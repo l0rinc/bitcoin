@@ -14,6 +14,12 @@ data. The source datadir was not modified. Short benchmarks require at least
 five runs; expensive full-chain runs are paired with a repeatable focused
 benchmark when possible.
 
+Exact fixes that have already been pushed to
+[`bitcoin/bitcoin`](https://github.com/bitcoin/bitcoin) are out of scope for
+new commits on this branch. They may motivate a distinct local hypothesis, but
+are screened before implementation so this branch does not duplicate an
+upstream proposal.
+
 ## Accepted changes
 
 ### `ceb0979096` coinstats: streamline un-hashed UTXO stats
@@ -202,6 +208,55 @@ Reach: every `scantxoutset start` UTXO. The largest gain is for sparse or
 negative descriptor matches, where nearly every cached key copy disappears.
 Denser matches retain one key copy per returned UTXO; cold scans remain
 storage-bound.
+
+### `scantxoutset`: defer unneeded cursor outpoint materialization
+
+The preceding `scantxoutset` improvement stopped copying the already cached
+`COutPoint` into the RPC loop, but `CCoinsViewDBCursor::Next()` still decoded
+and copied every next key into that cache. In a sparse or negative scan, the
+next key is only needed at the existing 8192-entry progress cadence or for a
+matching result. This change adds `NextNoKey()` with a safe default and uses it
+only after a nonmatching scan entry. The DB cursor still reads and validates
+the key tag, the complete 32-byte txid span, and the output-index VarInt; it
+simply does not copy the txid into `keyTmp` until `GetKey()` is requested.
+
+The existing eager path is retained for `Next()` and all full-key users, so
+`gettxoutsetinfo`, `dumptxoutset`, snapshot construction, and cursor callers
+that need every key do not take the lazy path. If a caller later requests a
+key after `NextNoKey()`, the DB cursor decodes it then and caches it. The
+focused DB cursor test advances with `NextNoKey()` and obtains the next key on
+every iteration, covering both the deferred decode and output-index ordering.
+
+Full local chainstate at height 957779, 166,350,731 UTXOs, a no-match
+`combo(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)`
+descriptor, warm cache, daemon pinned to CPU 3, five runs per version:
+
+| version | median wall | range | median instructions | median branches |
+| --- | ---: | ---: | ---: | ---: |
+| base | 66.61 s | 66.57-66.69 s | 641.485 B | 129.069 B |
+| candidate | 65.54 s | 65.43-65.58 s | 616.956 B | 124.440 B |
+
+The median wall time improved 1.61%, instructions 3.82%, and branches 3.59%.
+All ten RPC responses were byte-identical (SHA-256
+`62539678afd6931c917d0135fedcc12d3f11e9e40958fe4983e461a5f0d0891a`),
+reported the same 166,350,731 scanned UTXOs, and contained no matches. Raw
+command output and `perf stat` files are under
+`/mnt/my_storage/bitcoin-perf-scratch/scantxoutset-lazy-key-{base,candidate}/`.
+
+Validation:
+
+```text
+ninja -C build bitcoind test_bitcoin -j8
+build/bin/test_bitcoin --run_test=coins_tests_dbbase --log_level=message
+build/test/functional/test_runner.py rpc_scantxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-scantxoutset-lazy-key-final --timeout-factor=2
+```
+
+Reach: all `scantxoutset start` scans. The win approaches the measurement when
+almost no entries match; matches and progress checkpoints already require the
+key and continue through the eager path. `gettxoutsetinfo`, `dumptxoutset`,
+snapshots, and other full-key cursor users keep their existing behavior. Cold
+HDD scans remain I/O-bound, so the wall-time improvement can be smaller even
+though the CPU work is removed.
 
 ### `736f48b4da` coinstats: stream ordered cursor entries while hashing
 

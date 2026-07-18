@@ -50,7 +50,23 @@ struct CoinEntry {
     uint8_t key{DB_COIN};
     explicit CoinEntry(const COutPoint* ptr) : outpoint(const_cast<COutPoint*>(ptr)) {}
 
-    SERIALIZE_METHODS(CoinEntry, obj) { READWRITE(obj.key, obj.outpoint->hash, VARINT(obj.outpoint->n)); }
+    SERIALIZE_METHODS(CoinEntry, obj)
+    {
+        READWRITE(obj.key);
+        SER_WRITE(obj, {
+            assert(obj.outpoint);
+            READWRITE(obj.outpoint->hash, VARINT(obj.outpoint->n));
+        });
+        SER_READ(obj, {
+            if (obj.outpoint) {
+                READWRITE(obj.outpoint->hash, VARINT(obj.outpoint->n));
+            } else {
+                uint32_t ignored_output_index;
+                s.ignore(Txid::size());
+                READWRITE(VARINT(ignored_output_index));
+            }
+        });
+    }
 };
 
 } // namespace
@@ -230,10 +246,14 @@ public:
 
     bool Valid() const override;
     void Next() override;
+    void NextNoKey() override;
 
 private:
     std::unique_ptr<CDBIterator> pcursor;
-    std::pair<char, COutPoint> keyTmp;
+    mutable std::pair<char, COutPoint> keyTmp;
+    mutable bool key_cached{false};
+
+    void UpdateKeyCache(bool cache_key);
 
     friend class CCoinsViewDB;
 };
@@ -251,6 +271,7 @@ std::unique_ptr<CCoinsViewCursor> CCoinsViewDB::Cursor() const
         CoinEntry entry(&i->keyTmp.second);
         i->pcursor->GetKey(entry);
         i->keyTmp.first = entry.key;
+        i->key_cached = entry.key == DB_COIN;
     } else {
         i->keyTmp.first = 0; // Make sure Valid() and GetKey() return false
     }
@@ -259,12 +280,18 @@ std::unique_ptr<CCoinsViewCursor> CCoinsViewDB::Cursor() const
 
 bool CCoinsViewDBCursor::GetKey(COutPoint &key) const
 {
-    // Return cached key
-    if (keyTmp.first == DB_COIN) {
-        key = keyTmp.second;
-        return true;
+    if (keyTmp.first != DB_COIN) return false;
+
+    if (!key_cached) {
+        CoinEntry entry(&keyTmp.second);
+        if (!pcursor->GetKey(entry) || entry.key != DB_COIN) {
+            keyTmp.first = 0;
+            return false;
+        }
+        key_cached = true;
     }
-    return false;
+    key = keyTmp.second;
+    return true;
 }
 
 bool CCoinsViewDBCursor::GetValue(Coin &coin) const
@@ -285,10 +312,23 @@ bool CCoinsViewDBCursor::Valid() const
 void CCoinsViewDBCursor::Next()
 {
     pcursor->Next();
-    CoinEntry entry(&keyTmp.second);
+    UpdateKeyCache(/*cache_key=*/true);
+}
+
+void CCoinsViewDBCursor::NextNoKey()
+{
+    pcursor->Next();
+    UpdateKeyCache(/*cache_key=*/false);
+}
+
+void CCoinsViewDBCursor::UpdateKeyCache(bool cache_key)
+{
+    CoinEntry entry(cache_key ? &keyTmp.second : nullptr);
     if (!pcursor->Valid() || !pcursor->GetKey(entry)) {
         keyTmp.first = 0; // Invalidate cached key after last record so that Valid() and GetKey() return false
+        key_cached = false;
     } else {
         keyTmp.first = entry.key;
+        key_cached = cache_key && entry.key == DB_COIN;
     }
 }
