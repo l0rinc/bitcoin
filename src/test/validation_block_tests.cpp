@@ -458,9 +458,16 @@ BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
     m_node.validation_signals->UnregisterSharedValidationInterface(sub);
 
     LOCK(cs_main);
-    BOOST_CHECK_EQUAL(sub->m_expected_tip, m_node.chainman->ActiveChain().Tip()->GetBlockHash());
-    BOOST_CHECK_EQUAL(sub->m_expected_height, m_node.chainman->ActiveChain().Height());
-    BOOST_CHECK(!sub->m_update_start_tip);
+    const CBlockIndex* final_tip{m_node.chainman->ActiveChain().Tip()};
+    BOOST_CHECK_EQUAL(sub->m_expected_tip, final_tip->GetBlockHash());
+    BOOST_CHECK_EQUAL(sub->m_expected_height, final_tip->nHeight);
+    // UpdatedBlockTip is skipped when an activation ends at the fork block
+    // (pindexFork == pindexNewTip), e.g. when a failed reorg disconnects and
+    // reconnects the same blocks. That leaves a dangling update window, which
+    // must then be the final tip or one of its disconnected descendants.
+    if (sub->m_update_start_tip) {
+        BOOST_CHECK_EQUAL(LastCommonAncestor(sub->m_update_start_tip, final_tip), final_tip);
+    }
 }
 
 /**
