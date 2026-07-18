@@ -230,6 +230,18 @@ public:
     SERIALIZE_METHODS(TestHeaderAndShortIDs, obj) { READWRITE(obj.header, obj.nonce, Using<VectorFormatter<CustomUintFormatter<CBlockHeaderAndShortTxIDs::SHORTTXIDS_LENGTH>>>(obj.shorttxids), obj.prefilledtxn); }
 };
 
+class TestDirectHeaderAndShortIDs : public CBlockHeaderAndShortTxIDs
+{
+public:
+    using CBlockHeaderAndShortTxIDs::CBlockHeaderAndShortTxIDs;
+
+    void FillShortTxIDs(size_t size)
+    {
+        shorttxids.resize(size);
+        for (size_t i{0}; i < size; ++i) shorttxids[i] = i;
+    }
+};
+
 BOOST_AUTO_TEST_CASE(HeaderAndShortIDsDeserializationRejectsTooManyTransactions)
 {
     auto rand_ctx(FastRandomContext(uint256{42}));
@@ -243,6 +255,27 @@ BOOST_AUTO_TEST_CASE(HeaderAndShortIDsDeserializationRejectsTooManyTransactions)
 
     CBlockHeaderAndShortTxIDs decoded;
     BOOST_CHECK_EXCEPTION(stream >> decoded, std::ios_base::failure, HasReason("indexes overflowed 16 bits"));
+}
+
+BOOST_AUTO_TEST_CASE(InitDataRejectsDirectShortIDIndexOverflow)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    auto rand_ctx(FastRandomContext(uint256{42}));
+    CBlock block(BuildBlockTestCase(rand_ctx));
+    TestDirectHeaderAndShortIDs ids(block, rand_ctx.rand64());
+    ids.FillShortTxIDs(std::numeric_limits<uint16_t>::max() + 2U);
+
+    TestPartiallyDownloadedBlock partial_block(&pool);
+    const Wtxid wtxid{block.vtx[1]->GetWitnessHash()};
+    partial_block.m_get_short_id_mock = [](const CBlockHeaderAndShortTxIDs&, const Wtxid&) {
+        return std::numeric_limits<uint16_t>::max();
+    };
+    BOOST_CHECK_EQUAL(partial_block.InitData(ids, {{wtxid, block.vtx[1]}}), READ_STATUS_INVALID);
+    BOOST_CHECK(partial_block.header.IsNull());
+    BOOST_CHECK_EQUAL(partial_block.AvailableTxCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
 }
 
 BOOST_AUTO_TEST_CASE(InitDataFailureResetsPartialBlock)
