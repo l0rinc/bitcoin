@@ -2432,3 +2432,63 @@ sed -n '56,95p' src/util/hasher.h
 Decision: remove #180 from the open seed list. Do not turn the intentional
 `noexcept` memory trade-off into a claimed HDD optimization without a
 cross-library cache-capacity analysis and a reproducible end-to-end win.
+
+### Reject local total-amount accumulator split for un-hashed UTXO stats
+
+Disassembly of the `CoinStatsHashType::NONE` specialization showed that the
+common, non-overflowing `stats.total_amount` update reloads and stores the
+`std::optional<CAmount>` member in the large stack-resident `CCoinsStats`
+object for every UTXO. This is real per-coin work, but its overflow behavior is
+part of the public stats contract: `total_amount` must become `nullopt` after
+the first signed `CAmount` overflow and remain so for the rest of the scan.
+
+A temporary, source-local prototype therefore used a `CAmount` accumulator and
+a `bool total_amount_overflow` only in the un-hashed loop. Each coin still used
+`CheckedAdd`; a failed addition set the boolean, later additions were skipped,
+and the loop copied the value back into `stats.total_amount` or reset the
+optional after traversal. This generated a register-held accumulator on the
+common path while preserving the observable overflow transition. It was not
+committed.
+
+The first paired warm-cache full-chain trial looked marginally favorable:
+
+| binary | five `gettxoutsetinfo none` runs (s) | median (s) |
+| --- | --- | ---: |
+| baseline before | 47.00, 46.97, 47.02, 47.09, 47.10 | 47.02 |
+| temporary accumulator | 46.67, 46.72, 46.73, 46.75, 46.77 | 46.73 |
+
+That apparent 0.62% change is not sufficient evidence. A fresh baseline daemon
+started immediately after the candidate, pinned to the same CPU and with the
+same network-disabled/wallet-disabled options, produced 46.59, 46.53, 46.58,
+and 46.62 seconds (46.585 s median). It is already faster than the candidate
+by about 0.31%. A fifth reverse-control request was interrupted during harness
+shutdown and wrote an empty response, so it is explicitly excluded rather than
+used as a favorable or unfavorable data point. All five baseline-before,
+candidate, and the four valid reverse-control JSON replies have SHA-256
+`4b96d583ae030f7391f6b960ee9c738360da5ea27532da61c7057cc206dccfa0`.
+
+The initial baseline process required a cold 2:28.62 scan after startup;
+candidate and reverse-control warmups were 47.50 and 47.20 seconds. Measured
+iterations themselves were tightly clustered, but the between-daemon drift is
+larger than the proposed gain. The temporary binaries, replies, timers,
+debug logs, and command artifacts are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/total-accumulator-baseline.X4Bhfo`,
+`.../total-accumulator-candidate3.0800Z5`, and
+`.../total-accumulator-baseline2.mQ0Lt9`.
+
+Reviewed with:
+
+```sh
+ninja -C build bitcoind -j4
+# one network-disabled, wallet-disabled daemon per binary, taskset -c 0
+build/bin/bitcoin-cli -rpcclienttimeout=0 -datadir=/mnt/my_storage/BitcoinData \
+  -rpccookiefile=<trial>/.cookie gettxoutsetinfo none
+sha256sum <baseline>/run-*.json <candidate>/run-*.json <reverse>/run-{1,2,3,4}.json
+```
+
+Decision: reject the split accumulator. The optional field is a plausible
+micro-optimization target, but preserving its overflow contract buys no
+reproducible end-to-end `gettxoutsetinfo none` gain here. Do not add a second
+amount state machine or broaden the change to hashed stats/dumptxoutset unless
+a profile and an interleaved, repeated benchmark establish a materially larger
+win.
