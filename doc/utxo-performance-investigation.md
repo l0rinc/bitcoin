@@ -5083,3 +5083,71 @@ Decision: retain the original `resize`/`memcpy` reconstruction. The target
 has broad warm full-scan reach, but no user-visible win; a generic C++ string
 API substitution is not a valid analogue of removing a known overwritten stack
 fill. No production or test changes result from this experiment.
+
+### Current stack: controlled HDD `-reindex-chainstate` comparison with master
+
+The earlier user report established a serious full-HDD regression from
+`e3ec270a39` (`leveldb: mark mmaped table reads random`): its height-957759
+workload was 1.79 times the pre-change time. The stack contains the separate
+`df4669a112` readahead repair and several independently measured Core
+optimizations, but its net result against current master had not been
+measured. This experiment measures the whole stack; it must not be used to
+attribute the result to a particular commit or to claim that the original
+height-957759 regression is fully resolved.
+
+The compared revisions were branch head
+`0c1c88b09c76b79375f33ea8523e968492ff456c` and fresh `origin/master`
+`18c05d93016b28a9afd4c716dfe00b6e0accb30b`. Both use the same GCC/g++ 14
+Release configuration (`-O2` C++, `-O3 -DNDEBUG` C), enabled wallet and IPC,
+and all other CMake options matched; the branch also built the benchmark target,
+which does not affect `bitcoind`. The host was `i7-hdd`: Intel i7-7700 (4
+cores/8 threads), 62 GiB RAM, Linux 6.14.0-33-generic, and the local
+`/mnt/my_storage/BitcoinData` on ext4 over rotating `md2` RAID1. Network and
+wallet activity were disabled.
+
+Each run mounted the unchanged local datadir as the lower layer of a unique
+OverlayFS scratch datadir, removed the overlay-visible `debug.log`, ran
+`sync; echo 3 > /proc/sys/vm/drop_caches`, then started the daemon with:
+
+```text
+bitcoind -datadir=<overlay> -reindex-chainstate -stopatheight=287000 -dbcache=450 \
+  -blocksonly -networkactive=0 -listen=0 -dnsseed=0 -fixedseeds=0 -discover=0 \
+  -disablewallet -printtoconsole=0
+```
+
+`/usr/bin/time -v` wrapped `perf stat` for task-clock, cycles, instructions,
+branches, branch misses, and page faults. The branch and master were run in
+opposite orders. Every run logged height 0, height 287000, and `Shutdown done`.
+The first pair used the same command before the scratch harness began removing
+the inherited lower-layer debug log. The fresh-log reverse pair independently
+has the same direction. Raw outputs are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/`.
+
+| order | master wall | branch wall | branch change |
+| --- | ---: | ---: | ---: |
+| master then branch | 594.805 s | 574.800 s | -3.36% |
+| branch then master | 584.365 s | 573.998 s | -1.77% |
+| two-run median (midpoint) | 589.585 s | 574.399 s | **-2.58%** |
+
+The two-run median values also show the expected CPU-side reduction while performing
+effectively identical filesystem I/O:
+
+| metric | master | branch | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 528.034 s | 509.335 s | -3.54% |
+| user CPU | 469.670 s | 450.910 s | -3.99% |
+| system CPU | 61.865 s | 61.850 s | -0.02% |
+| instructions | 2.634 T | 2.456 T | -6.78% |
+| branches | 296.352 B | 271.921 B | -8.24% |
+| reported filesystem input | 31.012 M | 31.013 M | +0.00% |
+| reported filesystem output | 9.291 M | 9.308 M | +0.19% |
+| peak RSS | 1.600 GB | 1.573 GB | -1.65% |
+
+The branch took more major faults (893 versus 121 median), consistent with its
+mmap locality repair using `MADV_WILLNEED`; the unchanged input bytes and lower
+wall and task time indicate clustered readahead faults rather than extra reads.
+This is a meaningful controlled height-287000 HDD result for the aggregate
+branch. It is not sufficient evidence for a full-chain result, for other
+hardware/filesystems/cache sizes, or for the original height-957759 comparison.
+Keep the historical mmap regression explicitly open until that full workload
+has been repeated against this stack and master.
