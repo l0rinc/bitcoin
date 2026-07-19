@@ -111,6 +111,10 @@ private:
 
 protected:
     std::unique_ptr<interfaces::Chain> m_chain;
+    /// Gives indexing code access to node internals. Assigned under ::cs_main in Init() on every
+    /// index (re)start, so readers outside the sync/callback threads must hold ::cs_main. For block
+    /// file access, prefer the never-reassigned m_chain->context()->chainman->m_blockman.
+    /// Will be removed in followup https://github.com/bitcoin/bitcoin/pull/24230.
     Chainstate* m_chainstate{nullptr};
     const std::string m_name;
     const std::string m_thread_name;

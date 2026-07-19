@@ -13,6 +13,7 @@
 #include <interfaces/chain.h>
 #include <logging.h>
 #include <node/blockstorage.h>
+#include <node/context.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -143,7 +144,8 @@ bool TxoSpenderIndex::CustomRemove(const interfaces::BlockInfo& block)
 
 util::Expected<TxoSpender, std::string> TxoSpenderIndex::ReadTransaction(const CDiskTxPos& tx_pos) const
 {
-    AutoFile file{m_chainstate->m_blockman.OpenBlockFile(tx_pos, /*fReadOnly=*/true)};
+    // Unlike m_chainstate, chainman->m_blockman is never reassigned on index restart.
+    AutoFile file{m_chain->context()->chainman->m_blockman.OpenBlockFile(tx_pos, /*fReadOnly=*/true)};
     if (file.IsNull()) {
         return util::Unexpected("cannot open block");
     }
