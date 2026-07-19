@@ -50,17 +50,23 @@ static size_t TxOutSerSize(const Coin& coin)
            coin.out.scriptPubKey.size();
 }
 
-static void ApplyCoinHash(HashWriter& ss, const COutPoint& outpoint, const Coin& coin)
+static void ApplyCoinHash(HashWriter& ss, DataStream&, const COutPoint& outpoint, const Coin& coin)
 {
     TxOutSer(ss, outpoint, coin);
+}
+
+static void ApplyCoinHash(MuHash3072& muhash, DataStream& ss, const COutPoint& outpoint, const Coin& coin)
+{
+    ScopedDataStreamUsage scoped_stream{ss};
+    ss.reserve(TxOutSerSize(coin));
+    TxOutSer(ss, outpoint, coin);
+    muhash.Insert(MakeUCharSpan(ss));
 }
 
 void ApplyCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& coin)
 {
     DataStream ss{};
-    ss.reserve(TxOutSerSize(coin));
-    TxOutSer(ss, outpoint, coin);
-    muhash.Insert(MakeUCharSpan(ss));
+    ApplyCoinHash(muhash, ss, outpoint, coin);
 }
 
 void RemoveCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& coin)
@@ -96,6 +102,7 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, CCoinsView* view,
     }
     assert(pcursor);
     CCoinsStats stats{Assert(pindex)->nHeight, pindex->GetBlockHash()};
+    DataStream coin_hash_scratch{};
 
     Txid prevkey;
     bool have_prevkey{false};
@@ -114,7 +121,7 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, CCoinsView* view,
                 stats.total_amount = CheckedAdd(*stats.total_amount, coin.out.nValue);
             }
             stats.nBogoSize += GetBogoSize(coin.out.scriptPubKey.size());
-            ApplyCoinHash(hash_obj, *key, coin);
+            ApplyCoinHash(hash_obj, coin_hash_scratch, *key, coin);
             stats.coins_count++;
         } else {
             LogError("%s: unable to read value\n", __func__);

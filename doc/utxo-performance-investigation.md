@@ -4628,3 +4628,99 @@ The scanner source, binary, and raw Hyperfine JSON are retained in
 production change and no independent claim for `gettxoutsetinfo`,
 `dumptxoutset`, snapshots, or HDD `-reindex-chainstate`; the rejected branch
 would only have reached singleton-descriptor `scantxoutset` calls.
+
+### `coinstats`: reuse MuHash coin serialization storage
+
+`ComputeUTXOStats(MuHash3072)` serializes every UTXO as an outpoint, height/
+coinbase code, and transaction output before inserting its bytes into MuHash.
+The prior `f38582a6fa` improvement reserves the exact size of that temporary
+`DataStream`, but it still constructs and frees a separately allocated stream
+for every coin. `MuHash3072::Insert()` consumes the bytes synchronously, so a
+single stream can safely be reused across the full statistics traversal.
+
+Add a private overload taking that stream. It uses the existing
+`ScopedDataStreamUsage`: the stream must be empty before serialization, keeps
+its capacity after `Insert()`, and is cleared on every normal or exceptional
+exit. Thus every insertion sees exactly the old `TxOutSer()` byte sequence;
+only repeated capacity allocation/deallocation is removed. The public
+three-argument `ApplyCoinHash(MuHash3072&, ...)` retains its fresh local stream
+and therefore coinstats-index connect/disconnect/rollback updates are
+unchanged. `HashWriter` still serializes directly into the hash writer; its
+scratch argument is unused. The `NONE` specialization has its own loop and
+does not construct this buffer.
+
+A focused CPU-3-pinned benchmark performs one million normal P2WPKH coin
+serializations and MuHash insertions. Fresh and reusable modes produce the
+same final hash on every execution:
+
+```
+4aa83821b83ff6f0518f1cf805748b6fce464fff2ecec3d6ad338f6e63c21c57
+```
+
+Each order used one warmup and seven measured Hyperfine runs:
+
+| order | fresh stream median | reused stream median | result |
+| --- | ---: | ---: | ---: |
+| fresh then reused | 4.354824 s | 4.309137 s | 1.05% faster |
+| reused then fresh | 4.352117 s | 4.314017 s | 0.88% faster |
+
+The complete closed-chainstate reader retrieves each key and `Coin`, runs the
+same `TxOutSer()` plus `MuHash3072::Insert()` path, and finalizes the
+commitment. All four scans processed 32,867,816 UTXOs and returned the exact
+same MuHash:
+
+```
+6142d32e4a4dff7df3ec3362c8f8bc375384a44e55d9c79beb65a653bee35b0d
+```
+
+The two orders are independently favorable; values are `/usr/bin/time` wall
+seconds:
+
+| order | fresh stream | reused stream | result |
+| --- | ---: | ---: | ---: |
+| fresh then reused | 152.42 s | 150.85 s | 1.03% faster |
+| reused then fresh | 151.88 s | 150.64 s | 0.82% faster |
+
+The matching focused and complete measurements establish that retained
+capacity helps this specific per-coin serialization path, not merely a
+synthetic allocation microbenchmark. The scanner intentionally omits RPC
+setup, locks, block-index lookup, non-hash statistics, and disk-size
+accounting; it isolates the part changed by this commit. This is a warm
+CPU-bound result, so it is not a standalone HDD or `-reindex-chainstate`
+claim.
+
+The existing functional UTXO-set hash test independently serializes every
+created output in Python and compares the resulting MuHash with
+`gettxoutsetinfo("muhash")`. It passes with the candidate. As a temporary
+mutation proof, removing `ScopedDataStreamUsage` causes later serializations
+to append to the previous coin's bytes; the same test fails with expected
+`97f341d4226cb4451dd9da2856759fb97659cfc238a0b8d5452e64af6032bd3d` but
+actual `04793837fad9e1c74292425d050982de3d97faba20d43ca2397fd3f6984fafea`.
+Restoring the scope passes. The existing coinstats-index functional test covers
+MuHash index updates, restart, reorg, `-reindex`, and `-reindex-chainstate`;
+it passes without any index-helper change.
+
+```sh
+git fetch -q origin master
+git log origin/master --format='%h %s' -S'coin_hash_scratch' -- src/kernel/coinstats.cpp
+git log origin/master --format='%h %s' -G'ScopedDataStreamUsage.*(muhash|coin_hash|DataStream)' -- src/kernel/coinstats.cpp
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=crypto_tests/muhash_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+build/test/functional/test_runner.py feature_utxo_set_hash.py feature_coinstatsindex.py rpc_blockchain.py --jobs=1 \
+  --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/muhash-reuse/functional --timeout-factor=2
+ninja -C build-debug src/CMakeFiles/bitcoin_node.dir/kernel/coinstats.cpp.o -j4
+```
+
+The focused benchmark, source, full-chainstate reader, raw Hyperfine JSON,
+four full output/time pairs, functional-test directories, and mutation log are
+retained under `/mnt/my_storage/bitcoin-perf-scratch/muhash-reuse/`. Fresh
+`origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no
+equivalent reusable MuHash serialization buffer.
+
+Reach is direct non-indexed `gettxoutsetinfo hash_type=muhash` (including a
+`use_index=false` request) via the sole production caller of
+`ComputeUTXOStats`. It does not change `hash_type=none`,
+`hash_serialized_3`, `dumptxoutset`, snapshot validation, `scantxoutset`, or
+ordinary `-reindex-chainstate`; coinstats-index maintenance continues to use
+the public fresh-buffer helper.
