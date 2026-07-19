@@ -1457,6 +1457,89 @@ Raw microbenchmark JSON/text are under
 `/mnt/my_storage/bitcoin-perf-scratch/bip68-prevheights-connectblock/`; raw
 reindex metrics and debug logs are under
 `/mnt/my_storage/bitcoin-perf-scratch/bip68-prevheights-reindex/{baseline1,candidate,baseline2}/metrics/`.
+
+### `coins`: avoid cache work for unspendable transaction outputs ([fork PR #133](https://github.com/l0rinc/bitcoin/pull/133))
+
+Fork PR #133 is open at `8c6ca2d76aaf49c1d6e5337d418a8fbfc4227cc1` and
+is absent from freshly fetched `origin/master` at
+`18c05d93016b28a9afd4c716dfe00b6e0accb30b`; it is not an already-pushed
+upstream fix. `AddCoins()` previously constructed a `COutPoint` for its
+overwrite query, constructed a second one for `AddCoin()`, and constructed a
+`Coin` for every transaction output. `CCoinsViewCache::AddCoin()` then
+immediately returns for an `IsUnspendable()` script, without mutating the UTXO
+cache. The accepted change makes that existing condition first-class in
+`AddCoins()`: it skips the pointless lookup and `Coin` construction, and
+reuses one `COutPoint` for the remaining spendable outputs.
+
+This preserves the valid-chain contract. An unspendable output never becomes
+a UTXO: the existing `AddCoin()` guard enforces that fact, and
+`DisconnectBlock()` likewise skips such outputs when removing a block. The
+`check_for_overwrite=true` recovery caller previously made a `HaveCoin()`
+query before reaching the same no-op `AddCoin()` guard; the new early return
+suppresses that query only for an output that valid block connection never
+stores. Spendable outputs retain the same `HaveCoin()`/overwrite decision and
+the same `AddCoin()` call. The normal `coins_tests` and `transaction_tests`
+cover cache insertion, overwrites, spentness, `UpdateCoins`, and transaction
+validation; this is a performance-only rearrangement, so the before/after
+microbenchmark is its primary verifier rather than a test that freezes an
+internal lookup count.
+
+The retained scratch benchmark builds one non-coinbase transaction with either
+one 42-byte `OP_RETURN` output or one `OP_TRUE` output. For the spendable case
+it spends the just-created coin after each iteration, keeping the cache state
+constant. Five CPU-3-pinned Release runs used:
+
+```text
+build/bin/bench_bitcoin -filter='AddUnspendableCoins|AddSpendableCoins' -min-time=1000
+```
+
+| one-output case | base median ns/op | candidate median ns/op | base / candidate instructions | result |
+| --- | ---: | ---: | ---: | --- |
+| 42-byte `OP_RETURN` | 38.84 | 6.66 | 507 / 76 | 5.83x faster; -85.0% instructions |
+| spendable `OP_TRUE` | 139.12 | 141.89 | 1,294 / 1,304 | +2.0%; +10 instructions |
+
+The small spendable cost is the additional early `IsUnspendable()` predicate;
+the unspendable path saves 431 instructions. Its instruction break-even is
+therefore about `10 / (431 + 10) = 2.27%` unspendable outputs. To establish
+that this is not an early-chain-only effect, a network-disabled local daemon
+read the explicitly permitted `BitcoinData` and counted complete verbose
+blocks in six disjoint 20-block ranges. `IsUnspendable()` is the first-byte
+`OP_RETURN` predicate used by this count.
+
+| sampled heights | outputs | unspendable outputs | share |
+| --- | ---: | ---: | ---: |
+| 240000-240019 | 14,860 | 0 | 0.0000% |
+| 400000-400019 | 74,890 | 369 | 0.4927% |
+| 550000-550019 | 73,991 | 7,217 | 9.7539% |
+| 700000-700019 | 64,548 | 1,548 | 2.3982% |
+| 850000-850019 | 157,113 | 41,819 | 26.6171% |
+| 950000-950019 | 185,849 | 36,871 | 19.8392% |
+| total | 571,251 | 87,824 | 15.3740% |
+
+The weighted sample is well above the microbenchmark break-even, and covers
+the mature chain where regular output creation is substantial. Raw benchmark
+text and the block-sampling table are under
+`/mnt/my_storage/bitcoin-perf-scratch/addcoins-unspendable/`.
+
+Validation:
+
+```text
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests --log_level=message
+build/bin/test_bitcoin --run_test=transaction_tests --log_level=message
+git diff --check
+```
+
+Reach: all output additions through `AddCoins()`: ordinary
+`Chainstate::ConnectBlock()` work during sync and `-reindex-chainstate`,
+chainstate `ReplayBlocks()` recovery, and the mempool consistency checker.
+It does not speed `gettxoutsetinfo`, `scantxoutset`, or `dumptxoutset` scans
+directly, because those read an existing UTXO set and unspendable outputs are
+not in it. The change does not alter disk bytes or remove I/O, so no broad HDD
+wall-time percentage is claimed; the expected gain is the measured CPU work
+per unspendable output inside otherwise storage- and validation-dominated
+block processing.
+
 ### Skip `txsdata` allocation while assumevalid skips scripts ([PR #207](https://github.com/l0rinc/bitcoin/pull/207), [upstream PR #35663](https://github.com/bitcoin/bitcoin/pull/35663))
 
 Both PRs were checked on 2026-07-19 and are closed with `merged_at: null`, so
