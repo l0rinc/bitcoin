@@ -64,22 +64,26 @@ BOOST_FIXTURE_TEST_CASE(baseindex_no_commit_ahead_of_flush, TestChain100Setup)
     sync_index(false, 101, 100);
 }
 
-// Test that BlockUntilSyncedToCurrentChain() can run concurrently with the
-// index being stopped and restarted. TxIndex is used as a representative
-// BaseIndex implementation.
-BOOST_FIXTURE_TEST_CASE(baseindex_restart_block_until, TestChain100Setup)
+// Test that index readers can run concurrently with the index being stopped
+// and restarted. TxIndex is used because its FindTx reader runs off the sync
+// thread without synchronization.
+BOOST_FIXTURE_TEST_CASE(baseindex_restart_concurrent_reads, TestChain100Setup)
 {
     TxIndex index{interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/true};
     BOOST_REQUIRE(index.Init());
     index.Sync();
 
+    const Txid txid{m_coinbase_txns[1]->GetHash()};
     std::latch reader_started{1};
     std::atomic_bool run{true};
     std::thread reader{[&] {
         reader_started.count_down();
         while (run.load(std::memory_order_relaxed)) {
-            // This read overlaps Stop()/Init() and exposes the transient state.
+            CTransactionRef tx;
+            uint256 block_hash;
+            // These reads overlap Stop()/Init() and exercise the unsynchronized reader paths.
             index.BlockUntilSyncedToCurrentChain();
+            index.FindTx(txid, block_hash, tx);
         }
     }};
     reader_started.wait();
