@@ -1117,10 +1117,11 @@ full metrics are under
 
 ## Open investigation
 
-### Remaining PR seeds
-
-The following seeds were screened but have not yet produced an accepted or
-fully rejected independent change:
+All original `l0rinc/bitcoin` PR seeds named for this investigation have now
+been either accepted as independently measured commits, found already upstream,
+or rejected with recorded evidence. New work must begin from a current profile
+of one of the target workloads rather than retuning a previously neutral cache,
+allocation, mmap, or cursor idea.
 
 ### LevelDB: heapify forward merging iterators for full UTXO scans
 
