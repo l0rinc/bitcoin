@@ -7,6 +7,7 @@
 #include "table/block.h"
 
 #include <algorithm>
+#include <cstring>
 #include <cstdint>
 #include <vector>
 
@@ -243,8 +244,8 @@ class Block::Iter : public Iterator {
       CorruptionError();
       return false;
     } else {
-      key_.resize(shared);
-      key_.append(p, non_shared);
+      key_.resize(static_cast<size_t>(shared) + non_shared);
+      std::memcpy(key_.data() + shared, p, non_shared);
       value_ = Slice(p + non_shared, value_length);
       while (next_restart_ < current_) {
         ++restart_index_;

@@ -3822,3 +3822,80 @@ reach `gettxoutsetinfo hash_type=none`, which uses `UnserSize()` without
 constructing these scripts; it also does not change ordinary scripts or the
 legacy IDs 4--5. The measurement is a warm CPU-bound cursor scan, not a claim
 of an independent full-HDD-reindex wall-time improvement.
+
+### LevelDB: construct parsed forward keys in one resize
+
+`Block::Iter::ParseNextKey()` reconstructs every delta-compressed key during a
+forward table scan. After validating the shared-prefix length, the old code
+first resized `key_` to that prefix, then used `std::string::append()` for the
+non-shared suffix. A current full-scan profile attributed 5.62% exclusive
+samples to `ParseNextKey()` and 3.19% to its `memmove` path. The profiler gives
+the current LevelDB change a direct, high-reach justification; RocksDB was
+consulted only as an implementation reference and its much broader iterator
+design was not ported.
+
+Allocate the exact reconstructed key size once and copy the suffix with
+`std::memcpy`. The source and destination cannot overlap: `p` always points
+inside the immutable block and `key_` owns a separate string. The existing
+decoded-length checks, corruption handling, restart accounting, value slice,
+and key bytes remain unchanged. This is strictly a replacement of the two
+normal-path string mutations, not a format or iterator-contract change.
+
+The candidate was compared with commit `99796439a3` using its separate
+CPU-3-pinned full-coin reader on the closed local chainstate. It calls
+`GetValue(Coin)` and `NextNoKey()` for all 32,659,375 UTXOs; every run returned
+the exact aggregate:
+
+```
+32659375 847458211 1488241113523993
+```
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| two string mutations | 7.449661, 7.454717, 7.396024, 7.423891, 7.483173 s | 7.449661 s | baseline |
+| one resize and suffix copy | 7.347824, 7.341394, 7.334877, 7.366232, 7.323748 s | 7.341394 s | 1.45% faster |
+
+Three alternating `perf stat` pairs have a lower candidate task-clock in all
+three pairs and show the expected reduction in string work:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.30668 s | 7.23774 s | -0.94% |
+| instructions | 69.278772 B | 68.606533 B | -0.97% |
+| branches | 13.853100 B | 13.674901 B | -1.29% |
+| branch misses | 37.526 M | 38.938 M | +3.76% |
+| cache misses | 38.930 M | 39.005 M | +0.19% |
+
+Raw Hyperfine output, perf CSVs, reader binaries, and matching aggregate
+outputs are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/block-parse-resize/`; the baseline
+reader is
+`/mnt/my_storage/bitcoin-perf-scratch/full-coin-reader/full_coin_reader_99796439`.
+
+Existing `leveldb_tests/block_iterator_crosses_restart_points_in_both_directions`
+checks forward scans, reverse scans, seek, and direction changes through
+restart points using exact key/value strings. As a temporary mutation proof,
+replacing the new suffix `memcpy` with a zero fill rebuilt but made the focused
+test fail its forward and reverse key sequences and subsequent seek assertion;
+restoring `memcpy` passes. This proves the test detects a broken suffix copy,
+not merely iterator validity.
+
+Validation:
+
+```sh
+git fetch -q origin master
+git show origin/master:src/leveldb/table/block.cc # retains resize()+append()
+git log origin/master --format='%h %s' -G'key_\\.resize\\(shared\\)' -- src/leveldb/table/block.cc
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=leveldb_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase/coins_db_cursor_order --log_level=message
+git diff --check
+```
+
+Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` retains
+the two string operations. This reaches every LevelDB block iterator that
+reconstructs a delta-compressed forward key, including full chainstate scans
+for `gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`; point lookups,
+backward scans, compaction, and other databases can also reach it. The evidence
+is a warm CPU-bound chainstate traversal. It does not establish a standalone
+full-HDD-reindex wall-time gain.
