@@ -3321,3 +3321,53 @@ bytewise comparator, especially forward merged scans such as
 comparator. A non-bytewise comparator keeps its old path. This is a warm,
 CPU-bound chainstate measurement and does not claim a full HDD
 `-reindex-chainstate` wall-time speedup.
+
+### Rejected: avoid uncompressed-P2PK reconstruction in `CoinStatsValue`
+
+The symbolized closed-chainstate profile also shows legacy uncompressed-P2PK
+script handling in the no-hash statistics reader. `ScriptCompression::UnserSize`
+must preserve the normal decompressor's special behavior: an invalid encoded
+curve point produces an empty script, while a valid one produces a 67-byte
+uncompressed-P2PK script. The current implementation reads the 32-byte x
+coordinate and calls `DecompressScript`, which validates, expands, and sizes
+the key/script.
+
+A temporary direct-Core prototype retained the read bytes and point validation
+but replaced expansion with `CPubKey::IsFullyValid()` and the known 67-byte
+size. It avoids public-key serialization and copying the expanded key/script,
+without changing the valid or invalid result. The existing
+`coin_stats_value_matches_coin_deserialization` test passed for compressed and
+uncompressed P2PK as well as the other script encodings. The prototype built
+with:
+
+```sh
+ninja -C build test_bitcoin bitcoind -j4
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+```
+
+However, the candidate did not clear the performance acceptance bar. Four
+warm CPU-3-pinned closed-chainstate reader runs returned the same complete
+aggregate for both binaries:
+
+```
+32659375 7659292 1488241113523993 2480426961
+```
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| reconstruct valid uncompressed P2PK script | 7.164563, 7.181662, 7.153630, 7.141339 s | 7.159096 s | baseline |
+| validate and report only its size | 7.146717, 7.119680, 7.165411, 7.169703 s | 7.156064 s | 0.04% faster |
+
+The 0.00303-second median difference is substantially below the 17--23 ms
+standard deviation. An earlier ad-hoc pair varied in both directions, which
+is why it was not treated as evidence. The raw Hyperfine data is retained in
+`/mnt/my_storage/bitcoin-perf-scratch/stats-pubkey-validity/direct-reader.json`;
+the temporary linked candidate reader is
+`/mnt/my_storage/bitcoin-perf-scratch/dbiter-savekey/cursor_stats_bench_stats_pubkey_validity_candidate`.
+
+Decision: restore `DecompressScript`. The potential reach is only
+`gettxoutsetinfo hash_type=none` (via `CoinStatsValue`) on chainstates that
+contain these historical uncompressed-P2PK outputs; it does not affect hashed
+statistics, `scantxoutset`, `dumptxoutset`, or reindex-chainstate. The tiny
+unreproducible difference does not justify another correctness-sensitive
+partial-deserialization implementation.
