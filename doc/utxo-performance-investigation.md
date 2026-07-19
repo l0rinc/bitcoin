@@ -1098,9 +1098,6 @@ fully rejected independent change:
   `CheckTransaction` change is rejected above for insufficient HDD reach. Its
   seek-compaction idea is already present and upstream; any remaining flush
   idea needs a current compaction/write-amplification profile before review.
-- [#195](https://github.com/l0rinc/bitcoin/pull/195)/[#152](https://github.com/l0rinc/bitcoin/pull/152): cursor/coinstats ideas. Their proven portions are represented by
-  the accepted direct-streaming and hashing commits above; remaining layering
-  changes need independent evidence.
 - [#200](https://github.com/l0rinc/bitcoin/pull/200)/[#203](https://github.com/l0rinc/bitcoin/pull/203): mmap/open-file/cache-threshold variants. Existing and current
   cache/write-buffer experiments are neutral or harmful; reopen only if a new
   profile demonstrates a different bottleneck.
@@ -2289,3 +2286,48 @@ Raw `time`, `perf stat`, logs, and upperdir-size files are under
 Decision: remove PR #48 from the open seed list and retain the default. Reopen
 only with a profile that identifies LevelDB data-block overhead as material and
 with a change scoped to the database/workload it demonstrably helps.
+
+### Close fork PR #152/#195 cursor and coinstats seeds
+
+Fork PR [#152](https://github.com/l0rinc/bitcoin/pull/152), fetched as
+`l0rinc/pr-152` at `3ac40d0989e97e5c7d865f451d9a2561a7771dff`, contains the
+three direct scan ideas that seeded this branch: specialized un-hashed UTXO
+statistics, hashed `scantxoutset` script lookup with a script-size prefilter,
+and reduced scan-progress/key-copy work. All performance-relevant parts are
+already covered, and then extended, by the accepted commits in this stack:
+`ceb0979096`, `c806cd22bd`, `f38582a6fa`, `1a5bfbe875`, `a07f0eeff7`,
+`36803c075c`, `fd07d9125f`, and `405ab76014`.
+
+In particular, the live `FindScriptPubKey()` retains PR #152's progress update
+only every 8192 coins and fetches a key only for that update or a matching
+coin. It further avoids eager next-key decoding through `NextNoKey()`,
+prefilters by first script byte, and directly compares singleton needles. The
+live un-hashed coinstats path also goes beyond the seed by streaming ordered
+cursor entries, borrowing the cached key, avoiding script construction, and
+batching interruption checks. Reapplying the old PR would regress those
+improvements or conflict with their tests.
+
+Fork PR [#195](https://github.com/l0rinc/bitcoin/pull/195), fetched as
+`l0rinc/pr-195` at `34620b0490a1a6be681afbbdc89ba037d6143739`, is not an
+additional hot-loop optimization. It narrows `Cursor()` from the abstract
+`CCoinsView` interface to `CCoinsViewDB`, passes that concrete type through
+the coinstats helpers, and removes now-unreachable null checks. A cursor is
+created once per RPC, so this is API/layering cleanup; it neither removes a
+per-UTXO virtual call nor changes LevelDB iteration. It would be inappropriate
+to claim it as a measurable UTXO-RPC or HDD-reindex speedup without a separate
+maintainability goal.
+
+Reviewed with:
+
+```sh
+git fetch -q l0rinc 'refs/pull/152/head:refs/remotes/l0rinc/pr-152' 'refs/pull/195/head:refs/remotes/l0rinc/pr-195'
+git log --reverse --format='%H %s' $(git merge-base l0rinc/pr-152 origin/master)..l0rinc/pr-152
+git show 06fad3b1c4 967d2b0226 3ac40d0989 -- src/kernel/coinstats.cpp src/rpc/blockchain.cpp
+git show f821dbe736 6ad167db5a 5df2bbf543 -- src/coins.h src/txdb.h src/kernel/coinstats.cpp src/rpc/blockchain.cpp
+sed -n '2240,2273p' src/rpc/blockchain.cpp
+```
+
+Decision: remove both PRs from the open performance-seed list. The accepted
+scan stack is the stronger implementation. Any future cursor-interface cleanup
+belongs to a separate refactor/audit and must not be bundled with a performance
+claim.
