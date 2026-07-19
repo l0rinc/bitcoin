@@ -4107,3 +4107,54 @@ The complete compiler output is retained in the session history. This is not
 an unaddressed `scantxoutset`, `gettxoutsetinfo`, `dumptxoutset`, or reindex
 speedup. Reconsider only with a design that preserves the CDB-wrapper/LevelDB
 build boundary and shows a measurable scan improvement.
+
+### Reject forcing `Obfuscation::XorWord()` inline
+
+A refreshed twelve-pass full-coin profile assigned 5.84% self time to the
+already-inline `Obfuscation::operator()`. Its bounded private helper
+`XorWord()` still had emitted out-of-line clones, so a one-line
+`ALWAYS_INLINE` annotation was tested. This preserves the size assertion,
+empty-span handling, byte-identical `memcpy` reads/writes, and XOR operation;
+the existing randomized obfuscation round-trip and dbwrapper tests pass.
+
+The isolated 1,024-byte `ObfuscationBench` improves from 25,811,717,029 to
+30,168,423,299 bytes/second (0.04 to 0.03 ns/byte). It is nevertheless the
+wrong optimization for the target path. The full reader deserializes the
+closed chainstate through obfuscated `GetValue(Coin)` calls, where values are
+mostly short and surrounded by LevelDB iteration, VarInts, amount/script
+decompression, and secp256k1 key reconstruction. Seven warm CPU-3-pinned
+runs all returned the exact aggregate
+`32659375 847458211 1488241113523993` but regressed materially:
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| normal inline heuristic | 7.283086, 7.289761, 7.373239, 7.320106, 7.358292, 7.281143, 7.251138 s | 7.289761 s | baseline |
+| forced `XorWord()` inline | 7.453851, 7.406410, 7.359428, 7.379815, 7.370774, 7.333386, 7.331583 s | 7.370774 s | 1.11% slower |
+
+Candidate mean time is also worse (7.376464 versus 7.308109 seconds). The
+annotation additionally invalidates every translation unit including this
+widely used public utility header: the controlled Release build rebuilt 287
+targets before its focused tests and benchmarks ran. The source change was
+fully restored. Do not infer target-RPC or HDD-reindex benefit from the bulk
+XOR microbenchmark.
+
+Raw Hyperfine JSON, current and candidate readers, the refreshed profile, and
+all exact aggregates remain under
+`/mnt/my_storage/bitcoin-perf-scratch/xorword-always-inline/` and
+`/mnt/my_storage/bitcoin-perf-scratch/full-coin-reader-current-profile/`.
+The candidate validation commands were:
+
+```sh
+ninja -C build bitcoind test_bitcoin bench_bitcoin -j4
+build/bin/test_bitcoin --run_test=streams_tests/xor_random_chunks --log_level=message
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+taskset -c 3 build/bin/bench_bitcoin -filter=ObfuscationBench -min-time=2000
+hyperfine --runs 7 --warmup 1 \
+  'taskset -c 3 <base-reader> /mnt/my_storage/BitcoinData/chainstate' \
+  'taskset -c 3 <candidate-reader> /mnt/my_storage/BitcoinData/chainstate'
+```
+
+Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` likewise
+does not force this helper inline. That is correct for the measured
+full-chainstate path; reconsider only with a separate workload whose values
+are demonstrably large enough to resemble the bulk benchmark.
