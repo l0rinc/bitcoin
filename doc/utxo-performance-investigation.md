@@ -1969,3 +1969,33 @@ surface also weakens the case for retaining a negative result. Decision:
 fully revert the source and test prototype; do not trade a theoretically saved
 dispatch for demonstrably worse code generation. Raw artifacts are retained in
 `/mnt/my_storage/bitcoin-perf-scratch/cursor-fused-stats/`.
+
+### Reject fork PR #201 fixed-extent serialization as a UTXO/RPC seed
+
+The remaining potentially related fork seed was draft
+`l0rinc/bitcoin#201` (head `d2c3e708ed81b4e56aa4446c2f3a5e642a111bc1`,
+"Serialization specializations"). Its five commits benchmark and optimize
+`SizeComputer` and fixed-extent `write()`/`read()` stream overloads. The
+reported target is block serialization and block-size computation; it is an
+alternative to upstream PR #31868, not an established UTXO database or
+chainstate-iterator optimization.
+
+The exact patch was fetched without modifying this worktree and inspected with
+`git show d2c3e708 -- src/serialize.h src/streams.h`. The final change adds a
+fixed-extent `SizeComputer::write()` fast path and special-cases fixed spans
+in generic stream wrappers. Current-tree call-site search,
+`rg -n -C 3 "GetSerializeSize\\(" src/validation.cpp src/node/blockstorage.cpp
+src/rpc/blockchain.cpp src/coins.cpp src/txdb.cpp`, found no call in the
+`ComputeUTXOStats()` or `scantxoutset` cursors. Thus it cannot accelerate
+`gettxoutsetinfo`, `scantxoutset`, or the snapshot iteration/writing portions
+of `dumptxoutset`.
+
+For reindex-chainstate, the relevant current calls are the per-block consensus
+size check in `CheckBlock()` and normal block-storage size accounting. The
+latter is on block/undo writing paths rather than a chainstate-only replay;
+neither establishes the many-UTXO or HDD I/O reach required by this
+investigation. Replacing the current generic serialization interfaces with a
+large, draft specialization series would therefore have high implementation
+risk and no demonstrated target workload. Do not prototype or commit it for
+this goal. It remains a separate IBD/block-serialization lead if a future
+profile identifies size computation as material.
