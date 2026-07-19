@@ -4983,3 +4983,33 @@ connection. It does not affect `gettxoutsetinfo hash_type=none`, which uses
 `UnserSize()`, ordinary scripts, or the legacy IDs 4--5. The benchmark is a
 warm CPU-side scan, not an independent HDD reindex result; no reindex
 percentage is claimed.
+
+### Current MuHash profile: defer cryptographic changes
+
+The reusable serialization-buffer and common-script improvements leave direct
+`gettxoutsetinfo hash_type=muhash` overwhelmingly cryptographic rather than
+storage- or deserialization-bound. A fresh current-head full reader used the
+same local 32,867,816-coin chainstate and reusable `DataStream` path as
+`ComputeUTXOStats(MUHASH)`. It completed in 151.692 seconds with the unchanged
+MuHash digest
+`6142d32e4a4dff7df3ec3362c8f8bc375384a44e55d9c79beb65a653bee35b0d`.
+
+The host supplies only 153 usable samples even for this long run, so the exact
+sample percentages are routing evidence, not a microbenchmark claim. Their
+concentration is nevertheless unambiguous:
+
+| self sample | required path |
+| ---: | --- |
+| 61.79% | `Num3072::Multiply` under `MuHash3072::Insert` |
+| 15.38% | `ChaCha20Aligned::Keystream` while mapping a coin serialization to a MuHash element |
+| 14.80% | SHA-256 transform/finalize in the same mapping |
+| 1.34% | LevelDB `TwoLevelIterator::Next` |
+| 0.67% each | cursor value decode, VarInt read, merge comparison, and key parsing |
+
+The raw `perf.data`, self report, exact reader source/binary, and output are
+under `/mnt/my_storage/bitcoin-perf-scratch/muhash-reuse/` as
+`current-head.*`. This does not justify another LevelDB/RocksDB option,
+iterator, cache, or decoder change. A speedup would need to alter the
+cryptographic `MuHash3072` implementation or its required element generation,
+which has a much higher correctness and compatibility burden than the direct
+Core changes accepted here. No source change is made from this profile.
