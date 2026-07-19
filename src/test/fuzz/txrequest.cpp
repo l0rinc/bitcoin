@@ -285,7 +285,7 @@ public:
         }
     }
 
-    void Check()
+    void CheckModel()
     {
         // Compare CountTracked and CountLoad with naive structure.
         size_t total = 0;
@@ -297,28 +297,37 @@ public:
                 tracked += m_announcements[txhash][peer].m_state != State::NOTHING;
                 inflight += m_announcements[txhash][peer].m_state == State::REQUESTED;
                 candidates += m_announcements[txhash][peer].m_state == State::CANDIDATE;
-
-                std::bitset<MAX_PEERS> expected_announcers;
-                for (int peer = 0; peer < MAX_PEERS; ++peer) {
-                    if (m_announcements[txhash][peer].m_state == State::CANDIDATE || m_announcements[txhash][peer].m_state == State::REQUESTED) {
-                        expected_announcers[peer] = true;
-                    }
-                }
-                std::vector<NodeId> candidate_peers;
-                m_tracker.GetCandidatePeers(TXHASHES[txhash], candidate_peers);
-                assert(expected_announcers.count() == candidate_peers.size());
-                for (const auto& peer : candidate_peers) {
-                    assert(expected_announcers[peer]);
-                }
             }
             assert(m_tracker.Count(peer) == tracked);
             assert(m_tracker.CountInFlight(peer) == inflight);
             assert(m_tracker.CountCandidates(peer) == candidates);
             total += tracked;
         }
+
+        // Compare each transaction's candidate-peer index once. This used to be nested in the
+        // peer-count loop even though the result is independent of that loop's peer.
+        for (int txhash = 0; txhash < MAX_TXHASHES; ++txhash) {
+            std::bitset<MAX_PEERS> expected_announcers;
+            for (int peer = 0; peer < MAX_PEERS; ++peer) {
+                if (m_announcements[txhash][peer].m_state == State::CANDIDATE || m_announcements[txhash][peer].m_state == State::REQUESTED) {
+                    expected_announcers[peer] = true;
+                }
+            }
+            std::vector<NodeId> candidate_peers;
+            m_tracker.GetCandidatePeers(TXHASHES[txhash], candidate_peers);
+            assert(expected_announcers.count() == candidate_peers.size());
+            for (const auto& peer : candidate_peers) {
+                assert(expected_announcers[peer]);
+            }
+        }
+
         // Compare Size.
         assert(m_tracker.Size() == total);
+    }
 
+    void Check()
+    {
+        CheckModel();
         // Invoke internal consistency check of TxRequestTracker object.
         m_tracker.SanityCheck();
     }
@@ -384,6 +393,11 @@ FUZZ_TARGET(txrequest)
         default:
             assert(false);
         }
+
+        // Check each transition while the state produced by this command is still observable. A
+        // later command can legitimately clean up a completed announcement and otherwise hide a
+        // transient mismatch from the teardown-only check below.
+        tester.CheckModel();
     }
     tester.Check();
 }
