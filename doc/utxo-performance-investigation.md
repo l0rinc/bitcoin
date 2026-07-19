@@ -1622,3 +1622,36 @@ project-wide acceptance of the new primitive. The exact dataflow is
 `SaltedOutpointHasher` -> `CCoinsMap` -> coin-cache lookups and updates. No
 source diff was retained; this goal is limited to behavior-preserving direct
 Core speedups.
+
+### Current accepted-stack reindex profile: defer LevelDB/RocksDB work
+
+One fresh cold-cache profile was collected on the current accepted stack,
+including the assumevalid contextual-sigops and BIP30 changes, to decide
+whether the remaining work should move into LevelDB. The workload was a
+network-disabled `-reindex-chainstate` over a fresh OverlayFS view of the
+local `BitcoinData` copy to height 287000 with `-dbcache=450`. It used
+`perf record -F 99 --call-graph dwarf` and `/usr/bin/time -v`; the page cache
+was dropped before startup. The daemon completed normally in 509.25 s
+(384.09 s user, 50.85 s system), with 1,600,184 KiB peak RSS, 1,010 major
+faults, and 31,045,120 / 9,463,968 KiB input / output.
+
+The kernel throttled sampling from the requested 99 Hz to 1 Hz. The 463-cycle
+sample is consequently useful only for selecting investigations, not for
+claiming precise percentages or measuring a change. Its strongest identifiable
+hot paths were:
+
+| coarse self-sample signal | path | interpretation |
+| --- | --- | --- |
+| 12.55% | `std::_Hashtable<COutPoint,...>::_M_find_before_node`, including 6.91% below `CCoinsViewCache::BatchWrite` | coins-cache lookup/flush work; the known duplicate `BatchWrite` lookup removal is already in `origin/master` and must not be reintroduced. |
+| 8.94% | SHA256 `Lloop1` while `BlockManager::ReadBlock` constructs transactions | candidate direct-Core investigation: determine whether hash construction during block deserialization is required by the cached-hash contract. |
+| 6.79% | `PresaltedSipHasher::operator(uint256, uint32)` | normal keyed coins-cache hashing; the proposed bespoke SipHash replacement is rejected above for security reasons. |
+| 4.26% | LevelDB memtable skip-list `FindGreaterOrEqual` | real but below the cache and transaction-construction signals. |
+| 0.56% | LevelDB bloom-filter lookup | too small to justify a LevelDB/RocksDB port or invasive storage change. |
+
+This profile therefore does **not** justify touching LevelDB or consulting
+RocksDB implementation details yet. The next candidate is the direct Core
+transaction-hash construction path, and any change must first prove that it
+preserves transaction immutability, hash caching, deserialization, and all
+callers. Raw profiler and daemon data are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-profile-current/metrics/`
+(`perf.data`, `time.txt`, and `debug.log`).
