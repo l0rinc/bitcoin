@@ -1232,3 +1232,56 @@ contextual-sigops block only beneath the assumed-valid block, then verifies
 that an equivalent height-103 child is rejected as `bad-blk-sigops` when
 script checks resume. Raw results are under
 `/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/sigops170-{candidate1,baseline1,candidate2}/metrics/`.
+
+### Skip BIP30 spent-output checks while assumevalid skips scripts ([PR #170](https://github.com/l0rinc/bitcoin/pull/170))
+
+The BIP30 portion of local PR #170 is also still open and absent from
+`bitcoin/bitcoin`, so it passes the upstream-pushed exclusion. In
+`Chainstate::ConnectBlock()`, BIP30 tests every new output with
+`view.HaveCoin()` to reject an unspent output having the same transaction hash
+and index. The candidate makes that loop conditional on `script_check_reason`,
+the same non-empty condition used immediately afterwards for
+`fScriptChecks`. Thus it is skipped only while an assumed-valid ancestor
+disables script validation; BIP30 enforcement resumes exactly when script
+checking resumes. `CheckBlock()` and all normal (non-assumevalid) BIP30 paths
+are unchanged.
+
+The same controlled cold-HDD OverlayFS reindex-chainstate workload was run to
+height 287000 with `-dbcache=450`, dropped page cache, and network-disabled
+settings. Both runs logged `Disabling script verification at block #1`, reached
+height 287000, and logged `Shutdown done`:
+
+| version/run | daemon wall | user | system | instructions | branches | input / output KiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline | 568.053 s | 456.391 s | 61.489 s | 2.523 T | 281.496 B | 31,023,480 / 9,465,144 |
+| candidate | 498.925 s | 387.118 s | 61.286 s | 2.131 T | 213.401 B | 31,023,128 / 9,189,264 |
+
+This single matched pair is 12.17% faster in daemon wall time, with 15.18%
+less user CPU, 15.54% fewer retired instructions, and 24.19% fewer branches;
+disk input, major faults (886 versus 887), and system CPU are effectively
+unchanged. This identifies redundant CPU-side UTXO lookups rather than a
+LevelDB cache or write-buffer limitation, so it is an appropriate direct-Core
+optimization for the HDD workload. Raw commands and metrics are in
+`/mnt/my_storage/bitcoin-perf-scratch/run_reindex_writebuf_trial.sh` and
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/bip30-170-{baseline1,candidate1}/metrics/`.
+
+The focused regression test deliberately makes block 102 reuse the block-2
+coinbase transaction (a BIP30 violation) while also containing excessive
+contextual P2SH sigops. Without assumevalid it is rejected as
+`bad-txns-BIP30`; beneath the assumed-valid block it is accepted, proving both
+expensive checks are skipped there. A height-103 child with excessive sigops
+is then rejected as `bad-blk-sigops`, proving that script checking and the
+associated BIP30 guard resume above assumevalid. The verifier was:
+
+```
+ninja -C build bitcoind bitcoin-cli -j4
+build/test/functional/test_runner.py feature_assumevalid.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-bip30-sigops2 --timeout-factor=2
+```
+
+It passed in 10 seconds. As a mutation check, temporarily removing the new
+`script_check_reason` guard rebuilt successfully but made this test fail in
+four seconds when the assumevalid peer disconnected after the BIP30-invalid
+block. Restoring the guard rebuilt and passed in 10 seconds. The timing result
+is one pair rather than a repeated statistical sample, so rerun it before
+relying on an exact percentage for a different disk, cache size, or chain
+range.
