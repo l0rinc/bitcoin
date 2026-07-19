@@ -485,3 +485,72 @@ fully rejected independent change:
 - [#200](https://github.com/l0rinc/bitcoin/pull/200)/[#203](https://github.com/l0rinc/bitcoin/pull/203): mmap/open-file/cache-threshold variants. Existing and current
   cache/write-buffer experiments are neutral or harmful; reopen only if a new
   profile demonstrates a different bottleneck.
+### LevelDB: heapify forward merging iterators for full UTXO scans
+
+The earlier reindex profile correctly deferred LevelDB work: its small,
+throttled sample did not justify a storage change. A separate profile of the
+actual `gettxoutsetinfo none` RPC over the local full chainstate did. That
+scan had 166,350,731 UTXOs at height 957779, and its usable samples made
+`leveldb::MergingIterator::FindSmallest()` (13.76%) and
+`InternalKeyComparator::Compare` (11.84%) the two largest self-time signals.
+The already-committed direct-Core cursor changes leave this iterator-selection
+work intact.
+
+This is therefore a narrowly justified LevelDB change, not a RocksDB port or
+an options/cache experiment. The local LevelDB `MergingIterator` explicitly
+scanned every child in `FindSmallest()` after every forward `Next()`, with a
+comment that a heap might be useful for more children. Current RocksDB was
+consulted only as an independent design hint: it maintains a min-heap for its
+forward merging iterator. No RocksDB code is copied. The replacement keeps a
+binary heap of valid child wrappers: seek builds it in O(n), and each forward
+advance restores its root in O(log n), instead of finding the smallest child
+in O(n). Reverse iteration deliberately retains the existing linear
+`FindLargest()` path.
+
+Exact ordering is preserved. On comparator equality the heap uses the child
+wrapper's address as a stable tie-breaker. Those pointers all refer to the
+same `children_` array, so this has the original forward scan's lowest-index
+tie order; the unmodified reverse scan retains its original highest-index tie
+order. The new `leveldb_tests` use deliberately equal keys with distinguishable
+values, exercise `Seek()`, and change directions on a disjoint-key merge. A
+temporary mutation reversing the heap tie-breaker rebuilt successfully but
+made `merging_iterator_preserves_duplicate_tie_order` fail with the expected
+reversed `a`, `c`, and `e` values. Restoring the tie-breaker passed:
+
+```
+cmake -B build
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=leveldb_tests --log_level=message
+ctest --test-dir build --output-on-failure -R '^(leveldb_tests|dbwrapper_tests)$'
+build/bin/test_bitcoin --run_test=coins_tests --log_level=message
+```
+
+For performance evidence, two otherwise identical network-disabled daemons
+used `/mnt/my_storage/BitcoinData`, `-checkblocks=1`, `-persistmempool=0`, and
+an isolated RPC cookie/debug-log directory. The first baseline full scan
+(162.83 s) warmed the OS page cache and was excluded. The baseline's next five
+and the candidate's next five `gettxoutsetinfo none` results all have SHA-256
+`4b96d583ae030f7391f6b960ee9c738360da5ea27532da61c7057cc206dccfa0`:
+
+| version/runs | wall seconds | median wall | median task-clock | median instructions | median branches | median branch misses |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| baseline | 65.29, 65.19, 65.16, 65.27, 65.25 | 65.25 | 65.196 s | 631.535 B | 131.799 B | 539.718 M |
+| heap candidate | 56.20, 55.61, 55.79, 55.64, 55.60 | 55.64 | 55.587 s | 508.649 B | 106.118 B | 520.077 M |
+
+The candidate is 14.73% faster in median RPC wall time, with 14.74% less
+task-clock, 19.46% fewer instructions, 19.49% fewer branches, and 3.64% fewer
+branch misses. All measurements use `perf stat -p <daemon-pid>` over one RPC;
+raw JSON, timings, counter CSV files, and SHA-256 files are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/leveldb-merger-heap-baseline3.sMT71a/`
+and `/mnt/my_storage/bitcoin-perf-scratch/leveldb-merger-heap-candidate.SxJPUH/`.
+
+Reach is broad for forward LevelDB merged iterators: full chainstate scans in
+`gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`; other DB iterators with
+overlapping mutable/L0 sources; and LevelDB compaction's merging iterator.
+It does not change on-disk data, the comparator, value decoding, random
+reads, cache sizing, write buffering, or reverse iteration. The benchmark is
+one cache-warm full chainstate and one HDD host, not a cold-cache test and not
+a reindex-chainstate result; do not extrapolate its 14.73% figure to those
+workloads without rerunning them. `origin/master` was freshly fetched and its
+`src/leveldb/table/merger.cc` still uses the linear `FindSmallest()` loop, so
+this is not an already-pushed upstream fix.

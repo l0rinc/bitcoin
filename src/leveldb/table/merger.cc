@@ -8,6 +8,9 @@
 #include "leveldb/iterator.h"
 #include "table/iterator_wrapper.h"
 
+#include <utility>
+#include <vector>
+
 namespace leveldb {
 
 namespace {
@@ -19,6 +22,7 @@ class MergingIterator : public Iterator {
         n_(n),
         current_(nullptr),
         direction_(kForward) {
+    min_heap_.reserve(n);
     for (int i = 0; i < n; i++) {
       children_[i].Set(children[i]);
     }
@@ -32,7 +36,7 @@ class MergingIterator : public Iterator {
     for (int i = 0; i < n_; i++) {
       children_[i].SeekToFirst();
     }
-    FindSmallest();
+    BuildMinHeap();
     direction_ = kForward;
   }
 
@@ -40,6 +44,7 @@ class MergingIterator : public Iterator {
     for (int i = 0; i < n_; i++) {
       children_[i].SeekToLast();
     }
+    min_heap_.clear();
     FindLargest();
     direction_ = kReverse;
   }
@@ -48,7 +53,7 @@ class MergingIterator : public Iterator {
     for (int i = 0; i < n_; i++) {
       children_[i].Seek(target);
     }
-    FindSmallest();
+    BuildMinHeap();
     direction_ = kForward;
   }
 
@@ -72,14 +77,18 @@ class MergingIterator : public Iterator {
         }
       }
       direction_ = kForward;
+      current_->Next();
+      BuildMinHeap();
+      return;
     }
 
     current_->Next();
-    FindSmallest();
+    ReplaceMinHeapTop();
   }
 
   void Prev() override {
     assert(Valid());
+    min_heap_.clear();
 
     // Ensure that all children are positioned before key().
     // If we are moving in the reverse direction, it is already
@@ -132,32 +141,71 @@ class MergingIterator : public Iterator {
   // Which direction is the iterator moving?
   enum Direction { kForward, kReverse };
 
-  void FindSmallest();
   void FindLargest();
 
-  // We might want to use a heap in case there are lots of children.
-  // For now we use a simple array since we expect a very small number
-  // of children in leveldb.
+  bool MinHeapLess(const IteratorWrapper* lhs,
+                   const IteratorWrapper* rhs) const;
+  void BuildMinHeap();
+  void MinHeapify(size_t root);
+  void ReplaceMinHeapTop();
+
   const Comparator* comparator_;
   IteratorWrapper* children_;
   int n_;
   IteratorWrapper* current_;
   Direction direction_;
+  std::vector<IteratorWrapper*> min_heap_;
 };
 
-void MergingIterator::FindSmallest() {
-  IteratorWrapper* smallest = nullptr;
-  for (int i = 0; i < n_; i++) {
-    IteratorWrapper* child = &children_[i];
-    if (child->Valid()) {
-      if (smallest == nullptr) {
-        smallest = child;
-      } else if (comparator_->Compare(child->key(), smallest->key()) < 0) {
-        smallest = child;
-      }
+bool MergingIterator::MinHeapLess(const IteratorWrapper* lhs,
+                                  const IteratorWrapper* rhs) const {
+  const int cmp = comparator_->Compare(lhs->key(), rhs->key());
+  // Preserve FindSmallest()'s lowest-index tie order.
+  return cmp < 0 || (cmp == 0 && lhs < rhs);
+}
+
+void MergingIterator::BuildMinHeap() {
+  min_heap_.clear();
+  for (int i = 0; i < n_; ++i) {
+    if (children_[i].Valid()) {
+      min_heap_.push_back(&children_[i]);
     }
   }
-  current_ = smallest;
+  for (size_t i = min_heap_.size() / 2; i > 0; --i) {
+    MinHeapify(i - 1);
+  }
+  current_ = min_heap_.empty() ? nullptr : min_heap_.front();
+}
+
+void MergingIterator::MinHeapify(size_t root) {
+  while (true) {
+    size_t smallest = root;
+    const size_t left = root * 2 + 1;
+    const size_t right = left + 1;
+    if (left < min_heap_.size() &&
+        MinHeapLess(min_heap_[left], min_heap_[smallest])) {
+      smallest = left;
+    }
+    if (right < min_heap_.size() &&
+        MinHeapLess(min_heap_[right], min_heap_[smallest])) {
+      smallest = right;
+    }
+    if (smallest == root) break;
+    std::swap(min_heap_[root], min_heap_[smallest]);
+    root = smallest;
+  }
+}
+
+void MergingIterator::ReplaceMinHeapTop() {
+  assert(!min_heap_.empty() && min_heap_.front() == current_);
+  if (current_->Valid()) {
+    MinHeapify(0);
+  } else {
+    min_heap_.front() = min_heap_.back();
+    min_heap_.pop_back();
+    if (!min_heap_.empty()) MinHeapify(0);
+  }
+  current_ = min_heap_.empty() ? nullptr : min_heap_.front();
 }
 
 void MergingIterator::FindLargest() {
