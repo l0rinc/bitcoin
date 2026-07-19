@@ -3,6 +3,9 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <blockfilter.h>
+#include <hash.h>
+#include <serialize.h>
+#include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
@@ -21,12 +24,23 @@ FUZZ_TARGET(blockfilter)
     if (!block_filter) {
         return;
     }
-    {
-        (void)block_filter->ComputeHeader(ConsumeUInt256(fuzzed_data_provider));
-        (void)block_filter->GetBlockHash();
-        (void)block_filter->GetEncodedFilter();
-        (void)block_filter->GetHash();
-    }
+
+    const uint256 previous_header{ConsumeUInt256(fuzzed_data_provider)};
+    const uint256 expected_hash{Hash(block_filter->GetEncodedFilter())};
+    assert(block_filter->GetHash() == expected_hash);
+    assert(block_filter->ComputeHeader(previous_header) == Hash(expected_hash, previous_header));
+
+    DataStream serialized;
+    serialized << *block_filter;
+    BlockFilter round_tripped;
+    serialized >> round_tripped;
+    assert(serialized.empty());
+    assert(round_tripped.GetFilterType() == block_filter->GetFilterType());
+    assert(round_tripped.GetBlockHash() == block_filter->GetBlockHash());
+    assert(round_tripped.GetEncodedFilter() == block_filter->GetEncodedFilter());
+    assert(round_tripped.GetHash() == expected_hash);
+    assert(round_tripped.ComputeHeader(previous_header) == block_filter->ComputeHeader(previous_header));
+
     {
         const BlockFilterType block_filter_type = block_filter->GetFilterType();
         (void)BlockFilterTypeName(block_filter_type);
@@ -42,6 +56,11 @@ FUZZ_TARGET(blockfilter)
         {
             element_set.insert(ConsumeRandomLengthByteVector(fuzzed_data_provider));
         }
-        gcs_filter.MatchAny(element_set);
+        const bool match_any{gcs_filter.MatchAny(element_set)};
+        bool match_one{false};
+        for (const auto& element : element_set) {
+            match_one |= gcs_filter.Match(element);
+        }
+        assert(match_any == match_one);
     }
 }
