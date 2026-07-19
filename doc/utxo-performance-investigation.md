@@ -3235,3 +3235,89 @@ but it has no reproducible elapsed-time benefit on the measured chainstate and
 does not justify the added state, conditional comparison path, private-header
 test plumbing, or broader LevelDB maintenance surface. It is not an HDD
 reindex-chainstate optimization.
+
+### LevelDB: directly compare bytewise internal user keys
+
+The symbolized follow-up Callgrind profile used the same closed local
+chainstate reader as the `DBIter::SaveKey()` investigation. It processed
+32,659,375 UTXOs and retained 66.46 billion instructions. The source-attributed
+LevelDB trace showed 53,348,030 calls to
+`InternalKeyComparator::Compare()` from the forward merge heap's
+`MinHeapLess()` path, with 4.27 billion inclusive instructions below the
+internal-key comparator. The current comparator always dispatches virtually
+through its configured user comparator, even when it is LevelDB's built-in
+bytewise comparator.
+
+Core's `CDBWrapper::GetOptions()` starts from `leveldb::Options`, whose
+default comparator is `BytewiseComparator()`, and does not replace it. The
+candidate records that pointer identity once in `InternalKeyComparator` and
+uses the equivalent inline `Slice::compare()` for the bytewise case. All
+other comparators retain the original virtual `Comparator::Compare()` call.
+The internal-key ordering remains: user keys first, then the original
+decreasing sequence/type comparison for equal user keys. No database bytes,
+comparator name, filter keys, or external API changes.
+
+A focused test constructs two equal-sequence internal keys ordered by a custom
+reverse comparator and verifies that `b` sorts before `a`. A temporary mutation
+that forced every comparator into the bytewise path failed this oracle with
+`1 >= 0`, proving that the test protects the fallback rather than merely
+executing the normal Core case.
+
+Six warm alternating CPU-3-pinned scans of the closed chainstate reader all
+returned the exact same aggregate tuple:
+
+```
+32659375 7659292 1488241113523993 2480426961
+```
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| current virtual user comparison | 7.04774, 7.02387, 7.02696, 7.02305, 7.05191, 7.04165 s | 7.034305 s | baseline |
+| cached bytewise comparison | 7.04598, 7.00489, 7.00296, 6.99977, 7.00487, 7.05978 s | 7.004880 s | 0.42% faster |
+
+The paired-median improvement is 0.02113 seconds (0.30%); five of six pairs
+favor the candidate. Three additional alternating `perf stat` pairs provide
+the causal CPU evidence:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.08671 s | 7.05557 s | -0.44% |
+| instructions | 67.244941 B | 66.377648 B | -1.29% |
+| branches | 13.551859 B | 13.392437 B | -1.18% |
+| branch misses | 47.754826 M | 48.682570 M | +1.94% |
+| cache misses | 38.928653 M | 38.991140 M | +0.16% |
+
+The instruction and branch reductions are consistent across all three counter
+pairs; small miss increases do not overcome the reproducible task-clock and
+wall-time improvement. The earlier bytewise `DBIter` dispatch experiment was
+rejected because it had no task-clock or paired elapsed-time win. This hotter
+internal-key comparison has materially more calls in the merged forward scan
+and clears that acceptance bar.
+
+Validation used both the generic-comparator regression test and ordinary
+Core cursor/database tests:
+
+```sh
+git fetch -q origin master
+git log origin/master --format='%h %s' -S'user_comparator_is_bytewise_' -- src/leveldb/db/dbformat.h src/leveldb/db/dbformat.cc
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=leveldb_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase/coins_db_cursor_order --log_level=message
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+git diff --check
+```
+
+The symbolized profile, its separately linked reader, and raw benchmark
+commands/binaries are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/dbiter-savekey/` as
+`callgrind-leveldb-debug.out`, `cursor_stats_bench_leveldb_debug`, and
+`cursor_stats_bench_internal_cmp_candidate`. The temporary RelWithDebInfo
+build directory is `build-profile/` and is not part of the change.
+
+Reach is all LevelDB paths using an `InternalKeyComparator` with the built-in
+bytewise comparator, especially forward merged scans such as
+`gettxoutsetinfo`, `scantxoutset`, and the chainstate-copy/statistics phases of
+`dumptxoutset`; compaction and point-lookup paths can also execute this
+comparator. A non-bytewise comparator keeps its old path. This is a warm,
+CPU-bound chainstate measurement and does not claim a full HDD
+`-reindex-chainstate` wall-time speedup.

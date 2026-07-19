@@ -3,6 +3,7 @@
 // file COPYING or https://opensource.org/license/mit/.
 
 #include <leveldb/comparator.h>
+#include <leveldb/db/dbformat.h>
 #include <leveldb/iterator.h>
 #include <leveldb/table/merger.h>
 
@@ -107,6 +108,19 @@ std::string ReadBackward(leveldb::Iterator& iterator)
     return result;
 }
 
+class ReverseComparator final : public leveldb::Comparator {
+public:
+    const char* Name() const override { return "bitcoin.ReverseComparator"; }
+
+    int Compare(const leveldb::Slice& a, const leveldb::Slice& b) const override
+    {
+        return leveldb::BytewiseComparator()->Compare(b, a);
+    }
+
+    void FindShortestSeparator(std::string*, const leveldb::Slice&) const override {}
+    void FindShortSuccessor(std::string*) const override {}
+};
+
 } // namespace
 
 BOOST_AUTO_TEST_SUITE(leveldb_tests)
@@ -163,6 +177,16 @@ BOOST_AUTO_TEST_CASE(merging_iterator_changes_direction_without_skipping_entries
     BOOST_CHECK_EQUAL(iterator->key().ToString(), "d");
     iterator->Next();
     BOOST_CHECK_EQUAL(iterator->key().ToString(), "e");
+}
+
+BOOST_AUTO_TEST_CASE(internal_key_comparator_respects_non_bytewise_comparator)
+{
+    ReverseComparator user_comparator;
+    leveldb::InternalKeyComparator comparator{&user_comparator};
+    const leveldb::InternalKey b{"b", /*sequence=*/1, leveldb::kTypeValue};
+    const leveldb::InternalKey a{"a", /*sequence=*/1, leveldb::kTypeValue};
+
+    BOOST_CHECK_LT(comparator.Compare(b.Encode(), a.Encode()), 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

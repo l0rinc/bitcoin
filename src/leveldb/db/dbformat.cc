@@ -50,7 +50,9 @@ int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
   //    increasing user key (according to user-supplied comparator)
   //    decreasing sequence number
   //    decreasing type (though sequence# should be enough to disambiguate)
-  int r = user_comparator_->Compare(ExtractUserKey(akey), ExtractUserKey(bkey));
+  const Slice a{ExtractUserKey(akey)};
+  const Slice b{ExtractUserKey(bkey)};
+  int r = user_comparator_is_bytewise_ ? a.compare(b) : user_comparator_->Compare(a, b);
   if (r == 0) {
     const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8);
     const uint64_t bnum = DecodeFixed64(bkey.data() + bkey.size() - 8);

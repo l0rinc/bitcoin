@@ -141,8 +141,9 @@ add_executable(test_bitcoin
   versionbits_tests.cpp
 )
 
-# Test the internal LevelDB merging iterator directly.
+# Test internal LevelDB iterator and key-comparator behavior directly.
 target_include_directories(test_bitcoin PRIVATE
+  ${PROJECT_SOURCE_DIR}/src/leveldb
   ${PROJECT_SOURCE_DIR}/src/leveldb/include
 )
 
