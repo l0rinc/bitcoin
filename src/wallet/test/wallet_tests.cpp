@@ -5,6 +5,7 @@
 #include <wallet/wallet.h>
 
 #include <cstdint>
+#include <cstring>
 #include <future>
 #include <memory>
 #include <vector>
@@ -31,6 +32,7 @@
 #include <wallet/coincontrol.h>
 #include <wallet/context.h>
 #include <wallet/receive.h>
+#include <wallet/scriptpubkeyman.h>
 #include <wallet/spend.h>
 #include <wallet/sqlite.h>
 #include <wallet/test/util.h>
@@ -59,6 +61,8 @@ class MasterKeyFailDatabase : public InMemoryWalletDatabase
 {
 public:
     bool m_fail_master_key_writes{true};
+    //! Number of remaining crypted descriptor key record writes to fail.
+    int m_fail_crypted_key_writes{0};
 
     class Batch : public SQLiteBatch
     {
@@ -71,6 +75,14 @@ public:
             if (m_owner.m_fail_master_key_writes &&
                 key.size() >= 5 && key[0] == std::byte{0x04} && key[1] == std::byte{'m'} &&
                 key[2] == std::byte{'k'} && key[3] == std::byte{'e'} && key[4] == std::byte{'y'}) {
+                return false;
+            }
+            // The crypted descriptor key record serializes ("walletdescriptorckey", (desc_id, pubkey)).
+            static const std::string CKEY_TYPE{"walletdescriptorckey"};
+            if (m_owner.m_fail_crypted_key_writes > 0 &&
+                key.size() >= 1 + CKEY_TYPE.size() && key[0] == std::byte{static_cast<unsigned char>(CKEY_TYPE.size())} &&
+                std::memcmp(key.data() + 1, CKEY_TYPE.data(), CKEY_TYPE.size()) == 0) {
+                --m_owner.m_fail_crypted_key_writes;
                 return false;
             }
             return SQLiteBatch::WriteKey(std::move(key), std::move(value), overwrite);
@@ -165,6 +177,73 @@ BOOST_FIXTURE_TEST_CASE(change_passphrase_master_key_write_failure, WalletTestin
     // The in-memory record was restored to match the record on disk, so the
     // old passphrase still unlocks the wallet.
     BOOST_CHECK(wallet->Unlock("old_pass"));
+
+    TestUnloadWallet(std::move(wallet));
+}
+
+BOOST_FIXTURE_TEST_CASE(encrypt_descriptor_key_write_failure, WalletTestingSetup)
+{
+    // A descriptor wallet holding two private keys in one descriptor.
+    WalletContext context;
+    context.args = &m_args;
+    context.chain = m_node.chain.get();
+    auto wallet{TestCreateWallet(std::make_unique<MasterKeyFailDatabase>(), context, WALLET_FLAG_DESCRIPTORS)};
+    auto* fail_db{static_cast<MasterKeyFailDatabase*>(&wallet->GetDatabase())};
+    fail_db->m_fail_master_key_writes = false;
+
+    CKey key1{GenerateRandomKey()};
+    CKey key2{GenerateRandomKey()};
+    FlatSigningProvider keys;
+    std::string error;
+    auto descs{Parse("wsh(multi(1," + EncodeSecret(key1) + "," + EncodeSecret(key2) + "))", keys, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE(!descs.empty());
+    WalletDescriptor w_desc(std::move(descs.at(0)), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/0, /*next_index=*/0);
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_REQUIRE(wallet->AddWalletDescriptor(w_desc, keys, /*label=*/"", /*internal=*/false));
+    }
+    DescriptorScriptPubKeyMan* spkm{wallet->GetDescriptorScriptPubKeyMan(w_desc)};
+    BOOST_REQUIRE(spkm);
+    const uint256 desc_id{w_desc.id};
+
+    // The first crypted key record write fails mid-encryption. Encrypt() must
+    // report failure so the caller aborts the transaction (EncryptWallet dies
+    // and the user reloads the unencrypted wallet) instead of committing a mix
+    // of crypted and plaintext key records, which throws
+    // "Wallet contains both unencrypted and encrypted keys" on the next load.
+    fail_db->m_fail_crypted_key_writes = 1;
+    CKeyingMaterial master_key(32, 0x5a);
+    {
+        WalletBatch batch{wallet->GetDatabase()};
+        BOOST_REQUIRE(batch.TxnBegin());
+        BOOST_CHECK(!spkm->Encrypt(master_key, &batch));
+        batch.TxnAbort();
+    }
+
+    {
+        // Nothing was committed: both plaintext key records remain on disk and
+        // no crypted record exists, so the wallet still loads as unencrypted.
+        auto read_batch{wallet->GetDatabase().MakeBatch()};
+        std::unique_ptr<DatabaseCursor> cursor{read_batch->GetNewCursor()};
+        BOOST_REQUIRE(cursor);
+        size_t plaintext_keys{0};
+        size_t crypted_keys{0};
+        while (true) {
+            DataStream ss_key{}, ss_value{};
+            if (cursor->Next(ss_key, ss_value) != DatabaseCursor::Status::MORE) break;
+            std::string record_type;
+            ss_key >> record_type;
+            if (record_type != DBKeys::WALLETDESCRIPTORKEY && record_type != DBKeys::WALLETDESCRIPTORCKEY) continue;
+            uint256 id;
+            CPubKey pubkey;
+            ss_key >> id >> pubkey;
+            if (id != desc_id) continue;
+            plaintext_keys += (record_type == DBKeys::WALLETDESCRIPTORKEY);
+            crypted_keys += (record_type == DBKeys::WALLETDESCRIPTORCKEY);
+        }
+        BOOST_CHECK_EQUAL(plaintext_keys, 2U);
+        BOOST_CHECK_EQUAL(crypted_keys, 0U);
+    }
 
     TestUnloadWallet(std::move(wallet));
 }
