@@ -208,6 +208,9 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
         uint8_t key2{'k'};
         uint256 in2 = m_rng.rand256();
         dbw.Write(key2, in2);
+        uint8_t key3{'l'};
+        std::vector<uint8_t> in3{0, 1, 2, 3, 4, 5, 6};
+        dbw.Write(key3, in3);
 
         std::unique_ptr<CDBIterator> it(dbw.NewIterator());
 
@@ -237,6 +240,14 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
         BOOST_REQUIRE(it->GetValue(val_res));
         BOOST_CHECK_EQUAL(val_res.ToString(), in2.ToString());
 
+        it->Seek(key3);
+
+        BOOST_REQUIRE(it->GetKey(key_res));
+        BOOST_CHECK_EQUAL(key_res, key3);
+        std::vector<uint8_t> val_res3;
+        BOOST_REQUIRE(it->GetValue(val_res3));
+        BOOST_CHECK_EQUAL_COLLECTIONS(val_res3.begin(), val_res3.end(), in3.begin(), in3.end());
+
         it->Seek(key);
 
         BOOST_REQUIRE(it->GetKey(key_res));
@@ -250,6 +261,13 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
         BOOST_CHECK_EQUAL(key_res, key2);
         BOOST_REQUIRE(it->GetValue(val_res));
         BOOST_CHECK_EQUAL(val_res.ToString(), in2.ToString());
+
+        it->Next();
+
+        BOOST_REQUIRE(it->GetKey(key_res));
+        BOOST_CHECK_EQUAL(key_res, key3);
+        BOOST_REQUIRE(it->GetValue(val_res3));
+        BOOST_CHECK_EQUAL_COLLECTIONS(val_res3.begin(), val_res3.end(), in3.begin(), in3.end());
 
         it->Next();
         BOOST_CHECK_EQUAL(it->Valid(), false);

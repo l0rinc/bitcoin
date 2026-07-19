@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <optional>
@@ -79,6 +80,52 @@ namespace dbwrapper_private {
  * specific database.
  */
 const Obfuscation& GetObfuscation(const CDBWrapper&);
+
+/** Deserialize an obfuscated LevelDB value without first materializing it. */
+class ObfuscatedSpanReader
+{
+private:
+    std::span<const std::byte> m_data;
+    const Obfuscation& m_obfuscation;
+    size_t m_key_offset{0};
+
+public:
+    ObfuscatedSpanReader(std::span<const std::byte> data, const Obfuscation& obfuscation)
+        : m_data{data}, m_obfuscation{obfuscation}
+    {
+    }
+
+    template <typename T>
+    ObfuscatedSpanReader& operator>>(T&& obj)
+    {
+        ::Unserialize(*this, obj);
+        return *this;
+    }
+
+    size_t size() const { return m_data.size(); }
+    bool empty() const { return m_data.empty(); }
+
+    void read(std::span<std::byte> dst)
+    {
+        if (dst.empty()) return;
+        if (dst.size() > m_data.size()) {
+            throw std::ios_base::failure("ObfuscatedSpanReader::read(): end of data");
+        }
+        std::memcpy(dst.data(), m_data.data(), dst.size());
+        m_obfuscation(dst, m_key_offset);
+        m_data = m_data.subspan(dst.size());
+        m_key_offset += dst.size();
+    }
+
+    void ignore(size_t n)
+    {
+        if (n > m_data.size()) {
+            throw std::ios_base::failure("ObfuscatedSpanReader::ignore(): end of data");
+        }
+        m_data = m_data.subspan(n);
+        m_key_offset += n;
+    }
+};
 }; // namespace dbwrapper_private
 
 bool DestroyDB(const std::string& path_str);
@@ -179,10 +226,7 @@ public:
             if (!obfuscation) {
                 SpanReader{GetValueImpl()} >> value;
             } else {
-                ScopedDataStreamUsage scoped_scratch{m_scratch};
-                m_scratch.write(GetValueImpl());
-                obfuscation(m_scratch);
-                m_scratch >> value;
+                dbwrapper_private::ObfuscatedSpanReader{GetValueImpl(), obfuscation} >> value;
             }
         } catch (const std::exception&) {
             return false;
