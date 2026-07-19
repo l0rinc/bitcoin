@@ -964,3 +964,53 @@ contextual-sigops block only beneath the assumed-valid block, then verifies
 that an equivalent height-103 child is rejected as `bad-blk-sigops` when
 script checks resume. Raw results are under
 `/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/sigops170-{candidate1,baseline1,candidate2}/metrics/`.
+
+### Reuse input heights for BIP68 sequence locks ([PR #138](https://github.com/l0rinc/bitcoin/pull/138))
+
+Local PR #138 is open and its `f6c6d234e182446307395f92da87b27909377d89`
+head is absent from freshly fetched `origin/master` at
+`18c05d93016b28a9afd4c716dfe00b6e0accb30b`; it is therefore not an
+already-pushed upstream fix. In `Chainstate::ConnectBlock()`, every
+non-coinbase input was first consulted by `HaveInputs()`, again by
+`Consensus::CheckTxInputs()`, then a third time solely to populate
+`prevheights` for `SequenceLocks()`. The first availability pass must remain:
+it gives missing/spent inputs precedence over later maturity and amount
+failures. The second pass already has the required unspent `Coin`, however, so
+the accepted change makes its height an optional output of `CheckTxInputs()`
+and passes the pre-sized `prevheights` vector from `ConnectBlock()`.
+
+This removes exactly the final cache lookup per non-coinbase input. It does not
+change input validation, coin mutation, sequence-lock evaluation, or the
+mempool path: callers that do not need heights retain the default null
+argument. `HaveInputs()` establishes that all inputs are available before any
+height is written, and `CheckTxInputs()` still reads the same `Coin` in the
+same input order while checking maturity, amounts, and fees. The focused
+`checktxinputs_prev_heights_test` uses two coins at heights 101 and 202 to
+check the returned order and fee. A temporary `coin.nHeight + 1` mutation made
+that test fail with `102 != 101` and `203 != 202`, then was reverted.
+
+The same cold-HDD OverlayFS reindex-chainstate control used height 287000,
+`-dbcache=450`, a dropped page cache, network-disabled arguments, and
+`-disablewallet`. Each run started from a fresh upperdir over the same local
+`BitcoinData` lowerdir. It verified `height=0`, assumed-valid script disablement
+at block 1, height 287000, and clean shutdown. The two baseline results bracket
+the candidate:
+
+| version/run | daemon wall | user | system | task-clock | instructions | branches | branch misses | major faults | input / output KiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline 1 | 576.75 s | 457.02 s | 61.37 s | 514.848 s | 2.522384 T | 280.972 B | 4.305 B | 889 | 31,021,928 / 9,454,784 |
+| candidate | 573.01 s | 455.12 s | 62.21 s | 513.740 s | 2.503694 T | 281.131 B | 4.302 B | 895 | 31,024,392 / 9,751,024 |
+| baseline 2 | 574.96 s | 456.78 s | 61.83 s | 515.027 s | 2.522559 T | 281.004 B | 4.335 B | 889 | 31,023,664 / 9,449,344 |
+
+Against the two-baseline midpoint, candidate wall time improves 0.49%,
+task-clock 0.23%, user CPU 0.39%, and instructions 0.74%; branches are nearly
+unchanged (+0.05%), while branch misses fall 0.41%. The five CPU-pinned
+`bench_bitcoin -filter='ConnectBlock.*' -min-time=1000` controls agree on the
+direction: median elapsed time improved 0.23% for all-ECDSA, 0.21% for
+all-Schnorr, and 0.21% for mixed blocks; instruction movement was -0.45%,
++0.13%, and -0.30%, respectively. The macro reindex instruction result is the
+acceptance evidence; the microbenchmark is only a low-cost regression screen.
+Raw microbenchmark JSON/text are under
+`/mnt/my_storage/bitcoin-perf-scratch/bip68-prevheights-connectblock/`; raw
+reindex metrics and debug logs are under
+`/mnt/my_storage/bitcoin-perf-scratch/bip68-prevheights-reindex/{baseline1,candidate,baseline2}/metrics/`.
