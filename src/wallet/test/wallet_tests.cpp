@@ -206,13 +206,13 @@ BOOST_FIXTURE_TEST_CASE(encrypt_descriptor_key_write_failure, WalletTestingSetup
     {
         WalletBatch batch{wallet->GetDatabase()};
         BOOST_REQUIRE(batch.TxnBegin());
-        BOOST_CHECK(spkm->Encrypt(CKeyingMaterial(32, 0x5a), &batch)); // The failed crypted key write is currently ignored
-        BOOST_REQUIRE(batch.TxnCommit());
+        BOOST_CHECK(!spkm->Encrypt(CKeyingMaterial(32, 0x5a), &batch)); // Failed persistence must abort encryption
+        BOOST_REQUIRE(batch.TxnAbort());
     }
 
     const auto counts{CountKeyRecords(wallet->GetDatabase())};
-    BOOST_CHECK_EQUAL(counts.plain + 1, before.plain);
-    BOOST_CHECK_EQUAL(counts.crypted, before.crypted + 1);
+    BOOST_CHECK_EQUAL(counts.plain, before.plain);
+    BOOST_CHECK_EQUAL(counts.crypted, before.crypted);
 
     TestUnloadWallet(std::move(wallet));
 }
