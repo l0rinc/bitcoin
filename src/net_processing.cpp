@@ -3467,6 +3467,11 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
     bool new_block{false};
     m_chainman.ProcessNewBlock(block, force_processing, min_pow_checked, &new_block);
     if (new_block) {
+        const bool have_block_data{WITH_LOCK(cs_main, {
+            const CBlockIndex* pindex{m_chainman.m_blockman.LookupBlockIndex(block->GetHash())};
+            return pindex != nullptr && (pindex->nStatus & BLOCK_HAVE_DATA);
+        })};
+        Assume(have_block_data);
         node.m_last_block_time = GetTime<std::chrono::seconds>();
         // In case this block came from a different peer than we requested
         // from, we can erase the block request now anyway (as we just stored
