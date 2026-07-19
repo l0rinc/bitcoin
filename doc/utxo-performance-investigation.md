@@ -2720,3 +2720,67 @@ memory-constrained HDD replay it aims to speed up. A future map investigation
 must first demonstrate a materially larger map-lookup share with a
 container-independent capacity/recovery proof; neither variant justifies
 touching LevelDB or RocksDB.
+
+### Reject per-entry dirty-count updates during wiping cache flushes
+
+`CoinsViewCacheCursor::NextAndMaybeErase()` decrements `m_dirty_count` for
+every flagged entry even when `m_will_erase` is true. In that mode the caller
+will immediately clear the whole map, and `CCoinsViewDB::BatchWrite()` already
+reads the initial dirty count before iteration for logging and disk-space
+checks. A temporary Core-only prototype therefore kept the count unchanged
+while a wiping cursor iterated, set it to zero only after the final entry, and
+returned early before the per-entry `IsDirty()`/`TrySub()` work. The
+non-wiping `Sync()` path retained the exact original decrement, spent-entry
+erase, and flag-cleanup behavior.
+
+The prototype preserves the current wipe behavior: a completed normal
+`BatchWrite()` reaches the final linked-list entry, then `Flush()` clears the
+map and observes a zero count. If a backend stops iteration early, the count
+remains nonzero and the existing post-`BatchWrite()` assertion fails instead
+of silently accepting an incomplete flush. Artificial FRESH-only test entries
+remain harmless in wiping cursors because the map is discarded, as before.
+
+The focused cache suites passed with separately saved original and candidate
+release binaries:
+
+```sh
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests_base --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase --log_level=message
+build/bin/test_bitcoin --run_test=coinscachepair_tests --log_level=message
+git diff --check
+```
+
+The candidate binary is
+`/mnt/my_storage/bitcoin-perf-scratch/cursor-dirty-count/bitcoind-candidate`
+and the original is `.../bitcoind-baseline`. `nm -S -C` shows that the
+inlined wiping path shrank `CCoinsViewDB::BatchWrite()` from 9438 to 9351
+bytes (87 bytes, 0.92%), but grew `CCoinsViewCache::BatchWrite()` from 2783 to
+2831 bytes (48 bytes, 1.72%). That mixed code-size result does not establish a
+uniform instruction reduction.
+
+More importantly, this has too little end-to-end reach for a further HDD run.
+The controlled height-287000, `-dbcache=450` log has only five normal
+full-cache drops after genesis, each with 3,155,908 to 3,187,541 entries: at
+most 15,910,519 per-entry updates. The same run retires 2.496 trillion
+instructions. Even an unrealistically generous ten saved instructions per
+entry would bound the effect below 0.007% of that execution, while the prior
+cold controls vary by several tenths of a percent. The full local-chain
+telemetry has similarly only six large drops at 2 GiB cache capacity, not a
+per-block flush.
+
+The flush counts were extracted from the saved `UpdateTip` telemetry with:
+
+```sh
+rg 'UpdateTip: new best=.*cache=' \
+  /mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/freshflags-base-1/metrics/debug.log
+nm -S -C /mnt/my_storage/bitcoin-perf-scratch/cursor-dirty-count/bitcoind-{baseline,candidate}
+```
+
+Decision: fully revert the prototype without an HDD timing claim. It is a
+valid local simplification, but cannot produce a measurable reindex speedup at
+the observed flush frequency; the expanded parent-cache code also makes the
+direction less clear. Do not replace an exact dirty-entry accounting invariant
+with a special wipe-mode path unless a workload has substantially more flush
+events and a profiling result establishes that this cursor bookkeeping is
+material.
