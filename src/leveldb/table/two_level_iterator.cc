@@ -103,13 +103,13 @@ void TwoLevelIterator::SeekToLast() {
 void TwoLevelIterator::Next() {
   assert(Valid());
   data_iter_.Next();
-  SkipEmptyDataBlocksForward();
+  if (!data_iter_.Valid()) SkipEmptyDataBlocksForward();
 }
 
 void TwoLevelIterator::Prev() {
   assert(Valid());
   data_iter_.Prev();
-  SkipEmptyDataBlocksBackward();
+  if (!data_iter_.Valid()) SkipEmptyDataBlocksBackward();
 }
 
 void TwoLevelIterator::SkipEmptyDataBlocksForward() {

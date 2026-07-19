@@ -4389,3 +4389,92 @@ databases retain their original virtual comparison. Point lookups and the
 validation/cache/write-dominated portions of `-reindex-chainstate` do not use
 this full-scan measurement, so it is not a claim of an independent HDD
 reindex wall-time gain.
+
+### LevelDB: avoid empty-block recovery checks after ordinary movement
+
+`TwoLevelIterator::Next()` and `Prev()` move an already valid data-block
+iterator, then unconditionally call the helper that recovers from an empty or
+exhausted data block. For the common case this helper only proves what the
+caller already knows: before movement `TwoLevelIterator::Valid()` guaranteed
+that `data_iter_` exists and is valid, and after movement it normally remains
+valid. Full chainstate scans therefore paid an out-of-line helper call and its
+empty-block setup checks once per UTXO even though a block boundary is rare.
+
+Check `data_iter_.Valid()` immediately after movement and enter the existing
+`SkipEmptyDataBlocksForward()` or `SkipEmptyDataBlocksBackward()` recovery
+only when the current block was exhausted. `Seek`, `SeekToFirst`, and
+`SeekToLast` retain their existing unconditional recovery calls because those
+operations can start with no data iterator. At a block boundary the candidate
+calls the exact former helper, so index advancement, empty/corrupt block
+handling, iterator lifetime, positioning, key/value bytes, and direction
+changes remain unchanged. The optimized Release `Next()` has a direct
+validity branch to the existing helper rather than the former unconditional
+normal-path entry.
+
+The CPU-3-pinned reader opens the closed local chainstate and calls
+`GetValue(Coin)` plus `NextNoKey()` over every 32,659,375 UTXOs. Every run
+returned the same aggregate:
+
+```
+32659375 847458211 1488241113523993
+```
+
+Both run orders are independently favorable. Combined medians use all twelve
+samples per version:
+
+| order | unconditional recovery | recover only after exhaustion | result |
+| --- | ---: | ---: | ---: |
+| baseline then candidate, 7 runs | 7.214587 s | 6.973229 s | 3.34% faster |
+| candidate then baseline, 5 runs | 7.178977 s | 7.004188 s | 2.43% faster |
+| all 12 runs, combined median | 7.187717 s | 6.985925 s | 2.81% faster |
+
+Four alternating `perf stat` pairs likewise have a lower candidate
+task-clock in every pair and show the expected reduced work:
+
+| metric | unconditional recovery median | conditional recovery median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.09438 s | 6.88806 s | -2.91% |
+| instructions | 67.030527 B | 64.925022 B | -3.14% |
+| branches | 13.444615 B | 13.154098 B | -2.16% |
+| branch misses | 40.682 M | 38.979 M | -4.19% |
+| cache misses | 39.070 M | 39.062 M | -0.02% |
+
+The Core LevelDB and database-cursor tests pass. The standalone LevelDB
+`db_test` iteration group exercises empty, single, multi-entry, mixed-size,
+deletion, and snapshot iterator cases through real tables; its custom
+comparator case also passes. Together with `rpc_scantxoutset.py`, these cover
+ordinary movement, exhaustion/boundary transitions, direction changes, and
+non-default comparator database use. A Debug compile of this exact LevelDB
+source also passes. The performance counters and full scans are the hard proof
+for removing the uncontended helper entry.
+
+```sh
+git fetch -q origin master
+git log origin/master --format='%h %s' -G'if \(!data_iter_\.Valid\(\)\) SkipEmptyDataBlocks(Forward|Backward)' -- src/leveldb/table/two_level_iterator.cc
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=leveldb_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase/coins_db_cursor_order --log_level=message
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+LEVELDB_TESTS=Iter /mnt/my_storage/bitcoin-perf-scratch/dbiter-bytewise/leveldb-tests/db_test
+LEVELDB_TESTS=CustomComparator /mnt/my_storage/bitcoin-perf-scratch/dbiter-bytewise/leveldb-tests/db_test
+build/test/functional/test_runner.py rpc_scantxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/twolevel-next.hVSzfR/functional --timeout-factor=2
+ninja -C build-debug src/CMakeFiles/leveldb.dir/leveldb/table/two_level_iterator.cc.o -j4
+git diff --check
+```
+
+The full-reader binaries, initial/reverse Hyperfine JSON, counter CSVs,
+complete aggregate output, and functional test directory are preserved under
+`/mnt/my_storage/bitcoin-perf-scratch/twolevel-next.hVSzfR/`; the reusable
+standalone LevelDB test build is under
+`/mnt/my_storage/bitcoin-perf-scratch/dbiter-bytewise/leveldb-tests/`. Fresh
+`origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no
+equivalent conditional entry to either recovery helper.
+
+The expected reach is generic LevelDB scans that advance a `TwoLevelIterator`
+through populated data blocks. It directly covers forward chainstate scans
+for `gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`, plus reverse
+iteration and other LevelDB table walks. Block-boundary handling remains
+unchanged; point lookups generally do not repeatedly call `Next` or `Prev`.
+This warm CPU-bound scan does not establish an independent wall-time gain for
+validation/cache/write-dominated HDD `-reindex-chainstate`.
