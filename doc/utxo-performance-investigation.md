@@ -2042,3 +2042,112 @@ general parser with a specialized duplicate without a demonstrably better
 whole-program result. Raw replies, time files, perf CSVs, logs, and cookies
 are retained in `/mnt/my_storage/bitcoin-perf-scratch/skip-varint-base.jK4NTU/`
 and `/mnt/my_storage/bitcoin-perf-scratch/skip-varint-candidate.ozYUNM/`.
+
+### Reject historical buffered `ReadBlockFromDisk` seed as superseded
+
+The fork branch `l0rinc/buffered-ReadBlockFromDisk` contains historical commit
+`41a8220f1d7286e6f9a32ff14ea9275ddd505d5a`,
+`blockstorage: Use BufferedFile in ReadBlockFromDisk instead of AutoFile`.
+Its premise was sound for its old implementation: deserialize a block through
+a small `BufferedFile` ring buffer, rather than issuing one `fread()`-backed
+`AutoFile::read()` for every serialized field. The commit reports a 9% saving
+inside block deserialization and about 1.2% on an SSD-like reindex benchmark,
+so it initially appeared to be an appropriate direct HDD replay seed.
+
+It is not an applicable change in the live tree. Both the investigation base
+and `origin/master` have no diff in `src/node/blockstorage.cpp`; current
+`BlockManager::ReadBlock()` first calls `ReadRawBlock(pos)` to read the complete
+serialized block into one byte vector, then deserializes with `SpanReader`.
+This already eliminates the old per-field file-read pattern without retaining
+a fixed-size ring buffer or its rewind/error-boundary complexity. Current
+`LoadExternalBlockFile()` separately retains `BufferedFile` because that path
+must scan for markers and rewind around malformed external block-file input;
+it is not the regular indexed-block replay path.
+
+Inspection commands were:
+
+```sh
+git show 41a8220f1d -- src/node/blockstorage.cpp
+git diff --stat origin/master -- src/node/blockstorage.cpp
+rg -n "ReadRawBlock\\(|BlockManager::ReadBlock\\(" src/node/blockstorage.cpp src/node/blockstorage.h
+```
+
+Do not resurrect the old buffered wrapper, and do not spend a destructive HDD
+reindex run comparing it with the already-more-direct raw-block path. A future
+block-reader candidate must beat the existing single bulk read and preserve
+its partial-read and error-reporting contracts.
+
+### Reject sorted `CCoinsViewDB::BatchWrite` batches
+
+Fork branch `l0rinc/sorted-BatchWrite` contains `eec8edea2142d72e2bceb55831a468940ec84a88`,
+`optimization: sort BatchWrite batches in descending order`, followed by
+commits titled `Collect unspent hashes from cursor` and `Sort unspent dirty
+outpoints by hash`. It accumulates dirty entries in a `std::vector`, sorts them
+by outpoint hash, then serializes and writes that vector in place of the
+existing cursor-order batches. This looks HDD-relevant at first glance because
+chainstate flushes occur during reindex-chainstate.
+
+The mechanism does not establish an HDD I/O win. `CDBWrapper::WriteBatch()`
+passes the ordered `leveldb::WriteBatch` to LevelDB, whose
+`WriteBatchInternal::InsertInto()` inserts each record into the comparator-
+ordered memtable before tables are emitted. Reordering the application batch
+therefore cannot make the resulting memtable/SST key order more sequential;
+it instead adds an `O(n log n)` sort and copies/moves every dirty `Coin`.
+
+More importantly, the fork substitutes the existing encoded-byte boundary
+`batch.ApproximateSize() > m_options.batch_write_bytes` with
+`batch_write_bytes / sizeof(std::pair<COutPoint, Coin>)`. `Coin` has dynamic
+script storage, so that is neither an encoded-size bound nor a stable memory
+bound. It changes when crash-recovery head markers are committed, can create a
+zero-entry threshold for small debug `-dbbatchsize` values, and adds a large
+second representation of a dirty flush. A broad recovery-path change requires
+clear macro evidence, not an unprofiled locality intuition.
+
+Reviewed with:
+
+```sh
+git show eec8edea21 -- src/txdb.cpp
+sed -n '125,230p' src/txdb.cpp
+sed -n '105,150p' src/leveldb/db/write_batch.cc
+sed -n '1215,1245p' src/leveldb/db/db_impl.cc
+```
+
+Reject without a prototype or reindex benchmark. Any future ordered-write
+experiment must retain byte-accurate batch boundaries and demonstrate reduced
+LevelDB write/compaction I/O, not merely reordered calls.
+
+### Reject custom fixed-buffer COutPoint DB-key serialization as too small
+
+The non-upstream fork branch `l0rinc/custom-coinentry-serialization` ends at
+`b1afdcec0c7db01b1f9c8dacf5f5829abd60d750`, which replaces generic
+`CoinEntry` serialization in `GetCoin`, `HaveCoin`, and `BatchWrite` with a
+hand-written `WriteCOutPoint()` into a fixed byte buffer and adds raw
+span-based database APIs. It reaches chainstate point lookups and flushes, so
+it was screened after the larger LevelDB ideas were ruled out.
+
+The current generic path already reserves `DBWRAPPER_PREALLOC_KEY_SIZE` (64)
+bytes for read keys and reuses a 64-byte `CDBBatch::m_key_scratch` for every
+batch entry. A coin key is one database-prefix byte, 32 hash bytes, and at
+most five VARINT bytes: 38 bytes. Thus the candidate does not remove an
+allocation or change a LevelDB read/write; it replaces a short, capacity-reused
+generic serializer with custom encoding plus new raw-key API surface. The
+batch value serializer, LevelDB copying, WAL, memtable insertions, and table
+I/O all remain unchanged.
+
+The current scratch lifetime is explicit: `ScopedDataStreamUsage` requires
+the scratch stream to be empty at entry and clears it without releasing its
+capacity after each key. This rules out the historical rationale of repeated
+short-key allocations. A tiny instruction-count micro-win would not justify
+duplicating the database key contract in `txdb` or claiming an HDD benefit.
+
+Reviewed with:
+
+```sh
+git show b1afdcec0c -- src/txdb.cpp src/txdb.h src/dbwrapper.h src/dbwrapper.cpp
+rg -n "DBWRAPPER_PREALLOC_KEY_SIZE|ScopedDataStreamUsage" src/dbwrapper.h src/dbwrapper.cpp src/streams.h
+sed -n '145,215p' src/dbwrapper.cpp
+```
+
+Reject without code changes. Reconsider only if a profile on a real
+chainstate-flush workload attributes a material fraction of time to
+`CoinEntry` serialization after the existing reusable scratch buffers.
