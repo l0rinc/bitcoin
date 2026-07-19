@@ -58,20 +58,26 @@ namespace {
 class MasterKeyFailDatabase : public InMemoryWalletDatabase
 {
 public:
+    bool m_fail_master_key_writes{true};
+
     class Batch : public SQLiteBatch
     {
     public:
-        using SQLiteBatch::SQLiteBatch;
+        explicit Batch(MasterKeyFailDatabase& database) : SQLiteBatch(database), m_owner{database} {}
 
         bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) override
         {
             // The master key record serializes ("mkey", nID): compactsize 4 + "mkey".
-            if (key.size() >= 5 && key[0] == std::byte{0x04} && key[1] == std::byte{'m'} &&
+            if (m_owner.m_fail_master_key_writes &&
+                key.size() >= 5 && key[0] == std::byte{0x04} && key[1] == std::byte{'m'} &&
                 key[2] == std::byte{'k'} && key[3] == std::byte{'e'} && key[4] == std::byte{'y'}) {
                 return false;
             }
             return SQLiteBatch::WriteKey(std::move(key), std::move(value), overwrite);
         }
+
+    private:
+        MasterKeyFailDatabase& m_owner;
     };
 
     std::unique_ptr<DatabaseBatch> MakeBatch() override { return std::make_unique<Batch>(*this); }
@@ -122,6 +128,43 @@ BOOST_FIXTURE_TEST_CASE(encrypt_wallet_master_key_write_failure, WalletTestingSe
         BOOST_CHECK(!found_master_key);
         BOOST_CHECK(!found_crypted_key);
     }
+
+    TestUnloadWallet(std::move(wallet));
+}
+
+BOOST_FIXTURE_TEST_CASE(change_passphrase_master_key_write_failure, WalletTestingSetup)
+{
+    // Mirror the wallet_encrypt bench: a descriptor wallet holding a private key.
+    WalletContext context;
+    context.args = &m_args;
+    context.chain = m_node.chain.get();
+    auto wallet{TestCreateWallet(std::make_unique<MasterKeyFailDatabase>(), context, WALLET_FLAG_DESCRIPTORS)};
+    auto* fail_db{static_cast<MasterKeyFailDatabase*>(&wallet->GetDatabase())};
+    fail_db->m_fail_master_key_writes = false;
+
+    CKey key{GenerateRandomKey()};
+    FlatSigningProvider keys;
+    std::string error;
+    auto descs{Parse("combo(" + EncodeSecret(key) + ")", keys, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE(!descs.empty());
+    WalletDescriptor w_desc(std::move(descs.at(0)), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/0, /*next_index=*/0);
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_REQUIRE(wallet->AddWalletDescriptor(w_desc, keys, /*label=*/"", /*internal=*/false));
+    }
+
+    // Keep derive iteration calibration deterministic and fast.
+    FakeNodeClock clock{1s};
+    BOOST_REQUIRE(wallet->EncryptWallet("old_pass"));
+
+    // The master key record write now fails; the passphrase change must fail
+    // instead of silently succeeding only in memory.
+    fail_db->m_fail_master_key_writes = true;
+    BOOST_CHECK(!wallet->ChangeWalletPassphrase("old_pass", "new_pass"));
+
+    // The in-memory record was restored to match the record on disk, so the
+    // old passphrase still unlocks the wallet.
+    BOOST_CHECK(wallet->Unlock("old_pass"));
 
     TestUnloadWallet(std::move(wallet));
 }
