@@ -5013,3 +5013,36 @@ iterator, cache, or decoder change. A speedup would need to alter the
 cryptographic `MuHash3072` implementation or its required element generation,
 which has a much higher correctness and compatibility burden than the direct
 Core changes accepted here. No source change is made from this profile.
+
+### Reject forcing `Obfuscation::operator()` inline
+
+The refreshed full-coin reader profile assigns visible self time to
+`Obfuscation::operator()` underneath `ObfuscatedSpanReader::read()`. The
+existing rejection only covered forcing its small `XorWord()` helper inline,
+so the outer operator was tested separately with the one-line
+`ALWAYS_INLINE` annotation. Its key rotation, alignment, chunking, empty-key,
+and byte-exact XOR behavior are unchanged; only the compiler's inlining choice
+differs.
+
+The annotation is not local to UTXO reads: `util/obfuscation.h` is included by
+database, networking, wallet, and serialization users. The controlled Release
+`ninja -C build bitcoind -j4` therefore rebuilt 95 targets. That breadth needs
+a decisive full-read benefit, but two opposite-order full scans reject it. The
+same 32,867,816-coin aggregate was returned in every run:
+
+| order and runs | ordinary median | forced-inline median | result |
+| --- | ---: | ---: | ---: |
+| ordinary then forced, 7 each | 7.465084 s | 7.576532 s | 1.49% slower |
+| forced then ordinary, 5 each | 7.447640 s | 7.580552 s | 1.78% slower |
+
+The first forced series contains one 8.147 s outlier, but its remaining
+samples are also slower; the reversed series has no such outlier and confirms
+the regression. Raw Hyperfine JSON and both reader binaries are
+`/mnt/my_storage/bitcoin-perf-scratch/obfuscation-operator-inline{,-reverse}.json`
+and `/mnt/my_storage/bitcoin-perf-scratch/obfuscation-operator-inline-reader`.
+The source was restored and a clean ordinary Release `bitcoind` build passed.
+
+Decision: retain the compiler's normal inline heuristic. The existing
+profile's self-time signal does not justify force-inlining a wide utility
+header, and the full scan proves it makes this target slower. No production
+behavior or test changes result from this experiment.
