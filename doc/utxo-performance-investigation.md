@@ -1073,6 +1073,35 @@ codes, violating the unordered-container contract. Decision: correctness
 failure; do not retry without an immutable key representation or cache owned by
 the container rather than `COutPoint`.
 
+The later fork retry `cdc5144c17ccec928f860bc991e192e12c1e04aa` (`coins:
+cache CCoinsMap outpoint hashes`) does not repair that contract. It adds a
+mutable `size_t` to every `COutPoint` and fills it through `std::atomic_ref`
+inside a new `CCoinsCacheHasher`. Normal copying of `COutPoint` still copies
+the cache value without recording which hasher salt produced it, and normal
+writes to the public `hash` or `n` fields do not invalidate it. The new hasher
+tries to make production caches share one static random salt, but deterministic
+`CCoinsViewCache` instances deliberately use a different salt; a copied key
+can consequently carry a random-cache value into a deterministic map. It also
+adds eight bytes to every `COutPoint`, including transaction inputs and values
+that never enter `CCoinsMap`, counteracting the cache-node memory saving the
+proposal is intended to obtain.
+
+The atomic operation does not make the value semantics safe: the implicitly
+generated copy/move operations access the same non-atomic member normally, so
+the cache cannot be concurrently populated and copied without an additional
+object-level synchronization contract. No such contract exists for this public
+value type. The candidate was inspected with:
+
+```sh
+git show cdc5144c17 -- src/coins.cpp src/coins.h src/primitives/transaction.h
+rg -n 'class COutPoint|COutPoint\\{|\\.prevout\\.(hash|n)' src test
+```
+
+Decision: reject without compiling or benchmarking. The affected path would be
+hot (`SaltedOutpointHasher` -> `CCoinsMap` -> cache lookups), but an
+unordered-container hash cache must be owned by an immutable key or the
+container, not silently retained in a mutable, copyable public key.
+
 ### `SpendCoin` cached-lookup fast path ([PR #34](https://github.com/l0rinc/bitcoin/pull/34))
 
 Hypothesis: validation normally accesses each input before spending it, so
@@ -2611,3 +2640,83 @@ valid and may be useful as a cleanup seed, but it has no reproducible CPU or
 HDD benefit at this workload. Do not add a cache-persistence change for this
 tiny code-size reduction without interleaved controls that show a clear
 instruction decrease and an end-to-end win outside storage noise.
+
+### Close upstream UTXO-RPC and reindex flush seeds
+
+Two fork commits initially looked like direct improvements for the named
+workloads, but both are already in `origin/master` and therefore must not be
+duplicated on this branch.
+
+* `226b6c7d6e69c1f032079c8bc5af5710d8e54efb` (`validation: do not wipe utxo
+  cache for stats/scans/snapshots`) is merged upstream as
+  `4e4fa0199e` / `c6ca2b85a3`. It split forced persistence into non-wiping
+  `FORCE_SYNC` and wiping `FORCE_FLUSH`, and changes `gettxoutsetinfo`,
+  `scantxoutset`, and `dumptxoutset` snapshot preparation to call
+  `ForceFlushStateToDisk(/*wipe_cache=*/false)`. That is exactly the desired
+  behavior: dirty cache entries are safely written while useful clean entries
+  remain available. No branch commit is needed.
+* `7fc8d7f9c1f0fe3795b397327e38465ee6f76b83` (`validation: periodically
+  flush dbcache during reindex-chainstate`) is merged upstream as
+  `84820561dc`. It moves the existing periodic flush inside the
+  `ActivateBestChain()` outer loop, so a long reindex persists progress rather
+  than accumulating the entire activation. It is an availability/recovery
+  property, not an unmeasured replacement for the current cache or LevelDB
+  work.
+
+The live tree contains both exact mechanisms. Verified with:
+
+```sh
+git log origin/master --oneline -- src/validation.cpp src/rpc/blockchain.cpp
+git show c6ca2b85a3 -- src/validation.cpp src/validation.h src/rpc/blockchain.cpp
+git show 84820561dc -- src/validation.cpp
+rg -n 'ForceFlushStateToDisk\\(/\\*wipe_cache=\\*/false\\)|Write changes periodically to disk' \
+  src/rpc/blockchain.cpp src/validation.cpp
+```
+
+Decision: close both historical seeds. Their reach is already present in the
+base code; applying either again would be duplicate history, not a measurable
+new speedup.
+
+### Reject non-portable cache-map and tombstone-list rewrites
+
+The high reindex samples in `CCoinsMap` make an alternative map attractive,
+but the remaining fork variants are not simple, behavior-preserving Core
+changes.
+
+`1630e368d190a75870399cc38af3c6023faaf2d9` replaces the standard map with
+`boost::unordered_node_map`. It requires Boost 1.82, while the live CMake
+configuration requires Boost 1.74. The change also needs a new
+implementation-specific dynamic-memory formula and a new pool-node slack
+assumption. That makes cache capacity and flush thresholds depend on a new
+third-party container layout across all supported platforms. No profile or
+end-to-end result shows that the dependency-floor and cache-accounting change
+would improve this HDD workload. It is not an eligible minimal optimization.
+
+The two-commit `l0rinc/l0rinc/singly-linked-coins-cache` branch has a different
+tradeoff. `7ccc01bde4` retains spent FRESH entries as tombstones, adds a
+`m_spent_fresh_count`, modifies `AddCoin`, `SpendCoin`, `BatchWrite`, `Sync`,
+`Reset`, uncaching, and cache-state accounting, then scans the flagged list to
+compact tombstones at a new memory-pressure boundary. Only after that larger
+state-machine change does `1645927008` remove one linked-list pointer per
+entry. The supposed pointer saving is therefore coupled to delayed deletion,
+additional branches/counting on normal spends, a new compaction traversal, and
+changed cache persistence invariants. The branch itself ends at that prototype;
+it does not contain an HDD benchmark or a full recovery/fuzz validation stack.
+
+Reviewed with:
+
+```sh
+git show 1630e368d1 -- cmake/module/AddBoostIfNeeded.cmake src/coins.h src/memusage.h
+sed -n '20,42p' cmake/module/AddBoostIfNeeded.cmake
+git log --reverse --oneline \
+  $(git merge-base l0rinc/l0rinc/singly-linked-coins-cache origin/master)..l0rinc/l0rinc/singly-linked-coins-cache
+git show 7ccc01bde4 1645927008 -- src/coins.cpp src/coins.h src/validation.cpp src/test
+```
+
+Decision: reject both without a source prototype. The Boost change is a
+dependency and portability project, while the singly linked variant changes
+the coins-cache state machine and can retain more entries during the exact
+memory-constrained HDD replay it aims to speed up. A future map investigation
+must first demonstrate a materially larger map-lookup share with a
+container-independent capacity/recovery proof; neither variant justifies
+touching LevelDB or RocksDB.
