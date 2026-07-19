@@ -100,6 +100,28 @@ public:
     }
 };
 
+/**
+ * The parts of a serialized coin needed for un-hashed UTXO statistics.
+ *
+ * This intentionally does not construct the scriptPubKey. Script compression
+ * still consumes the same bytes and reports the exact size that a Coin would
+ * expose after deserialization.
+ */
+struct CoinStatsValue
+{
+    CAmount nValue{0};
+    uint64_t scriptPubKeySize{0};
+
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        uint32_t code{0};
+        s >> VARINT(code);
+        s >> Using<AmountCompression>(nValue);
+        ScriptCompression{}.UnserSize(s, scriptPubKeySize);
+    }
+};
+
 struct CCoinsCacheEntry;
 using CoinsCachePair = std::pair<const COutPoint, CCoinsCacheEntry>;
 
@@ -246,6 +268,7 @@ public:
 
     virtual bool GetKey(COutPoint &key) const = 0;
     virtual bool GetValue(Coin &coin) const = 0;
+    virtual bool GetValue(CoinStatsValue& coin) const = 0;
 
     virtual bool Valid() const = 0;
     virtual void Next() = 0;

@@ -36,12 +36,17 @@ CCoinsStats::CCoinsStats(int block_height, const uint256& block_hash)
 // Database-independent metric indicating the UTXO set size
 uint64_t GetBogoSize(const CScript& script_pub_key)
 {
+    return GetBogoSize(script_pub_key.size());
+}
+
+uint64_t GetBogoSize(uint64_t script_pub_key_size)
+{
     return 32 /* txid */ +
            4 /* vout index */ +
            4 /* height + coinbase */ +
            8 /* amount */ +
            2 /* scriptPubKey len */ +
-           script_pub_key.size() /* scriptPubKey */;
+           script_pub_key_size /* scriptPubKey */;
 }
 
 template <typename T>
@@ -158,7 +163,7 @@ static std::optional<CCoinsStats> ComputeUTXOStats(std::nullptr_t, CCoinsView* v
         // Bound interruption latency without dispatching std::function for every coin.
         if (interruption_point && stats.coins_count % INTERRUPT_CHECK_INTERVAL == 0) interruption_point();
         COutPoint key;
-        Coin coin;
+        CoinStatsValue coin;
         if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
             if (!have_prevkey || key.hash != prevkey) {
                 stats.nTransactions++;
@@ -167,9 +172,9 @@ static std::optional<CCoinsStats> ComputeUTXOStats(std::nullptr_t, CCoinsView* v
             }
             stats.nTransactionOutputs++;
             if (stats.total_amount.has_value()) {
-                stats.total_amount = CheckedAdd(*stats.total_amount, coin.out.nValue);
+                stats.total_amount = CheckedAdd(*stats.total_amount, coin.nValue);
             }
-            stats.nBogoSize += GetBogoSize(coin.out.scriptPubKey);
+            stats.nBogoSize += GetBogoSize(coin.scriptPubKeySize);
             stats.coins_count++;
         } else {
             LogError("%s: unable to read value\n", __func__);

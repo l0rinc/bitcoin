@@ -687,3 +687,71 @@ hashing and cold-HDD I/O reduce the percentage. Normal reindex-chainstate and
 coinstats-index maintenance do not call this function. The only behavioral
 tradeoff is the documented bounded shutdown/interrupt observation delay.
 
+### `coinstats`: deserialize only amount and script size for un-hashed stats
+
+The earlier no-hash specialization avoids building the transaction-to-output
+map, but it still fully deserializes every `Coin` while walking the chainstate.
+For `gettxoutsetinfo hash_type=none`, the remaining result needs a coin's
+amount and the size of the script which normal coin deserialization would
+produce; it never reads the script itself. A fresh full-chain profile after
+the iterator-reader change still attributed 20.44% of the usable samples to
+`CCoinsViewDBCursor::GetValue()` and its coin/script deserialization.
+
+`CoinStatsValue` therefore reads the height/coinbase code, amount compression,
+and a new `ScriptCompression::UnserSize()` helper. The helper consumes exactly
+the same encoded bytes as `Unser()` but avoids constructing ordinary scripts:
+P2PKH, P2SH, and compressed-P2PK encodings report their fixed reconstructed
+sizes, ordinary scripts report their encoded size, and oversized scripts
+report the one-byte `OP_RETURN` result. Compressed-pubkey encodings deliberately
+still call `DecompressScript`, because an invalid curve point must retain the
+normal empty-script result. Hash-producing statistics retain ordinary `Coin`
+deserialization and `ApplyCoinHash`; their serialization commitment is not
+weakened.
+
+The focused unit test serializes coins containing P2PKH, P2SH, compressed and
+uncompressed P2PK, ordinary, and oversized scripts. It compares the partial
+value's amount and reported script size with an independently fully
+deserialized `Coin`, and verifies that it consumes the whole record. A
+temporary mutation changing the P2SH reconstructed size from 23 to 25 makes
+the test fail, so the test checks the special-script rule rather than merely
+executing the parser. The existing functional RPC test additionally compares
+the live `hash_type=none` response with the full-hash response after removing
+only intentionally different fields.
+
+```text
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests --log_level=message
+build/test/functional/test_runner.py rpc_blockchain.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-partial-stats --timeout-factor=2
+git diff --check
+```
+
+The performance series used the explicitly permitted local `BitcoinData` at
+height 957779 with 166,350,731 UTXOs. A network-disabled, wallet-disabled
+daemon with `-checkblocks=1` served the exact same `gettxoutsetinfo none` RPC;
+each response had SHA-256
+`4b96d583ae030f7391f6b960ee9c738360da5ea27532da61c7057cc206dccfa0`.
+
+| version/runs | RPC wall seconds | daemon task-clock | instructions | branches | major faults |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| exact baseline (3) | 51.95, 51.98, 51.93 | 51.908, 51.939, 51.881 s | 467.147, 467.144, 467.145 B | 96.278, 96.278, 96.278 B | 0, 0, 0 |
+| partial-value candidate (3) | 47.91, 47.90, 48.04 | 47.869, 47.833, 47.982 s | 437.459, 437.313, 437.442 B | 89.115, 89.111, 89.112 B | 0, 0, 0 |
+
+The matched medians improve RPC wall time from 51.95 to 47.91 seconds
+(7.78%), daemon CPU from 51.908 to 47.869 seconds (7.78%), instructions by
+6.35%, and branches by 7.44%. Zero major faults in every run makes this a
+warm-cache CPU result; a cold HDD scan can realize a smaller wall-time share.
+Raw baseline and candidate artifacts are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/gettxoutsetinfo-partial-stats-baseline.tyWJXO/`
+and
+`/mnt/my_storage/bitcoin-perf-scratch/gettxoutsetinfo-partial-stats-candidate.DMeAkx/`.
+
+Reach is specifically non-indexed `gettxoutsetinfo hash_type=none` and any
+future direct caller of `ComputeUTXOStats(NONE)`. It does not change
+hash-producing `gettxoutsetinfo` modes, `dumptxoutset` (which requires the
+serialized hash), `scantxoutset`, coinstats-index maintenance, snapshots, or
+`-reindex-chainstate`; no speedup is claimed for those paths. Before this
+change, `origin/master` was freshly fetched at
+`18c05d93016b28a9afd4c716dfe00b6e0accb30b`; it contains neither
+`CoinStatsValue` nor `UnserSize`, so this is not a duplicate of an already
+pushed upstream fix.

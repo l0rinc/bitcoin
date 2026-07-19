@@ -93,6 +93,40 @@ struct ScriptCompression
             s >> std::span{script};
         }
     }
+
+    /**
+     * Consume a compressed script and return the size of the script produced
+     * by Unser(). This avoids constructing scripts when only their size is
+     * needed. It must stay in lockstep with Unser(), including its malformed
+     * compressed-pubkey and oversize-script behavior.
+     */
+    template<typename Stream>
+    void UnserSize(Stream& s, uint64_t& script_size) {
+        unsigned int nSize{0};
+        s >> VARINT(nSize);
+        if (nSize < nSpecialScripts) {
+            const unsigned int compressed_size{GetSpecialScriptSize(nSize)};
+            if (nSize == 4 || nSize == 5) {
+                CompressedScript vch(compressed_size, 0x00);
+                s >> std::span{vch};
+                CScript script;
+                DecompressScript(script, nSize, vch);
+                script_size = script.size();
+            } else {
+                s.ignore(compressed_size);
+                script_size = nSize == 0 ? 25 : nSize == 1 ? 23 : 35;
+            }
+            return;
+        }
+
+        nSize -= nSpecialScripts;
+        if (nSize > MAX_SCRIPT_SIZE) {
+            script_size = 1;
+        } else {
+            script_size = nSize;
+        }
+        s.ignore(nSize);
+    }
 };
 
 struct AmountCompression
