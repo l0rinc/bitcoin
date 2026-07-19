@@ -1646,3 +1646,31 @@ upstream-pushed rule: the equivalent commit `09ee8b7f278627b917f0784adf23cbc76ca
 fetched `origin/master`, and the current source already has its
 `expected_hash` overload and one computed `block_hash`. No duplicate change,
 benchmark, or further investigation is warranted.
+### Heap merging iterator reach: neutral for reindex-chainstate
+
+The heap change above was then checked against the same cold-HDD OverlayFS
+`-reindex-chainstate` control used for prior direct-Core candidates. A detached
+worktree at its parent `b19dcade20` supplied the baseline; `de88ee88c0`
+supplied the heap version. Each run used the local `BitcoinData` as a
+read-only OverlayFS lower layer, a separate scratch upper/work/merged layer,
+dropped page cache before startup, `-stopatheight=287000`, `-dbcache=450`, and
+network-disabled/wallet-disabled flags. Each newly written log reached height
+0, height 287000, and `Shutdown done` after the run; the overlay mount was
+then removed. Thus the local source data was not modified.
+
+| version | daemon wall | user | system | task-clock | instructions | branches | major faults | input / output KiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| parent baseline | 499.902 s | 386.764 s | 62.384 s | 445.745 s | 2.131096 T | 213.476 B | 889 | 31,023,056 / 9,178,000 |
+| heap candidate | 500.661 s | 386.634 s | 62.482 s | 445.575 s | 2.134999 T | 214.144 B | 886 | 31,022,712 / 9,454,672 |
+
+The candidate is 0.15% slower in one pair, with 0.18% more retired
+instructions and 0.31% more branches. These differences are too small and in
+the wrong direction to claim any reindex-chainstate benefit. This is expected
+reach separation, not a reason to revert the full-UTXO-scan optimization:
+reindex's earlier profile was dominated by coins-cache and transaction work,
+whereas the `gettxoutsetinfo none` profile directly exposed forward LevelDB
+merge selection. The accepted change may still serve compaction and other
+forward merged iterators, but it is not a demonstrated HDD reindex speedup.
+Raw commands and metrics are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/run_reindex_writebuf_trial.sh` and
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/mergerheap{base,}-1/`.
