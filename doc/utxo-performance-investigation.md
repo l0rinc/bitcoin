@@ -4013,3 +4013,61 @@ including full chainstate value scans for `scantxoutset`, hash-based
 `gettxoutsetinfo`, and `dumptxoutset`; unobfuscated temporary/index databases
 do not use it. The evidence remains a warm CPU-bound full scan, not an
 independent full-HDD-reindex wall-time result.
+
+### Reject internal-comparator dispatch specialization in `MergingIterator`
+
+The latest eight-pass full-coin reader profile sampled
+`MergingIterator::MinHeapLess()` at 7.25% self time and
+`InternalKeyComparator::Compare()` at 5.50%. Since `DBImpl::NewInternalIterator`
+and `VersionSet::MakeInputIterator` pass `InternalKeyComparator` to the
+otherwise generic merging iterator, a construction-time `dynamic_cast` plus a
+typed pointer looked like a narrowly scoped way to avoid a virtual comparator
+call for chainstate scans.
+
+The first prototype still invoked `InternalKeyComparator::Compare()` virtually:
+the method remains overridable, and disassembly of `MinHeapLess()` showed
+`call *%rcx` on the proposed fast branch. Its seven warm CPU-3-pinned scans
+looked encouraging, but could only be a layout/variance effect:
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| ordinary comparator call | 7.356205, 7.390771, 7.339622, 7.332848, 7.370854, 7.308214, 7.328129 s | 7.339622 s | baseline |
+| typed pointer, still virtual | 7.298835, 7.274557, 7.294270, 7.358328, 7.299864, 7.267370, 7.298882 s | 7.298835 s | 0.56% faster |
+
+To measure the intended operation rather than this accidental code layout,
+the experiment marked the internal-only `InternalKeyComparator::Compare()`
+override `final`. That makes the typed branch a verified direct
+`call InternalKeyComparator::Compare` while preserving the generic virtual
+fallback for every other `Comparator`; a temporary reverse-comparator merge
+test passed. The genuine direct-call run did not retain the improvement:
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| ordinary comparator call | 7.426315, 7.356343, 7.318064, 7.346205, 7.384150, 7.339264, 7.314684 s | 7.346205 s | baseline |
+| verified direct internal call | 7.508779, 7.297966, 7.350406, 7.297240, 7.409123, 7.337362, 7.304500 s | 7.337362 s | 0.12% faster |
+
+The candidate's mean is instead 7.357911 versus 7.355004 seconds and its
+standard deviation doubles (0.077449 versus 0.039268 seconds). This is inside
+measurement noise and does not justify adding a `table/` to `db/` dependency,
+a per-comparison branch, RTTI use, or a final override constraint. All source
+and temporary test changes were restored. No LevelDB or RPC commit should use
+this approach without a materially larger controlled result.
+
+Both raw Hyperfine JSON files, reader binaries, aggregate outputs, and the
+disassembly evidence are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/merge-internal-direct/`. Every reader
+returned `32659375 847458211 1488241113523993`. The experiment built and ran:
+
+```sh
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=leveldb_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase/coins_db_cursor_order --log_level=message
+hyperfine --runs 7 --warmup 1 \
+  'taskset -c 3 <base-reader> /mnt/my_storage/BitcoinData/chainstate' \
+  'taskset -c 3 <candidate-reader> /mnt/my_storage/BitcoinData/chainstate'
+```
+
+Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no
+equivalent specialization. That is not an omission: the measured direct
+variant is insufficient. This was a warm CPU-bound full-chainstate traversal,
+not evidence for a full-HDD-reindex improvement.
