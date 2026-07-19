@@ -184,13 +184,13 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     }
 
     const bool force_message_short_id_collision{!force_invalid_init && !force_short_id_index_overflow && cmpctblock.ShortTxIDCount() >= 2 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_short_id_collision{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_mempool_collision{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_mempool_extra_sequence{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_null_extra_collision{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_duplicate_extra_collision{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_short_id_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_extra_sequence{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_null_extra_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_duplicate_extra_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_mempool_duplicate_then_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_duplicate_extra_txn{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_duplicate_extra_txn{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
 
     bilingual_str error;
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
@@ -204,11 +204,11 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         bool add_to_extra_txn{fuzzed_data_provider.ConsumeBool()};
         bool add_to_mempool{fuzzed_data_provider.ConsumeBool()};
 
-        if (force_mempool_extra_sequence ||
-            (force_short_id_index_overflow && i == 1) ||
-            ((force_short_id_collision || force_mempool_collision) && (i == 1 || i == 2)) ||
-            ((force_null_extra_collision || force_duplicate_extra_collision || force_duplicate_extra_txn) && i == 1) ||
-            (force_mempool_duplicate_then_collision && (i == 1 || i == 2))) continue;
+        // Keep forced source sequences isolated and leave at least two short-ID slots so
+        // InitData's early exit cannot skip their duplicate/collision tail.
+        if (force_short_id_index_overflow || force_mempool_extra_sequence || force_short_id_collision || force_mempool_collision ||
+            force_null_extra_collision || force_duplicate_extra_collision ||
+            force_mempool_duplicate_then_collision || force_duplicate_extra_txn) continue;
 
         if (add_to_extra_txn) {
             extra_txn.emplace_back(tx->GetWitnessHash(), tx);
@@ -220,7 +220,10 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         }
     }
 
-    bool mempool_duplicate_then_collision_applied{false};
+    bool forced_terminal_collision_applied{false};
+    size_t forced_terminal_collision_short_id_index{0};
+    bool forced_null_extra_applied{false};
+    bool forced_duplicate_extra_applied{false};
     if (force_short_id_index_overflow) {
         const CTransactionRef& target_tx{block->vtx[1]};
         const Wtxid target_wtxid{target_tx->GetWitnessHash()};
@@ -250,6 +253,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                 if (wtxid == first_extra_wtxid || wtxid == collision_extra_wtxid) return collision_shortid;
                 return cmpctblock.GetShortID(wtxid);
             };
+            forced_terminal_collision_applied = true;
         }
     } else if (force_mempool_duplicate_then_collision) {
         CMutableTransaction mempool_tx_mutable{*block->vtx[2]};
@@ -283,7 +287,8 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                     if (wtxid == mempool_wtxid || wtxid == extra_a_wtxid || wtxid == extra_b_wtxid) return collision_shortid;
                     return cmpctblock.GetShortID(wtxid);
                 };
-                mempool_duplicate_then_collision_applied = true;
+                forced_terminal_collision_applied = true;
+                forced_terminal_collision_short_id_index = 1;
             }
         }
     } else if (force_duplicate_extra_txn) {
@@ -292,6 +297,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         extra_txn.emplace_back(target_wtxid, target_tx);
         extra_txn.emplace_back(target_wtxid, target_tx);
         cmpctblock.ReplaceShortTxID(0, cmpctblock.GetShortID(target_wtxid));
+        forced_duplicate_extra_applied = true;
     } else if (cmpctblock.ShortTxIDCount() > 0 && !force_short_id_collision && !force_mempool_collision &&
         (force_null_extra_collision || fuzzed_data_provider.ConsumeBool())) {
         if (force_null_extra_collision) {
@@ -305,6 +311,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                 const Wtxid target_wtxid{target_tx->GetWitnessHash()};
                 extra_txn.emplace_back(target_wtxid, CTransactionRef{});
                 cmpctblock.ReplaceShortTxID(0, cmpctblock.GetShortID(target_wtxid));
+                forced_null_extra_applied = true;
             }
         } else {
             const Wtxid empty_wtxid{Wtxid::FromUint256(uint256::ZERO)};
@@ -340,6 +347,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                     if (wtxid == first_wtxid || wtxid == second_wtxid) return collision_shortid;
                     return cmpctblock.GetShortID(wtxid);
                 };
+                forced_terminal_collision_applied = true;
             }
         }
     } else if (force_mempool_extra_sequence) {
@@ -366,6 +374,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                 if (wtxid == mempool_wtxid || wtxid == extra_wtxid) return collision_shortid;
                 return cmpctblock.GetShortID(wtxid);
             };
+            forced_terminal_collision_applied = true;
         }
     } else if (force_short_id_collision) {
         CMutableTransaction mempool_tx_mutable{*block->vtx[1]};
@@ -398,6 +407,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                     if (wtxid == mempool_wtxid || wtxid == extra_wtxid || wtxid == followup_wtxid) return collision_shortid;
                     return cmpctblock.GetShortID(wtxid);
                 };
+                forced_terminal_collision_applied = true;
             }
         }
     }
@@ -419,10 +429,20 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     }
     assert(pdb.AvailableTxCount() == pdb.PrefilledCount() + pdb.MempoolCount());
     assert(pdb.ExtraCount() <= pdb.MempoolCount());
-    if (mempool_duplicate_then_collision_applied) {
-        assert(!pdb.IsTxAvailable(2));
+    if (forced_terminal_collision_applied) {
+        assert(!pdb.IsTxAvailable(forced_terminal_collision_short_id_index + 1));
         assert(pdb.MempoolCount() == 0);
         assert(pdb.ExtraCount() == 0);
+    }
+    if (forced_null_extra_applied) {
+        assert(pdb.IsTxAvailable(1));
+        assert(pdb.MempoolCount() == 1);
+        assert(pdb.ExtraCount() == 0);
+    }
+    if (forced_duplicate_extra_applied) {
+        assert(pdb.IsTxAvailable(1));
+        assert(pdb.MempoolCount() == 1);
+        assert(pdb.ExtraCount() == 1);
     }
 
     const auto prefilled_by_position{cmpctblock.PrefilledTxsByPosition()};
