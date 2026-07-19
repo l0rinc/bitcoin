@@ -11,16 +11,20 @@
 
 #include <addresstype.h>
 #include <interfaces/chain.h>
+#include <key.h>
 #include <key_io.h>
 #include <node/blockstorage.h>
 #include <node/types.h>
 #include <policy/policy.h>
 #include <rpc/server.h>
+#include <script/descriptor.h>
 #include <script/solver.h>
+#include <script/signingprovider.h>
 #include <test/util/common.h>
 #include <test/util/logging.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
+#include <test/util/time.h>
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
@@ -28,6 +32,7 @@
 #include <wallet/context.h>
 #include <wallet/receive.h>
 #include <wallet/spend.h>
+#include <wallet/sqlite.h>
 #include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
 
@@ -44,6 +49,82 @@ static_assert(DEFAULT_TRANSACTION_MINFEE >= DEFAULT_MIN_RELAY_TX_FEE, "wallet mi
 static_assert(WALLET_INCREMENTAL_RELAY_FEE >= DEFAULT_INCREMENTAL_RELAY_FEE, "wallet incremental fee is smaller than default incremental relay fee");
 
 BOOST_FIXTURE_TEST_SUITE(wallet_tests, WalletTestingSetup)
+
+namespace {
+//! Wallet database whose batch fails master key record writes, modeling a
+//! transient I/O error on exactly that record: SQLite record statements are
+//! independent, so one failed record write does not poison the transaction
+//! and COMMIT can still succeed for the remaining records.
+class MasterKeyFailDatabase : public InMemoryWalletDatabase
+{
+public:
+    class Batch : public SQLiteBatch
+    {
+    public:
+        using SQLiteBatch::SQLiteBatch;
+
+        bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) override
+        {
+            // The master key record serializes ("mkey", nID): compactsize 4 + "mkey".
+            if (key.size() >= 5 && key[0] == std::byte{0x04} && key[1] == std::byte{'m'} &&
+                key[2] == std::byte{'k'} && key[3] == std::byte{'e'} && key[4] == std::byte{'y'}) {
+                return false;
+            }
+            return SQLiteBatch::WriteKey(std::move(key), std::move(value), overwrite);
+        }
+    };
+
+    std::unique_ptr<DatabaseBatch> MakeBatch() override { return std::make_unique<Batch>(*this); }
+};
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(encrypt_wallet_master_key_write_failure, WalletTestingSetup)
+{
+    // Mirror the wallet_encrypt bench: a descriptor wallet holding a private key.
+    WalletContext context;
+    context.args = &m_args;
+    context.chain = m_node.chain.get();
+    auto wallet{TestCreateWallet(std::make_unique<MasterKeyFailDatabase>(), context, WALLET_FLAG_DESCRIPTORS)};
+
+    CKey key{GenerateRandomKey()};
+    FlatSigningProvider keys;
+    std::string error;
+    auto descs{Parse("combo(" + EncodeSecret(key) + ")", keys, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE(!descs.empty());
+    WalletDescriptor w_desc(std::move(descs.at(0)), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/0, /*next_index=*/0);
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_REQUIRE(wallet->AddWalletDescriptor(w_desc, keys, /*label=*/"", /*internal=*/false));
+    }
+
+    // Keep derive iteration calibration deterministic and fast.
+    FakeNodeClock clock{1s};
+
+    // The master key record write fails; encryption must fail instead of
+    // committing re-encrypted keys without it (a permanent lockout on disk).
+    BOOST_CHECK(!wallet->EncryptWallet("passphrase"));
+
+    {
+        // Neither the master key nor the re-encrypted keys may be persisted.
+        auto batch{wallet->GetDatabase().MakeBatch()};
+        std::unique_ptr<DatabaseCursor> cursor{batch->GetNewCursor()};
+        BOOST_REQUIRE(cursor);
+        bool found_master_key{false};
+        bool found_crypted_key{false};
+        while (true) {
+            DataStream ss_key{}, ss_value{};
+            if (cursor->Next(ss_key, ss_value) != DatabaseCursor::Status::MORE) break;
+            std::string record_type;
+            ss_key >> record_type;
+            found_master_key |= (record_type == DBKeys::MASTER_KEY);
+            found_crypted_key |= (record_type == DBKeys::WALLETDESCRIPTORCKEY);
+        }
+        BOOST_CHECK(!found_master_key);
+        BOOST_CHECK(!found_crypted_key);
+    }
+
+    TestUnloadWallet(std::move(wallet));
+}
 
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {
