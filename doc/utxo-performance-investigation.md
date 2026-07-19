@@ -1522,3 +1522,29 @@ Decision: reject and fully revert the source and test diffs; do not make a
 consensus-path commit based on a microbenchmark alone. Raw harness and outputs
 are `/mnt/my_storage/bitcoin-perf-scratch/run_reindex_writebuf_trial.sh` and
 `/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/sigopfast-{candidate1,baseline1}/metrics/`.
+
+### Reject `CheckTxInputs` fetch reuse (`9fb074106f`)
+
+Local seed `9fb074106f` replaces `CheckTxInputs()`'s up-front
+`inputs.HaveInputs(tx)` pass with a spent-coin test inside the later value and
+maturity loop. It is absent from freshly fetched `origin/master`. The fork
+commit query maps it to a closed, unmerged PR, so it is not excluded merely as
+an already-pushed upstream fix; it is rejected on semantics instead.
+
+The change is not observationally equivalent. Today `HaveInputs()` checks
+*every* prevout first, before any coinbase-maturity or amount rule. A
+transaction whose first input is an existing immature coinbase and whose later
+input is missing therefore returns `TX_MISSING_INPUTS`. The candidate examines
+the first coin first and returns `TX_PREMATURE_SPEND`, never reaching the
+missing input. This follows directly from `CCoinsViewCache::HaveInputs()` and
+the proposed loop; no benchmark can make the changed result safe.
+
+The distinction has live policy reach: `AcceptToMemoryPool` passes the result
+through `node::ToTransactionError()`, where `TX_MISSING_INPUTS` becomes
+`TransactionError::MISSING_INPUTS`; the orphanage and tx download manager
+explicitly use `TX_MISSING_INPUTS` to retain/process possible orphan
+transactions. Reclassifying the described transaction changes peer and RPC
+behavior. Decision: reject without applying, building, or timing the patch.
+No source diff was retained. A safe optimization would have to preserve the
+all-input availability pass or preserve its exact error precedence, which this
+seed does not.
