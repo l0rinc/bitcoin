@@ -5046,3 +5046,40 @@ Decision: retain the compiler's normal inline heuristic. The existing
 profile's self-time signal does not justify force-inlining a wide utility
 header, and the full scan proves it makes this target slower. No production
 behavior or test changes result from this experiment.
+
+### Reject `Block::Iter` key reconstruction with `std::string::append()`
+
+`Block::Iter::ParseNextKey()` reconstructs the prefix-compressed key of every
+LevelDB block entry. Its `resize(shared + non_shared)` value-initializes any
+grown suffix immediately before `memcpy()` overwrites that suffix. The
+direct-script improvement above made this look like a promising analogous
+zero-fill avoidance: shrink the existing key to `shared`, then append the
+non-shared bytes.
+
+The string operation is not equivalent at the implementation-cost level. Its
+append path adds length/capacity handling that outweighs the redundant suffix
+initialization in this small, already-reserved key. The only temporary source
+change was:
+
+```text
+key_.resize(shared);
+key_.append(p, non_shared);
+```
+
+Two opposite-order full-chain reader series reject it; every run returned the
+same 32,867,816-coin aggregate:
+
+| order and runs | existing resize/memcpy median | shrink/append median | result |
+| --- | ---: | ---: | ---: |
+| existing then append, 7 each | 7.447236 s | 7.514731 s | 0.91% slower |
+| append then existing, 5 each | 7.433377 s | 7.525746 s | 1.24% slower |
+
+Raw Hyperfine JSON and the candidate reader are
+`/mnt/my_storage/bitcoin-perf-scratch/block-iter-append{,-reverse}.json` and
+`/mnt/my_storage/bitcoin-perf-scratch/block-iter-append-reader`. The source
+was restored and `ninja -C build bitcoind -j4` completed with a clean diff.
+
+Decision: retain the original `resize`/`memcpy` reconstruction. The target
+has broad warm full-scan reach, but no user-visible win; a generic C++ string
+API substitution is not a valid analogue of removing a known overwritten stack
+fill. No production or test changes result from this experiment.
