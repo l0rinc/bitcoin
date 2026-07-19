@@ -286,6 +286,37 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager, TestChain100Setup)
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
 }
 
+//! Regression test for deleting a snapshot chainstate from a ChainstateManager
+//! that has no mempool, mirroring libbitcoinkernel usage (btck never sets
+//! Options::mempool) on the reindex/wipe path.
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_delete_chainstate_no_mempool, ChainTestingSetup)
+{
+    ChainstateManager& manager{*Assert(m_node.chainman)};
+
+    // Mirror kernel API usage: the ChainstateManager has no mempool.
+    Chainstate& c1{WITH_LOCK(::cs_main, return manager.InitializeChainstate(/*mempool=*/nullptr))};
+
+    // Mirror LoadAssumeutxoChainstate(): a snapshot chainstate is added.
+    const uint256 snapshot_blockhash{uint256::ONE};
+    Chainstate& c2{WITH_LOCK(::cs_main, return manager.AddChainstate(std::make_unique<Chainstate>(nullptr, manager.m_blockman, manager, snapshot_blockhash)))};
+
+    // Leave a real coins db on disk, then release the views, mirroring a
+    // snapshot chainstate dir from a previous process (deleted on reindex).
+    c2.InitCoinsDB(8_MiB, /*in_memory=*/false, /*should_wipe=*/true);
+    c2.ResetCoinsViews();
+
+    // Mirror node::LoadChainstate(): reset the IBD chainstate target from
+    // the snapshot block back to the network tip before deleting.
+    WITH_LOCK(::cs_main, c1.SetTargetBlock(nullptr));
+
+    // Mirror the reindex wipe path in node::LoadChainstate(): deleting the
+    // snapshot chainstate must not dereference its null mempool.
+    BOOST_CHECK(WITH_LOCK(::cs_main, return manager.DeleteChainstate(c2)));
+    LOCK(::cs_main);
+    BOOST_CHECK_EQUAL(manager.m_chainstates.size(), 1);
+    BOOST_CHECK_EQUAL(manager.m_chainstates[0].get(), &c1);
+}
+
 //! Test rebalancing the caches associated with each chainstate.
 BOOST_FIXTURE_TEST_CASE(chainstatemanager_rebalance_caches, TestChain100Setup)
 {
