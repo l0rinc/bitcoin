@@ -4724,3 +4724,80 @@ Reach is direct non-indexed `gettxoutsetinfo hash_type=muhash` (including a
 `hash_serialized_3`, `dumptxoutset`, snapshot validation, `scantxoutset`, or
 ordinary `-reindex-chainstate`; coinstats-index maintenance continues to use
 the public fresh-buffer helper.
+
+### `AmountCompression`: inline the bounded amount decoder at deserialization
+
+Every `Coin` read through `AmountCompression::Unser()` calls
+`DecompressAmount()`. The function is small but, after the existing
+power-of-ten-table improvement, was still emitted out of line. The current
+full-chainstate profile assigns 4.66% self samples to that call beneath
+`CCoinsViewDBCursor::GetValue(Coin&)`.
+
+Move the exact codec body to `compressor.h` and mark only it `ALWAYS_INLINE`.
+`AmountCompression::Unser()` is already a header-defined template, so its
+common `Coin` deserialization instantiation can then contain the decoder
+instead of calling the standalone function. The zero case, unsigned arithmetic,
+division/remainder order, `POW10` table, and all output values are byte-for-byte
+the existing codec; `compressor.cpp` only loses the former out-of-line copy.
+The final reader has no `DecompressAmount(unsigned long)` text symbol (only the
+local `POW10` data symbol).
+
+Two CPU-3-pinned seven-run Hyperfine comparisons use the current direct
+closed-chainstate reader. Each scan obtains `Coin` values then accumulates
+their count, script sizes, and amount. All 14 runs return the same aggregate:
+
+```
+32867816 854678620 1497563613382042
+```
+
+Both orders favor the candidate by their medians:
+
+| order | ordinary decoder median | inline decoder median | result |
+| --- | ---: | ---: | ---: |
+| ordinary then inline | 7.278140 s | 7.222481 s | 0.76% faster |
+| inline then ordinary | 7.305732 s | 7.256996 s | 0.67% faster |
+
+The second ordinary-decoder order includes two noisy 7.436946 s and 7.963474 s
+samples, so its 7.412205 s mean is not used as the claim. The first order has
+means 7.290999 +/- 0.029838 s versus 7.229944 +/- 0.021804 s. The conservative
+two-order result is therefore a small warm CPU scan speedup, not an HDD or
+`-reindex-chainstate` claim. The candidate reader's executable text grows by
+701 bytes (2,402,997 to 2,403,698 bytes); the larger unstripped-file change
+comes from regenerated debug information and is not executable code.
+
+The complete Release build recompiles the header consumers with no warnings.
+`compress_tests/compress_amounts` covers the amount codec's round trips and
+edge vectors, while `coins_tests/coin_stats_value_matches_coin_deserialization`
+cross-checks real coin decoding. The relevant UTXO RPC functional tests pass
+for `gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`; a Debug compile of
+the `compressor.cpp` and `txdb.cpp` consumers confirms the annotation also
+builds outside optimization mode.
+
+```sh
+git fetch -q origin master
+git grep -n 'ALWAYS_INLINE uint64_t DecompressAmount' origin/master -- src || true
+git log origin/master --format='%h %s' -S'ALWAYS_INLINE uint64_t DecompressAmount' -- src/compressor.h src/compressor.cpp
+git log origin/master --format='%h %s' -G'DecompressAmount.*inline|inline.*DecompressAmount' -- src/compressor.h src/compressor.cpp
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=compress_tests/compress_amounts --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+build/test/functional/test_runner.py feature_utxo_set_hash.py rpc_scantxoutset.py rpc_dumptxoutset.py --jobs=1 \
+  --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/decompress-inline-functional --timeout-factor=2
+ninja -C build-debug src/CMakeFiles/bitcoin_common.dir/compressor.cpp.o src/CMakeFiles/bitcoin_node.dir/txdb.cpp.o -j4
+hyperfine --warmup 1 --runs 7 --export-json /mnt/my_storage/bitcoin-perf-scratch/decompress-inline-hyperfine.json \
+  'taskset -c 3 <ordinary-reader> /mnt/my_storage/BitcoinData/chainstate 1' \
+  'taskset -c 3 <inline-reader> /mnt/my_storage/BitcoinData/chainstate 1'
+```
+
+The reader source/binaries, raw Hyperfine JSON for both orders, test directory,
+and symbol/size outputs are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/` as `decompress-inline-*`; the ordinary
+reader is
+`twolevel-next.hVSzfR/full_coin_reader_repeat-current`. Fresh `origin/master`
+at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no equivalent annotation.
+
+Reach is every `AmountCompression::Unser()` instantiation, including decoded
+UTXO values during `gettxoutsetinfo`, `scantxoutset`, `dumptxoutset`, snapshot
+work, and normal validation/cache reads. It does not alter the on-disk amount
+encoding or an unspent-output's public value. This change is intentionally not
+credited with a separate full-HDD reindex result.

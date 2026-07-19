@@ -6,6 +6,7 @@
 #ifndef BITCOIN_COMPRESSOR_H
 #define BITCOIN_COMPRESSOR_H
 
+#include <attributes.h>
 #include <prevector.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
@@ -45,7 +46,30 @@ bool DecompressScript(CScript& script, unsigned int nSize, const CompressedScrip
  */
 uint64_t CompressAmount(uint64_t nAmount);
 
-uint64_t DecompressAmount(uint64_t nAmount);
+ALWAYS_INLINE uint64_t DecompressAmount(uint64_t x)
+{
+    // x = 0  OR  x = 1+10*(9*n + d - 1) + e  OR  x = 1+10*(n - 1) + 9
+    if (x == 0)
+        return 0;
+    x--;
+    // x = 10*(9*n + d - 1) + e
+    int e = x % 10;
+    x /= 10;
+    uint64_t n = 0;
+    if (e < 9) {
+        // x = 9*n + d - 1
+        int d = (x % 9) + 1;
+        x /= 9;
+        // x = n
+        n = x*10 + d;
+    } else {
+        n = x+1;
+    }
+    static constexpr uint64_t POW10[]{
+        1, 10, 100, 1'000, 10'000, 100'000, 1'000'000, 10'000'000, 100'000'000, 1'000'000'000,
+    };
+    return n * POW10[e];
+}
 
 /** Compact serializer for scripts.
  *
