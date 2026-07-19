@@ -1122,10 +1122,6 @@ full metrics are under
 The following seeds were screened but have not yet produced an accepted or
 fully rejected independent change:
 
-- [#180](https://github.com/l0rinc/bitcoin/pull/180): the direct
-  `CheckTransaction` change is rejected above for insufficient HDD reach. Its
-  seek-compaction idea is already present and upstream; any remaining flush
-  idea needs a current compaction/write-amplification profile before review.
 ### LevelDB: heapify forward merging iterators for full UTXO scans
 
 The earlier reindex profile correctly deferred LevelDB work: its small,
@@ -2394,3 +2390,44 @@ Decision: remove both from the open list. Do not retune mmap advice, block
 cache, or write buffer size without a new profile showing a different access
 pattern and enough repeated end-to-end HDD evidence to overcome the existing
 negative controls.
+
+### Close fork PR #180: no independent flush or hash-cache speed seed remains
+
+Fork PR [#180](https://github.com/l0rinc/bitcoin/pull/180), fetched as
+`l0rinc/pr-180` at `a93d6789b6198243cf16f0d26b11c2e263a3437b`, was a
+collection of unrelated experiments rather than a remaining flush proposal.
+Its parallel `CoinsViewOverlay` input-fetch series is already merged in
+`origin/master` as `ab2a379237 coins: fetch inputs in parallel` and related
+commits, so is explicitly out of scope. Its `f5a15c37` LevelDB statistics
+addition is diagnostic logging, not an optimization. Its `e483b98eb` seek
+compaction policy is already live and was closed above. Its custom
+SipHash-1-3 outpoint hasher is rejected above on the cache's collision-resistance
+boundary, and its `CheckTransaction` duplicate/null change is rejected above
+for insufficient HDD reach.
+
+The only superficially simple remaining item, `32eba3b3d48`, removes
+`noexcept` from `SaltedOutpointHasher::operator()`. That is not a universally
+safe speed annotation. Current source documents the deliberate trade-off:
+libstdc++ treats the noexcept fast hash as non-cached, recomputes it during
+rehash, costs about 1.6% in that narrow operation, but saves one `size_t` per
+node and about 9% cache memory, permitting a larger `-dbcache`. Reversing this
+would make a platform-library implementation policy part of Core's cache
+budget, complicate the pool allocator's portable node-size assumption, and
+trade memory for an unmeasured microbenchmark. The live cache-reallocation
+trace above reinforces why preserved cache capacity is a first-order resource
+contract during IBD.
+
+There is no PR #180 flush patch to test after separating these components;
+the earlier flush discussion belonged to PR #59 and is now closed with a
+current trace. Reviewed with:
+
+```sh
+git fetch -q l0rinc 'refs/pull/180/head:refs/remotes/l0rinc/pr-180'
+git log --reverse --format='%H %s' $(git merge-base l0rinc/pr-180 origin/master)..l0rinc/pr-180
+git log origin/master --oneline -- src/coins.h
+sed -n '56,95p' src/util/hasher.h
+```
+
+Decision: remove #180 from the open seed list. Do not turn the intentional
+`noexcept` memory trade-off into a claimed HDD optimization without a
+cross-library cache-capacity analysis and a reproducible end-to-end win.
