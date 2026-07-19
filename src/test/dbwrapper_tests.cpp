@@ -290,22 +290,21 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
         BOOST_REQUIRE(it->GetValue(val_res));
         BOOST_CHECK_EQUAL(val_res.ToString(), in.ToString());
 
-        it->Next();
+        BOOST_REQUIRE(it->NextAndValid());
 
         BOOST_REQUIRE(it->GetKey(key_res));
         BOOST_CHECK_EQUAL(key_res, key2);
         BOOST_REQUIRE(it->GetValue(val_res));
         BOOST_CHECK_EQUAL(val_res.ToString(), in2.ToString());
 
-        it->Next();
+        BOOST_REQUIRE(it->NextAndValid());
 
         BOOST_REQUIRE(it->GetKey(key_res));
         BOOST_CHECK_EQUAL(key_res, key3);
         BOOST_REQUIRE(it->GetValue(val_res3));
         BOOST_CHECK_EQUAL_COLLECTIONS(val_res3.begin(), val_res3.end(), in3.begin(), in3.end());
 
-        it->Next();
-        BOOST_CHECK_EQUAL(it->Valid(), false);
+        BOOST_CHECK(!it->NextAndValid());
     }
 }
 

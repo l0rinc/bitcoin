@@ -4478,3 +4478,88 @@ iteration and other LevelDB table walks. Block-boundary handling remains
 unchanged; point lookups generally do not repeatedly call `Next` or `Prev`.
 This warm CPU-bound scan does not establish an independent wall-time gain for
 validation/cache/write-dominated HDD `-reindex-chainstate`.
+
+### `dbwrapper`: combine cursor advancement with its validity check
+
+Each `CCoinsViewDBCursor` movement previously crossed the private
+`CDBIterator` PImpl boundary twice: `Next()` advanced the LevelDB iterator,
+then `UpdateKeyCache()` called `Valid()` before decoding the following key.
+The two out-of-line wrappers each obtain the same underlying iterator; in the
+normal successful case the second call is only the validity query following
+the just-completed movement. A repeated current-stack profile sampled
+`CDBIterator::Valid()` on this `NextNoKey()` path at 2.91%.
+
+Add `CDBIterator::NextAndValid()`, which makes exactly the former ordered
+calls to `leveldb::Iterator::Next()` then `Valid()` behind one PImpl boundary.
+`CCoinsViewDBCursor::{Next,NextNoKey}` pass that returned state into their
+already inlined key-cache update. An invalid result takes the existing
+invalidation path without attempting key decoding; a valid result takes the
+same `GetKey()` path as before. Existing `CDBIterator::Next()` users keep
+their exact API and behavior. There is no change to key/value bytes,
+obfuscation, LevelDB iterator position, malformed-key handling, or the lazy
+key contract.
+
+The CPU-3-pinned reader opens the closed local chainstate and calls
+`GetValue(Coin)` plus `NextNoKey()` over all 32,659,375 UTXOs. Every run
+returned the exact aggregate:
+
+```
+32659375 847458211 1488241113523993
+```
+
+Both run orders favor the candidate; all twelve samples are included in the
+combined median:
+
+| order | separate `Next()` and `Valid()` | combined `NextAndValid()` | result |
+| --- | ---: | ---: | ---: |
+| baseline then candidate, 7 runs | 6.989887 s | 6.942200 s | 0.68% faster |
+| candidate then baseline, 5 runs | 6.991837 s | 6.957479 s | 0.49% faster |
+| all 12 runs, combined median | 6.990862 s | 6.954724 s | 0.52% faster |
+
+Four alternating `perf stat` pairs have a lower candidate task-clock in each
+pair and show the expected reduced wrapper work:
+
+| metric | separate calls median | combined call median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 6.90323 s | 6.84757 s | -0.81% |
+| instructions | 64.924877 B | 64.663564 B | -0.40% |
+| branches | 13.154080 B | 13.088751 B | -0.50% |
+| branch misses | 39.132 M | 39.410 M | +0.71% |
+| cache misses | 39.073 M | 39.067 M | -0.02% |
+
+`dbwrapper_tests/dbwrapper_iterator` now advances through all three sorted
+entries with `NextAndValid()` and asserts `false` exactly after the final
+entry, for both obfuscated and non-obfuscated databases. As a temporary
+mutation proof, making `NextAndValid()` always return `true` rebuilt but made
+that exhaustion assertion fail twice, once for each obfuscation setting;
+restoring the validity call passes. The cursor-order test, full dbwrapper
+test group, full coin-stat decode cross-check, and `rpc_scantxoutset.py` also
+pass. The Debug builds of both PImpl wrapper and cursor consumer compile.
+
+```sh
+git fetch -q origin master
+git log origin/master --format='%h %s' -S'NextAndValid' -- src/dbwrapper.cpp src/dbwrapper.h src/txdb.cpp
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=dbwrapper_tests/dbwrapper_iterator --log_level=message
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+build/test/functional/test_runner.py rpc_scantxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/cursor-nextvalid.YESNfu/functional --timeout-factor=2
+ninja -C build-debug src/CMakeFiles/bitcoin_node.dir/dbwrapper.cpp.o src/CMakeFiles/bitcoin_node.dir/txdb.cpp.o -j4
+git diff --check
+```
+
+The fresh full-reader profile is retained under
+`/mnt/my_storage/bitcoin-perf-scratch/twolevel-next.hVSzfR/` and the candidate
+reader, initial/reverse Hyperfine JSON, counter CSVs, aggregate outputs,
+and functional test directory are under
+`/mnt/my_storage/bitcoin-perf-scratch/cursor-nextvalid.YESNfu/`. Fresh
+`origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no
+equivalent combined operation.
+
+The change reaches each `CCoinsViewDBCursor` advance. It therefore applies to
+the full chainstate scans in `gettxoutsetinfo`, `scantxoutset`,
+`dumptxoutset`, snapshot/statistics construction, and other cursor walks;
+both eager-key and lazy-key advances use it. Other `CDBIterator` callers
+retain `Next()`. It does not help ordinary point lookups or establish an
+independent full-HDD-reindex wall-time gain.

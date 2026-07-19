@@ -254,7 +254,7 @@ private:
     mutable std::pair<char, COutPoint> keyTmp;
     mutable bool key_cached{false};
 
-    ALWAYS_INLINE void UpdateKeyCache(bool cache_key);
+    ALWAYS_INLINE void UpdateKeyCache(bool cache_key, bool cursor_valid);
 
     friend class CCoinsViewDB;
 };
@@ -311,20 +311,18 @@ bool CCoinsViewDBCursor::Valid() const
 
 void CCoinsViewDBCursor::Next()
 {
-    pcursor->Next();
-    UpdateKeyCache(/*cache_key=*/true);
+    UpdateKeyCache(/*cache_key=*/true, pcursor->NextAndValid());
 }
 
 void CCoinsViewDBCursor::NextNoKey()
 {
-    pcursor->Next();
-    UpdateKeyCache(/*cache_key=*/false);
+    UpdateKeyCache(/*cache_key=*/false, pcursor->NextAndValid());
 }
 
-ALWAYS_INLINE void CCoinsViewDBCursor::UpdateKeyCache(bool cache_key)
+ALWAYS_INLINE void CCoinsViewDBCursor::UpdateKeyCache(bool cache_key, bool cursor_valid)
 {
     CoinEntry entry(cache_key ? &keyTmp.second : nullptr);
-    if (!pcursor->Valid() || !pcursor->GetKey(entry)) {
+    if (!cursor_valid || !pcursor->GetKey(entry)) {
         keyTmp.first = 0; // Invalidate cached key after last record so that Valid() and GetKey() return false
         key_cached = false;
     } else {

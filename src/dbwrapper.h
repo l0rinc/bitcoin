@@ -214,6 +214,7 @@ public:
     }
 
     void Next();
+    bool NextAndValid();
 
     template<typename K> bool GetKey(K& key) {
         try {

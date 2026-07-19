@@ -404,3 +404,8 @@ CDBIterator::~CDBIterator() = default;
 bool CDBIterator::Valid() const { return m_impl_iter->iter->Valid(); }
 void CDBIterator::SeekToFirst() { m_impl_iter->iter->SeekToFirst(); }
 void CDBIterator::Next() { m_impl_iter->iter->Next(); }
+bool CDBIterator::NextAndValid()
+{
+    m_impl_iter->iter->Next();
+    return m_impl_iter->iter->Valid();
+}
