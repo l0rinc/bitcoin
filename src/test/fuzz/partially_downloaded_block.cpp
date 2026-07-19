@@ -191,6 +191,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     const bool force_duplicate_extra_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_mempool_duplicate_then_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_duplicate_extra_txn{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
 
     bilingual_str error;
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
@@ -208,7 +209,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         // InitData's early exit cannot skip their duplicate/collision tail.
         if (force_short_id_index_overflow || force_mempool_extra_sequence || force_short_id_collision || force_mempool_collision ||
             force_null_extra_collision || force_duplicate_extra_collision ||
-            force_mempool_duplicate_then_collision || force_duplicate_extra_txn) continue;
+            force_mempool_duplicate_then_collision || force_duplicate_extra_txn || force_mempool_early_exit_collision) continue;
 
         if (add_to_extra_txn) {
             extra_txn.emplace_back(tx->GetWitnessHash(), tx);
@@ -224,6 +225,8 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     size_t forced_terminal_collision_short_id_index{0};
     bool forced_null_extra_applied{false};
     bool forced_duplicate_extra_applied{false};
+    bool forced_mempool_early_exit_collision_applied{false};
+    size_t forced_mempool_candidates_seen{0};
     if (force_short_id_index_overflow) {
         const CTransactionRef& target_tx{block->vtx[1]};
         const Wtxid target_wtxid{target_tx->GetWitnessHash()};
@@ -298,6 +301,44 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         extra_txn.emplace_back(target_wtxid, target_tx);
         cmpctblock.ReplaceShortTxID(0, cmpctblock.GetShortID(target_wtxid));
         forced_duplicate_extra_applied = true;
+    } else if (force_mempool_early_exit_collision) {
+        CMutableTransaction first_mempool_tx_mutable{*block->vtx[1]};
+        first_mempool_tx_mutable.nLockTime ^= 1U;
+        const CTransactionRef first_mempool_tx{MakeTransactionRef(std::move(first_mempool_tx_mutable))};
+        CMutableTransaction second_mempool_tx_mutable{*block->vtx[2]};
+        second_mempool_tx_mutable.nLockTime ^= 2U;
+        const CTransactionRef second_mempool_tx{MakeTransactionRef(std::move(second_mempool_tx_mutable))};
+        CMutableTransaction late_mempool_tx_mutable{*block->vtx[1]};
+        late_mempool_tx_mutable.nLockTime ^= 4U;
+        const CTransactionRef late_mempool_tx{MakeTransactionRef(std::move(late_mempool_tx_mutable))};
+
+        if (first_mempool_tx->GetWitnessHash() != second_mempool_tx->GetWitnessHash() &&
+            first_mempool_tx->GetWitnessHash() != late_mempool_tx->GetWitnessHash() &&
+            second_mempool_tx->GetWitnessHash() != late_mempool_tx->GetWitnessHash()) {
+            TestMemPoolEntryHelper entry;
+            for (const CTransactionRef& tx : {first_mempool_tx, second_mempool_tx, late_mempool_tx}) {
+                LOCK2(cs_main, pool.cs);
+                TryAddToMempool(pool, entry.FromTx(tx));
+            }
+            if (pool.size() == 3) {
+                const std::vector<uint64_t> target_short_ids{
+                    cmpctblock.GetShortID(block->vtx[1]->GetWitnessHash()),
+                    cmpctblock.GetShortID(block->vtx[2]->GetWitnessHash())};
+                pdb.m_get_short_id_mock = [&forced_mempool_candidates_seen, target_short_ids, assigned_short_ids = std::vector<std::pair<Wtxid, uint64_t>>{}](const CBlockHeaderAndShortTxIDs& cmpctblock, const Wtxid& wtxid) mutable {
+                    for (const auto& [assigned_wtxid, short_id] : assigned_short_ids) {
+                        if (assigned_wtxid == wtxid) return short_id;
+                    }
+                    if (forced_mempool_candidates_seen < 2) {
+                        const uint64_t short_id{target_short_ids[forced_mempool_candidates_seen]};
+                        assigned_short_ids.emplace_back(wtxid, short_id);
+                        ++forced_mempool_candidates_seen;
+                        return short_id;
+                    }
+                    return cmpctblock.GetShortID(wtxid);
+                };
+                forced_mempool_early_exit_collision_applied = true;
+            }
+        }
     } else if (cmpctblock.ShortTxIDCount() > 0 && !force_short_id_collision && !force_mempool_collision &&
         (force_null_extra_collision || fuzzed_data_provider.ConsumeBool())) {
         if (force_null_extra_collision) {
@@ -444,6 +485,13 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         assert(pdb.MempoolCount() == 1);
         assert(pdb.ExtraCount() == 1);
     }
+    if (forced_mempool_early_exit_collision_applied) {
+        assert(forced_mempool_candidates_seen == 2);
+        assert(pdb.IsTxAvailable(1));
+        assert(pdb.IsTxAvailable(2));
+        assert(pdb.MempoolCount() == 2);
+        assert(pdb.ExtraCount() == 0);
+    }
 
     const auto prefilled_by_position{cmpctblock.PrefilledTxsByPosition()};
     const auto shorttxids_by_position{cmpctblock.ShortTxIDsByPosition()};
@@ -486,7 +534,12 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
 
     // Mock IsBlockMutated
     bool fail_block_mutated{fuzzed_data_provider.ConsumeBool()};
-    pdb.m_check_block_mutated_mock = FuzzedIsBlockMutated(fail_block_mutated);
+    if (!forced_mempool_early_exit_collision_applied) {
+        pdb.m_check_block_mutated_mock = FuzzedIsBlockMutated(fail_block_mutated);
+    }
+    // This construction intentionally leaves a colliding mempool candidate unexamined;
+    // exercise the production mutation check on the resulting wrong transaction set.
+    const bool expected_block_mutated{fail_block_mutated || forced_mempool_early_exit_collision_applied};
 
     CBlock reconstructed_block{*block};
     reconstructed_block.vtx = {block->vtx[0]};
@@ -500,7 +553,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         assert(!skipped_missing);
         assert(!extra_missing);
         assert(missing.size() == required_missing_count);
-        assert(!fail_block_mutated);
+        assert(!expected_block_mutated);
         assert(block->GetHash() == reconstructed_block.GetHash());
         assert(block->vtx.size() == reconstructed_block.vtx.size());
         for (size_t i{0}; i < block->vtx.size(); ++i) {
@@ -509,7 +562,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         }
         break;
     case READ_STATUS_FAILED:
-        assert(fail_block_mutated);
+        assert(expected_block_mutated);
         assert(reconstructed_block.GetHash() == reconstructed_block_hash);
         assert(reconstructed_block.vtx == reconstructed_block_txs);
         break;
