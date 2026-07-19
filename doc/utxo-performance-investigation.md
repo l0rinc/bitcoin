@@ -3899,3 +3899,40 @@ for `gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`; point lookups,
 backward scans, compaction, and other databases can also reach it. The evidence
 is a warm CPU-bound chainstate traversal. It does not establish a standalone
 full-HDD-reindex wall-time gain.
+
+### Reject forcing `ReadVarInt()` inline
+
+The refreshed eight-pass full-coin reader profile still sampled
+`ReadVarInt<ObfuscatedSpanReader, uint32_t>` at 5.25% and the corresponding
+`SpanReader` instantiation in `CCoinsViewDBCursor::UpdateKeyCache()` at 3.50%.
+That made forced inlining a plausible annotation-style experiment: change the
+generic template declaration from ordinary linkage to `ALWAYS_INLINE`, rebuild
+the complete daemon, and compare the same full chainstate reader. This was
+intentionally tested rather than inferred from the sample percentage because
+the helper has exceptional overflow paths and is instantiated throughout the
+serialization surface.
+
+The broad hardened Release build succeeded, and a candidate reader completed
+the same 32,659,375-coin scan with the exact aggregate
+`32659375 847458211 1488241113523993`. Five warm CPU-3-pinned Hyperfine runs
+against the preceding `7005a005c5` stack show the expected conclusion:
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| normal generic inlining decisions | 7.341025, 7.332817, 7.337481, 7.381430, 7.656660 s | 7.341025 s | baseline |
+| `ALWAYS_INLINE ReadVarInt()` | 7.377785, 7.370824, 7.435377, 7.460264, 7.557620 s | 7.435377 s | 1.29% slower |
+
+The candidate binary was marginally smaller (4,956,056 versus 4,960,096
+bytes), so this is not a simple generated-size increase. It is nevertheless a
+clear full-scan regression and no `perf` follow-up or behavior-changing test
+is warranted. The source change was completely restored. The profile, raw
+Hyperfine JSON, both readers, and build artifact are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/full-coin-reader-7005a005-profile/` and
+`/mnt/my_storage/bitcoin-perf-scratch/varint-always-inline/`.
+
+Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` likewise
+leaves this generic serializer without a force-inline annotation. Do not add
+one for the target RPCs or reindex: its wide serialization reach makes the
+measured full-UTXO-scan regression more important than its sampled call-site
+cost. Reconsider only a narrowly scoped caller with separate profile and
+end-to-end evidence.
