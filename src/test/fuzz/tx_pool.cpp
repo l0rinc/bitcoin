@@ -306,6 +306,14 @@ void CheckMempoolInfoViews(const CTxMemPool& tx_pool)
         AssertInfoEqual(info, tx_pool.info_for_relay(wtxid, std::numeric_limits<uint64_t>::max()));
         AssertInfoEmpty(tx_pool.info_for_relay(txid, /*last_sequence=*/0));
         AssertInfoEmpty(tx_pool.info_for_relay(wtxid, /*last_sequence=*/0));
+
+        const uint64_t entry_sequence{WITH_LOCK(tx_pool.cs, return (*tx_pool.GetIter(txid))->GetSequence())};
+        AssertInfoEmpty(tx_pool.info_for_relay(txid, entry_sequence));
+        AssertInfoEmpty(tx_pool.info_for_relay(wtxid, entry_sequence));
+        if (entry_sequence < std::numeric_limits<uint64_t>::max()) {
+            AssertInfoEqual(info, tx_pool.info_for_relay(txid, entry_sequence + 1));
+            AssertInfoEqual(info, tx_pool.info_for_relay(wtxid, entry_sequence + 1));
+        }
     }
 
     std::vector<Txid> delta_only_txids;
