@@ -2492,3 +2492,60 @@ reproducible end-to-end `gettxoutsetinfo none` gain here. Do not add a second
 amount state machine or broaden the change to hashed stats/dumptxoutset unless
 a profile and an interleaved, repeated benchmark establish a materially larger
 win.
+
+### `coinstats`: inline the fixed bogo-size calculation
+
+`GetBogoSize(uint64_t)` is a fixed `50 + script_pub_key_size` calculation. It
+was nevertheless an out-of-line, stack-protected function and appeared once
+per UTXO in both `ComputeUTXOStats` loops. The full un-hashed stats disassembly
+showed a call to it after every decoded `CoinStatsValue`, including the
+function's stack-canary load/check and return. The same helper was also used
+for every added and spent output while maintaining the coinstats index.
+
+The size-taking overload is now `constexpr` in `kernel/coinstats.h`; direct
+call sites pass `scriptPubKey.size()`, so the compiler emits the exact `+50`
+calculation at each use. This removes the now-unneeded CScript wrapper and its
+out-of-line definition. The metric is unchanged: it remains txid 32, output
+index 4, height/coinbase 4, amount 8, script-length 2, and the exact script
+byte count. The arithmetic has the same `uint64_t` promotion and wrap behavior
+as the former implementation.
+
+The measurement used the permitted local `BitcoinData` chainstate at height
+957779 (166,350,731 UTXOs), release binaries, CPU 3 pinning, network and
+wallet disabled, a fresh daemon for each series, one unmeasured warm scan, and
+daemon-attached `perf stat` for every `gettxoutsetinfo none` request. Every
+valid response had SHA-256
+`4b96d583ae030f7391f6b960ee9c738360da5ea27532da61c7057cc206dccfa0`.
+
+| binary / valid runs | wall median | task-clock median | instructions median | branches median |
+| --- | ---: | ---: | ---: | ---: |
+| out-of-line base (5) | 47.13 s | 47.006 s | 433.890 B | 87.782 B |
+| inline candidate, first series (5) | 47.16 s | 47.044 s | 432.398 B | 87.647 B |
+| inline candidate, reverse control (3) | 46.79 s | 46.710 s | 431.817 B | 87.400 B |
+
+Daemon-to-daemon wall-clock and frequency drift is larger than this small
+change, so the stable evidence is retired work rather than a precise wall-time
+claim. The first matched five-run pair consistently removes 1.492 B
+instructions per scan (0.344%) and 135 M branches (0.154%), with each series'
+instruction range below 0.03%. The reverse candidate has the same direction
+and a lower task-clock, confirming that the reduced call sequence is not a
+response or counter artifact. Candidate and baseline binaries, JSON replies,
+timers, perf CSVs, debug logs, and cookies are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/bogosize-inline-{candidate.dTLKg1,baseline.nDjNp7,candidate2.TEwAqn}`.
+
+Validated with:
+
+```sh
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+build/bin/test_bitcoin --run_test=coinstatsindex_tests --log_level=message
+build/test/functional/test_runner.py rpc_blockchain.py feature_coinstatsindex.py --jobs=1 \
+  --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-bogosize-inline
+git diff --check
+```
+
+Expected reach is every direct `ComputeUTXOStats` scan, including all
+non-indexed `gettxoutsetinfo` hash types and the preparation phase of
+`dumptxoutset`, plus coinstats-index block connect/disconnect maintenance. It
+does not change `scantxoutset`, chainstate reindex, snapshot output writes, or
+LevelDB I/O; cold HDD wall gains can be proportionally smaller.

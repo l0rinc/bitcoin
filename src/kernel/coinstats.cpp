@@ -33,22 +33,6 @@ CCoinsStats::CCoinsStats(int block_height, const uint256& block_hash)
     : nHeight(block_height),
       hashBlock(block_hash) {}
 
-// Database-independent metric indicating the UTXO set size
-uint64_t GetBogoSize(const CScript& script_pub_key)
-{
-    return GetBogoSize(script_pub_key.size());
-}
-
-uint64_t GetBogoSize(uint64_t script_pub_key_size)
-{
-    return 32 /* txid */ +
-           4 /* vout index */ +
-           4 /* height + coinbase */ +
-           8 /* amount */ +
-           2 /* scriptPubKey len */ +
-           script_pub_key_size /* scriptPubKey */;
-}
-
 template <typename T>
 static void TxOutSer(T& ss, const COutPoint& outpoint, const Coin& coin)
 {
@@ -129,7 +113,7 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, CCoinsView* view,
             if (stats.total_amount.has_value()) {
                 stats.total_amount = CheckedAdd(*stats.total_amount, coin.out.nValue);
             }
-            stats.nBogoSize += GetBogoSize(coin.out.scriptPubKey);
+            stats.nBogoSize += GetBogoSize(coin.out.scriptPubKey.size());
             ApplyCoinHash(hash_obj, *key, coin);
             stats.coins_count++;
         } else {

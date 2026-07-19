@@ -16,7 +16,6 @@
 class CCoinsView;
 class Coin;
 class COutPoint;
-class CScript;
 class MuHash3072;
 namespace node {
 class BlockManager;
@@ -72,8 +71,15 @@ struct CCoinsStats {
     CCoinsStats(int block_height, const uint256& block_hash);
 };
 
-uint64_t GetBogoSize(const CScript& script_pub_key);
-uint64_t GetBogoSize(uint64_t script_pub_key_size);
+constexpr uint64_t GetBogoSize(uint64_t script_pub_key_size)
+{
+    return 32 /* txid */ +
+           4 /* vout index */ +
+           4 /* height + coinbase */ +
+           8 /* amount */ +
+           2 /* scriptPubKey len */ +
+           script_pub_key_size /* scriptPubKey */;
+}
 
 void ApplyCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& coin);
 void RemoveCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& coin);
