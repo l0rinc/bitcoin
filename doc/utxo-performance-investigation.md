@@ -1729,3 +1729,49 @@ forward merged iterators, but it is not a demonstrated HDD reindex speedup.
 Raw commands and metrics are retained in
 `/mnt/my_storage/bitcoin-perf-scratch/run_reindex_writebuf_trial.sh` and
 `/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/mergerheap{base,}-1/`.
+
+### Reject `scantxoutset` selective coin deserialization
+
+The scan loop already rejects a decoded script by size and first byte before
+performing the descriptor-set lookup. A temporary direct-Core candidate moved
+that rejection into coin deserialization: it consumed the height and compressed
+amount, inspected the compressed script's possible output size/first byte, and
+only deserialized a full `Coin` when a requested script could match. P2PKH,
+P2SH, compressed P2PK, ordinary, oversized, and empty scripts have an exact
+shape at that point. Compressed encodings for uncompressed pubkeys need a
+conservative exception: an invalid curve point becomes an empty script in
+normal `DecompressScript`, so the candidate retained those entries whenever an
+empty script was requested.
+
+The temporary unit test compared the partial shape with full coin
+deserialization for every common compression form and crafted an invalid
+compressed uncompressed-pubkey record. The latter fully deserialized to an
+empty script while the prefilter correctly recorded both its usual 67-byte
+shape and its possible-empty state. This established that the proposed filter
+would not silently omit that malformed on-disk case. The temporary code and
+test were fully reverted after measurement.
+
+The controlled full-chain comparison used separate current-tree and candidate
+Release binaries, the explicitly permitted local `BitcoinData` at height
+957779, 166,350,731 UTXOs, one CPU-3-pinned network/wallet-disabled daemon per
+variant, `-checkblocks=1`, and one unmeasured warm scan before two measured
+no-match `raw(6a)#4mhr9ur5` scans. All four 199-byte RPC replies had SHA-256
+`62539678afd6931c917d0135fedcc12d3f11e9e40958fe4983e461a5f0d0891a`.
+
+| version/runs | RPC wall seconds | daemon task-clock | instructions | branches | branch misses | major faults |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| current baseline | 50.48, 50.42 | 50.351, 50.307 s | 455.580, 455.585 B | 94.610, 94.609 B | 502.023, 502.005 M | 0, 0 |
+| selective-parser candidate | 50.41, 50.33 | 50.280, 50.218 s | 456.014, 456.012 B | 94.489, 94.489 B | 552.647, 545.435 M | 0, 0 |
+
+The candidate's two-run wall median is only 0.16% lower and its task-clock is
+also only 0.16% lower, while instructions rise 0.09% and branch misses rise
+about 9%. That is not a credible speedup, and the extra cursor overload,
+compressed-script shape parser, and malformed-pubkey state would make the scan
+path more complex. Reject the idea rather than expanding the sample.
+
+Raw replies, wall times, perf CSVs, daemon logs, and isolated cookies are in
+`/mnt/my_storage/bitcoin-perf-scratch/scantxoutset-prefilter-runs/{baseline.fBuhev,candidate.h2wUih}/`.
+Freshly fetched `origin/master` at
+`18c05d93016b28a9afd4c716dfe00b6e0accb30b` contains neither `CoinScanInfo`
+nor `UnserInfo`; this was an independently tested but rejected candidate, not
+a duplicate of an already-pushed fix.
