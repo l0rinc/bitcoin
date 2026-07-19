@@ -5,6 +5,7 @@
 
 #include <txdb.h>
 
+#include <attributes.h>
 #include <coins.h>
 #include <dbwrapper.h>
 #include <logging/timer.h>
@@ -253,7 +254,7 @@ private:
     mutable std::pair<char, COutPoint> keyTmp;
     mutable bool key_cached{false};
 
-    void UpdateKeyCache(bool cache_key);
+    ALWAYS_INLINE void UpdateKeyCache(bool cache_key);
 
     friend class CCoinsViewDB;
 };
@@ -320,7 +321,7 @@ void CCoinsViewDBCursor::NextNoKey()
     UpdateKeyCache(/*cache_key=*/false);
 }
 
-void CCoinsViewDBCursor::UpdateKeyCache(bool cache_key)
+ALWAYS_INLINE void CCoinsViewDBCursor::UpdateKeyCache(bool cache_key)
 {
     CoinEntry entry(cache_key ? &keyTmp.second : nullptr);
     if (!pcursor->Valid() || !pcursor->GetKey(entry)) {

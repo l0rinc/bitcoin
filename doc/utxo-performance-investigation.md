@@ -4210,3 +4210,84 @@ Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` does not
 have this specialization. That is appropriate for this measured full UTXO
 scan. Any future attempt needs a larger representative improvement and a way
 to avoid duplicating VarInt correctness logic.
+
+### `CCoinsViewDBCursor::UpdateKeyCache()`: inline the shared cursor advance
+
+The refreshed full-coin profile sampled `CCoinsViewDBCursor::UpdateKeyCache()`
+at 4.67%. Both `Next()` and the branch's `NextNoKey()` call the helper after
+advancing the LevelDB cursor; Release GCC left it as a separate function with
+`Next()` and `NextNoKey()` tail-calling it. The helper is private to
+`txdb.cpp`, has only those two call sites, and performs the key-tag/length/
+VarInt validation that keeps `Valid()` and lazy `GetKey()` safe on malformed
+database entries.
+
+Mark that exact helper `ALWAYS_INLINE`. No control flow, exception path,
+deserialization, cache state, key materialization choice, or public cursor
+contract changes. The baseline direct reader has a
+`CCoinsViewDBCursor::UpdateKeyCache(bool)` symbol; the candidate has none,
+confirming the annotation took effect. The candidate is 4,024 bytes smaller
+(4,956,216 versus 4,960,240 bytes), but the performance evidence—not that
+incidental size change—is the basis for this commit.
+
+The CPU-3-pinned reader opens the closed local chainstate and executes
+`GetValue(Coin)` plus `NextNoKey()` over all 32,659,375 UTXOs. Every run
+returned:
+
+```
+32659375 847458211 1488241113523993
+```
+
+The first seven warm runs and a reverse-order five-run repetition both favor
+the candidate:
+
+| order | version | wall samples | median wall | change |
+| --- | --- | --- | ---: | ---: |
+| baseline then candidate | ordinary call | 7.293092, 7.279087, 7.281288, 7.317195, 7.273448, 7.304163, 7.332864 s | 7.293092 s | baseline |
+| baseline then candidate | forced inline | 7.290480, 7.287518, 7.280015, 7.173193, 7.228770, 7.262303, 7.197437 s | 7.262303 s | 0.42% faster |
+| candidate then baseline | forced inline | 7.267381, 7.236379, 7.266416, 7.257626, 7.254186 s | 7.257626 s | 0.61% faster than the reverse baseline median |
+| candidate then baseline | ordinary call | 7.341227, 7.685866, 7.302396, 7.294989, 7.292025 s | 7.302396 s | reverse baseline |
+
+The reverse baseline has one 7.686-second outlier, but its median remains
+above every candidate median. Four alternating baseline/candidate `perf stat`
+pairs all have lower candidate task-clock and the expected reduced work:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.20382 s | 7.16002 s | -0.61% |
+| instructions | 68.609295 B | 67.694295 B | -1.33% |
+| branches | 13.675268 B | 13.544554 B | -0.96% |
+| branch misses | 39.106 M | 40.039 M | +2.39% |
+| cache misses | 39.002 M | 38.946 M | -0.14% |
+
+The existing cursor-order unit test exercises output-index VarInts at 0, 1,
+127, 128, 255, 256, and `uint32_t` max; it retrieves the borrowed and copying
+keys around `GetValue()` and advances with `NextNoKey()`. The focused
+coin-deserialization cross-check and `rpc_scantxoutset.py` also pass. A Debug
+`-O0` compile of the exact `txdb.cpp` consumer passes, so the annotation does
+not make that configuration invalid.
+
+Raw Hyperfine JSON, all counter CSVs, reader binaries, symbol checks, exact
+aggregate output, and the functional-test directory are retained at
+`/mnt/my_storage/bitcoin-perf-scratch/update-key-cache-inline/` and
+`/mnt/my_storage/bitcoin-perf-scratch/full-coin-reader-current-profile/`.
+Validation:
+
+```sh
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests_dbbase --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+build/test/functional/test_runner.py rpc_scantxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/update-key-cache-inline/functional --timeout-factor=2
+cmake -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
+ninja -C build-debug src/CMakeFiles/bitcoin_node.dir/txdb.cpp.o -j4
+git diff --check
+```
+
+Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no
+`UpdateKeyCache()` or `NextNoKey()` because this is a follow-up to this
+branch's `36803c075c` deferred-key cursor work, not an already-upstream
+improvement. On that stack it reaches each CCoinsViewDB cursor advance:
+no-match `scantxoutset` scans use `NextNoKey()`, while matches,
+`gettxoutsetinfo`, `dumptxoutset`, snapshot writing, and other key-consuming
+walks use `Next()`. It does not affect ordinary point lookups or
+`-reindex-chainstate`; the measurement is a warm CPU-bound UTXO scan, not an
+HDD-reindex wall-time claim.
