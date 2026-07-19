@@ -2151,3 +2151,46 @@ sed -n '145,215p' src/dbwrapper.cpp
 Reject without code changes. Reconsider only if a profile on a real
 chainstate-flush workload attributes a material fraction of time to
 `CoinEntry` serialization after the existing reusable scratch buffers.
+
+### Reject seek-compaction work as already present and upstream
+
+The remaining historical LevelDB lead was the fork series headed by
+`e73f0cd4b5cdaf213be1b696cfedcf99a76f0cc3`, `leveldb: disable seek
+compactions`, and its later equivalent `e483b98eb015b048549c11f1443356634c9ba0e0`,
+`Disable seek compaction`. Its diagnosis is relevant to a rotational
+chainstate: LevelDB normally decrements a file's `allowed_seeks` budget for
+point-read and iterator samples. Once exhausted, `Version::UpdateStats()` can
+schedule a read-triggered compaction. Hash-random UTXO keys make that heuristic
+capable of causing large, write-amplifying rewrites that do not reflect size
+pressure.
+
+It is not a candidate for this branch. The current live implementation already
+defines `Version::UpdateStats(const GetStats&)` as an intentional no-op in
+`src/leveldb/db/version_set.cc`: it returns `false` with the explanation that
+the random-key heuristic can cause severe write amplification. The adjacent
+`RecordReadSample()` code remains only to parse a sample and invoke that no-op;
+size-triggered and manual compactions remain separate paths. Both the current
+tree and freshly fetched `origin/master` have this exact implementation, so a
+new commit would duplicate an already-pushed fix contrary to this
+investigation's scope.
+
+The behavior is protected rather than merely commented: `db_test.cc` creates
+an L0/L2 layout, performs one thousand misses, and asserts that the file layout
+is unchanged before separately proving that a manual compaction still moves
+the L0 file. `autocompact_test.cc` repeatedly scans a range and asserts it does
+not shrink. Re-enabling or retuning the `allowed_seeks` counter without a
+full write-amplification/recovery study would reopen the known HDD risk, not
+provide a simple scan or reindex speedup.
+
+Reviewed with:
+
+```sh
+git show e73f0cd4b5 -- src/leveldb/db/version_set.cc src/leveldb/db/autocompact_test.cc
+git show e483b98eb0 -- src/leveldb/db/version_set.cc src/leveldb/db/autocompact_test.cc src/leveldb/db/db_test.cc
+rg -n -C 5 "RecordReadSample|UpdateStats\\(|allowed_seeks|seek compaction" src/leveldb/db
+git diff --stat origin/master -- src/leveldb/db/version_set.cc src/leveldb/db/autocompact_test.cc
+```
+
+The final comparison produced no diff. Decision: do not benchmark, modify, or
+port this already-applied compaction policy. Any later LevelDB proposal must
+first identify a different, currently enabled source of I/O or CPU cost.
