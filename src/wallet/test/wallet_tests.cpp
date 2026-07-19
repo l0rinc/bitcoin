@@ -172,10 +172,10 @@ BOOST_FIXTURE_TEST_CASE(change_passphrase_master_key_write_failure, WalletTestin
     BOOST_REQUIRE(wallet->EncryptWallet("old_pass"));
 
     fail_db->FailNextWrite(DBKeys::MASTER_KEY);
-    BOOST_CHECK(wallet->ChangeWalletPassphrase("old_pass", "new_pass")); // TODO: Return false on write failure
-    BOOST_CHECK(wallet->Unlock("new_pass")); // TODO: Reject new passphrase
+    BOOST_CHECK(!wallet->ChangeWalletPassphrase("old_pass", "new_pass")); // Failed persistence must reject the new passphrase
+    BOOST_CHECK(wallet->Unlock("old_pass"));
     wallet->Lock();
-    BOOST_CHECK(!wallet->Unlock("old_pass")); // TODO: Keep old passphrase valid
+    BOOST_CHECK(!wallet->Unlock("new_pass"));
 
     TestUnloadWallet(std::move(wallet));
 }
