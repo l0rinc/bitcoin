@@ -3528,3 +3528,73 @@ RPCs (`gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`) and other full
 table traversals. Key-only operations can pay the one cached value fetch and
 may not benefit. This is a warm CPU-bound reader result, not a full HDD
 `-reindex-chainstate` claim.
+
+### `DecompressAmount`: replace bounded repeated scaling with a lookup table
+
+`DecompressAmount()` decodes the amount portion of every compressed UTXO. Its
+decimal exponent is `x % 10`, so after the existing zero/non-zero decoding it
+is always in the closed range 0--9. The old code multiplied the decoded
+unsigned value by ten once for each exponent. The hot closed-chainstate reader
+therefore executed a small, data-dependent-count multiplication loop for every
+decoded coin.
+
+Replace that loop with the exact ten-element power-of-ten table and one
+unsigned multiplication. This is deliberately not an amount-range shortcut:
+the function continues to operate on `uint64_t`, and unsigned wraparound has
+the same defined modulo-2^64 result as the former sequence of multiplications.
+The existing encoding, zero special case, exponent calculation, and every
+serialized byte remain unchanged.
+
+Five warm CPU-3-pinned Hyperfine scans of the closed
+`/mnt/my_storage/BitcoinData/chainstate` returned the exact same aggregate in
+each execution:
+
+```
+32659375 7659292 1488241113523993 2480426961
+```
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| repeated multiplication | 7.039472, 7.056618, 7.015177, 6.999751, 7.070181 s | 7.039472 s | baseline |
+| table multiplication | 6.966039, 7.064214, 6.988460, 7.008820, 6.945035 s | 6.988460 s | 0.72% faster |
+
+Three alternating `perf stat` pairs strengthen the result and all have a
+lower candidate task-clock value:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.00517 s | 6.85521 s | -2.14% |
+| instructions | 65.116606 B | 64.831116 B | -0.44% |
+| branches | 12.902890 B | 12.811997 B | -0.70% |
+| branch misses | 46.278 M | 37.972 M | -17.95% |
+| cache misses | 38.868 M | 38.979 M | +0.29% |
+
+Raw Hyperfine output and the per-pair perf CSVs are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/amount-pow10/`.
+
+The existing `compress_tests/compress_amounts` test covers the amount
+encoding/decoding domain. As a mutation check, changing the `1'000` entry to
+`999` rebuilt but made that focused test fail with its encode/decode
+assertions (10,090 failures); restoring the exact entry passes. This verifies
+the table is part of the observable amount codec rather than a performance-only
+detail.
+
+Validation:
+
+```sh
+git fetch -q origin master
+git grep -n 'POW10\|pow10' origin/master -- src/compressor.cpp || true
+git log origin/master --oneline -G'\*=[[:space:]]*10' -- src/compressor.cpp
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=compress_tests/compress_amounts --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+git diff --check
+```
+
+The fresh `origin/master` has no current equivalent table; the only historical
+match is the original compressor move. This direct Core change reaches every
+`DecompressAmount()` caller, including the value decoding in full UTXO-table
+traversals used by `gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`, plus
+other UTXO reads. The measurement is a warm, CPU-bound full chainstate reader.
+It does not establish a standalone full-HDD-reindex wall-time win, where disk
+and validation work can dominate.

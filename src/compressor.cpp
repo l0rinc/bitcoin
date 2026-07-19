@@ -184,9 +184,8 @@ uint64_t DecompressAmount(uint64_t x)
     } else {
         n = x+1;
     }
-    while (e) {
-        n *= 10;
-        e--;
-    }
-    return n;
+    static constexpr uint64_t POW10[]{
+        1, 10, 100, 1'000, 10'000, 100'000, 1'000'000, 10'000'000, 100'000'000, 1'000'000'000,
+    };
+    return n * POW10[e];
 }
