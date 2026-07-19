@@ -938,3 +938,29 @@ change, `origin/master` was freshly fetched at
 `18c05d93016b28a9afd4c716dfe00b6e0accb30b`; it contains neither
 `CoinStatsValue` nor `UnserSize`, so this is not a duplicate of an already
 pushed upstream fix.
+### Skip contextual sigops counting while assumevalid skips scripts ([PR #170](https://github.com/l0rinc/bitcoin/pull/170))
+
+Local PR #170 is open and its commit is not present in `bitcoin/bitcoin`, so it
+passes the upstream-pushed exclusion. `CheckBlock()` continues to enforce the
+unconditional legacy sigops bound. The change only skips contextual
+P2SH/witness `GetTransactionSigOpCost()` work in `ConnectBlock()` when
+`fScriptChecks` is false, alongside skipped script validation.
+
+The cold-HDD OverlayFS reindex-chainstate control used height 287000,
+`-dbcache=450`, a dropped page cache, and network-disabled settings. All runs
+logged script-check disablement at block 1, reached the stop height, and shut
+down cleanly:
+
+| version/run | daemon wall | user | system | instructions | branches | input KiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| candidate 1 | 574.895 s | 457.603 s | 61.578 s | 2.496 T | 281.033 B | 31,024,016 |
+| baseline | 576.680 s | 468.193 s | 62.119 s | 2.636 T | 296.868 B | 31,023,720 |
+| candidate 2 | 569.623 s | 459.459 s | 61.543 s | 2.494 T | 280.772 B | 31,023,520 |
+
+Candidate median wall time is 572.259 seconds, 0.77% faster than baseline;
+median user CPU falls 2.06%, instructions about 5.3%, and branches about
+5.3%. `feature_assumevalid.py` now funds P2SH outputs, accepts an over-limit
+contextual-sigops block only beneath the assumed-valid block, then verifies
+that an equivalent height-103 child is rejected as `bad-blk-sigops` when
+script checks resume. Raw results are under
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/sigops170-{candidate1,baseline1,candidate2}/metrics/`.
