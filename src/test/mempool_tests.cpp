@@ -85,6 +85,14 @@ BOOST_AUTO_TEST_CASE(MempoolLookupTest)
         const auto by_wtxid{pool.get(tx.GetWitnessHash())};
         BOOST_REQUIRE(by_wtxid);
         BOOST_CHECK(by_wtxid == by_txid);
+
+        const uint64_t entry_sequence{(*by_txid_iter)->GetSequence()};
+        BOOST_CHECK(!pool.info_for_relay(tx.GetHash(), entry_sequence).tx);
+        BOOST_CHECK(!pool.info_for_relay(tx.GetWitnessHash(), entry_sequence).tx);
+        if (entry_sequence < std::numeric_limits<uint64_t>::max()) {
+            BOOST_CHECK(pool.info_for_relay(tx.GetHash(), entry_sequence + 1).tx == by_txid);
+            BOOST_CHECK(pool.info_for_relay(tx.GetWitnessHash(), entry_sequence + 1).tx == by_txid);
+        }
     };
 
     TryAddToMempool(pool, entry.Fee(1000LL).FromTx(no_witness_mut));
