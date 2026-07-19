@@ -1098,9 +1098,6 @@ fully rejected independent change:
   `CheckTransaction` change is rejected above for insufficient HDD reach. Its
   seek-compaction idea is already present and upstream; any remaining flush
   idea needs a current compaction/write-amplification profile before review.
-- [#200](https://github.com/l0rinc/bitcoin/pull/200)/[#203](https://github.com/l0rinc/bitcoin/pull/203): mmap/open-file/cache-threshold variants. Existing and current
-  cache/write-buffer experiments are neutral or harmful; reopen only if a new
-  profile demonstrates a different bottleneck.
 ### LevelDB: heapify forward merging iterators for full UTXO scans
 
 The earlier reindex profile correctly deferred LevelDB work: its small,
@@ -2331,3 +2328,41 @@ Decision: remove both PRs from the open performance-seed list. The accepted
 scan stack is the stronger implementation. Any future cursor-interface cleanup
 belongs to a separate refactor/audit and must not be bundled with a performance
 claim.
+
+### Close fork PR #200/#203 mmap and cache-allocation seeds
+
+Fork PR [#200](https://github.com/l0rinc/bitcoin/pull/200) is exactly
+`e3ec270a39094e56cfaa581c00487d5a9b5a6966`, the upstream
+`MADV_RANDOM` mmap-table-read annotation. It is not a new candidate: the
+user's full height-957759 HDD benchmark established that its global advisory
+caused the 1.79x reindex regression recorded above. The accepted
+`df4669a112` follow-up retains the upstream random-read protection and adds a
+strictly bounded sequential-read `MADV_WILLNEED` recovery. That controlled
+change, not a duplicate of #200, improved the cold height-287000 reindex
+median 1.55% and the established-SST random-read control 3.08%.
+
+Fork PR [#203](https://github.com/l0rinc/bitcoin/pull/203), fetched as
+`l0rinc/pr-203` at `b4ba9ee5969ac188012a051b3e8b195d0e7b09c3`, removes the
+LevelDB block cache and leaves its default write-buffer size after a larger
+cache-allocation/refactor series. The precise behavior was tested directly on
+the requested HDD at height 900000 and `-dbcache=4000`: the relevant
+`78fa6e39` control, `ba30dc7600` cache/write-buffer candidate, and following
+cleanup were all within ordinary variation (means 22014.138 s, 21834.785 s,
+and 21905.920 s for only two runs). The repository's independent cold
+height-287000 pair likewise found a 0.107% median difference. The premise
+does not yield a reproducible reindex gain.
+
+The two PRs therefore cover already-applied mmap behavior plus a measured
+neutral cache knob. Neither has an untried small descendant suitable for this
+goal. Reviewed with:
+
+```sh
+git fetch -q l0rinc 'refs/pull/200/head:refs/remotes/l0rinc/pr-200' 'refs/pull/203/head:refs/remotes/l0rinc/pr-203'
+git show e3ec270a39 -- src/leveldb/util/env_posix.cc
+git log --reverse --format='%H %s' $(git merge-base l0rinc/pr-203 origin/master)..l0rinc/pr-203
+```
+
+Decision: remove both from the open list. Do not retune mmap advice, block
+cache, or write buffer size without a new profile showing a different access
+pattern and enough repeated end-to-end HDD evidence to overcome the existing
+negative controls.
