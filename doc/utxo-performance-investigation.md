@@ -4886,3 +4886,37 @@ values, including `scantxoutset`, hash-based `gettxoutsetinfo`,
 `dumptxoutset`, snapshots, indexes, and normal validation/cache reads. It does
 not reach `gettxoutsetinfo hash_type=none`, which uses `UnserSize()`, and it
 does not change ordinary scripts or legacy IDs 4--5.
+
+### Reject header-inlining legacy P2PK script decompression
+
+After the common IDs 0--3 were inlined and their overwritten payload fill was
+removed, the remaining `DecompressScript()` calls in `Unser()` and
+`UnserSize()` are the legacy IDs 4--5. They reconstruct an uncompressed public
+key, including the required curve validation and the pre-existing empty-script
+result for invalid coordinates. A profile can therefore show the associated
+secp256k1 square root, but not necessarily removable wrapper overhead.
+
+Two temporary variants moved this code into `compressor.h`: first the complete
+six-case `DecompressScript()` switch, then an IDs-4/5-only
+`DecompressPubKeyScript()` helper while retaining the public generic function
+in `compressor.cpp`. Both forms built enough consumers to expose the same GCC
+diagnostic when `UnserSize()` or snapshot validation inlined the helper:
+
+```
+warning: writing 65 bytes into a region of size 39 [-Wstringop-overflow=]
+memcpy(&script[1], pubkey.begin(), 65);
+```
+
+The source does resize the `CScript` to 67 bytes first, so this is likely a
+conservative analysis of its inline prevector capacity. It is nevertheless a
+real-looking memory-safety warning in widely built code. Suppressing or
+working around it solely to test an annotation would weaken diagnostics around
+the corrupted-key recovery path, and the generic move also requires exposing
+`pubkey.h` to every compressor consumer. Both temporary variants were stopped
+before timing and restored exactly; `git diff` is empty afterwards and the
+ordinary Release `ninja -C build bitcoind -j4` completes without that warning.
+
+Decision: do not inline legacy P2PK decompression through the header. The
+curve validation remains required, the likely benefit is only its wrapper,
+and this build-quality regression is not an acceptable tradeoff. No production
+behavior changes and no performance claim result from this experiment.
