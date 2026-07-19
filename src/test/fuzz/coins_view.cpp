@@ -31,6 +31,7 @@
 #include <ranges>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -85,6 +86,11 @@ public:
         m_expected_snapshot = ComputeCacheCoinsSnapshot();
     }
 
+    void AssertUnchanged() const
+    {
+        assert(ComputeCacheCoinsSnapshot() == m_expected_snapshot);
+    }
+
     using CCoinsViewCache::CCoinsViewCache;
 };
 
@@ -129,6 +135,23 @@ CBlock BuildRandomBlock(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& vi
 
     seed_cache.Flush();
     return block;
+}
+
+// Mirror the ordered prevout walk used by ConnectBlock. Uncache after each
+// lookup so duplicate external outpoints exercise each queued fetch entry.
+void ConsumePrefetchedInputs(const CBlock& block, CoinsViewOverlay& view)
+{
+    std::unordered_set<Txid, SaltedTxidHasher> earlier_txids;
+    earlier_txids.reserve(block.vtx.size());
+    for (const auto& tx : block.vtx | std::views::drop(1)) {
+        for (const auto& input : tx->vin) {
+            if (earlier_txids.contains(input.prevout.hash)) continue;
+            (void)view.GetCoin(input.prevout);
+            view.Uncache(input.prevout);
+        }
+        earlier_txids.emplace(tx->GetHash());
+    }
+    assert(view.AllInputsConsumed());
 }
 
 } // namespace
@@ -441,6 +464,8 @@ FUZZ_TARGET(coins_view_overlay, .init = initialize_coins_view) EXCLUSIVE_LOCKS_R
     CoinsViewOverlay coins_view_cache{&backend_cache, g_thread_pool, /*deterministic=*/true};
     CBlock block{BuildRandomBlock(fuzzed_data_provider, backend_cache)};
     const auto reset_guard{coins_view_cache.StartFetching(block)};
+    ConsumePrefetchedInputs(block, coins_view_cache);
+    backend_cache.AssertUnchanged();
     TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache);
 }
 
