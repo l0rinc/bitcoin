@@ -1999,3 +1999,46 @@ large, draft specialization series would therefore have high implementation
 risk and no demonstrated target workload. Do not prototype or commit it for
 this goal. It remains a separate IBD/block-serialization lead if a future
 profile identifies size computation as material.
+
+### Reject skipped unused coin-height VARINT decoding in un-hashed stats
+
+`CoinStatsValue::Unserialize()` reads the height/coinbase `uint32_t` first in
+every serialized coin, but un-hashed UTXO statistics use only the amount and
+the decompressed script size. An assembly probe confirmed that this path still
+called `ReadVarInt<uint32_t>` even though its final value was not retained. The
+candidate introduced a temporary `SkipVarInt()` with the same overflow errors
+and byte-consumption order as `ReadVarInt()`: it read the first byte, returned
+immediately for a terminating byte, and tracked the accumulated integer only
+after a continuation bit required further overflow checks.
+
+A temporary unit test compared `SkipVarInt<uint32_t>` with `ReadVarInt` for
+the one-, two-, three-, and five-byte boundaries (0, 127, 128, 16511, 16512,
+and `uint32_t` max). It also compared success/failure and remaining input for
+a truncated continuation and two overflowing sequences. The focused
+`serialize_tests/skip_varint_matches_read_varint` and existing
+`coins_tests/coin_stats_value_matches_coin_deserialization` passed before the
+temporary source and test were reverted. This proves the proposed parser model
+was behavior-equivalent for the checked encodings, but does not prove a speedup.
+
+The decisive paired macro benchmark used the explicitly permitted local
+`BitcoinData` chainstate at height 957779, normal network-disabled and
+wallet-disabled daemons, one warm `gettxoutsetinfo none` per binary, then two
+daemon-attached `perf stat` scans per binary. The base and candidate differed
+only in whether `CoinStatsValue` used the original `ReadVarInt` result or the
+temporary skip helper. Every JSON result had SHA-256
+`4b96d583ae030f7391f6b960ee9c738360da5ea27532da61c7057cc206dccfa0`.
+
+| version/runs | RPC wall seconds | daemon task-clock | instructions | branches | branch misses |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| original `ReadVarInt` | 46.56, 46.45 | 46.495, 46.390 s | 428.134, 428.134 B | 86.866, 86.866 B | 510.101, 504.386 M |
+| temporary `SkipVarInt` | 47.46, 47.45 | 47.391, 47.408 s | 437.475, 437.493 B | 88.546, 88.549 B | 507.028, 504.431 M |
+
+The candidate samples vary only 0.004% in instructions and the base samples
+only 0.0002%. The candidate retires 2.18% more instructions, takes 2.06% more
+task-clock, and has about 1.94% more branches. The intended shortcut therefore
+made code generation materially worse despite avoiding an unused final value.
+Fully revert the helper and test; do not replace a compact, well-optimized
+general parser with a specialized duplicate without a demonstrably better
+whole-program result. Raw replies, time files, perf CSVs, logs, and cookies
+are retained in `/mnt/my_storage/bitcoin-perf-scratch/skip-varint-base.jK4NTU/`
+and `/mnt/my_storage/bitcoin-perf-scratch/skip-varint-candidate.ozYUNM/`.
