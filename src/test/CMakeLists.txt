@@ -56,6 +56,7 @@ add_executable(test_bitcoin
   interfaces_tests.cpp
   key_io_tests.cpp
   key_tests.cpp
+  leveldb_tests.cpp
   logging_tests.cpp
   mempool_tests.cpp
   merkle_tests.cpp
@@ -138,6 +139,11 @@ add_executable(test_bitcoin
   validation_tests.cpp
   validationinterface_tests.cpp
   versionbits_tests.cpp
+)
+
+# Test the internal LevelDB merging iterator directly.
+target_include_directories(test_bitcoin PRIVATE
+  ${PROJECT_SOURCE_DIR}/src/leveldb/include
 )
 
 include(TargetDataSources)
