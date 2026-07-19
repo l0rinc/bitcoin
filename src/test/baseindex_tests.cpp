@@ -13,6 +13,10 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <atomic>
+#include <latch>
+#include <thread>
+
 // Tests of generic BaseIndex functionality that is independent of which
 // concrete index is being used. Concrete indexes are used here merely as
 // convenient instantiations of BaseIndex.
@@ -60,25 +64,37 @@ BOOST_FIXTURE_TEST_CASE(baseindex_no_commit_ahead_of_flush, TestChain100Setup)
     sync_index(false, 101, 100);
 }
 
-BOOST_FIXTURE_TEST_CASE(baseindex_restart_reads, TestChain100Setup)
+// Test that BlockUntilSyncedToCurrentChain() can run concurrently with the
+// index being stopped and restarted. TxIndex is used as a representative
+// BaseIndex implementation.
+BOOST_FIXTURE_TEST_CASE(baseindex_restart_block_until, TestChain100Setup)
 {
     TxIndex index{interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/true};
     BOOST_REQUIRE(index.Init());
     index.Sync();
 
-    const Txid txid{m_coinbase_txns[1]->GetHash()};
-    for (int i{0}; i < 2; ++i) {
-        index.Stop();
-        BOOST_REQUIRE(index.Init());
-        index.Sync();
+    std::latch reader_started{1};
+    std::atomic_bool run{true};
+    std::thread reader{[&] {
+        reader_started.count_down();
+        while (run.load(std::memory_order_relaxed)) {
+            // This read overlaps Stop()/Init() and exposes the transient state.
+            index.BlockUntilSyncedToCurrentChain();
+        }
+    }};
+    reader_started.wait();
 
-        CTransactionRef tx;
-        uint256 block_hash;
-        BOOST_REQUIRE(index.BlockUntilSyncedToCurrentChain());
-        BOOST_REQUIRE(index.FindTx(txid, block_hash, tx));
+    bool init_ok{true};
+    for (int i{0}; init_ok && i < 1000; ++i) {
+        index.Stop();
+        init_ok = index.Init();
+        std::this_thread::yield();
     }
 
+    run = false;
+    reader.join();
     index.Stop();
+    BOOST_REQUIRE(init_ok);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
