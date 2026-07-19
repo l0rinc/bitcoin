@@ -4071,3 +4071,39 @@ Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no
 equivalent specialization. That is not an omission: the measured direct
 variant is insufficient. This was a warm CPU-bound full-chainstate traversal,
 not evidence for a full-HDD-reindex improvement.
+
+### Reject exposing the LevelDB iterator to inline `CDBIterator` forwarding
+
+The same full-coin profile attributed 3.50% to `DBIter::key()` underneath
+`CDBIterator::GetKeyImpl()` and `CCoinsViewDBCursor::UpdateKeyCache()`. The
+wrapper's tiny forwarding methods are out of line because its
+`IteratorImpl` deliberately hides `leveldb::Iterator` in `dbwrapper.cpp`.
+An annotation-style experiment therefore moved that private definition into
+`dbwrapper.h`, included `leveldb/iterator.h`, and made `GetKeyImpl()`,
+`GetValueImpl()`, `Valid()`, `SeekToFirst()`, and `Next()` `ALWAYS_INLINE`.
+
+This is not a valid Core architecture change. The full ordinary Release build
+immediately fails in the IPC target, which includes `dbwrapper.h` but is not
+given the vendored LevelDB include directory:
+
+```
+src/dbwrapper.h:10:10: fatal error: leveldb/iterator.h: No such file or directory
+```
+
+The PImpl boundary is consequently serving a real build-layering purpose, not
+merely preventing an optimization. Making the experiment build would require
+leaking the vendored LevelDB include path into every `dbwrapper.h` consumer or
+changing the public header's design. That cost is not justified by a sampled
+callee which is itself the required virtual `DBIter::key()` operation; no
+end-to-end timing was performed. All source changes were restored.
+
+The failed ordinary build was:
+
+```sh
+ninja -C build bitcoind test_bitcoin -j4
+```
+
+The complete compiler output is retained in the session history. This is not
+an unaddressed `scantxoutset`, `gettxoutsetinfo`, `dumptxoutset`, or reindex
+speedup. Reconsider only with a design that preserves the CDB-wrapper/LevelDB
+build boundary and shows a measurable scan improvement.
