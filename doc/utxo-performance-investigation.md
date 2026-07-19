@@ -2974,3 +2974,64 @@ security-sensitive change.
 
 Decision: no code change. This historical speedup is already on master, so it
 is excluded under the rule to ignore fixes pushed to `bitcoin/bitcoin`.
+
+### Reject libstdc++ `CCoinsMap` hash-node caching
+
+The current reindex profile still has a coarse `std::_Hashtable<COutPoint,...>`
+signal, so the existing `SaltedOutpointHasher::operator() noexcept` policy was
+rechecked rather than assuming that less hash recomputation must be better.
+On libstdc++, a fast, non-throwing hasher selects an unordered-map node without
+a cached hash code. Removing only `noexcept` makes libstdc++ retain the hash
+in every node, avoiding some stored-key SipHash calls when probing or
+rehashing. It would affect the active `CCoinsViewCache::cacheCoins` map and
+thus validation and reindex-chainstate, but also every other
+`SaltedOutpointHasher` map in the mempool, orphanage, policy, and wallet.
+It does not accelerate the cursor-based `gettxoutsetinfo`, `scantxoutset`, or
+`dumptxoutset` scan loops.
+
+This is an intentional current tradeoff, not an omission. The live hasher
+comment records that the no-cache choice saves `sizeof(size_t)` per node so a
+fixed `-dbcache` can retain more coins. A scratch compile against the actual
+GCC 14.2 libstdc++ verified the mechanism rather than relying on that comment:
+`std::__cache_default<COutPoint, SaltedOutpointHasher>::value` is `0` with the
+live `noexcept` declaration and becomes `1` after removing it. The matching
+internal hash-node sizes are 128 and 136 bytes respectively. The 6.25% node
+increase is in the adverse direction for an HDD reindex bounded by a configured
+coins-cache budget; it leads to fewer cached coins and potentially more flush
+work. The production `PoolAllocator` deliberately has enough headroom for
+either node shape, so this is a performance/capacity tradeoff rather than an
+allocator correctness problem.
+
+A temporary one-line candidate removed `noexcept`; it built successfully.
+Five CPU-3-pinned GCC Release `CCoinsCaching` runs, each with
+`-min-time=5000`, measured the existing cache access path:
+
+| version | all ns/op samples | five-run median | result |
+| --- | --- | ---: | --- |
+| current uncached nodes | 573.24, 572.63, 664.27, 651.11, 572.21 | 573.24 | baseline |
+| temporary cached nodes | 977.14, 1015.66, 587.19, 586.87, 585.21 | 587.19 | 2.43% slower |
+
+The benchmark has machine-frequency outliers in both variants, but even its
+five-run medians are wrong-direction. Its three close baseline samples have a
+572.63 ns median, versus 586.87 ns for the three close candidate samples
+(2.49% slower). That direct cache-path regression, plus the per-node memory
+increase and the already documented fixed-cache advantage, is enough to reject
+the idea before spending another multi-hour HDD reindex pair on it.
+
+The temporary source edit was reverted and the baseline build and relevant
+tests passed:
+
+```sh
+ninja -C build bench_bitcoin test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests,coinscachepair_tests --log_level=message
+git diff --check
+```
+
+The trait probe and its output are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/coins-hash-cache/`; the compiled probe
+reported `0 128 136` before the temporary edit and `1 128 136` with it.
+
+Decision: retain `noexcept`. Cached hashes cannot be reused safely through the
+public mutable `COutPoint` itself (covered by the earlier rejection), and the
+container-owned alternative is both locally slower and reduces the capacity
+that makes the cache effective on the target HDD workload.
