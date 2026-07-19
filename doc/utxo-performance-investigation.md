@@ -1477,3 +1477,48 @@ that the candidate removes consensus checks rather than redundant work. No
 source diff was retained. The only safe related family remains the committed
 assumevalid-specific gates above, which retain the existing requirement that
 the historical chain is externally verified.
+
+### Reject standard-script legacy-sigops fast path (`d76d7531df`)
+
+Local branch `l0rinc/l0rinc/short-circuit-known-script-types` contains the
+2025 seed `d76d7531df` and it is absent from freshly fetched `origin/master`;
+the commit has no associated GitHub pull request. The current tree still has
+the relevant pre-contextual `CScript::GetSigOpCount()` call from
+`GetLegacySigOpCount()` in `CheckBlock()`, so a small reimplementation was
+evaluated rather than applying the stale patch verbatim.
+
+The temporary switch recognized only exact fixed-size script forms whose
+legacy sigop count follows directly from their opcode layout: empty, anchor,
+P2WPKH, P2SH, P2PKH, P2WSH, P2TR, and compressed/uncompressed P2PK. All other
+scripts fell through to the existing parser. Focused unit cases for each
+template passed with:
+
+```
+ninja -C build test_bitcoin bench_bitcoin -j4
+build/bin/test_bitcoin --run_test=sigopcount_tests --log_level=test_suite
+```
+
+Five CPU-3-pinned `CheckBlockTest` runs (`-min-time=5000`) did show the local
+effect: baseline median 948,169 ns/block (947,086--950,508), candidate median
+865,012 ns/block (864,892--867,605), a 8.77% reduction. Instructions fell
+from 7,629,700 to 6,601,021 per block (13.48%) and branches from 1,211,223 to
+1,023,329 (15.51%).
+
+The decisive cold-HDD OverlayFS reindex-chainstate pair was nevertheless
+neutral. It used the same height-287000, `-dbcache=450`, dropped-page-cache,
+and network-disabled control as the assumevalid measurements; both logs
+started at height 0, reached height 287000, and shut down cleanly:
+
+| version | daemon wall | user | system | task-clock | instructions | branches | major faults | input / output KiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline | 502.176 s | 385.312 s | 61.862 s | 443.740 s | 2.133340 T | 214.085 B | 888 | 31,023,464 / 9,446,640 |
+| candidate | 502.199 s | 382.835 s | 61.108 s | 440.550 s | 2.104613 T | 208.668 B | 885 | 31,023,048 / 9,422,480 |
+
+The candidate is 0.0046% slower in wall time, well within noise, although it
+uses 0.64% less user CPU, 0.72% less task-clock, 1.35% fewer instructions, and
+2.53% fewer branches. The unchanged wall time with virtually identical I/O and
+faults shows that this CPU-side win has insufficient reach in this HDD replay.
+Decision: reject and fully revert the source and test diffs; do not make a
+consensus-path commit based on a microbenchmark alone. Raw harness and outputs
+are `/mnt/my_storage/bitcoin-perf-scratch/run_reindex_writebuf_trial.sh` and
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/sigopfast-{candidate1,baseline1}/metrics/`.
