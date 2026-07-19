@@ -728,7 +728,9 @@ FUZZ_TARGET(txorphanage_sim)
             assert(done);
         }
         // We must now be within limits, otherwise LimitOrphans should have continued further.
-        // We don't check the contents of the orphanage until the end to make fuzz runs faster.
+        // Check cached indexes while the state produced by this command is still observable. A
+        // later erase or trim can otherwise hide an intermediate accounting mismatch.
+        real->SanityCheck();
         assert(real->TotalLatencyScore() <= real->MaxGlobalLatencyScore());
         assert(real->TotalOrphanUsage() <= real->MaxGlobalUsage());
     }
