@@ -17,6 +17,7 @@
 #include <cassert>
 #include <cstdint>
 #include <limits>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,55 @@ static bool operator==(const CBanEntry& lhs, const CBanEntry& rhs)
            lhs.nBanUntil == rhs.nBanUntil;
 }
 
+struct ModelBanEntry
+{
+    int64_t nCreateTime;
+    int64_t nBanUntil;
+};
+
+using ModelBanMap = std::map<CSubNet, ModelBanEntry>;
+
+void SweepModel(ModelBanMap& bans, const int64_t now)
+{
+    for (auto it = bans.begin(); it != bans.end();) {
+        if (!it->first.IsValid() || now > it->second.nBanUntil) {
+            it = bans.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void AssertBanModel(BanMan& ban_man, ModelBanMap& expected, const int64_t now)
+{
+    SweepModel(expected, now);
+
+    banmap_t actual;
+    ban_man.GetBanned(actual);
+    assert(actual.size() == expected.size());
+    for (const auto& [subnet, expected_entry] : expected) {
+        const auto it = actual.find(subnet);
+        assert(it != actual.end());
+        assert(it->second.nVersion == CBanEntry::CURRENT_VERSION);
+        assert(it->second.nCreateTime == expected_entry.nCreateTime);
+        assert(it->second.nBanUntil == expected_entry.nBanUntil);
+    }
+}
+
+void ModelBan(ModelBanMap& bans, const CSubNet& subnet, const int64_t now, const int64_t default_ban_time,
+              int64_t ban_time_offset, bool since_unix_epoch)
+{
+    if (ban_time_offset <= 0) {
+        ban_time_offset = default_ban_time;
+        since_unix_epoch = false;
+    }
+    const int64_t ban_until = (since_unix_epoch ? 0 : now) + ban_time_offset;
+    const auto it = bans.find(subnet);
+    if (it == bans.end() || it->second.nBanUntil < ban_until) {
+        bans.insert_or_assign(subnet, ModelBanEntry{now, ban_until});
+    }
+}
+
 FUZZ_TARGET(banman, .init = initialize_banman)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -61,7 +111,17 @@ FUZZ_TARGET(banman, .init = initialize_banman)
     }
 
     {
-        BanMan ban_man{banlist_file, /*client_interface=*/nullptr, /*default_ban_time=*/ConsumeBanTimeOffset(fuzzed_data_provider)};
+        const int64_t default_ban_time = ConsumeBanTimeOffset(fuzzed_data_provider);
+        BanMan ban_man{banlist_file, /*client_interface=*/nullptr, default_ban_time};
+        ModelBanMap expected_bans;
+        bool model_enabled{!start_with_corrupted_banlist};
+        const auto check_model = [&] {
+            if (model_enabled) {
+                AssertBanModel(ban_man, expected_bans, GetTime());
+            }
+        };
+        check_model();
+
         // The complexity is O(N^2), where N is the input size, because each call
         // might call DumpBanlist (or other methods that are at least linear
         // complexity of the input size).
@@ -77,54 +137,102 @@ FUZZ_TARGET(banman, .init = initialize_banman)
                             net_addr = *addr;
                         } else {
                             contains_invalid = true;
+                            model_enabled = false;
                         }
                     }
                     auto ban_time_offset = ConsumeBanTimeOffset(fuzzed_data_provider);
                     auto since_unix_epoch = fuzzed_data_provider.ConsumeBool();
+                    if (model_enabled) {
+                        const CSubNet subnet{net_addr};
+                        assert(subnet.IsValid());
+                        ModelBan(expected_bans, subnet, GetTime(), default_ban_time, ban_time_offset, since_unix_epoch);
+                    }
                     ban_man.Ban(net_addr, ban_time_offset, since_unix_epoch);
+                    check_model();
                 },
                 [&] {
                     CSubNet subnet{ConsumeSubNet(fuzzed_data_provider)};
                     subnet = LookupSubNet(subnet.ToString());
                     if (!subnet.IsValid()) {
                         contains_invalid = true;
+                        model_enabled = false;
                     }
                     auto ban_time_offset = ConsumeBanTimeOffset(fuzzed_data_provider);
                     auto since_unix_epoch = fuzzed_data_provider.ConsumeBool();
+                    if (model_enabled) ModelBan(expected_bans, subnet, GetTime(), default_ban_time, ban_time_offset, since_unix_epoch);
                     ban_man.Ban(subnet, ban_time_offset, since_unix_epoch);
+                    check_model();
                 },
                 [&] {
                     ban_man.ClearBanned();
+                    expected_bans.clear();
+                    check_model();
                 },
                 [&] {
-                    ban_man.IsBanned(ConsumeNetAddr(fuzzed_data_provider));
+                    const CNetAddr net_addr{ConsumeNetAddr(fuzzed_data_provider)};
+                    const bool actual{ban_man.IsBanned(net_addr)};
+                    if (model_enabled && net_addr.IsValid()) {
+                        const int64_t now{GetTime()};
+                        bool expected{false};
+                        for (const auto& [subnet, ban_entry] : expected_bans) {
+                            if (now < ban_entry.nBanUntil && subnet.Match(net_addr)) {
+                                expected = true;
+                                break;
+                            }
+                        }
+                        assert(actual == expected);
+                    }
                 },
                 [&] {
-                    ban_man.IsBanned(ConsumeSubNet(fuzzed_data_provider));
+                    const CSubNet subnet{ConsumeSubNet(fuzzed_data_provider)};
+                    const bool actual{ban_man.IsBanned(subnet)};
+                    if (model_enabled && subnet.IsValid()) {
+                        const auto it = expected_bans.find(subnet);
+                        assert(actual == (it != expected_bans.end() && GetTime() < it->second.nBanUntil));
+                    }
                 },
                 [&] {
-                    ban_man.Unban(ConsumeNetAddr(fuzzed_data_provider));
+                    const CNetAddr net_addr{ConsumeNetAddr(fuzzed_data_provider)};
+                    const CSubNet subnet{net_addr};
+                    const bool actual{ban_man.Unban(net_addr)};
+                    if (model_enabled) {
+                        const bool expected{subnet.IsValid() && expected_bans.erase(subnet) != 0};
+                        assert(actual == expected);
+                        check_model();
+                    }
                 },
                 [&] {
-                    ban_man.Unban(ConsumeSubNet(fuzzed_data_provider));
+                    const CSubNet subnet{ConsumeSubNet(fuzzed_data_provider)};
+                    const bool actual{ban_man.Unban(subnet)};
+                    if (model_enabled) {
+                        const bool expected{subnet.IsValid() && expected_bans.erase(subnet) != 0};
+                        assert(actual == expected);
+                        check_model();
+                    }
                 },
                 [&] {
                     banmap_t banmap;
                     ban_man.GetBanned(banmap);
+                    check_model();
                 },
                 [&] {
                     ban_man.DumpBanlist();
+                    check_model();
                 },
                 [&] {
-                    ban_man.Discourage(ConsumeNetAddr(fuzzed_data_provider));
+                    const CNetAddr net_addr{ConsumeNetAddr(fuzzed_data_provider)};
+                    ban_man.Discourage(net_addr);
+                    assert(ban_man.IsDiscouraged(net_addr));
                 },
                 [&] {
-                    ban_man.IsDiscouraged(ConsumeNetAddr(fuzzed_data_provider));
+                    (void)ban_man.IsDiscouraged(ConsumeNetAddr(fuzzed_data_provider));
                 });
         }
         if (!force_read_and_write_to_err) {
             ban_man.DumpBanlist();
+            check_model();
             clock.set(ConsumeTime(fuzzed_data_provider));
+            check_model();
             banmap_t banmap;
             ban_man.GetBanned(banmap);
             BanMan ban_man_read{banlist_file, /*client_interface=*/nullptr, /*default_ban_time=*/0};
@@ -132,6 +240,10 @@ FUZZ_TARGET(banman, .init = initialize_banman)
             ban_man_read.GetBanned(banmap_read);
             if (!contains_invalid) {
                 assert(banmap == banmap_read);
+            }
+            if (model_enabled) {
+                ModelBanMap expected_read{expected_bans};
+                AssertBanModel(ban_man_read, expected_read, GetTime());
             }
         }
     }

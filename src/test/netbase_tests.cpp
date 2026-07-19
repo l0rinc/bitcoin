@@ -15,8 +15,9 @@
 #include <util/strencodings.h>
 #include <util/translation.h>
 
-#include <string>
+#include <map>
 #include <numeric>
+#include <string>
 
 #include <boost/test/unit_test.hpp>
 
@@ -323,6 +324,21 @@ BOOST_AUTO_TEST_CASE(subnet_test)
     BOOST_CHECK(!subnet.IsValid());
     subnet = LookupSubNet("1:2:3:4:5:6:7:8/ffff:ffff:ffff:fffe:ffff:ffff:ffff:ff0f");
     BOOST_CHECK(!subnet.IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(subnet_ordering)
+{
+    const CSubNet invalid_subnet;
+    const CSubNet ipv6_wildcard{LookupSubNet("::/0")};
+
+    BOOST_CHECK(!invalid_subnet.IsValid());
+    BOOST_CHECK(ipv6_wildcard.IsValid());
+    BOOST_CHECK(!(invalid_subnet == ipv6_wildcard));
+
+    std::map<CSubNet, int> bans{{ipv6_wildcard, 1}};
+    BOOST_CHECK(bans.find(invalid_subnet) == bans.end());
+    BOOST_CHECK_EQUAL(bans.erase(invalid_subnet), 0);
+    BOOST_CHECK_EQUAL(bans.size(), 1);
 }
 
 BOOST_AUTO_TEST_CASE(netbase_getgroup)
