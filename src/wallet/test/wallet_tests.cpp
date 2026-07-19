@@ -148,12 +148,13 @@ BOOST_FIXTURE_TEST_CASE(encrypt_wallet_master_key_write_failure, WalletTestingSe
     const auto before{CountKeyRecords(wallet->GetDatabase())};
 
     fail_db->FailNextWrite(DBKeys::MASTER_KEY);
-    BOOST_CHECK(wallet->EncryptWallet("passphrase")); // TODO: Return false on write failure
-    BOOST_CHECK(wallet->HasEncryptionKeys()); // TODO: Keep wallet unencrypted
+    BOOST_CHECK(!wallet->EncryptWallet("passphrase")); // Failed persistence must abort encryption
+    BOOST_CHECK(!wallet->HasEncryptionKeys());
     const auto counts{CountKeyRecords(wallet->GetDatabase())};
     BOOST_CHECK_EQUAL(counts.master, before.master);
-    BOOST_CHECK_LT(counts.plain, before.plain); // TODO: Keep plaintext keys
-    BOOST_CHECK_GT(counts.crypted, before.crypted); // TODO: Do not write encrypted keys
+    BOOST_CHECK_EQUAL(counts.plain, before.plain);
+    BOOST_CHECK_EQUAL(counts.crypted, before.crypted);
+    BOOST_CHECK(wallet->EncryptWallet("passphrase")); // The failed attempt leaves encryption retryable
 
     TestUnloadWallet(std::move(wallet));
 }
