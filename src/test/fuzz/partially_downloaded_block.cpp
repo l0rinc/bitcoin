@@ -120,6 +120,15 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
 
     CBlock reconstructed_block;
     auto fill_status{pdb.FillBlock(reconstructed_block, missing, segwit_active)};
+    if (init_status == READ_STATUS_OK) {
+        if (skipped_missing) {
+            assert(fill_status == READ_STATUS_INVALID);
+        } else if (fail_block_mutated) {
+            assert(fill_status == READ_STATUS_FAILED);
+        } else {
+            assert(fill_status == READ_STATUS_OK);
+        }
+    }
     switch (fill_status) {
     case READ_STATUS_OK:
         assert(!skipped_missing);
