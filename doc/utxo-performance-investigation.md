@@ -3451,3 +3451,80 @@ options change or a RocksDB port. It reaches forward/reverse data-block
 iteration in the target UTXO scans and other LevelDB table reads, including
 some compaction paths. The evidence is a warm, CPU-bound closed-chainstate
 scan; no full HDD `-reindex-chainstate` wall-time improvement is claimed.
+
+### LevelDB: cache iterator-wrapper values between movements
+
+The same symbolized closed-chainstate reader profile shows a repeated value
+dispatch chain below both `DBIter::ParseKey()` and Core value decoding:
+`DBIter` -> `MergingIterator` -> `TwoLevelIterator` -> `Block::Iter`.
+`IteratorWrapper` already cached the child iterator's validity and key but
+called its virtual `value()` method again for every value access. On the
+32,659,375-UTXO scan, the profile attributes 4.70 billion inclusive
+instructions to `MergingIterator::value()`, 4.15 billion to its wrapper-level
+value path, and 3.32 billion to `TwoLevelIterator::value()`.
+
+Store the borrowed `Slice` returned by `iter_->value()` alongside the existing
+borrowed key whenever `IteratorWrapper::Update()` follows a `Set`, seek, or
+movement. `value()` then returns that cache. This introduces no allocation or
+copy: the cache has the same lifetime as the existing key cache and becomes
+invalid on the same underlying iterator movement. It does not change iterator
+positioning, key/value bytes, table layout, filtering, or comparator behavior.
+The extra value fetch occurs once per movement; target full scans already
+retrieve each value for parsing and deserialization, so it removes a repeated
+virtual-wrapper walk rather than speculative work.
+
+The established `leveldb_tests/merging_iterator_preserves_duplicate_tie_order`
+test covers cached values across ordinary forward/reverse traversal and a
+seek. A temporary mutation that omitted the new `value_ = iter_->value()`
+refresh rebuilt successfully but made it return stale empty values, failing
+the forward sequence and subsequent `zero`/`two` assertions. Restoring the
+refresh passed the full `leveldb_tests` suite.
+
+Five warm CPU-3-pinned Hyperfine runs of the closed-chainstate reader returned
+the exact aggregate on every execution:
+
+```
+32659375 7659292 1488241113523993 2480426961
+```
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| cached key only | 7.133524, 7.109694, 7.123608, 7.212580, 7.156696 s | 7.133524 s | baseline |
+| cached key and value | 7.046762, 7.096574, 7.100484, 7.066848, 7.146234 s | 7.096574 s | 0.52% faster |
+
+Three alternating `perf stat` pairs show the expected CPU reduction:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.01111 s | 6.96133 s | -0.71% |
+| instructions | 66.054112 B | 65.116425 B | -1.42% |
+| branches | 13.326619 B | 12.902860 B | -3.18% |
+| branch misses | 46.716 M | 48.621 M | +4.08% |
+| cache misses | 38.911 M | 39.012 M | +0.26% |
+
+The candidate wins two of three paired task-clock samples; the third is a
+noisy slowdown despite the stable instruction reduction. The raw five-run JSON
+and per-pair perf CSVs are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/iterator-value-cache/`. The separately
+linked candidate reader is
+`/mnt/my_storage/bitcoin-perf-scratch/dbiter-savekey/cursor_stats_bench_iterator_value_candidate`.
+
+Validation:
+
+```sh
+git fetch -q origin master
+git log origin/master --format='%h %s' -S'value_ = iter_->value()' -- src/leveldb/table/iterator_wrapper.h
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=leveldb_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase/coins_db_cursor_order --log_level=message
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+git diff --check
+```
+
+The fresh `origin/master` at
+`18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no equivalent cache. Reach is
+greatest for forward LevelDB scans that retrieve every value: the target UTXO
+RPCs (`gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`) and other full
+table traversals. Key-only operations can pay the one cached value fetch and
+may not benefit. This is a warm CPU-bound reader result, not a full HDD
+`-reindex-chainstate` claim.
