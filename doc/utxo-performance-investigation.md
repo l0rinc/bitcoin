@@ -1091,12 +1091,6 @@ full metrics are under
 The following seeds were screened but have not yet produced an accepted or
 fully rejected independent change:
 
-- [#48](https://github.com/l0rinc/bitcoin/pull/48): old LevelDB block-size
-  tuning. The branch's input-prefetch commits predate master’s current
-  `CoinsViewOverlay`; #68's independent manual `ConnectBlock` prefetch is
-  rejected above. Revisit table-block sizing only with a current LevelDB trace
-  that demonstrates a block-size, rather than mmap locality or compaction,
-  bottleneck.
 - [#140](https://github.com/l0rinc/bitcoin/pull/140)/[#59](https://github.com/l0rinc/bitcoin/pull/59): the pool-chunk and
   isolated no-reallocation variants are rejected above. Other allocation or
   accounting shapes still need a current profile and an independent invariant.
@@ -2235,3 +2229,63 @@ Decision: remove PR #34 from the open seed list and do not benchmark a
 duplicate. A new coins-cache candidate must differ materially from both
 upstream forms and prove a measurable end-to-end effect without weakening the
 cache's persistence or memory-reclamation contract.
+
+### Reject fork PR #48 32 KiB LevelDB data blocks on cold HDD reindex
+
+Fork PR [#48](https://github.com/l0rinc/bitcoin/pull/48), fetched as
+`l0rinc/pr-48` at `a07162850e8dcbf49429704b697a39c9f7ed4607`, is mostly a
+historical experiment series. Its final five commits change only
+`CDBWrapper::GetOptions()` from LevelDB's default 4 KiB data block target to
+1, 2, 8, 16, and finally 32 KiB. Its input-prefetch commits predate the
+current `CoinsViewOverlay` work and are not part of this test. Larger data
+blocks could reduce index/filter and block-restart overhead while building a
+fresh chainstate, but they also increase the read unit for point lookups and
+apply to every Core LevelDB database, not only chainstate.
+
+The setting affects only newly written SSTables: `TableBuilder::Add()` flushes
+a data block at `options.block_size`, while existing `/mnt/my_storage/BitcoinData`
+tables retain their historical layout. A fresh OverlayFS
+`-reindex-chainstate` is therefore the correct test, whereas an RPC scan over
+the existing database would be a no-op. A temporary one-line
+`options.block_size = 32 * 1024` prototype was built, then completely removed.
+
+Both cold runs used the same permitted local data as a read-only OverlayFS
+lowerdir, independent upper/work directories, dropped page cache, GCC Release
+binary, `-stopatheight=287000`, `-dbcache=450`, wallet/network disabled, and
+the harness checks for height 0, height 287000, and clean shutdown. The
+candidate run did complete successfully, but it has no reliable speedup:
+
+| metric | 4 KiB default | 32 KiB prototype | change |
+| --- | ---: | ---: | ---: |
+| wall | 561.307 s | 558.972 s | -0.42% |
+| task-clock | 512.186 s | 521.629 s | +1.84% |
+| user CPU | 454.20 s | 464.25 s | +2.21% |
+| system CPU | 61.48 s | 60.96 s | -0.85% |
+| instructions | 2.497 T | 2.494 T | -0.11% |
+| filesystem output | 9,440,840 KiB | 9,655,352 KiB | +2.27% |
+| OverlayFS upperdir | 743,959,541 B | 727,348,603 B | -2.23% |
+| major faults | 892 | 894 | +0.22% |
+
+The sub-half-percent wall difference is far below the noise bar for a costly
+full reindex pair, while both task-clock and user CPU are materially worse and
+filesystem output increases. The reduced final upperdir is a layout outcome,
+not a justification for a slower build path; its relation to full-height disk
+usage is unproven. Repeating four more pairs would not be a responsible use of
+the HDD solely to rescue a wrong-direction first result. The temporary source
+line was removed, leaving the upstream 4 KiB default intact.
+
+Commands and raw artifacts:
+
+```sh
+git fetch -q l0rinc 'refs/pull/48/head:refs/remotes/l0rinc/pr-48'
+git show 46ad2d3d2e -- src/dbwrapper.cpp
+ninja -C build bitcoind -j4
+/mnt/my_storage/bitcoin-perf-scratch/run_reindex_writebuf_trial.sh blocksize4-base 1 build/bin/bitcoind
+/mnt/my_storage/bitcoin-perf-scratch/run_reindex_writebuf_trial.sh blocksize32-candidate 1 build/bin/bitcoind
+```
+
+Raw `time`, `perf stat`, logs, and upperdir-size files are under
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/{blocksize4-base-1,blocksize32-candidate-1}/metrics/`.
+Decision: remove PR #48 from the open seed list and retain the default. Reopen
+only with a profile that identifies LevelDB data-block overhead as material and
+with a change scoped to the database/workload it demonstrably helps.
