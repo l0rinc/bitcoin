@@ -1383,3 +1383,28 @@ behavior. Decision: reject without applying, building, or timing the patch.
 No source diff was retained. A safe optimization would have to preserve the
 all-input availability pass or preserve its exact error precedence, which this
 seed does not.
+
+### Reject bespoke jumboblock SipHash for the coins cache (`ac805c2917`)
+
+Local commit `ac805c2917` (currently in unmerged fork PR #180) is absent from
+freshly fetched `origin/master`. It changes `SaltedOutpointHasher`, the hash
+function of `CCoinsMap`, from the current standard SipHash-2-4 specialization
+to a new `PresaltedSipHasher13Jumbo`: a non-standard SipHash-1-3 variant that
+injects the four uint256 limbs together and omits the usual fixed-shape padding
+step.
+
+This is not a transparent implementation optimization. `CCoinsMap` backs
+`FetchCoin`, `AccessCoin`, `HaveCoin`, `SpendCoin`, and cache flushes; its
+`COutPoint` keys originate in transactions and blocks processed from peers and
+on disk. The current keyed SipHash-2-4 construction is the map's collision
+resistance boundary. The candidate deliberately changes its round count and
+compression construction, and its single fixed-output vector only establishes
+implementation determinism, not keyed collision or hash-flood resistance.
+
+Decision: reject without compiling or benchmarking it. A throughput gain does
+not justify weakening or replacing the established keyed-hash construction in
+an attacker-facing cache absent a cryptographic/security analysis and a
+project-wide acceptance of the new primitive. The exact dataflow is
+`SaltedOutpointHasher` -> `CCoinsMap` -> coin-cache lookups and updates. No
+source diff was retained; this goal is limited to behavior-preserving direct
+Core speedups.
