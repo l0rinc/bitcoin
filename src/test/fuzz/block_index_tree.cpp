@@ -39,6 +39,20 @@ void initialize_block_index_tree()
     g_setup = testing_setup.get();
 }
 
+void ReceiveBlockTransactionsAndAssert(ChainstateManager& chainman, const CBlock& block, CBlockIndex* index, const FlatFilePos& pos)
+    EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+{
+    const uint32_t status_before{index->nStatus};
+    chainman.ReceivedBlockTransactions(block, index, pos);
+    assert(index->nTx == block.vtx.size());
+    assert(index->nFile == pos.nFile);
+    assert(index->nDataPos == pos.nPos);
+    assert(index->nUndoPos == 0);
+    assert(index->nStatus & BLOCK_HAVE_DATA);
+    assert(index->nStatus & BLOCK_VALID_TRANSACTIONS);
+    assert((index->nStatus & status_before) == status_before);
+}
+
 FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
@@ -85,9 +99,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                         CBlock block; // Dummy block, so that ReceivedBlockTransactions can infer a nTx value.
                         block.vtx = std::vector<CTransactionRef>(nTx);
                         FlatFilePos pos(0, fuzzed_data_provider.ConsumeIntegralInRange<int>(1, 1000));
-                        chainman.ReceivedBlockTransactions(block, index, pos);
-                        assert(index->nStatus & BLOCK_VALID_TRANSACTIONS);
-                        assert(index->nStatus & BLOCK_HAVE_DATA);
+                        ReceiveBlockTransactionsAndAssert(chainman, block, index, pos);
                     }
                 }
             },
@@ -188,9 +200,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 CBlock block;
                 block.vtx = std::vector<CTransactionRef>(index->nTx); // Set the number of tx to the prior value.
                 FlatFilePos pos(0, fuzzed_data_provider.ConsumeIntegralInRange<int>(1, 1000));
-                chainman.ReceivedBlockTransactions(block, index, pos);
-                assert(index->nStatus & BLOCK_VALID_TRANSACTIONS);
-                assert(index->nStatus & BLOCK_HAVE_DATA);
+                ReceiveBlockTransactionsAndAssert(chainman, block, index, pos);
                 pruned_blocks.erase(pruned_blocks.begin() + i);
             });
 
