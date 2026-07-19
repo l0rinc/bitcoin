@@ -1626,8 +1626,8 @@ Core speedups.
 ### Current accepted-stack reindex profile: defer LevelDB/RocksDB work
 
 One fresh cold-cache profile was collected on the current accepted stack,
-including the assumevalid contextual-sigops and BIP30 changes, to decide
-whether the remaining work should move into LevelDB. The workload was a
+including the assumevalid contextual-sigops change, to decide whether the
+remaining work should move into LevelDB. The workload was a
 network-disabled `-reindex-chainstate` over a fresh OverlayFS view of the
 local `BitcoinData` copy to height 287000 with `-dbcache=450`. It used
 `perf record -F 99 --call-graph dwarf` and `/usr/bin/time -v`; the page cache
@@ -1672,9 +1672,15 @@ calls `BlockMerkleRoot()`, and that calls `GetHash()` for every transaction.
 For blocks with a witness commitment, `CheckWitnessMalleation()` likewise calls
 `BlockWitnessMerkleRoot()`, which calls `GetWitnessHash()` for every
 non-coinbase transaction. The same cached hashes are subsequently used for
-coin creation, BIP30 (when applicable), and validation diagnostics. Thus the
-8.94% coarse `CTransaction::ComputeHash()` sample from the reindex profile is
-required consensus work, not lazily avoidable construction work.
+coin creation and validation diagnostics. Thus the 8.94% coarse
+`CTransaction::ComputeHash()` sample from the reindex profile is required
+consensus work, not lazily avoidable construction work.
+
+The BIP30-specific assumevalid candidate is deliberately not in this stack.
+Its checks are meaningful only in the early historical height range, where the
+blocks are nearly empty; the user rejected that narrow reach despite its
+short-range benchmark. The retained contextual-sigops change has broader
+assumevalid reach and is documented and tested independently.
 
 The candidate would only move this hashing from construction to the immediate
 merkle check in the target workload, while adding pointer allocation,
