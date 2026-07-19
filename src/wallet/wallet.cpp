@@ -861,7 +861,15 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
             encrypted_batch = nullptr;
             return false;
         }
-        encrypted_batch->WriteMasterKey(nMasterKeyMaxID, master_key);
+        if (!encrypted_batch->WriteMasterKey(nMasterKeyMaxID, master_key)) {
+            // No key material is encrypted in memory or on disk yet, so fail
+            // cleanly rather than committing re-encrypted keys without the
+            // master key they would be locked to (permanent lockout).
+            encrypted_batch->TxnAbort();
+            delete encrypted_batch;
+            encrypted_batch = nullptr;
+            return false;
+        }
 
         for (const auto& spk_man_pair : m_spk_managers) {
             auto spk_man = spk_man_pair.second.get();
