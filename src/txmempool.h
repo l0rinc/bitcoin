@@ -582,6 +582,7 @@ public:
         const size_t randomized_count{txns_randomized.size()};
         auto i{GetIter(id)};
         const bool eligible{i.has_value() && i.value()->GetSequence() < last_sequence};
+        Assume(eligible == (i.has_value() && i.value()->GetSequence() < last_sequence));
         auto ret{eligible ? GetInfo(*i) : TxMempoolInfo{}};
         Assume(mapTx.size() == tx_count);
         Assume(mapNextTx.size() == input_count);
