@@ -15,6 +15,7 @@
 #include <test/util/txmempool.h>
 #include <txmempool.h>
 #include <util/check.h>
+#include <util/rbf.h>
 #include <util/translation.h>
 
 #include <cstdint>
@@ -87,7 +88,23 @@ FUZZ_TARGET(rbf, .init = initialize_rbf)
     }
     {
         LOCK(pool.cs);
-        (void)IsRBFOptIn(tx, pool);
+        const RBFTransactionState expected_empty_mempool_state =
+            SignalsOptInRBF(tx) ? RBFTransactionState::REPLACEABLE_BIP125 : RBFTransactionState::UNKNOWN;
+        assert(IsRBFOptInEmptyMempool(tx) == expected_empty_mempool_state);
+
+        RBFTransactionState expected_state = expected_empty_mempool_state;
+        if (expected_state == RBFTransactionState::UNKNOWN) {
+            if (const auto tx_iter = pool.GetIter(tx.GetHash())) {
+                expected_state = RBFTransactionState::FINAL;
+                for (const auto& ancestor : pool.CalculateMemPoolAncestors(**tx_iter)) {
+                    if (SignalsOptInRBF(ancestor->GetTx())) {
+                        expected_state = RBFTransactionState::REPLACEABLE_BIP125;
+                        break;
+                    }
+                }
+            }
+        }
+        assert(IsRBFOptIn(tx, pool) == expected_state);
     }
 }
 
