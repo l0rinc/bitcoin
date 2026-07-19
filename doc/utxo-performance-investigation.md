@@ -2383,6 +2383,43 @@ scan stack is the stronger implementation. Any future cursor-interface cleanup
 belongs to a separate refactor/audit and must not be bundled with a performance
 claim.
 
+### Close fork PR #199 periodic chainstate-write interval seed for 2 GiB reindex
+
+Fork PR [#199](https://github.com/l0rinc/bitcoin/pull/199), at
+`e93a55f`, proposes stretching `DATABASE_WRITE_INTERVAL_MIN/MAX` from
+50/70 minutes to 90/110 minutes and reducing the cache flush ratio from 320
+to 200. Its reported HDD result was one height-954459, `-dbcache=10000` run
+per revision (29,895.588 to 28,591.829 seconds). That is a distinct cache
+regime and does not demonstrate a benefit for the requested
+`-dbcache=2000` reindex.
+
+The live flush predicate makes the lack of reach explicit. In
+`Chainstate::FlushStateToDisk`, periodic mode sets `fCacheLarge` whenever
+the cache reaches `CoinsCacheSizeState::LARGE`; `empty_cache` includes that
+condition, and `should_write` includes `empty_cache` independently of
+`fPeriodicWrite`. The interval only controls the latter. The active full
+master control, which uses the requested local HDD, height 957759 target, and
+`-dbcache=2000`, first logged a large-cache flush at height 425132 after
+roughly 40 minutes, then repeated it at height 438930, 451673, and 465177.
+Every one occurs before the existing 50-minute minimum periodic-write
+deadline. Stretching that deadline cannot suppress these cache-pressure
+flushes; neither can it turn the PR's `-dbcache=10000` one-sample result into
+evidence for this target.
+
+Verified with:
+
+```sh
+rg -n -C 8 'fPeriodicWrite|fCacheLarge|m_next_write|DATABASE_WRITE_INTERVAL' \
+  src/validation.cpp src/validation.h
+tail -n ... /mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/master-full-1/merged/debug.log
+```
+
+Decision: do not implement or benchmark this timer-only proposal at
+`-dbcache=2000`. It could be reconsidered only as a separately controlled
+large-dbcache experiment with repeated samples, explicit crash-recovery
+constraints, and a profile showing periodic writes occur before a
+large-cache flush.
+
 ### Close fork PR #200/#203 mmap and cache-allocation seeds
 
 Fork PR [#200](https://github.com/l0rinc/bitcoin/pull/200) is exactly
