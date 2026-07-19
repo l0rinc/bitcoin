@@ -35,6 +35,7 @@
 #include <util/string.h>
 #include <validation.h>
 
+#include <array>
 #include <functional>
 #include <map>
 #include <string>
@@ -1164,6 +1165,28 @@ BOOST_AUTO_TEST_CASE(checktxinputs_invalid_transactions_test)
                   /*coinbase=*/true,
                   /*spend_height=*/COINBASE_MATURITY,
                   TxValidationResult::TX_PREMATURE_SPEND, /*expected_reason=*/"bad-txns-premature-spend-of-coinbase");
+}
+
+BOOST_AUTO_TEST_CASE(checktxinputs_prev_heights_test)
+{
+    CCoinsViewCache inputs{&CoinsViewEmpty::Get()};
+    const COutPoint first{Txid::FromUint256(uint256::ONE), 0};
+    const COutPoint second{Txid::FromUint256(uint256::ONE), 1};
+    inputs.AddCoin(first, Coin{{1 * COIN, CScript() << OP_TRUE}, /*nHeightIn=*/101, /*coinbase=*/false}, /*possible_overwrite=*/false);
+    inputs.AddCoin(second, Coin{{2 * COIN, CScript() << OP_TRUE}, /*nHeightIn=*/202, /*coinbase=*/false}, /*possible_overwrite=*/false);
+
+    CMutableTransaction mtx;
+    mtx.vin.emplace_back(first);
+    mtx.vin.emplace_back(second);
+    mtx.vout.emplace_back(1 * COIN, CScript() << OP_TRUE);
+
+    std::vector<int> prev_heights(mtx.vin.size(), -1);
+    TxValidationState state;
+    CAmount txfee{0};
+    BOOST_REQUIRE(Consensus::CheckTxInputs(CTransaction{mtx}, state, inputs, /*nSpendHeight=*/203, txfee, &prev_heights));
+    BOOST_CHECK_EQUAL(txfee, 2 * COIN);
+    const std::array expected_heights{101, 202};
+    BOOST_CHECK_EQUAL_COLLECTIONS(prev_heights.begin(), prev_heights.end(), expected_heights.begin(), expected_heights.end());
 }
 
 BOOST_AUTO_TEST_CASE(getvalueout_out_of_range_throws)
