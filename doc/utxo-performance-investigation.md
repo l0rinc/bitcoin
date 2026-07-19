@@ -3035,3 +3035,73 @@ Decision: retain `noexcept`. Cached hashes cannot be reused safely through the
 public mutable `COutPoint` itself (covered by the earlier rejection), and the
 container-owned alternative is both locally slower and reduces the capacity
 that makes the cache effective on the target HDD workload.
+
+### LevelDB: avoid `std::string::assign()` in forward DB iteration
+
+A full Callgrind run of the closed local chainstate was used because the
+machine's global perf sample cap is one sample per second. The scratch reader
+executes the same per-coin key/value, txid-boundary, amount, bogo-size, and
+forward-cursor operations as the un-hashed `ComputeUTXOStats()` loop, while
+deliberately excluding RPC dispatch, `cs_main`, block-index lookup, and final
+disk-size accounting. It processed 32,659,375 UTXOs and returned 7,659,292
+transaction ids, 1,488,241,113,523,993 satoshis, and bogo size 2,480,426,961.
+
+The instrumented run retired 67.36 billion instructions. Cursor advancement
+accounts for 73.07% inclusive work: LevelDB `DBIter::Next()` saves the current
+user key in `saved_key_` before advancing, so it can suppress old versions or
+deletions of that key. The resulting `std::string::assign()` call is executed
+once for every forward entry. `MergingIterator`, key comparison, and value
+deserialization remain the larger surrounding costs, but the repeated
+same-sized string assignment is a narrow, behavior-preserving direct target.
+
+`SaveKey()` only receives a slice owned by its underlying iterator, never a
+slice into its destination string. Replacing `assign(k.data(), k.size())` with
+`clear(); append(k.data(), k.size())` therefore preserves the copied bytes and
+replacement semantics for normal values, deletions, forward/reverse direction
+changes, and empty keys. `clear()` preserves the reusable allocation; `append`
+uses the known-disjoint source without `assign()`'s replacement/overlap path.
+A scratch microbenchmark that clears the same retained 37-byte string 32,659,375
+times measured medians of 0.118592 seconds for `assign()` and 0.109490 seconds
+for `append()` (7.68% faster), but the real scan below is the acceptance proof.
+
+Six alternating, warm, CPU-3-pinned Release scans of the closed chainstate all
+returned the exact aggregate tuple above:
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| baseline `assign()` | 7.12722, 7.10781, 7.17174, 7.13544, 7.14286, 7.13335 s | 7.134395 s | baseline |
+| `clear()` + `append()` | 7.03359, 7.03578, 7.03851, 7.05839, 7.05229, 7.03142 s | 7.037145 s | 1.36% faster |
+
+Three additional alternating `perf stat` pairs confirm the causal CPU change:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.18570 s | 7.09297 s | -1.29% |
+| instructions | 68.144589 B | 67.242723 B | -1.32% |
+| branches | 13.782547 B | 13.551479 B | -1.68% |
+| cache misses | 38.871008 M | 38.928748 M | +0.15% |
+
+The changed routine is a generic LevelDB forward-iteration primitive. Its
+demonstrated reach is full forward scans through chainstate, including
+`gettxoutsetinfo none`, `scantxoutset`, and the chainstate-copy phase of
+`dumptxoutset`; it may help other Core LevelDB scans. It is not claimed as an
+HDD reindex-chainstate speedup: that workload is dominated by validation,
+coins-cache, and point-lookup/write paths rather than a full forward DB scan.
+
+Validation used the existing LevelDB iterator and coin-cursor tests:
+
+```sh
+ninja -C build libleveldb.a bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=leveldb_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase/coins_db_cursor_order --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+git diff --check
+```
+
+The Callgrind profile, reader sources/binaries, string microbenchmark, and
+raw commands remain under
+`/mnt/my_storage/bitcoin-perf-scratch/{key-hash-stats-baseline,dbiter-savekey}/`.
+RocksDB was consulted only after this profile established a LevelDB iterator
+bottleneck; its current merging iterator also uses a min-heap with a
+replace-top operation, supporting the already accepted heap structure but not
+justifying a RocksDB port or option change for this smaller string-copy fix.

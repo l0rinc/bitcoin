@@ -89,7 +89,8 @@ class DBIter : public Iterator {
   bool ParseKey(ParsedInternalKey* key);
 
   inline void SaveKey(const Slice& k, std::string* dst) {
-    dst->assign(k.data(), k.size());
+    dst->clear();
+    dst->append(k.data(), k.size());
   }
 
   inline void ClearSavedValue() {
