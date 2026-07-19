@@ -3161,3 +3161,77 @@ Decision: retain the existing `read()` one-byte fast path and do not add the
 specialization. This candidate can reach every obfuscated chainstate cursor
 value, including the UTXO RPC scans, but it has no demonstrated benefit and
 is not an HDD reindex-chainstate optimization.
+
+### Reject bytewise `DBIter` comparator dispatch specialization
+
+After the forward-scan profile and the `SaveKey()` allocation improvement, the
+next small LevelDB target was `DBIter::FindNextUserEntry()`. On every normal
+forward user-key transition it calls the configured `Comparator` virtually to
+decide whether the candidate is hidden by the preceding key. Core's
+`CDBWrapper::GetOptions()` starts from `leveldb::Options`, whose default is
+the built-in `BytewiseComparator`, and does not replace the comparator.
+
+A temporary generic LevelDB candidate recorded at `DBIter` construction
+whether `cmp == BytewiseComparator()`. Its comparison helper called inline
+`Slice::compare()` on that path and retained the original virtual
+`Comparator::Compare()` call for every non-bytewise database. It changed no
+on-disk key ordering and did not assume that third-party LevelDB users have
+the Core default comparator. A temporary unit test constructed internal keys
+in reverse-comparator order and confirmed that the fallback yields `b:b,a:a`.
+Forcing the candidate to treat that comparator as bytewise made the test fail
+after `b:b`, proving that the test catches the comparator-contract violation.
+
+The candidate built and every direct reader run returned the unchanged closed
+chainstate aggregate:
+
+```
+32659375 7659292 1488241113523993 2480426961
+```
+
+Ten warm alternating, CPU-3-pinned scans compared the committed
+`clear()+append()` `SaveKey()` baseline with the dispatch candidate:
+
+| version | wall samples | median wall |
+| --- | --- | ---: |
+| current virtual comparator | 7.02371, 7.00939, 7.00936, 7.04597, 7.05488, 7.06018, 7.04080, 7.03671, 7.05490, 7.05314 s | 7.043385 s |
+| temporary bytewise dispatch | 7.02355, 7.03485, 6.99840, 7.00999, 7.06842, 6.99501, 7.03057, 7.10994, 7.03569, 7.02169 s | 7.027060 s |
+
+The unpaired medians imply 0.23% faster elapsed time, but the more relevant
+paired-median saving is only 0.010595 seconds (0.15%), while individual pairs
+range from a 1.04% regression to a 0.93% improvement. That is not enough
+elapsed-time evidence for a cross-project LevelDB control-flow change.
+
+Three alternating `perf stat` pairs did establish the intended CPU mechanism:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| instructions | 67.245310 B | 66.584504 B | -0.98% |
+| branches | 13.551919 B | 13.452173 B | -0.74% |
+| task-clock | 7.11135 s | 7.11212 s | +0.01% |
+
+The candidate's instruction reduction is stable, but the second task-clock
+sample was a 7.46327-second frequency/scheduling outlier. The median
+task-clock does not improve, so neither the instruction counter nor the
+unpaired wall median is sufficient to claim a user-visible speedup.
+
+The temporary source, CMake include path, and generic-comparator test were
+fully reverted. The restored build and focused baseline tests passed:
+
+```sh
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=leveldb_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase/coins_db_cursor_order --log_level=message
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+git diff --check
+```
+
+The candidate reader and the direct-scan source are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/dbiter-savekey/` as
+`cursor_stats_bench_bytewise_candidate` and `cursor_stats_bench.cpp`.
+
+Decision: do not retain the specialization. Its potential reach is generic
+bytewise LevelDB forward and reverse iterators, including the UTXO RPC scans,
+but it has no reproducible elapsed-time benefit on the measured chainstate and
+does not justify the added state, conditional comparison path, private-header
+test plumbing, or broader LevelDB maintenance surface. It is not an HDD
+reindex-chainstate optimization.
