@@ -52,6 +52,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
     bool abort_run{false};
 
     std::vector<CBlockIndex*> pruned_blocks;
+    unsigned int transitions_since_check{0};
 
     LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 1000) {
         if (abort_run) break;
@@ -192,6 +193,13 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 assert(index->nStatus & BLOCK_HAVE_DATA);
                 pruned_blocks.erase(pruned_blocks.begin() + i);
             });
+
+        if (!abort_run && ++transitions_since_check >= 16) {
+            // Periodically check so a later command cannot repair an invalid state without making
+            // every command pay the full O(tree) consistency-check cost.
+            chainman.CheckBlockIndex();
+            transitions_since_check = 0;
+        }
     }
     if (!abort_run) {
         chainman.CheckBlockIndex();
