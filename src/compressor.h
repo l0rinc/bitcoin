@@ -111,32 +111,28 @@ struct ScriptCompression
         s >> VARINT(nSize);
         if (nSize < nSpecialScripts) {
             if (nSize <= 1) {
-                std::array<unsigned char, 20> vch;
-                s >> std::span{vch};
                 if (nSize == 0) {
                     script.resize(25);
+                    s >> std::span{script}.subspan(3, 20);
                     script[0] = OP_DUP;
                     script[1] = OP_HASH160;
                     script[2] = 20;
-                    std::memcpy(&script[3], vch.data(), 20);
                     script[23] = OP_EQUALVERIFY;
                     script[24] = OP_CHECKSIG;
                 } else {
                     script.resize(23);
+                    s >> std::span{script}.subspan(2, 20);
                     script[0] = OP_HASH160;
                     script[1] = 20;
-                    std::memcpy(&script[2], vch.data(), 20);
                     script[22] = OP_EQUAL;
                 }
                 return;
             }
             if (nSize <= 3) {
-                std::array<unsigned char, 32> vch;
-                s >> std::span{vch};
                 script.resize(35);
+                s >> std::span{script}.subspan(2, 32);
                 script[0] = 33;
                 script[1] = nSize;
-                std::memcpy(&script[2], vch.data(), 32);
                 script[34] = OP_CHECKSIG;
                 return;
             }

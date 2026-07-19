@@ -4920,3 +4920,66 @@ Decision: do not inline legacy P2PK decompression through the header. The
 curve validation remains required, the likely benefit is only its wrapper,
 and this build-quality regression is not an acceptable tradeoff. No production
 behavior changes and no performance claim result from this experiment.
+
+### `ScriptCompression::Unser`: read common payloads directly
+
+The immediately preceding special-script change removes an overwritten
+zero-fill from IDs 0--3, but it still first reads each 20- or 32-byte payload
+into a stack array and then copies it to the final `CScript`. For P2PKH,
+P2SH, and compressed P2PK that intermediate has no validation or lifetime
+purpose: after sizing the final script, the stream can read directly into its
+payload slot and the fixed opcodes can be written after the read. This retains
+the existing full-read-before-fixed-bytes ordering and matches the ordinary
+script branch's resize-then-read failure behavior. IDs 4--5 deliberately keep
+their separate stack representation and `DecompressScript()` curve validation.
+
+The full reader deserializes every one of the 32,867,816 local chainstate
+coins, sums values and reconstructed script sizes, and advances without
+materializing cursor keys. The base is the immediately preceding reader binary
+and the candidate only changes the three direct destination spans. Both order
+series produced the identical aggregate
+`32867816 854678620 1497563613382042`:
+
+| order and runs | baseline median | direct-reader median | change |
+| --- | ---: | ---: | ---: |
+| baseline then direct, 7 each | 7.685378 s | 7.447346 s | -3.10% |
+| direct then baseline, 5 each | 7.680220 s | 7.454223 s | -2.94% |
+
+A separate five-run `perf stat` series gives the same direction:
+
+| counter | stack-array base | direct destination | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.669 s | 7.321 s | -4.52% |
+| instructions | 71.935 B | 68.993 B | -4.09% |
+| branches | 14.332 B | 13.881 B | -3.15% |
+| branch misses | 45.311 M | 43.374 M | -4.28% |
+| cache misses | 41.500 M | 41.448 M | -0.13% |
+
+Raw Hyperfine JSON, both reader binaries, and perf CSVs are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/direct-special-script-reader/`; the
+base reader is
+`/mnt/my_storage/bitcoin-perf-scratch/full-coin-reader/full_coin_reader_current`.
+
+Validation:
+
+```text
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=compress_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+build/test/functional/test_runner.py feature_utxo_set_hash.py rpc_scantxoutset.py rpc_dumptxoutset.py rpc_blockchain.py --jobs=4 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-direct-special-script --timeout-factor=2
+```
+
+The existing coin round-trip test constructs P2PKH, P2SH, compressed and
+uncompressed P2PK, ordinary, and oversized scripts, then checks the fully
+deserialized script byte-for-byte. As a mutation proof, temporarily changing
+the P2PKH destination from `subspan(3, 20)` to `subspan(2, 20)` made it fail
+at `script index 0`; restoring the correct span passed. This proves the test
+checks the exact payload placement rather than only successful parsing.
+
+Reach: all full `Coin` deserializations of the common special script IDs
+0--3, including `scantxoutset`, hash-producing `gettxoutsetinfo`, ordinary
+`dumptxoutset`, snapshots, indexes, cache/validation reads, and block
+connection. It does not affect `gettxoutsetinfo hash_type=none`, which uses
+`UnserSize()`, ordinary scripts, or the legacy IDs 4--5. The benchmark is a
+warm CPU-side scan, not an independent HDD reindex result; no reindex
+percentage is claimed.
