@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <future>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include <addresstype.h>
@@ -21,12 +22,15 @@
 #include <test/util/logging.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
+#include <test/util/time.h>
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
 #include <wallet/coincontrol.h>
 #include <wallet/context.h>
 #include <wallet/receive.h>
+#include <wallet/scriptpubkeyman.h>
+#include <wallet/sqlite.h>
 #include <wallet/spend.h>
 #include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
@@ -69,6 +73,147 @@ static void AddKey(CWallet& wallet, const CKey& key)
     auto& desc = descs.at(0);
     WalletDescriptor w_desc(std::move(desc), 0, 0, 1, 1);
     Assert(wallet.AddWalletDescriptor(w_desc, provider, "", false));
+}
+
+namespace {
+class FailingWriteDatabase : public InMemoryWalletDatabase
+{
+public:
+    void FailNextWrite(std::string record_type) { m_fail_record = std::move(record_type); }
+
+    class Batch : public SQLiteBatch
+    {
+    public:
+        explicit Batch(FailingWriteDatabase& database) : SQLiteBatch(database), m_owner{database} {}
+
+        bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) override
+        {
+            DataStream key_copy{key};
+            std::string record_type;
+            key_copy >> record_type;
+            if (m_owner.m_fail_record == record_type) {
+                m_owner.m_fail_record.reset();
+                return false;
+            }
+            return SQLiteBatch::WriteKey(std::move(key), std::move(value), overwrite);
+        }
+
+    private:
+        FailingWriteDatabase& m_owner;
+    };
+
+    std::unique_ptr<DatabaseBatch> MakeBatch() override { return std::make_unique<Batch>(*this); }
+
+private:
+    std::optional<std::string> m_fail_record;
+};
+
+struct KeyRecordCounts {
+    size_t master{0};
+    size_t plain{0};
+    size_t crypted{0};
+};
+
+KeyRecordCounts CountKeyRecords(WalletDatabase& database)
+{
+    auto batch{database.MakeBatch()};
+    auto cursor{batch->GetNewCursor()};
+    BOOST_REQUIRE(cursor);
+    KeyRecordCounts counts;
+    while (true) {
+        DataStream key, value;
+        if (cursor->Next(key, value) != DatabaseCursor::Status::MORE) break;
+        std::string record_type;
+        key >> record_type;
+        counts.master += record_type == DBKeys::MASTER_KEY;
+        counts.plain += record_type == DBKeys::WALLETDESCRIPTORKEY;
+        counts.crypted += record_type == DBKeys::WALLETDESCRIPTORCKEY;
+    }
+    return counts;
+}
+} // namespace
+
+BOOST_FIXTURE_TEST_CASE(encrypt_wallet_master_key_write_failure, WalletTestingSetup)
+{
+    WalletContext context;
+    context.args = &m_args;
+    context.chain = m_node.chain.get();
+    auto database{std::make_unique<FailingWriteDatabase>()};
+    auto* fail_db{database.get()};
+    auto wallet{TestCreateWallet(std::move(database), context, WALLET_FLAG_DESCRIPTORS)};
+    AddKey(*wallet, GenerateRandomKey());
+    FakeNodeClock clock{1s};
+    const auto before{CountKeyRecords(wallet->GetDatabase())};
+
+    fail_db->FailNextWrite(DBKeys::MASTER_KEY);
+    BOOST_CHECK(wallet->EncryptWallet("passphrase")); // The failed master key write is currently ignored
+    BOOST_CHECK(wallet->HasEncryptionKeys());
+    const auto counts{CountKeyRecords(wallet->GetDatabase())};
+    BOOST_CHECK_EQUAL(counts.master, before.master);
+    BOOST_CHECK_LT(counts.plain, before.plain);
+    BOOST_CHECK_GT(counts.crypted, before.crypted);
+
+    TestUnloadWallet(std::move(wallet));
+}
+
+BOOST_FIXTURE_TEST_CASE(change_passphrase_master_key_write_failure, WalletTestingSetup)
+{
+    WalletContext context;
+    context.args = &m_args;
+    context.chain = m_node.chain.get();
+    auto database{std::make_unique<FailingWriteDatabase>()};
+    auto* fail_db{database.get()};
+    auto wallet{TestCreateWallet(std::move(database), context, WALLET_FLAG_DESCRIPTORS)};
+    AddKey(*wallet, GenerateRandomKey());
+    FakeNodeClock clock{1s};
+    BOOST_REQUIRE(wallet->EncryptWallet("old_pass"));
+
+    fail_db->FailNextWrite(DBKeys::MASTER_KEY);
+    BOOST_CHECK(wallet->ChangeWalletPassphrase("old_pass", "new_pass")); // The failed write is currently ignored
+    BOOST_CHECK(wallet->Unlock("new_pass"));
+    wallet->Lock();
+    BOOST_CHECK(!wallet->Unlock("old_pass"));
+
+    TestUnloadWallet(std::move(wallet));
+}
+
+BOOST_FIXTURE_TEST_CASE(encrypt_descriptor_key_write_failure, WalletTestingSetup)
+{
+    WalletContext context;
+    context.args = &m_args;
+    context.chain = m_node.chain.get();
+    auto database{std::make_unique<FailingWriteDatabase>()};
+    auto* fail_db{database.get()};
+    auto wallet{TestCreateWallet(std::move(database), context, WALLET_FLAG_DESCRIPTORS)};
+
+    CKey key1{GenerateRandomKey()};
+    CKey key2{GenerateRandomKey()};
+    FlatSigningProvider keys;
+    std::string error;
+    auto descriptors{Parse("wsh(multi(1," + EncodeSecret(key1) + "," + EncodeSecret(key2) + "))", keys, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE(!descriptors.empty());
+    WalletDescriptor descriptor{std::move(descriptors.front()), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/0, /*next_index=*/0};
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_REQUIRE(wallet->AddWalletDescriptor(descriptor, keys, /*label=*/"", /*internal=*/false));
+    }
+    auto* spkm{wallet->GetDescriptorScriptPubKeyMan(descriptor)};
+    BOOST_REQUIRE(spkm);
+    const auto before{CountKeyRecords(wallet->GetDatabase())};
+
+    fail_db->FailNextWrite(DBKeys::WALLETDESCRIPTORCKEY);
+    {
+        WalletBatch batch{wallet->GetDatabase()};
+        BOOST_REQUIRE(batch.TxnBegin());
+        BOOST_CHECK(spkm->Encrypt(CKeyingMaterial(32, 0x5a), &batch)); // The failed crypted key write is currently ignored
+        BOOST_REQUIRE(batch.TxnCommit());
+    }
+
+    const auto counts{CountKeyRecords(wallet->GetDatabase())};
+    BOOST_CHECK_EQUAL(counts.plain + 1, before.plain);
+    BOOST_CHECK_EQUAL(counts.crypted, before.crypted + 1);
+
+    TestUnloadWallet(std::move(wallet));
 }
 
 BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
