@@ -2784,3 +2784,83 @@ direction less clear. Do not replace an exact dirty-entry accounting invariant
 with a special wipe-mode path unless a workload has substantially more flush
 events and a profiling result establishes that this cursor bookkeeping is
 material.
+
+### Reject buffered `WriteVarInt()` fast paths after a matched HDD reindex
+
+The local, non-upstream historical commit
+`2d4518f1ab78aef48d8fe92e5aaabf31273dd646` (`serialize: specialize VarInt
+hot paths`) suggested a direct write-side seed for `CCoinsViewDB::BatchWrite`.
+The current `WriteVarInt()` emits every encoded byte through
+`ser_writedata8()`. A temporary, fully reverted prototype retained the exact
+encoding but wrote the common two- and three-byte encodings through one stack
+buffer and one `Stream::write()` call; longer encodings were similarly
+assembled into a bounded stack buffer. It retained the one-byte fast path.
+
+The isolated result looked promising. A scratch `DataStream` benchmark created
+10,000,000 streams, reserved 256 bytes each, and wrote 100 VARINTs per stream
+using the mix observed by the historical experiment: 54 one-byte values (42),
+14 two-byte values (300), 28 three-byte values (70,000), and four four-byte
+values (3,000,000). Seven CPU-pinned release samples in seconds were:
+
+| version | samples | median |
+| --- | --- | ---: |
+| current byte-at-a-time code | 3.57092, 3.57093, 3.57218, 3.50071, 3.57323, 3.56848, 3.56997 | 3.57092 |
+| temporary buffered writes | 3.02166, 3.02815, 3.02594, 3.02269, 3.02877, 3.02851, 3.02746 | 3.02594 |
+
+That is a 15.26% microbenchmark improvement. The temporary source change
+also preserved serialization tests and made the inlined
+`CCoinsViewDB::BatchWrite()` symbol smaller (9,438 to 9,051 bytes):
+
+```sh
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=serialize_tests --log_level=message
+git diff --check
+nm -S -C /mnt/my_storage/bitcoin-perf-scratch/varint-fastpath/bitcoind-{baseline,candidate}
+```
+
+The macro result rejects it. Separately built baseline and candidate binaries
+were run on the supplied local `BitcoinData` HDD chainstate with the Linux
+page cache dropped before each run, `-dbcache=4000`, no wallet or networking,
+and the same process metrics. The initial baseline command named
+`-stopatheight=700000`, but it was cleanly stopped through `bitcoin-cli stop`
+at height 382619 immediately after the first 29,153,566-entry full cache
+flush; the candidate used `-stopatheight=382619` and reached exactly the same
+block hash, transaction count (91,594,661), first flush size, and final flush
+size (14,219,291 entries). Both exited successfully. This makes the measured
+range, rather than the abandoned height-700000 suffix, the comparison unit.
+
+```sh
+sync
+echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null
+perf stat -e task-clock,cycles,instructions,major-faults,minor-faults \
+  /usr/bin/time -v <baseline-or-candidate-bitcoind> \
+    -datadir=/mnt/my_storage/BitcoinData -stopatheight=382619 \
+    -dbcache=4000 -reindex-chainstate -blocksonly -disablewallet \
+    -connect=0 -listen=0 -dnsseed=0 -printtoconsole=0
+```
+
+| version | wall | task-clock | user | system | instructions | major faults | filesystem output |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| current byte-at-a-time code | 1444.120 s | 1253.123 s | 1153.726 s | 106.147 s | 5.941447 T | 897 | 22,191,248 KiB |
+| temporary buffered writes | 1450.904 s | 1254.519 s | 1155.379 s | 105.941 s | 5.985218 T | 887 | 23,891,760 KiB |
+
+The candidate is 6.783 seconds (0.47%) slower, retires 43.738 billion more
+instructions (0.74%), and writes 7.66% more filesystem data. The matched
+first flush took 295 seconds in the baseline (11:00:08--11:05:03 UTC) and 294
+seconds in the candidate (11:24:58--11:29:52 UTC), while the final flush plus
+shutdown took 22 versus 33 seconds. Neither local timing difference overturns
+the whole-workload regression, and a single pair is already sufficient to
+reject a change whose sole justification is speed.
+
+Raw benchmark source, binaries, commands, logs, `perf stat`, and `/usr/bin/time`
+outputs are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/varint-fastpath/`. The temporary source
+diff was reverted before this commit; the tracked tree retains no serialization
+change.
+
+Decision: do not commit the generic buffered-VarInt change. Its small,
+allocation-free microbenchmark win does not transfer to the write-heavy
+chainstate workload, and it would broaden a serialization primitive used well
+beyond the named UTXO paths. Revisit only with a profile showing VARINT byte
+writes as a material end-to-end bottleneck and interleaved controls that show
+a reproducible whole-workload win.
