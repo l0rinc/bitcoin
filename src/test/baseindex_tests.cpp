@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <index/coinstatsindex.h>
+#include <index/txindex.h>
 #include <interfaces/chain.h>
 #include <script/script.h>
 #include <test/util/setup_common.h>
@@ -13,8 +14,8 @@
 #include <boost/test/unit_test.hpp>
 
 // Tests of generic BaseIndex functionality that is independent of which
-// concrete index is being used. CoinStatsIndex is used here merely as a
-// convenient instantiation of BaseIndex.
+// concrete index is being used. Concrete indexes are used here merely as
+// convenient instantiations of BaseIndex.
 BOOST_AUTO_TEST_SUITE(baseindex_tests)
 
 // Test that the index does not commit ahead of the chainstate's last
@@ -57,6 +58,27 @@ BOOST_FIXTURE_TEST_CASE(baseindex_no_commit_ahead_of_flush, TestChain100Setup)
     // state deterministic.
     CreateAndProcessBlock({}, CScript() << OP_TRUE);
     sync_index(false, 101, 100);
+}
+
+BOOST_FIXTURE_TEST_CASE(baseindex_restart_reads, TestChain100Setup)
+{
+    TxIndex index{interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/true};
+    BOOST_REQUIRE(index.Init());
+    index.Sync();
+
+    const Txid txid{m_coinbase_txns[1]->GetHash()};
+    for (int i{0}; i < 2; ++i) {
+        index.Stop();
+        BOOST_REQUIRE(index.Init());
+        index.Sync();
+
+        CTransactionRef tx;
+        uint256 block_hash;
+        BOOST_REQUIRE(index.BlockUntilSyncedToCurrentChain());
+        BOOST_REQUIRE(index.FindTx(txid, block_hash, tx));
+    }
+
+    index.Stop();
 }
 
 BOOST_AUTO_TEST_SUITE_END()
