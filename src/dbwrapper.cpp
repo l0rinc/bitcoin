@@ -404,12 +404,3 @@ CDBIterator::~CDBIterator() = default;
 bool CDBIterator::Valid() const { return m_impl_iter->iter->Valid(); }
 void CDBIterator::SeekToFirst() { m_impl_iter->iter->SeekToFirst(); }
 void CDBIterator::Next() { m_impl_iter->iter->Next(); }
-
-namespace dbwrapper_private {
-
-const Obfuscation& GetObfuscation(const CDBWrapper& w)
-{
-    return w.m_obfuscation;
-}
-
-} // namespace dbwrapper_private

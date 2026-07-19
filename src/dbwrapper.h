@@ -345,4 +345,9 @@ public:
     }
 };
 
+inline const Obfuscation& dbwrapper_private::GetObfuscation(const CDBWrapper& w)
+{
+    return w.m_obfuscation;
+}
+
 #endif // BITCOIN_DBWRAPPER_H

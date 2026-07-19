@@ -3671,3 +3671,72 @@ construction, and other `Coin` deserialization. Ordinary scripts do not call
 this mapping. Reads during reindex-chainstate can also use it when they decode
 such coins, but this CPU-bound cursor result does not establish a full HDD
 reindex wall-time improvement.
+
+### `CDBIterator`: inline the obfuscation accessor
+
+Every `CDBIterator::GetValue()` begins by obtaining its database's
+`Obfuscation` object. `dbwrapper_private::GetObfuscation()` merely returned the
+`CDBWrapper::m_obfuscation` member by reference, but lived out of line in
+`dbwrapper.cpp`. The closed-chainstate reader calls it for every value; its
+Release disassembly showed a call into a stack-protected function before the
+empty-key test and `ObfuscatedSpanReader` construction.
+
+Define the existing friend function inline in `dbwrapper.h`, after
+`CDBWrapper` is complete, and remove its standalone definition. This preserves
+the exact private accessor and reference identity for tests and all callers;
+it only lets the already-header-defined `CDBIterator::GetValue` templates
+directly address the member. The rebuilt `libbitcoin_node.a` and candidate
+reader have no remaining `GetObfuscation` symbol or call.
+
+Five warm CPU-3-pinned scans of the closed local chainstate returned the same
+aggregate in every run:
+
+```
+32659375 7659292 1488241113523993 2480426961
+```
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| out-of-line accessor | 6.766056, 6.780601, 6.748966, 6.766380, 6.742654 s | 6.766056 s | baseline |
+| inline accessor | 6.672761, 6.683139, 6.742190, 6.713952, 6.676145 s | 6.683139 s | 1.23% faster |
+
+Three alternating `perf stat` pairs have a lower candidate task-clock in all
+three pairs and show the expected CPU reduction:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 6.68521 s | 6.60213 s | -1.24% |
+| instructions | 64.142477 B | 63.717508 B | -0.66% |
+| branches | 12.650035 B | 12.551999 B | -0.78% |
+| branch misses | 36.657 M | 35.853 M | -2.19% |
+| cache misses | 38.826 M | 38.897 M | +0.18% |
+
+Raw Hyperfine JSON and the per-pair perf CSVs are retained at
+`/mnt/my_storage/bitcoin-perf-scratch/obfuscation-accessor/`. The baseline is
+the immediately preceding special-script-size reader, so this comparison
+isolates the accessor move.
+
+Existing `dbwrapper_tests` exercises both empty and non-empty obfuscation
+keys, verifies returned accessor values across reopen, and repeatedly decodes
+iterator values in both modes, including a failed decode followed by a valid
+one. It therefore verifies the exact reference and iterator-deobfuscation
+contract rather than merely compiling the inline definition.
+
+Validation:
+
+```sh
+git fetch -q origin master
+git grep -n 'inline const Obfuscation& dbwrapper_private::GetObfuscation' origin/master -- src || true
+git log origin/master --format='%h %s' -S'inline const Obfuscation& dbwrapper_private::GetObfuscation' -- src/dbwrapper.cpp src/dbwrapper.h
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+nm -A -C build/lib/libbitcoin_node.a | grep GetObfuscation # no output
+git diff --check
+```
+
+Fresh `origin/master` has no equivalent inline definition. Reach is every
+`CDBIterator::GetValue` instantiation, including obfuscated chainstate scans
+for all target UTXO RPCs and iterator reads of unobfuscated temporary/index
+databases. The full scan measurement is warm and CPU-bound; it is not a
+standalone full-HDD-reindex result.
