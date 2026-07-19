@@ -985,6 +985,37 @@ interdependent stack. Decision: do not cherry-pick or benchmark the isolated
 line; revisit only if a current profile demonstrates repeated empty-cache
 flushes and a minimal accounting invariant can be proven.
 
+A later current-tree trace confirms that the isolated allocation-saving line
+does not have enough reach to justify reopening that coupled design. From the
+last daemon section of the clean 287000-height, `-dbcache=450` OverlayFS
+reindex used for the 4 KiB block-size control, `UpdateTip` cache telemetry
+shows exactly five full cache resets after the initial genesis setup:
+
+| reset height | cache before | cache after | entries before |
+| ---: | ---: | ---: | ---: |
+| 207934 | 434.9 MiB | 0.3 MiB | 3,155,908 |
+| 231364 | 434.8 MiB | 0.8 MiB | 3,156,317 |
+| 244099 | 434.9 MiB | 0.3 MiB | 3,186,835 |
+| 269395 | 434.9 MiB | 0.5 MiB | 3,187,541 |
+| 279817 | 435.0 MiB | 0.3 MiB | 3,186,915 |
+
+Thus the intended saving is at most five pool/map destructions over a 561.307 s
+run, not a per-block cost. Retaining a roughly 435 MiB allocation after each
+flush would also keep the current capacity-based accounting at its trigger;
+changing that requires the broader active-memory and cache-reservation
+semantics that #59 bundles. The trace rules out a simple, independent
+reindex-speed commit. It was obtained without a new source diff:
+
+```sh
+start=$(rg -n 'Bitcoin Core version' <debug.log> | tail -1 | cut -d: -f1)
+sed -n "${start},\$p" <debug.log> | awk '<extract UpdateTip cache drops>'
+```
+
+Raw log: `/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/blocksize4-base-1/metrics/debug.log`.
+The PR #59 part of the remaining-seed list is closed; a future cache-accounting
+proposal must first establish a new invariant and benefit beyond these five
+events.
+
 ### `CheckTransaction` duplicate/null fast path ([PR #180](https://github.com/l0rinc/bitcoin/pull/180))
 
 The final direct-Core part of #180 special-cases one- and two-input
@@ -1091,9 +1122,6 @@ full metrics are under
 The following seeds were screened but have not yet produced an accepted or
 fully rejected independent change:
 
-- [#140](https://github.com/l0rinc/bitcoin/pull/140)/[#59](https://github.com/l0rinc/bitcoin/pull/59): the pool-chunk and
-  isolated no-reallocation variants are rejected above. Other allocation or
-  accounting shapes still need a current profile and an independent invariant.
 - [#180](https://github.com/l0rinc/bitcoin/pull/180): the direct
   `CheckTransaction` change is rejected above for insufficient HDD reach. Its
   seek-compaction idea is already present and upstream; any remaining flush
