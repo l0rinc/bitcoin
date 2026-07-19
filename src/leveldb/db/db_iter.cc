@@ -49,6 +49,7 @@ class DBIter : public Iterator {
          uint32_t seed)
       : db_(db),
         user_comparator_(cmp),
+        user_comparator_is_bytewise_(cmp == BytewiseComparator()),
         iter_(iter),
         sequence_(s),
         direction_(kForward),
@@ -88,6 +89,11 @@ class DBIter : public Iterator {
   void FindPrevUserEntry();
   bool ParseKey(ParsedInternalKey* key);
 
+  int CompareUserKeys(const Slice& a, const Slice& b) const {
+    return user_comparator_is_bytewise_ ? a.compare(b)
+                                       : user_comparator_->Compare(a, b);
+  }
+
   inline void SaveKey(const Slice& k, std::string* dst) {
     dst->clear();
     dst->append(k.data(), k.size());
@@ -109,6 +115,7 @@ class DBIter : public Iterator {
 
   DBImpl* db_;
   const Comparator* const user_comparator_;
+  const bool user_comparator_is_bytewise_;
   Iterator* const iter_;
   SequenceNumber const sequence_;
   Status status_;
@@ -191,7 +198,7 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
           break;
         case kTypeValue:
           if (skipping &&
-              user_comparator_->Compare(ikey.user_key, *skip) <= 0) {
+              CompareUserKeys(ikey.user_key, *skip) <= 0) {
             // Entry hidden
           } else {
             valid_ = true;
@@ -223,8 +230,7 @@ void DBIter::Prev() {
         ClearSavedValue();
         return;
       }
-      if (user_comparator_->Compare(ExtractUserKey(iter_->key()), saved_key_) <
-          0) {
+      if (CompareUserKeys(ExtractUserKey(iter_->key()), saved_key_) < 0) {
         break;
       }
     }
@@ -243,7 +249,7 @@ void DBIter::FindPrevUserEntry() {
       ParsedInternalKey ikey;
       if (ParseKey(&ikey) && ikey.sequence <= sequence_) {
         if ((value_type != kTypeDeletion) &&
-            user_comparator_->Compare(ikey.user_key, saved_key_) < 0) {
+            CompareUserKeys(ikey.user_key, saved_key_) < 0) {
           // We encountered a non-deleted value in entries for previous keys,
           break;
         }

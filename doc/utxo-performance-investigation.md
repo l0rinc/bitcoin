@@ -4291,3 +4291,101 @@ no-match `scantxoutset` scans use `NextNoKey()`, while matches,
 walks use `Next()`. It does not affect ordinary point lookups or
 `-reindex-chainstate`; the measurement is a warm CPU-bound UTXO scan, not an
 HDD-reindex wall-time claim.
+
+### LevelDB: directly compare bytewise DB iterator user keys
+
+`DBIter::FindNextUserEntry()` compares every candidate user key with the
+previous user key before deciding whether a value is hidden by an earlier
+version or deletion. `Prev()` and `FindPrevUserEntry()` make the corresponding
+comparison while changing or maintaining reverse iteration. These calls use a
+virtual `Comparator::Compare()` even for Bitcoin Core's normal database
+configuration: `CDBWrapper::GetOptions()` retains LevelDB's default
+`BytewiseComparator()`.
+
+Record at `DBIter` construction whether the supplied comparator is precisely
+that singleton. The normal bytewise path can then use the equivalent
+`Slice::compare()` directly; all custom comparators retain the original
+virtual call. Pointer identity is intentional: it is the same static
+singleton test used by the accepted internal-key-comparator specialization,
+and a comparator merely having similar ordering must retain its own
+implementation. The change does not alter internal-key parsing, user-key
+ordering, deletion/version visibility, database bytes, filter keys, or the
+public LevelDB API.
+
+The candidate's Release disassembly has the normal path call `memcmp` from
+`FindNextUserEntry()` and keeps an indirect comparator call in the fallback.
+Thus it removes the proven default-comparator dispatch rather than relying on
+devirtualization that the compiler may or may not perform.
+
+The CPU-3-pinned reader opens the closed local chainstate and calls
+`GetValue(Coin)` plus `NextNoKey()` for all 32,659,375 UTXOs. Every execution
+returned the exact aggregate:
+
+```
+32659375 847458211 1488241113523993
+```
+
+The first run order and an independent reversed run order both favor the
+candidate. Combined medians use all twelve samples per version, rather than
+selecting the stronger order:
+
+| order | ordinary comparator | bytewise direct comparison | result |
+| --- | ---: | ---: | ---: |
+| baseline then candidate, 7 runs | 7.212106 s | 7.196557 s | 0.22% faster |
+| candidate then baseline, 5 runs | 7.250914 s | 7.177336 s | 1.01% faster |
+| all 12 runs, combined median | 7.226418 s | 7.188121 s | 0.53% faster |
+
+Four alternating `perf stat` pairs have a lower candidate task-clock in every
+pair and show the expected removal of dispatch work:
+
+| metric | ordinary comparator median | bytewise direct median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.12593 s | 7.08881 s | -0.52% |
+| instructions | 67.694435 B | 67.029955 B | -0.98% |
+| branches | 13.544595 B | 13.444540 B | -0.74% |
+| cache misses | 39.027 M | 38.951 M | -0.20% |
+
+This was re-evaluated despite the previously documented rejected DBIter
+bytewise attempt. That prior run was before the later cursor and iterator
+changes now in the stack and had no task-clock evidence. The current complete
+reader rebuild has two independent wall-time orders and four same-direction
+counter pairs; its stable instruction reduction now corresponds to a
+reproducible elapsed-time reduction. The earlier rejection remains useful
+history: this is accepted only for the refreshed, current-stack evidence, not
+because a virtual call is assumed costly in the abstract.
+
+The regular Core LevelDB and cursor tests cover normal forward/reverse cursor
+movement, key ordering, and full coin decode. A separate LevelDB `DBTest`
+`CustomComparator` run creates, compacts, and reads a database using a numeric
+non-bytewise comparator, exercising the exact fallback through DB iteration.
+It passed after this change. The Debug target also compiles with the new
+constant field and helper.
+
+```sh
+git fetch -q origin master
+git log origin/master --format='%h %s' -S'user_comparator_is_bytewise_' -- src/leveldb/db/db_iter.cc
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=leveldb_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase/coins_db_cursor_order --log_level=message
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+LEVELDB_TESTS=CustomComparator /mnt/my_storage/bitcoin-perf-scratch/dbiter-bytewise/leveldb-tests/db_test
+build/test/functional/test_runner.py rpc_scantxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/dbiter-bytewise/functional --timeout-factor=2
+ninja -C build-debug src/CMakeFiles/leveldb.dir/leveldb/db/db_iter.cc.o -j4
+git diff --check
+```
+
+Raw Hyperfine JSON, alternating counter CSVs, reader binaries, full reader
+output, standalone LevelDB build, and functional-test directory remain under
+`/mnt/my_storage/bitcoin-perf-scratch/dbiter-bytewise/`. Fresh
+`origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no
+equivalent `DBIter` specialization.
+
+Reach is normal bytewise LevelDB iteration. The measured hot case is full
+forward chainstate traversal, so `gettxoutsetinfo`, `scantxoutset`, and the
+scan phases of `dumptxoutset` benefit. Reverse iterator paths receive the
+same correct specialization but were not separately timed. Custom comparator
+databases retain their original virtual comparison. Point lookups and the
+validation/cache/write-dominated portions of `-reindex-chainstate` do not use
+this full-scan measurement, so it is not a claim of an independent HDD
+reindex wall-time gain.
