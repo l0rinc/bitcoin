@@ -116,6 +116,14 @@ FUZZ_TARGET(process_message, .init = initialize_process_message)
 
     connman.AddTestNode(p2p_node);
     FillNode(fuzzed_data_provider, connman, p2p_node);
+    const auto block_data_count_before{WITH_LOCK(chainman.GetMutex(), {
+        size_t count{0};
+        for (const auto& entry : chainman.BlockIndex()) {
+            if (entry.second.nStatus & BLOCK_HAVE_DATA) ++count;
+        }
+        return count;
+    })};
+    const auto last_block_time_before{p2p_node.m_last_block_time.load()};
 
     clock.set(ConsumeTime(fuzzed_data_provider));
 
@@ -137,8 +145,18 @@ FUZZ_TARGET(process_message, .init = initialize_process_message)
     }
     node.validation_signals->SyncWithValidationInterfaceQueue();
     node.validation_signals->UnregisterValidationInterface(node.peerman.get());
+    const auto block_data_count_after{WITH_LOCK(chainman.GetMutex(), {
+        size_t count{0};
+        for (const auto& entry : chainman.BlockIndex()) {
+            if (entry.second.nStatus & BLOCK_HAVE_DATA) ++count;
+        }
+        return count;
+    })};
+    const auto last_block_time_after{p2p_node.m_last_block_time.load()};
+    assert(last_block_time_after == last_block_time_before || block_data_count_after > block_data_count_before);
     node.connman->StopNodes();
-    if (block_index_size != WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())) {
+    if (block_index_size != WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size()) ||
+        block_data_count_before != block_data_count_after) {
         // Reuse the global chainman, but reset it when it is dirty
         ResetChainman(*g_setup);
     }
