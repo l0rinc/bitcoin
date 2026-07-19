@@ -4379,7 +4379,6 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     }
 
     // Write block to history file
-    if (fNewBlock) *fNewBlock = true;
     try {
         FlatFilePos blockPos{};
         if (dbp) {
@@ -4393,6 +4392,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
             }
         }
         ReceivedBlockTransactions(block, pindex, blockPos);
+        if (fNewBlock) *fNewBlock = true;
     } catch (const std::runtime_error& e) {
         return FatalError(GetNotifications(), state, strprintf(_("System error while saving block to disk: %s"), e.what()));
     }
