@@ -198,13 +198,13 @@ BOOST_FIXTURE_TEST_CASE(encrypt_descriptor_key_write_failure, WalletTestingSetup
         WalletBatch batch{wallet->GetDatabase()};
         BOOST_REQUIRE(batch.TxnBegin());
         const bool encrypted{spkm->Encrypt(CKeyingMaterial(32, 0x5a), &batch)};
-        BOOST_CHECK(encrypted); // TODO: Return false on write failure
+        BOOST_CHECK(!encrypted); // Failed persistence must abort encryption
         BOOST_REQUIRE(encrypted ? batch.TxnCommit() : batch.TxnAbort());
     }
 
     const auto counts{CountKeyRecords(wallet->GetDatabase())};
-    BOOST_CHECK_EQUAL(counts.plain + 1, before.plain); // TODO: Keep plaintext descriptor keys
-    BOOST_CHECK_EQUAL(counts.crypted, before.crypted + 1); // TODO: Do not write encrypted descriptor keys
+    BOOST_CHECK_EQUAL(counts.plain, before.plain);
+    BOOST_CHECK_EQUAL(counts.crypted, before.crypted);
 
     TestUnloadWallet(std::move(wallet));
 }
