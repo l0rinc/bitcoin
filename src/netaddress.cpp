@@ -1089,5 +1089,6 @@ bool operator==(const CSubNet& a, const CSubNet& b)
 
 bool operator<(const CSubNet& a, const CSubNet& b)
 {
+    if (a.valid != b.valid) return a.valid < b.valid;
     return (a.network < b.network || (a.network == b.network && memcmp(a.netmask, b.netmask, 16) < 0));
 }
