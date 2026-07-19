@@ -1097,15 +1097,13 @@ fully rejected independent change:
   rejected above. Revisit table-block sizing only with a current LevelDB trace
   that demonstrates a block-size, rather than mmap locality or compaction,
   bottleneck.
-- [#34](https://github.com/l0rinc/bitcoin/pull/34): repeated coins-cache lookup/hash and short-lived reallocation. The
-  `SpendCoin` subcandidate is rejected above; other subpatterns remain open.
 - [#140](https://github.com/l0rinc/bitcoin/pull/140)/[#59](https://github.com/l0rinc/bitcoin/pull/59): the pool-chunk and
   isolated no-reallocation variants are rejected above. Other allocation or
   accounting shapes still need a current profile and an independent invariant.
 - [#180](https://github.com/l0rinc/bitcoin/pull/180): the direct
   `CheckTransaction` change is rejected above for insufficient HDD reach. Its
-  LevelDB seek-compaction and flush ideas remain separate, high-risk hypotheses
-  that require a current compaction/write-amplification profile before review.
+  seek-compaction idea is already present and upstream; any remaining flush
+  idea needs a current compaction/write-amplification profile before review.
 - [#195](https://github.com/l0rinc/bitcoin/pull/195)/[#152](https://github.com/l0rinc/bitcoin/pull/152): cursor/coinstats ideas. Their proven portions are represented by
   the accepted direct-streaming and hashing commits above; remaining layering
   changes need independent evidence.
@@ -2194,3 +2192,46 @@ git diff --stat origin/master -- src/leveldb/db/version_set.cc src/leveldb/db/au
 The final comparison produced no diff. Decision: do not benchmark, modify, or
 port this already-applied compaction policy. Any later LevelDB proposal must
 first identify a different, currently enabled source of I/O or CPU cost.
+
+### Reject fork PR #34 cache-propagation and short-lived-cache seeds as upstream
+
+Fork PR [#34](https://github.com/l0rinc/bitcoin/pull/34), fetched as
+`l0rinc/pr-34` at `195fc2fe102197eae27c33b5e3969a6b15d1253a`, contains two
+otherwise relevant ideas. The first commit, `b23c6a1fc8f9a44561add79427d2f3fff4c3718f`,
+replaces a `find()` then `try_emplace()` pair in
+`CCoinsViewCache::BatchWrite()` with one leading `try_emplace()` and branches
+on `inserted`. That removes a redundant SipHash/bucket traversal when a child
+cache propagates an entry that is absent from its parent. The second commit
+adds a `Flush(reallocate_cache)` parameter so local one-block caches do not
+destroy and reconstruct their map immediately before destruction.
+
+Neither is a remaining change. The live `BatchWrite()` has the exact leading
+`auto [itUs, inserted]{cacheCoins.try_emplace(it->first)}` shape, and
+`origin/master` records it as `c8f5e446dc coins: reduce lookups in dbcache
+layer propagation`. The live `Flush(bool reallocate_cache = true)` retains the
+reallocation policy for reusable caches and all local validation/RPC teardown
+callers explicitly pass `false`; `origin/master` records the current naming as
+`3e0fd0e4dd refactor: rename will_reuse_cache to reallocate_cache`.
+
+The latter has potentially broad reindex and rollback reach only because it
+prevents repeated destruction/recreation of a map that will never be used
+again. It is already correctly applied to `ConnectTip`, `DisconnectTip`,
+snapshot activation, and the relevant `dumptxoutset` rollback cache. The
+former has cache-layer propagation reach, not UTXO RPC scan reach. Reapplying
+either would either be a no-op or duplicate already-pushed Core work, which is
+explicitly out of scope.
+
+Reviewed with:
+
+```sh
+git fetch -q l0rinc 'refs/pull/34/head:refs/remotes/l0rinc/pr-34'
+git log --reverse --format='%H %s' $(git merge-base l0rinc/pr-34 origin/master)..l0rinc/pr-34
+git show b23c6a1fc -- src/coins.cpp src/coins.h src/validation.cpp
+rg -n -C 4 'try_emplace\(it->first\)|Flush\(/\*reallocate_cache=\*/false\)' src/coins.cpp src/coins.h src/validation.cpp src/rpc/blockchain.cpp
+git log origin/master --oneline -G 'try_emplace\(it->first\)|Flush\(/\*reallocate_cache=\*/false\)' -- src/coins.cpp src/coins.h src/validation.cpp
+```
+
+Decision: remove PR #34 from the open seed list and do not benchmark a
+duplicate. A new coins-cache candidate must differ materially from both
+upstream forms and prove a measurable end-to-end effect without weakening the
+cache's persistence or memory-reclamation contract.
