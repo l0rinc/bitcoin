@@ -59,6 +59,11 @@ public:
         XorWord(target, rot_key);
     }
 
+    std::byte ObfuscateByte(std::byte target, size_t key_offset = 0) const
+    {
+        return target ^ std::as_bytes(std::span{&m_rotations[0], 1})[key_offset % KEY_SIZE];
+    }
+
     template <typename Stream>
     void Serialize(Stream& s) const
     {

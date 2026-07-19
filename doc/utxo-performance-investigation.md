@@ -1829,3 +1829,63 @@ Freshly fetched `origin/master` at
 `18c05d93016b28a9afd4c716dfe00b6e0accb30b` contains neither `CoinScanInfo`
 nor `UnserInfo`; this was an independently tested but rejected candidate, not
 a duplicate of an already-pushed fix.
+
+### Obfuscated iterator values: avoid word setup for one-byte reads
+
+A warm full-chain `gettxoutsetinfo none` profile on the current accepted stack
+identified `ReadVarInt<ObfuscatedSpanReader>` as a plausible direct-Core lead.
+The profile had only 48 usable samples, so its apparent 12.96% combined sample
+share is routing evidence only, not a percentage claim. Inspection established
+that each byte read presently copies one byte, zero-initializes a `uint64_t`,
+XORs the word through `Obfuscation::operator()`, then copies one byte back.
+Coin stats deserialization performs many such reads for compact-size and
+VARINT fields.
+
+The retained change adds `Obfuscation::ObfuscateByte()` and uses it only for a
+one-byte `ObfuscatedSpanReader::read()`. It XORs the byte with the matching
+byte in the original key representation, advances `m_key_offset` once, and
+advances the source span once. Multi-byte reads retain the established,
+optimized word/chunk implementation. The implementation is endian-safe: the
+key was originally copied into `m_rotations[0]`, and `HexKey()` already exposes
+that same object representation as the key bytes.
+
+A temporary two-one-byte-VARINT benchmark (five runs per version) measured
+6.47--6.49 ns and 94 instructions at base versus 6.16--6.30 ns and 90
+instructions with the shortcut (medians 6.49 -> 6.18 ns, 4.8% faster). That
+alone was insufficient to commit, so it was removed after routing the
+end-to-end check below.
+
+The macro comparison used the explicitly permitted local
+`/mnt/my_storage/BitcoinData` chainstate at height 957779, one normal
+network-disabled/wallet-disabled daemon per build, and `gettxoutsetinfo none`.
+Each candidate daemon first completed an unmeasured warm scan. Measured scans
+attached `perf stat` to the daemon for `task-clock`, cycles, instructions, and
+branch counters; every response had SHA-256
+`4b96d583ae030f7391f6b960ee9c738360da5ea27532da61c7057cc206dccfa0`.
+
+| version/runs | RPC wall seconds | daemon task-clock | instructions | branches | branch misses |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| base | 47.80, 47.96 | 47.749, 47.908 s | 437.937, 438.004 B | 89.376, 89.377 B | 500.469, 508.194 M |
+| one-byte reader | 47.24, 47.36 | 47.185, 47.290 s | 435.653, 435.667 B | 87.957, 87.960 B | 484.138, 488.327 M |
+
+The two base instruction counts differ by 0.015%, and the two candidate
+counts by 0.003%; the candidate consistently retires 0.53% fewer instructions.
+Its two-run wall median is 1.2% lower, but the small sample should not be read
+as a precise wall-time claim. The defensible result is a reproducible CPU
+reduction in a full 166,350,731-UTXO scan, with matching observable output.
+
+`dbwrapper_tests/obfuscated_span_reader` covers nonzero key bytes, a one-byte
+read, `ignore()` across two key offsets, a multi-byte read, and a wrapped
+single-byte key offset. It passes with the shortcut. As a temporary mutation,
+forcing the shortcut to always use offset zero made a standalone program using
+the same production headers fail at the byte after `ignore()` (exit 2); the
+unmutated program exits 0. This proves the added oracle catches the critical
+offset accounting error rather than merely executing the path.
+
+Expected reach is CPU time after an obfuscated LevelDB value is available, not
+disk I/O. It directly covers chainstate iterator users including
+`gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`, and any other
+`CDBIterator::GetValue()` use that deserializes byte-at-a-time fields. It does
+not accelerate plain LevelDB data, LevelDB merge selection, block reads, or
+HDD seeks. Raw microbenchmark outputs, RPC replies, perf CSVs, and timing
+files are retained in `/mnt/my_storage/bitcoin-perf-scratch/obfuscated-reader-byte/`.

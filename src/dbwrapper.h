@@ -111,6 +111,11 @@ public:
         if (dst.size() > m_data.size()) {
             throw std::ios_base::failure("ObfuscatedSpanReader::read(): end of data");
         }
+        if (dst.size() == 1) {
+            dst.front() = m_obfuscation.ObfuscateByte(m_data.front(), m_key_offset++);
+            m_data = m_data.subspan(1);
+            return;
+        }
         std::memcpy(dst.data(), m_data.data(), dst.size());
         m_obfuscation(dst, m_key_offset);
         m_data = m_data.subspan(dst.size());

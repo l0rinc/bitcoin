@@ -10,6 +10,7 @@
 #include <util/byte_units.h>
 #include <util/string.h>
 
+#include <array>
 #include <memory>
 #include <ranges>
 
@@ -18,6 +19,40 @@
 using util::ToString;
 
 BOOST_FIXTURE_TEST_SUITE(dbwrapper_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(obfuscated_span_reader)
+{
+    const std::array key{
+        std::byte{0x01}, std::byte{0x23}, std::byte{0x45}, std::byte{0x67},
+        std::byte{0x89}, std::byte{0xab}, std::byte{0xcd}, std::byte{0xef},
+    };
+    const Obfuscation obfuscation{key};
+    const std::array original{
+        std::byte{0x10}, std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14},
+        std::byte{0x15}, std::byte{0x16}, std::byte{0x17}, std::byte{0x18}, std::byte{0x19},
+    };
+    auto encoded{original};
+    obfuscation(encoded);
+
+    dbwrapper_private::ObfuscatedSpanReader reader{encoded, obfuscation};
+    const auto read_byte{[&] {
+        std::array<std::byte, 1> result;
+        reader.read(result);
+        return result.front();
+    }};
+
+    BOOST_CHECK(read_byte() == original[0]);
+    reader.ignore(2);
+    BOOST_CHECK(read_byte() == original[3]);
+
+    std::array<std::byte, 4> bulk;
+    reader.read(bulk);
+    BOOST_CHECK_EQUAL_COLLECTIONS(bulk.begin(), bulk.end(), original.begin() + 4, original.begin() + 8);
+
+    BOOST_CHECK(read_byte() == original[8]);
+    BOOST_CHECK(read_byte() == original[9]);
+    BOOST_CHECK(reader.empty());
+}
 
 BOOST_AUTO_TEST_CASE(dbwrapper)
 {
