@@ -3936,3 +3936,80 @@ one for the target RPCs or reindex: its wide serialization reach makes the
 measured full-UTXO-scan regression more important than its sampled call-site
 cost. Reconsider only a narrowly scoped caller with separate profile and
 end-to-end evidence.
+
+### `ObfuscatedSpanReader::read`: force inline the scoped value reader
+
+The generic `ReadVarInt()` annotation above was too broad, but the refreshed
+full-coin reader profile isolated a narrower leaf: the existing direct
+obfuscated-value path samples `ObfuscatedSpanReader::read()` at 3.50%.
+`CDBIterator::GetValue()` constructs that reader for every obfuscated
+chainstate value; its `read()` member is defined in the header but the hardened
+Release compiler still emitted a callable weak symbol. The call is on the
+ordinary successful value-deserialization path, including the frequent
+one-byte VarInt reads and larger field/script reads.
+
+Mark only that member `ALWAYS_INLINE`. It retains every bounds check, throw,
+single-byte fast path, XOR offset, span update, and byte copy exactly; the
+change merely requires the already-template-visible reader body to be emitted
+at its callers. The baseline reader binary contains
+`dbwrapper_private::ObfuscatedSpanReader::read`, while the candidate contains
+no such symbol. The candidate is only 144 bytes larger.
+
+Five warm CPU-3-pinned full-coin scans on the closed local chainstate produced
+the same aggregate every time:
+
+```
+32659375 847458211 1488241113523993
+```
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| normal inline heuristic | 7.318034, 7.323073, 7.324097, 7.345345, 7.333226 s | 7.324097 s | baseline |
+| forced reader inline | 7.307045, 7.304316, 7.269921, 7.311896, 7.282881 s | 7.304316 s | 0.27% faster |
+
+The direct full-coin reader calls `GetValue(Coin)` and `NextNoKey()` for all
+32,659,375 UTXOs. The small Hyperfine result is supported by eight alternating
+`perf stat` pairs, including three pairs in reverse candidate/base order: all
+eight candidate task-clock readings are lower. Their combined medians are
+7.24153 seconds for the baseline and 7.17691 seconds for the candidate
+(-0.89%). Retired instructions are effectively unchanged (68.606870 versus
+68.606080 billion, -0.001%); cache-miss median is 38.966 versus 38.865
+million (-0.26%). Treat the improvement as code-layout/cache-sensitive, not
+as a claim of a large instruction reduction.
+
+Raw Hyperfine JSON, all normal and reverse-order perf CSVs, exact aggregate
+outputs, reader binaries, and the sample profile are retained at
+`/mnt/my_storage/bitcoin-perf-scratch/obfuscated-read-always-inline/` and
+`/mnt/my_storage/bitcoin-perf-scratch/full-coin-reader-7005a005-profile/`.
+
+Existing `dbwrapper_tests` covers the reader's one-byte and bulk reads across
+nonzero XOR offsets, both obfuscated and unobfuscated CDB iteration, and a
+failed value decode followed by a valid decode. The full `dbwrapper_tests`
+suite (ten cases) and the coin deserialization cross-check pass. A separate
+Debug configuration compiled the exact `dbwrapper.cpp` consumer with
+`-O0`, confirming that the annotation does not make this caller a
+Release-only build failure.
+
+Validation:
+
+```sh
+git fetch -q origin master
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+cmake -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
+ninja -C build-debug src/CMakeFiles/bitcoin_node.dir/dbwrapper.cpp.o -j4
+nm -C <baseline-reader> | grep ObfuscatedSpanReader::read
+nm -C <candidate-reader> | grep ObfuscatedSpanReader::read # no output
+git diff --check
+```
+
+Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` does not
+yet contain the branch's preceding direct obfuscated-reader change, so it has
+no equivalent `ObfuscatedSpanReader` annotation. This commit is a focused
+follow-up to `b3af50801d` (`dbwrapper: decode obfuscated iterator values
+directly`). On that path it reaches obfuscated `CDBIterator::GetValue` calls,
+including full chainstate value scans for `scantxoutset`, hash-based
+`gettxoutsetinfo`, and `dumptxoutset`; unobfuscated temporary/index databases
+do not use it. The evidence remains a warm CPU-bound full scan, not an
+independent full-HDD-reindex wall-time result.

@@ -105,7 +105,7 @@ public:
     size_t size() const { return m_data.size(); }
     bool empty() const { return m_data.empty(); }
 
-    void read(std::span<std::byte> dst)
+    ALWAYS_INLINE void read(std::span<std::byte> dst)
     {
         if (dst.empty()) return;
         if (dst.size() > m_data.size()) {
