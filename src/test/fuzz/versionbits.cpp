@@ -16,6 +16,7 @@
 #include <test/fuzz/util.h>
 #include <test/util/versionbits.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -39,6 +40,77 @@ public:
     ThresholdState GetStateFor(const CBlockIndex* pindexPrev) const { return AbstractThresholdConditionChecker::GetStateFor(pindexPrev, m_cache); }
     int GetStateSinceHeightFor(const CBlockIndex* pindexPrev) const { return AbstractThresholdConditionChecker::GetStateSinceHeightFor(pindexPrev, m_cache); }
 };
+
+struct ModelState
+{
+    ThresholdState state{ThresholdState::DEFINED};
+    int since{0};
+};
+
+bool ModelCondition(const CBlockIndex* block, const Consensus::BIP9Deployment& dep)
+{
+    return (block->nVersion & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS &&
+           (block->nVersion & (int32_t{1} << dep.bit)) != 0;
+}
+
+ModelState ModelStateFor(const CBlockIndex* pindexPrev, const Consensus::BIP9Deployment& dep)
+{
+    const int period = static_cast<int>(dep.period);
+    if (dep.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE) {
+        return {ThresholdState::ACTIVE, 0};
+    }
+    if (dep.nStartTime == Consensus::BIP9Deployment::NEVER_ACTIVE) {
+        return {ThresholdState::FAILED, 0};
+    }
+    if (pindexPrev == nullptr) return {};
+
+    // GetStateFor() evaluates the period containing the next block. Walk the
+    // completed periods in chronological order so the expected state and its
+    // transition height are independent of the production cache.
+    const int period_end_height = pindexPrev->nHeight - ((pindexPrev->nHeight + 1) % period);
+    const CBlockIndex* period_end = pindexPrev->GetAncestor(period_end_height);
+    std::vector<const CBlockIndex*> period_ends;
+    while (period_end != nullptr) {
+        period_ends.push_back(period_end);
+        period_end = period_end->nHeight >= period ? period_end->GetAncestor(period_end->nHeight - period) : nullptr;
+    }
+    std::reverse(period_ends.begin(), period_ends.end());
+
+    ModelState result;
+    for (const CBlockIndex* end : period_ends) {
+        ThresholdState next = result.state;
+        switch (result.state) {
+        case ThresholdState::DEFINED:
+            if (end->GetMedianTimePast() >= dep.nStartTime) next = ThresholdState::STARTED;
+            break;
+        case ThresholdState::STARTED: {
+            int count{0};
+            const CBlockIndex* block = end;
+            for (int i = 0; i < period; ++i) {
+                if (ModelCondition(block, dep)) ++count;
+                block = block->pprev;
+            }
+            if (count >= static_cast<int>(dep.threshold)) {
+                next = ThresholdState::LOCKED_IN;
+            } else if (end->GetMedianTimePast() >= dep.nTimeout) {
+                next = ThresholdState::FAILED;
+            }
+            break;
+        }
+        case ThresholdState::LOCKED_IN:
+            if (end->nHeight + 1 >= dep.min_activation_height) next = ThresholdState::ACTIVE;
+            break;
+        case ThresholdState::ACTIVE:
+        case ThresholdState::FAILED:
+            break;
+        }
+        if (next != result.state) {
+            result.state = next;
+            result.since = end->nHeight + 1;
+        }
+    }
+    return result;
+}
 
 /** Track blocks mined for test */
 class Blocks
@@ -199,6 +271,9 @@ FUZZ_TARGET(versionbits, .init = initialize)
     CBlockIndex* prev = blocks.tip();
     const int exp_since = checker.GetStateSinceHeightFor(prev);
     const ThresholdState exp_state = checker.GetStateFor(prev);
+    const ModelState exp_model = ModelStateFor(prev, dep);
+    assert(exp_state == exp_model.state);
+    assert(exp_since == exp_model.since);
 
     // get statistics from end of previous period, then reset
     BIP9Stats last_stats;
@@ -226,6 +301,9 @@ FUZZ_TARGET(versionbits, .init = initialize)
         const int since = checker.GetStateSinceHeightFor(current_block);
         assert(state == exp_state);
         assert(since == exp_since);
+        const ModelState model = ModelStateFor(current_block, dep);
+        assert(state == model.state);
+        assert(since == model.since);
 
         // check that after mining this block stats change as expected
         std::vector<bool> signals;
@@ -269,6 +347,9 @@ FUZZ_TARGET(versionbits, .init = initialize)
     // More interesting is whether the state changed.
     const ThresholdState state = checker.GetStateFor(current_block);
     const int since = checker.GetStateSinceHeightFor(current_block);
+    const ModelState model = ModelStateFor(current_block, dep);
+    assert(state == model.state);
+    assert(since == model.since);
 
     // since is straightforward:
     assert(since % period == 0);
