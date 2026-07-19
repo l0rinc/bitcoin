@@ -1709,3 +1709,43 @@ preserves transaction immutability, hash caching, deserialization, and all
 callers. Raw profiler and daemon data are retained under
 `/mnt/my_storage/bitcoin-perf-scratch/reindex-profile-current/metrics/`
 (`perf.data`, `time.txt`, and `debug.log`).
+
+### Reject lazy `CTransaction` hashes ([fork PR #21](https://github.com/l0rinc/bitcoin/pull/21))
+
+Fork commit `feb458e6bf` is still open and unmerged, and is absent from freshly
+fetched `origin/master`, so it passes the already-pushed exclusion. It replaces
+the two eager, inline `CTransaction` hash values with heap-allocated mutable
+pointers guarded by `std::once_flag`; it also adds custom copy/move/destructor
+operations. `GetHash()` then computes both txid and wtxid on first access.
+The patch itself has no test change.
+
+This cannot remove the reindex work identified by the profile. A normal
+connection calls `Chainstate::ConnectBlock(..., fJustCheck=false)`, which calls
+`CheckBlock(..., fCheckMerkleRoot=true)`. `CheckMerkleRoot()` immediately
+calls `BlockMerkleRoot()`, and that calls `GetHash()` for every transaction.
+For blocks with a witness commitment, `CheckWitnessMalleation()` likewise calls
+`BlockWitnessMerkleRoot()`, which calls `GetWitnessHash()` for every
+non-coinbase transaction. The same cached hashes are subsequently used for
+coin creation, BIP30 (when applicable), and validation diagnostics. Thus the
+8.94% coarse `CTransaction::ComputeHash()` sample from the reindex profile is
+required consensus work, not lazily avoidable construction work.
+
+The candidate would only move this hashing from construction to the immediate
+merkle check in the target workload, while adding pointer allocation,
+deallocation, `call_once` synchronization, and nontrivial copy/move behavior
+to a widely used primitive. Other common deserialization paths (mempool and
+P2P transaction processing) request txid/wtxid immediately as well. No
+separate workload that retains deserialized transactions without their hashes
+has been demonstrated. Decision: reject without applying, building, or timing
+the patch; its expected reindex-chainstate reach is zero.
+
+### Exclude already-pushed `ReadBlock` header-hash reuse
+
+The similarly named fork candidate `8117c16fd` avoids recomputing a block
+header hash inside `BlockManager::ReadBlock()` by reusing it for proof of work
+and the optional index-integrity comparison. It must be ignored under the
+upstream-pushed rule: the equivalent commit `09ee8b7f278627b917f0784adf23cbc76cae5fa0`
+(`node: avoid recomputing block hash in ReadBlock`) is reachable from freshly
+fetched `origin/master`, and the current source already has its
+`expected_hash` overload and one computed `block_hash`. No duplicate change,
+benchmark, or further investigation is warranted.
