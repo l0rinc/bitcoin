@@ -2931,3 +2931,46 @@ only the no-hash `gettxoutsetinfo` path among the target workloads; hashed
 statistics, `scantxoutset`, `dumptxoutset`, and reindex-chainstate retain the
 full-key path. A stable instruction decrease alone is not enough to widen the
 cursor interface when the actual timed loop has no reproducible speedup.
+
+### Screened historical cached-SipHash seed: already present upstream
+
+Historical local commit `a8df73ee020c` (`optimization: refactor: Introduce
+Uint256ExtraSipHasher to cache SipHash constant state`) measured 2.3--6.4%
+throughput improvements in `SaltedOutpointHasher` microbenchmarks. Its idea
+was narrow and sound: construct the keyed SipHash initial state once, then
+copy that state for each `uint256` plus output-index hash instead of repeating
+the four key-dependent xor operations for every map lookup. That is directly
+relevant to the `CCoinsViewCache::cacheCoins` map, which is active in
+validation and reindex-chainstate.
+
+It is not an available follow-up. Current master already contains the same
+mechanism under the clearer `PresaltedSipHasher` name. Commit `ec11b9fede`
+introduced it and `9ca52a4cbe` migrated `SipHashUint256` users. The live
+implementation stores immutable `SipHashState` in `PresaltedSipHasher`, and
+its `(uint256, uint32_t)` overload starts each hash from that saved state.
+`SaltedOutpointHasher` holds a `const PresaltedSipHasher`, so both normal and
+deterministic coins-cache maps use the cached state rather than reconstructing
+it for every `COutPoint` hash.
+
+This was verified without relying on name similarity:
+
+```sh
+git log origin/master --format='%h %s' -S'PresaltedSipHasher' \
+  -- src/crypto/siphash.h src/crypto/siphash.cpp src/util/hasher.h src/util/hasher.cpp
+git blame -L 46,70 -- src/crypto/siphash.h
+rg -n -C 3 'PresaltedSipHasher|SaltedOutpointHasher' \
+  src/crypto/siphash.h src/crypto/siphash.cpp src/util/hasher.h \
+  src/util/hasher.cpp src/coins.h src/coins.cpp
+```
+
+The commands identify the two upstream commits, the cached-state declaration,
+the specialized 32-byte-plus-index implementation, and its construction in
+the active coins-cache hasher. The reindex profile's 6.79% coarse sample share
+in `PresaltedSipHasher::operator(uint256, uint32)` is therefore not evidence
+that this historical fix is missing. The separate non-standard SipHash-1-3
+proposal remains rejected on collision-resistance grounds; replacing the
+already-cached standard SipHash-2-4 path would be a materially different,
+security-sensitive change.
+
+Decision: no code change. This historical speedup is already on master, so it
+is excluded under the rule to ignore fixes pushed to `bitcoin/bitcoin`.
