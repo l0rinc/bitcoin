@@ -2549,3 +2549,65 @@ non-indexed `gettxoutsetinfo` hash types and the preparation phase of
 `dumptxoutset`, plus coinstats-index block connect/disconnect maintenance. It
 does not change `scantxoutset`, chainstate reindex, snapshot output writes, or
 LevelDB I/O; cold HDD wall gains can be proportionally smaller.
+
+### Reject fused dirty/fresh coins-cache flag setting
+
+The unmerged `l0rinc/coins-cache-invariants` history contains
+`000efb0bdf928195ddc168be80741c55708b047a` (`coins: pass freshness through
+SetDirty() in production`). It is not reachable from freshly fetched
+`origin/master`, so it was a legitimate non-upstream seed. The patch observes
+that normal production insertion already knows whether a cache entry is fresh:
+`AddCoin()` calls `SetDirty()` and then, for the common new-output case,
+`SetFresh()`. The inserted-parent branch in `CCoinsViewCache::BatchWrite()`
+has the same two-call sequence.
+
+A temporary direct-Core prototype changed `SetDirty()` to accept `fresh` and
+called `AddFlags(DIRTY | (fresh ? FRESH : 0), ...)` once at those two sites.
+For an entry with no flags, the original first call links it and sets `DIRTY`;
+the second sees the existing link and ORs `FRESH`. The prototype performs the
+same link and the same combined bit update once. It deliberately retained
+`SetFresh()` for test-only artificial states, and did not adopt the later,
+broader fork refactor that derives dirtiness from linked-list membership.
+
+The compiler effect is real but small: on the GCC Release binaries,
+`CCoinsViewCache::AddCoin()` shrank from 967 to 919 bytes (48 bytes, 4.96%).
+Its fresh-output path no longer performs the second `AddFlags()` test, linked
+list check, and flag store. The changed parent-flush function instead grew
+from 2783 to 2822 bytes, so this does not establish a uniformly reduced code
+path. Existing cache coverage passed under the temporary source change:
+
+```sh
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests_base --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase --log_level=message
+build/bin/test_bitcoin --run_test=coinscachepair_tests --log_level=message
+```
+
+The macro check used two separately built binaries and the same cold OverlayFS
+reindex harness as the other HDD controls: the supplied `BitcoinData` was the
+read-only lower layer; a new upper/work/merged directory was used for every
+run; page cache was dropped; the target was height 287000 with `-dbcache=450`,
+wallet and networking disabled. Both logs reached heights 0 and 287000 and
+`Shutdown done`; their output block hash, transaction count, and final cache
+statistics match. Raw data is retained under
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/{freshflags-base-1,freshflags-candidate-1}/metrics/`.
+
+| version | perf wall | task-clock | instructions | branches | major faults | output KiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| original two calls | 574.925 s | 512.057 s | 2.496001 T | 279.701 B | 896 | 9,411,928 |
+| fused temporary prototype | 571.533 s | 510.934 s | 2.496458 T | 279.540 B | 894 | 9,432,744 |
+
+The nominal 0.59% wall and 0.22% task-clock decrease is contradicted by
+457.1 M additional retired instructions (0.018%) and 0.59 more user CPU
+seconds. It is also accompanied by 1.75% more filesystem output and a 1.46%
+larger OverlayFS upper directory (739,811,571 versus 729,154,392 bytes).
+One cold pair cannot attribute that I/O/frequency variation to a few removed
+flag instructions, and its instruction direction is wrong. The branch count
+does fall by 161.5 M (0.058%), as expected, but that is not enough to prove a
+meaningful end-to-end reindex improvement.
+
+Decision: reject and fully revert the prototype. The exact state transition is
+valid and may be useful as a cleanup seed, but it has no reproducible CPU or
+HDD benefit at this workload. Do not add a cache-persistence change for this
+tiny code-size reduction without interleaved controls that show a clear
+instruction decrease and an end-to-end win outside storage noise.
