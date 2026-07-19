@@ -1889,3 +1889,55 @@ disk I/O. It directly covers chainstate iterator users including
 not accelerate plain LevelDB data, LevelDB merge selection, block reads, or
 HDD seeks. Raw microbenchmark outputs, RPC replies, perf CSVs, and timing
 files are retained in `/mnt/my_storage/bitcoin-perf-scratch/obfuscated-reader-byte/`.
+
+### UTXO statistics: borrow the cached cursor key
+
+`CCoinsViewDBCursor` already caches the current `COutPoint` in `keyTmp` until
+the cursor advances. Its old `GetKey(COutPoint&)` virtual method copied that
+36-byte object for every UTXO. Both `ComputeUTXOStats()` loops immediately
+used the copy and advanced the cursor: the no-hash loop only needs the txid to
+detect transaction boundaries, and the hashed loops pass the key straight to
+the serialization/hash helper. The copy is therefore unnecessary in all UTXO
+statistics modes.
+
+The cursor now exposes a borrowed `const COutPoint*`, documented as valid only
+until cursor movement. The existing `GetKey(COutPoint&)` interface remains as
+a nonvirtual copying wrapper for callers that need an owned key. The two
+statistics loops borrow the cached key, use it before `Next()`, and preserve
+their per-transaction `prevkey` copy (which is needed after cursor movement).
+No key serialization, ordering, value deserialization, or error behavior
+changes.
+
+The full-chain measurement used the local `BitcoinData` chainstate at height
+957779, one normal network-disabled/wallet-disabled daemon per build, an
+unmeasured warm `gettxoutsetinfo none`, and two subsequent RPCs with daemon
+`perf stat` counters. Every measured JSON reply had SHA-256
+`4b96d583ae030f7391f6b960ee9c738360da5ea27532da61c7057cc206dccfa0`.
+
+| version/runs | RPC wall seconds | daemon task-clock | instructions | branches | branch misses |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| copying key | 47.37, 47.50 | 47.320, 47.452 s | 435.176, 435.308 B | 88.045, 88.048 B | 496.993, 502.878 M |
+| borrowed key | 46.89, 46.86 | 46.811, 46.791 s | 428.139, 428.140 B | 86.867, 86.867 B | 506.050, 506.841 M |
+
+The candidate instructions vary by only 0.00024% between its two scans and
+are 1.63% below the base median; task-clock and wall medians improve by 1.23%
+and 1.18%, respectively. The small two-run wall sample remains secondary to
+the stable instruction result. Raw replies, timings, perf CSVs, logs, and
+cookies are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/cursor-key-reference/`.
+
+`coins_tests_dbbase` now uses both cursor forms over output indices 0, 1, 127,
+128, 255, 256, and `uint32_t` max, verifies that both forms agree, and advances
+with `NextNoKey()`. This covers byte/VARINT key decoding, borrowed-key
+lifetime through use, the retained copying compatibility path, ordering, and
+the transition to a lazily decoded next key. The configured functional suite
+`build/test/functional/test_runner.py rpc_blockchain.py --jobs=1` passed under
+both v1 and v2 transport.
+
+Expected reach is all `ComputeUTXOStats()` calls. `gettxoutsetinfo none` is the
+demonstrated high-reach case; its `hash_serialized` and `muhash` variants share
+the borrowed key but spend more time hashing, so their percentage gain should
+be smaller. `dumptxoutset` uses UTXO statistics during snapshot preparation
+and can benefit in that phase, but its copy/write work limits end-to-end reach.
+`scantxoutset` and snapshot-writing loops retain the copying wrapper because
+they need an owned key; reindex-chainstate does not use this cursor path.

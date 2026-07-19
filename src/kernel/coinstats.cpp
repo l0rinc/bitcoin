@@ -118,12 +118,11 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, CCoinsView* view,
     while (pcursor->Valid()) {
         // Bound interruption latency without dispatching std::function for every coin.
         if (interruption_point && stats.coins_count % INTERRUPT_CHECK_INTERVAL == 0) interruption_point();
-        COutPoint key;
         Coin coin;
-        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
-            if (!have_prevkey || key.hash != prevkey) {
+        if (const COutPoint* key{pcursor->GetKey()}; key && pcursor->GetValue(coin)) {
+            if (!have_prevkey || key->hash != prevkey) {
                 stats.nTransactions++;
-                prevkey = key.hash;
+                prevkey = key->hash;
                 have_prevkey = true;
             }
             stats.nTransactionOutputs++;
@@ -131,7 +130,7 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, CCoinsView* view,
                 stats.total_amount = CheckedAdd(*stats.total_amount, coin.out.nValue);
             }
             stats.nBogoSize += GetBogoSize(coin.out.scriptPubKey);
-            ApplyCoinHash(hash_obj, key, coin);
+            ApplyCoinHash(hash_obj, *key, coin);
             stats.coins_count++;
         } else {
             LogError("%s: unable to read value\n", __func__);
@@ -162,12 +161,11 @@ static std::optional<CCoinsStats> ComputeUTXOStats(std::nullptr_t, CCoinsView* v
     while (pcursor->Valid()) {
         // Bound interruption latency without dispatching std::function for every coin.
         if (interruption_point && stats.coins_count % INTERRUPT_CHECK_INTERVAL == 0) interruption_point();
-        COutPoint key;
         CoinStatsValue coin;
-        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
-            if (!have_prevkey || key.hash != prevkey) {
+        if (const COutPoint* key{pcursor->GetKey()}; key && pcursor->GetValue(coin)) {
+            if (!have_prevkey || key->hash != prevkey) {
                 stats.nTransactions++;
-                prevkey = key.hash;
+                prevkey = key->hash;
                 have_prevkey = true;
             }
             stats.nTransactionOutputs++;

@@ -323,8 +323,13 @@ BOOST_FIXTURE_TEST_CASE(coins_db_cursor_order, BasicTestingSetup)
     BOOST_REQUIRE(cursor);
     std::vector<uint32_t> cursor_indices;
     while (cursor->Valid()) {
+        const COutPoint* outpoint_ref{cursor->GetKey()};
+        BOOST_REQUIRE(outpoint_ref);
+        Coin coin;
+        BOOST_REQUIRE(cursor->GetValue(coin));
         COutPoint outpoint;
         BOOST_REQUIRE(cursor->GetKey(outpoint));
+        BOOST_CHECK(*outpoint_ref == outpoint);
         BOOST_CHECK_EQUAL(outpoint.hash, txid);
         cursor_indices.push_back(outpoint.n);
         cursor->NextNoKey();

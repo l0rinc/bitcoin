@@ -266,7 +266,15 @@ public:
     CCoinsViewCursor(const uint256& in_block_hash) : block_hash(in_block_hash) {}
     virtual ~CCoinsViewCursor() = default;
 
-    virtual bool GetKey(COutPoint &key) const = 0;
+    //! Returned key is valid until the next cursor movement.
+    virtual const COutPoint* GetKey() const = 0;
+    bool GetKey(COutPoint& key) const
+    {
+        const COutPoint* key_ref{GetKey()};
+        if (!key_ref) return false;
+        key = *key_ref;
+        return true;
+    }
     virtual bool GetValue(Coin &coin) const = 0;
     virtual bool GetValue(CoinStatsValue& coin) const = 0;
 
