@@ -4158,3 +4158,55 @@ Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` likewise
 does not force this helper inline. That is correct for the measured
 full-chainstate path; reconsider only with a separate workload whose values
 are demonstrably large enough to resemble the bulk benchmark.
+
+### Reject obfuscated-stream-only `ReadVarInt()` inlining
+
+The refreshed profile still sampled the two direct-value VarInt instantiations:
+`ReadVarInt<ObfuscatedSpanReader, uint32_t>` at 4.83% and the `uint64_t`
+instance at 3.66%. A global `ALWAYS_INLINE ReadVarInt()` annotation had
+already regressed this workload by 1.29%, so a deliberately narrow experiment
+added explicit `ALWAYS_INLINE` specializations only for these two
+`ObfuscatedSpanReader` instantiations. They used one private helper that
+exactly preserved the generic loop, overflow checks, byte read, and exception
+text; all other serialization streams and integer widths retained the generic
+implementation.
+
+The candidate built through `bitcoind`, removed both weak obfuscated
+`ReadVarInt` symbols from the direct reader, and was 3,976 bytes smaller
+(4,956,264 versus 4,960,240 bytes). It also returned the exact expected full
+scan aggregate on every execution:
+
+```
+32659375 847458211 1488241113523993
+```
+
+Nevertheless, seven warm CPU-3-pinned scans do not support the specialization:
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| generic `ReadVarInt` | 7.314853, 7.403998, 7.285310, 7.329692, 7.333843, 7.321974, 7.295596 s | 7.321974 s | baseline |
+| two forced obfuscated specializations | 7.323685, 7.332298, 7.308219, 7.352236, 7.348454, 7.322304, 7.393495 s | 7.332298 s | 0.14% slower |
+
+Mean time also rises from 7.326467 to 7.340099 seconds. This is noise at best,
+not a speedup, and the benefit of deleting two symbols cannot justify duplicating
+the consensus-adjacent generic VarInt decoder, even in a private stream helper.
+The source was completely restored.
+
+Raw Hyperfine JSON, candidate reader, symbol checks, and aggregate outputs are
+retained at
+`/mnt/my_storage/bitcoin-perf-scratch/obfuscated-varint-specialization/`.
+Candidate checks were:
+
+```sh
+ninja -C build bitcoind -j4
+taskset -c 3 <candidate-reader> /mnt/my_storage/BitcoinData/chainstate
+nm -C <candidate-reader> | grep 'ReadVarInt<dbwrapper_private::ObfuscatedSpanReader' # no output
+hyperfine --runs 7 --warmup 1 \
+  'taskset -c 3 <base-reader> /mnt/my_storage/BitcoinData/chainstate' \
+  'taskset -c 3 <candidate-reader> /mnt/my_storage/BitcoinData/chainstate'
+```
+
+Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` does not
+have this specialization. That is appropriate for this measured full UTXO
+scan. Any future attempt needs a larger representative improvement and a way
+to avoid duplicating VarInt correctness logic.
