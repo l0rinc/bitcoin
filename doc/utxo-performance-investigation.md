@@ -1451,3 +1451,29 @@ provide the required measurable HDD reindex speedup. The candidate diff was
 fully reverted. Raw command harness and outputs are in
 `/mnt/my_storage/bitcoin-perf-scratch/run_reindex_writebuf_trial.sh` and
 `/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/txdata207-{candidate1,baseline1,candidate2}/metrics/`.
+### Reject reindex-wide script-check bypass (`84d2706c57`)
+
+An older local branch (`l0rinc/l0rinc/assumevalid-reindex`) proposes making
+`fScriptChecks` false whenever the node is reindexing. It is not present in
+the freshly fetched `origin/master`, but it has no associated pull request and
+must not be treated as a performance candidate. The old patch predates the
+current `script_check_reason` spelling, but its proposed condition is
+unambiguous: it would make a normal `-reindex-chainstate` skip script checks
+without requiring an externally verified assumed-valid ancestor.
+
+Current `Chainstate::ConnectBlock()` uses `fScriptChecks` to gate both
+contextual `GetTransactionSigOpCost()` and `CheckInputScripts()`. The latter
+is the consensus script interpreter. `-assumevalid=0`, an unknown/non-ancestor
+assumed-valid hash, insufficient chainwork, a recent header, and blocks above
+the assumed-valid height deliberately leave `script_check_reason` non-null so
+that those checks run. Replacing this decision with a reindex flag would accept
+invalid scripts during a user-requested chainstate rebuild and cannot be
+validated as a speed optimization.
+
+Decision: reject without compiling or timing it. The exact current dataflow is
+`script_check_reason` -> `fScriptChecks` (`src/validation.cpp`) ->
+`GetTransactionSigOpCost` and `CheckInputScripts`; this is a correctness proof
+that the candidate removes consensus checks rather than redundant work. No
+source diff was retained. The only safe related family remains the committed
+assumevalid-specific gates above, which retain the existing requirement that
+the historical chain is externally verified.
