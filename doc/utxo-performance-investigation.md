@@ -554,3 +554,87 @@ a reindex-chainstate result; do not extrapolate its 14.73% figure to those
 workloads without rerunning them. `origin/master` was freshly fetched and its
 `src/leveldb/table/merger.cc` still uses the linear `FindSmallest()` loop, so
 this is not an already-pushed upstream fix.
+### `dbwrapper`: decode obfuscated iterator values without a temporary copy
+
+The earlier `7d1733df09` cursor change deliberately optimized only databases
+with an empty obfuscation key: a stable LevelDB value span can then be passed
+straight to `SpanReader`. The normal chainstate intentionally has a non-empty
+key, so its `CDBIterator::GetValue()` still copied every value into
+`m_scratch`, XORed the complete copy, then decoded it. That leaves the main
+cursor path used by `gettxoutsetinfo`, `scantxoutset`, and ordinary
+`dumptxoutset` outside the prior improvement.
+
+The full-chainstate `scantxoutset` profile made this concrete. A
+network-disabled daemon at height 957779 scanned all 166,350,731 UTXOs using
+the no-match descriptor `raw(6a)#4mhr9ur5`; `CDBIterator::GetValue<Coin>` and
+the vector range insertion in its temporary `DataStream` accounted for 7.82%
+of the usable samples. This is a direct Core decoding change, so it avoids the
+more invasive LevelDB/RocksDB work that the reindex profile did not justify.
+
+`ObfuscatedSpanReader` borrows the iterator's value span, copies only each
+requested deserialize field into its destination, XORs that destination at
+the current byte offset, and advances the borrowed span. `ignore()` advances
+the same offset without unnecessary decoding. Its bounds failures retain
+`CDBIterator::GetValue()`'s existing catch-and-return-false contract. The
+offset matters: serializing a vector reads its CompactSize and payload in
+separate calls, while database obfuscation is defined over the whole original
+value.
+
+`dbwrapper_iterator` now stores such a vector in both an obfuscated and an
+unobfuscated in-memory database, reads it after `Seek()` and after `Next()`,
+and checks every byte. The normal validation passed:
+
+```
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests --log_level=message
+git diff --check
+```
+
+For a negative proof, a temporary mutation changed
+`m_obfuscation(dst, m_key_offset)` to `m_obfuscation(dst)`. The focused test
+then failed in both iterator positions with the expected corrupted payload
+(`ad e7 84 b9 f1 c9 3e` rather than `00 01 02 03 04 05 06`); restoring the
+offset passed the test again. This proves the new test checks the precise
+cross-read invariant rather than merely exercising the code.
+
+The performance comparison used the local HDD-backed `BitcoinData`, same
+network/wallet-disabled daemon arguments as the profile, an isolated
+cookie/log directory, `-checkblocks=1`, and a page-cache drop before each
+startup. The baseline was this branch with only the uncommitted reader change
+removed. All runs returned the identical 199-byte JSON response with SHA-256
+`62539678afd6931c917d0135fedcc12d3f11e9e40958fe4983e461a5f0d0891a`:
+
+| version/runs | RPC wall seconds | daemon task-clock | instructions | branches | major faults |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| baseline | 152.97 | 63.836 s | 513.383 B | 107.171 B | 14,641 |
+| reader candidate | 148.29, 149.91 | 59.555 s, 59.066 s | 473.305 B, 466.506 B | 97.452 B, 96.398 B | 14,737, 14,641 |
+
+The two candidate scans are 3.06% and 2.00% faster in RPC wall time than the
+matched baseline. Their task-clock falls 6.71% and 7.47%, retired
+instructions 7.81% and 9.13%, and branches 9.07% and 10.05%; matching major
+fault counts rule out a changed I/O path as the explanation. The sample is
+small (one baseline, two candidates) and the wall-time effect is HDD-limited,
+so the conservative claim is a reproducible CPU reduction with an initial
+2--3% full-chainstate `scantxoutset` wall-time gain on this host, not a
+general reindex result.
+
+Reach is every obfuscated `CDBIterator` value decode. In particular it removes
+the whole-value copy/deobfuscate buffer for normal chainstate scans in
+`gettxoutsetinfo`, `scantxoutset`, and non-`in_memory` `dumptxoutset`; it can
+also help other intentionally obfuscated Core databases and indexes that use
+this iterator. It does not alter the XOR key or bytes on disk, serialization,
+error handling, LevelDB iteration, the unobfuscated direct-reader path, or
+reindex's write/validation work. It may reduce the chainstate iterator share
+of `-reindex-chainstate`, but no reindex speedup is claimed until separately
+measured. Raw baseline and candidate artifacts are retained at
+`/mnt/my_storage/bitcoin-perf-scratch/scantxoutset-obfuscated-reader-baseline.20260719-050739/`,
+`/mnt/my_storage/bitcoin-perf-scratch/scantxoutset-obfuscated-reader.vFF5Sg/`,
+and
+`/mnt/my_storage/bitcoin-perf-scratch/scantxoutset-obfuscated-reader-candidate.S0rHPz/`.
+
+Before considering this change, `origin/master` was freshly fetched at
+`18c05d93016b28a9afd4c716dfe00b6e0accb30b`. Its `CDBIterator::GetValue()`
+still copies and deobfuscates its entire iterator value in a `DataStream`; its
+history contains no `ObfuscatedSpanReader`. It is therefore not an already
+pushed upstream fix.
