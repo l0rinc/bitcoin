@@ -4563,3 +4563,68 @@ the full chainstate scans in `gettxoutsetinfo`, `scantxoutset`,
 both eager-key and lazy-key advances use it. Other `CDBIterator` callers
 retain `Next()`. It does not help ordinary point lookups or establish an
 independent full-HDD-reindex wall-time gain.
+
+### Reject `scantxoutset` singleton script-size shortcut
+
+The accepted singleton-needle optimization still evaluates
+`ContainsScriptSize(needle_sizes, script.size())` before it compares a script
+with the sole needle. For a singleton expansion the vector necessarily has
+one element, so a plausible follow-up was to replace that dynamic-vector loop
+with `script.size() == single_needle->size()` on the singleton branch. The
+first-byte prefilter and exact script comparison would remain unchanged.
+
+Do not make that source change. A closed-chainstate scanner was built from the
+current stack and ran the same cursor, coin decoding, size check, first-byte
+check, and direct `CScript` equality as the RPC loop. Its `vector` mode used
+the live `ContainsScriptSize()` implementation with `std::vector<size_t>{1}`;
+its `singleton` mode used the proposed direct size equality. It used the
+single `raw(6a)#4mhr9ur5` needle, which exercises the size check for every
+coin before rejecting every candidate at the first-byte filter. Each command
+returned the same complete-scan aggregate:
+
+```
+32867816 0 0
+```
+
+CPU-3-pinned Hyperfine ran the vector implementation first and the proposed
+singleton form second, with one warmup and seven measured runs each:
+
+| version | median wall | range | mean wall |
+| --- | ---: | ---: | ---: |
+| existing one-element size vector | 7.277384 s | 7.254342-7.307303 s | 7.281524 s |
+| proposed direct singleton size | 7.277218 s | 7.259038-7.354943 s | 7.290552 s |
+
+The 0.002% median difference is below noise and the candidate mean is 0.12%
+slower. This is a direct rejection of the predicted singleton hot-path work,
+not a claim that `scantxoutset` itself is unimportant: the existing direct
+singleton *script* comparison remains measurable because it avoids a salted
+hash-table lookup. Here the compiler and one-element loop already leave too
+little work for the different size expression to matter.
+
+An attempted RPC profile with the same descriptor was also discarded. This
+local benchmark datadir was resuming block import while the temporary daemon
+was running; `scantxoutset` forced a cache flush and the samples therefore
+mixed import, validation, compaction, and scan work. The node was stopped
+cleanly, and that profile is retained only as a non-evidence artifact under
+`/mnt/my_storage/bitcoin-perf-scratch/scantx-current.h9Iexf/`. The closed
+reader avoids that confounder and is the only evidence used for this decision.
+
+```sh
+g++ -O2 -std=c++20 -fPIE -Ibuild/src -Isrc -Isrc/leveldb/include -Isrc/minisketch/include -Isrc/univalue/include \
+  /mnt/my_storage/bitcoin-perf-scratch/singleton-size-scan/singleton_size_scan.cpp \
+  -o /mnt/my_storage/bitcoin-perf-scratch/singleton-size-scan/singleton_size_scan \
+  build/lib/libbitcoin_node.a build/src/libleveldb.a build/src/libcrc32c.a \
+  build/src/libminisketch.a build/lib/libbitcoin_common.a build/lib/libbitcoin_util.a \
+  build/lib/libbitcoin_clientversion.a build/lib/libbitcoin_consensus.a \
+  build/lib/libbitcoin_crypto.a build/src/secp256k1/lib/libsecp256k1.a \
+  build/src/univalue/libunivalue.a /usr/lib/x86_64-linux-gnu/libsqlite3.so
+hyperfine --warmup 1 --runs 7 \
+  'taskset -c 3 /mnt/my_storage/bitcoin-perf-scratch/singleton-size-scan/singleton_size_scan /mnt/my_storage/BitcoinData/chainstate vector' \
+  'taskset -c 3 /mnt/my_storage/bitcoin-perf-scratch/singleton-size-scan/singleton_size_scan /mnt/my_storage/BitcoinData/chainstate singleton'
+```
+
+The scanner source, binary, and raw Hyperfine JSON are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/singleton-size-scan/`. There is no
+production change and no independent claim for `gettxoutsetinfo`,
+`dumptxoutset`, snapshots, or HDD `-reindex-chainstate`; the rejected branch
+would only have reached singleton-descriptor `scantxoutset` calls.
