@@ -3105,3 +3105,59 @@ RocksDB was consulted only after this profile established a LevelDB iterator
 bottleneck; its current merging iterator also uses a min-heap with a
 replace-top operation, supporting the already accepted heap structure but not
 justifying a RocksDB port or option change for this smaller string-copy fix.
+
+### Reject an `ObfuscatedSpanReader` byte-read serialization specialization
+
+The same forward cursor profile has a visible `ReadVarInt`/coin-value decoding
+component. The current `ObfuscatedSpanReader::read()` already has a special
+case for a one-byte destination: it directly obfuscates the byte and advances
+the span, avoiding the word-at-a-time XOR setup used for longer reads. The
+generic `ser_readdata8()` helper still makes a one-byte `Span` and dispatches
+through `read()`, so a temporary candidate added a `read_byte()` member and an
+ADL `dbwrapper_private::ser_readdata8(ObfuscatedSpanReader&)` overload. It
+would have removed only that short-span construction and dispatch for the
+VARINT byte reads in obfuscated chainstate values.
+
+The candidate kept the existing bounds/error contract: it first checked that
+the input span was non-empty, then used `ObfuscateByte(m_data.front(),
+m_key_offset++)`, advanced exactly one byte, and otherwise threw the same
+`std::ios_base::failure` text as `read()`. A static Release reader over the
+closed local chainstate built successfully and produced the identical full
+scan aggregate on every run:
+
+```
+32659375 7659292 1488241113523993 2480426961
+```
+
+Five warm alternating CPU-3-pinned pairs compared the already accepted
+`DBIter::SaveKey()` `clear()+append()` version with this byte-read candidate:
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| existing one-byte `read()` path | 7.04221, 7.18058, 7.02681, 7.00651, 7.04197 s | 7.04197 s | baseline |
+| temporary ADL byte specialization | 7.06690, 7.03072, 7.05166, 7.04814, 7.03110 s | 7.04814 s | 0.09% slower |
+
+The single large baseline result does not change the conclusion: the
+five-sample median is already wrong-direction, and the candidate's closer
+four samples do not establish a meaningful win. Extending the public reader
+surface and adding a serialization ADL overload would make the low-level
+contract harder to follow, while the live reader already contains the
+important one-byte XOR fast path. The temporary edit was fully reverted.
+
+The baseline rebuild and focused tests passed after that restoration:
+
+```sh
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+git diff --check
+```
+
+The reader, static binaries, and raw timing commands are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/dbiter-savekey/` as
+`cursor_stats_bench_candidate` and `cursor_stats_bench_byte_candidate`.
+
+Decision: retain the existing `read()` one-byte fast path and do not add the
+specialization. This candidate can reach every obfuscated chainstate cursor
+value, including the UTXO RPC scans, but it has no demonstrated benefit and
+is not an HDD reindex-chainstate optimization.
