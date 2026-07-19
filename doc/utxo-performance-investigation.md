@@ -4801,3 +4801,88 @@ UTXO values during `gettxoutsetinfo`, `scantxoutset`, `dumptxoutset`, snapshot
 work, and normal validation/cache reads. It does not alter the on-disk amount
 encoding or an unspent-output's public value. This change is intentionally not
 credited with a separate full-HDD reindex result.
+
+### `ScriptCompression::Unser`: avoid overwritten special-script zero fills
+
+The previous common-special-script inlining leaves a second cost in the same
+hot path: it creates a `CompressedScript` with `0x00` fill, then immediately
+reads every one of those 20 or 32 bytes from the stream before copying the
+payload into the result. IDs 0--3 are fixed-size P2PKH, P2SH, and compressed
+P2PK encodings, so none of those initial bytes can be observed on a successful
+read.
+
+For IDs 0--1, read into an uninitialized 20-byte `std::array`; for IDs 2--3,
+use a 32-byte one. The complete stream read remains before any output-script
+mutation, preserving the prior truncated-input failure order. The existing
+zero-filled `CompressedScript` and `DecompressScript()` remain exactly in use
+for legacy IDs 4--5, where the payload must be validated as an uncompressed
+public key. Ordinary and oversize scripts, `UnserSize()`, and every serialized
+format are untouched.
+
+The CPU-3-pinned full-chainstate reader opens the closed local database,
+deserializes every `Coin`, and aggregates count, script size, and amount. Every
+run returns the identical aggregate:
+
+```
+32867816 854678620 1497563613382042
+```
+
+Seven-run Hyperfine comparisons in both orders show a consistent scan win:
+
+| order | zero-filled temporary median | fixed-array median | result |
+| --- | ---: | ---: | ---: |
+| zero-filled then fixed-array | 7.211383 s | 6.997586 s | 2.97% faster |
+| fixed-array then zero-filled | 7.200846 s | 6.976071 s | 3.12% faster |
+
+One first-order fixed-array sample was a 7.413268 s host outlier, but its
+median remains favorable; the reversed fixed-array order is tight (6.969567
+to 7.041863 s). Three alternating `perf stat` pairs show the expected reduced
+work:
+
+| metric | zero-filled median | fixed-array median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.09983 s | 6.90600 s | -2.73% |
+| instructions | 67.492762 B | 65.128513 B | -3.50% |
+| branches | 13.621996 B | 13.038905 B | -4.28% |
+| cache misses | 41.515 M | 41.519 M | +0.01% |
+
+The candidate reader's executable text is 69 bytes smaller (2,403,698 to
+2,403,629 bytes). This is a warm CPU scan claim only; it does not establish a
+separate HDD or full `-reindex-chainstate` wall-time improvement.
+
+The existing coin-stat deserialization test checks exact reconstructed P2PKH,
+P2SH, compressed-P2PK, uncompressed-P2PK, ordinary, and oversize scripts, as
+well as full stream consumption. The prior inlining commit's temporary opcode
+mutation demonstrates that this oracle rejects malformed common-script output.
+The amount and full-coin tests, the three relevant RPC functional tests, and
+a Debug compile of the changed consumers all pass with this candidate.
+
+```sh
+git fetch -q origin master
+git grep -n 'std::array<unsigned char, 20> vch' origin/master -- src/compressor.h || true
+git log origin/master --format='%h %s' -S'std::array<unsigned char, 20> vch' -- src/compressor.h
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+build/bin/test_bitcoin --run_test=compress_tests --log_level=message
+build/test/functional/test_runner.py feature_utxo_set_hash.py rpc_scantxoutset.py rpc_dumptxoutset.py --jobs=1 \
+  --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/special-script-nozero-functional --timeout-factor=2
+ninja -C build-debug src/CMakeFiles/bitcoin_common.dir/compressor.cpp.o src/CMakeFiles/bitcoin_node.dir/txdb.cpp.o -j4
+hyperfine --warmup 1 --runs 7 --export-json /mnt/my_storage/bitcoin-perf-scratch/special-script-nozero.json \
+  'taskset -c 3 <zero-filled-reader> /mnt/my_storage/BitcoinData/chainstate 1' \
+  'taskset -c 3 <fixed-array-reader> /mnt/my_storage/BitcoinData/chainstate 1'
+perf stat -x, -e task-clock,instructions,branches,branch-misses,cache-misses \
+  taskset -c 3 <zero-filled-reader> /mnt/my_storage/BitcoinData/chainstate 1
+```
+
+The source/binaries, both raw Hyperfine JSON files, six counter CSVs and
+outputs, and functional-test directory are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/` as `special-script-nozero-*`; the
+immediate amount-inline baseline is `decompress-inline-candidate-final`.
+Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no
+equivalent fixed-array read.
+
+Reach is full special-script reconstruction for IDs 0--3 in decoded UTXO
+values, including `scantxoutset`, hash-based `gettxoutsetinfo`,
+`dumptxoutset`, snapshots, indexes, and normal validation/cache reads. It does
+not reach `gettxoutsetinfo hash_type=none`, which uses `UnserSize()`, and it
+does not change ordinary scripts or legacy IDs 4--5.

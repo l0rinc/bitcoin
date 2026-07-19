@@ -13,6 +13,7 @@
 #include <serialize.h>
 #include <span.h>
 
+#include <array>
 #include <cstring>
 
 /**
@@ -109,27 +110,29 @@ struct ScriptCompression
         unsigned int nSize = 0;
         s >> VARINT(nSize);
         if (nSize < nSpecialScripts) {
-            CompressedScript vch(GetSpecialScriptSize(nSize), 0x00);
-            s >> std::span{vch};
-            switch (nSize) {
-            case 0x00:
-                script.resize(25);
-                script[0] = OP_DUP;
-                script[1] = OP_HASH160;
-                script[2] = 20;
-                std::memcpy(&script[3], vch.data(), 20);
-                script[23] = OP_EQUALVERIFY;
-                script[24] = OP_CHECKSIG;
+            if (nSize <= 1) {
+                std::array<unsigned char, 20> vch;
+                s >> std::span{vch};
+                if (nSize == 0) {
+                    script.resize(25);
+                    script[0] = OP_DUP;
+                    script[1] = OP_HASH160;
+                    script[2] = 20;
+                    std::memcpy(&script[3], vch.data(), 20);
+                    script[23] = OP_EQUALVERIFY;
+                    script[24] = OP_CHECKSIG;
+                } else {
+                    script.resize(23);
+                    script[0] = OP_HASH160;
+                    script[1] = 20;
+                    std::memcpy(&script[2], vch.data(), 20);
+                    script[22] = OP_EQUAL;
+                }
                 return;
-            case 0x01:
-                script.resize(23);
-                script[0] = OP_HASH160;
-                script[1] = 20;
-                std::memcpy(&script[2], vch.data(), 20);
-                script[22] = OP_EQUAL;
-                return;
-            case 0x02:
-            case 0x03:
+            }
+            if (nSize <= 3) {
+                std::array<unsigned char, 32> vch;
+                s >> std::span{vch};
                 script.resize(35);
                 script[0] = 33;
                 script[1] = nSize;
@@ -137,6 +140,8 @@ struct ScriptCompression
                 script[34] = OP_CHECKSIG;
                 return;
             }
+            CompressedScript vch(GetSpecialScriptSize(nSize), 0x00);
+            s >> std::span{vch};
             DecompressScript(script, nSize, vch);
             return;
         }
