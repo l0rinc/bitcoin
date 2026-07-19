@@ -1941,3 +1941,31 @@ be smaller. `dumptxoutset` uses UTXO statistics during snapshot preparation
 and can benefit in that phase, but its copy/write work limits end-to-end reach.
 `scantxoutset` and snapshot-writing loops retain the copying wrapper because
 they need an owned key; reindex-chainstate does not use this cursor path.
+
+### Reject fused no-hash cursor stats accessor
+
+After borrowing cached cursor keys, the no-hash UTXO statistics loop still
+made two virtual calls per UTXO: `GetKey()` and `GetValue(CoinStatsValue&)`.
+A temporary `GetCoinStatsValue()` virtual combined them in
+`CCoinsViewDBCursor` by retrieving the borrowed key and decoding the value in
+one derived-method call. The existing methods remained available, so the
+candidate was behavior-preserving in source review and built successfully.
+
+It is nevertheless a clear regression in the only workload it targets. The
+comparison used the same full local chainstate, normal network-disabled and
+wallet-disabled daemons, one warm `gettxoutsetinfo none`, and daemon-attached
+`perf stat` counters; all replies had SHA-256
+`4b96d583ae030f7391f6b960ee9c738360da5ea27532da61c7057cc206dccfa0`.
+
+| version/runs | RPC wall seconds | daemon task-clock | instructions | branches | branch misses |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| borrowed-key base | 47.07, 47.09 | 47.043, 47.042 s | 433.931, 434.061 B | 88.128, 88.129 B | 515.845, 515.736 M |
+| fused virtual candidate | 50.18, 50.17 | 50.130, 50.117 s | 435.971, 436.032 B | 88.275, 88.274 B | 731.854, 733.090 M |
+
+The candidate takes 6.5% more task-clock and 6.6% more RPC wall time, retires
+0.46% more instructions, and has about 42% more branch misses. Both runs are
+internally stable, so this is not measurement noise. The added virtual ABI/API
+surface also weakens the case for retaining a negative result. Decision:
+fully revert the source and test prototype; do not trade a theoretically saved
+dispatch for demonstrably worse code generation. Raw artifacts are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/cursor-fused-stats/`.
