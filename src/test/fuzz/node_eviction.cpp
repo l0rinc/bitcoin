@@ -12,8 +12,63 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <vector>
+
+namespace {
+
+NodeId FindUnusedNodeId(const std::vector<NodeEvictionCandidate>& candidates)
+{
+    NodeId id{std::numeric_limits<NodeId>::max()};
+    while (std::any_of(candidates.begin(), candidates.end(), [id](const auto& candidate) {
+        return candidate.id == id;
+    })) {
+        assert(id > std::numeric_limits<NodeId>::min());
+        --id;
+    }
+    return id;
+}
+
+NodeEvictionCandidate MakeProtectedCandidate(const std::vector<NodeEvictionCandidate>& candidates,
+                                             ConnectionType connection_type,
+                                             bool noban)
+{
+    NodeEvictionCandidate candidate{};
+    candidate.id = FindUnusedNodeId(candidates);
+    candidate.m_noban = noban;
+    candidate.m_conn_type = connection_type;
+    return candidate;
+}
+
+void AssertEvictionContracts(const std::vector<NodeEvictionCandidate>& candidates,
+                             const std::optional<NodeId>& selected)
+{
+    const auto is_eligible = [](const NodeEvictionCandidate& candidate) {
+        return !candidate.m_noban && candidate.m_conn_type == ConnectionType::INBOUND;
+    };
+    const bool has_eligible_candidate{std::any_of(candidates.begin(), candidates.end(), is_eligible)};
+    if (!has_eligible_candidate) {
+        assert(!selected);
+    }
+    if (selected) {
+        assert(std::any_of(candidates.begin(), candidates.end(), [&](const auto& candidate) {
+            return candidate.id == *selected && is_eligible(candidate);
+        }));
+    }
+
+    // Protected candidates are removed before every ranking stage, so adding one with a fresh ID
+    // must not change the result for the original candidate set.
+    auto with_noban{candidates};
+    with_noban.push_back(MakeProtectedCandidate(candidates, ConnectionType::INBOUND, /*noban=*/true));
+    assert(SelectNodeToEvict(std::move(with_noban)) == selected);
+
+    auto with_outbound{candidates};
+    with_outbound.push_back(MakeProtectedCandidate(candidates, ConnectionType::OUTBOUND_FULL_RELAY, /*noban=*/false));
+    assert(SelectNodeToEvict(std::move(with_outbound)) == selected);
+}
+
+} // namespace
 
 FUZZ_TARGET(node_eviction)
 {
@@ -41,6 +96,7 @@ FUZZ_TARGET(node_eviction)
     // indeterminate state after the SelectNodeToEvict(&&) call.
     const std::vector<NodeEvictionCandidate> eviction_candidates_copy = eviction_candidates;
     const std::optional<NodeId> node_to_evict = SelectNodeToEvict(std::move(eviction_candidates));
+    AssertEvictionContracts(eviction_candidates_copy, node_to_evict);
     if (node_to_evict) {
         assert(std::any_of(eviction_candidates_copy.begin(), eviction_candidates_copy.end(), [&node_to_evict](const NodeEvictionCandidate& eviction_candidate) { return *node_to_evict == eviction_candidate.id; }));
     }
