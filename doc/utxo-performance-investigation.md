@@ -3371,3 +3371,83 @@ contain these historical uncompressed-P2PK outputs; it does not affect hashed
 statistics, `scantxoutset`, `dumptxoutset`, or reindex-chainstate. The tiny
 unreproducible difference does not justify another correctness-sensitive
 partial-deserialization implementation.
+
+### LevelDB: cache the next data-block restart offset
+
+The symbolized closed-chainstate scan profile used for the forward-iterator
+work processed 32,659,375 UTXOs and attributed 4.92 billion inclusive
+instructions to `Block::Iter::Next()` and 4.43 billion to
+`Block::Iter::ParseNextKey()`. Every parsed data-block entry checked whether it
+had crossed the next restart point by decoding that fixed-width restart-array
+word afresh, even though the next offset remains unchanged for all entries in
+the same restart interval.
+
+`Block::Iter` now caches that next offset. `SeekToRestartPoint()` initializes
+it from the following restart (or the existing `restarts_` sentinel), and the
+existing `while` loop advances it only after the current entry crosses it. The
+condition and loop are deliberately retained: malformed/non-monotonic restart
+arrays continue to take the same multi-step recovery path. The cache is only
+an equivalent representation of the value formerly returned by
+`GetRestartPoint(restart_index_ + 1)`; key reconstruction, block bytes,
+comparator behavior, filtering, and iterator ordering do not change.
+
+The new `block_iterator_crosses_restart_points_in_both_directions` test builds
+an eight-entry block with a two-entry restart interval, checks complete forward
+and reverse traversal, then seeks across restart points and switches direction.
+It exercises the cached state through `SeekToFirst`, `SeekToLast`, `Seek`,
+`Next`, and `Prev` rather than relying on a synthetic field assertion.
+
+Two independently run warm CPU-3-pinned Hyperfine groups of the closed
+chainstate reader returned the same aggregate in every execution:
+
+```
+32659375 7659292 1488241113523993 2480426961
+```
+
+Across all eight samples, the existing reader median is 7.184500 s and the
+cached-restart reader median is 7.141964 s, a 0.59% improvement. The two raw
+groups were:
+
+| group | baseline samples | candidate samples |
+| --- | --- | --- |
+| 3 runs | 7.184214, 7.303063, 7.228086 s | 7.161673, 7.236245, 7.104488 s |
+| 5 runs | 7.184786, 7.208772, 7.174608, 7.152168, 7.108873 s | 7.136076, 7.120083, 7.147851, 7.206967, 7.134511 s |
+
+The five-run group alone has 7.174608 s versus 7.136076 s medians (0.54%).
+Three subsequent alternating `perf stat` pairs provide the causal result:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.05065 s | 7.01138 s | -0.56% |
+| instructions | 66.377233 B | 66.054427 B | -0.49% |
+| branches | 13.392379 B | 13.326661 B | -0.49% |
+| branch misses | 48.735 M | 45.426 M | -6.79% |
+| cache misses | 38.879 M | 38.996 M | +0.30% |
+
+The instruction/branch reduction matches the eliminated fixed-width decode;
+the candidate wins all three paired task-clock measurements and has a lower
+median. The raw Hyperfine JSON and per-pair perf CSV files are retained
+under `/mnt/my_storage/bitcoin-perf-scratch/block-restart-cache/`; the linked
+candidate reader is
+`/mnt/my_storage/bitcoin-perf-scratch/dbiter-savekey/cursor_stats_bench_block_restart_candidate`.
+
+Validation:
+
+```sh
+git fetch -q origin master
+git log origin/master --format='%h %s' -S'next_restart_' -- src/leveldb/table/block.cc
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=leveldb_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests_dbbase/coins_db_cursor_order --log_level=message
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message
+git diff --check
+```
+
+The fresh `origin/master` at
+`18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no equivalent cache; the
+only historical `GetRestartPoint(restart_index_ + 1)` search result is the
+original LevelDB import. This is a profile-backed LevelDB change, not an
+options change or a RocksDB port. It reaches forward/reverse data-block
+iteration in the target UTXO scans and other LevelDB table reads, including
+some compaction paths. The evidence is a warm, CPU-bound closed-chainstate
+scan; no full HDD `-reindex-chainstate` wall-time improvement is claimed.

@@ -5,10 +5,15 @@
 #include <leveldb/comparator.h>
 #include <leveldb/db/dbformat.h>
 #include <leveldb/iterator.h>
+#include <leveldb/options.h>
+#include <leveldb/table/block.h>
+#include <leveldb/table/block_builder.h>
+#include <leveldb/table/format.h>
 #include <leveldb/table/merger.h>
 
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -177,6 +182,39 @@ BOOST_AUTO_TEST_CASE(merging_iterator_changes_direction_without_skipping_entries
     BOOST_CHECK_EQUAL(iterator->key().ToString(), "d");
     iterator->Next();
     BOOST_CHECK_EQUAL(iterator->key().ToString(), "e");
+}
+
+BOOST_AUTO_TEST_CASE(block_iterator_crosses_restart_points_in_both_directions)
+{
+    leveldb::Options options;
+    options.block_restart_interval = 2;
+    leveldb::BlockBuilder builder{&options};
+    for (int i = 0; i < 8; ++i) {
+        const std::string key{"key" + std::to_string(i)};
+        builder.Add(key, "value" + std::to_string(i));
+    }
+
+    const leveldb::Slice built{builder.Finish()};
+    auto data{std::make_unique<char[]>(built.size())};
+    std::memcpy(data.get(), built.data(), built.size());
+    leveldb::BlockContents contents{
+        .data = leveldb::Slice{data.release(), built.size()},
+        .cachable = false,
+        .heap_allocated = true,
+    };
+    leveldb::Block block{contents};
+    const std::unique_ptr<leveldb::Iterator> iterator{block.NewIterator(leveldb::BytewiseComparator())};
+
+    BOOST_CHECK_EQUAL(ReadForward(*iterator), "key0:value0,key1:value1,key2:value2,key3:value3,key4:value4,key5:value5,key6:value6,key7:value7");
+    BOOST_CHECK_EQUAL(ReadBackward(*iterator), "key7:value7,key6:value6,key5:value5,key4:value4,key3:value3,key2:value2,key1:value1,key0:value0");
+
+    iterator->Seek("key4");
+    BOOST_REQUIRE(iterator->Valid());
+    BOOST_CHECK_EQUAL(iterator->key().ToString(), "key4");
+    iterator->Prev();
+    BOOST_CHECK_EQUAL(iterator->key().ToString(), "key3");
+    iterator->Next();
+    BOOST_CHECK_EQUAL(iterator->key().ToString(), "key4");
 }
 
 BOOST_AUTO_TEST_CASE(internal_key_comparator_respects_non_bytewise_comparator)
