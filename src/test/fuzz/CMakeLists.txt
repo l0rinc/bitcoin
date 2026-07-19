@@ -25,6 +25,7 @@ add_executable(fuzz
   buffered_file.cpp
   cache_sizes.cpp
   chain.cpp
+  chainstate_lifecycle.cpp
   checkqueue.cpp
   cluster_linearize.cpp
   cmpctblock.cpp
