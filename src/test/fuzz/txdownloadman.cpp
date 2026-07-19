@@ -24,6 +24,8 @@
 #include <validation.h>
 #include <validationinterface.h>
 
+#include <algorithm>
+
 namespace {
 
 const TestingSetup* g_setup;
@@ -165,6 +167,30 @@ void CheckPackageToValidate(const node::PackageToValidate& package_to_validate, 
     Assert(package.size() == 2);
 }
 
+void CheckReceivedTxResult(const std::pair<bool, std::optional<node::PackageToValidate>>& first,
+                           const std::pair<bool, std::optional<node::PackageToValidate>>& second)
+{
+    Assert(first.first == second.first);
+    Assert(first.second.has_value() == second.second.has_value());
+    if (!first.second) return;
+
+    const auto& first_package{*first.second};
+    const auto& second_package{*second.second};
+    Assert(first_package.m_senders == second_package.m_senders);
+    Assert(first_package.m_txns.size() == second_package.m_txns.size());
+    for (size_t i{0}; i < first_package.m_txns.size(); ++i) {
+        Assert(first_package.m_txns[i]->GetHash() == second_package.m_txns[i]->GetHash());
+        Assert(first_package.m_txns[i]->GetWitnessHash() == second_package.m_txns[i]->GetWitnessHash());
+    }
+}
+
+void CheckRejectedTxTodo(const node::RejectedTxTodo& todo, const CTransaction& tx)
+{
+    Assert(todo.m_unique_parents.size() <= tx.vin.size());
+    Assert(std::adjacent_find(todo.m_unique_parents.begin(), todo.m_unique_parents.end()) == todo.m_unique_parents.end());
+    Assert(std::is_sorted(todo.m_unique_parents.begin(), todo.m_unique_parents.end()));
+}
+
 FUZZ_TARGET(txdownloadman, .init = initialize)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -224,6 +250,7 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
 
                 node::RejectedTxTodo todo = txdownloadman.MempoolRejectedTx(rand_tx, state, rand_peer, first_time_failure);
                 Assert(first_time_failure || !todo.m_should_add_extra_compact_tx);
+                CheckRejectedTxTodo(todo, *rand_tx);
             },
             [&] {
                 auto gtxid = fuzzed_data_provider.ConsumeBool() ?
@@ -235,8 +262,10 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
                 txdownloadman.GetRequestsToSend(rand_peer, time);
             },
             [&] {
-                txdownloadman.ReceivedTx(rand_peer, rand_tx);
-                const auto& [should_validate, maybe_package] = txdownloadman.ReceivedTx(rand_peer, rand_tx);
+                const auto first_result{txdownloadman.ReceivedTx(rand_peer, rand_tx)};
+                const auto second_result{txdownloadman.ReceivedTx(rand_peer, rand_tx)};
+                CheckReceivedTxResult(first_result, second_result);
+                const auto& [should_validate, maybe_package] = second_result;
                 // The only possible results should be:
                 // - Don't validate the tx, no package.
                 // - Don't validate the tx, package.
@@ -361,6 +390,7 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
 
                 node::RejectedTxTodo todo = txdownload_impl.MempoolRejectedTx(rand_tx, state, rand_peer, first_time_failure);
                 Assert(first_time_failure || !todo.m_should_add_extra_compact_tx);
+                CheckRejectedTxTodo(todo, *rand_tx);
                 if (!reject_contains_wtxid) Assert(todo.m_unique_parents.size() <= rand_tx->vin.size());
             },
             [&] {
@@ -376,9 +406,13 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                 for (const auto& gtxid : getdata_requests) {
                     Assert(!txdownload_impl.AlreadyHaveTx(gtxid, /*include_reconsiderable=*/false));
                 }
+                txdownload_impl.m_txrequest.PostGetRequestableSanityCheck(time);
             },
             [&] {
-                const auto& [should_validate, maybe_package] = txdownload_impl.ReceivedTx(rand_peer, rand_tx);
+                const auto first_result{txdownload_impl.ReceivedTx(rand_peer, rand_tx)};
+                const auto second_result{txdownload_impl.ReceivedTx(rand_peer, rand_tx)};
+                CheckReceivedTxResult(first_result, second_result);
+                const auto& [should_validate, maybe_package] = second_result;
                 // The only possible results should be:
                 // - Don't validate the tx, no package.
                 // - Don't validate the tx, package.
@@ -424,6 +458,8 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                     txdownload_impl.MempoolRejectedTx(ptx, state_missing_inputs, rand_peer, fuzzed_data_provider.ConsumeBool());
                 }
             });
+
+        CheckInvariants(txdownload_impl);
 
         auto time_skip = fuzzed_data_provider.PickValueInArray(TIME_SKIPS);
         if (fuzzed_data_provider.ConsumeBool()) time_skip *= -1;
