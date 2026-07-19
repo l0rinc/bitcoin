@@ -14,6 +14,7 @@
 #include <util/chaintype.h>
 #include <validation.h>
 
+#include <algorithm>
 #include <cassert>
 #include <string>
 
@@ -44,6 +45,15 @@ FUZZ_TARGET(block, .init = initialize_block)
     BlockValidationState validation_state_none;
     const bool valid_incl_none = CheckBlock(block, validation_state_none, consensus_params, /* fCheckPOW= */ false, /* fCheckMerkleRoot= */ false);
     assert(validation_state_none.IsValid() || validation_state_none.IsInvalid() || validation_state_none.IsError());
+    const bool has_multiple_coinbases = std::count_if(block.vtx.begin(), block.vtx.end(), [](const auto& tx) {
+        return tx->IsCoinBase();
+    }) > 1;
+    const bool has_invalid_coinbase_layout = block.vtx.empty() ||
+        !block.vtx.front()->IsCoinBase() || has_multiple_coinbases;
+    if (has_invalid_coinbase_layout) {
+        // These context-free consensus rules must hold even when PoW and merkle checks are disabled.
+        assert(!valid_incl_none);
+    }
     if (valid_incl_pow_and_merkle) {
         assert(valid_incl_pow && valid_incl_merkle && valid_incl_none);
     } else if (valid_incl_merkle || valid_incl_pow) {
