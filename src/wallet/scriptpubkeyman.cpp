@@ -965,7 +965,15 @@ bool DescriptorScriptPubKeyMan::Encrypt(const CKeyingMaterial& master_key, Walle
             return false;
         }
         m_map_crypted_keys[pubkey.GetID()] = make_pair(pubkey, crypted_secret);
-        batch->WriteCryptedDescriptorKey(GetID(), pubkey, crypted_secret);
+        if (!batch->WriteCryptedDescriptorKey(GetID(), pubkey, crypted_secret)) {
+            // The plaintext record for this key is still on disk (the erase is
+            // skipped when the crypted write fails). Let the caller abort the
+            // transaction so the wallet reloads unencrypted, rather than
+            // committing a mix of crypted and plaintext key records, which
+            // throws "Wallet contains both unencrypted and encrypted keys" on
+            // the next load.
+            return false;
+        }
     }
     m_map_keys.clear();
     return true;
