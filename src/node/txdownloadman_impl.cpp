@@ -12,7 +12,15 @@
 #include <validation.h>
 #include <validationinterface.h>
 
+#include <algorithm>
+
 namespace node {
+static std::pair<bool, std::optional<PackageToValidate>> CheckedReceivedTxResult(std::pair<bool, std::optional<PackageToValidate>> result)
+{
+    Assume(!(result.first && result.second.has_value()));
+    return result;
+}
+
 // TxDownloadManager wrappers
 TxDownloadManager::TxDownloadManager(const TxDownloadOptions& options) :
     m_impl{std::make_unique<TxDownloadManagerImpl>(options)}
@@ -490,6 +498,10 @@ node::RejectedTxTodo TxDownloadManagerImpl::MempoolRejectedTx(const CTransaction
         LogDebug(BCLog::TXPACKAGES, "   removed orphan tx %s (wtxid=%s)\n", ptx->GetHash().ToString(), ptx->GetWitnessHash().ToString());
     }
 
+    Assume(unique_parents.size() <= tx.vin.size());
+    Assume(std::is_sorted(unique_parents.begin(), unique_parents.end()));
+    Assume(std::adjacent_find(unique_parents.begin(), unique_parents.end()) == unique_parents.end());
+
     return RejectedTxTodo{
         .m_should_add_extra_compact_tx = add_extra_compact_tx,
         .m_unique_parents = std::move(unique_parents),
@@ -540,18 +552,18 @@ std::pair<bool, std::optional<PackageToValidate>> TxDownloadManagerImpl::Receive
         // due to node policy (vs. consensus). So we can't blanket penalize a
         // peer simply for relaying a tx that our m_lazy_recent_rejects has caught,
         // regardless of false positives.
-        return {false, std::nullopt};
+        return CheckedReceivedTxResult({false, std::nullopt});
     } else if (RecentRejectsReconsiderableFilter().contains(wtxid.ToUint256())) {
         // When a transaction is already in m_lazy_recent_rejects_reconsiderable, we shouldn't submit
         // it by itself again. However, look for a matching child in the orphanage, as it is
         // possible that they succeed as a package.
         LogDebug(BCLog::TXPACKAGES, "found tx %s (wtxid=%s) in reconsiderable rejects, looking for child in orphanage\n",
                  txid.ToString(), wtxid.ToString());
-        return {false, Find1P1CPackage(ptx, nodeid)};
+        return CheckedReceivedTxResult({false, Find1P1CPackage(ptx, nodeid)});
     }
 
 
-    return {true, std::nullopt};
+    return CheckedReceivedTxResult({true, std::nullopt});
 }
 
 bool TxDownloadManagerImpl::HaveMoreWork(NodeId nodeid)
