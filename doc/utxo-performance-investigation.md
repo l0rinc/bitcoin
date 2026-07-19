@@ -2864,3 +2864,70 @@ chainstate workload, and it would broaden a serialization primitive used well
 beyond the named UTXO paths. Revisit only with a profile showing VARINT byte
 writes as a material end-to-end bottleneck and interleaved controls that show
 a reproducible whole-workload win.
+
+### Reject txid-only cursor progression for un-hashed UTXO statistics
+
+The un-hashed `ComputeUTXOStats()` loop, used by `gettxoutsetinfo none`, needs
+the current database key's txid to count transaction boundaries, but not its
+output index. `CCoinsViewDBCursor::Next()` eagerly deserializes both members
+of the `COutPoint`. A temporary direct-Core candidate added
+`GetKeyTxid()`/`NextTxid()` cursor hooks. The coins-DB override cached the
+32-byte txid rather than materializing the `uint32_t` output index; it still
+parsed and range-validated the output-index VARINT into a local, so malformed
+keys retained the existing failure behavior. Existing cursors retained a
+correct full-key default.
+
+A normal daemon could not provide a stable RPC benchmark after the earlier
+height-382619 reindex: RPC remained in warm-up while background activation
+rapidly advanced the chainstate. It was sent a graceful `SIGTERM` instead of
+allowing uncontrolled progress and shut down cleanly at height 385302. That
+attempt is not performance evidence; its dedicated log is
+`/mnt/my_storage/bitcoin-perf-scratch/key-hash-stats-baseline/bitcoind.log`.
+
+The focused measurement instead used a scratch-only, separately linked
+program opening the closed `BitcoinData/chainstate` through `CCoinsViewDB`.
+It performs the same key/value, txid-boundary, amount, bogo-size, and cursor
+advance operations as the `NONE` stats loop, but deliberately excludes RPC,
+`cs_main`, block-index lookup, and final disk-size accounting. Both versions
+returned exactly the same aggregate tuple for 32,659,375 UTXOs at the
+post-shutdown chainstate: 7,659,292 transaction ids, total amount
+1,488,241,113,523,993 satoshis, and bogo size 2,480,426,961. The database was
+warm, each run was pinned to CPU 3, and all had zero major faults.
+
+Five newly collected alternating baseline/candidate pairs give:
+
+| version | wall samples | median wall | median task-clock | median instructions | median branches |
+| --- | --- | ---: | ---: | ---: | ---: |
+| full `COutPoint` cursor key | 7.15577, 7.17739, 7.19080, 7.14002, 7.19949 s | 7.17739 s | 7.230831 s | 68.151431 B | 13.783771 B |
+| temporary txid-only key | 7.11395, 7.20070, 7.21824, 7.10533, 7.20625 s | 7.20070 s | 7.254107 s | 67.886764 B | 13.815732 B |
+
+The candidate consistently removes 264.667 million instructions per scan
+(0.388%), but increases median branches by 31.961 million (0.232%) and has a
+0.322% task-clock regression. Pairwise wall changes alternate in direction
+(-0.58%, +0.32%, +0.38%, -0.48%, +0.09%); their variation is larger than the
+possible benefit. The candidate adds two virtual cursor extension points, a
+second 32-byte cache, and extra cache-state transitions to obtain this
+non-transferable instruction saving.
+
+The temporary source and test change built, and the cursor ordering test
+requested txids before full keys so it exercised both the txid-only cache and
+later full-key materialization across indices 0, 1, 127, 128, 255, 256, and
+`uint32_t` max:
+
+```sh
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests_dbbase/coins_db_cursor_order --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+git diff --check
+```
+
+Scratch source, the baseline/candidate binaries, and the direct closed-DB
+reader are under
+`/mnt/my_storage/bitcoin-perf-scratch/key-hash-stats-baseline/`. The
+temporary tracked source change was fully reverted before this commit.
+
+Decision: reject. This affects only `CoinStatsHashType::NONE` and therefore
+only the no-hash `gettxoutsetinfo` path among the target workloads; hashed
+statistics, `scantxoutset`, `dumptxoutset`, and reindex-chainstate retain the
+full-key path. A stable instruction decrease alone is not enough to widen the
+cursor interface when the actual timed loop has no reproducible speedup.
