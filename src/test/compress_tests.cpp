@@ -8,6 +8,7 @@
 #include <test/util/setup_common.h>
 
 #include <cstdint>
+#include <limits>
 
 #include <boost/test/unit_test.hpp>
 
@@ -61,6 +62,17 @@ BOOST_AUTO_TEST_CASE(compress_amounts)
 
     for (uint64_t i = 0; i < 100000; i++)
         BOOST_CHECK(TestDecode(i));
+}
+
+BOOST_AUTO_TEST_CASE(special_script_sizes)
+{
+    BOOST_CHECK_EQUAL(GetSpecialScriptSize(0), 20U);
+    BOOST_CHECK_EQUAL(GetSpecialScriptSize(1), 20U);
+    for (unsigned int size{2}; size <= 5; ++size) {
+        BOOST_CHECK_EQUAL(GetSpecialScriptSize(size), 32U);
+    }
+    BOOST_CHECK_EQUAL(GetSpecialScriptSize(6), 0U);
+    BOOST_CHECK_EQUAL(GetSpecialScriptSize(std::numeric_limits<unsigned int>::max()), 0U);
 }
 
 BOOST_AUTO_TEST_CASE(compress_script_to_ckey_id)

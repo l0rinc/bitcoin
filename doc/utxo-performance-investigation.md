@@ -3598,3 +3598,76 @@ traversals used by `gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`, plus
 other UTXO reads. The measurement is a warm, CPU-bound full chainstate reader.
 It does not establish a standalone full-HDD-reindex wall-time win, where disk
 and validation work can dominate.
+
+### `GetSpecialScriptSize`: inline the fixed compressed-script mapping
+
+`ScriptCompression::Unser()` and the no-hash `UnserSize()` helper use
+`GetSpecialScriptSize()` whenever a compressed script has one of the six
+special encodings. The mapping is a pure total function: encodings 0 and 1
+need 20 input bytes, encodings 2 through 5 need 32 input bytes, and every
+other unsigned value needs zero. Despite this, it was an out-of-line function
+in `compressor.cpp`, so each special-script decode paid a call, return, and the
+project's stack-protector sequence. The normal hardened build disassembly
+showed that out-of-line function around the two comparisons.
+
+Move the exact mapping into `compressor.h` as `constexpr`. Template callers
+can now inline the comparisons and the normal rebuilt `libbitcoin_common.a`
+contains no `GetSpecialScriptSize` symbol. The mapping remains total for all
+`unsigned int` inputs, including invalid sizes; no serialized format, special
+script reconstruction, malformed-script handling, or byte consumption changes.
+
+Five warm CPU-3-pinned scans of the closed
+`/mnt/my_storage/BitcoinData/chainstate` returned the same aggregate for each
+binary:
+
+```
+32659375 7659292 1488241113523993 2480426961
+```
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| out-of-line helper | 6.949113, 7.041728, 6.950332, 6.956002, 6.915209 s | 6.950332 s | baseline |
+| constexpr helper | 6.730109, 6.725094, 6.742200, 6.781826, 6.764456 s | 6.742200 s | 3.00% faster |
+
+Three alternating `perf stat` pairs have a lower candidate task-clock in every
+pair and establish the expected reduced work:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 6.81735 s | 6.66901 s | -2.18% |
+| instructions | 64.828671 B | 64.142455 B | -1.06% |
+| branches | 12.811605 B | 12.650042 B | -1.26% |
+| branch misses | 36.058 M | 35.568 M | -1.36% |
+| cache misses | 38.826 M | 38.964 M | +0.36% |
+
+The raw Hyperfine JSON and per-pair perf CSVs are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/special-script-size/`. The comparison
+uses the already accepted amount-table reader as its baseline and changes only
+the special-size helper.
+
+The new `compress_tests/special_script_sizes` unit test checks every special
+encoding, the first non-special size, and `unsigned int` maximum. As a
+temporary mutation proof, changing the 2--5 result from 32 to 31 made a
+compile-time assertion of the same contract fail with `(31 == 32)`; restoring
+32 passes the focused codec and coin-stat tests.
+
+Validation:
+
+```sh
+git fetch -q origin master
+git grep -n 'constexpr unsigned int GetSpecialScriptSize' origin/master -- src || true
+git log origin/master --format='%h %s' -S'constexpr unsigned int GetSpecialScriptSize' -- src/compressor.cpp src/compressor.h
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=compress_tests --log_level=message
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+nm -C build/lib/libbitcoin_common.a | grep GetSpecialScriptSize # no output
+git diff --check
+```
+
+Fresh `origin/master` has no equivalent constexpr helper. The change reaches
+full UTXO value reads with a special compressed script, including all
+`gettxoutsetinfo` modes, `scantxoutset`, `dumptxoutset`, snapshot/statistics
+construction, and other `Coin` deserialization. Ordinary scripts do not call
+this mapping. Reads during reindex-chainstate can also use it when they decode
+such coins, but this CPU-bound cursor result does not establish a full HDD
+reindex wall-time improvement.

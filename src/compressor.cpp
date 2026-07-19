@@ -83,15 +83,6 @@ bool CompressScript(const CScript& script, CompressedScript& out)
     return false;
 }
 
-unsigned int GetSpecialScriptSize(unsigned int nSize)
-{
-    if (nSize == 0 || nSize == 1)
-        return 20;
-    if (nSize == 2 || nSize == 3 || nSize == 4 || nSize == 5)
-        return 32;
-    return 0;
-}
-
 bool DecompressScript(CScript& script, unsigned int nSize, const CompressedScript& in)
 {
     switch(nSize) {
