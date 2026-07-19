@@ -3740,3 +3740,85 @@ Fresh `origin/master` has no equivalent inline definition. Reach is every
 for all target UTXO RPCs and iterator reads of unobfuscated temporary/index
 databases. The full scan measurement is warm and CPU-bound; it is not a
 standalone full-HDD-reindex result.
+
+### `ScriptCompression::Unser`: inline common script decompression
+
+The value decoder reconstructs every compressed P2PKH, P2SH, and compressed
+P2PK output through the out-of-line `DecompressScript()` helper. Those four
+encodings (IDs 0--3) are fully determined by the already-read hash or
+coordinate bytes: the helper only resizes the script, writes fixed opcodes,
+and copies 20 or 32 bytes. In the hardened Release build each full `Coin`
+decode therefore paid a call and return, plus the helper's stack-protector
+sequence. A current `scantxoutset` profile attributed 3.40% exclusive samples
+to `DecompressScript()`.
+
+Keep the helper for IDs 4 and 5. Those legacy uncompressed-P2PK encodings
+must continue to construct and validate a public key; an invalid coordinate
+has the established empty-script result. Inline only IDs 0--3 in
+`ScriptCompression::Unser`, duplicating their exact byte construction. The
+input `CompressedScript` is still read completely before the output script is
+modified, so truncated input retains the old stream-failure ordering. Ordinary
+and oversized scripts retain their existing paths.
+
+Five warm CPU-3-pinned scans of the closed local
+`/mnt/my_storage/BitcoinData/chainstate` completed the same full-coin work in
+each run. The reader opens `CCoinsViewDB`, calls `GetValue(Coin)` and
+`NextNoKey()` for every cursor entry, and aggregates the coin count, decoded
+script sizes, and values:
+
+```
+32659375 847458211 1488241113523993
+```
+
+| version | wall samples | median wall | change |
+| --- | --- | ---: | ---: |
+| out-of-line decompressor | 7.527095, 7.523989, 7.515087, 7.513474, 7.468036 s | 7.515087 s | baseline |
+| IDs 0--3 inline | 7.406352, 7.394246, 7.432757, 7.494406, 7.472624 s | 7.432757 s | 1.10% faster |
+
+Three alternating `perf stat` pairs likewise have a lower candidate
+task-clock in every pair:
+
+| metric | baseline median | candidate median | change |
+| --- | ---: | ---: | ---: |
+| task-clock | 7.40231 s | 7.33064 s | -0.97% |
+| instructions | 70.085369 B | 69.279247 B | -1.15% |
+| branches | 13.918866 B | 13.853172 B | -0.47% |
+| branch misses | 39.134 M | 38.683 M | -1.15% |
+| cache misses | 38.854 M | 38.881 M | +0.07% |
+
+Raw Hyperfine output, each perf CSV, and the separate reader source/binaries
+are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/decompress-script-inline/` and
+`/mnt/my_storage/bitcoin-perf-scratch/full-coin-reader/`.
+
+`coins_tests/coin_stats_value_matches_coin_deserialization` now compares the
+fully decoded script with the original for P2PKH, P2SH, compressed P2PK,
+uncompressed P2PK, and ordinary scripts, while explicitly expecting the
+pre-existing one-byte `OP_RETURN` replacement for oversized scripts. It also
+checks that the full reader consumed exactly the value. As a temporary
+mutation proof, replacing the inlined P2PKH final `OP_CHECKSIG` with
+`OP_EQUAL` rebuilt successfully but made this focused test fail at script
+index 0; restoring `OP_CHECKSIG` passes. This proves the new equality oracle
+catches a malformed common-script reconstruction rather than only sizes or
+amounts.
+
+Validation:
+
+```sh
+git fetch -q origin master
+git show origin/master:src/compressor.h # still calls DecompressScript for IDs 0--5
+git log origin/master --format='%h %s' -G'DecompressScript\\(script, nSize, vch\\)' -- src/compressor.h
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests/coin_stats_value_matches_coin_deserialization --log_level=message
+build/bin/test_bitcoin --run_test=compress_tests --log_level=message
+git diff --check
+```
+
+Fresh `origin/master` at `18c05d93016b28a9afd4c716dfe00b6e0accb30b` has no
+equivalent inlining. This reaches full `Coin` deserialization of common
+special scripts, including `scantxoutset`, hash-based `gettxoutsetinfo`,
+`dumptxoutset`, snapshots, indexes, and other full UTXO reads. It does not
+reach `gettxoutsetinfo hash_type=none`, which uses `UnserSize()` without
+constructing these scripts; it also does not change ordinary scripts or the
+legacy IDs 4--5. The measurement is a warm CPU-bound cursor scan, not a claim
+of an independent full-HDD-reindex wall-time improvement.

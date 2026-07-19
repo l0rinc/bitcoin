@@ -12,6 +12,8 @@
 #include <serialize.h>
 #include <span.h>
 
+#include <cstring>
+
 /**
  * This saves us from making many heap allocations when serializing
  * and deserializing compressed scripts.
@@ -85,6 +87,32 @@ struct ScriptCompression
         if (nSize < nSpecialScripts) {
             CompressedScript vch(GetSpecialScriptSize(nSize), 0x00);
             s >> std::span{vch};
+            switch (nSize) {
+            case 0x00:
+                script.resize(25);
+                script[0] = OP_DUP;
+                script[1] = OP_HASH160;
+                script[2] = 20;
+                std::memcpy(&script[3], vch.data(), 20);
+                script[23] = OP_EQUALVERIFY;
+                script[24] = OP_CHECKSIG;
+                return;
+            case 0x01:
+                script.resize(23);
+                script[0] = OP_HASH160;
+                script[1] = 20;
+                std::memcpy(&script[2], vch.data(), 20);
+                script[22] = OP_EQUAL;
+                return;
+            case 0x02:
+            case 0x03:
+                script.resize(35);
+                script[0] = 33;
+                script[1] = nSize;
+                std::memcpy(&script[2], vch.data(), 32);
+                script[34] = OP_CHECKSIG;
+                return;
+            }
             DecompressScript(script, nSize, vch);
             return;
         }

@@ -356,7 +356,8 @@ BOOST_AUTO_TEST_CASE(coin_stats_value_matches_coin_deserialization)
         CScript{} << OP_RETURN << std::vector<unsigned char>(MAX_SCRIPT_SIZE + 1, 0),
     };
 
-    for (const CScript& script : scripts) {
+    for (size_t script_index{0}; script_index < scripts.size(); ++script_index) {
+        const CScript& script{scripts[script_index]};
         const Coin input{CTxOut{42 * COIN, script}, /*nHeight=*/100, /*fCoinBase=*/false};
         DataStream serialized;
         serialized << input;
@@ -368,8 +369,11 @@ BOOST_AUTO_TEST_CASE(coin_stats_value_matches_coin_deserialization)
         full_reader >> full;
         stats_reader >> stats;
 
+        const CScript expected_script{script.size() <= MAX_SCRIPT_SIZE ? script : CScript{OP_RETURN}};
+        BOOST_CHECK_MESSAGE(full.out.scriptPubKey == expected_script, "script index " << script_index);
         BOOST_CHECK_EQUAL(stats.nValue, full.out.nValue);
         BOOST_CHECK_EQUAL(stats.scriptPubKeySize, full.out.scriptPubKey.size());
+        BOOST_CHECK_EQUAL(full_reader.size(), 0U);
         BOOST_CHECK_EQUAL(stats_reader.size(), 0U);
     }
 }
