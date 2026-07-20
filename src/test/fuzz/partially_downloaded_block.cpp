@@ -141,4 +141,8 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     case READ_STATUS_INVALID:
         break;
     }
+    if (fill_status == READ_STATUS_OK || fill_status == READ_STATUS_FAILED) {
+        CBlock second_reconstructed_block;
+        assert(pdb.FillBlock(second_reconstructed_block, {}, segwit_active) == READ_STATUS_INVALID);
+    }
 }
