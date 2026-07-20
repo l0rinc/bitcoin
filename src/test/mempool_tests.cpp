@@ -12,6 +12,7 @@
 #include <txmempool.h>
 #include <uint256.h>
 #include <util/check.h>
+#include <util/overflow.h>
 #include <util/time.h>
 #include <validation.h>
 
@@ -248,6 +249,37 @@ BOOST_AUTO_TEST_CASE(MempoolPrioritisationTest)
         BOOST_CHECK_EQUAL(diagram.back().fee, max_delta);
         pool.TrimToSize(0);
         BOOST_CHECK(pool.mapTx.empty());
+    }
+}
+
+BOOST_AUTO_TEST_CASE(MempoolInfoSaturatesFeeDelta)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+
+    CMutableTransaction tx_mut;
+    tx_mut.vin.resize(1);
+    tx_mut.vin[0].prevout = COutPoint{Txid::FromUint256(uint256{1}), 0};
+    tx_mut.vin[0].scriptSig = CScript() << OP_11;
+    tx_mut.vout.emplace_back(1, CScript() << OP_11 << OP_EQUAL);
+    const CTransactionRef tx{MakeTransactionRef(tx_mut)};
+    const Txid txid{tx->GetHash()};
+    constexpr CAmount base_fee{10'000};
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(base_fee).FromTx(tx));
+    }
+
+    pool.PrioritiseTransaction(txid, std::numeric_limits<CAmount>::min());
+    pool.PrioritiseTransaction(txid, -base_fee);
+    const auto info{pool.info(txid)};
+    BOOST_REQUIRE(info.tx);
+    BOOST_CHECK_EQUAL(info.nFeeDelta, std::numeric_limits<CAmount>::min());
+
+    {
+        LOCK(pool.cs);
+        pool.removeRecursive(*tx, REMOVAL_REASON_DUMMY);
     }
 }
 
