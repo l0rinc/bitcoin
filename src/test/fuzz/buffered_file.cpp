@@ -45,11 +45,18 @@ FUZZ_TARGET(buffered_file)
                     }
                 },
                 [&] {
-                    opt_buffered_file->SetLimit(fuzzed_data_provider.ConsumeIntegralInRange<uint64_t>(0, 4096));
+                    const uint64_t current_pos{opt_buffered_file->GetPos()};
+                    const uint64_t requested_limit{fuzzed_data_provider.ConsumeIntegralInRange<uint64_t>(0, 4096)};
+                    const bool limit_set{opt_buffered_file->SetLimit(requested_limit)};
+                    assert(limit_set == (requested_limit >= current_pos));
+                    assert(opt_buffered_file->GetPos() == current_pos);
                 },
                 [&] {
-                    if (!opt_buffered_file->SetPos(fuzzed_data_provider.ConsumeIntegralInRange<uint64_t>(0, 4096))) {
+                    const uint64_t requested_pos{fuzzed_data_provider.ConsumeIntegralInRange<uint64_t>(0, 4096)};
+                    if (!opt_buffered_file->SetPos(requested_pos)) {
                         setpos_fail = true;
+                    } else {
+                        assert(opt_buffered_file->GetPos() == requested_pos);
                     }
                 },
                 [&] {
