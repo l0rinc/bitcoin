@@ -193,6 +193,13 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     const bool force_duplicate_extra_txn{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_mempool_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_extra_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_extra_early_exit_collision_with_prefilled{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_extra_early_exit_collision && block->vtx.size() == 4 && fuzzed_data_provider.ConsumeBool()};
+    if (force_extra_early_exit_collision_with_prefilled) {
+        // Leave a real transaction between the two short-ID slots so the source
+        // collision also exercises InitData's index-offset mapping.
+        cmpctblock.AddPrefilledTx(/*index=*/1, block->vtx[2]);
+        cmpctblock.EraseShortTxID(1);
+    }
 
     bilingual_str error;
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
@@ -210,7 +217,8 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         // InitData's early exit cannot skip their duplicate/collision tail.
         if (force_short_id_index_overflow || force_mempool_extra_sequence || force_short_id_collision || force_mempool_collision ||
             force_null_extra_collision || force_duplicate_extra_collision ||
-            force_mempool_duplicate_then_collision || force_duplicate_extra_txn || force_mempool_early_exit_collision || force_extra_early_exit_collision) continue;
+            force_mempool_duplicate_then_collision || force_duplicate_extra_txn || force_mempool_early_exit_collision || force_extra_early_exit_collision ||
+            force_extra_early_exit_collision_with_prefilled) continue;
 
         if (add_to_extra_txn) {
             extra_txn.emplace_back(tx->GetWitnessHash(), tx);
@@ -228,6 +236,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     bool forced_duplicate_extra_applied{false};
     bool forced_mempool_early_exit_collision_applied{false};
     bool forced_extra_early_exit_collision_applied{false};
+    bool forced_extra_early_exit_collision_with_prefilled_applied{false};
     bool forced_late_extra_seen{false};
     size_t forced_mempool_candidates_seen{0};
     if (force_short_id_index_overflow) {
@@ -379,6 +388,45 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                     return cmpctblock.GetShortID(wtxid);
                 };
                 forced_extra_early_exit_collision_applied = true;
+            }
+        }
+    } else if (force_extra_early_exit_collision_with_prefilled) {
+        CMutableTransaction first_mempool_tx_mutable{*block->vtx[1]};
+        first_mempool_tx_mutable.nLockTime ^= 1U;
+        const CTransactionRef first_mempool_tx{MakeTransactionRef(std::move(first_mempool_tx_mutable))};
+        CMutableTransaction first_extra_tx_mutable{*block->vtx[3]};
+        first_extra_tx_mutable.nLockTime ^= 2U;
+        const CTransactionRef first_extra_tx{MakeTransactionRef(std::move(first_extra_tx_mutable))};
+        CMutableTransaction late_extra_tx_mutable{*block->vtx[1]};
+        late_extra_tx_mutable.nLockTime ^= 4U;
+        const CTransactionRef late_extra_tx{MakeTransactionRef(std::move(late_extra_tx_mutable))};
+
+        if (first_mempool_tx->GetWitnessHash() != first_extra_tx->GetWitnessHash() &&
+            first_mempool_tx->GetWitnessHash() != late_extra_tx->GetWitnessHash() &&
+            first_extra_tx->GetWitnessHash() != late_extra_tx->GetWitnessHash()) {
+            TestMemPoolEntryHelper entry;
+            {
+                LOCK2(cs_main, pool.cs);
+                TryAddToMempool(pool, entry.FromTx(first_mempool_tx));
+            }
+            if (pool.size() == 1) {
+                const Wtxid first_mempool_wtxid{first_mempool_tx->GetWitnessHash()};
+                const Wtxid first_extra_wtxid{first_extra_tx->GetWitnessHash()};
+                const Wtxid late_extra_wtxid{late_extra_tx->GetWitnessHash()};
+                const uint64_t first_short_id{cmpctblock.GetShortID(block->vtx[1]->GetWitnessHash())};
+                const uint64_t second_short_id{cmpctblock.GetShortID(block->vtx[3]->GetWitnessHash())};
+                extra_txn.emplace_back(first_extra_wtxid, first_extra_tx);
+                extra_txn.emplace_back(late_extra_wtxid, late_extra_tx);
+                pdb.m_get_short_id_mock = [&forced_late_extra_seen, first_mempool_wtxid, first_extra_wtxid, late_extra_wtxid, first_short_id, second_short_id](const CBlockHeaderAndShortTxIDs& cmpctblock, const Wtxid& wtxid) {
+                    if (wtxid == first_mempool_wtxid) return first_short_id;
+                    if (wtxid == first_extra_wtxid) return second_short_id;
+                    if (wtxid == late_extra_wtxid) {
+                        forced_late_extra_seen = true;
+                        return first_short_id;
+                    }
+                    return cmpctblock.GetShortID(wtxid);
+                };
+                forced_extra_early_exit_collision_with_prefilled_applied = true;
             }
         }
     } else if (cmpctblock.ShortTxIDCount() > 0 && !force_short_id_collision && !force_mempool_collision &&
@@ -541,6 +589,15 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         assert(pdb.MempoolCount() == 2);
         assert(pdb.ExtraCount() == 1);
     }
+    if (forced_extra_early_exit_collision_with_prefilled_applied) {
+        assert(!forced_late_extra_seen);
+        assert(pdb.IsTxAvailable(1));
+        assert(pdb.IsTxAvailable(2));
+        assert(pdb.IsTxAvailable(3));
+        assert(pdb.PrefilledCount() == 2);
+        assert(pdb.MempoolCount() == 2);
+        assert(pdb.ExtraCount() == 1);
+    }
 
     const auto prefilled_by_position{cmpctblock.PrefilledTxsByPosition()};
     const auto shorttxids_by_position{cmpctblock.ShortTxIDsByPosition()};
@@ -583,12 +640,12 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
 
     // Mock IsBlockMutated
     bool fail_block_mutated{fuzzed_data_provider.ConsumeBool()};
-    if (!forced_mempool_early_exit_collision_applied && !forced_extra_early_exit_collision_applied) {
+    if (!forced_mempool_early_exit_collision_applied && !forced_extra_early_exit_collision_applied && !forced_extra_early_exit_collision_with_prefilled_applied) {
         pdb.m_check_block_mutated_mock = FuzzedIsBlockMutated(fail_block_mutated);
     }
     // A forced early-exit construction intentionally leaves a colliding candidate unexamined;
     // exercise the production mutation check on the resulting wrong transaction set.
-    const bool expected_block_mutated{fail_block_mutated || forced_mempool_early_exit_collision_applied || forced_extra_early_exit_collision_applied};
+    const bool expected_block_mutated{fail_block_mutated || forced_mempool_early_exit_collision_applied || forced_extra_early_exit_collision_applied || forced_extra_early_exit_collision_with_prefilled_applied};
 
     CBlock reconstructed_block{*block};
     reconstructed_block.vtx = {block->vtx[0]};
