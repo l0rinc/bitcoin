@@ -170,6 +170,8 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
     auto& mempool = *setup->m_node.mempool;
     auto& chainman = static_cast<TestChainstateManager&>(*setup->m_node.chainman);
     chainman.ResetIbd();
+    // Compact-block reconstruction and transaction rejection are post-IBD paths.
+    chainman.JumpOutOfIbd();
     chainman.DisableNextWrite();
     const size_t initial_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
 
@@ -179,6 +181,8 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
                                      /*banman=*/nullptr, chainman,
                                      mempool, *setup->m_node.warnings,
                                      PeerManager::Options{
+                                         // Keep the ring at its legal minimum so ordinary fuzz inputs exercise both fill and overwrite.
+                                         .max_extra_txs = 1,
                                          .deterministic_rng = true,
                                      });
     connman.SetMsgProc(peerman.get());
@@ -190,6 +194,19 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
 
     std::vector<CNode*> peers;
     for (int i = 0; i < 4; ++i) {
+        if (i == 0) {
+            auto cache_peer = std::make_unique<CNode>(
+                i, std::make_shared<ZeroSock>(), CAddress{}, /*nKeyedNetGroupIn=*/0,
+                /*nLocalHostNonceIn=*/0, CService{}, /*addrNameIn=*/std::string{},
+                ConnectionType::INBOUND, /*inbound_onion=*/false, /*network_key=*/0);
+            connman.Handshake(*cache_peer, /*successfully_connected=*/true,
+                              ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                              ServiceFlags(NODE_NETWORK | NODE_WITNESS), PROTOCOL_VERSION,
+                              /*relay_txs=*/true);
+            connman.AddTestNode(*cache_peer);
+            peers.push_back(cache_peer.release());
+            continue;
+        }
         peers.push_back(ConsumeNodeAsUniquePtr(fuzzed_data_provider, steady_clock, i).release());
         CNode& p2p_node = *peers.back();
         FillNode(fuzzed_data_provider, connman, p2p_node);
@@ -203,6 +220,36 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
     std::vector<std::pair<COutPoint, CAmount>> mature_coinbase = g_mature_coinbase;
 
     const uint64_t initial_sequence{WITH_LOCK(mempool.cs, return mempool.GetSequence())};
+
+    auto block_data_count = [&]() {
+        return WITH_LOCK(chainman.GetMutex(), {
+            size_t count{0};
+            for (const auto& entry : chainman.BlockIndex()) {
+                if (entry.second.nStatus & BLOCK_HAVE_DATA) ++count;
+            }
+            return count;
+        });
+    };
+
+    auto block_index_size = [&]() {
+        return WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size());
+    };
+
+    uint32_t orphan_tx_counter{0};
+
+    auto create_orphan_tx = [&]() -> CTransactionRef {
+        CMutableTransaction tx_mut;
+        const uint32_t unique_index{orphan_tx_counter++};
+        tx_mut.nLockTime = unique_index;
+
+        CTxIn in;
+        in.prevout = COutPoint{Txid::FromUint256(uint256::ONE), unique_index};
+        in.scriptWitness.stack = std::vector<std::vector<uint8_t>>{WITNESS_STACK_ELEM_OP_TRUE};
+        tx_mut.vin.push_back(in);
+        tx_mut.vout.emplace_back(COIN - AMOUNT_FEE, P2WSH_OP_TRUE);
+
+        return MakeTransactionRef(tx_mut);
+    };
 
     auto create_tx = [&]() -> CTransactionRef {
         CMutableTransaction tx_mut;
@@ -250,6 +297,30 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         auto tx = MakeTransactionRef(tx_mut);
         return tx;
     };
+
+    // Guarantee one real rejected P2P transaction reaches the extra-transaction ring.
+    {
+        CNode& cache_peer = *peers.front();
+        const auto last_block_time_before{cache_peer.m_last_block_time.load()};
+        const size_t block_data_count_before{block_data_count()};
+        const size_t block_index_size_before{block_index_size()};
+        const uint64_t sequence_before{WITH_LOCK(mempool.cs, return mempool.GetSequence())};
+        CSerializedNetMsg cache_msg{NetMsg::Make(NetMsgType::TX, TX_WITH_WITNESS(*create_orphan_tx()))};
+
+        connman.FlushSendBuffer(cache_peer);
+        (void)connman.ReceiveMsgFrom(cache_peer, std::move(cache_msg));
+        bool more_work{true};
+        while (more_work) {
+            cache_peer.fPauseSend = false;
+            more_work = connman.ProcessMessagesOnce(cache_peer);
+            peerman->SendMessages(cache_peer);
+        }
+
+        assert(cache_peer.m_last_block_time.load() == last_block_time_before);
+        assert(block_data_count() == block_data_count_before);
+        assert(block_index_size() == block_index_size_before);
+        assert(WITH_LOCK(mempool.cs, return mempool.GetSequence()) >= sequence_before);
+    }
 
     auto create_block = [&]() {
         uint256 prev;
@@ -447,7 +518,8 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
             },
             [&]() {
                 // Send a transaction.
-                CTransactionRef tx = create_tx();
+                // Missing-input transactions deliberately exercise the rejected/orphan cache path.
+                CTransactionRef tx = fuzzed_data_provider.ConsumeBool() ? create_orphan_tx() : create_tx();
                 net_msg = NetMsg::Make(NetMsgType::TX, TX_WITH_WITNESS(*tx));
             },
             [&]() {
@@ -467,6 +539,11 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         }
 
         CNode& random_node = *PickValue(fuzzed_data_provider, peers);
+        const auto last_block_time_before{random_node.m_last_block_time.load()};
+        const size_t block_data_count_before{block_data_count()};
+        const size_t block_index_size_before{block_index_size()};
+        const uint64_t sequence_before{WITH_LOCK(mempool.cs, return mempool.GetSequence())};
+        const auto highbandwidth_from_before{random_node.m_bip152_highbandwidth_from.load()};
         connman.FlushSendBuffer(random_node);
         (void)connman.ReceiveMsgFrom(random_node, std::move(net_msg));
 
@@ -477,6 +554,15 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
             more_work = connman.ProcessMessagesOnce(random_node);
             peerman->SendMessages(random_node);
         }
+
+        const auto last_block_time_after{random_node.m_last_block_time.load()};
+        const size_t block_data_count_after{block_data_count()};
+        const size_t block_index_size_after{block_index_size()};
+        const uint64_t sequence_after{WITH_LOCK(mempool.cs, return mempool.GetSequence())};
+        assert(block_data_count_after >= block_data_count_before);
+        assert(block_index_size_after >= block_index_size_before);
+        assert(sequence_after >= sequence_before);
+        assert(last_block_time_after == last_block_time_before || block_data_count_after > block_data_count_before);
 
         std::vector<CNodeStats> stats;
         connman.GetNodeStats(stats);
@@ -496,7 +582,12 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         if (sent_sendcmpct && !random_node.fDisconnect) {
             // If the fuzzer sent SENDCMPCT with proper version, check the node's state matches what it sent.
             const CNodeStats& random_node_stats = stats[random_node.GetId()];
-            if (valid_sendcmpct) assert(random_node_stats.m_bip152_highbandwidth_from == requested_hb);
+            if (valid_sendcmpct) {
+                assert(random_node_stats.m_bip152_highbandwidth_from == requested_hb);
+            } else {
+                // Unsupported versions are ignored and must not rewrite an earlier negotiation.
+                assert(random_node.m_bip152_highbandwidth_from.load() == highbandwidth_from_before);
+            }
         }
     }
 

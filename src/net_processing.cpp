@@ -1909,6 +1909,11 @@ std::vector<CTransactionRef> PeerManagerImpl::AbortPrivateBroadcast(const uint25
 void PeerManagerImpl::AddToCompactExtraTransactions(const CTransactionRef& tx)
 {
     if (m_opts.max_extra_txs == 0) return;
+    Assert(tx);
+    Assert(vExtraTxnForCompact.size() <= m_opts.max_extra_txs);
+    if (vExtraTxnForCompact.size() == m_opts.max_extra_txs) {
+        Assert(vExtraTxnForCompactIt < vExtraTxnForCompact.size());
+    }
     if (vExtraTxnForCompact.size() < m_opts.max_extra_txs) {
         if (vExtraTxnForCompact.empty()) vExtraTxnForCompact.reserve(m_opts.max_extra_txs);
         vExtraTxnForCompact.emplace_back(tx->GetWitnessHash(), tx);
@@ -1916,6 +1921,8 @@ void PeerManagerImpl::AddToCompactExtraTransactions(const CTransactionRef& tx)
         vExtraTxnForCompact[vExtraTxnForCompactIt] = std::make_pair(tx->GetWitnessHash(), tx);
     }
     vExtraTxnForCompactIt = (vExtraTxnForCompactIt + 1) % m_opts.max_extra_txs;
+    Assert(vExtraTxnForCompact.size() <= m_opts.max_extra_txs);
+    Assert(vExtraTxnForCompactIt < m_opts.max_extra_txs);
 }
 
 void PeerManagerImpl::Misbehaving(Peer& peer, const std::string& message)
