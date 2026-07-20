@@ -109,6 +109,7 @@ FUZZ_TARGET(p2p_private_broadcast, .init = ::initialize)
     // Capture outbound messages to verify if well formed (and to learn the PING
     // nonce), before SocketSendData drains vSendMsg.
     connman.SetCaptureMessages(true);
+    const bool relay_txs{fuzzed_data_provider.ConsumeBool()};
     const auto CaptureMessageOrig = CaptureMessage;
     const CAddress pb_addr = pb_node->addr;
     std::optional<uint64_t> pb_ping_nonce;
@@ -145,6 +146,10 @@ FUZZ_TARGET(p2p_private_broadcast, .init = ::initialize)
             Assert(!relay);
             return;
         }
+        if (msg_type == NetMsgType::VERACK) {
+            Assert(relay_txs);
+            return;
+        }
         if (msg_type != NetMsgType::INV) return;
         SpanReader ds{data};
         std::vector<CInv> invs;
@@ -153,14 +158,19 @@ FUZZ_TARGET(p2p_private_broadcast, .init = ::initialize)
         Assert(invs[0].IsMsgTx());
     };
 
-    // Complete handshake so PushPrivateBroadcastTx runs.
+    // Complete handshake so PushPrivateBroadcastTx runs. A private-broadcast peer that
+    // does not advertise transaction relay must be disconnected as connected in vain.
     connman.Handshake(
         /*node=*/*pb_node,
         /*successfully_connected=*/true,
         /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
         /*local_services=*/NODE_NONE,
         /*version=*/PROTOCOL_VERSION,
-        /*relay_txs=*/true);
+        /*relay_txs=*/relay_txs);
+    if (!relay_txs) {
+        Assert(pb_node->fDisconnect);
+        Assert(!pb_node->fSuccessfullyConnected);
+    }
 
     // Optionally add extra peers of random connection types.
     const int extra_peers{fuzzed_data_provider.ConsumeIntegralInRange(0, 2)};
