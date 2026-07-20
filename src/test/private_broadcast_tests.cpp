@@ -219,6 +219,7 @@ BOOST_AUTO_TEST_CASE(rejection_at_cap)
     BOOST_REQUIRE(pb.Remove(fresh).has_value());
     BOOST_CHECK_EQUAL(pb.Add(fresh), PrivateBroadcast::AddResult::Added);
     BOOST_CHECK_EQUAL(pb.GetBroadcastInfo().size(), num_cap);
+}
 
 BOOST_AUTO_TEST_CASE(disconnected_unconfirmed_nodes_are_pruned)
 {
