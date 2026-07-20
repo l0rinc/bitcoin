@@ -1694,29 +1694,29 @@ BOOST_AUTO_TEST_CASE(addlocal_onlynet_externalip)
     // Test that `-externalip` addresses bypass `-onlynet`, but score alone does
     // not.
 
-    CAddress addr_onion;
-    BOOST_REQUIRE(addr_onion.SetSpecial("pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion"));
-    BOOST_REQUIRE(addr_onion.IsValid());
-    BOOST_REQUIRE(addr_onion.IsTor());
+    CAddress addr_i2p;
+    BOOST_REQUIRE(addr_i2p.SetSpecial("udhdrtrcetjm5sxzskjyr5ztpeszydbh4dpl3pl4utgqqw2v4jna.b32.i2p"));
+    BOOST_REQUIRE(addr_i2p.IsValid());
+    BOOST_REQUIRE(addr_i2p.IsI2P());
 
     const auto reachable_nets_at_start{g_reachable_nets.All()};
     const bool discover_orig{fDiscover};
 
-    // Simulate using -onlynet=ipv4 -externalip=<onion>
+    // Simulate using -onlynet=ipv4 -externalip=<i2p>
     g_reachable_nets.RemoveAll();
     g_reachable_nets.Add(NET_IPV4);
     fDiscover = false;
 
     // Now AddLocal with a non-manual score should fail for an unreachable network.
-    BOOST_CHECK(!AddLocal(addr_onion, LOCAL_BIND));
-    BOOST_CHECK(!IsLocal(addr_onion));
+    BOOST_CHECK(!AddLocal(addr_i2p, LOCAL_BIND));
+    BOOST_CHECK(!IsLocal(addr_i2p));
 
-    BOOST_CHECK(!AddLocal(addr_onion, LOCAL_MANUAL));
-    BOOST_CHECK(!IsLocal(addr_onion));
+    BOOST_CHECK(!AddLocal(addr_i2p, LOCAL_MANUAL));
+    BOOST_CHECK(!IsLocal(addr_i2p));
 
     // Whereas AddLocal for -externalip should succeed.
-    BOOST_CHECK(AddLocal(addr_onion, LOCAL_MANUAL, /*add_even_if_unreachable=*/true));
-    BOOST_CHECK(IsLocal(addr_onion));
+    BOOST_CHECK(AddLocal(addr_i2p, LOCAL_MANUAL, /*add_even_if_unreachable=*/true));
+    BOOST_CHECK(IsLocal(addr_i2p));
 
     // Normal AddLocal on a reachable network still works.
     const CNetAddr addr_ipv4{LookupHost("1.2.3.4", false).value()};
@@ -1724,7 +1724,7 @@ BOOST_AUTO_TEST_CASE(addlocal_onlynet_externalip)
     BOOST_CHECK(IsLocal(CService{addr_ipv4, GetListenPort()}));
 
     RemoveLocal(CService{addr_ipv4, GetListenPort()});
-    RemoveLocal(addr_onion);
+    RemoveLocal(addr_i2p);
     g_reachable_nets.RemoveAll();
     for (const auto& net : reachable_nets_at_start) {
         g_reachable_nets.Add(net);
