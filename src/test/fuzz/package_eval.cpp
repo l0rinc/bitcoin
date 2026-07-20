@@ -62,6 +62,53 @@ struct MockedTxPool : public CTxMemPool {
     }
 };
 
+struct MempoolEntryState {
+    Wtxid wtxid;
+    std::chrono::seconds time;
+    CAmount fee;
+    int32_t vsize;
+    int64_t fee_delta;
+
+    friend bool operator==(const MempoolEntryState&, const MempoolEntryState&) = default;
+};
+
+struct MempoolState {
+    std::map<Txid, MempoolEntryState> entries;
+    std::map<Txid, CAmount> fee_deltas;
+    std::set<Txid> unbroadcast;
+    uint64_t total_tx_size{0};
+    CAmount total_fee{0};
+    uint64_t sequence{0};
+    unsigned transactions_updated{0};
+    bool load_tried{false};
+
+    friend bool operator==(const MempoolState&, const MempoolState&) = default;
+};
+
+MempoolState CaptureMempoolState(const CTxMemPool& pool)
+{
+    MempoolState ret;
+    for (const auto& info : pool.infoAll()) {
+        const auto [_, inserted] = ret.entries.emplace(
+            info.tx->GetHash(),
+            MempoolEntryState{info.tx->GetWitnessHash(), info.m_time, info.fee, info.vsize, info.nFeeDelta});
+        Assert(inserted);
+    }
+    ret.fee_deltas = WITH_LOCK(pool.cs, return pool.mapDeltas);
+    ret.unbroadcast = pool.GetUnbroadcastTxs();
+    ret.total_tx_size = WITH_LOCK(pool.cs, return pool.GetTotalTxSize());
+    ret.total_fee = WITH_LOCK(pool.cs, return pool.GetTotalFee());
+    ret.sequence = WITH_LOCK(pool.cs, return pool.GetSequence());
+    ret.transactions_updated = pool.GetTransactionsUpdated();
+    ret.load_tried = pool.GetLoadTried();
+    return ret;
+}
+
+void AssertMempoolStateUnchanged(const CTxMemPool& pool, const MempoolState& before)
+{
+    Assert(CaptureMempoolState(pool) == before);
+}
+
 void initialize_tx_pool()
 {
     static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
@@ -341,11 +388,24 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
 
         auto single_submit = txs.size() == 1;
 
-        const auto result_package = WITH_LOCK(::cs_main,
-                                    return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, /*client_maxfeerate=*/{}));
+        MempoolState state_before_test_accept;
+        const auto result_package = [&] {
+            if (single_submit) {
+                const auto before = CaptureMempoolState(tx_pool);
+                auto result = WITH_LOCK(::cs_main,
+                                        return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/true, /*client_maxfeerate=*/{}));
+                AssertMempoolStateUnchanged(tx_pool, before);
+                return result;
+            }
+            auto result = WITH_LOCK(::cs_main,
+                                    return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/false, /*client_maxfeerate=*/{}));
+            state_before_test_accept = CaptureMempoolState(tx_pool);
+            return result;
+        }();
 
         const auto res = WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, txs.back(), GetTime(),
                                    /*bypass_limits=*/false, /*test_accept=*/!single_submit));
+        if (!single_submit) AssertMempoolStateUnchanged(tx_pool, state_before_test_accept);
 
         if (!single_submit && result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
             // We don't know anything about the validity since transactions were randomly generated, so
@@ -515,13 +575,26 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
             client_maxfeerate = CFeeRate(fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-1, 50 * COIN), 100);
         }
 
-        const auto result_package = WITH_LOCK(::cs_main,
-                                    return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, client_maxfeerate));
+        MempoolState state_before_test_accept;
+        const auto result_package = [&] {
+            if (single_submit) {
+                const auto before = CaptureMempoolState(tx_pool);
+                auto result = WITH_LOCK(::cs_main,
+                                        return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/true, client_maxfeerate));
+                AssertMempoolStateUnchanged(tx_pool, before);
+                return result;
+            }
+            auto result = WITH_LOCK(::cs_main,
+                                    return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/false, client_maxfeerate));
+            state_before_test_accept = CaptureMempoolState(tx_pool);
+            return result;
+        }();
 
         // Always set bypass_limits to false because it is not supported in ProcessNewPackage and
         // can be a source of divergence.
         const auto res = WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, txs.back(), GetTime(),
                                    /*bypass_limits=*/false, /*test_accept=*/!single_submit));
+        if (!single_submit) AssertMempoolStateUnchanged(tx_pool, state_before_test_accept);
         const bool passed = res.m_result_type == MempoolAcceptResult::ResultType::VALID;
 
         node.validation_signals->SyncWithValidationInterfaceQueue();
