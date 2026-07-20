@@ -89,6 +89,9 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
         CSerializedNetMsg net_msg;
         net_msg.m_type = PickValue(fuzzed_data_provider, ALL_NET_MESSAGE_TYPES);
         net_msg.data = ConsumeRandomLengthByteVector(fuzzed_data_provider, MAX_PROTOCOL_MESSAGE_LENGTH);
+        const int version_before{connection.nVersion.load()};
+        const bool connected_before{connection.fSuccessfullyConnected.load()};
+        const bool disconnect_before{connection.fDisconnect.load()};
 
         connman.FlushSendBuffer(connection);
         (void)connman.ReceiveMsgFrom(connection, std::move(net_msg));
@@ -102,6 +105,17 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
             } catch (const std::ios_base::failure&) {
             }
             node.peerman->SendMessages(connection);
+        }
+
+        const int version_after{connection.nVersion.load()};
+        const bool connected_after{connection.fSuccessfullyConnected.load()};
+        const bool disconnect_after{connection.fDisconnect.load()};
+        assert(version_before == 0 || version_after == version_before);
+        assert(!connected_before || connected_after);
+        assert(!disconnect_before || disconnect_after);
+        if (version_after != 0) {
+            assert(version_after >= MIN_PEER_PROTO_VERSION);
+            assert(connection.GetCommonVersion() >= MIN_PEER_PROTO_VERSION);
         }
     }
 
