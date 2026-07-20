@@ -345,7 +345,7 @@ public:
      * @param decimals Number of fractional decimal digits to accept
      * @return Command-line argument (0 if invalid number) multiplied by 10**decimals
      */
-    std::optional<int64_t> GetFixedPointArg(const std::string& arg, int decimals) const;
+    std::optional<int64_t> GetFixedPointArg(const std::string& arg, int decimals) const EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
 
     /**
      * Return boolean argument or default value
