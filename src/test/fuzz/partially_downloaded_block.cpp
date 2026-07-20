@@ -204,10 +204,11 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     const bool force_duplicate_extra_txn{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_mempool_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_mempool_early_exit_collision_with_prefilled{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && block->vtx.size() == 4 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_extra_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_extra_early_exit_collision_with_prefilled{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_extra_early_exit_collision && block->vtx.size() == 4 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_extra_early_exit_collision_without_coinbase{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_extra_early_exit_collision && !force_extra_early_exit_collision_with_prefilled && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
-    if (force_extra_early_exit_collision_without_coinbase) {
+    const bool force_mempool_early_exit_collision_without_coinbase{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_with_prefilled && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_extra_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_without_coinbase && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_extra_early_exit_collision_with_prefilled{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_without_coinbase && !force_extra_early_exit_collision && block->vtx.size() == 4 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_extra_early_exit_collision_without_coinbase{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_without_coinbase && !force_extra_early_exit_collision && !force_extra_early_exit_collision_with_prefilled && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    if (force_extra_early_exit_collision_without_coinbase || force_mempool_early_exit_collision_without_coinbase) {
         const uint64_t coinbase_short_id{cmpctblock.GetShortID(block->vtx[0]->GetWitnessHash())};
         cmpctblock.RemoveCoinbasePrefill();
         cmpctblock.InsertCoinbaseShortTxID(coinbase_short_id);
@@ -241,7 +242,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         // InitData's early exit cannot skip their duplicate/collision tail.
         if (force_short_id_index_overflow || force_mempool_extra_sequence || force_short_id_collision || force_mempool_collision ||
             force_null_extra_collision || force_duplicate_extra_collision ||
-            force_mempool_duplicate_then_collision || force_duplicate_extra_txn || force_mempool_early_exit_collision || force_mempool_early_exit_collision_with_prefilled || force_extra_early_exit_collision ||
+            force_mempool_duplicate_then_collision || force_duplicate_extra_txn || force_mempool_early_exit_collision || force_mempool_early_exit_collision_with_prefilled || force_mempool_early_exit_collision_without_coinbase || force_extra_early_exit_collision ||
             force_extra_early_exit_collision_with_prefilled || force_extra_early_exit_collision_without_coinbase) continue;
 
         if (add_to_extra_txn) {
@@ -260,6 +261,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     bool forced_duplicate_extra_applied{false};
     bool forced_mempool_early_exit_collision_applied{false};
     bool forced_mempool_early_exit_collision_with_prefilled_applied{false};
+    bool forced_mempool_early_exit_collision_without_coinbase_applied{false};
     bool forced_extra_early_exit_collision_applied{false};
     bool forced_extra_early_exit_collision_with_prefilled_applied{false};
     bool forced_extra_early_exit_collision_without_coinbase_applied{false};
@@ -412,6 +414,50 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                     return target_short_ids.front();
                 };
                 forced_mempool_early_exit_collision_with_prefilled_applied = true;
+            }
+        }
+    } else if (force_mempool_early_exit_collision_without_coinbase) {
+        CMutableTransaction first_mempool_tx_mutable{*block->vtx[1]};
+        first_mempool_tx_mutable.nLockTime ^= 1U;
+        const CTransactionRef first_mempool_tx{MakeTransactionRef(std::move(first_mempool_tx_mutable))};
+        CMutableTransaction second_mempool_tx_mutable{*block->vtx[2]};
+        second_mempool_tx_mutable.nLockTime ^= 2U;
+        const CTransactionRef second_mempool_tx{MakeTransactionRef(std::move(second_mempool_tx_mutable))};
+        CMutableTransaction third_mempool_tx_mutable{*block->vtx[1]};
+        third_mempool_tx_mutable.nLockTime ^= 4U;
+        const CTransactionRef third_mempool_tx{MakeTransactionRef(std::move(third_mempool_tx_mutable))};
+        CMutableTransaction late_mempool_tx_mutable{*block->vtx[2]};
+        late_mempool_tx_mutable.nLockTime ^= 8U;
+        const CTransactionRef late_mempool_tx{MakeTransactionRef(std::move(late_mempool_tx_mutable))};
+
+        if (first_mempool_tx->GetWitnessHash() != second_mempool_tx->GetWitnessHash() &&
+            first_mempool_tx->GetWitnessHash() != third_mempool_tx->GetWitnessHash() &&
+            first_mempool_tx->GetWitnessHash() != late_mempool_tx->GetWitnessHash() &&
+            second_mempool_tx->GetWitnessHash() != third_mempool_tx->GetWitnessHash() &&
+            second_mempool_tx->GetWitnessHash() != late_mempool_tx->GetWitnessHash() &&
+            third_mempool_tx->GetWitnessHash() != late_mempool_tx->GetWitnessHash()) {
+            TestMemPoolEntryHelper entry;
+            for (const CTransactionRef& tx : {first_mempool_tx, second_mempool_tx, third_mempool_tx, late_mempool_tx}) {
+                LOCK2(cs_main, pool.cs);
+                TryAddToMempool(pool, entry.FromTx(tx));
+            }
+            if (pool.size() == 4) {
+                const std::vector<uint64_t> target_short_ids{
+                    cmpctblock.GetShortID(block->vtx[0]->GetWitnessHash()),
+                    cmpctblock.GetShortID(block->vtx[1]->GetWitnessHash()),
+                    cmpctblock.GetShortID(block->vtx[2]->GetWitnessHash())};
+                pdb.m_get_short_id_mock = [&forced_mempool_candidates_seen, target_short_ids, assigned_short_ids = std::vector<std::pair<Wtxid, uint64_t>>{}](const CBlockHeaderAndShortTxIDs& cmpctblock, const Wtxid& wtxid) mutable {
+                    for (const auto& [assigned_wtxid, short_id] : assigned_short_ids) {
+                        if (assigned_wtxid == wtxid) return short_id;
+                    }
+                    if (forced_mempool_candidates_seen < target_short_ids.size()) {
+                        const uint64_t short_id{target_short_ids[forced_mempool_candidates_seen++]};
+                        assigned_short_ids.emplace_back(wtxid, short_id);
+                        return short_id;
+                    }
+                    return target_short_ids.front();
+                };
+                forced_mempool_early_exit_collision_without_coinbase_applied = true;
             }
         }
     } else if (force_extra_early_exit_collision) {
@@ -703,6 +749,15 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         assert(pdb.MempoolCount() == 2);
         assert(pdb.ExtraCount() == 0);
     }
+    if (forced_mempool_early_exit_collision_without_coinbase_applied) {
+        assert(forced_mempool_candidates_seen == 3);
+        assert(pdb.IsTxAvailable(0));
+        assert(pdb.IsTxAvailable(1));
+        assert(pdb.IsTxAvailable(2));
+        assert(pdb.PrefilledCount() == 0);
+        assert(pdb.MempoolCount() == 3);
+        assert(pdb.ExtraCount() == 0);
+    }
     if (forced_extra_early_exit_collision_applied) {
         assert(!forced_late_extra_seen);
         assert(pdb.IsTxAvailable(1));
@@ -770,12 +825,12 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
 
     // Mock IsBlockMutated
     bool fail_block_mutated{fuzzed_data_provider.ConsumeBool()};
-    if (!forced_mempool_early_exit_collision_applied && !forced_mempool_early_exit_collision_with_prefilled_applied && !forced_extra_early_exit_collision_applied && !forced_extra_early_exit_collision_with_prefilled_applied && !forced_extra_early_exit_collision_without_coinbase_applied) {
+    if (!forced_mempool_early_exit_collision_applied && !forced_mempool_early_exit_collision_with_prefilled_applied && !forced_mempool_early_exit_collision_without_coinbase_applied && !forced_extra_early_exit_collision_applied && !forced_extra_early_exit_collision_with_prefilled_applied && !forced_extra_early_exit_collision_without_coinbase_applied) {
         pdb.m_check_block_mutated_mock = FuzzedIsBlockMutated(fail_block_mutated);
     }
     // A forced early-exit construction intentionally leaves a colliding candidate unexamined;
     // exercise the production mutation check on the resulting wrong transaction set.
-    const bool expected_block_mutated{fail_block_mutated || forced_mempool_early_exit_collision_applied || forced_mempool_early_exit_collision_with_prefilled_applied || forced_extra_early_exit_collision_applied || forced_extra_early_exit_collision_with_prefilled_applied || forced_extra_early_exit_collision_without_coinbase_applied};
+    const bool expected_block_mutated{fail_block_mutated || forced_mempool_early_exit_collision_applied || forced_mempool_early_exit_collision_with_prefilled_applied || forced_mempool_early_exit_collision_without_coinbase_applied || forced_extra_early_exit_collision_applied || forced_extra_early_exit_collision_with_prefilled_applied || forced_extra_early_exit_collision_without_coinbase_applied};
 
     CBlock reconstructed_block{*block};
     reconstructed_block.vtx = {block->vtx[0]};
