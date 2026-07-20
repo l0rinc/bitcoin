@@ -1314,6 +1314,62 @@ BOOST_AUTO_TEST_CASE(ShortIDCollisionAfterMempoolEarlyExitWithoutCoinbasePrefill
     BOOST_CHECK(reconstructed_block.vtx[0] == reconstructed_block_tx);
 }
 
+BOOST_AUTO_TEST_CASE(ShortIDCollisionAfterMempoolCompletionWithLeadingNullExtraIsRejected)
+{
+    bilingual_str error;
+    CTxMemPool pool{MemPoolOptionsForTest(m_node), error};
+    BOOST_REQUIRE(error.empty());
+    TestMemPoolEntryHelper entry;
+    auto rand_ctx(FastRandomContext(uint256{49}));
+    const CBlock block{BuildBlockTestCase(rand_ctx)};
+    const CBlockHeaderAndShortTxIDs cmpctblock{block, rand_ctx.rand64()};
+
+    auto make_variant = [](const CTransactionRef& tx, uint32_t mask) {
+        CMutableTransaction mutable_tx{*tx};
+        mutable_tx.nLockTime ^= mask;
+        return MakeTransactionRef(std::move(mutable_tx));
+    };
+    const CTransactionRef first_mempool_tx{make_variant(block.vtx[1], 1)};
+    const CTransactionRef second_mempool_tx{make_variant(block.vtx[2], 2)};
+    const CTransactionRef extra_collision_tx{make_variant(block.vtx[1], 4)};
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.FromTx(first_mempool_tx));
+        TryAddToMempool(pool, entry.FromTx(second_mempool_tx));
+    }
+    BOOST_REQUIRE_EQUAL(pool.size(), 2U);
+
+    const std::vector<uint64_t> target_short_ids{
+        cmpctblock.GetShortID(block.vtx[1]->GetWitnessHash()),
+        cmpctblock.GetShortID(block.vtx[2]->GetWitnessHash())};
+    size_t candidates_seen{0};
+    TestPartiallyDownloadedBlock partial_block{&pool};
+    partial_block.m_get_short_id_mock = [&candidates_seen, target_short_ids, extra_collision_wtxid = extra_collision_tx->GetWitnessHash(), empty_wtxid = Wtxid::FromUint256(uint256::ZERO), assigned_short_ids = std::vector<std::pair<Wtxid, uint64_t>>{}](const CBlockHeaderAndShortTxIDs&, const Wtxid& wtxid) mutable {
+        if (wtxid == empty_wtxid) return target_short_ids.front();
+        if (wtxid == extra_collision_wtxid) return target_short_ids.front();
+        for (const auto& [assigned_wtxid, short_id] : assigned_short_ids) {
+            if (assigned_wtxid == wtxid) return short_id;
+        }
+        BOOST_REQUIRE(candidates_seen < target_short_ids.size());
+        const uint64_t short_id{target_short_ids[candidates_seen++]};
+        assigned_short_ids.emplace_back(wtxid, short_id);
+        return short_id;
+    };
+
+    const Wtxid empty_wtxid{Wtxid::FromUint256(uint256::ZERO)};
+    BOOST_CHECK_EQUAL(partial_block.InitData(cmpctblock, {
+        {empty_wtxid, CTransactionRef{}},
+        {extra_collision_tx->GetWitnessHash(), extra_collision_tx},
+    }), READ_STATUS_OK);
+    BOOST_CHECK_EQUAL(candidates_seen, 2U);
+    BOOST_CHECK(partial_block.IsTxAvailable(0));
+    BOOST_CHECK(!partial_block.IsTxAvailable(1));
+    BOOST_CHECK(partial_block.IsTxAvailable(2));
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 1U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 1U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+}
+
 BOOST_AUTO_TEST_CASE(TransactionsRequestSerializationTest) {
     BlockTransactionsRequest req1;
     req1.blockhash = m_rng.rand256();
