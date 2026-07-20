@@ -1128,11 +1128,7 @@ class CompactBlocksTest(BitcoinTestFramework):
         self.test_end_to_end_block_relay([self.segwit_node, self.additional_segwit_node])
 
         self.log.info("Testing handling of invalid compact blocks...")
-        self.test_invalid_tx_in_compactblock(self.segwit_node)
-
-        # The previous test will lead to a disconnection. Reconnect before continuing.
-        self.segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn())
-        self.segwit_node.send_and_ping(msg_sendcmpct())
+        self.test_invalid_tx_in_compactblock(self.outbound_node)
 
         self.log.info("Testing witness-mutated blocktxn fallback...")
         self.test_witness_mutated_blocktxn_response(self.segwit_node)
