@@ -74,6 +74,16 @@ void CheckMempoolState(const CTxMemPool& pool, Chainstate& chainstate)
         Assert(pool.exists(txid));
     }
 }
+
+bool EquivalentPersistentState(const MempoolState& lhs, const MempoolState& rhs)
+{
+    return lhs.txids == rhs.txids &&
+           lhs.fee_deltas == rhs.fee_deltas &&
+           lhs.unbroadcast == rhs.unbroadcast &&
+           lhs.total_tx_size == rhs.total_tx_size &&
+           lhs.total_fee == rhs.total_fee &&
+           lhs.load_tried == rhs.load_tried;
+}
 } // namespace
 
 void initialize_validation_load_mempool()
@@ -109,4 +119,21 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
     (void)DumpMempool(pool, MempoolPath(g_setup->m_args), fuzzed_fopen, true);
     Assert(CaptureMempoolState(pool) == before_dump);
     CheckMempoolState(pool, chainstate);
+
+    const fs::path roundtrip_path{g_setup->m_args.GetDataDirNet() / "fuzz-mempool-roundtrip.dat"};
+    if (DumpMempool(pool, roundtrip_path, fsbridge::fopen, true)) {
+        bilingual_str roundtrip_error;
+        CTxMemPool roundtrip_pool{MemPoolOptionsForTest(g_setup->m_node), roundtrip_error};
+        Assert(roundtrip_error.empty());
+        chainstate.SetMempool(&roundtrip_pool);
+        const bool loaded{LoadMempool(roundtrip_pool, roundtrip_path, chainstate,
+                                      {
+                                          .mockable_fopen_function = fsbridge::fopen,
+                                      })};
+        Assert(loaded);
+        roundtrip_pool.SetLoadTried(true);
+        CheckMempoolState(roundtrip_pool, chainstate);
+        chainstate.SetMempool(&pool);
+        Assert(EquivalentPersistentState(before_dump, CaptureMempoolState(roundtrip_pool)));
+    }
 }
