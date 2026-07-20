@@ -66,6 +66,7 @@ std::string BlockFilterThreadName(BlockFilterType filter_type)
 {
     switch (filter_type) {
     case BlockFilterType::BASIC: return "blkfltbscidx";
+    case BlockFilterType::V0: return "blkfltv0idx";
     case BlockFilterType::INVALID: return "";
     } // no default case, so the compiler can warn about missing cases
     assert(false);
