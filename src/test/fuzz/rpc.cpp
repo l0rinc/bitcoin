@@ -13,17 +13,21 @@
 #include <rpc/server.h>
 #include <span.h>
 #include <streams.h>
+#include <sync.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <tinyformat.h>
+#include <txmempool.h>
 #include <uint256.h>
 #include <univalue.h>
+#include <util/check.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <util/time.h>
+#include <validation.h>
 
 #include <algorithm>
 #include <cassert>
@@ -41,6 +45,9 @@ using util::Join;
 using util::ToString;
 
 namespace {
+struct RPCFuzzTestingSetup;
+void AssertCorePostconditions(const RPCFuzzTestingSetup& setup);
+
 struct RPCFuzzTestingSetup : public TestingSetup {
     RPCFuzzTestingSetup(const ChainType chain_type, TestOpts opts) : TestingSetup{chain_type, opts}
     {
@@ -56,7 +63,13 @@ struct RPCFuzzTestingSetup : public TestingSetup {
         } catch (const std::runtime_error&) {
             return;
         }
-        tableRPC.execute(request);
+        try {
+            tableRPC.execute(request);
+        } catch (...) {
+            AssertCorePostconditions(*this);
+            throw;
+        }
+        AssertCorePostconditions(*this);
     }
 
     std::vector<std::string> GetRPCCommands() const
@@ -67,6 +80,20 @@ struct RPCFuzzTestingSetup : public TestingSetup {
 
 RPCFuzzTestingSetup* rpc_testing_setup = nullptr;
 std::string g_limit_to_rpc_command;
+
+void AssertCorePostconditions(const RPCFuzzTestingSetup& setup)
+{
+    if (setup.m_node.validation_signals) {
+        setup.m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    }
+    LOCK(cs_main);
+    Assert(setup.m_node.chainman);
+    auto& chainman{*setup.m_node.chainman};
+    chainman.CheckBlockIndex();
+    Assert(setup.m_node.mempool);
+    auto& chainstate{chainman.ActiveChainstate()};
+    setup.m_node.mempool->check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1);
+}
 
 // RPC commands which are not appropriate for fuzzing: such as RPC commands
 // reading or writing to a filename passed as an RPC parameter, RPC commands
