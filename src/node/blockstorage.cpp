@@ -584,6 +584,10 @@ bool BlockManager::LoadBlockIndexDB(const std::optional<uint256>& snapshot_block
 
     // Load block file info
     m_block_tree_db->ReadLastBlockFile(max_blockfile_num);
+    if (max_blockfile_num < 0) {
+        LogError("Corrupt block index db: negative last block file number %d\n", max_blockfile_num);
+        return false;
+    }
     m_blockfile_info.resize(max_blockfile_num + 1);
     LogInfo("Loading block index db: last block file = %i", max_blockfile_num);
     for (int nFile = 0; nFile <= max_blockfile_num; nFile++) {
