@@ -12,6 +12,11 @@
 #include <boost/test/unit_test.hpp>
 #include <test/util/setup_common.h>
 
+#include <addresstype.h>
+#include <key.h>
+#include <script/signingprovider.h>
+#include <script/solver.h>
+
 #include <limits>
 #include <map>
 #include <vector>
@@ -347,6 +352,28 @@ BOOST_AUTO_TEST_CASE(merge_proprietary_fields)
     const auto output_it = left.outputs[0].m_proprietary.find(right_prop);
     BOOST_REQUIRE(output_it != left.outputs[0].m_proprietary.end());
     BOOST_CHECK(output_it->value == right_prop.value);
+}
+
+BOOST_AUTO_TEST_CASE(update_psbt_output_zero_inputs)
+{
+    // A zero-input PSBT must not reach the signature creator: signing a
+    // would-be spend through input 0 reads tx.vin[0] out of bounds.
+    CKey key{GenerateRandomKey()};
+    const CPubKey pubkey{key.GetPubKey()};
+    FlatSigningProvider provider;
+    provider.pubkeys.emplace(pubkey.GetID(), pubkey);
+    provider.keys.emplace(pubkey.GetID(), key);
+
+    CMutableTransaction mtx;
+    mtx.vout.emplace_back(1000, GetScriptForDestination(WitnessV0KeyHash(pubkey.GetID())));
+    PartiallySignedTransaction psbt(mtx);
+    BOOST_REQUIRE_EQUAL(psbt.inputs.size(), 0U);
+    BOOST_REQUIRE_EQUAL(psbt.outputs.size(), 1U);
+
+    // No crash; no script metadata can be produced without a spend context.
+    UpdatePSBTOutput(provider, psbt, 0);
+    BOOST_CHECK(psbt.outputs[0].witness_script.empty());
+    BOOST_CHECK(psbt.outputs[0].hd_keypaths.empty());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
