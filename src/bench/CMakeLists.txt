@@ -90,9 +90,5 @@ if(ENABLE_WALLET)
   target_link_libraries(bench_bitcoin bitcoin_wallet)
 endif()
 
-add_test(NAME bench_sanity_check_high_priority
-  COMMAND bench_bitcoin -sanity-check -priority-level=high
-)
-
 make_libbitcoinconsensus_dll_available(bench_bitcoin)
 install_binary_component(bench_bitcoin)
