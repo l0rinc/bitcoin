@@ -1043,6 +1043,19 @@ BOOST_AUTO_TEST_CASE(advertise_local_address)
     RemoveLocal(addr_cjdns);
 }
 
+BOOST_AUTO_TEST_CASE(v1transport_test)
+{
+    constexpr auto max_message_type{std::string(CMessageHeader::MESSAGE_TYPE_SIZE, 'x')};
+    V1Transport transport{NodeId{0}};
+    CSerializedNetMsg msg;
+    msg.m_type = max_message_type;
+    BOOST_REQUIRE(transport.SetMessageToSend(msg));
+    const auto& [header, more, message_type] = transport.GetBytesToSend(false);
+    BOOST_CHECK_EQUAL(header.size(), CMessageHeader::HEADER_SIZE);
+    BOOST_CHECK(!more);
+    BOOST_CHECK_EQUAL(message_type, max_message_type);
+}
+
 namespace {
 
 CKey GenerateRandomTestKey(FastRandomContext& rng) noexcept
@@ -1504,7 +1517,9 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         // Send invalidly-encoded message
         tester.SendMessage(std::string("blocktxn\x00\x00\x00a", CMessageHeader::MESSAGE_TYPE_SIZE), {});
         tester.SendMessage("foobar", {}); // test receiving unknown message type
+        constexpr auto max_message_type{std::string(CMessageHeader::MESSAGE_TYPE_SIZE, 'x')};
         tester.AddMessage("barfoo", {}); // test sending unknown message type
+        tester.AddMessage(max_message_type, {}); // test sending the longest unknown message type
         ret = tester.Interact();
         BOOST_REQUIRE(ret && ret->size() == 4);
         BOOST_CHECK((*ret)[0] && (*ret)[0]->m_type == "addrv2" && std::ranges::equal((*ret)[0]->m_recv, MakeByteSpan(msg_data_1)));
@@ -1512,6 +1527,7 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         BOOST_CHECK(!(*ret)[2]);
         BOOST_CHECK((*ret)[3] && (*ret)[3]->m_type == "foobar" && (*ret)[3]->m_recv.empty());
         tester.ReceiveMessage("barfoo", {});
+        tester.ReceiveMessage(max_message_type, {});
     }
 
     // Too long garbage (initiator).
