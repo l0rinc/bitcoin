@@ -626,9 +626,12 @@ btck_PrecomputedTransactionData* btck_precomputed_transaction_data_create(
 {
     try {
         const CTransaction& tx{*btck_Transaction::get(tx_to)};
+        // A spent_outputs array shorter than the transaction's inputs
+        // would be read out of bounds during sighash computation; report
+        // the mismatch like any other invalid create input.
+        if (spent_outputs_ != nullptr && spent_outputs_len > 0 && spent_outputs_len != tx.vin.size()) return nullptr;
         auto txdata{btck_PrecomputedTransactionData::create()};
         if (spent_outputs_ != nullptr && spent_outputs_len > 0) {
-            assert(spent_outputs_len == tx.vin.size());
             std::vector<CTxOut> spent_outputs;
             spent_outputs.reserve(spent_outputs_len);
             for (size_t i = 0; i < spent_outputs_len; i++) {

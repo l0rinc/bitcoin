@@ -549,6 +549,35 @@ BOOST_AUTO_TEST_CASE(btck_precomputed_txdata) {
     CheckHandle(precomputed_txdata, precomputed_txdata_2);
 }
 
+BOOST_AUTO_TEST_CASE(btck_precomputed_txdata_length_mismatch_tests)
+{
+    // A spent_outputs array whose length differs from the transaction's input
+    // count must be rejected with nullptr: a shorter array would be read out
+    // of bounds during sighash computation (only assert-checked before).
+    auto tx_data{hex_string_to_byte_vec("02000000013f7cebd65c27431a90bba7f796914fe8cc2ddfc3f2cbd6f7e5f2fc854534da95000000006b483045022100de1ac3bcdfb0332207c4a91f3832bd2c2915840165f876ab47c5f8996b971c3602201c6c053d750fadde599e6f5c4e1963df0f01fc0d97815e8157e3d59fe09ca30d012103699b464d1d8bc9e47d4fb1cdaa89a1c5783d68363c4dbc4b524ed3d857148617feffffff02836d3c01000000001976a914fc25d6d5c94003bf5b0c7b640a248e2c637fcfb088ac7ada8202000000001976a914fbed3d9b11183209a57999d54d59f67c019e756c88ac6acb0700")};
+    auto spk_data{hex_string_to_byte_vec("76a9144bfbaf6afb76cc5771bc6404810d1cc041a6933988ac")};
+    btck_Transaction* tx{btck_transaction_create(tx_data.data(), tx_data.size())};
+    BOOST_REQUIRE(tx != nullptr);
+    btck_ScriptPubkey* spk{btck_script_pubkey_create(spk_data.data(), spk_data.size())};
+    BOOST_REQUIRE(spk != nullptr);
+    btck_TransactionOutput* output{btck_transaction_output_create(spk, 1000)};
+    BOOST_REQUIRE(output != nullptr);
+
+    // The 1-input transaction with a matching single spent output succeeds...
+    const btck_TransactionOutput* one_output[]{output};
+    btck_PrecomputedTransactionData* txdata{btck_precomputed_transaction_data_create(tx, one_output, 1)};
+    BOOST_CHECK(txdata != nullptr);
+    btck_precomputed_transaction_data_destroy(txdata);
+
+    // ...but two spent outputs for a 1-input transaction are rejected.
+    const btck_TransactionOutput* two_outputs[]{output, output};
+    BOOST_CHECK(btck_precomputed_transaction_data_create(tx, two_outputs, 2) == nullptr);
+
+    btck_transaction_output_destroy(output);
+    btck_script_pubkey_destroy(spk);
+    btck_transaction_destroy(tx);
+}
+
 BOOST_AUTO_TEST_CASE(btck_script_verify_tests)
 {
     // Legacy transaction aca326a724eda9a461c10a876534ecd5ae7b27f10f26c3862fb996f80ea2d45d
