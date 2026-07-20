@@ -5239,6 +5239,10 @@ bool PeerManagerImpl::ProcessMessages(CNode& node, std::atomic<bool>& interruptM
     try {
         ProcessMessage(peer, node, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc);
         if (interruptMsgProc) return false;
+        if (node.nVersion != 0) {
+            Assume(node.nVersion >= MIN_PEER_PROTO_VERSION);
+            Assume(node.GetCommonVersion() >= MIN_PEER_PROTO_VERSION);
+        }
         {
             LOCK(peer.m_getdata_requests_mutex);
             if (!peer.m_getdata_requests.empty()) fMoreWork = true;
