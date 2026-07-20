@@ -5,17 +5,25 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <node/blockstorage.h>
+#include <node/kernel_notifications.h>
+#include <node/warnings.h>
 #include <pow.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
+#include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <txdb.h>
 #include <util/byte_units.h>
+#include <util/fs.h>
+#include <util/signalinterrupt.h>
 #include <validation.h>
 
+#include <atomic>
 #include <map>
+#include <memory>
 #include <optional>
+#include <vector>
 
 using kernel::CBlockFileInfo;
 
@@ -111,6 +119,7 @@ void init_block_index()
 
 FUZZ_TARGET(block_index, .init = init_block_index)
 {
+    SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     auto block_index = kernel::BlockTreeDB(DBParams{
         .path = "", // Memory only.
@@ -258,4 +267,60 @@ FUZZ_TARGET(block_index, .init = init_block_index)
             AssertBlockPositionAccessors(loaded);
         }
     });
+
+    // A crafted or damaged database can also hold states the well-formed
+    // round-trip above never produces. Loading those must be rejected
+    // gracefully, never by crashing.
+    if (blocks_count >= 8 && fuzzed_data_provider.ConsumeBool()) {
+        const fs::path db_path{g_setup->m_path_root / "corrupt_block_index"};
+        {
+            kernel::BlockTreeDB corrupt_db{DBParams{
+                .path = db_path,
+                .cache_bytes = 1_MiB,
+            }};
+            if (fuzzed_data_provider.ConsumeBool()) {
+                // A negative DB_LAST_BLOCK value: the eager m_blockfile_info
+                // resize must not index [-1] on an empty vector.
+                corrupt_db.WriteBatchSync({}, -1, {});
+            } else {
+                // Parent-linked, valid-PoW headers whose on-disk heights do
+                // not follow the parent chain: contiguous, but every
+                // parent/child height relation is broken.
+                static constexpr int PERMUTED_HEIGHT[8]{0, 6, 7, 1, 2, 3, 4, 5};
+                std::vector<std::unique_ptr<CBlockIndex>> corrupt_blocks;
+                std::vector<uint256> corrupt_hashes;
+                std::vector<const CBlockIndex*> corrupt_ptrs;
+                corrupt_blocks.reserve(8);
+                corrupt_hashes.reserve(8);
+                corrupt_ptrs.reserve(8);
+                for (int i = 0; i < 8; ++i) {
+                    auto index{std::make_unique<CBlockIndex>(blocks[i]->GetBlockHeader())};
+                    corrupt_hashes.push_back(block_hashes[i]);
+                    index->phashBlock = &corrupt_hashes.back();
+                    index->nHeight = PERMUTED_HEIGHT[i];
+                    index->nStatus = BLOCK_VALID_TREE;
+                    index->pprev = i == 0 ? nullptr : corrupt_blocks[i - 1].get();
+                    corrupt_blocks.push_back(std::move(index));
+                    corrupt_ptrs.push_back(corrupt_blocks.back().get());
+                }
+                corrupt_db.WriteBatchSync({}, 0, corrupt_ptrs);
+            }
+        }
+
+        node::Warnings warnings{};
+        std::atomic<int> exit_status{};
+        node::KernelNotifications notifications{[]{ return false; }, exit_status, warnings};
+        const node::BlockManager::Options blockman_opts{
+            .chainparams = Params(),
+            .blocks_dir = g_setup->m_path_root / "blocks",
+            .notifications = notifications,
+            .block_tree_db_params = DBParams{
+                .path = db_path,
+                .cache_bytes = 0,
+            },
+        };
+        util::SignalInterrupt shutdown_signal;
+        node::BlockManager blockman{shutdown_signal, blockman_opts};
+        WITH_LOCK(::cs_main, assert(!blockman.LoadBlockIndexDB(std::nullopt)));
+    }
 }
