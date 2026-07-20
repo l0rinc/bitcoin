@@ -345,7 +345,7 @@ void BlockAssembler::addPriorityTxs(const CTxMemPool& mempool)
         *m_options.block_max_size)};
     if (priority_size == 0) return;
 
-    auto priority_with_delta{[this, &mempool](const CTxMemPoolEntry& entry) {
+    auto priority_with_delta{[this, &mempool](const CTxMemPoolEntry& entry) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs) {
         double priority{entry.GetPriority(nHeight)};
         CAmount dummy_fee_delta{0};
         mempool.ApplyDeltas(entry.GetTx().GetHash(), priority, dummy_fee_delta);
@@ -357,7 +357,7 @@ void BlockAssembler::addPriorityTxs(const CTxMemPool& mempool)
     for (auto it{mempool.mapTx.begin()}; it != mempool.mapTx.end(); ++it) {
         priority_entries.push_back(it);
     }
-    std::sort(priority_entries.begin(), priority_entries.end(), [&priority_with_delta](CTxMemPool::txiter a, CTxMemPool::txiter b) {
+    std::sort(priority_entries.begin(), priority_entries.end(), [&priority_with_delta](CTxMemPool::txiter a, CTxMemPool::txiter b) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs) {
         const double a_priority{priority_with_delta(*a)};
         const double b_priority{priority_with_delta(*b)};
         if (a_priority != b_priority) return a_priority > b_priority;
