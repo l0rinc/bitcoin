@@ -15,6 +15,8 @@
 #include <wallet/walletutil.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <span>
 #include <string>
@@ -304,6 +306,121 @@ BOOST_AUTO_TEST_CASE(in_memory_database_cannot_reopen)
     InMemoryWalletDatabase database;
     database.Close();
     BOOST_CHECK_THROW(database.Open(), std::runtime_error);
+}
+
+BOOST_AUTO_TEST_CASE(berkeley_ro_cyclic_overflow_chain_rejected)
+{
+    // A minimal BDB file whose single record value is an overflow record
+    // pointing at a self-referential, empty overflow page. Overflow pages
+    // that contribute no bytes can form cycles that the item_len check
+    // never terminates; the chain must be bounded by the page count.
+    constexpr size_t PAGE_SIZE{4096};
+    constexpr uint32_t NUM_PAGES{5};
+    std::vector<std::byte> file(PAGE_SIZE * NUM_PAGES, std::byte{0});
+
+    auto w8{[&](size_t& p, uint8_t v) { file[p++] = std::byte{v}; }};
+    auto w16{[&](size_t& p, uint16_t v) {
+        w8(p, static_cast<uint8_t>(v & 0xff));
+        w8(p, static_cast<uint8_t>(v >> 8));
+    }};
+    auto w32{[&](size_t& p, uint32_t v) {
+        w16(p, static_cast<uint16_t>(v & 0xffff));
+        w16(p, static_cast<uint16_t>(v >> 16));
+    }};
+    auto meta_page{[&](uint32_t page_num, uint32_t root) {
+        size_t p{page_num * PAGE_SIZE};
+        w32(p, 0);            // lsn_file
+        w32(p, 1);            // lsn_offset
+        w32(p, page_num);
+        w32(p, 0x00053162);   // BTREE_MAGIC
+        w32(p, 9);            // version
+        w32(p, PAGE_SIZE);
+        w8(p, 0);             // encrypt_algo
+        w8(p, 9);             // BTREE_META
+        w8(p, 0);             // metaflags
+        w8(p, 0);             // unused1
+        w32(p, 0);            // free_list
+        w32(p, NUM_PAGES - 1); // last_page
+        w32(p, 0);            // partitions
+        w32(p, 0);            // key_count
+        w32(p, 0);            // record_count
+        w32(p, 0x20);         // flags: SUBDB
+        p += 20;              // uid
+        w32(p, 0);            // unused2
+        w32(p, 0);            // minkey
+        w32(p, 0);            // re_len
+        w32(p, 0);            // re_pad
+        w32(p, root);
+        // unused3[368], crypto_magic, trash[12], iv[20], chksum[16] stay zero
+    }};
+    meta_page(/*page_num=*/0, /*root=*/1);
+    meta_page(/*page_num=*/2, /*root=*/3);
+
+    // Page 1: outer root leaf with ("main", BE32(2)) records.
+    {
+        size_t p{1 * PAGE_SIZE};
+        w32(p, 0); w32(p, 1); w32(p, 1); // lsn, page_num
+        w32(p, 0); w32(p, 0);            // prev_page, next_page
+        w16(p, 2);                       // entries
+        w16(p, 4082);                    // hf_offset
+        w8(p, 1);                        // level
+        w8(p, 5);                        // BTREE_LEAF
+        w16(p, 4082);                    // index[0] -> "main" record
+        w16(p, 4089);                    // index[1] -> page number record
+        p = 1 * PAGE_SIZE + 4082;
+        w16(p, 4); w8(p, 1);             // len=4, KEYDATA
+        w8(p, 'm'); w8(p, 'a'); w8(p, 'i'); w8(p, 'n');
+        w16(p, 4); w8(p, 1);             // len=4, KEYDATA
+        w8(p, 0); w8(p, 0); w8(p, 0); w8(p, 2); // BE32(page 2)
+    }
+
+    // Page 3: inner root leaf with (key, overflow-record-to-page-4) records.
+    {
+        size_t p{3 * PAGE_SIZE};
+        w32(p, 0); w32(p, 1); w32(p, 3);
+        w32(p, 0); w32(p, 0);
+        w16(p, 2);
+        w16(p, 4080);
+        w8(p, 1);
+        w8(p, 5);
+        w16(p, 4092);                    // index[0] -> key record
+        w16(p, 4080);                    // index[1] -> overflow record
+        p = 3 * PAGE_SIZE + 4080;
+        w16(p, 0); w8(p, 3);             // len=0, OVERFLOW_DATA
+        w8(p, 0);                        // unused2
+        w32(p, 4);                       // page_number
+        w32(p, 16);                      // item_len
+        w16(p, 1); w8(p, 1);             // len=1, KEYDATA
+        w8(p, 0x01);
+    }
+
+    // Page 4: self-referential overflow page with zero bytes of data.
+    {
+        size_t p{4 * PAGE_SIZE};
+        w32(p, 0); w32(p, 1); w32(p, 4);
+        w32(p, 0); w32(p, 4);            // prev_page, next_page (self-cycle)
+        w16(p, 1);                       // entries
+        w16(p, 0);                       // hf_offset: no data
+        w8(p, 0);                        // level
+        w8(p, 7);                        // OVERFLOW_DATA
+    }
+
+    const fs::path bdb_path{m_path_root / "cyclic_overflow_wallet.dat"};
+    {
+        FILE* f{fsbridge::fopen(bdb_path, "wb")};
+        BOOST_REQUIRE(f != nullptr);
+        BOOST_REQUIRE_EQUAL(std::fwrite(file.data(), 1, file.size(), f), file.size());
+        BOOST_REQUIRE_EQUAL(std::fclose(f), 0);
+    }
+
+    DatabaseOptions options;
+    DatabaseStatus status;
+    bilingual_str error;
+    auto database{MakeBerkeleyRODatabase(bdb_path, options, status, error)};
+    // The cyclic chain must be rejected, not traversed forever.
+    BOOST_CHECK(database == nullptr);
+    BOOST_CHECK_EQUAL(status, DatabaseStatus::FAILED_LOAD);
+    BOOST_CHECK(error.original.find("cyclic") != std::string::npos);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
