@@ -24,8 +24,8 @@ bool operator<(std::span<const std::byte> a, BytePrefix b) { return std::ranges:
 
 std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& wallet_dir)
 {
-    const fs::path& data_dir = gArgs.GetDataDirNet();
-    const fs::path& blocks_dir = gArgs.GetBlocksDirPath();
+    const fs::path data_dir{fs::weakly_canonical(gArgs.GetDataDirNet())};
+    const fs::path blocks_dir{fs::weakly_canonical(gArgs.GetBlocksDirPath())};
 
     // Here we place the top level dirs we want to skip in case walletdir is datadir or blocksdir
     // Those directories are referenced in doc/files.md
