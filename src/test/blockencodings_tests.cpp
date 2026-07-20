@@ -1008,6 +1008,80 @@ BOOST_AUTO_TEST_CASE(ShortIDCollisionAfterExtraEarlyExitIsRejected)
     BOOST_CHECK(reconstructed_block.vtx.empty());
 }
 
+BOOST_AUTO_TEST_CASE(ShortIDCollisionAfterExtraEarlyExitWithPrefilledIsRejected)
+{
+    bilingual_str error;
+    CTxMemPool pool{MemPoolOptionsForTest(m_node), error};
+    BOOST_REQUIRE(error.empty());
+    TestMemPoolEntryHelper entry;
+    auto rand_ctx(FastRandomContext(uint256{45}));
+    CBlock block{BuildBlockTestCase(rand_ctx)};
+    CMutableTransaction fourth_tx{*block.vtx[2]};
+    fourth_tx.nLockTime ^= 16U;
+    block.vtx.push_back(MakeTransactionRef(std::move(fourth_tx)));
+    bool mutated;
+    block.hashMerkleRoot = BlockMerkleRoot(block, &mutated);
+    BOOST_REQUIRE(!mutated);
+
+    TestHeaderAndShortIDs short_ids{block, rand_ctx};
+    // Keep transaction 2 prefilled, leaving short-ID slots at positions 1 and 3.
+    short_ids.prefilledtxn.emplace_back(/*index=*/1, block.vtx[2]);
+    short_ids.shorttxids.erase(short_ids.shorttxids.begin() + 1);
+    DataStream stream{};
+    stream << short_ids;
+    CBlockHeaderAndShortTxIDs cmpctblock;
+    stream >> cmpctblock;
+    BOOST_REQUIRE_EQUAL(cmpctblock.BlockTxCount(), 4U);
+
+    auto make_variant = [](const CTransactionRef& tx, uint32_t mask) {
+        CMutableTransaction mutable_tx{*tx};
+        mutable_tx.nLockTime ^= mask;
+        return MakeTransactionRef(std::move(mutable_tx));
+    };
+    const CTransactionRef first_mempool_tx{make_variant(block.vtx[1], 1)};
+    const CTransactionRef first_extra_tx{make_variant(block.vtx[3], 2)};
+    const CTransactionRef late_extra_tx{make_variant(block.vtx[1], 4)};
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.FromTx(first_mempool_tx));
+    }
+    BOOST_REQUIRE_EQUAL(pool.size(), 1U);
+
+    const Wtxid first_mempool_wtxid{first_mempool_tx->GetWitnessHash()};
+    const Wtxid first_extra_wtxid{first_extra_tx->GetWitnessHash()};
+    const Wtxid late_extra_wtxid{late_extra_tx->GetWitnessHash()};
+    const uint64_t first_short_id{cmpctblock.GetShortID(block.vtx[1]->GetWitnessHash())};
+    const uint64_t second_short_id{cmpctblock.GetShortID(block.vtx[3]->GetWitnessHash())};
+    bool late_extra_seen{false};
+    TestPartiallyDownloadedBlock partial_block{&pool};
+    partial_block.m_get_short_id_mock = [&late_extra_seen, first_mempool_wtxid, first_extra_wtxid, late_extra_wtxid, first_short_id, second_short_id](const CBlockHeaderAndShortTxIDs& ids, const Wtxid& wtxid) {
+        if (wtxid == first_mempool_wtxid) return first_short_id;
+        if (wtxid == first_extra_wtxid) return second_short_id;
+        if (wtxid == late_extra_wtxid) {
+            late_extra_seen = true;
+            return first_short_id;
+        }
+        return ids.GetShortID(wtxid);
+    };
+
+    BOOST_CHECK_EQUAL(partial_block.InitData(cmpctblock, {
+        {first_extra_wtxid, first_extra_tx},
+        {late_extra_wtxid, late_extra_tx},
+    }), READ_STATUS_OK);
+    BOOST_CHECK(!late_extra_seen);
+    BOOST_CHECK(partial_block.IsTxAvailable(0));
+    BOOST_CHECK(partial_block.IsTxAvailable(1));
+    BOOST_CHECK(partial_block.IsTxAvailable(2));
+    BOOST_CHECK(partial_block.IsTxAvailable(3));
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 2U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 2U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 1U);
+
+    CBlock reconstructed_block;
+    BOOST_CHECK_EQUAL(partial_block.FillBlock(reconstructed_block, {}, /*segwit_active=*/true), READ_STATUS_FAILED);
+    BOOST_CHECK(reconstructed_block.vtx.empty());
+}
+
 BOOST_AUTO_TEST_CASE(TransactionsRequestSerializationTest) {
     BlockTransactionsRequest req1;
     req1.blockhash = m_rng.rand256();
