@@ -102,9 +102,22 @@ FUZZ_TARGET(utxo_total_supply)
         LOCK(chainman.GetMutex());
         chainman.ActiveChainstate().ForceFlushStateToDisk(wipe_cache);
         utxo_stats = std::move(
-            *Assert(kernel::ComputeUTXOStats(kernel::CoinStatsHashType::NONE, chainman.ActiveChainstate().CoinsDB(), chainman.m_blockman, {})));
+            *Assert(kernel::ComputeUTXOStats(kernel::CoinStatsHashType::HASH_SERIALIZED, chainman.ActiveChainstate().CoinsDB(), chainman.m_blockman, {})));
         // Check that miner can't print more money than they are allowed to
         assert(circulation == utxo_stats.total_amount);
+        assert(utxo_stats.nTransactionOutputs == utxo_stats.coins_count);
+    };
+
+    const auto AssertStatsUnchanged = [](const kernel::CCoinsStats& before, const kernel::CCoinsStats& after) {
+        assert(before.nHeight == after.nHeight);
+        assert(before.hashBlock == after.hashBlock);
+        assert(before.nTransactions == after.nTransactions);
+        assert(before.nTransactionOutputs == after.nTransactionOutputs);
+        assert(before.nBogoSize == after.nBogoSize);
+        assert(before.hashSerialized == after.hashSerialized);
+        assert(before.total_amount == after.total_amount);
+        assert(before.coins_count == after.coins_count);
+        // nDiskSize may legitimately change when ForceFlushStateToDisk() compacts the database.
     };
 
 
@@ -164,10 +177,10 @@ FUZZ_TARGET(utxo_total_supply)
             },
             [&] {
                 // Append the current block to the active chain
+                const auto previous_utxo_stats{utxo_stats};
                 node::RegenerateCommitments(*current_block, chainman);
                 const bool was_valid = !MineBlock(node, current_block).IsNull();
 
-                const uint256 prev_hash_serialized{utxo_stats.hashSerialized};
                 if (was_valid) {
                     if (duplicate_coinbase_height == ActiveHeight()) {
                         // we mined the duplicate coinbase
@@ -180,8 +193,8 @@ FUZZ_TARGET(utxo_total_supply)
                 UpdateUtxoStats(/*wipe_cache=*/fuzzed_data_provider.ConsumeBool());
 
                 if (!was_valid) {
-                    // utxo stats must not change
-                    assert(prev_hash_serialized == utxo_stats.hashSerialized);
+                    // Rejecting a block must not change semantic UTXO statistics.
+                    AssertStatsUnchanged(previous_utxo_stats, utxo_stats);
                 }
 
                 current_block = PrepareNextBlock();
