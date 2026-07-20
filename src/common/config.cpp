@@ -237,7 +237,7 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
 
     // Check for chain settings (BaseParams() calls are only valid after this clause)
     try {
-        SelectBaseParams(gArgs.GetChainType());
+        SelectBaseParams(GetChainType());
     } catch (const std::exception& e) {
         error = e.what();
         return false;
@@ -257,11 +257,13 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
     }
     std::ifstream rwconf_stream{rwconf_path.std_path()};
     if (rwconf_stream.good()) {
-        if (!ReadConfigStream(rwconf_stream, fs::PathToString(rwconf_path), error, ignore_invalid_keys, &m_settings.rw_config)) {
+        std::map<std::string, std::vector<common::SettingsValue>> rw_config;
+        if (!ReadConfigStream(rwconf_stream, fs::PathToString(rwconf_path), error, ignore_invalid_keys, &rw_config)) {
             return false;
         }
         {
             LOCK(cs_args);
+            m_settings.rw_config = std::move(rw_config);
             m_rwconf_had_prune_option = m_settings.rw_config.count("prune");
         }
     }
