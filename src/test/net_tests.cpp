@@ -1047,6 +1047,13 @@ BOOST_AUTO_TEST_CASE(v1transport_max_message_type)
 {
     auto max_message_type{std::string(CMessageHeader::MESSAGE_TYPE_SIZE, 'x')};
     V1Transport transport{NodeId{0}};
+
+    auto oversized_msg{NetMsg::Make(max_message_type + 'x', uint8_t{0x01})};
+    auto expected{oversized_msg.Copy()};
+    BOOST_REQUIRE(!transport.SetMessageToSend(oversized_msg)); // Reject oversized types before encoding
+    BOOST_CHECK_EQUAL(oversized_msg.m_type, expected.m_type);
+    BOOST_CHECK(oversized_msg.data == expected.data);
+
     auto msg{NetMsg::Make(max_message_type, uint8_t{0x01})};
     BOOST_REQUIRE(transport.SetMessageToSend(msg)); // Accept the maximum-length type with a non-empty payload
 
@@ -1529,6 +1536,11 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         tester.ReceiveMessage("barfoo", {});
 
         auto max_message_type{std::string(CMessageHeader::MESSAGE_TYPE_SIZE, 'x')};
+        auto oversized_msg{NetMsg::Make(max_message_type + 'x', uint8_t{0x01})};
+        auto expected{oversized_msg.Copy()};
+        BOOST_REQUIRE(!tester.SetMessageToSend(oversized_msg)); // Reject oversized types before encoding
+        BOOST_CHECK_EQUAL(oversized_msg.m_type, expected.m_type);
+        BOOST_CHECK(oversized_msg.data == expected.data);
         auto msg{NetMsg::Make(std::move(max_message_type), uint8_t{0x01})};
         BOOST_REQUIRE(tester.SetMessageToSend(msg)); // Accept the maximum-length type with a non-empty payload
     }
