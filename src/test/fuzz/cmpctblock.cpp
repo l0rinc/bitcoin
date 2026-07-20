@@ -135,6 +135,16 @@ void ResetChainmanAndMempool(TestingSetup& setup)
     }
 }
 
+void AssertPostCompactBlockContracts(ChainstateManager& chainman, CTxMemPool& mempool)
+{
+    LOCK(cs_main);
+    // Compact-block processing may reject or defer data, but it must not leave the
+    // production block-index or mempool graph internally inconsistent.
+    chainman.CheckBlockIndex();
+    auto& chainstate{chainman.ActiveChainstate()};
+    mempool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1);
+}
+
 //! Used to run tasks in a std::thread to avoid DEBUG_LOCKORDER false positives.
 class ImmediateBackgroundTaskRunner : public util::TaskRunnerInterface
 {
@@ -314,6 +324,8 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
             cache_peer.fPauseSend = false;
             more_work = connman.ProcessMessagesOnce(cache_peer);
             peerman->SendMessages(cache_peer);
+            setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
+            AssertPostCompactBlockContracts(chainman, mempool);
         }
 
         assert(cache_peer.m_last_block_time.load() == last_block_time_before);
@@ -553,6 +565,8 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
 
             more_work = connman.ProcessMessagesOnce(random_node);
             peerman->SendMessages(random_node);
+            setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
+            AssertPostCompactBlockContracts(chainman, mempool);
         }
 
         const auto last_block_time_after{random_node.m_last_block_time.load()};
@@ -592,6 +606,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
     }
 
     setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    AssertPostCompactBlockContracts(chainman, mempool);
     setup->m_node.validation_signals->UnregisterAllValidationInterfaces();
     connman.StopNodes();
 
