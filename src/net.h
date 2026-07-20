@@ -299,8 +299,8 @@ public:
     /** Set the next message to send.
      *
      * If no message can currently be set (perhaps because the previous one is not yet done being
-     * sent), returns false, and msg will be unmodified. Otherwise msg is enqueued (and
-     * possibly moved-from) and true is returned.
+     * sent), or its type is too long for the wire field, returns false, and msg will be unmodified.
+     * Otherwise msg is enqueued (and possibly moved-from) and true is returned.
      */
     virtual bool SetMessageToSend(CSerializedNetMsg& msg) noexcept = 0;
 

@@ -1200,6 +1200,13 @@ public:
         m_msg_to_send.push_back(std::move(msg));
     }
 
+    bool TrySetMessageToSend(std::string m_type)
+    {
+        CSerializedNetMsg msg;
+        msg.m_type = std::move(m_type);
+        return m_transport.SetMessageToSend(msg);
+    }
+
     /** Expect ellswift key to have been received from transport and process it.
      *
      * Many other V2TransportTester functions cannot be called until after ReceiveKey() has been
@@ -1504,14 +1511,16 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         // Send invalidly-encoded message
         tester.SendMessage(std::string("blocktxn\x00\x00\x00a", CMessageHeader::MESSAGE_TYPE_SIZE), {});
         tester.SendMessage("foobar", {}); // test receiving unknown message type
-        tester.AddMessage("barfoo", {}); // test sending unknown message type
+        auto max_message_type{std::string(CMessageHeader::MESSAGE_TYPE_SIZE, 'x')};
+        tester.AddMessage(max_message_type, {}); // test sending the longest unknown message type
         ret = tester.Interact();
         BOOST_REQUIRE(ret && ret->size() == 4);
         BOOST_CHECK((*ret)[0] && (*ret)[0]->m_type == "addrv2" && std::ranges::equal((*ret)[0]->m_recv, MakeByteSpan(msg_data_1)));
         BOOST_CHECK((*ret)[1] && (*ret)[1]->m_type == "headers" && std::ranges::equal((*ret)[1]->m_recv, MakeByteSpan(msg_data_2)));
         BOOST_CHECK(!(*ret)[2]);
         BOOST_CHECK((*ret)[3] && (*ret)[3]->m_type == "foobar" && (*ret)[3]->m_recv.empty());
-        tester.ReceiveMessage("barfoo", {});
+        tester.ReceiveMessage(max_message_type, {});
+        BOOST_CHECK(!tester.TrySetMessageToSend(std::string(CMessageHeader::MESSAGE_TYPE_SIZE + 1, 'x')));
     }
 
     // Too long garbage (initiator).
