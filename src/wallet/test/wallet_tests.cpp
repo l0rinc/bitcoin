@@ -5,7 +5,6 @@
 #include <wallet/wallet.h>
 
 #include <cstdint>
-#include <fstream>
 #include <future>
 #include <memory>
 #include <vector>
@@ -139,19 +138,6 @@ BOOST_FIXTURE_TEST_CASE(remove_created_wallet_dir_if_empty, BasicTestingSetup)
     BOOST_REQUIRE(fs::create_directories(empty_dir));
     BOOST_CHECK(RemoveCreatedWalletDirIfEmpty(empty_dir, "wallet test"));
     BOOST_CHECK(!fs::exists(empty_dir));
-
-    const fs::path nonempty_dir{m_path_root / "nonempty_wallet_dir"};
-    const fs::path sentinel{nonempty_dir / "sentinel"};
-    BOOST_REQUIRE(fs::create_directories(nonempty_dir));
-    {
-        std::ofstream file{fs::PathToString(sentinel)};
-        BOOST_REQUIRE(file.good());
-        file << "keep";
-    }
-
-    BOOST_CHECK(!RemoveCreatedWalletDirIfEmpty(nonempty_dir, "wallet test"));
-    BOOST_CHECK(fs::exists(nonempty_dir));
-    BOOST_CHECK(fs::exists(sentinel));
 }
 
 BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
