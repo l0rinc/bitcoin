@@ -10,10 +10,26 @@
 #include <test/fuzz/util.h>
 #include <test/util/setup_common.h>
 
+#include <cstddef>
+#include <cstdio>
 #include <memory>
+#include <vector>
 
 namespace {
 const BasicTestingSetup* g_setup;
+
+std::vector<std::byte> CaptureEstimatorState(CBlockPolicyEstimator& estimator)
+{
+    AutoFile file{std::tmpfile()};
+    Assert(!file.IsNull());
+    Assert(estimator.Write(file));
+    const auto size{file.size()};
+    file.seek(0, SEEK_SET);
+    std::vector<std::byte> state(size);
+    file.read(state);
+    Assert(file.fclose() == 0);
+    return state;
+}
 } // namespace
 
 void initialize_policy_estimator_io()
@@ -29,8 +45,14 @@ FUZZ_TARGET(policy_estimator_io, .init = initialize_policy_estimator_io)
     AutoFile fuzzed_auto_file{fuzzed_file_provider.open()};
     // Reusing block_policy_estimator across runs to avoid costly creation of CBlockPolicyEstimator object.
     static CBlockPolicyEstimator block_policy_estimator{FeeestPath(*g_setup->m_node.args), DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
-    if (block_policy_estimator.Read(fuzzed_auto_file)) {
+    const auto before_read{CaptureEstimatorState(block_policy_estimator)};
+    const bool read_succeeded{block_policy_estimator.Read(fuzzed_auto_file)};
+    if (!read_succeeded) {
+        assert(CaptureEstimatorState(block_policy_estimator) == before_read);
+    } else {
+        const auto before_write{CaptureEstimatorState(block_policy_estimator)};
         block_policy_estimator.Write(fuzzed_auto_file);
+        assert(CaptureEstimatorState(block_policy_estimator) == before_write);
     }
     (void)fuzzed_auto_file.fclose();
 }
