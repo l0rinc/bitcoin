@@ -94,6 +94,14 @@ public:
 
     std::unique_ptr<DatabaseBatch> MakeBatch() override { return std::make_unique<Batch>(*this); }
 };
+
+//! Wallet database whose post-encryption rewrite fails, modeling an I/O
+//! error (e.g. ENOSPC during VACUUM) at exactly that step.
+class RewriteFailDatabase : public InMemoryWalletDatabase
+{
+public:
+    bool Rewrite() override { return false; }
+};
 } // namespace
 
 BOOST_FIXTURE_TEST_CASE(encrypt_wallet_master_key_write_failure, WalletTestingSetup)
@@ -140,6 +148,38 @@ BOOST_FIXTURE_TEST_CASE(encrypt_wallet_master_key_write_failure, WalletTestingSe
         BOOST_CHECK(!found_master_key);
         BOOST_CHECK(!found_crypted_key);
     }
+
+    TestUnloadWallet(std::move(wallet));
+}
+
+BOOST_FIXTURE_TEST_CASE(encrypt_wallet_rewrite_failure, WalletTestingSetup)
+{
+    // Mirror the wallet_encrypt bench: a descriptor wallet holding a private key.
+    WalletContext context;
+    context.args = &m_args;
+    context.chain = m_node.chain.get();
+    auto wallet{TestCreateWallet(std::make_unique<RewriteFailDatabase>(), context, WALLET_FLAG_DESCRIPTORS)};
+
+    CKey key{GenerateRandomKey()};
+    FlatSigningProvider keys;
+    std::string error;
+    auto descs{Parse("combo(" + EncodeSecret(key) + ")", keys, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE(!descs.empty());
+    WalletDescriptor w_desc(std::move(descs.at(0)), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/0, /*next_index=*/0);
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_REQUIRE(wallet->AddWalletDescriptor(w_desc, keys, /*label=*/"", /*internal=*/false));
+    }
+
+    // Keep derive iteration calibration deterministic and fast.
+    FakeNodeClock clock{1s};
+
+    // Encryption itself succeeds, but the database rewrite that purges
+    // plaintext key material from slack space fails: the user must be warned
+    // instead of the failure passing silently.
+    ASSERT_DEBUG_LOG("Wallet database rewrite failed after encryption");
+    BOOST_CHECK(wallet->EncryptWallet("passphrase"));
+    BOOST_CHECK(wallet->HasEncryptionKeys());
 
     TestUnloadWallet(std::move(wallet));
 }
