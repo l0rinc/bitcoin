@@ -78,9 +78,15 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 CBlockIndex* prev_block = PickValue(fuzzed_data_provider, blocks);
                 if (!(prev_block->nStatus & BLOCK_FAILED_VALID)) {
                     CBlockHeader header = ConsumeBlockHeader(fuzzed_data_provider, prev_block->GetBlockHash(), nonce_counter);
+                    CBlockIndex* best_header_before{chainman.m_best_header};
                     CBlockIndex* index = blockman.AddToBlockIndex(header, chainman.m_best_header);
                     assert(index->nStatus & BLOCK_VALID_TREE);
                     assert(index->pprev == prev_block);
+                    if (best_header_before == nullptr || best_header_before->nChainWork < index->nChainWork) {
+                        assert(chainman.m_best_header == index);
+                    } else {
+                        assert(chainman.m_best_header == best_header_before);
+                    }
                     blocks.push_back(index);
                 }
             },
