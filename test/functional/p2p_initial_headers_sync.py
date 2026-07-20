@@ -91,6 +91,7 @@ class HeadersSyncTest(BitcoinTestFramework):
         for p in all_peers:
             p.sync_with_ping()
         with p2p_lock:
+            # TODO: Empty headers should release the initial sync slot.
             assert "getheaders" not in peer2.last_message
             assert "getheaders" not in peer3.last_message
 
