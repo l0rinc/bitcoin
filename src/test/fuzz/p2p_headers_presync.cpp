@@ -18,6 +18,8 @@
 #include <uint256.h>
 #include <validation.h>
 
+#include <utility>
+
 namespace {
 constexpr uint32_t FUZZ_MAX_HEADERS_RESULTS{16};
 
@@ -212,8 +214,96 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
     g_testing_setup->ResetAndInitialize();
     g_testing_setup->ExerciseEmptyHeadersHandoff();
 
-    // The chain is just a single block, so this is equal to 1
-    size_t original_index_size{WITH_LOCK(cs_main, return chainman.m_blockman.m_block_index.size())};
+    struct BlockIndexSnapshot {
+        uint256 hash;
+        const uint256* phashBlock;
+        const CBlockIndex* index;
+        const CBlockIndex* pprev;
+        const CBlockIndex* pskip;
+        int nHeight;
+        int nFile;
+        unsigned int nDataPos;
+        unsigned int nUndoPos;
+        arith_uint256 nChainWork;
+        unsigned int nTx;
+        uint64_t m_chain_tx_count;
+        uint32_t nStatus;
+        int32_t nVersion;
+        uint256 hashMerkleRoot;
+        uint32_t nTime;
+        uint32_t nBits;
+        uint32_t nNonce;
+        int32_t nSequenceId;
+        unsigned int nTimeMax;
+    };
+
+    std::vector<BlockIndexSnapshot> original_index;
+    std::vector<CBlockIndex*> original_candidates;
+    const CBlockIndex* original_best_header{WITH_LOCK(cs_main, return chainman.m_best_header)};
+    {
+        LOCK(cs_main);
+        original_index.reserve(chainman.m_blockman.m_block_index.size());
+        for (const auto& [hash, index] : chainman.m_blockman.m_block_index) {
+            original_index.push_back({
+                hash,
+                index.phashBlock,
+                &index,
+                index.pprev,
+                index.pskip,
+                index.nHeight,
+                index.nFile,
+                index.nDataPos,
+                index.nUndoPos,
+                index.nChainWork,
+                index.nTx,
+                index.m_chain_tx_count,
+                index.nStatus,
+                index.nVersion,
+                index.hashMerkleRoot,
+                index.nTime,
+                index.nBits,
+                index.nNonce,
+                index.nSequenceId,
+                index.nTimeMax,
+            });
+        }
+        original_candidates.assign(chainman.ActiveChainstate().setBlockIndexCandidates.begin(), chainman.ActiveChainstate().setBlockIndexCandidates.end());
+    }
+
+    const auto AssertNoBlockIndexMutation = [&]() {
+        LOCK(cs_main);
+        assert(chainman.m_blockman.m_block_index.size() == original_index.size());
+        for (const auto& snapshot : original_index) {
+            const auto it = chainman.m_blockman.m_block_index.find(snapshot.hash);
+            assert(it != chainman.m_blockman.m_block_index.end());
+            const CBlockIndex& index = it->second;
+            assert(index.phashBlock == snapshot.phashBlock);
+            assert(&index == snapshot.index);
+            assert(index.pprev == snapshot.pprev);
+            assert(index.pskip == snapshot.pskip);
+            assert(index.nHeight == snapshot.nHeight);
+            assert(index.nFile == snapshot.nFile);
+            assert(index.nDataPos == snapshot.nDataPos);
+            assert(index.nUndoPos == snapshot.nUndoPos);
+            assert(index.nChainWork == snapshot.nChainWork);
+            assert(index.nTx == snapshot.nTx);
+            assert(index.m_chain_tx_count == snapshot.m_chain_tx_count);
+            assert(index.nStatus == snapshot.nStatus);
+            assert(index.nVersion == snapshot.nVersion);
+            assert(index.hashMerkleRoot == snapshot.hashMerkleRoot);
+            assert(index.nTime == snapshot.nTime);
+            assert(index.nBits == snapshot.nBits);
+            assert(index.nNonce == snapshot.nNonce);
+            assert(index.nSequenceId == snapshot.nSequenceId);
+            assert(index.nTimeMax == snapshot.nTimeMax);
+        }
+        assert(chainman.m_best_header == original_best_header);
+        assert(chainman.ActiveChainstate().setBlockIndexCandidates.size() == original_candidates.size());
+        for (const CBlockIndex* candidate : original_candidates) {
+            assert(chainman.ActiveChainstate().setBlockIndexCandidates.count(candidate));
+        }
+    };
+
     arith_uint256 total_work{WITH_LOCK(cs_main, return chainman.m_best_header->nChainWork)};
 
     std::vector<CBlockHeader> all_headers;
@@ -242,6 +332,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
 
                 auto headers_msg = NetMsg::Make(NetMsgType::HEADERS, TX_WITH_WITNESS(headers));
                 g_testing_setup->SendMessage(fuzzed_data_provider, std::move(headers_msg));
+                AssertNoBlockIndexMutation();
             },
             [&]() NO_THREAD_SAFETY_ANALYSIS {
                 // Send a compact block
@@ -252,6 +343,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
 
                 auto headers_msg = NetMsg::Make(NetMsgType::CMPCTBLOCK, TX_WITH_WITNESS(cmpct_block));
                 g_testing_setup->SendMessage(fuzzed_data_provider, std::move(headers_msg));
+                AssertNoBlockIndexMutation();
             },
             [&]() NO_THREAD_SAFETY_ANALYSIS {
                 // Send a block
@@ -261,6 +353,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
 
                 auto headers_msg = NetMsg::Make(NetMsgType::BLOCK, TX_WITH_WITNESS(block));
                 g_testing_setup->SendMessage(fuzzed_data_provider, std::move(headers_msg));
+                AssertNoBlockIndexMutation();
             });
     }
 
@@ -272,8 +365,8 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
     // This test should never create a chain with more work than MinimumChainWork.
     assert(total_work < chainman.MinimumChainWork());
 
-    // The headers/blocks sent in this test should never be stored, as the chains don't have the work required
-    // to meet the anti-DoS work threshold. So, if at any point the block index grew in size, then there's a bug
-    // in the headers pre-sync logic.
-    assert(WITH_LOCK(cs_main, return chainman.m_blockman.m_block_index.size()) == original_index_size);
+    // The headers/blocks sent in this test should never mutate existing chain state, as the chains don't have
+    // the work required to meet the anti-DoS work threshold. Check this after every message and at the end so
+    // that a transient mutation cannot be hidden by a later rollback.
+    AssertNoBlockIndexMutation();
 }
