@@ -56,6 +56,11 @@ class HeadersSyncTest(BitcoinTestFramework):
             p.send_and_ping(new_block_announcement)
 
     def assert_single_getheaders_recipient(self, peers):
+        def num_getheaders():
+            with p2p_lock:
+                return sum("getheaders" in p.last_message for p in peers)
+
+        self.wait_until(lambda: num_getheaders() == 1)
         count = 0
         receiving_peer = None
         for p in peers:
@@ -81,42 +86,27 @@ class HeadersSyncTest(BitcoinTestFramework):
         peer1.send_without_ping(msg_headers())
 
         self.log.info("Connecting two more peers to node0")
-        # Connect 2 more peers; they should not receive a getheaders yet
+        # peer1's empty response releases the initial sync slot.
         peer2 = self.nodes[0].add_p2p_connection(P2PInterface())
         peer3 = self.nodes[0].add_p2p_connection(P2PInterface())
 
         all_peers = [peer1, peer2, peer3]
 
-        self.log.info("Verify that peer2 and peer3 don't receive a getheaders after connecting")
+        self.log.info("Verify that one of peer2 and peer3 receives a getheaders after connecting")
         for p in all_peers:
             p.sync_with_ping()
-        with p2p_lock:
-            assert "getheaders" not in peer2.last_message
-            assert "getheaders" not in peer3.last_message
+        peer_receiving_initial_getheaders = self.assert_single_getheaders_recipient([peer2, peer3])
+        peer_receiving_initial_getheaders.wait_for_getheaders(block_hash=best_block_hash)
+        peer_receiving_initial_getheaders.send_without_ping(msg_headers())
+        remaining_peer = peer3 if peer_receiving_initial_getheaders == peer2 else peer2
 
         self.log.info("Have all peers announce a new block")
         self.announce_random_block(all_peers)
 
-        self.log.info("Check that peer1 receives a getheaders in response")
-        peer1.wait_for_getheaders(block_hash=best_block_hash)
-        peer1.send_without_ping(msg_headers()) # Send empty response, see above
-
-        self.log.info("Check that exactly 1 of {peer2, peer3} received a getheaders in response")
-        peer_receiving_getheaders = self.assert_single_getheaders_recipient([peer2, peer3])
-        peer_receiving_getheaders.send_without_ping(msg_headers()) # Send empty response, see above
-
-        self.log.info("Announce another new block, from all peers")
-        self.announce_random_block(all_peers)
-
-        self.log.info("Check that peer1 receives a getheaders in response")
-        peer1.wait_for_getheaders(block_hash=best_block_hash)
-
-        self.log.info("Check that the remaining peer received a getheaders as well")
-        expected_peer = peer2
-        if peer2 == peer_receiving_getheaders:
-            expected_peer = peer3
-
-        expected_peer.wait_for_getheaders(block_hash=best_block_hash)
+        self.log.info("Check that the remaining peer receives one getheaders in response")
+        peer_receiving_getheaders = self.assert_single_getheaders_recipient(all_peers)
+        assert_equal(peer_receiving_getheaders, remaining_peer)
+        peer_receiving_getheaders.wait_for_getheaders(block_hash=best_block_hash)
 
     def setup_timeout_test_peers(self):
         self.log.info("Add peer1 and check it receives an initial getheaders request")
