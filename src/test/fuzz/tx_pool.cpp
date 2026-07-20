@@ -478,6 +478,10 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
         const auto res = WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, tx, GetTime(), bypass_limits, /*test_accept=*/false));
         const bool accepted = res.m_result_type == MempoolAcceptResult::ResultType::VALID;
         if (accepted) {
+            assert(tx_pool.exists(tx->GetHash()));
+            assert(tx_pool.exists(tx->GetWitnessHash()));
+        }
+        if (accepted) {
             txids.push_back(tx->GetHash());
             if (!ever_bypassed_limits) {
                 CheckMempoolTRUCInvariants(tx_pool);
