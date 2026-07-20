@@ -113,7 +113,8 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
         assert(version_before == 0 || version_after == version_before);
         assert(!connected_before || connected_after);
         assert(!disconnect_before || disconnect_after);
-        if (version_after != 0) {
+        // A peer is only fully connected after a valid VERSION/VERACK exchange.
+        if (version_after != 0 || connected_after) {
             assert(version_after >= MIN_PEER_PROTO_VERSION);
             assert(connection.GetCommonVersion() >= MIN_PEER_PROTO_VERSION);
         }
