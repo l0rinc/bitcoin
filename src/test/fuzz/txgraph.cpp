@@ -367,6 +367,7 @@ FUZZ_TARGET(txgraph)
 
     /** Currently active block builders. */
     std::vector<BlockBuilderData> block_builders;
+    unsigned transitions_since_check{0};
 
     /** Function to pick any SimTxObject (for either sim in sims: from sim.simmap or sim.removed, or the
      *  empty one). */
@@ -1054,6 +1055,11 @@ FUZZ_TARGET(txgraph)
                 }
                 break;
             }
+        }
+        if (++transitions_since_check >= 16) {
+            // Check before a later graph operation can repair an intermediate index or cluster defect.
+            real->SanityCheck();
+            transitions_since_check = 0;
         }
     }
 
