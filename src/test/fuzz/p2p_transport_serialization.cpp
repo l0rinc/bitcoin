@@ -81,6 +81,7 @@ FUZZ_TARGET(p2p_transport_serialization, .init = initialize_p2p_transport_serial
             const auto time{NodeClock::time_point::max()};
             bool reject_message{false};
             CNetMessage msg = recv_transport.GetReceivedMessage(time, reject_message);
+            assert(!recv_transport.ReceivedMessageComplete());
             assert(msg.m_type.size() <= CMessageHeader::MESSAGE_TYPE_SIZE);
             assert(msg.m_raw_message_size <= mutable_msg_bytes.size());
             assert(msg.m_raw_message_size == CMessageHeader::HEADER_SIZE + msg.m_message_size);
@@ -281,6 +282,7 @@ void SimulationTest(Transport& initiator, Transport& responder, R& rng, FuzzedDa
                 // The data must match what is expected.
                 assert(std::ranges::equal(received.m_recv, MakeByteSpan(expected[side].front().data)));
                 expected[side].pop_front();
+                assert(!transports[!side]->ReceivedMessageComplete());
                 progress = true;
             }
             // Progress must be made (by processing incoming bytes and/or returning complete
@@ -327,8 +329,17 @@ void SimulationTest(Transport& initiator, Transport& responder, R& rng, FuzzedDa
     assert(expected[0].empty());
     assert(expected[1].empty());
 
-    // Compare session IDs.
-    assert(transports[0]->GetInfo().session_id == transports[1]->GetInfo().session_id);
+    // A completed V2 exchange must expose its session, while V1 and V1 fallback do not.
+    const auto info0{transports[0]->GetInfo()};
+    const auto info1{transports[1]->GetInfo()};
+    assert(info0.transport_type == info1.transport_type);
+    assert(info0.session_id == info1.session_id);
+    if (info0.transport_type == TransportProtocolType::V2) {
+        assert(info0.session_id.has_value());
+    } else {
+        assert(info0.transport_type == TransportProtocolType::V1);
+        assert(!info0.session_id.has_value());
+    }
 }
 
 void CheckOversizedMessageType(Transport& transport)
