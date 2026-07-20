@@ -252,9 +252,9 @@ void AllocateFileRange(FILE* file, unsigned int offset, unsigned int length)
                 return;
             }
             memset(&buf[rlen], 0, now - rlen);
-            if (0 != fseek(file, -rlen, SEEK_CUR)) {
-                return;
-            }
+        }
+        if (0 != fseek(file, -static_cast<long>(rlen), SEEK_CUR)) {
+            return;
         }
         fwrite(buf, 1, now, file); // allowed to fail; this function is advisory anyway
         length -= now;
