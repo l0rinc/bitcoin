@@ -23,6 +23,7 @@
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <test/util/validation.h>
+#include <txmempool.h>
 #include <util/time.h>
 #include <validation.h>
 #include <validationinterface.h>
@@ -48,6 +49,16 @@ void ResetChainman(TestingSetup& setup)
     for (int i = 0; i < 2 * COINBASE_MATURITY; i++) {
         MineBlock(setup.m_node, options);
     }
+}
+
+void AssertPostMessageContracts(ChainstateManager& chainman, CTxMemPool& mempool)
+{
+    LOCK(cs_main);
+    // These are the same production consistency checks used by the test setup, made
+    // deterministic here so a malformed message cannot leave deferred corruption behind.
+    chainman.CheckBlockIndex();
+    auto& chainstate{chainman.ActiveChainstate()};
+    mempool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1);
 }
 } // namespace
 
@@ -131,9 +142,9 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
             } catch (const std::ios_base::failure&) {
             }
             node.peerman->SendMessages(random_node);
+            node.validation_signals->SyncWithValidationInterfaceQueue();
+            AssertPostMessageContracts(chainman, *node.mempool);
         }
-
-        node.validation_signals->SyncWithValidationInterfaceQueue();
 
         // A TX message can accept the message itself, an orphan made ready by an earlier
         // parent, or an eligible package. Each case must refresh the sending peer's
