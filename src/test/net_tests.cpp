@@ -1043,6 +1043,26 @@ BOOST_AUTO_TEST_CASE(advertise_local_address)
     RemoveLocal(addr_cjdns);
 }
 
+BOOST_AUTO_TEST_CASE(v1transport_max_message_type)
+{
+    auto max_message_type{std::string(CMessageHeader::MESSAGE_TYPE_SIZE, 'x')};
+    V1Transport transport{NodeId{0}};
+
+    auto oversized_msg{NetMsg::Make(max_message_type + 'x', uint8_t{0x01})};
+    auto expected{oversized_msg.Copy()};
+    BOOST_REQUIRE(!transport.SetMessageToSend(oversized_msg)); // Reject oversized types before encoding
+    BOOST_CHECK_EQUAL(oversized_msg.m_type, expected.m_type);
+    BOOST_CHECK(oversized_msg.data == expected.data);
+
+    auto msg{NetMsg::Make(max_message_type, uint8_t{0x01})};
+    BOOST_REQUIRE(transport.SetMessageToSend(msg)); // Accept the maximum-length type with a non-empty payload
+
+    const auto& [header, more, message_type]{transport.GetBytesToSend(/*have_next_message=*/false)};
+    BOOST_CHECK_EQUAL(header.size(), CMessageHeader::HEADER_SIZE);
+    BOOST_CHECK(more);
+    BOOST_CHECK_EQUAL(message_type, max_message_type);
+}
+
 namespace {
 
 CKey GenerateRandomTestKey(FastRandomContext& rng) noexcept
@@ -1199,6 +1219,8 @@ public:
         msg.data = std::move(payload);
         m_msg_to_send.push_back(std::move(msg));
     }
+
+    bool SetMessageToSend(CSerializedNetMsg& msg) { return m_transport.SetMessageToSend(msg); }
 
     /** Expect ellswift key to have been received from transport and process it.
      *
@@ -1512,6 +1534,15 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         BOOST_CHECK(!(*ret)[2]);
         BOOST_CHECK((*ret)[3] && (*ret)[3]->m_type == "foobar" && (*ret)[3]->m_recv.empty());
         tester.ReceiveMessage("barfoo", {});
+
+        auto max_message_type{std::string(CMessageHeader::MESSAGE_TYPE_SIZE, 'x')};
+        auto oversized_msg{NetMsg::Make(max_message_type + 'x', uint8_t{0x01})};
+        auto expected{oversized_msg.Copy()};
+        BOOST_REQUIRE(!tester.SetMessageToSend(oversized_msg)); // Reject oversized types before encoding
+        BOOST_CHECK_EQUAL(oversized_msg.m_type, expected.m_type);
+        BOOST_CHECK(oversized_msg.data == expected.data);
+        auto msg{NetMsg::Make(std::move(max_message_type), uint8_t{0x01})};
+        BOOST_REQUIRE(tester.SetMessageToSend(msg)); // Accept the maximum-length type with a non-empty payload
     }
 
     // Too long garbage (initiator).
