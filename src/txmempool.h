@@ -22,6 +22,7 @@
 #include <txgraph.h>
 #include <util/feefrac.h>
 #include <util/hasher.h>
+#include <util/overflow.h>
 #include <util/result.h>
 
 #include <boost/multi_index/hashed_index.hpp>
@@ -285,11 +286,13 @@ private:
 
     static TxMempoolInfo GetInfo(CTxMemPool::indexed_transaction_set::const_iterator it)
     {
-        TxMempoolInfo info{it->GetSharedTx(), it->GetTime(), it->GetFee(), it->GetTxSize(), it->GetModifiedFee() - it->GetFee()};
+        const CAmount fee_delta{SaturatingSubtract(it->GetModifiedFee(), it->GetFee())};
+        TxMempoolInfo info{it->GetSharedTx(), it->GetTime(), it->GetFee(), it->GetTxSize(), fee_delta};
         Assume(info.tx);
         Assume(info.tx == it->GetSharedTx());
         Assume(info.fee == it->GetFee());
         Assume(info.vsize == it->GetTxSize());
+        Assume(info.nFeeDelta == fee_delta);
         return info;
     }
 
