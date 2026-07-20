@@ -666,12 +666,15 @@ static void TestAddMatrix()
     BOOST_CHECK_EQUAL(MINI, SaturatingAdd(T{-1}, MINI + 1));
     BOOST_CHECK_EQUAL(MINI + 1, SaturatingAdd(T{-1}, MINI + 2));
     BOOST_CHECK_EQUAL(-1, SaturatingAdd(MINI, MAXI));
+    BOOST_CHECK_EQUAL(MINI, SaturatingSubtract(MINI, T{1}));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingSubtract(MAXI, T{-1}));
 }
 
 BOOST_AUTO_TEST_CASE(util_overflow)
 {
     TestAddMatrixOverflow<unsigned>();
     TestAddMatrix<signed>();
+    BOOST_CHECK_EQUAL(0U, SaturatingSubtract(0U, 1U));
 }
 
 template <typename T>

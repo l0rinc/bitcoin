@@ -22,6 +22,7 @@
 #include <txgraph.h>
 #include <util/feefrac.h>
 #include <util/hasher.h>
+#include <util/overflow.h>
 #include <util/result.h>
 
 #include <boost/multi_index/hashed_index.hpp>
@@ -285,7 +286,7 @@ private:
 
     static TxMempoolInfo GetInfo(CTxMemPool::indexed_transaction_set::const_iterator it)
     {
-        return TxMempoolInfo{it->GetSharedTx(), it->GetTime(), it->GetFee(), it->GetTxSize(), it->GetModifiedFee() - it->GetFee()};
+        return TxMempoolInfo{it->GetSharedTx(), it->GetTime(), it->GetFee(), it->GetTxSize(), SaturatingSubtract(it->GetModifiedFee(), it->GetFee())};
     }
 
     // Helper to remove all transactions that conflict with a given
