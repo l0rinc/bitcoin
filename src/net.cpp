@@ -851,6 +851,7 @@ bool V1Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
     // Determine whether a new message can be set.
     LOCK(m_send_mutex);
     if (m_sending_header || m_bytes_sent < m_message_to_send.data.size()) return false;
+    if (msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return false;
 
     // create dbl-sha256 checksum
     uint256 hash = Hash(msg.data);
@@ -1495,6 +1496,7 @@ bool V2Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
     // is available) and the send buffer is empty. This limits the number of messages in the send
     // buffer to just one, and leaves the responsibility for queueing them up to the caller.
     if (!(m_send_state == SendState::READY && m_send_buffer.empty())) return false;
+    if (msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return false;
     // Construct contents (encoding message type + payload).
     std::vector<uint8_t> contents;
     auto short_message_id = V2_MESSAGE_MAP(msg.m_type);
@@ -4140,6 +4142,7 @@ static bool IsOutboundMessageAllowedInPrivateBroadcast(std::string_view type) no
 void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 {
     AssertLockNotHeld(m_total_bytes_sent_mutex);
+    if (!Assume(msg.m_type.size() <= CMessageHeader::MESSAGE_TYPE_SIZE)) return;
 
     if (pnode->IsPrivateBroadcastConn() && !IsOutboundMessageAllowedInPrivateBroadcast(msg.m_type)) {
         LogDebug(BCLog::PRIVBROADCAST, "Omitting send of message '%s', %s", msg.m_type, pnode->LogPeer());

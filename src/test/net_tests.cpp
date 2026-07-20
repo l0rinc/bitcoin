@@ -1214,6 +1214,13 @@ public:
         m_msg_to_send.push_back(std::move(msg));
     }
 
+    bool TrySetMessageToSend(std::string m_type)
+    {
+        CSerializedNetMsg msg;
+        msg.m_type = std::move(m_type);
+        return m_transport.SetMessageToSend(msg);
+    }
+
     /** Expect ellswift key to have been received from transport and process it.
      *
      * Many other V2TransportTester functions cannot be called until after ReceiveKey() has been
@@ -1529,6 +1536,7 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         BOOST_CHECK((*ret)[3] && (*ret)[3]->m_type == "foobar" && (*ret)[3]->m_recv.empty());
         tester.ReceiveMessage("barfoo", {});
         tester.ReceiveMessage(max_message_type, {});
+        BOOST_CHECK(!tester.TrySetMessageToSend(std::string(CMessageHeader::MESSAGE_TYPE_SIZE + 1, 'x')));
     }
 
     // Too long garbage (initiator).
