@@ -265,6 +265,13 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         }
     };
 
+    auto check_cache_contracts = [&]() {
+        for (const auto& cache : caches) {
+            // Check at the transition that created the state, before a later operation can repair it.
+            cache->SanityCheck();
+        }
+    };
+
     // Main simulation loop: read commands from the fuzzer input, and apply them
     // to both the real cache stack and the simulation.
     FuzzedDataProvider provider(buffer.data(), buffer.size());
@@ -471,6 +478,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 current_height = provider.ConsumeIntegralInRange<uint32_t>(1, current_height - 1);
             }
         );
+        check_cache_contracts();
     }
 
     // Sanity check all the remaining caches
