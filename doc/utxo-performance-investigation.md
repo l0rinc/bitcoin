@@ -5188,3 +5188,58 @@ branch. It is not sufficient evidence for a full-chain result, for other
 hardware/filesystems/cache sizes, or for the original height-957759 comparison.
 Keep the historical mmap regression explicitly open until that full workload
 has been repeated against this stack and master.
+
+### Current stack: full-height HDD `-reindex-chainstate` comparison with master
+
+The full-height repeat overturns the short-run result above. Fresh
+`origin/master` `18c05d93016b28a9afd4c716dfe00b6e0accb30b` was compared with
+the production-code branch revision
+`ef533c1d8463f84b697deee1770bbc03555a32ff` (the current branch subsequently
+added documentation-only commits). This used the same local rotating ext4
+RAID1 datadir, GCC/g++ 14 Release builds, OverlayFS scratch copies, cache
+drop, disabled network/wallet activity, and time/perf collection as the
+height-287000 experiment. The only workload change was the user's original
+full-chain target:
+
+```text
+bitcoind -datadir=<overlay> -reindex-chainstate -stopatheight=957759 -dbcache=2000 \
+  -blocksonly -networkactive=0 -listen=0 -dnsseed=0 -fixedseeds=0 -discover=0 \
+  -disablewallet -printtoconsole=0
+```
+
+Each daemon logged height 0, height 957759, and `Shutdown done`, and exited
+zero. The full raw logs, `time -v`, perf output, validation markers, and
+OverlayFS-upper sizes are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/{master-full-1,current-full-1}/metrics/`
+and `full-current-vs-master-summary.txt`.
+
+| metric | master | branch | branch change |
+| --- | ---: | ---: | ---: |
+| wall time | 28,255.353 s (7:50:56) | 49,922.207 s (13:52:03) | **+76.68%** |
+| task-clock | 42,139.628 s | 41,018.284 s | -2.66% |
+| user CPU | 40,509.549 s | 38,818.015 s | -4.18% |
+| system CPU | 1,669.033 s | 2,347.936 s | +40.68% |
+| instructions | 223.467 T | 213.399 T | -4.51% |
+| branches | 18.698 T | 17.108 T | -8.50% |
+| major faults | 296,228 | 7,944,698 | **26.82x** |
+| minor faults | 17,623,112 | 18,107,612 | +2.75% |
+| filesystem input | 1,514,021,672 | 1,560,771,704 | +3.09% |
+| filesystem output | 1,296,389,272 | 1,310,015,304 | +1.05% |
+| peak RSS | 18,169,028 KiB | 17,974,260 KiB | -1.07% |
+| OverlayFS upper bytes | 15,596,157,807 | 15,522,241,857 | -0.47% |
+
+This is a serious aggregate regression, not evidence against a particular
+commit. The branch performed fewer instructions and branches, and wrote almost
+the same amount, yet spent 76.68% longer on the wall clock with 26.82 times as
+many major faults and 40.68% more system CPU. That combination makes an
+HDD/page-cache/mmap access-pattern regression the leading hypothesis; it does
+not prove that hypothesis or identify the responsible patch. In particular,
+neither the earlier short-run CPU win nor the existing `df4669a112` readahead
+repair resolves the original concern at this workload.
+
+This comparison has one cold run per revision, master ran first, and uses
+OverlayFS over a local RAID1 data source. It therefore cannot estimate variance,
+attribute causality, or generalize to SSDs or other cache sizes. The magnitude
+is large enough that the stack must be bisected with a representative late-chain
+workload before retaining or claiming any aggregate reindex speedup. Do not use
+the short-run result to justify the current production stack.
