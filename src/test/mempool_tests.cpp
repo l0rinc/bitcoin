@@ -557,16 +557,20 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
 
     if (!pool.exists(tx5.GetHash()))
         TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
-    TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
+    if (!pool.exists(tx7.GetHash()))
+        TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
 
     if (!pool.exists(tx5.GetHash()))
         TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
     if (!pool.exists(tx6.GetHash()))
         TryAddToMempool(pool, entry.Fee(110LL).FromTx(tx6));
-    TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
+    if (!pool.exists(tx7.GetHash()))
+        TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
 
-    TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
-    TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
+    if (!pool.exists(tx5.GetHash()))
+        TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
+    if (!pool.exists(tx7.GetHash()))
+        TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
 
     std::vector<CTransactionRef> vtx;
     FakeNodeClock clock{42s};
