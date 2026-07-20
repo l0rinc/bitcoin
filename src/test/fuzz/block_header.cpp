@@ -32,6 +32,12 @@ FUZZ_TARGET(block_header)
         CBlockHeader mut_block_header = *block_header;
         mut_block_header.SetNull();
         assert(mut_block_header.IsNull());
+        assert(mut_block_header.nVersion == 0);
+        assert(mut_block_header.hashPrevBlock.IsNull());
+        assert(mut_block_header.hashMerkleRoot.IsNull());
+        assert(mut_block_header.nTime == 0);
+        assert(mut_block_header.nBits == 0);
+        assert(mut_block_header.nNonce == 0);
         CBlock block{*block_header};
         assert(block.GetHash() == block_header->GetHash());
         (void)block.ToString();
