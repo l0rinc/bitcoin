@@ -95,6 +95,22 @@ template <std::integral T>
     }
 }
 
+template <std::integral T>
+[[nodiscard]] constexpr T SaturatingSubtract(const T i, const T j) noexcept
+{
+    if constexpr (std::numeric_limits<T>::is_signed) {
+        if (j > 0 && i < std::numeric_limits<T>::min() + j) {
+            return std::numeric_limits<T>::min();
+        }
+        if (j < 0 && i > std::numeric_limits<T>::max() + j) {
+            return std::numeric_limits<T>::max();
+        }
+    } else if (i < j) {
+        return 0;
+    }
+    return i - j;
+}
+
 /**
  * @brief Integer ceiling division (for unsigned values).
  *
