@@ -48,6 +48,20 @@ public:
         WITH_LOCK(m_impl->cs, m_impl->insecure_rand.Reseed(ConsumeUInt256(fuzzed_data_provider)));
     }
 
+    int CheckConsistency() const
+    {
+        LOCK(m_impl->cs);
+        return m_impl->CheckAddrman();
+    }
+
+    std::optional<AddrInfo> GetInfo(const CService& addr) const
+    {
+        LOCK(m_impl->cs);
+        const AddrInfo* info{m_impl->Find(addr)};
+        if (!info) return std::nullopt;
+        return *info;
+    }
+
     /**
      * Compare with another AddrMan.
      * This compares:
