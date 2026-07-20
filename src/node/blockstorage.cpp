@@ -481,6 +481,12 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
             return false;
         }
         previous_index = pindex;
+        if (pindex->pprev && (pindex->nHeight <= 0 || pindex->pprev->nHeight != pindex->nHeight - 1)) {
+            // Disk heights are not covered by the block hash, so validate them here.
+            LogError("%s: block index is corrupt: height %d of block %s does not follow its parent height %d\n",
+                     __func__, pindex->nHeight, pindex->GetBlockHash().ToString(), pindex->pprev->nHeight);
+            return false;
+        }
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
         pindex->nTimeMax = (pindex->pprev ? std::max(pindex->pprev->nTimeMax, pindex->nTime) : pindex->nTime);
 
