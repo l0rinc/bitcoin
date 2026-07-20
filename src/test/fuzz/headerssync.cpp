@@ -6,6 +6,7 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <headerssync.h>
+#include <pow.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/util/setup_common.h>
@@ -17,6 +18,8 @@
 
 #include <iterator>
 #include <vector>
+
+using State = HeadersSyncState::State;
 
 static void initialize_headers_sync_state_fuzz()
 {
@@ -76,6 +79,9 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
         /*chain_start=*/start_index,
         /*minimum_required_work=*/min_work);
 
+    State previous_state{headers_sync.GetState()};
+    uint256 redownload_released_hash{genesis_hash};
+
     // Store headers for potential redownload phase.
     std::vector<CBlockHeader> all_headers;
     std::vector<CBlockHeader>::const_iterator redownloaded_it;
@@ -105,8 +111,61 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
         }
 
         if (headers.empty()) return;
-        auto result = headers_sync.ProcessNextHeaders(headers, fuzzed_data_provider.ConsumeBool());
+        const auto state_before{headers_sync.GetState()};
+        const auto presync_work_before{headers_sync.GetPresyncWork()};
+        const auto presync_height_before{headers_sync.GetPresyncHeight()};
+        const auto result = headers_sync.ProcessNextHeaders(headers, fuzzed_data_provider.ConsumeBool());
+        const auto state_after{headers_sync.GetState()};
         requested_more = result.request_more;
+
+        // ProcessNextHeaders has one live continuation state. Any failed or
+        // non-continuing result must finalize the state and return no more
+        // work; this is independent of the fuzzer's message construction.
+        assert(result.request_more == (result.success && state_after != State::FINAL));
+        assert(state_after != State::PRESYNC || state_before == State::PRESYNC);
+        assert(state_after != State::REDOWNLOAD || state_before != State::FINAL);
+        if (!result.success) {
+            assert(state_after == State::FINAL);
+            assert(result.pow_validated_headers.empty());
+        }
+
+        if (state_before == State::PRESYNC && result.success && state_after != State::FINAL) {
+            arith_uint256 expected_work{presync_work_before};
+            for (const auto& header : headers) expected_work += GetBlockProof(header);
+            assert(headers_sync.GetPresyncWork() == expected_work);
+            assert(headers_sync.GetPresyncHeight() == presync_height_before + static_cast<int64_t>(headers.size()));
+            assert(headers_sync.GetPresyncTime() == headers.back().nTime);
+        }
+
+        if (!result.pow_validated_headers.empty()) {
+            assert(state_before == State::REDOWNLOAD);
+            for (const auto& header : result.pow_validated_headers) {
+                assert(header.hashPrevBlock == redownload_released_hash);
+                redownload_released_hash = header.GetHash();
+            }
+        }
+
+        if (state_before == State::PRESYNC && state_after == State::REDOWNLOAD) {
+            redownload_released_hash = genesis_hash;
+        }
+
+        if (result.request_more) {
+            const auto locator{headers_sync.NextHeadersRequestLocator()};
+            assert(!locator.vHave.empty());
+            if (state_after == State::PRESYNC) {
+                assert(locator.vHave.front() == headers.back().GetHash());
+            } else {
+                assert(state_after == State::REDOWNLOAD);
+                if (state_before == State::PRESYNC) {
+                    assert(locator.vHave.front() == genesis_hash);
+                } else {
+                    assert(locator.vHave.front() == headers.back().GetHash());
+                }
+            }
+        }
+
+        if (previous_state == State::REDOWNLOAD) assert(state_after != State::PRESYNC);
+        previous_state = state_after;
 
         if (result.request_more) {
             if (presync) {

@@ -133,6 +133,10 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(
     }
 
     if (!(ret.success && ret.request_more)) Finalize();
+
+    // A caller may continue only when this batch succeeded and the state is
+    // still live. Every other result must leave the state finalized.
+    Assume(ret.request_more == (ret.success && m_download_state != State::FINAL));
     return ret;
 }
 
@@ -169,6 +173,11 @@ bool HeadersSyncState::ValidateAndStoreHeadersCommitments(std::span<const CBlock
         m_redownload_buffer_last_hash = m_chain_start.GetBlockHash();
         m_redownload_chain_work = m_chain_start.nChainWork;
         m_download_state = State::REDOWNLOAD;
+        Assume(m_redownloaded_headers.empty());
+        Assume(m_redownload_buffer_last_height == m_chain_start.nHeight);
+        Assume(m_redownload_buffer_first_prev_hash == m_chain_start.GetBlockHash());
+        Assume(m_redownload_buffer_last_hash == m_chain_start.GetBlockHash());
+        Assume(m_redownload_chain_work == m_chain_start.nChainWork);
         LogDebug(BCLog::NET, "Initial headers sync transition with peer=%d: reached sufficient work at height=%i, redownloading from height=%i\n", m_id, m_current_height, m_redownload_buffer_last_height);
     }
     return true;
@@ -290,6 +299,8 @@ std::vector<CBlockHeader> HeadersSyncState::PopHeadersReadyForAcceptance()
         m_redownloaded_headers.pop_front();
         m_redownload_buffer_first_prev_hash = ret.back().GetHash();
     }
+    Assume(m_redownloaded_headers.size() <= m_params.redownload_buffer_size);
+    if (m_process_all_remaining_headers) Assume(m_redownloaded_headers.empty());
     return ret;
 }
 
