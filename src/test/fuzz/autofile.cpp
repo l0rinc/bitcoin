@@ -49,6 +49,7 @@ FUZZ_TARGET(autofile)
             },
             [&] {
                 (void)auto_file.fclose();
+                assert(auto_file.IsNull());
             },
             [&] {
                 ReadFromStream(fuzzed_data_provider, auto_file);
@@ -59,11 +60,15 @@ FUZZ_TARGET(autofile)
     }
     (void)auto_file.IsNull();
     if (fuzzed_data_provider.ConsumeBool()) {
+        const bool was_open{!auto_file.IsNull()};
         FILE* f = auto_file.release();
+        assert(!was_open || f != nullptr);
+        assert(auto_file.IsNull());
         if (f != nullptr) {
             fclose(f);
         }
     } else {
         (void)auto_file.fclose();
+        assert(auto_file.IsNull());
     }
 }
