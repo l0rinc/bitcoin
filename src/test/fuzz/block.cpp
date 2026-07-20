@@ -122,4 +122,8 @@ FUZZ_TARGET(block, .init = initialize_block)
     block_copy.SetNull();
     const bool is_null = block_copy.IsNull();
     assert(is_null);
+    assert(block_copy.vtx.empty());
+    assert(!block_copy.fChecked);
+    assert(!block_copy.m_checked_witness_commitment);
+    assert(!block_copy.m_checked_merkle_root);
 }
