@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <arith_uint256.h>
+#include <common/args.h>
 #include <chain.h>
 #include <chainparams.h>
 #include <pow.h>
@@ -154,6 +155,52 @@ FUZZ_TARGET(pow, .init = initialize_pow)
                 AssertPowTargetContracts(nbits, consensus_params);
                 (void)CheckProofOfWorkImpl(*hash, nbits, consensus_params);
             }
+        }
+    }
+
+    // Exercise the testnet min-difficulty rules that mainnet params never
+    // reach (the fPowAllowMinDifficultyBlocks branch in GetNextWorkRequired),
+    // with locally created params instead of a global SelectParams switch.
+    // Runs unconditionally: inputs default to 0 when the provider is empty.
+    {
+        const auto testnet{CreateChainParams(ArgsManager{}, ChainType::TESTNET)};
+        const Consensus::Params& tn_consensus{testnet->GetConsensus()};
+        const uint32_t pow_limit_bits{UintToArith256(tn_consensus.powLimit).GetCompact()};
+        const uint32_t hard_bits{fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
+        // Chain: one hard-difficulty genesis, then only min-difficulty blocks.
+        std::vector<std::unique_ptr<CBlockIndex>> tn_blocks;
+        CBlockHeader hard_header;
+        hard_header.nBits = hard_bits;
+        hard_header.nTime = fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, std::numeric_limits<uint32_t>::max() - 40'000);
+        auto hard{std::make_unique<CBlockIndex>(hard_header)};
+        hard->nHeight = 0;
+        hard->nChainWork = GetBlockProof(*hard);
+        tn_blocks.push_back(std::move(hard));
+        const int easy_count{fuzzed_data_provider.ConsumeIntegralInRange(1, 10)};
+        for (int i = 1; i <= easy_count; ++i) {
+            CBlockHeader easy_header;
+            easy_header.nBits = pow_limit_bits;
+            easy_header.nTime = tn_blocks.back()->nTime + fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, 3600);
+            auto easy{std::make_unique<CBlockIndex>(easy_header)};
+            easy->pprev = tn_blocks.back().get();
+            easy->nHeight = tn_blocks.back()->nHeight + 1;
+            easy->nChainWork = tn_blocks.back()->nChainWork + GetBlockProof(*tn_blocks.back());
+            tn_blocks.push_back(std::move(easy));
+        }
+        CBlockIndex* last{tn_blocks.back().get()};
+        CBlockHeader next_header;
+        const uint32_t last_time{last->nTime};
+        const bool trigger_min_difficulty{fuzzed_data_provider.ConsumeBool()};
+        next_header.nTime = trigger_min_difficulty ? last_time + tn_consensus.nPowTargetSpacing * 2 + 1 : last_time;
+        const uint32_t next_bits{GetNextWorkRequired(last, &next_header, tn_consensus)};
+        if (trigger_min_difficulty) {
+            // Block time beyond twice the target spacing forces min difficulty.
+            assert(next_bits == pow_limit_bits);
+        } else {
+            // The walk back over min-difficulty blocks must stop at the hard
+            // ancestor (or the interval boundary at height 0); either way it
+            // returns the hard ancestor's bits.
+            assert(next_bits == hard_bits);
         }
     }
 }
