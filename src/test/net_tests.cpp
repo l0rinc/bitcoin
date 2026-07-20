@@ -1043,6 +1043,10 @@ BOOST_AUTO_TEST_CASE(advertise_local_address)
     RemoveLocal(addr_cjdns);
 }
 
+namespace {
+void CheckOversizedMessage(Transport& transport);
+} // namespace
+
 BOOST_AUTO_TEST_CASE(v1transport_max_message_type)
 {
     auto max_message_type{std::string(CMessageHeader::MESSAGE_TYPE_SIZE, 'x')};
@@ -1057,6 +1061,12 @@ BOOST_AUTO_TEST_CASE(v1transport_max_message_type)
     BOOST_CHECK_EQUAL(message_type, max_message_type);
 }
 
+BOOST_AUTO_TEST_CASE(v1transport_oversized_message_type)
+{
+    V1Transport transport{NodeId{0}};
+    CheckOversizedMessage(transport);
+}
+
 namespace {
 
 CKey GenerateRandomTestKey(FastRandomContext& rng) noexcept
@@ -1065,6 +1075,14 @@ CKey GenerateRandomTestKey(FastRandomContext& rng) noexcept
     uint256 key_data = rng.rand256();
     key.Set(key_data.begin(), key_data.end(), true);
     return key;
+}
+
+void CheckOversizedMessage(Transport& transport)
+{
+    auto msg{NetMsg::Make(std::string(CMessageHeader::MESSAGE_TYPE_SIZE + 1, 'x'), uint8_t{0x01})};
+    auto expected{msg.Copy()};
+    BOOST_CHECK(!transport.SetMessageToSend(msg)); // V1 aborts and V2 overflows without the guard
+    BOOST_CHECK(msg.m_type == expected.m_type && msg.data == expected.data);
 }
 
 /** A class for scenario-based tests of V2Transport
@@ -1214,11 +1232,9 @@ public:
         m_msg_to_send.push_back(std::move(msg));
     }
 
-    bool TrySetMessageToSend(std::string m_type)
+    void CheckOversizedMessageType()
     {
-        CSerializedNetMsg msg;
-        msg.m_type = std::move(m_type);
-        return m_transport.SetMessageToSend(msg);
+        CheckOversizedMessage(m_transport);
     }
 
     /** Expect ellswift key to have been received from transport and process it.
@@ -1536,7 +1552,7 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         BOOST_CHECK((*ret)[3] && (*ret)[3]->m_type == "foobar" && (*ret)[3]->m_recv.empty());
         tester.ReceiveMessage("barfoo", {});
         tester.ReceiveMessage(max_message_type, {});
-        BOOST_CHECK(!tester.TrySetMessageToSend(std::string(CMessageHeader::MESSAGE_TYPE_SIZE + 1, 'x')));
+        tester.CheckOversizedMessageType();
     }
 
     // Too long garbage (initiator).
