@@ -121,7 +121,7 @@ static void MemPoolAddTransactions(benchmark::Bench& bench)
             AddTx(tx, pool, det_rand);
         }
         pool.TrimToSize(pool.DynamicMemoryUsage() * 3 / 4);
-        pool.TrimToSize(GetVirtualTransactionSize(*ordered_coins.front()));
+        pool.TrimToSize(GetVirtualTransactionSize(*transactions.front()));
     });
 }
 
