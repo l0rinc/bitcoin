@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <addrman.h>
+#include <addresstype.h>
 #include <bip324.h>
 #include <chainparams.h>
 #include <clientversion.h>
@@ -21,6 +22,7 @@
 #include <test/util/net.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
+#include <test/util/time.h>
 #include <test/util/validation.h>
 #include <util/strencodings.h>
 #include <util/string.h>
@@ -1676,6 +1678,72 @@ BOOST_AUTO_TEST_CASE(addlocal_onlynet_externalip)
         g_reachable_nets.Add(net);
     }
     fDiscover = discover_orig;
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_SUITE(net_processing_tests, TestChain100Setup)
+
+BOOST_FIXTURE_TEST_CASE(last_tx_time_tracks_orphan_acceptance, TestChain100Setup)
+{
+    m_clock.set(1700000000s);
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    m_node.validation_signals->RegisterValidationInterface(m_node.peerman.get());
+
+    auto* peer = new CNode{
+        /*id=*/0,
+        /*sock=*/nullptr,
+        /*addrIn=*/CAddress{Lookup("1.2.3.4", 8333, /*fAllowLookup=*/false).value(), NODE_NETWORK},
+        /*nKeyedNetGroupIn=*/0,
+        /*nLocalHostNonceIn=*/0,
+        /*addrBindIn=*/CService{},
+        /*addrNameIn=*/"",
+        /*conn_type_in=*/ConnectionType::INBOUND,
+        /*inbound_onion=*/false,
+        /*network_key=*/0,
+    };
+
+    connman.Handshake(*peer,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/static_cast<ServiceFlags>(NODE_NETWORK | NODE_WITNESS),
+                      /*local_services=*/static_cast<ServiceFlags>(NODE_NETWORK | NODE_WITNESS),
+                      PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+    connman.FlushSendBuffer(*peer);
+    connman.AddTestNode(*peer);
+
+    const CScript destination{GetScriptForDestination(PKHash(coinbaseKey.GetPubKey()))};
+    const auto parent{MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns.front(), /*input_vout=*/0, /*input_height=*/1, coinbaseKey,
+        destination, m_coinbase_txns.front()->vout.front().nValue - 1000, /*submit=*/false))};
+    const auto orphan{MakeTransactionRef(CreateValidMempoolTransaction(
+        parent, /*input_vout=*/0, /*input_height=*/101, coinbaseKey,
+        destination, parent->vout.front().nValue - 1000, /*submit=*/false))};
+
+    const auto process_one_message = [&](const CTransactionRef& tx) {
+        BOOST_REQUIRE(connman.ReceiveMsgFrom(*peer, NetMsg::Make(NetMsgType::TX, TX_WITH_WITNESS(*tx))));
+        peer->fPauseSend = false;
+        return connman.ProcessMessagesOnce(*peer);
+    };
+
+    BOOST_REQUIRE(!process_one_message(orphan));
+    BOOST_CHECK(!m_node.mempool->exists(orphan->GetHash()));
+
+    m_clock.set(1700000001s);
+    BOOST_REQUIRE(process_one_message(parent));
+    BOOST_CHECK_EQUAL(peer->m_last_tx_time.load(), 1700000001s);
+
+    m_clock.set(1700000002s);
+    BOOST_REQUIRE(connman.ProcessMessagesOnce(*peer));
+    BOOST_CHECK(m_node.mempool->exists(orphan->GetHash()));
+    BOOST_CHECK_EQUAL(peer->m_last_tx_time.load(), 1700000002s);
+
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    m_node.validation_signals->UnregisterValidationInterface(m_node.peerman.get());
+    m_node.peerman->FinalizeNode(*peer);
+    connman.ClearTestNodes();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

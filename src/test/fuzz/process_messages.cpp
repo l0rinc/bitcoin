@@ -117,6 +117,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
         net_msg.data = ConsumeRandomLengthByteVector(fuzzed_data_provider, MAX_PROTOCOL_MESSAGE_LENGTH);
 
         CNode& random_node = *PickValue(fuzzed_data_provider, peers);
+        const auto mempool_size_before{node.mempool->size()};
 
         connman.FlushSendBuffer(random_node);
         (void)connman.ReceiveMsgFrom(random_node, std::move(net_msg));
@@ -131,8 +132,17 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
             }
             node.peerman->SendMessages(random_node);
         }
+
+        node.validation_signals->SyncWithValidationInterfaceQueue();
+
+        // A TX message can accept the message itself, an orphan made ready by an earlier
+        // parent, or an eligible package. Each case must refresh the sending peer's
+        // eviction timestamp when it grows the mempool.
+        if (random_message_type == NetMsgType::TX && node.mempool->size() > mempool_size_before) {
+            assert(random_node.m_last_tx_time.load() == GetTime<std::chrono::seconds>());
+        }
     }
-    node.validation_signals->SyncWithValidationInterfaceQueue();
+
     node.validation_signals->UnregisterValidationInterface(node.peerman.get());
     node.connman->StopNodes();
     if (block_index_size != WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())) {
