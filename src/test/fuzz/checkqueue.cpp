@@ -25,6 +25,14 @@ struct DumbCheck {
         return 1;
     }
 };
+
+std::optional<int> ExpectedResult(const std::vector<DumbCheck>& checks)
+{
+    for (const DumbCheck& check : checks) {
+        if (!check.result) return 1;
+    }
+    return std::nullopt;
+}
 } // namespace
 
 FUZZ_TARGET(checkqueue)
@@ -42,18 +50,26 @@ FUZZ_TARGET(checkqueue)
         checks_1.emplace_back(result);
         checks_2.emplace_back(result);
     }
-    if (fuzzed_data_provider.ConsumeBool()) {
+    const bool add_to_queue_1{fuzzed_data_provider.ConsumeBool()};
+    const std::optional<int> expected_result_1{add_to_queue_1 ? ExpectedResult(checks_1) : std::nullopt};
+    if (add_to_queue_1) {
         check_queue_1.Add(std::move(checks_1));
     }
     if (fuzzed_data_provider.ConsumeBool()) {
-        (void)check_queue_1.Complete();
+        const std::optional<int> result{check_queue_1.Complete()};
+        assert(result.has_value() == expected_result_1.has_value());
+        if (result) assert(*result == *expected_result_1);
     }
 
     CCheckQueueControl<DumbCheck> check_queue_control{check_queue_2};
-    if (fuzzed_data_provider.ConsumeBool()) {
+    const bool add_to_queue_2{fuzzed_data_provider.ConsumeBool()};
+    const std::optional<int> expected_result_2{add_to_queue_2 ? ExpectedResult(checks_2) : std::nullopt};
+    if (add_to_queue_2) {
         check_queue_control.Add(std::move(checks_2));
     }
     if (fuzzed_data_provider.ConsumeBool()) {
-        (void)check_queue_control.Complete();
+        const std::optional<int> result{check_queue_control.Complete()};
+        assert(result.has_value() == expected_result_2.has_value());
+        if (result) assert(*result == *expected_result_2);
     }
 }
