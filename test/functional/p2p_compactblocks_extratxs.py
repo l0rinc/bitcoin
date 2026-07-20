@@ -15,6 +15,7 @@ from test_framework.messages import (
     HeaderAndShortIDs,
     MSG_BLOCK,
     msg_cmpctblock,
+    msg_headers,
     msg_sendcmpct,
     msg_tx,
     tx_from_hex,
@@ -206,7 +207,9 @@ class CompactBlocksBlockReconstructionLimitTest(BitcoinTestFramework):
         add_witness_commitment(block)
         block.solve()
 
-        # Send as compact block
+        # Request the block before sending its compact form.
+        self.segwit_node.send_without_ping(msg_headers([block]))
+        self.segwit_node.wait_for_getdata([block.hash_int], timeout=30)
         cmpct_block = HeaderAndShortIDs()
         cmpct_block.initialize_from_block(block, use_witness=True)
         self.segwit_node.send_and_ping(msg_cmpctblock(cmpct_block.to_p2p()))
