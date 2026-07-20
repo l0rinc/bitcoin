@@ -91,6 +91,11 @@ public:
         assert(ComputeCacheCoinsSnapshot() == m_expected_snapshot);
     }
 
+    void CaptureSnapshot()
+    {
+        m_expected_snapshot = ComputeCacheCoinsSnapshot();
+    }
+
     using CCoinsViewCache::CCoinsViewCache;
 };
 
@@ -475,13 +480,16 @@ FUZZ_TARGET(coins_view_stacked, .init = initialize_coins_view)
         .memory_only = true,
     };
     CCoinsViewDB backend_base_coins_view{std::move(db_params), CoinsViewOptions{}};
-    CCoinsViewCache backend_cache{&backend_base_coins_view, /*deterministic=*/true};
+    MutationGuardCoinsViewCache backend_cache{&backend_base_coins_view, /*deterministic=*/true};
     TestCoinsView(fuzzed_data_provider, backend_cache, &backend_base_coins_view);
+    backend_cache.CaptureSnapshot();
     CoinsViewOverlay coins_view_cache{&backend_cache, g_thread_pool, /*deterministic=*/true};
     CBlock block{BuildRandomBlock(fuzzed_data_provider, backend_base_coins_view)};
     {
         const auto reset_guard{coins_view_cache.StartFetching(block)};
         TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache);
+        backend_cache.AssertUnchanged();
     }
+    backend_cache.AssertUnchanged();
     TestCoinsView(fuzzed_data_provider, backend_cache, &backend_base_coins_view);
 }
