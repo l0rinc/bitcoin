@@ -913,7 +913,9 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
 
         // Need to completely rewrite the wallet file; if we don't, the database might keep
         // bits of the unencrypted private key in slack space in the database file.
-        GetDatabase().Rewrite();
+        if (!GetDatabase().Rewrite()) {
+            WalletLogPrintf("Wallet database rewrite failed after encryption: unencrypted key material may remain in slack space of the wallet file. To purge it, restore a new wallet from a dump of this one (dumpwallet -> restorewallet).\n");
+        }
     }
     NotifyStatusChanged(this);
 
