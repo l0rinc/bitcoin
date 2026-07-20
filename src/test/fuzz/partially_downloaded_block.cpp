@@ -47,6 +47,17 @@ public:
         prefilledtxn.resize(size);
     }
 
+    void RemoveCoinbasePrefill()
+    {
+        assert(!prefilledtxn.empty());
+        prefilledtxn.erase(prefilledtxn.begin());
+    }
+
+    void InsertCoinbaseShortTxID(uint64_t shorttxid)
+    {
+        shorttxids.insert(shorttxids.begin(), shorttxid);
+    }
+
     size_t ShortTxIDCount() const { return shorttxids.size(); }
 
     uint64_t ShortTxID(size_t index) const
@@ -194,6 +205,12 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     const bool force_mempool_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_extra_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_extra_early_exit_collision_with_prefilled{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_extra_early_exit_collision && block->vtx.size() == 4 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_extra_early_exit_collision_without_coinbase{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_extra_early_exit_collision && !force_extra_early_exit_collision_with_prefilled && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    if (force_extra_early_exit_collision_without_coinbase) {
+        const uint64_t coinbase_short_id{cmpctblock.GetShortID(block->vtx[0]->GetWitnessHash())};
+        cmpctblock.RemoveCoinbasePrefill();
+        cmpctblock.InsertCoinbaseShortTxID(coinbase_short_id);
+    }
     if (force_extra_early_exit_collision_with_prefilled) {
         // Leave a real transaction between the two short-ID slots so the source
         // collision also exercises InitData's index-offset mapping.
@@ -218,7 +235,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         if (force_short_id_index_overflow || force_mempool_extra_sequence || force_short_id_collision || force_mempool_collision ||
             force_null_extra_collision || force_duplicate_extra_collision ||
             force_mempool_duplicate_then_collision || force_duplicate_extra_txn || force_mempool_early_exit_collision || force_extra_early_exit_collision ||
-            force_extra_early_exit_collision_with_prefilled) continue;
+            force_extra_early_exit_collision_with_prefilled || force_extra_early_exit_collision_without_coinbase) continue;
 
         if (add_to_extra_txn) {
             extra_txn.emplace_back(tx->GetWitnessHash(), tx);
@@ -237,6 +254,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     bool forced_mempool_early_exit_collision_applied{false};
     bool forced_extra_early_exit_collision_applied{false};
     bool forced_extra_early_exit_collision_with_prefilled_applied{false};
+    bool forced_extra_early_exit_collision_without_coinbase_applied{false};
     bool forced_late_extra_seen{false};
     size_t forced_mempool_candidates_seen{0};
     if (force_short_id_index_overflow) {
@@ -429,6 +447,55 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                 forced_extra_early_exit_collision_with_prefilled_applied = true;
             }
         }
+    } else if (force_extra_early_exit_collision_without_coinbase) {
+        CMutableTransaction first_mempool_tx_mutable{*block->vtx[1]};
+        first_mempool_tx_mutable.nLockTime ^= 1U;
+        const CTransactionRef first_mempool_tx{MakeTransactionRef(std::move(first_mempool_tx_mutable))};
+        CMutableTransaction first_extra_tx_mutable{*block->vtx[2]};
+        first_extra_tx_mutable.nLockTime ^= 2U;
+        const CTransactionRef first_extra_tx{MakeTransactionRef(std::move(first_extra_tx_mutable))};
+        CMutableTransaction second_extra_tx_mutable{*block->vtx[1]};
+        second_extra_tx_mutable.nLockTime ^= 4U;
+        const CTransactionRef second_extra_tx{MakeTransactionRef(std::move(second_extra_tx_mutable))};
+        CMutableTransaction late_extra_tx_mutable{*block->vtx[1]};
+        late_extra_tx_mutable.nLockTime ^= 8U;
+        const CTransactionRef late_extra_tx{MakeTransactionRef(std::move(late_extra_tx_mutable))};
+
+        if (first_mempool_tx->GetWitnessHash() != first_extra_tx->GetWitnessHash() &&
+            first_mempool_tx->GetWitnessHash() != second_extra_tx->GetWitnessHash() &&
+            first_mempool_tx->GetWitnessHash() != late_extra_tx->GetWitnessHash() &&
+            first_extra_tx->GetWitnessHash() != second_extra_tx->GetWitnessHash() &&
+            first_extra_tx->GetWitnessHash() != late_extra_tx->GetWitnessHash() &&
+            second_extra_tx->GetWitnessHash() != late_extra_tx->GetWitnessHash()) {
+            TestMemPoolEntryHelper entry;
+            {
+                LOCK2(cs_main, pool.cs);
+                TryAddToMempool(pool, entry.FromTx(first_mempool_tx));
+            }
+            if (pool.size() == 1) {
+                const Wtxid first_mempool_wtxid{first_mempool_tx->GetWitnessHash()};
+                const Wtxid first_extra_wtxid{first_extra_tx->GetWitnessHash()};
+                const Wtxid second_extra_wtxid{second_extra_tx->GetWitnessHash()};
+                const Wtxid late_extra_wtxid{late_extra_tx->GetWitnessHash()};
+                const uint64_t first_short_id{cmpctblock.GetShortID(block->vtx[0]->GetWitnessHash())};
+                const uint64_t second_short_id{cmpctblock.GetShortID(block->vtx[1]->GetWitnessHash())};
+                const uint64_t third_short_id{cmpctblock.GetShortID(block->vtx[2]->GetWitnessHash())};
+                extra_txn.emplace_back(first_extra_wtxid, first_extra_tx);
+                extra_txn.emplace_back(second_extra_wtxid, second_extra_tx);
+                extra_txn.emplace_back(late_extra_wtxid, late_extra_tx);
+                pdb.m_get_short_id_mock = [&forced_late_extra_seen, first_mempool_wtxid, first_extra_wtxid, second_extra_wtxid, late_extra_wtxid, first_short_id, second_short_id, third_short_id](const CBlockHeaderAndShortTxIDs& cmpctblock, const Wtxid& wtxid) {
+                    if (wtxid == first_mempool_wtxid) return first_short_id;
+                    if (wtxid == first_extra_wtxid) return second_short_id;
+                    if (wtxid == second_extra_wtxid) return third_short_id;
+                    if (wtxid == late_extra_wtxid) {
+                        forced_late_extra_seen = true;
+                        return first_short_id;
+                    }
+                    return cmpctblock.GetShortID(wtxid);
+                };
+                forced_extra_early_exit_collision_without_coinbase_applied = true;
+            }
+        }
     } else if (cmpctblock.ShortTxIDCount() > 0 && !force_short_id_collision && !force_mempool_collision &&
         (force_null_extra_collision || fuzzed_data_provider.ConsumeBool())) {
         if (force_null_extra_collision) {
@@ -598,6 +665,15 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         assert(pdb.MempoolCount() == 2);
         assert(pdb.ExtraCount() == 1);
     }
+    if (forced_extra_early_exit_collision_without_coinbase_applied) {
+        assert(!forced_late_extra_seen);
+        assert(pdb.IsTxAvailable(0));
+        assert(pdb.IsTxAvailable(1));
+        assert(pdb.IsTxAvailable(2));
+        assert(pdb.PrefilledCount() == 0);
+        assert(pdb.MempoolCount() == 3);
+        assert(pdb.ExtraCount() == 2);
+    }
 
     const auto prefilled_by_position{cmpctblock.PrefilledTxsByPosition()};
     const auto shorttxids_by_position{cmpctblock.ShortTxIDsByPosition()};
@@ -640,12 +716,12 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
 
     // Mock IsBlockMutated
     bool fail_block_mutated{fuzzed_data_provider.ConsumeBool()};
-    if (!forced_mempool_early_exit_collision_applied && !forced_extra_early_exit_collision_applied && !forced_extra_early_exit_collision_with_prefilled_applied) {
+    if (!forced_mempool_early_exit_collision_applied && !forced_extra_early_exit_collision_applied && !forced_extra_early_exit_collision_with_prefilled_applied && !forced_extra_early_exit_collision_without_coinbase_applied) {
         pdb.m_check_block_mutated_mock = FuzzedIsBlockMutated(fail_block_mutated);
     }
     // A forced early-exit construction intentionally leaves a colliding candidate unexamined;
     // exercise the production mutation check on the resulting wrong transaction set.
-    const bool expected_block_mutated{fail_block_mutated || forced_mempool_early_exit_collision_applied || forced_extra_early_exit_collision_applied || forced_extra_early_exit_collision_with_prefilled_applied};
+    const bool expected_block_mutated{fail_block_mutated || forced_mempool_early_exit_collision_applied || forced_extra_early_exit_collision_applied || forced_extra_early_exit_collision_with_prefilled_applied || forced_extra_early_exit_collision_without_coinbase_applied};
 
     CBlock reconstructed_block{*block};
     reconstructed_block.vtx = {block->vtx[0]};
