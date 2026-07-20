@@ -59,7 +59,7 @@ class RPCSignerTest(BitcoinTestFramework):
         if rpc_error is None:
             raise AssertionError("No exception raised")
         assert_equal(rpc_error["code"], -1)
-        assert "received invalid fingerprint: must be exactly 8 hex characters" in rpc_error["message"]
+        assert "received invalid fingerprint, must be 8 hex characters" in rpc_error["message"]
         assert fingerprint not in rpc_error["message"]
 
     def run_test(self):
