@@ -558,6 +558,61 @@ FUZZ_TARGET(txorphanage_sim)
         return std::max<ByRatioNegSize<FeeFrac>>(FeeFrac{count, max_count}, FeeFrac{usage, max_usage});
     };
 
+    // Compare the externally observable model state immediately after each mutator and trim
+    // cycle. A later operation could otherwise erase an intermediate accounting mismatch.
+    const auto AssertSimState = [&] {
+        real->SanityCheck();
+
+        node::TxOrphanage::Usage sim_unique_usage{0};
+        node::TxOrphanage::Count sim_unique_latency_score{0};
+        node::TxOrphanage::Count sim_unique_orphans{0};
+        std::vector<node::TxOrphanage::Usage> sim_usage_by_peer(NUM_PEERS);
+        std::vector<node::TxOrphanage::Count> sim_latency_by_peer(NUM_PEERS);
+        std::vector<node::TxOrphanage::Count> sim_announcements_by_peer(NUM_PEERS);
+        for (const auto& ann : sim_announcements) {
+            sim_usage_by_peer[ann.announcer] += GetTransactionWeight(*txn[ann.tx]);
+            sim_latency_by_peer[ann.announcer] += 1 + txn[ann.tx]->vin.size() / 10;
+            sim_announcements_by_peer[ann.announcer] += 1;
+        }
+        for (unsigned tx = 0; tx < NUM_TX; ++tx) {
+            if (have_tx_fn(tx)) {
+                sim_unique_orphans += 1;
+                sim_unique_usage += GetTransactionWeight(*txn[tx]);
+                sim_unique_latency_score += txn[tx]->vin.size() / 10;
+            }
+        }
+
+        const auto present_peers = count_peers_fn();
+        assert(real->CountAnnouncements() == sim_announcements.size());
+        assert(real->CountUniqueOrphans() == sim_unique_orphans);
+        assert(real->TotalOrphanUsage() == sim_unique_usage);
+        assert(real->TotalLatencyScore() == sim_unique_latency_score + sim_announcements.size());
+        assert(real->MaxGlobalLatencyScore() == max_global_latency_score);
+        assert(real->ReservedPeerUsage() == reserved_peer_usage);
+        assert(real->MaxPeerLatencyScore() == max_global_latency_score / std::max<unsigned>(1, present_peers));
+        assert(real->MaxGlobalUsage() == reserved_peer_usage * std::max<unsigned>(1, present_peers));
+        assert(real->TotalLatencyScore() <= real->MaxGlobalLatencyScore());
+        assert(real->TotalOrphanUsage() <= real->MaxGlobalUsage());
+
+        for (NodeId peer = 0; peer < NUM_PEERS; ++peer) {
+            assert(real->UsageByPeer(peer) == sim_usage_by_peer[peer]);
+            assert(real->LatencyScoreFromPeer(peer) == sim_latency_by_peer[peer]);
+            assert(real->AnnouncementsFromPeer(peer) == sim_announcements_by_peer[peer]);
+            assert(real->HaveTxToReconsider(peer) == have_reconsider_fn(peer));
+        }
+        for (unsigned tx = 0; tx < NUM_TX; ++tx) {
+            const auto wtxid = txn[tx]->GetWitnessHash();
+            const bool sim_have_tx = have_tx_fn(tx);
+            assert(real->HaveTx(wtxid) == sim_have_tx);
+            const auto txref = real->GetTx(wtxid);
+            assert(!!txref == sim_have_tx);
+            if (sim_have_tx) assert(txref->GetWitnessHash() == wtxid);
+            for (NodeId peer = 0; peer < NUM_PEERS; ++peer) {
+                assert(real->HaveTxFromPeer(wtxid, peer) == (find_announce_fn(tx, peer) != sim_announcements.end()));
+            }
+        }
+    };
+
     //
     // 5. Run through a scenario of mutators on both real and simulated orphanage.
     //
@@ -665,20 +720,19 @@ FUZZ_TARGET(txorphanage_sim)
             } else if (command-- == 0) {
                 // GetTxToReconsider.
                 auto peer = read_peer_fn();
+                // The real index is ordered by peer, reconsiderable state, and entry sequence.
+                // The first matching simulation entry is therefore the required result.
+                const auto sim_it = std::find_if(sim_announcements.begin(), sim_announcements.end(), [&](const auto& ann) {
+                    return ann.announcer == peer && ann.reconsider;
+                });
                 auto result = real->GetTxToReconsider(peer);
-                if (result) {
-                    // A transaction was found. It must have a corresponding reconsiderable
-                    // announcement from peer.
-                    auto sim_ann_it = find_announce_wtxid_fn(result->GetWitnessHash(), peer);
-                    assert(sim_ann_it != sim_announcements.end());
-                    assert(sim_ann_it->announcer == peer);
-                    assert(sim_ann_it->reconsider);
+                if (sim_it != sim_announcements.end()) {
+                    assert(result);
+                    assert(result->GetWitnessHash() == txn[sim_it->tx]->GetWitnessHash());
                     // Make it non-reconsiderable.
-                    sim_ann_it->reconsider = false;
+                    sim_it->reconsider = false;
                 } else {
-                    // No reconsiderable transaction was found from peer. Verify that it does not
-                    // have any.
-                    assert(!have_reconsider_fn(peer));
+                    assert(!result);
                 }
                 break;
             }
@@ -730,9 +784,7 @@ FUZZ_TARGET(txorphanage_sim)
         // We must now be within limits, otherwise LimitOrphans should have continued further.
         // Check cached indexes while the state produced by this command is still observable. A
         // later erase or trim can otherwise hide an intermediate accounting mismatch.
-        real->SanityCheck();
-        assert(real->TotalLatencyScore() <= real->MaxGlobalLatencyScore());
-        assert(real->TotalOrphanUsage() <= real->MaxGlobalUsage());
+        AssertSimState();
     }
 
     //
