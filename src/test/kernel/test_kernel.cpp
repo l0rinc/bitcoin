@@ -676,6 +676,14 @@ BOOST_AUTO_TEST_CASE(btck_chainparams_tests)
     CheckHandle(params_signet, params_signet_challenge);
 }
 
+BOOST_AUTO_TEST_CASE(btck_chainparams_invalid_type_tests)
+{
+    // An invalid chain type from an FFI caller must yield nullptr, matching
+    // the create functions' convention for invalid input, instead of falling
+    // off the end of the function and returning an indeterminate pointer.
+    BOOST_CHECK(btck_chain_parameters_create(static_cast<btck_ChainType>(42)) == nullptr);
+}
+
 BOOST_AUTO_TEST_CASE(btck_context_tests)
 {
     { // test default context

@@ -854,7 +854,9 @@ btck_ChainParameters* btck_chain_parameters_create(const btck_ChainType chain_ty
         return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::RegTest().release()));
     }
     }
-    assert(false);
+    // An invalid enum value from an FFI caller is reported like any other
+    // invalid input to a create function: by returning nullptr.
+    return nullptr;
 }
 
 btck_ChainParameters* btck_chain_parameters_create_signet(const void* challenge, size_t challenge_len)
