@@ -851,6 +851,9 @@ bool V1Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
     // Determine whether a new message can be set.
     LOCK(m_send_mutex);
     if (m_sending_header || m_bytes_sent < m_message_to_send.data.size()) return false;
+    // The wire header has a fixed-width message type field. Reject invalid caller input before
+    // CMessageHeader would assert in debug builds or silently truncate it in a release build.
+    if (msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return false;
 
     // create dbl-sha256 checksum
     uint256 hash = Hash(msg.data);
@@ -1495,6 +1498,9 @@ bool V2Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
     // is available) and the send buffer is empty. This limits the number of messages in the send
     // buffer to just one, and leaves the responsibility for queueing them up to the caller.
     if (!(m_send_state == SendState::READY && m_send_buffer.empty())) return false;
+    // Long V2 message types use the same fixed-width field as V1. Check the caller's input before
+    // copying it into the fixed-size contents buffer.
+    if (msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return false;
     // Construct contents (encoding message type + payload).
     std::vector<uint8_t> contents;
     auto short_message_id = V2_MESSAGE_MAP(msg.m_type);
