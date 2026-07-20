@@ -950,6 +950,85 @@ BOOST_AUTO_TEST_CASE(ShortIDCollisionAfterMempoolEarlyExitIsRejected)
     BOOST_CHECK(reconstructed_block.vtx.empty());
 }
 
+BOOST_AUTO_TEST_CASE(ShortIDCollisionAfterMempoolEarlyExitWithPrefilledIsRejected)
+{
+    bilingual_str error;
+    CTxMemPool pool{MemPoolOptionsForTest(m_node), error};
+    BOOST_REQUIRE(error.empty());
+    TestMemPoolEntryHelper entry;
+    auto rand_ctx(FastRandomContext(uint256{47}));
+    CBlock block{BuildBlockTestCase(rand_ctx)};
+    CMutableTransaction fourth_tx{*block.vtx[2]};
+    fourth_tx.nLockTime ^= 16U;
+    block.vtx.push_back(MakeTransactionRef(std::move(fourth_tx)));
+    bool mutated;
+    block.hashMerkleRoot = BlockMerkleRoot(block, &mutated);
+    BOOST_REQUIRE(!mutated);
+
+    TestHeaderAndShortIDs short_ids{block, rand_ctx};
+    // Keep transaction 2 prefilled, leaving short-ID slots at positions 1 and 3.
+    short_ids.prefilledtxn.emplace_back(/*index=*/1, block.vtx[2]);
+    short_ids.shorttxids.erase(short_ids.shorttxids.begin() + 1);
+    DataStream stream{};
+    stream << short_ids;
+    CBlockHeaderAndShortTxIDs cmpctblock;
+    stream >> cmpctblock;
+    BOOST_REQUIRE_EQUAL(cmpctblock.BlockTxCount(), 4U);
+
+    auto make_variant = [](const CTransactionRef& tx, uint32_t mask) {
+        CMutableTransaction mutable_tx{*tx};
+        mutable_tx.nLockTime ^= mask;
+        return MakeTransactionRef(std::move(mutable_tx));
+    };
+    const CTransactionRef first_mempool_tx{make_variant(block.vtx[1], 1)};
+    const CTransactionRef second_mempool_tx{make_variant(block.vtx[3], 2)};
+    const CTransactionRef late_mempool_tx{make_variant(block.vtx[1], 4)};
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.FromTx(first_mempool_tx));
+        TryAddToMempool(pool, entry.FromTx(second_mempool_tx));
+        TryAddToMempool(pool, entry.FromTx(late_mempool_tx));
+    }
+    BOOST_REQUIRE_EQUAL(pool.size(), 3U);
+
+    const std::vector<uint64_t> target_short_ids{
+        cmpctblock.GetShortID(block.vtx[1]->GetWitnessHash()),
+        cmpctblock.GetShortID(block.vtx[3]->GetWitnessHash())};
+    size_t candidates_seen{0};
+    TestPartiallyDownloadedBlock partial_block{&pool};
+    partial_block.m_get_short_id_mock = [&candidates_seen, target_short_ids, assigned_short_ids = std::vector<std::pair<Wtxid, uint64_t>>{}](const CBlockHeaderAndShortTxIDs& ids, const Wtxid& wtxid) mutable {
+        for (const auto& [assigned_wtxid, short_id] : assigned_short_ids) {
+            if (assigned_wtxid == wtxid) return short_id;
+        }
+        if (candidates_seen < target_short_ids.size()) {
+            const uint64_t short_id{target_short_ids[candidates_seen++]};
+            assigned_short_ids.emplace_back(wtxid, short_id);
+            return short_id;
+        }
+        // A candidate after both slots are filled would collide with the first.
+        return target_short_ids.front();
+    };
+
+    BOOST_CHECK_EQUAL(partial_block.InitData(cmpctblock, {}), READ_STATUS_OK);
+    BOOST_CHECK_EQUAL(candidates_seen, 2U);
+    BOOST_CHECK(partial_block.IsTxAvailable(0));
+    BOOST_CHECK(partial_block.IsTxAvailable(1));
+    BOOST_CHECK(partial_block.IsTxAvailable(2));
+    BOOST_CHECK(partial_block.IsTxAvailable(3));
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 2U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 2U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+
+    CBlock reconstructed_block{block};
+    reconstructed_block.vtx = {block.vtx[0]};
+    const uint256 reconstructed_block_hash{reconstructed_block.GetHash()};
+    const CTransactionRef reconstructed_block_tx{reconstructed_block.vtx[0]};
+    BOOST_CHECK_EQUAL(partial_block.FillBlock(reconstructed_block, {}, /*segwit_active=*/true), READ_STATUS_FAILED);
+    BOOST_CHECK_EQUAL(reconstructed_block.GetHash(), reconstructed_block_hash);
+    BOOST_REQUIRE_EQUAL(reconstructed_block.vtx.size(), 1U);
+    BOOST_CHECK(reconstructed_block.vtx[0] == reconstructed_block_tx);
+}
+
 BOOST_AUTO_TEST_CASE(ShortIDCollisionAfterExtraEarlyExitIsRejected)
 {
     bilingual_str error;
