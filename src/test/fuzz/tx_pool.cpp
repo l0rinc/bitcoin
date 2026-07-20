@@ -277,7 +277,7 @@ void CheckMempoolInfoViews(const CTxMemPool& tx_pool)
             Assert(info.m_time == entry.GetTime());
             Assert(info.fee == entry.GetFee());
             Assert(info.vsize == entry.GetTxSize());
-            Assert(info.nFeeDelta == entry.GetModifiedFee() - entry.GetFee());
+            Assert(info.nFeeDelta == SaturatingSubtract(entry.GetModifiedFee(), entry.GetFee()));
 
             const Txid txid{info.tx->GetHash()};
             const Wtxid wtxid{info.tx->GetWitnessHash()};
