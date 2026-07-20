@@ -50,9 +50,20 @@ public:
     }
 
     void ResetAndInitialize() EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex);
+    void ExerciseEmptyHeadersHandoff() EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex);
     void SendMessage(FuzzedDataProvider& fuzzed_data_provider, CSerializedNetMsg&& msg)
         EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex);
 };
+
+bool HasPendingMessage(CNode& connection, std::string_view message_type)
+{
+    LOCK(connection.cs_vSend);
+    for (const auto& message : connection.vSendMsg) {
+        if (message.m_type == message_type) return true;
+    }
+    const auto& [to_send, _more, msg_type] = connection.m_transport->GetBytesToSend(false);
+    return !to_send.empty() && msg_type == message_type;
+}
 
 void HeadersSyncSetup::ResetAndInitialize()
 {
@@ -81,7 +92,33 @@ void HeadersSyncSetup::ResetAndInitialize()
             /*relay_txs=*/true);
 
         connman.AddTestNode(p2p_node);
+        // The handshake's initial GETHEADERS and keepalive messages are not
+        // part of this oracle. Leave the sync-accounting state live while
+        // removing those already-generated wire messages.
+        connman.FlushSendBuffer(p2p_node);
     }
+}
+
+void HeadersSyncSetup::ExerciseEmptyHeadersHandoff()
+{
+    auto& connman = static_cast<ConnmanTestMsg&>(*m_node.connman);
+    CNode& initial_sync_peer = *m_connections.front();
+    CNode& replacement_peer = *m_connections[1];
+
+    std::vector<CBlock> empty_headers;
+    auto empty_headers_msg = NetMsg::Make(NetMsgType::HEADERS, TX_WITH_WITNESS(empty_headers));
+    assert(connman.ReceiveMsgFrom(initial_sync_peer, std::move(empty_headers_msg)));
+    initial_sync_peer.fPauseSend = false;
+    (void)connman.ProcessMessagesOnce(initial_sync_peer);
+
+    // The peer that answered empty must not be immediately selected again,
+    // while a different usable peer must be eligible on the next scheduler
+    // pass. The pending wire message is the observable Core-side result.
+    m_node.peerman->SendMessages(initial_sync_peer);
+    connman.FlushSendBuffer(initial_sync_peer);
+    m_node.peerman->SendMessages(replacement_peer);
+    assert(HasPendingMessage(replacement_peer, NetMsgType::GETHEADERS));
+    connman.FlushSendBuffer(replacement_peer);
 }
 
 void HeadersSyncSetup::SendMessage(FuzzedDataProvider& fuzzed_data_provider, CSerializedNetMsg&& msg)
@@ -168,11 +205,12 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
 
     ChainstateManager& chainman = *g_testing_setup->m_node.chainman;
     CBlockHeader base{chainman.GetParams().GenesisBlock()};
-    const FakeNodeClock clock{base.Time()};
+    const FakeNodeClock clock{base.Time() + std::chrono::hours{48}};
 
     LOCK(NetEventsInterface::g_msgproc_mutex);
 
     g_testing_setup->ResetAndInitialize();
+    g_testing_setup->ExerciseEmptyHeadersHandoff();
 
     // The chain is just a single block, so this is equal to 1
     size_t original_index_size{WITH_LOCK(cs_main, return chainman.m_blockman.m_block_index.size())};
