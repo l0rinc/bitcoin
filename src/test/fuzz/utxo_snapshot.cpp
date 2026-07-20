@@ -43,6 +43,55 @@ namespace {
 const std::vector<std::shared_ptr<CBlock>>* g_chain;
 TestingSetup* g_setup{nullptr};
 
+struct ChainstateState {
+    const CBlockIndex* active_tip;
+    int active_height;
+    std::optional<uint256> from_snapshot_blockhash;
+    Assumeutxo assumeutxo;
+    std::optional<uint256> target_blockhash;
+    uint256 coins_best_block;
+    size_t coins_cache_size;
+    size_t coinsdb_cache_size_bytes;
+    size_t coinstip_cache_size_bytes;
+    std::optional<int> snapshot_height;
+};
+
+ChainstateState CaptureChainstateState(ChainstateManager& chainman)
+{
+    LOCK(::cs_main);
+    auto& chainstate{chainman.ActiveChainstate()};
+    const auto& coins_tip{chainstate.CoinsTip()};
+    return {
+        chainstate.m_chain.Tip(),
+        chainstate.m_chain.Height(),
+        chainstate.m_from_snapshot_blockhash,
+        chainstate.m_assumeutxo,
+        chainstate.m_target_blockhash,
+        coins_tip.GetBestBlock(),
+        coins_tip.GetCacheSize(),
+        chainstate.m_coinsdb_cache_size_bytes,
+        chainstate.m_coinstip_cache_size_bytes,
+        chainman.m_blockman.m_snapshot_height,
+    };
+}
+
+void AssertChainstateUnchanged(ChainstateManager& chainman, const ChainstateState& expected)
+{
+    LOCK(::cs_main);
+    auto& chainstate{chainman.ActiveChainstate()};
+    const auto& coins_tip{chainstate.CoinsTip()};
+    Assert(chainstate.m_chain.Tip() == expected.active_tip);
+    Assert(chainstate.m_chain.Height() == expected.active_height);
+    Assert(chainstate.m_from_snapshot_blockhash == expected.from_snapshot_blockhash);
+    Assert(chainstate.m_assumeutxo == expected.assumeutxo);
+    Assert(chainstate.m_target_blockhash == expected.target_blockhash);
+    Assert(coins_tip.GetBestBlock() == expected.coins_best_block);
+    Assert(coins_tip.GetCacheSize() == expected.coins_cache_size);
+    Assert(chainstate.m_coinsdb_cache_size_bytes == expected.coinsdb_cache_size_bytes);
+    Assert(chainstate.m_coinstip_cache_size_bytes == expected.coinstip_cache_size_bytes);
+    Assert(chainman.m_blockman.m_snapshot_height == expected.snapshot_height);
+}
+
 /** Sanity check the assumeutxo values hardcoded in chainparams for the fuzz target. */
 void sanity_check_snapshot()
 {
@@ -181,6 +230,7 @@ void utxo_snapshot_fuzz(FuzzBufferType buffer)
         }
     }
 
+    const auto chainstate_before_activation{CaptureChainstateState(chainman)};
     if (ActivateFuzzedSnapshot()) {
         LOCK(::cs_main);
         Assert(!chainman.ActiveChainstate().m_from_snapshot_blockhash->IsNull());
@@ -201,6 +251,7 @@ void utxo_snapshot_fuzz(FuzzBufferType buffer)
         Assert(g_chain->size() == coinscache.GetCacheSize());
         dirty_chainman = true;
     } else {
+        AssertChainstateUnchanged(chainman, chainstate_before_activation);
         Assert(!chainman.ActiveChainstate().m_from_snapshot_blockhash);
     }
     // Snapshot should refuse to load a second time regardless of validity
