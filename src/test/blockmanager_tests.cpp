@@ -18,7 +18,10 @@
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
 
+#include <optional>
+
 using kernel::CBlockFileInfo;
+using kernel::BlockTreeDB;
 using node::STORAGE_HEADER_BYTES;
 using node::BlockManager;
 using node::KernelNotifications;
@@ -322,6 +325,34 @@ BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)
 
     // Deleting a non-existent lock returns false
     BOOST_CHECK(!blockman.DeletePruneLock("nonexistent"));
+}
+
+BOOST_AUTO_TEST_CASE(blockmanager_negative_last_block_file_rejected)
+{
+    const fs::path db_path{m_args.GetDataDirNet() / "blocks" / "index"};
+    {
+        // A corrupt index can hold a negative DB_LAST_BLOCK value; the eager
+        // m_blockfile_info.resize(0) then indexes [-1] on an empty vector.
+        BlockTreeDB block_tree_db{DBParams{
+            .path = db_path,
+            .cache_bytes = 1_MiB,
+        }};
+        block_tree_db.WriteBatchSync({}, -1, {});
+    }
+
+    KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
+    const BlockManager::Options blockman_opts{
+        .chainparams = Params(),
+        .blocks_dir = m_args.GetBlocksDirPath(),
+        .notifications = notifications,
+        .block_tree_db_params = DBParams{
+            .path = db_path,
+            .cache_bytes = 0,
+        },
+    };
+    BlockManager blockman{*Assert(m_node.shutdown_signal), blockman_opts};
+    LOCK(::cs_main);
+    BOOST_CHECK(!blockman.LoadBlockIndexDB(std::nullopt));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
