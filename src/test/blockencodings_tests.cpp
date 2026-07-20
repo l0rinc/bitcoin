@@ -950,6 +950,64 @@ BOOST_AUTO_TEST_CASE(ShortIDCollisionAfterMempoolEarlyExitIsRejected)
     BOOST_CHECK(reconstructed_block.vtx.empty());
 }
 
+BOOST_AUTO_TEST_CASE(ShortIDCollisionAfterExtraEarlyExitIsRejected)
+{
+    bilingual_str error;
+    CTxMemPool pool{MemPoolOptionsForTest(m_node), error};
+    BOOST_REQUIRE(error.empty());
+    TestMemPoolEntryHelper entry;
+    auto rand_ctx(FastRandomContext(uint256{44}));
+    const CBlock block{BuildBlockTestCase(rand_ctx)};
+    const CBlockHeaderAndShortTxIDs cmpctblock{block, rand_ctx.rand64()};
+
+    auto make_variant = [](const CTransactionRef& tx, uint32_t mask) {
+        CMutableTransaction mutable_tx{*tx};
+        mutable_tx.nLockTime ^= mask;
+        return MakeTransactionRef(std::move(mutable_tx));
+    };
+    const CTransactionRef first_mempool_tx{make_variant(block.vtx[1], 1)};
+    const CTransactionRef first_extra_tx{make_variant(block.vtx[2], 2)};
+    const CTransactionRef late_extra_tx{make_variant(block.vtx[1], 4)};
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.FromTx(first_mempool_tx));
+    }
+    BOOST_REQUIRE_EQUAL(pool.size(), 1U);
+
+    const Wtxid first_mempool_wtxid{first_mempool_tx->GetWitnessHash()};
+    const Wtxid first_extra_wtxid{first_extra_tx->GetWitnessHash()};
+    const Wtxid late_extra_wtxid{late_extra_tx->GetWitnessHash()};
+    const uint64_t first_short_id{cmpctblock.GetShortID(block.vtx[1]->GetWitnessHash())};
+    const uint64_t second_short_id{cmpctblock.GetShortID(block.vtx[2]->GetWitnessHash())};
+    bool late_extra_seen{false};
+    TestPartiallyDownloadedBlock partial_block{&pool};
+    partial_block.m_get_short_id_mock = [&late_extra_seen, first_mempool_wtxid, first_extra_wtxid, late_extra_wtxid, first_short_id, second_short_id](const CBlockHeaderAndShortTxIDs& ids, const Wtxid& wtxid) {
+        if (wtxid == first_mempool_wtxid) return first_short_id;
+        if (wtxid == first_extra_wtxid) return second_short_id;
+        if (wtxid == late_extra_wtxid) {
+            late_extra_seen = true;
+            return first_short_id;
+        }
+        return ids.GetShortID(wtxid);
+    };
+
+    BOOST_CHECK_EQUAL(partial_block.InitData(cmpctblock, {
+        {first_extra_wtxid, first_extra_tx},
+        {late_extra_wtxid, late_extra_tx},
+    }), READ_STATUS_OK);
+    // The first extra entry fills the final slot, so the optimized extra scan stops
+    // before examining the distinct late collision.
+    BOOST_CHECK(!late_extra_seen);
+    BOOST_CHECK(partial_block.IsTxAvailable(1));
+    BOOST_CHECK(partial_block.IsTxAvailable(2));
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 2U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 1U);
+
+    CBlock reconstructed_block;
+    BOOST_CHECK_EQUAL(partial_block.FillBlock(reconstructed_block, {}, /*segwit_active=*/true), READ_STATUS_FAILED);
+    BOOST_CHECK(reconstructed_block.vtx.empty());
+}
+
 BOOST_AUTO_TEST_CASE(TransactionsRequestSerializationTest) {
     BlockTransactionsRequest req1;
     req1.blockhash = m_rng.rand256();
