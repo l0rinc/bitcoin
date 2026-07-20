@@ -331,6 +331,17 @@ void SimulationTest(Transport& initiator, Transport& responder, R& rng, FuzzedDa
     assert(transports[0]->GetInfo().session_id == transports[1]->GetInfo().session_id);
 }
 
+void CheckOversizedMessageType(Transport& transport)
+{
+    CSerializedNetMsg msg;
+    msg.m_type = std::string(CMessageHeader::MESSAGE_TYPE_SIZE + 64, 'x');
+    msg.data = {0x01};
+    const auto expected{msg.Copy()};
+    assert(!transport.SetMessageToSend(msg));
+    assert(msg.m_type == expected.m_type);
+    assert(msg.data == expected.data);
+}
+
 std::unique_ptr<Transport> MakeV1Transport(NodeId nodeid) noexcept
 {
     return std::make_unique<V1Transport>(nodeid);
@@ -381,6 +392,7 @@ FUZZ_TARGET(p2p_transport_bidirectional, .init = initialize_p2p_transport_serial
     auto t2 = MakeV1Transport(NodeId{1});
     if (!t1 || !t2) return;
     SimulationTest(*t1, *t2, rng, provider);
+    CheckOversizedMessageType(*t1);
 }
 
 FUZZ_TARGET(p2p_transport_bidirectional_v2, .init = initialize_p2p_transport_serialization)
@@ -392,6 +404,7 @@ FUZZ_TARGET(p2p_transport_bidirectional_v2, .init = initialize_p2p_transport_ser
     auto t2 = MakeV2Transport(NodeId{1}, false, rng, provider);
     if (!t1 || !t2) return;
     SimulationTest(*t1, *t2, rng, provider);
+    CheckOversizedMessageType(*t1);
 }
 
 FUZZ_TARGET(p2p_transport_bidirectional_v1v2, .init = initialize_p2p_transport_serialization)
