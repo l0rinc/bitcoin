@@ -25,12 +25,14 @@
 BOOST_AUTO_TEST_SUITE(txvalidation_tests)
 
 std::optional<std::pair<std::string, CTransactionRef>> SingleTRUCChecks(const CTxMemPool& pool, const CTransactionRef& ptx, const std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef>& mempool_parents, const std::set<Txid>& direct_conflicts, int64_t vsize)
+    EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
 {
     std::string reason;
     return ::SingleTRUCChecks(pool, ptx, /*reason_prefix=*/"", reason, empty_ignore_rejects, mempool_parents, direct_conflicts, vsize);
 }
 
 std::optional<std::string> PackageTRUCChecks(const CTxMemPool& pool, const CTransactionRef& ptx, int64_t vsize, const Package& package, const std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef>& mempool_parents)
+    EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
 {
     std::string reason;
     return ::PackageTRUCChecks(pool, ptx, vsize, /*reason_prefix=*/"", reason, empty_ignore_rejects, package, mempool_parents);
