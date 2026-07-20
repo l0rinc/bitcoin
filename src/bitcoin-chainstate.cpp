@@ -157,49 +157,12 @@ int main(int argc, char* argv[])
     }
     std::filesystem::path abs_datadir{std::filesystem::absolute(argv[argc-1])};
     std::filesystem::create_directories(abs_datadir);
-
-
-    // SETUP: Context
-    kernel::Context kernel_context{};
-    // We can't use a goto here, but we can use an assert since none of the
-    // things instantiated so far requires running the epilogue to be torn down
-    // properly
-    assert(kernel::SanityChecks(kernel_context));
-
-    ValidationSignals validation_signals{std::make_unique<util::ImmediateTaskRunner>()};
-
-    class KernelNotifications : public kernel::Notifications
-    {
-    public:
-        kernel::InterruptResult blockTip(SynchronizationState, CBlockIndex&) override
-        {
-            std::cout << "Block tip changed" << std::endl;
-            return {};
-        }
-        void headerTip(SynchronizationState, int64_t height, int64_t timestamp, bool presync) override
-        {
-            std::cout << "Header tip changed: " << height << ", " << timestamp << ", " << presync << std::endl;
-        }
-        void progress(const bilingual_str& title, int progress_percent, bool resume_possible) override
-        {
-            std::cout << "Progress: " << title.original << ", " << progress_percent << ", " << resume_possible << std::endl;
-        }
-        void warningSet(kernel::Warning id, const bilingual_str& message, bool update) override
-        {
-            std::cout << "Warning " << static_cast<int>(id) << " set: " << message.original << std::endl;
-        }
-        void warningUnset(kernel::Warning id) override
-        {
-            std::cout << "Warning " << static_cast<int>(id) << " unset" << std::endl;
-        }
-        void flushError(const bilingual_str& message) override
-        {
-            std::cerr << "Error flushing block data to disk: " << message.original << std::endl;
-        }
-        void fatalError(const bilingual_str& message) override
-        {
-            std::cerr << "Error: " << message.original << std::endl;
-        }
+    btck_LoggingOptions logging_options = {
+        .log_timestamps = true,
+        .log_time_micros = false,
+        .log_threadnames = false,
+        .log_sourcelocations = false,
+        .always_print_category_levels = true,
     };
 
     logging_set_options(logging_options);
