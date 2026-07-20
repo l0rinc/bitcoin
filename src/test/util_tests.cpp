@@ -749,6 +749,35 @@ BOOST_AUTO_TEST_CASE(util_overflow)
     TestAddMatrix<int64_t>();
 }
 
+template <typename T>
+static void TestSubtractMatrix()
+{
+    constexpr T MAXI{std::numeric_limits<T>::max()};
+
+    if constexpr (std::numeric_limits<T>::is_signed) {
+        constexpr T MINI{std::numeric_limits<T>::min()};
+        BOOST_CHECK_EQUAL(T{-1}, SaturatingSubtract(T{0}, T{1}));
+        BOOST_CHECK_EQUAL(MINI, SaturatingSubtract(MINI, T{1}));
+        BOOST_CHECK_EQUAL(MAXI, SaturatingSubtract(MAXI, MINI));
+        BOOST_CHECK_EQUAL(MINI + 1, SaturatingSubtract(MINI, T{-1}));
+        BOOST_CHECK_EQUAL(MAXI - 1, SaturatingSubtract(MAXI, T{1}));
+        BOOST_CHECK_EQUAL(T{2}, SaturatingSubtract(T{1}, T{-1}));
+    } else {
+        BOOST_CHECK_EQUAL(T{0}, SaturatingSubtract(T{0}, T{1}));
+        BOOST_CHECK_EQUAL(T{0}, SaturatingSubtract(T{0}, MAXI));
+        BOOST_CHECK_EQUAL(T{1}, SaturatingSubtract(MAXI, MAXI - 1));
+        BOOST_CHECK_EQUAL(MAXI - 1, SaturatingSubtract(MAXI, T{1}));
+    }
+}
+
+BOOST_AUTO_TEST_CASE(util_saturating_subtract)
+{
+    TestSubtractMatrix<unsigned>();
+    TestSubtractMatrix<uint64_t>();
+    TestSubtractMatrix<signed>();
+    TestSubtractMatrix<int64_t>();
+}
+
 /* Check for multiplication overflow */
 template <typename T>
 static void TestMulMatrixOverflow()
