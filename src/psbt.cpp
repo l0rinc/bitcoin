@@ -607,6 +607,11 @@ void UpdatePSBTOutput(const SigningProvider& provider, PartiallySignedTransactio
         return;
     }
     CMutableTransaction& tx = *unsigned_tx;
+    if (tx.vin.empty()) {
+        // The would-be spend below signs through input 0; with no inputs the
+        // signature creator would read tx.vin[0] out of bounds.
+        return;
+    }
     const CTxOut& out = tx.vout.at(index);
     PSBTOutput& psbt_out = psbt.outputs.at(index);
 
