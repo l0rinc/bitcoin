@@ -42,14 +42,26 @@ FUZZ_TARGET(script_sigcache, .init = initialize_script_sigcache)
         const auto random_bytes = fuzzed_data_provider.ConsumeBytes<unsigned char>(64);
         const XOnlyPubKey pub_key(ConsumeUInt256(fuzzed_data_provider));
         if (random_bytes.size() == 64) {
-            (void)caching_transaction_signature_checker.VerifySchnorrSignature(random_bytes, pub_key, ConsumeUInt256(fuzzed_data_provider));
+            const uint256 sighash{ConsumeUInt256(fuzzed_data_provider)};
+            const bool result{caching_transaction_signature_checker.VerifySchnorrSignature(random_bytes, pub_key, sighash)};
+            uint256 entry;
+            signature_cache.ComputeEntrySchnorr(entry, sighash, random_bytes, pub_key);
+            // Only a successful verification with store enabled may populate the cache.
+            assert(signature_cache.Get(entry, /*erase=*/false) == (store && result));
+            assert(caching_transaction_signature_checker.VerifySchnorrSignature(random_bytes, pub_key, sighash) == result);
         }
     } else {
         const auto random_bytes = ConsumeRandomLengthByteVector(fuzzed_data_provider);
         const auto pub_key = ConsumeDeserializable<CPubKey>(fuzzed_data_provider);
         if (pub_key) {
             if (!random_bytes.empty()) {
-                (void)caching_transaction_signature_checker.VerifyECDSASignature(random_bytes, *pub_key, ConsumeUInt256(fuzzed_data_provider));
+                const uint256 sighash{ConsumeUInt256(fuzzed_data_provider)};
+                const bool result{caching_transaction_signature_checker.VerifyECDSASignature(random_bytes, *pub_key, sighash)};
+                uint256 entry;
+                signature_cache.ComputeEntryECDSA(entry, sighash, random_bytes, *pub_key);
+                // Only a successful verification with store enabled may populate the cache.
+                assert(signature_cache.Get(entry, /*erase=*/false) == (store && result));
+                assert(caching_transaction_signature_checker.VerifyECDSASignature(random_bytes, *pub_key, sighash) == result);
             }
         }
     }
