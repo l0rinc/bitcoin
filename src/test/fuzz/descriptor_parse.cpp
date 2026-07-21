@@ -14,8 +14,40 @@
 //! The converter of mocked descriptors, needs to be initialized when the target is.
 MockedDescriptorConverter MOCKED_DESC_CONVERTER;
 
+/** A serialized descriptor must be accepted by the strict parser unchanged. */
+static void AssertDescriptorRoundTrip(const std::string& serialized)
+{
+    FlatSigningProvider roundtrip_provider;
+    std::string error;
+    const auto reparsed = Parse(serialized, roundtrip_provider, error, /*require_checksum=*/true);
+    assert(!reparsed.empty());
+    bool found_match{false};
+    for (const auto& descriptor : reparsed) {
+        assert(descriptor);
+        found_match = found_match || descriptor->ToString() == serialized;
+    }
+    assert(found_match);
+}
+
+/** A private descriptor must preserve its private serialization after parsing. */
+static void AssertPrivateDescriptorRoundTrip(const std::string& serialized)
+{
+    FlatSigningProvider roundtrip_provider;
+    std::string error;
+    const auto reparsed = Parse(serialized, roundtrip_provider, error, /*require_checksum=*/true);
+    assert(!reparsed.empty());
+    bool found_match{false};
+    for (const auto& descriptor : reparsed) {
+        assert(descriptor);
+        std::string reparsed_private;
+        (void)descriptor->ToPrivateString(roundtrip_provider, reparsed_private);
+        found_match = found_match || reparsed_private == serialized;
+    }
+    assert(found_match);
+}
+
 /** Test a successfully parsed descriptor. */
-static void TestDescriptor(const Descriptor& desc, FlatSigningProvider& sig_provider, std::string& dummy, std::optional<bool>& is_ranged, std::optional<bool>& is_solvable)
+static void TestDescriptor(const Descriptor& desc, FlatSigningProvider& sig_provider, std::optional<bool>& is_ranged, std::optional<bool>& is_solvable)
 {
     // Trivial helpers.
     (void)desc.IsRange();
@@ -33,10 +65,21 @@ static void TestDescriptor(const Descriptor& desc, FlatSigningProvider& sig_prov
         is_solvable = desc.IsSolvable();
     }
 
-    // Serialization to string representation.
-    (void)desc.ToString();
-    (void)desc.ToPrivateString(sig_provider, dummy);
-    (void)desc.ToNormalizedString(sig_provider, dummy);
+    // Serialization to string representation. Every successful representation
+    // must remain a valid, checksummed descriptor when parsed independently.
+    const std::string public_string{desc.ToString()};
+    AssertDescriptorRoundTrip(public_string);
+
+    std::string private_string;
+    const bool has_private_key{desc.ToPrivateString(sig_provider, private_string)};
+    assert(!private_string.empty());
+    AssertPrivateDescriptorRoundTrip(private_string);
+    if (!has_private_key) assert(private_string == public_string);
+
+    std::string normalized_string;
+    if (desc.ToNormalizedString(sig_provider, normalized_string)) {
+        AssertDescriptorRoundTrip(normalized_string);
+    }
 
     // Serialization to Script.
     DescriptorCache cache;
@@ -45,9 +88,19 @@ static void TestDescriptor(const Descriptor& desc, FlatSigningProvider& sig_prov
     (void)desc.ExpandPrivate(0, sig_provider, sig_provider);
     (void)desc.ExpandFromCache(0, cache, out_scripts, sig_provider);
 
-    // If we could serialize to script we must be able to infer using the same provider.
+    // If we could serialize to script, InferDescriptor must return a non-ranged
+    // descriptor that expands back to exactly the same script.
     if (!out_scripts.empty()) {
-        assert(InferDescriptor(out_scripts.back(), sig_provider));
+        for (const CScript& script : out_scripts) {
+            const auto inferred{InferDescriptor(script, sig_provider)};
+            assert(inferred);
+            assert(!inferred->IsRange());
+            FlatSigningProvider inferred_provider;
+            std::vector<CScript> inferred_scripts;
+            assert(inferred->Expand(0, inferred_provider, inferred_scripts, inferred_provider));
+            assert(inferred_scripts.size() == 1);
+            assert(inferred_scripts.front() == script);
+        }
 
         // The ScriptSize() must match the size of the serialized Script. (ScriptSize() is set for all descs but 'combo()'.)
         const bool is_combo{!desc.IsSingleType()};
@@ -95,7 +148,7 @@ FUZZ_TARGET(mocked_descriptor_parse, .init = initialize_mocked_descriptor_parse)
         std::optional<bool> is_solvable;
         for (const auto& d : desc) {
             assert(d);
-            TestDescriptor(*d, signing_provider, error, is_ranged, is_solvable);
+            TestDescriptor(*d, signing_provider, is_ranged, is_solvable);
         }
     }
 }
@@ -113,7 +166,7 @@ FUZZ_TARGET(descriptor_parse, .init = initialize_descriptor_parse)
         std::optional<bool> is_solvable;
         for (const auto& d : desc) {
             assert(d);
-            TestDescriptor(*d, signing_provider, error, is_ranged, is_solvable);
+            TestDescriptor(*d, signing_provider, is_ranged, is_solvable);
         }
     }
 }

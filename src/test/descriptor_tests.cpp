@@ -1343,6 +1343,32 @@ BOOST_AUTO_TEST_CASE(descriptor_older_warnings)
     }
 }
 
+BOOST_AUTO_TEST_CASE(descriptor_private_string_without_private_keys)
+{
+    for (const std::string payload : {"addr(1BitcoinEaterAddressDontSendf59kuE)", "raw(51)"}) {
+        FlatSigningProvider keys;
+        std::string error;
+        const std::string descriptor{payload + "#" + GetDescriptorChecksum(payload)};
+        auto descs = Parse(descriptor, keys, error, /*require_checksum=*/true);
+        BOOST_REQUIRE_MESSAGE(descs.size() == 1, error);
+
+        std::string private_string;
+        BOOST_CHECK(!descs.front()->ToPrivateString(keys, private_string));
+        BOOST_CHECK_EQUAL(private_string, descs.front()->ToString());
+    }
+}
+
+BOOST_AUTO_TEST_CASE(descriptor_multipath_duplicate_key_rejected)
+{
+    const std::string key{"xprvA1RpRA33e1JQ7ifknakTFpgNXPmW2YvmhqLQYMmrj4xJXXWYpDPS3xz7iAxn8L39njGVyuoseXzU6rcxFLJ8HFsTjSyQbLYnMpCqE2VbFWc"};
+    const std::string descriptor{
+        "wsh(j:multi(1," + key + "/0/<0;1>," + key + "/0/<2;1>))"};
+    FlatSigningProvider keys;
+    std::string error;
+    BOOST_CHECK(Parse(descriptor, keys, error, /*require_checksum=*/false).empty());
+    BOOST_CHECK(error.find("duplicate public keys") != std::string::npos);
+}
+
 void CheckSingleUnparsable(const std::string& desc, const std::string& expected_error)
 {
     FlatSigningProvider keys;
