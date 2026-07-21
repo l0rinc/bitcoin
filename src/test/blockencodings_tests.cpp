@@ -791,6 +791,23 @@ BOOST_AUTO_TEST_CASE(ShortIDCollisionTracksSourceCounts)
     BOOST_CHECK_EQUAL(null_extra_block.MempoolCount(), 1U);
     BOOST_CHECK_EQUAL(null_extra_block.ExtraCount(), 0U);
 
+    bilingual_str extra_source_error;
+    CTxMemPool extra_source_pool{MemPoolOptionsForTest(m_node), extra_source_error};
+    BOOST_REQUIRE(extra_source_error.empty());
+    const Wtxid extra_source_wtxid{block.vtx[1]->GetWitnessHash()};
+    TestPartiallyDownloadedBlock extra_source_then_null{&extra_source_pool};
+    BOOST_CHECK_EQUAL(extra_source_then_null.InitData(cmpctblock, {
+        {extra_source_wtxid, block.vtx[1]},
+        {extra_source_wtxid, CTransactionRef{}},
+    }), READ_STATUS_OK);
+    BOOST_CHECK(extra_source_then_null.IsTxAvailable(0));
+    BOOST_CHECK(extra_source_then_null.IsTxAvailable(1));
+    BOOST_CHECK(!extra_source_then_null.IsTxAvailable(2));
+    BOOST_CHECK(!extra_source_then_null.IsTxAvailable(3));
+    BOOST_CHECK_EQUAL(extra_source_then_null.AvailableTxCount(), 2U);
+    BOOST_CHECK_EQUAL(extra_source_then_null.MempoolCount(), 1U);
+    BOOST_CHECK_EQUAL(extra_source_then_null.ExtraCount(), 1U);
+
     const std::vector<std::pair<Wtxid, CTransactionRef>> duplicate_extra_txn{
         {block.vtx[1]->GetWitnessHash(), block.vtx[1]},
         {block.vtx[1]->GetWitnessHash(), block.vtx[1]},
