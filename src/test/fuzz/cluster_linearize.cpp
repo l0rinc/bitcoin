@@ -914,13 +914,14 @@ FUZZ_TARGET(clusterlin_sfl)
 
     // Function to test the state.
     std::vector<FeeFrac> last_diagram;
+    uint64_t last_cost{0};
     bool was_optimal{false};
     auto test_fn = [&](bool is_optimal = false, bool is_minimal = false) {
-        if (rng.randbits(4) == 0) {
-            // Perform sanity checks from time to time (too computationally expensive to do after
-            // every step).
-            sfl.SanityCheck();
-        }
+        // Check the state after every transition, before a later merge or split can repair it.
+        sfl.SanityCheck();
+        const auto cost = sfl.GetCost();
+        assert(cost >= last_cost);
+        last_cost = cost;
         auto diagram = sfl.GetDiagram();
         if (rng.randbits(4) == 0) {
             // Verify that the diagram of GetLinearization() is at least as good as GetDiagram(),
