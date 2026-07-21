@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chainparams.h>
+#include <hash.h>
 #include <key.h>
 #include <key_io.h>
 #include <outputtype.h>
@@ -14,6 +15,8 @@
 #include <script/sign.h>
 #include <script/signingprovider.h>
 #include <script/solver.h>
+#include <secp256k1.h>
+#include <span.h>
 #include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
@@ -26,6 +29,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -48,6 +52,7 @@ FUZZ_TARGET(key, .init = initialize_key)
     if (!key.IsValid()) {
         return;
     }
+    const uint256 random_uint256 = Hash(buffer);
 
     {
         assert(key.begin() + key.size() == key.end());
@@ -72,6 +77,32 @@ FUZZ_TARGET(key, .init = initialize_key)
         assert(key.size() == 32);
         assert(uncompressed_key.begin() + uncompressed_key.size() == uncompressed_key.end());
         assert(uncompressed_key.IsValid());
+
+        const CPubKey uncompressed_pubkey = uncompressed_key.GetPubKey();
+        assert(!uncompressed_pubkey.IsCompressed());
+        assert(uncompressed_pubkey.size() == CPubKey::SIZE);
+        assert(uncompressed_pubkey.IsValid());
+        assert(uncompressed_pubkey.IsFullyValid());
+        assert(uncompressed_key.VerifyPubKey(uncompressed_pubkey));
+        assert(DecodeSecret(EncodeSecret(uncompressed_key)) == uncompressed_key);
+
+        std::vector<unsigned char> uncompressed_sig;
+        assert(uncompressed_key.Sign(random_uint256, uncompressed_sig));
+        assert(uncompressed_pubkey.Verify(random_uint256, uncompressed_sig));
+        assert(CPubKey::CheckLowS(uncompressed_sig));
+
+        std::vector<unsigned char> uncompressed_compact_sig;
+        assert(uncompressed_key.SignCompact(random_uint256, uncompressed_compact_sig));
+        CPubKey uncompressed_recovered_pubkey;
+        assert(uncompressed_recovered_pubkey.RecoverCompact(random_uint256, uncompressed_compact_sig));
+        assert(uncompressed_recovered_pubkey == uncompressed_pubkey);
+
+        const CPrivKey uncompressed_priv_key = uncompressed_key.GetPrivKey();
+        for (const bool skip_check : {true, false}) {
+            CKey loaded_uncompressed_key;
+            assert(loaded_uncompressed_key.Load(uncompressed_priv_key, uncompressed_pubkey, skip_check));
+            assert(loaded_uncompressed_key == uncompressed_key);
+        }
     }
 
     {
@@ -80,19 +111,41 @@ FUZZ_TARGET(key, .init = initialize_key)
         assert(copied_key == key);
     }
 
-    const uint256 random_uint256 = Hash(buffer);
+    const CPubKey pubkey = key.GetPubKey();
+    const ChainCode parent_chaincode{random_uint256};
 
     {
-        CKey child_key;
-        ChainCode child_chaincode;
-        const bool ok = key.Derive(child_key, child_chaincode, 0, ChainCode{random_uint256});
-        assert(ok);
-        assert(child_key.IsValid());
-        assert(!(child_key == key));
-        assert(child_chaincode != random_uint256);
-    }
+        // Check both BIP32 branches against the byte-level construction. The
+        // public derivation path cannot validate the hardened branch.
+        for (const unsigned int n_child : {0U, 1U << 31}) {
+            std::array<unsigned char, 32> reference_secret;
+            std::memcpy(reference_secret.data(), key.data(), reference_secret.size());
+            std::array<unsigned char, 64> bip32_output;
+            if (n_child >> 31) {
+                BIP32Hash(parent_chaincode, n_child, 0, UCharCast(key.begin()), bip32_output.data());
+            } else {
+                BIP32Hash(parent_chaincode, n_child, *UCharCast(pubkey.begin()), UCharCast(pubkey.begin() + 1), bip32_output.data());
+            }
+            const ChainCode reference_chaincode{std::span<const unsigned char>{bip32_output.data() + 32, 32}};
+            const bool reference_ok = secp256k1_ec_seckey_tweak_add(secp256k1_context_static, reference_secret.data(), bip32_output.data());
 
-    const CPubKey pubkey = key.GetPubKey();
+            CKey child_key;
+            ChainCode child_chaincode;
+            const bool ok = key.Derive(child_key, child_chaincode, n_child, parent_chaincode);
+            assert(ok == reference_ok);
+            if (!ok) {
+                assert(!child_key.IsValid());
+                continue;
+            }
+
+            CKey reference_child;
+            reference_child.Set(reference_secret.begin(), reference_secret.end(), true);
+            assert(child_key == reference_child);
+            assert(child_key.IsValid());
+            assert(child_key.IsCompressed());
+            assert(child_chaincode == reference_chaincode);
+        }
+    }
 
     {
         assert(pubkey.size() == 33);
