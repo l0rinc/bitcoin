@@ -163,6 +163,15 @@ BOOST_AUTO_TEST_CASE(key_test1)
     BOOST_CHECK_EQUAL(HexStr(detsigc), "2052d8a32079c11e79db95af63bb9600c5b04f21a9ca33dc129c2bfa8ac9dc1cd561d8ae5e0f6c1a16bde3719c64c2fd70e404b6428ab9a69566962e8771b5944d");
 }
 
+BOOST_AUTO_TEST_CASE(key_load_empty_private_key)
+{
+    const CKey source = DecodeSecret(strSecret1);
+    CKey loaded;
+    const CPrivKey empty;
+    BOOST_CHECK(!loaded.Load(empty, source.GetPubKey(), /*fSkipCheck=*/false));
+    BOOST_CHECK(!loaded.IsValid());
+}
+
 BOOST_AUTO_TEST_CASE(key_signature_tests)
 {
     // When entropy is specified, we should see at least one high R signature within 20 signatures

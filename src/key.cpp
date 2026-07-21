@@ -9,6 +9,7 @@
 #include <crypto/hmac_sha512.h>
 #include <hash.h>
 #include <random.h>
+#include <util/check.h>
 
 #include <secp256k1.h>
 #include <secp256k1_ellswift.h>
@@ -36,48 +37,57 @@ static secp256k1_context* secp256k1_context_sign = nullptr;
  * out32 must point to an output buffer of length at least 32 bytes.
  */
 int ec_seckey_import_der(const secp256k1_context* ctx, unsigned char *out32, const unsigned char *seckey, size_t seckeylen) {
-    const unsigned char *end = seckey + seckeylen;
     memset(out32, 0, 32);
+    const auto fail = [&]() {
+        memset(out32, 0, 32);
+        for (size_t i = 0; i < 32; ++i) {
+            Assume(out32[i] == 0);
+        }
+        return 0;
+    };
+    if (seckeylen == 0) {
+        return fail();
+    }
+    const unsigned char *end = seckey + seckeylen;
     /* sequence header */
     if (end - seckey < 1 || *seckey != 0x30u) {
-        return 0;
+        return fail();
     }
     seckey++;
     /* sequence length constructor */
     if (end - seckey < 1 || !(*seckey & 0x80u)) {
-        return 0;
+        return fail();
     }
     ptrdiff_t lenb = *seckey & ~0x80u; seckey++;
     if (lenb < 1 || lenb > 2) {
-        return 0;
+        return fail();
     }
     if (end - seckey < lenb) {
-        return 0;
+        return fail();
     }
     /* sequence length */
     ptrdiff_t len = seckey[lenb-1] | (lenb > 1 ? seckey[lenb-2] << 8 : 0u);
     seckey += lenb;
     if (end - seckey < len) {
-        return 0;
+        return fail();
     }
     /* sequence element 0: version number (=1) */
     if (end - seckey < 3 || seckey[0] != 0x02u || seckey[1] != 0x01u || seckey[2] != 0x01u) {
-        return 0;
+        return fail();
     }
     seckey += 3;
     /* sequence element 1: octet string, up to 32 bytes */
     if (end - seckey < 2 || seckey[0] != 0x04u) {
-        return 0;
+        return fail();
     }
     ptrdiff_t oslen = seckey[1];
     seckey += 2;
     if (oslen > 32 || end - seckey < oslen) {
-        return 0;
+        return fail();
     }
     memcpy(out32 + (32 - oslen), seckey, oslen);
     if (!secp256k1_ec_seckey_verify(ctx, out32)) {
-        memset(out32, 0, 32);
-        return 0;
+        return fail();
     }
     return 1;
 }
