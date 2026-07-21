@@ -899,6 +899,7 @@ util::Result<CTxDestination> DescriptorScriptPubKeyMan::GetNewDestination(const 
             // We can't generate anymore keys
             return util::Error{_("Error: Keypool ran out, please call keypoolrefill first")};
         }
+        assert(!scripts_temp.empty());
 
         CTxDestination dest;
         if (!ExtractDestination(scripts_temp[0], dest)) {
