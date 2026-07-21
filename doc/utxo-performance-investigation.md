@@ -440,9 +440,9 @@ commitment generation/validation. It does not affect `hash_serialized_3` or
 `hash_type=none`. Only one full scan was practical; the five-run focused test
 supplies repeatability.
 
-### LevelDB: recover readahead for contiguous mmap reads
+### LevelDB: historical bounded mmap readahead attempt (superseded)
 
-Master commit `e3ec270a39` applies `MADV_RANDOM` to every successful read-only
+Fork commit `e3ec270a39` applies `MADV_RANDOM` to every successful read-only
 table mmap. It fixed a resumed prune-assumevalid workload whose old-chainstate
 point reads took 771 s without the hint and 177 s with it while avoiding
 hundreds of MiB of swap. The user's full HDD reindex-chainstate benchmark at
@@ -476,12 +476,14 @@ compaction gate were fully removed; raw traces remain in
 `mmap-trace-established-noauto/`, and
 `reindex-writebuf/mmap-fresh-1/metrics/mmap-trace.tsv`.
 
-The change retains `MADV_RANDOM`, atomically recognizes adjacent reads within
-each mapped table, and issues a best-effort `MADV_WILLNEED` only when the reads
-cross into a new 128 KiB window. This matches the test HDD's kernel readahead
-unit, avoids changing persistent advice on a mapping shared by concurrent
-readers, and bounds damage from coincidental adjacency. Platforms without
-both advice constants compile the behavior out.
+The then-proposed change retained `MADV_RANDOM`, atomically recognized adjacent
+reads within each mapped table, and issued a best-effort `MADV_WILLNEED` only
+when the reads crossed into a new 128 KiB window. This matched the test HDD's
+kernel readahead unit, avoided changing persistent advice on a mapping shared
+by concurrent readers, and bounded damage from coincidental adjacency.
+Platforms without both advice constants compiled the behavior out. The
+full-height re-test below shows this was insufficient: it is retained here as
+an experimental record and removed by the later global-advice removal.
 
 Current RocksDB was inspected only after the traces proved that Core cannot
 see the per-SST offset locality. Its design supports the same conclusion:
@@ -539,14 +541,10 @@ env_test        # 7/7 passed
 build/test/functional/feature_reindex.py --tmpdir=<nonexistent-scratch-path> --nocleanup
 ```
 
-Reach: every 64-bit POSIX LevelDB mmap user can benefit when reads within an
-SST become contiguous, including reindex-chainstate, compaction, ordered UTXO
-scans (`gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`), and index builds.
-Pure random reads retain the global random advice and normally only pay one
-relaxed atomic exchange. The measured gains are specific to this rotational
-device. A repeat of the user's height-957759 benchmark is still needed to
-quantify full-chain reach; the shorter end-to-end result and five-run old-SST
-control establish direction and protect the original workload.
+The short-run result established a plausible improvement for contiguous reads
+but did not quantify full-chain reach. It was explicitly superseded after the
+full height-957759 test below found that retaining the global random advice
+still caused the serious HDD regression.
 
 ## Rejected changes
 
@@ -2423,14 +2421,16 @@ large-cache flush.
 ### Close fork PR #200/#203 mmap and cache-allocation seeds
 
 Fork PR [#200](https://github.com/l0rinc/bitcoin/pull/200) is exactly
-`e3ec270a39094e56cfaa581c00487d5a9b5a6966`, the upstream
+`e3ec270a39094e56cfaa581c00487d5a9b5a6966`, the fork's
 `MADV_RANDOM` mmap-table-read annotation. It is not a new candidate: the
 user's full height-957759 HDD benchmark established that its global advisory
-caused the 1.79x reindex regression recorded above. The accepted
-`df4669a112` follow-up retains the upstream random-read protection and adds a
-strictly bounded sequential-read `MADV_WILLNEED` recovery. That controlled
-change, not a duplicate of #200, improved the cold height-287000 reindex
-median 1.55% and the established-SST random-read control 3.08%.
+caused the 1.79x reindex regression recorded above. The now-superseded
+`df4669a112` follow-up retained the random-read protection and added a strictly
+bounded sequential-read `MADV_WILLNEED` recovery. It improved the cold
+height-287000 reindex median 1.55% and the established-SST random-read control
+3.08%, but the later full-height run proved that it did not repair the
+global-advice regression. The follow-up and the original global advice are
+removed together by the full-height result below.
 
 Fork PR [#203](https://github.com/l0rinc/bitcoin/pull/203), fetched as
 `l0rinc/pr-203` at `b4ba9ee5969ac188012a051b3e8b195d0e7b09c3`, removes the
@@ -2443,7 +2443,7 @@ and 21905.920 s for only two runs). The repository's independent cold
 height-287000 pair likewise found a 0.107% median difference. The premise
 does not yield a reproducible reindex gain.
 
-The two PRs therefore cover already-applied mmap behavior plus a measured
+The two PRs therefore cover a disproven global mmap policy plus a measured
 neutral cache knob. Neither has an untried small descendant suitable for this
 goal. Reviewed with:
 
@@ -2453,10 +2453,10 @@ git show e3ec270a39 -- src/leveldb/util/env_posix.cc
 git log --reverse --format='%H %s' $(git merge-base l0rinc/pr-203 origin/master)..l0rinc/pr-203
 ```
 
-Decision: remove both from the open list. Do not retune mmap advice, block
-cache, or write buffer size without a new profile showing a different access
-pattern and enough repeated end-to-end HDD evidence to overcome the existing
-negative controls.
+Decision: remove both from the open list. Do not retune block cache or write
+buffer size without a new profile showing a different access pattern and
+enough repeated end-to-end HDD evidence to overcome the existing negative
+controls. The mmap decision is resolved separately by the full-height result.
 
 ### Close fork PR #180: no independent flush or hash-cache speed seed remains
 
@@ -5243,3 +5243,75 @@ attribute causality, or generalize to SSDs or other cache sizes. The magnitude
 is large enough that the stack must be bisected with a representative late-chain
 workload before retaining or claiming any aggregate reindex speedup. Do not use
 the short-run result to justify the current production stack.
+
+### LevelDB: remove global random mmap advice after full HDD reindex proof
+
+The full comparison above made global `MADV_RANDOM` the leading hypothesis.
+To isolate it from every other branch change, a detached worktree at production
+revision `ef533c1d8463f84b697deee1770bbc03555a32ff` restored the exact
+`origin/master` mmap-reader behavior in `src/leveldb/util/env_posix.cc`: it
+removed the successful-mmap `MADV_RANDOM` call introduced by
+`e3ec270a39094e56cfaa581c00487d5a9b5a6966` and also removed the later
+per-read atomic/128 KiB `MADV_WILLNEED` recovery in `df4669a112`. No other
+production file differed. The candidate built cleanly and reports
+`v31.99.0-ef533c1d8463-dirty` only because of that isolated diff.
+
+It used the identical full-height command, data lowerdir, OverlayFS setup,
+`-dbcache=2000`, cache drop, GCC/g++ 14 Release settings, and disabled
+network/wallet settings as the two controls above. It logged height 0, height
+957759, and `Shutdown done`, and exited zero. The candidate raw log, time,
+perf, and size output are under
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/default-full-1/metrics/`.
+
+| metric | global random + repair | default mmap candidate | candidate change | `origin/master` |
+| --- | ---: | ---: | ---: | ---: |
+| wall time | 49,922.207 s (13:52:03) | 27,226.893 s (7:33:48) | **-45.46%** | 28,255.353 s (7:50:56) |
+| task-clock | 41,018.284 s | 40,883.467 s | -0.33% | 42,139.628 s |
+| user CPU | 38,818.015 s | 39,252.607 s | +1.12% | 40,509.549 s |
+| system CPU | 2,347.936 s | 1,670.962 s | **-28.83%** | 1,669.033 s |
+| instructions | 213.399 T | 212.772 T | -0.29% | 223.467 T |
+| branches | 17.108 T | 17.017 T | -0.53% | 18.698 T |
+| major faults | 7,944,698 | 285,760 | **-96.40%** | 296,228 |
+| minor faults | 18,107,612 | 17,810,374 | -1.64% | 17,623,112 |
+| filesystem input | 1,560,771,704 | 1,512,699,448 | -3.08% | 1,514,021,672 |
+| filesystem output | 1,310,015,304 | 1,308,627,560 | -0.11% | 1,296,389,272 |
+| peak RSS | 17,974,260 KiB | 18,003,888 KiB | +0.16% | 18,169,028 KiB |
+| OverlayFS upper bytes | 15,522,241,857 | 15,735,783,037 | +1.38% | 15,596,157,807 |
+
+This isolates a large causal win: removing the global random advice makes the
+same stack **1.834x as fast** as with the advice/repair, while task-clock and
+instruction count stay effectively unchanged. The 27.8-fold major-fault drop,
+28.8% lower system time, and return of filesystem input to the master level
+show that the HDD regression was page-cache readahead suppression, not added
+validation work or a cache/write-buffer setting. The candidate is also 3.64%
+faster than this single master control, but that small difference is not a
+cross-revision claim because each full variant has one sample and master ran
+first.
+
+The affected `PosixMmapReadableFile` abstraction cannot distinguish a random
+old-chainstate point read from a sequential chainstate/RPC iterator. A global
+`MADV_RANDOM` policy therefore imposes the wrong policy on the important cold
+sequential workloads. Removing it restores the platform default, which lets
+the kernel apply normal readahead. Expected reach is cold HDD
+`-reindex-chainstate`, LevelDB compaction, index construction, and ordered
+UTXO-set scans (`gettxoutsetinfo`, `dumptxoutset`, and `scantxoutset` queries
+that walk the UTXO set). The patch changes no persisted data, file format, RPC
+result, consensus rule, or explicit cache size.
+
+Limitation: this removes the optimization originally measured for a resumed
+prune-assumevalid random-prevout workload. The old 20-block point-read control
+does not reproduce that exact workload and must not be used to assert that
+there is no random-read cost. The full HDD regression is sufficiently large to
+justify restoring the safe default; a future random-read-specific optimization
+must be opt-in at a call site or prove that it does not globally alter
+sequential mmap behavior. This full result is one cold run per variant on one
+rotational ext4 RAID1 device; it establishes causality against the production
+stack but not variance on SSDs, other filesystems, cache sizes, or the named
+RPCs. Those RPCs require their own controlled follow-up measurements.
+
+Validation after applying the minimal source change:
+
+```text
+ninja -C build bitcoind -j1
+ctest --test-dir build --output-on-failure -R '^(dbwrapper_tests|coinsviewoverlay_tests|coinsviewoverlay_tests_noworkers)$'
+```

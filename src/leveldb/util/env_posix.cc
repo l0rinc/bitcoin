@@ -209,8 +209,8 @@ class PosixRandomAccessFile final : public RandomAccessFile {
 // Implements random read access in a file using mmap().
 //
 // Instances of this class are thread-safe, as required by the RandomAccessFile
-// API. Read() only calls thread-safe library functions and updates read-locality
-// state atomically.
+// API. Instances are immutable and Read() only calls thread-safe library
+// functions.
 class PosixMmapReadableFile final : public RandomAccessFile {
  public:
   // mmap_base[0, length-1] points to the memory-mapped contents of the file. It
@@ -239,27 +239,6 @@ class PosixMmapReadableFile final : public RandomAccessFile {
       return PosixError(filename_, EINVAL);
     }
 
-#if defined(MADV_RANDOM) && defined(MADV_WILLNEED)
-    // Keep the mapping's random-access policy, but recover bounded readahead
-    // when adjacent table-block reads demonstrate a sequential access pattern.
-    constexpr uint64_t kReadaheadSize = 128 * 1024;
-    const uint64_t read_end = offset + n;
-    const uint64_t previous_end =
-        last_read_end_.exchange(read_end, std::memory_order_relaxed);
-    if (previous_end == offset &&
-        offset / kReadaheadSize != read_end / kReadaheadSize) {
-      const uint64_t advice_offset =
-          read_end / kReadaheadSize * kReadaheadSize;
-      if (advice_offset < length_) {
-        const size_t remaining = length_ - advice_offset;
-        const size_t advice_size =
-            remaining < kReadaheadSize ? remaining : kReadaheadSize;
-        (void)::madvise(mmap_base_ + advice_offset, advice_size,
-                        MADV_WILLNEED);
-      }
-    }
-#endif
-
     *result = Slice(mmap_base_ + offset, n);
     return Status::OK();
   }
@@ -271,10 +250,6 @@ class PosixMmapReadableFile final : public RandomAccessFile {
   const size_t length_;
   Limiter* const mmap_limiter_;
   const std::string filename_;
-#if defined(MADV_RANDOM) && defined(MADV_WILLNEED)
-  mutable std::atomic<uint64_t> last_read_end_{
-      std::numeric_limits<uint64_t>::max()};
-#endif
 };
 
 class PosixWritableFile final : public WritableFile {
@@ -566,9 +541,6 @@ class PosixEnv : public Env {
       void* mmap_base =
           ::mmap(/*addr=*/nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
       if (mmap_base != MAP_FAILED) {
-#if defined(MADV_RANDOM)
-        (void)::madvise(mmap_base, file_size, MADV_RANDOM);
-#endif
         *result = new PosixMmapReadableFile(filename,
                                             reinterpret_cast<char*>(mmap_base),
                                             file_size, &mmap_limiter_);
