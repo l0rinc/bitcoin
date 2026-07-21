@@ -180,6 +180,20 @@ void AssertBlockLocatorRoundTrip(const CBlockLocator& locator)
     assert(reparsed.vHave == locator.vHave);
 }
 
+void AssertMessageHeaderRoundTrip(const CMessageHeader& header)
+{
+    auto serialized{Serialize(header)};
+    assert(serialized.size() == CMessageHeader::HEADER_SIZE);
+
+    CMessageHeader reparsed;
+    serialized >> reparsed;
+    assert(serialized.empty());
+    assert(reparsed.pchMessageStart == header.pchMessageStart);
+    assert(std::memcmp(reparsed.m_msg_type, header.m_msg_type, CMessageHeader::MESSAGE_TYPE_SIZE) == 0);
+    assert(reparsed.nMessageSize == header.nMessageSize);
+    assert(std::memcmp(reparsed.pchChecksum, header.pchChecksum, CMessageHeader::CHECKSUM_SIZE) == 0);
+}
+
 void DeserializeAndAssertBlockLocator(FuzzBufferType buffer, CBlockLocator& locator)
 {
     SpanReader reader{buffer};
@@ -376,7 +390,8 @@ FUZZ_TARGET(service_deserialize, .init = initialize_deserialize)
 }
 FUZZ_TARGET_DESERIALIZE(messageheader_deserialize, {
     CMessageHeader mh;
-    DeserializeFromFuzzingInput(buffer, mh);
+    DeserializeAndAssertCanonicalPrefix(buffer, mh);
+    AssertMessageHeaderRoundTrip(mh);
     (void)mh.IsMessageTypeValid();
 })
 FUZZ_TARGET(address_deserialize, .init = initialize_deserialize)
