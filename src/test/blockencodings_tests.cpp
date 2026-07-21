@@ -230,13 +230,6 @@ public:
     SERIALIZE_METHODS(TestHeaderAndShortIDs, obj) { READWRITE(obj.header, obj.nonce, Using<VectorFormatter<CustomUintFormatter<CBlockHeaderAndShortTxIDs::SHORTTXIDS_LENGTH>>>(obj.shorttxids), obj.prefilledtxn); }
 };
 
-struct TestPartiallyDownloadedBlock : PartiallyDownloadedBlock {
-    using PartiallyDownloadedBlock::PartiallyDownloadedBlock;
-
-    size_t GetMempoolCount() const { return mempool_count; }
-    size_t GetExtraCount() const { return extra_count; }
-};
-
 class TestDirectHeaderAndShortIDs : public CBlockHeaderAndShortTxIDs
 {
 public:
@@ -596,6 +589,14 @@ BOOST_AUTO_TEST_CASE(ReceiveWithExtraTransactions) {
     block.hashMerkleRoot = BlockMerkleRoot(block);
     while (!CheckProofOfWork(block.GetHash(), block.nBits, Params().GetConsensus())) ++block.nNonce;
 
+    const auto make_variant = [](const CTransactionRef& tx, uint32_t mask) {
+        CMutableTransaction mutable_tx{*tx};
+        mutable_tx.nLockTime ^= mask;
+        return MakeTransactionRef(std::move(mutable_tx));
+    };
+    const CTransactionRef extra_collision_tx{make_variant(non_block_tx, 1)};
+    const CTransactionRef extra_source_collision_tx{make_variant(non_block_tx, 2)};
+
     std::vector<std::pair<Wtxid, CTransactionRef>> extra_txn;
     extra_txn.resize(10);
 
@@ -631,32 +632,50 @@ BOOST_AUTO_TEST_CASE(ReceiveWithExtraTransactions) {
         BOOST_CHECK(partial_block_with_extra.IsTxAvailable(2));
 
         // Simulate a mempool collision after finding an unrelated extra transaction.
-        extra_txn[2] = {block.vtx[2]->GetWitnessHash(), non_block_tx};
+        extra_txn[2] = {extra_collision_tx->GetWitnessHash(), extra_collision_tx};
         TestPartiallyDownloadedBlock partial_block_with_extra_collision{&pool};
+        const uint64_t mempool_shortid{cmpctblock.GetShortID(block.vtx[2]->GetWitnessHash())};
+        const Wtxid extra_collision_wtxid{extra_collision_tx->GetWitnessHash()};
+        partial_block_with_extra_collision.m_get_short_id_mock = [mempool_shortid, extra_collision_wtxid](const CBlockHeaderAndShortTxIDs& ids, const Wtxid& wtxid) {
+            if (wtxid == extra_collision_wtxid) return mempool_shortid;
+            return ids.GetShortID(wtxid);
+        };
         BOOST_CHECK_EQUAL(partial_block_with_extra_collision.InitData(cmpctblock, extra_txn), READ_STATUS_OK);
         BOOST_CHECK(partial_block_with_extra_collision.IsTxAvailable(1));
         BOOST_CHECK(!partial_block_with_extra_collision.IsTxAvailable(2));
-        BOOST_CHECK_EQUAL(partial_block_with_extra_collision.GetMempoolCount(), 1U);
-        BOOST_CHECK_EQUAL(partial_block_with_extra_collision.GetExtraCount(), 1U);
+        BOOST_CHECK_EQUAL(partial_block_with_extra_collision.MempoolCount(), 1U);
+        BOOST_CHECK_EQUAL(partial_block_with_extra_collision.ExtraCount(), 1U);
 
         // Now also collide the extra-sourced slot: both counters decrement exactly once.
-        extra_txn[3] = {block.vtx[1]->GetWitnessHash(), non_block_tx};
+        extra_txn[3] = {extra_source_collision_tx->GetWitnessHash(), extra_source_collision_tx};
         TestPartiallyDownloadedBlock partial_block_with_extra_source_collision{&pool};
+        const uint64_t extra_shortid{cmpctblock.GetShortID(block.vtx[1]->GetWitnessHash())};
+        const Wtxid extra_source_collision_wtxid{extra_source_collision_tx->GetWitnessHash()};
+        partial_block_with_extra_source_collision.m_get_short_id_mock = [mempool_shortid, extra_shortid, extra_collision_wtxid, extra_source_collision_wtxid](const CBlockHeaderAndShortTxIDs& ids, const Wtxid& wtxid) {
+            if (wtxid == extra_collision_wtxid) return mempool_shortid;
+            if (wtxid == extra_source_collision_wtxid) return extra_shortid;
+            return ids.GetShortID(wtxid);
+        };
         BOOST_CHECK_EQUAL(partial_block_with_extra_source_collision.InitData(cmpctblock, extra_txn), READ_STATUS_OK);
         BOOST_CHECK(!partial_block_with_extra_source_collision.IsTxAvailable(1));
         BOOST_CHECK(!partial_block_with_extra_source_collision.IsTxAvailable(2));
-        BOOST_CHECK_EQUAL(partial_block_with_extra_source_collision.GetMempoolCount(), 0U);
-        BOOST_CHECK_EQUAL(partial_block_with_extra_source_collision.GetExtraCount(), 0U);
+        BOOST_CHECK_EQUAL(partial_block_with_extra_source_collision.MempoolCount(), 0U);
+        BOOST_CHECK_EQUAL(partial_block_with_extra_source_collision.ExtraCount(), 0U);
 
         // Collided slots are terminal: not even the genuine transactions refill them.
         extra_txn[4] = {block.vtx[2]->GetWitnessHash(), block.vtx[2]};
         extra_txn[5] = {block.vtx[1]->GetWitnessHash(), block.vtx[1]};
         TestPartiallyDownloadedBlock partial_block_no_refill{&pool};
+        partial_block_no_refill.m_get_short_id_mock = [mempool_shortid, extra_shortid, extra_collision_wtxid, extra_source_collision_wtxid](const CBlockHeaderAndShortTxIDs& ids, const Wtxid& wtxid) {
+            if (wtxid == extra_collision_wtxid) return mempool_shortid;
+            if (wtxid == extra_source_collision_wtxid) return extra_shortid;
+            return ids.GetShortID(wtxid);
+        };
         BOOST_CHECK_EQUAL(partial_block_no_refill.InitData(cmpctblock, extra_txn), READ_STATUS_OK);
         BOOST_CHECK(!partial_block_no_refill.IsTxAvailable(1));
         BOOST_CHECK(!partial_block_no_refill.IsTxAvailable(2));
-        BOOST_CHECK_EQUAL(partial_block_no_refill.GetMempoolCount(), 0U);
-        BOOST_CHECK_EQUAL(partial_block_no_refill.GetExtraCount(), 0U);
+        BOOST_CHECK_EQUAL(partial_block_no_refill.MempoolCount(), 0U);
+        BOOST_CHECK_EQUAL(partial_block_no_refill.ExtraCount(), 0U);
     }
 }
 
