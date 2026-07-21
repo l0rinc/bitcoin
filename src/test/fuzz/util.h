@@ -45,6 +45,25 @@ size_t CallOneOf(FuzzedDataProvider& fuzzed_data_provider, Callables... callable
     return call_size;
 }
 
+inline void AssertPartialMerkleTreeExtraction(CPartialMerkleTree& partial_merkle_tree)
+{
+    std::vector<Txid> matches;
+    std::vector<unsigned int> indices{0xdeadbeefU};
+    const uint256 merkle_root = partial_merkle_tree.ExtractMatches(matches, indices);
+
+    assert(matches.size() == indices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+        assert(indices[i] < partial_merkle_tree.GetNumTransactions());
+        if (i > 0) assert(indices[i] > indices[i - 1]);
+    }
+
+    const auto expected_matches = matches;
+    const auto expected_indices = indices;
+    assert(partial_merkle_tree.ExtractMatches(matches, indices) == merkle_root);
+    assert(matches == expected_matches);
+    assert(indices == expected_indices);
+}
+
 template <typename Collection>
 auto PickIterator(FuzzedDataProvider& fuzzed_data_provider, Collection& col)
 {
