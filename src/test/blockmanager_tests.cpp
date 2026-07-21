@@ -10,7 +10,11 @@
 #include <node/kernel_notifications.h>
 #include <script/solver.h>
 #include <primitives/block.h>
+#include <util/byte_units.h>
 #include <util/chaintype.h>
+#include <util/check.h>
+#include <util/strencodings.h>
+#include <streams.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
@@ -18,7 +22,12 @@
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
 
+#include <memory>
+#include <optional>
+#include <vector>
+
 using kernel::CBlockFileInfo;
+using kernel::BlockTreeDB;
 using node::STORAGE_HEADER_BYTES;
 using node::BlockManager;
 using node::KernelNotifications;
@@ -322,6 +331,91 @@ BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)
 
     // Deleting a non-existent lock returns false
     BOOST_CHECK(!blockman.DeletePruneLock("nonexistent"));
+}
+
+BOOST_AUTO_TEST_CASE(blockmanager_negative_last_block_file_rejected)
+{
+    const fs::path db_path{m_args.GetDataDirNet() / "blocks" / "index"};
+    {
+        // A negative file number indexed an empty m_blockfile_info vector.
+        BlockTreeDB block_tree_db{DBParams{
+            .path = db_path,
+            .cache_bytes = 1_MiB,
+        }};
+        block_tree_db.WriteBatchSync({}, -1, {});
+    }
+
+    KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
+    const BlockManager::Options blockman_opts{
+        .chainparams = Params(),
+        .blocks_dir = m_args.GetBlocksDirPath(),
+        .notifications = notifications,
+        .block_tree_db_params = DBParams{
+            .path = db_path,
+            .cache_bytes = 0,
+        },
+    };
+    BlockManager blockman{*Assert(m_node.shutdown_signal), blockman_opts};
+    LOCK(::cs_main);
+    BOOST_CHECK(!blockman.LoadBlockIndexDB(std::nullopt));
+}
+
+BOOST_AUTO_TEST_CASE(blockmanager_permuted_disk_heights_rejected)
+{
+    LOCK(::cs_main);
+    // Valid headers with contiguous disk heights that disagree with their parents.
+    static constexpr const char* HEADER_HEX[]{
+        "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c",
+        "010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e36299",
+        "010000004860eb18bf1b1620e37e9490fc8a427514416fd75159ab86688e9a8300000000d5fdcc541e25de1c7a5addedf24858b8bb665c9f36ef744ee42c316022c90f9bb0bc6649ffff001d08d2bd61",
+        "01000000bddd99ccfda39da1b108ce1a5d70038d0a967bacb68b6b63065f626a0000000044f672226090d85db9a9f2fbfe5f0f9609b387af7be5b7fbb7a1767c831c9e995dbe6649ffff001d05e0ed6d",
+        "010000004944469562ae1c2c74d9a535e00b6f3e40ffbad4f2fda3895501b582000000007a06ea98cd40ba2e3288262b28638cec5337c1456aaf5eedc8e9e5a20f062bdf8cc16649ffff001d2bfee0a9",
+        "0100000085144a84488ea88d221c8bd6c059da090e88f8a2c99690ee55dbba4e00000000e11c48fecdd9e72510ca84f023370c9a38bf91ac5cae88019bee94d24528526344c36649ffff001d1d03e477",
+        "01000000fc33f596f822a0a1951ffdbf2a897b095636ad871707bf5d3162729b00000000379dfb96a5ea8c81700ea4ac6b97ae9a9312b2d4301a29580e924ee6761a2520adc46649ffff001d189c4c97",
+        "010000008d778fdc15a2d3fb76b7122a3b5582bea4f21f5a0c693537e7a03130000000003f674005103b42f984169c7d008370967e91920a6a5d64fd51282f75bc73a68af1c66649ffff001d39a59c86",
+    };
+    static constexpr int PERMUTED_HEIGHT[8]{0, 6, 7, 1, 2, 3, 4, 5};
+
+    const fs::path db_path{m_args.GetDataDirNet() / "blocks" / "index"};
+    {
+        BlockTreeDB block_tree_db{DBParams{
+            .path = db_path,
+            .cache_bytes = 1_MiB,
+        }};
+        std::vector<std::unique_ptr<CBlockIndex>> blocks;
+        std::vector<uint256> hashes;
+        std::vector<const CBlockIndex*> block_ptrs;
+        blocks.reserve(8);
+        hashes.reserve(8);
+        block_ptrs.reserve(8);
+        for (int i{0}; i < 8; ++i) {
+            DataStream stream{ParseHex(HEADER_HEX[i])};
+            CBlockHeader header{};
+            stream >> header;
+            hashes.push_back(header.GetHash());
+            auto index{std::make_unique<CBlockIndex>(header)};
+            index->phashBlock = &hashes.back();
+            index->nHeight = PERMUTED_HEIGHT[i];
+            index->nStatus = BLOCK_VALID_TREE;
+            index->pprev = i == 0 ? nullptr : blocks[i - 1].get();
+            blocks.push_back(std::move(index));
+            block_ptrs.push_back(blocks.back().get());
+        }
+        block_tree_db.WriteBatchSync({}, 0, block_ptrs);
+    }
+
+    KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
+    const BlockManager::Options blockman_opts{
+        .chainparams = Params(),
+        .blocks_dir = m_args.GetBlocksDirPath(),
+        .notifications = notifications,
+        .block_tree_db_params = DBParams{
+            .path = db_path,
+            .cache_bytes = 0,
+        },
+    };
+    BlockManager blockman{*Assert(m_node.shutdown_signal), blockman_opts};
+    BOOST_CHECK(!blockman.LoadBlockIndexDB(std::nullopt));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
