@@ -5375,3 +5375,29 @@ host, this 957779 chainstate, a cold page cache, and the exact descriptor and
 snapshot type. The repeated `gettxoutsetinfo` order reversal gives confidence
 in its result; `scantxoutset` and `dumptxoutset` have one pair each and should
 be repeated before making a cross-device or percentage-guarantee claim.
+
+### Post-fix `gettxoutsetinfo` profile: no new isolated change
+
+One additional fixed-policy cold `gettxoutsetinfo` run was profiled only to
+select the next candidate, not as timing evidence. After startup and the final
+cache drop, `perf record -F 99 -g --call-graph dwarf -p <daemon-pid>` attached
+for the synchronous RPC; `perf report --stdio --percent-limit 0.5` is retained
+as `rpc-mmap/fixed-gettxoutsetinfo-12/metrics/gettxoutsetinfo.perf.{data,report.txt}`.
+The profiler's own work means this run is deliberately excluded from every
+timing table above.
+
+`kernel::ComputeUTXOStats`/`GetUTXOStats` accounts for 77.86% of samples.
+Within it, cursor advance is the dominant remaining CPU path:
+`CCoinsViewDBCursor::Next` 24.00%, `CDBIterator::NextAndValid` 22.99%,
+`leveldb::DBIter::Next` 15.19%, merging-iterator heap maintenance 8.83%,
+internal-key comparison 6.55%, and two-level table advance 6.36%.
+`CCoinsViewDBCursor::GetValue` is 7.53%.
+
+These are not fresh candidates: `fd825127fa` already replaces the former
+linear forward child selection with the profiled heap path and has its own
+correctness/mutation proof and warm full-scan gain above; the obfuscated
+borrowed-span reader change already targets the profiled value-decode path.
+The current samples therefore validate their reach but do not identify a new
+simple, independently safe optimization. Decision: do not further alter heap
+maintenance, key ordering, or coin decoding without a separate hypothesis and
+baseline/candidate measurement.
