@@ -1145,7 +1145,8 @@ int btck_chainstate_manager_import_blocks(btck_ChainstateManager* chainman, cons
         import_files.reserve(block_file_paths_data_len);
         for (uint32_t i = 0; i < block_file_paths_data_len; i++) {
             if (block_file_paths_data[i] != nullptr) {
-                import_files.emplace_back(std::string{block_file_paths_data[i], block_file_paths_lens[i]}.c_str());
+                const size_t path_len{block_file_paths_lens ? block_file_paths_lens[i] : std::strlen(block_file_paths_data[i])};
+                import_files.emplace_back(fs::PathFromString({block_file_paths_data[i], path_len}));
             }
         }
         auto& chainman_ref{*btck_ChainstateManager::get(chainman).m_chainman};
