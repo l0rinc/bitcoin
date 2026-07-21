@@ -52,6 +52,16 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
         }
     };
 
+    // A moved-from VecDeque remains valid and must be reusable, even though its exact contents and
+    // capacity are not part of the move contract.
+    auto check_reusable_fn = [&](VecDeque<T>& moved_from) {
+        moved_from.clear();
+        moved_from.emplace_back(rng.rand64());
+        assert(moved_from.size() == 1);
+        moved_from.pop_back();
+        assert(moved_from.empty());
+    };
+
     LIMITED_WHILE (provider.remaining_bytes(), MAX_OPERATIONS) {
         int command = provider.ConsumeIntegral<uint8_t>() % 64;
         unsigned idx = real.empty() ? 0 : provider.ConsumeIntegralInRange<unsigned>(0, real.size() - 1);
@@ -116,6 +126,7 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 VecDeque<T> copy(real[idx]);
                 real.emplace_back(std::move(copy));
                 sim.emplace_back(sim[idx]);
+                check_reusable_fn(copy);
                 break;
             }
             if (multiple_exist && command-- == 0) {
@@ -137,6 +148,7 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 compare_fn(real[idx], sim[idx]);
                 real[idx] = std::move(copy);
                 sim[idx] = sim[(idx + 1) % num_buffers];
+                check_reusable_fn(copy);
                 break;
             }
             if (non_empty && command-- == 0) {
@@ -152,7 +164,9 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
             if (non_empty && command-- == 0) {
                 /* Self-move assign. */
                 // Do not use std::move(real[idx]) here: -Wself-move correctly warns about that.
+                compare_fn(real[idx], sim[idx]);
                 real[idx] = static_cast<VecDeque<T>&&>(real[idx]);
+                compare_fn(real[idx], sim[idx]);
                 break;
             }
             if (non_empty && command-- == 0) {
@@ -318,6 +332,12 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 assert(real[idx].size() == old_size - 1);
                 break;
             }
+        }
+
+        // Compare after every completed transition, including operations that do not have a
+        // local size assertion. This keeps the model synchronized at the point of failure.
+        for (size_t i = 0; i < sim.size(); ++i) {
+            compare_fn(real[i], sim[i]);
         }
     }
 
