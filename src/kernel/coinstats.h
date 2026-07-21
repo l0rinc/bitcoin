@@ -73,6 +73,7 @@ struct CCoinsStats {
 };
 
 uint64_t GetBogoSize(const CScript& script_pub_key);
+uint64_t GetBogoSize(uint64_t script_pub_key_size);
 
 void ApplyCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& coin);
 void RemoveCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& coin);

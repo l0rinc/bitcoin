@@ -337,6 +337,38 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(coins_tests, BasicTestingSetup)
 
+BOOST_AUTO_TEST_CASE(coin_stats_value_matches_coin_deserialization)
+{
+    auto compressed_key{GenerateRandomKey()};
+    auto uncompressed_key{GenerateRandomKey(/*compressed=*/false)};
+    auto redeem_script{CScript{OP_TRUE}};
+    auto scripts{std::vector<CScript>{
+        CScript{} << OP_DUP << OP_HASH160 << ToByteVector(compressed_key.GetPubKey().GetID()) << OP_EQUALVERIFY << OP_CHECKSIG,
+        CScript{} << OP_HASH160 << ToByteVector(CScriptID{redeem_script}) << OP_EQUAL,
+        CScript{} << ToByteVector(compressed_key.GetPubKey()) << OP_CHECKSIG,
+        CScript{} << ToByteVector(uncompressed_key.GetPubKey()) << OP_CHECKSIG,
+        CScript{} << OP_RETURN << std::vector<unsigned char>(42, 0),
+        CScript{} << OP_RETURN << std::vector<unsigned char>(MAX_SCRIPT_SIZE + 1, 0),
+    }};
+
+    for (const CScript& script : scripts) {
+        auto input{Coin{CTxOut{42 * COIN, script}, /*nHeight=*/100, /*fCoinBase=*/false}};
+        DataStream serialized{};
+        serialized << input;
+
+        Coin full{};
+        CoinStatsValue stats{};
+        DataStream full_reader{serialized};
+        DataStream stats_reader{serialized};
+        full_reader >> full;
+        stats_reader >> stats;
+
+        BOOST_CHECK_EQUAL(stats.nValue, full.out.nValue);
+        BOOST_CHECK_EQUAL(stats.scriptPubKeySize, full.out.scriptPubKey.size());
+        BOOST_CHECK_EQUAL(stats_reader.size(), 0U);
+    }
+}
+
 struct UpdateTest : BasicTestingSetup {
 // Store of all necessary tx and undo data for next test
 typedef std::map<COutPoint, std::tuple<CTransaction,CTxUndo,Coin>> UtxoData;
