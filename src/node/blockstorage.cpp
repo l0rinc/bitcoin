@@ -131,8 +131,16 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
             CDiskBlockIndex diskindex;
             if (pcursor->GetValue(diskindex)) {
                 // Construct block index object
-                CBlockIndex* pindexNew = insertBlockIndex(diskindex.ConstructBlockHash());
-                pindexNew->pprev          = insertBlockIndex(diskindex.hashPrev);
+                const uint256 block_hash{diskindex.ConstructBlockHash()};
+                CBlockIndex* pindexNew = insertBlockIndex(block_hash);
+                Assert(pindexNew);
+                Assert(pindexNew->phashBlock);
+                Assert(pindexNew->GetBlockHash() == block_hash);
+                CBlockIndex* pprev = insertBlockIndex(diskindex.hashPrev);
+                Assert(pprev);
+                Assert(pprev->phashBlock);
+                Assert(pprev->GetBlockHash() == diskindex.hashPrev);
+                pindexNew->pprev = pprev;
                 pindexNew->nHeight        = diskindex.nHeight;
                 pindexNew->nFile          = diskindex.nFile;
                 pindexNew->nDataPos       = diskindex.nDataPos;
