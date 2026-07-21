@@ -33,11 +33,28 @@ class VecDeque
     /** The size of m_buffer, expressed as a multiple of the size of T. */
     size_t m_capacity{0};
 
+    /** Check the representation invariants that all public operations rely on. */
+    void AssertValid() const noexcept
+    {
+        Assume(m_size <= m_capacity);
+        Assume((m_buffer == nullptr) == (m_capacity == 0));
+        if (m_capacity == 0) {
+            Assume(m_offset == 0);
+        } else {
+            Assume(m_offset < m_capacity);
+        }
+    }
+
     /** Returns the number of populated objects between m_offset and the end of the buffer. */
-    size_t FirstPart() const noexcept { return std::min(m_capacity - m_offset, m_size); }
+    size_t FirstPart() const noexcept
+    {
+        AssertValid();
+        return std::min(m_capacity - m_offset, m_size);
+    }
 
     void Reallocate(size_t capacity)
     {
+        AssertValid();
         Assume(capacity >= m_size);
         Assume((m_offset == 0 && m_capacity == 0) || m_offset < m_capacity);
         // Allocate new buffer.
@@ -68,12 +85,13 @@ class VecDeque
         m_buffer = new_buffer;
         m_offset = 0;
         m_capacity = capacity;
-        Assume((m_offset == 0 && m_capacity == 0) || m_offset < m_capacity);
+        AssertValid();
     }
 
     /** What index in the buffer does logical entry number pos have? */
     size_t BufferIndex(size_t pos) const noexcept
     {
+        AssertValid();
         Assume(pos < m_capacity);
         // The expression below is used instead of the more obvious (pos + m_offset >= m_capacity),
         // because the addition there could in theory overflow with very large deques.
@@ -88,6 +106,7 @@ class VecDeque
      *  without requiring a default T constructor. */
     void ResizeDown(size_t size) noexcept
     {
+        AssertValid();
         Assume(size <= m_size);
         if constexpr (std::is_trivially_destructible_v<T>) {
             // If T is trivially destructible, we do not need to do anything but update the
@@ -101,6 +120,7 @@ class VecDeque
                 --m_size;
             }
         }
+        AssertValid();
     }
 
 public:
@@ -109,6 +129,7 @@ public:
     /** Resize the deque to be exactly size size (adding default-constructed elements if needed). */
     void resize(size_t size)
     {
+        AssertValid();
         if (size < m_size) {
             // Delegate to ResizeDown when shrinking.
             ResizeDown(size);
@@ -120,6 +141,7 @@ public:
                 ++m_size;
             }
         }
+        AssertValid();
     }
 
     /** Resize the deque to be size 0. The capacity will remain unchanged. */
@@ -128,6 +150,7 @@ public:
     /** Destroy a deque. */
     ~VecDeque()
     {
+        AssertValid();
         clear();
         Reallocate(0);
     }
@@ -135,6 +158,8 @@ public:
     /** Copy-assign a deque. */
     VecDeque& operator=(const VecDeque& other)
     {
+        AssertValid();
+        other.AssertValid();
         if (&other == this) [[unlikely]] return *this;
         clear();
         Reallocate(other.m_size);
@@ -154,16 +179,21 @@ public:
                 ++m_size;
             }
         }
+        AssertValid();
         return *this;
     }
 
     /** Swap two deques. */
     void swap(VecDeque& other) noexcept
     {
+        AssertValid();
+        other.AssertValid();
         std::swap(m_buffer, other.m_buffer);
         std::swap(m_offset, other.m_offset);
         std::swap(m_size, other.m_size);
         std::swap(m_capacity, other.m_capacity);
+        AssertValid();
+        other.AssertValid();
     }
 
     /** Non-member version of swap. */
@@ -179,11 +209,16 @@ public:
     /** Copy-construct a deque. */
     VecDeque(const VecDeque& other) { *this = other; }
     /** Move-construct a deque. */
-    VecDeque(VecDeque&& other) noexcept { swap(other); }
+    VecDeque(VecDeque&& other) noexcept
+    {
+        swap(other);
+    }
 
     /** Equality comparison between two deques (only compares size+contents, not capacity). */
     bool friend operator==(const VecDeque& a, const VecDeque& b)
     {
+        a.AssertValid();
+        b.AssertValid();
         if (a.m_size != b.m_size) return false;
         for (size_t i = 0; i < a.m_size; ++i) {
             if (a[i] != b[i]) return false;
@@ -194,6 +229,8 @@ public:
     /** Comparison between two deques, implementing lexicographic ordering on the contents. */
     std::strong_ordering friend operator<=>(const VecDeque& a, const VecDeque& b)
     {
+        a.AssertValid();
+        b.AssertValid();
         size_t pos_a{0}, pos_b{0};
         while (pos_a < a.m_size && pos_b < b.m_size) {
             auto cmp = a[pos_a++] <=> b[pos_b++];
@@ -205,22 +242,28 @@ public:
     /** Increase the capacity to capacity. Capacity will not shrink. */
     void reserve(size_t capacity)
     {
+        AssertValid();
         if (capacity > m_capacity) Reallocate(capacity);
+        AssertValid();
     }
 
     /** Make the capacity equal to the size. The contents does not change. */
     void shrink_to_fit()
     {
+        AssertValid();
         if (m_capacity > m_size) Reallocate(m_size);
+        AssertValid();
     }
 
     /** Construct a new element at the end of the deque. */
     template<typename... Args>
     void emplace_back(Args&&... args)
     {
+        AssertValid();
         if (m_size == m_capacity) Reallocate((m_size + 1) * 2);
         std::construct_at(m_buffer + BufferIndex(m_size), std::forward<Args>(args)...);
         ++m_size;
+        AssertValid();
     }
 
     /** Move-construct a new element at the end of the deque. */
@@ -233,11 +276,13 @@ public:
     template<typename... Args>
     void emplace_front(Args&&... args)
     {
+        AssertValid();
         if (m_size == m_capacity) Reallocate((m_size + 1) * 2);
         std::construct_at(m_buffer + BufferIndex(m_capacity - 1), std::forward<Args>(args)...);
         if (m_offset == 0) m_offset = m_capacity;
         --m_offset;
         ++m_size;
+        AssertValid();
     }
 
     /** Copy-construct a new element at the beginning of the deque. */
@@ -249,24 +294,29 @@ public:
     /** Remove the first element of the deque. Requires !empty(). */
     void pop_front()
     {
+        AssertValid();
         Assume(m_size);
         std::destroy_at(m_buffer + m_offset);
         --m_size;
         ++m_offset;
         if (m_offset == m_capacity) m_offset = 0;
+        AssertValid();
     }
 
     /** Remove the last element of the deque. Requires !empty(). */
     void pop_back()
     {
+        AssertValid();
         Assume(m_size);
         std::destroy_at(m_buffer + BufferIndex(m_size - 1));
         --m_size;
+        AssertValid();
     }
 
     /** Get a mutable reference to the first element of the deque. Requires !empty(). */
     T& front() noexcept
     {
+        AssertValid();
         Assume(m_size);
         return m_buffer[m_offset];
     }
@@ -274,6 +324,7 @@ public:
     /** Get a const reference to the first element of the deque. Requires !empty(). */
     const T& front() const noexcept
     {
+        AssertValid();
         Assume(m_size);
         return m_buffer[m_offset];
     }
@@ -281,6 +332,7 @@ public:
     /** Get a mutable reference to the last element of the deque. Requires !empty(). */
     T& back() noexcept
     {
+        AssertValid();
         Assume(m_size);
         return m_buffer[BufferIndex(m_size - 1)];
     }
@@ -288,6 +340,7 @@ public:
     /** Get a const reference to the last element of the deque. Requires !empty(). */
     const T& back() const noexcept
     {
+        AssertValid();
         Assume(m_size);
         return m_buffer[BufferIndex(m_size - 1)];
     }
@@ -295,6 +348,7 @@ public:
     /** Get a mutable reference to the element in the deque at the given index. Requires idx < size(). */
     T& operator[](size_t idx) noexcept
     {
+        AssertValid();
         Assume(idx < m_size);
         return m_buffer[BufferIndex(idx)];
     }
@@ -302,6 +356,7 @@ public:
     /** Get a const reference to the element in the deque at the given index. Requires idx < size(). */
     const T& operator[](size_t idx) const noexcept
     {
+        AssertValid();
         Assume(idx < m_size);
         return m_buffer[BufferIndex(idx)];
     }

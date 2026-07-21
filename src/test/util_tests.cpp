@@ -25,6 +25,7 @@
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <util/time.h>
+#include <util/vecdeque.h>
 #include <util/vector.h>
 
 #include <array>
@@ -146,6 +147,38 @@ BOOST_AUTO_TEST_CASE(bitdeque_move_state)
     BOOST_CHECK_EQUAL(assigned.size(), 129);
     BOOST_CHECK(assigned.front());
     BOOST_CHECK(assigned.back());
+}
+
+BOOST_AUTO_TEST_CASE(vecdeque_move_state)
+{
+    VecDeque<uint64_t> source;
+    source.emplace_back(1);
+    source.emplace_front(2);
+    VecDeque<uint64_t> moved{std::move(source)};
+    BOOST_CHECK_EQUAL(moved.size(), 2);
+    BOOST_CHECK_EQUAL(moved.front(), 2);
+    BOOST_CHECK_EQUAL(moved.back(), 1);
+
+    source.emplace_back(3);
+    BOOST_CHECK_EQUAL(source.size(), 1);
+    BOOST_CHECK_EQUAL(source.front(), 3);
+
+    VecDeque<uint64_t> assigned;
+    assigned.emplace_back(4);
+    assigned = std::move(moved);
+    BOOST_CHECK_EQUAL(assigned.size(), 2);
+    BOOST_CHECK_EQUAL(assigned.front(), 2);
+    BOOST_CHECK_EQUAL(assigned.back(), 1);
+
+    moved.clear();
+    moved.emplace_back(5);
+    BOOST_CHECK_EQUAL(moved.size(), 1);
+    BOOST_CHECK_EQUAL(moved.front(), 5);
+
+    assigned = static_cast<VecDeque<uint64_t>&&>(assigned);
+    BOOST_CHECK_EQUAL(assigned.size(), 2);
+    BOOST_CHECK_EQUAL(assigned.front(), 2);
+    BOOST_CHECK_EQUAL(assigned.back(), 1);
 }
 
 BOOST_AUTO_TEST_CASE(util_criticalsection)
