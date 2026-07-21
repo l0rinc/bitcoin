@@ -11,6 +11,8 @@
 #include <limits>
 #include <stdexcept>
 #include <tuple>
+#include <utility>
+#include <util/check.h>
 #include <util/overflow.h>
 
 /** Class that mimics std::deque<bool>, but with std::vector<bool>'s bit packing.
@@ -129,9 +131,24 @@ private:
     /** Number of unused bits at the back of m_deque.back(). */
     int m_pad_end;
 
+    void assert_valid() const noexcept
+    {
+        Assume(m_pad_begin >= 0);
+        Assume(m_pad_begin < BITS_PER_WORD);
+        Assume(m_pad_end >= 0);
+        Assume(m_pad_end < BITS_PER_WORD);
+        if (m_deque.empty()) {
+            Assume(m_pad_begin == 0);
+            Assume(m_pad_end == 0);
+        } else if (m_deque.size() == 1) {
+            Assume(m_pad_begin + m_pad_end <= BITS_PER_WORD);
+        }
+    }
+
     /** Shrink the container by n bits, removing from the end. */
     void erase_back(size_type n)
     {
+        assert_valid();
         if (n >= static_cast<size_type>(BITS_PER_WORD - m_pad_end)) {
             n -= BITS_PER_WORD - m_pad_end;
             m_pad_end = 0;
@@ -146,11 +163,13 @@ private:
                 --n;
             }
         }
+        assert_valid();
     }
 
     /** Extend the container by n bits, adding at the end. */
     void extend_back(size_type n)
     {
+        assert_valid();
         if (n > static_cast<size_type>(m_pad_end)) {
             n -= m_pad_end + 1;
             m_pad_end = BITS_PER_WORD - 1;
@@ -158,11 +177,13 @@ private:
             n %= BITS_PER_WORD;
         }
         m_pad_end -= n;
+        assert_valid();
     }
 
     /** Shrink the container by n bits, removing from the beginning. */
     void erase_front(size_type n)
     {
+        assert_valid();
         if (n >= static_cast<size_type>(BITS_PER_WORD - m_pad_begin)) {
             n -= BITS_PER_WORD - m_pad_begin;
             m_pad_begin = 0;
@@ -177,11 +198,13 @@ private:
                 --n;
             }
         }
+        assert_valid();
     }
 
     /** Extend the container by n bits, adding at the beginning. */
     void extend_front(size_type n)
     {
+        assert_valid();
         if (n > static_cast<size_type>(m_pad_begin)) {
             n -= m_pad_begin + 1;
             m_pad_begin = BITS_PER_WORD - 1;
@@ -189,11 +212,13 @@ private:
             n %= BITS_PER_WORD;
         }
         m_pad_begin -= n;
+        assert_valid();
     }
 
     /** Insert a sequence of falses anywhere in the container. */
     void insert_zeroes(size_type before, size_type count)
     {
+        assert_valid();
         size_type after = size() - before;
         if (before < after) {
             extend_front(count);
@@ -202,6 +227,7 @@ private:
             extend_back(count);
             std::move_backward(begin() + before, begin() + before + after, end());
         }
+        assert_valid();
     }
 
 public:
@@ -221,6 +247,7 @@ public:
         if (count % BITS_PER_WORD) {
             erase_back(BITS_PER_WORD - (count % BITS_PER_WORD));
         }
+        assert_valid();
     }
 
     /** Construct a container containing count times the value of val. */
@@ -233,21 +260,61 @@ public:
     bitdeque(const bitdeque&) = default;
 
     /** Move constructor. */
-    bitdeque(bitdeque&&) noexcept = default;
+    bitdeque(bitdeque&& other) noexcept
+        : m_deque(std::move(other.m_deque)),
+          m_pad_begin(std::exchange(other.m_pad_begin, 0)),
+          m_pad_end(std::exchange(other.m_pad_end, 0))
+    {
+        assert_valid();
+        other.assert_valid();
+    }
 
     /** Copy assignment operator. */
     bitdeque& operator=(const bitdeque& other) = default;
 
     /** Move assignment operator. */
-    bitdeque& operator=(bitdeque&& other) noexcept = default;
+    bitdeque& operator=(bitdeque&& other) noexcept
+    {
+        if (this == &other) return *this;
+        m_deque = std::move(other.m_deque);
+        m_pad_begin = std::exchange(other.m_pad_begin, 0);
+        m_pad_end = std::exchange(other.m_pad_end, 0);
+        assert_valid();
+        other.assert_valid();
+        return *this;
+    }
 
     // Iterator functions.
-    iterator begin() noexcept { return {m_deque.begin(), m_pad_begin}; }
-    iterator end() noexcept { return iterator{m_deque.end(), 0} - m_pad_end; }
-    const_iterator begin() const noexcept { return const_iterator{m_deque.cbegin(), m_pad_begin}; }
-    const_iterator cbegin() const noexcept { return const_iterator{m_deque.cbegin(), m_pad_begin}; }
-    const_iterator end() const noexcept { return const_iterator{m_deque.cend(), 0} - m_pad_end; }
-    const_iterator cend() const noexcept { return const_iterator{m_deque.cend(), 0} - m_pad_end; }
+    iterator begin() noexcept
+    {
+        assert_valid();
+        return {m_deque.begin(), m_pad_begin};
+    }
+    iterator end() noexcept
+    {
+        assert_valid();
+        return iterator{m_deque.end(), 0} - m_pad_end;
+    }
+    const_iterator begin() const noexcept
+    {
+        assert_valid();
+        return const_iterator{m_deque.cbegin(), m_pad_begin};
+    }
+    const_iterator cbegin() const noexcept
+    {
+        assert_valid();
+        return const_iterator{m_deque.cbegin(), m_pad_begin};
+    }
+    const_iterator end() const noexcept
+    {
+        assert_valid();
+        return const_iterator{m_deque.cend(), 0} - m_pad_end;
+    }
+    const_iterator cend() const noexcept
+    {
+        assert_valid();
+        return const_iterator{m_deque.cend(), 0} - m_pad_end;
+    }
     reverse_iterator rbegin() noexcept { return reverse_iterator{end()}; }
     reverse_iterator rend() noexcept { return reverse_iterator{begin()}; }
     const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator{cend()}; }
@@ -256,17 +323,23 @@ public:
     const_reverse_iterator crend() const noexcept { return const_reverse_iterator{cbegin()}; }
 
     /** Count the number of bits in the container. */
-    size_type size() const noexcept { return m_deque.size() * BITS_PER_WORD - m_pad_begin - m_pad_end; }
+    size_type size() const noexcept
+    {
+        assert_valid();
+        return m_deque.size() * BITS_PER_WORD - m_pad_begin - m_pad_end;
+    }
 
     /** Determine whether the container is empty. */
     bool empty() const noexcept
     {
+        assert_valid();
         return m_deque.size() == 0 || (m_deque.size() == 1 && (m_pad_begin + m_pad_end == BITS_PER_WORD));
     }
 
     /** Return the maximum size of the container. */
     size_type max_size() const noexcept
     {
+        assert_valid();
         if (m_deque.max_size() < std::numeric_limits<difference_type>::max() / BITS_PER_WORD) {
             return m_deque.max_size() * BITS_PER_WORD;
         } else {
@@ -334,7 +407,9 @@ public:
     /** Release unused memory. */
     void shrink_to_fit()
     {
+        assert_valid();
         m_deque.shrink_to_fit();
+        assert_valid();
     }
 
     /** Empty the container. */
@@ -342,6 +417,7 @@ public:
     {
         m_deque.clear();
         m_pad_begin = m_pad_end = 0;
+        assert_valid();
     }
 
     // Append an element to the container.
@@ -397,9 +473,13 @@ public:
     // Swap two containers.
     void swap(bitdeque& other) noexcept
     {
+        assert_valid();
+        other.assert_valid();
         std::swap(m_deque, other.m_deque);
         std::swap(m_pad_begin, other.m_pad_begin);
         std::swap(m_pad_end, other.m_pad_end);
+        assert_valid();
+        other.assert_valid();
     }
     friend void swap(bitdeque& b1, bitdeque& b2) noexcept { b1.swap(b2); }
 

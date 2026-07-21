@@ -121,6 +121,33 @@ BOOST_AUTO_TEST_CASE(util_check)
     BOOST_CHECK_EQUAL(9, nine);
 }
 
+BOOST_AUTO_TEST_CASE(bitdeque_move_state)
+{
+    bitdeque<128> source(129, true);
+    bitdeque<128> moved{std::move(source)};
+    BOOST_CHECK(source.empty());
+    BOOST_CHECK_EQUAL(source.size(), 0);
+    source.push_back(false);
+    BOOST_CHECK_EQUAL(source.size(), 1);
+    BOOST_CHECK(!source.front());
+
+    bitdeque<128> assigned(3, false);
+    assigned = std::move(moved);
+    BOOST_CHECK(moved.empty());
+    BOOST_CHECK_EQUAL(moved.size(), 0);
+    moved.push_back(true);
+    BOOST_CHECK_EQUAL(moved.size(), 1);
+    BOOST_CHECK(moved.front());
+    BOOST_CHECK_EQUAL(assigned.size(), 129);
+    BOOST_CHECK(assigned.front());
+    BOOST_CHECK(assigned.back());
+
+    assigned = static_cast<bitdeque<128>&&>(assigned);
+    BOOST_CHECK_EQUAL(assigned.size(), 129);
+    BOOST_CHECK(assigned.front());
+    BOOST_CHECK(assigned.back());
+}
+
 BOOST_AUTO_TEST_CASE(util_criticalsection)
 {
     RecursiveMutex cs;
