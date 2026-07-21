@@ -194,6 +194,16 @@ void AssertMessageHeaderRoundTrip(const CMessageHeader& header)
     assert(std::memcmp(reparsed.pchChecksum, header.pchChecksum, CMessageHeader::CHECKSUM_SIZE) == 0);
 }
 
+void AssertInvRoundTrip(const CInv& inv)
+{
+    auto serialized{Serialize(inv)};
+    CInv reparsed;
+    serialized >> reparsed;
+    assert(serialized.empty());
+    assert(reparsed.type == inv.type);
+    assert(reparsed.hash == inv.hash);
+}
+
 void DeserializeAndAssertBlockLocator(FuzzBufferType buffer, CBlockLocator& locator)
 {
     SpanReader reader{buffer};
@@ -421,7 +431,8 @@ FUZZ_TARGET(address_deserialize, .init = initialize_deserialize)
 }
 FUZZ_TARGET_DESERIALIZE(inv_deserialize, {
     CInv i;
-    DeserializeFromFuzzingInput(buffer, i);
+    DeserializeAndAssertCanonicalPrefix(buffer, i);
+    AssertInvRoundTrip(i);
 })
 FUZZ_TARGET_DESERIALIZE(bloomfilter_deserialize, {
     CBloomFilter bf;
