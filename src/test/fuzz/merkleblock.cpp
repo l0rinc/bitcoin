@@ -13,6 +13,29 @@
 #include <string>
 #include <vector>
 
+namespace {
+
+void AssertExtractMatchesContract(CPartialMerkleTree& partial_merkle_tree)
+{
+    std::vector<Txid> matches;
+    std::vector<unsigned int> indices{0xdeadbeefU};
+    const uint256 merkle_root = partial_merkle_tree.ExtractMatches(matches, indices);
+
+    assert(matches.size() == indices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+        assert(indices[i] < partial_merkle_tree.GetNumTransactions());
+        if (i > 0) assert(indices[i] > indices[i - 1]);
+    }
+
+    const auto expected_matches = matches;
+    const auto expected_indices = indices;
+    assert(partial_merkle_tree.ExtractMatches(matches, indices) == merkle_root);
+    assert(matches == expected_matches);
+    assert(indices == expected_indices);
+}
+
+} // namespace
+
 FUZZ_TARGET(merkleblock)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
@@ -42,8 +65,5 @@ FUZZ_TARGET(merkleblock)
             }
             partial_merkle_tree = merkle_block.txn;
         });
-    (void)partial_merkle_tree.GetNumTransactions();
-    std::vector<Txid> matches;
-    std::vector<unsigned int> indices;
-    (void)partial_merkle_tree.ExtractMatches(matches, indices);
+    AssertExtractMatchesContract(partial_merkle_tree);
 }
