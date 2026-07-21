@@ -8,6 +8,8 @@
 
 #include <string>
 
+#include <cassert>
+
 #include <serialize.h>
 #include <util/fs.h>
 
@@ -23,13 +25,19 @@ struct FlatFilePos
     FlatFilePos(int32_t nFileIn, uint32_t nPosIn)
         : nFile{nFileIn},
           nPos{nPosIn}
-    {}
+    {
+        assert(nFile >= -1);
+    }
 
     friend bool operator==(const FlatFilePos &a, const FlatFilePos &b) {
         return (a.nFile == b.nFile && a.nPos == b.nPos);
     }
 
-    bool IsNull() const { return (nFile == -1); }
+    bool IsNull() const
+    {
+        assert(nFile >= -1);
+        return nFile == -1;
+    }
 
     std::string ToString() const;
 };
