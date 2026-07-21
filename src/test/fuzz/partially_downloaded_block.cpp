@@ -199,6 +199,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     const bool force_mempool_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_mempool_extra_sequence{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_null_extra_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_null_extra_after_extra_source{force_null_extra_collision && fuzzed_data_provider.ConsumeBool()};
     const bool force_duplicate_extra_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_mempool_duplicate_then_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_duplicate_extra_txn{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
@@ -259,6 +260,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     bool forced_terminal_collision_applied{false};
     size_t forced_terminal_collision_short_id_index{0};
     bool forced_null_extra_applied{false};
+    bool forced_null_extra_after_extra_source_applied{false};
     bool forced_duplicate_extra_applied{false};
     bool forced_mempool_early_exit_collision_applied{false};
     bool forced_mempool_early_exit_collision_with_prefilled_applied{false};
@@ -634,17 +636,26 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     } else if (cmpctblock.ShortTxIDCount() > 0 && !force_short_id_collision && !force_mempool_collision &&
         (force_null_extra_collision || fuzzed_data_provider.ConsumeBool())) {
         if (force_null_extra_collision) {
-            const CTransactionRef& target_tx{block->vtx[1]};
-            if (!pool.exists(target_tx->GetHash())) {
-                TestMemPoolEntryHelper entry;
-                LOCK2(cs_main, pool.cs);
-                TryAddToMempool(pool, entry.FromTx(target_tx));
-            }
-            if (pool.exists(target_tx->GetHash())) {
+            if (force_null_extra_after_extra_source) {
+                const CTransactionRef& target_tx{block->vtx[1]};
                 const Wtxid target_wtxid{target_tx->GetWitnessHash()};
+                extra_txn.emplace_back(target_wtxid, target_tx);
                 extra_txn.emplace_back(target_wtxid, CTransactionRef{});
                 cmpctblock.ReplaceShortTxID(0, cmpctblock.GetShortID(target_wtxid));
-                forced_null_extra_applied = true;
+                forced_null_extra_after_extra_source_applied = true;
+            } else {
+                const CTransactionRef& target_tx{block->vtx[1]};
+                if (!pool.exists(target_tx->GetHash())) {
+                    TestMemPoolEntryHelper entry;
+                    LOCK2(cs_main, pool.cs);
+                    TryAddToMempool(pool, entry.FromTx(target_tx));
+                }
+                if (pool.exists(target_tx->GetHash())) {
+                    const Wtxid target_wtxid{target_tx->GetWitnessHash()};
+                    extra_txn.emplace_back(target_wtxid, CTransactionRef{});
+                    cmpctblock.ReplaceShortTxID(0, cmpctblock.GetShortID(target_wtxid));
+                    forced_null_extra_applied = true;
+                }
             }
         } else {
             const Wtxid empty_wtxid{Wtxid::FromUint256(uint256::ZERO)};
@@ -771,6 +782,11 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         assert(pdb.IsTxAvailable(1));
         assert(pdb.MempoolCount() == 1);
         assert(pdb.ExtraCount() == 0);
+    }
+    if (forced_null_extra_after_extra_source_applied) {
+        assert(pdb.IsTxAvailable(1));
+        assert(pdb.MempoolCount() == 1);
+        assert(pdb.ExtraCount() == 1);
     }
     if (forced_duplicate_extra_applied) {
         assert(pdb.IsTxAvailable(1));
