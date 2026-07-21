@@ -117,6 +117,16 @@ void AssertEqualAfterSerializeDeserialize(const T& obj)
     assert(Deserialize<T>(Serialize(obj)) == obj);
 }
 
+void AssertSnapshotMetadataRoundTrip(const SnapshotMetadata& metadata)
+{
+    auto serialized{Serialize(metadata)};
+    SnapshotMetadata reparsed{Params().MessageStart()};
+    serialized >> reparsed;
+    assert(serialized.empty());
+    assert(reparsed.m_base_blockhash == metadata.m_base_blockhash);
+    assert(reparsed.m_coins_count == metadata.m_coins_count);
+}
+
 } // namespace
 
 FUZZ_TARGET_DESERIALIZE(block_filter_deserialize, {
@@ -318,6 +328,7 @@ FUZZ_TARGET_DESERIALIZE(snapshotmetadata_deserialize, {
     auto msg_start = Params().MessageStart();
     SnapshotMetadata snapshot_metadata{msg_start};
     DeserializeFromFuzzingInput(buffer, snapshot_metadata);
+    AssertSnapshotMetadataRoundTrip(snapshot_metadata);
 })
 FUZZ_TARGET_DESERIALIZE(uint160_deserialize, {
     uint160 u160;
