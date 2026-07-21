@@ -169,6 +169,13 @@ void DeserializeAndAssertBlockTransactions(FuzzBufferType buffer)
     AssertBlockTransactionsRoundTrip(block_transactions);
 }
 
+void AssertBlockTransactionsRequestContract(const BlockTransactionsRequest& request)
+{
+    for (size_t i{1}; i < request.indexes.size(); ++i) {
+        assert(request.indexes[i] > request.indexes[i - 1]);
+    }
+}
+
 } // namespace
 
 FUZZ_TARGET_DESERIALIZE(block_filter_deserialize, {
@@ -365,7 +372,8 @@ FUZZ_TARGET_DESERIALIZE(blocktransactions_deserialize, {
 })
 FUZZ_TARGET_DESERIALIZE(blocktransactionsrequest_deserialize, {
     BlockTransactionsRequest btr;
-    DeserializeFromFuzzingInput(buffer, btr);
+    DeserializeAndAssertCanonicalPrefix(buffer, btr);
+    AssertBlockTransactionsRequestContract(btr);
 })
 FUZZ_TARGET_DESERIALIZE(snapshotmetadata_deserialize, {
     auto msg_start = Params().MessageStart();
