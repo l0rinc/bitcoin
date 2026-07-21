@@ -11,8 +11,12 @@
 #include <test/util/poolresourcetester.h>
 #include <util/byte_units.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <iterator>
+#include <set>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -24,6 +28,7 @@ class PoolResourceFuzzer
     PoolResource<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES> m_test_resource;
     uint64_t m_sequence{0};
     size_t m_total_allocated{};
+    uint64_t m_state_checks{};
 
     struct Entry {
         std::span<std::byte> span;
@@ -34,6 +39,26 @@ class PoolResourceFuzzer
     };
 
     std::vector<Entry> m_entries;
+    std::set<std::pair<std::uintptr_t, std::uintptr_t>> m_live_ranges;
+
+    void CheckState()
+    {
+        assert(m_test_resource.NumAllocatedChunks() >= 1);
+        assert(m_test_resource.ChunkSizeBytes() >= MAX_BLOCK_SIZE_BYTES);
+
+        assert(m_live_ranges.size() == m_entries.size());
+        if ((m_state_checks++ & 0x3f) == 0) {
+            size_t live_bytes{0};
+            for (const auto& entry : m_entries) {
+                live_bytes += entry.span.size();
+            }
+            assert(live_bytes == m_total_allocated);
+        }
+        for (const auto& entry : m_entries) {
+            assert(!entry.span.empty());
+            assert((reinterpret_cast<std::uintptr_t>(entry.span.data()) & (entry.alignment - 1)) == 0);
+        }
+    }
 
 public:
     PoolResourceFuzzer(FuzzedDataProvider& provider)
@@ -54,9 +79,16 @@ public:
 
         auto ptr_val = reinterpret_cast<std::uintptr_t>(span.data());
         assert((ptr_val & (alignment - 1)) == 0);
+        const auto range{std::pair{ptr_val, ptr_val + size}};
+        assert(range.second >= range.first);
+        const auto next{m_live_ranges.lower_bound(range)};
+        assert(next == m_live_ranges.end() || range.second <= next->first);
+        assert(next == m_live_ranges.begin() || std::prev(next)->second <= range.first);
+        assert(m_live_ranges.insert(range).second);
 
         uint64_t seed = m_sequence++;
         RandomContentFill(m_entries.emplace_back(span, alignment, seed));
+        CheckState();
     }
 
     void
@@ -86,6 +118,7 @@ public:
     {
         auto ptr_val = reinterpret_cast<std::uintptr_t>(entry.span.data());
         assert((ptr_val & (entry.alignment - 1)) == 0);
+        assert(m_live_ranges.erase({ptr_val, ptr_val + entry.span.size()}) == 1);
         RandomContentCheck(entry);
         m_total_allocated -= entry.span.size();
         m_test_resource.Deallocate(entry.span.data(), entry.span.size(), entry.alignment);
@@ -103,6 +136,7 @@ public:
             m_entries[idx] = std::move(m_entries.back());
         }
         m_entries.pop_back();
+        CheckState();
     }
 
     void Clear()
@@ -112,6 +146,7 @@ public:
         }
 
         PoolResourceTester::CheckAllDataAccountedFor(m_test_resource);
+        CheckState();
     }
 
     void Fuzz()

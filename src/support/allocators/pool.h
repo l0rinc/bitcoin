@@ -147,6 +147,17 @@ class PoolResource final
         node = new (p) ListNode{node};
     }
 
+    /** Check the cursor contract for the most recently allocated chunk. */
+    void AssertInvariants() const
+    {
+        assert(!m_allocated_chunks.empty());
+        const auto* chunk_begin{m_allocated_chunks.back()};
+        assert(m_available_memory_it >= chunk_begin);
+        assert(m_available_memory_it <= m_available_memory_end);
+        assert(m_available_memory_end == chunk_begin + m_chunk_size_bytes);
+        assert((m_available_memory_end - m_available_memory_it) % ELEM_ALIGN_BYTES == 0);
+    }
+
     /**
      * Allocate one full memory chunk which will be used to carve out allocations.
      * Also puts any leftover bytes into the freelist.
@@ -168,6 +179,7 @@ class PoolResource final
         m_available_memory_end = m_available_memory_it + m_chunk_size_bytes;
         ASAN_POISON_MEMORY_REGION(m_available_memory_it, m_chunk_size_bytes);
         m_allocated_chunks.emplace_back(m_available_memory_it);
+        AssertInvariants();
     }
 
     /**
@@ -228,7 +240,9 @@ public:
                 auto* next{m_free_lists[num_alignments]->m_next};
                 ASAN_POISON_MEMORY_REGION(m_free_lists[num_alignments], sizeof(ListNode));
                 ASAN_UNPOISON_MEMORY_REGION(m_free_lists[num_alignments], bytes);
-                return std::exchange(m_free_lists[num_alignments], next);
+                auto* result{std::exchange(m_free_lists[num_alignments], next)};
+                AssertInvariants();
+                return result;
             }
 
             // freelist is empty: get one allocation from allocated chunk memory.
@@ -240,11 +254,15 @@ public:
 
             // Make sure we use the right amount of bytes for that freelist (might be rounded up),
             ASAN_UNPOISON_MEMORY_REGION(m_available_memory_it, round_bytes);
-            return std::exchange(m_available_memory_it, m_available_memory_it + round_bytes);
+            auto* result{std::exchange(m_available_memory_it, m_available_memory_it + round_bytes)};
+            AssertInvariants();
+            return result;
         }
 
         // Can't use the pool => use operator new()
-        return ::operator new (bytes, std::align_val_t{alignment});
+        void* result{::operator new (bytes, std::align_val_t{alignment})};
+        AssertInvariants();
+        return result;
     }
 
     /**
@@ -263,6 +281,7 @@ public:
             // Can't use the pool => forward deallocation to ::operator delete().
             ::operator delete (p, std::align_val_t{alignment});
         }
+        AssertInvariants();
     }
 
     /**
