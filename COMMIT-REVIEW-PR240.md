@@ -63,6 +63,27 @@ subject match) and against `origin/master` for the bug's presence. ~80 rows carr
 are doc/test/infra/Knots-only-feature/revert-policy entries with no Core-relevant bug content (batch summaries on file
 in the audit handover).
 
+
+## Full-sweep verdict on the remaining 1,724 commits (2026-07-21)
+
+The 1,724 commits not individually reviewed in round 1 were swept by sensitive-path file touches
+(validation/net_processing/coins/txmempool/interpreter/serialize/crypto/blockencodings/txdb/dbwrapper/
+mempool/policy/pow/chain/consensus/kernel): 222 touched sensitive paths, ~33 were fix-shaped, all checked
+against origin/master. Verdicts:
+
+- Already on master / backports: `43e9968c50` (compact blocktxn null-header guard = upstream 5e585a0fc4,
+  in PR base), `cb1ea0bb30` + `f99d97d42e` (removeForBlock empty-mempool guard — master has it at
+  txmempool.cpp:449), `a02bf2779c` (cleanSubVer lock-ordering — master's current structure at
+  net_processing.cpp:3712-3715 already assigns under m_subver_mutex; 2022-era concern, obsolete).
+- Knots-only feature plumbing (no Core bug): `eab4aa0d86` (require_sighash_all member, infrastructure for
+  Knots-only flag), `ca518aad35` (DoS-ban->disconnect for invalid blocks from "primary nodes"), checkpoints
+  enforcement, prune-lock persistence, `-blockmaxsize`, maxmempool/scriptthreads RPCs, mempool statistics,
+  softwareexpiry, ignore_rejects, RDTS_CONSENT runtime warn, non-RDTS outbound tolerance, subdustfeepenalty,
+  datacarrier options, LevelDB subtree tweaks, siphash optimization, MSG_FILTERED_WITNESS_BLOCK handling.
+- One more small Core win: `d4c2da5e55` — `ApplyHash` copies `Coin` per UTXO on master
+  (kernel/coinstats.cpp:92); avoiding it is free perf in gettxoutsetinfo. Low value, zero risk.
+- No additional covert Core fixes found in the sweep beyond the 30+ already listed above.
+
 ---
 
 | # | Commit | Subject | Author | Category | Verdict |
