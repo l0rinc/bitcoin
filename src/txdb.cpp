@@ -224,7 +224,7 @@ public:
         CCoinsViewCursor(in_block_hash), pcursor(pcursorIn) {}
     ~CCoinsViewDBCursor() = default;
 
-    bool GetKey(COutPoint &key) const override;
+    const COutPoint* GetKey() const override;
     bool GetValue(Coin &coin) const override;
     bool GetValue(CoinStatsValue& coin) const override;
 
@@ -257,14 +257,12 @@ std::unique_ptr<CCoinsViewCursor> CCoinsViewDB::Cursor() const
     return i;
 }
 
-bool CCoinsViewDBCursor::GetKey(COutPoint &key) const
+const COutPoint* CCoinsViewDBCursor::GetKey() const
 {
-    // Return cached key
     if (keyTmp.first == DB_COIN) {
-        key = keyTmp.second;
-        return true;
+        return &keyTmp.second;
     }
-    return false;
+    return nullptr;
 }
 
 bool CCoinsViewDBCursor::GetValue(Coin &coin) const

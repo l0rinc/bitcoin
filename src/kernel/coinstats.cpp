@@ -108,12 +108,11 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, const CCoinsViewD
     bool have_prevkey{false};
     while (pcursor->Valid()) {
         if (interruption_point && stats.coins_count % INTERRUPT_CHECK_INTERVAL == 0) interruption_point();
-        COutPoint key;
         Coin coin;
-        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
-            if (!have_prevkey || key.hash != prevkey) {
+        if (const auto* key{pcursor->GetKey()}; key && pcursor->GetValue(coin)) {
+            if (!have_prevkey || key->hash != prevkey) {
                 stats.nTransactions++;
-                prevkey = key.hash;
+                prevkey = key->hash;
                 have_prevkey = true;
             }
             stats.nTransactionOutputs++;
@@ -121,7 +120,7 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, const CCoinsViewD
                 stats.total_amount = CheckedAdd(*stats.total_amount, coin.out.nValue);
             }
             stats.nBogoSize += GetBogoSize(coin.out.scriptPubKey.size());
-            ApplyCoinHash(hash_obj, coin_hash_scratch, key, coin);
+            ApplyCoinHash(hash_obj, coin_hash_scratch, *key, coin);
             stats.coins_count++;
         } else {
             LogError("%s: unable to read value\n", __func__);
@@ -150,12 +149,11 @@ static std::optional<CCoinsStats> ComputeUTXOStats(std::nullptr_t, const CCoinsV
     bool have_prevkey{false};
     while (pcursor->Valid()) {
         if (interruption_point && stats.coins_count % INTERRUPT_CHECK_INTERVAL == 0) interruption_point();
-        COutPoint key;
         CoinStatsValue coin;
-        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
-            if (!have_prevkey || key.hash != prevkey) {
+        if (const auto* key{pcursor->GetKey()}; key && pcursor->GetValue(coin)) {
+            if (!have_prevkey || key->hash != prevkey) {
                 stats.nTransactions++;
-                prevkey = key.hash;
+                prevkey = key->hash;
                 have_prevkey = true;
             }
             stats.nTransactionOutputs++;
