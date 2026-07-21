@@ -118,6 +118,22 @@ void AssertEqualAfterSerializeDeserialize(const T& obj)
     assert(Deserialize<T>(Serialize(obj)) == obj);
 }
 
+template <typename T>
+void DeserializeAndAssertCanonicalPrefix(FuzzBufferType buffer, T& obj)
+{
+    SpanReader reader{buffer};
+    try {
+        reader >> obj;
+    } catch (const std::ios_base::failure&) {
+        throw invalid_fuzzing_input_exception();
+    }
+
+    const auto serialized{Serialize(obj)};
+    assert(serialized.size() <= buffer.size());
+    assert(reader.size() == buffer.size() - serialized.size());
+    assert(std::memcmp(serialized.data(), buffer.data(), serialized.size()) == 0);
+}
+
 void AssertSnapshotMetadataRoundTrip(const SnapshotMetadata& metadata)
 {
     auto serialized{Serialize(metadata)};
@@ -149,17 +165,7 @@ void AssertBlockTransactionsRoundTrip(const BlockTransactions& block_transaction
 void DeserializeAndAssertBlockTransactions(FuzzBufferType buffer)
 {
     BlockTransactions block_transactions;
-    SpanReader reader{buffer};
-    try {
-        reader >> block_transactions;
-    } catch (const std::ios_base::failure&) {
-        throw invalid_fuzzing_input_exception();
-    }
-
-    auto serialized{Serialize(block_transactions)};
-    assert(serialized.size() <= buffer.size());
-    assert(reader.size() == buffer.size() - serialized.size());
-    assert(std::memcmp(serialized.data(), buffer.data(), serialized.size()) == 0);
+    DeserializeAndAssertCanonicalPrefix(buffer, block_transactions);
     AssertBlockTransactionsRoundTrip(block_transactions);
 }
 
@@ -189,7 +195,8 @@ FUZZ_TARGET_DESERIALIZE(fee_rate_deserialize, {
 })
 FUZZ_TARGET_DESERIALIZE(merkle_block_deserialize, {
     CMerkleBlock merkle_block;
-    DeserializeFromFuzzingInput(buffer, merkle_block);
+    DeserializeAndAssertCanonicalPrefix(buffer, merkle_block);
+    AssertPartialMerkleTreeExtraction(merkle_block.txn);
 })
 FUZZ_TARGET_DESERIALIZE(out_point_deserialize, {
     COutPoint out_point;
@@ -198,7 +205,8 @@ FUZZ_TARGET_DESERIALIZE(out_point_deserialize, {
 })
 FUZZ_TARGET_DESERIALIZE(partial_merkle_tree_deserialize, {
     CPartialMerkleTree partial_merkle_tree;
-    DeserializeFromFuzzingInput(buffer, partial_merkle_tree);
+    DeserializeAndAssertCanonicalPrefix(buffer, partial_merkle_tree);
+    AssertPartialMerkleTreeExtraction(partial_merkle_tree);
 })
 FUZZ_TARGET_DESERIALIZE(pub_key_deserialize, {
     CPubKey pub_key;
