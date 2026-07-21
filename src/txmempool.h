@@ -18,6 +18,7 @@
 #include <policy/packages.h>
 #include <primitives/transaction.h>
 #include <primitives/transaction_identifier.h>
+#include <script/script.h>
 #include <sync.h>
 #include <txgraph.h>
 #include <util/feefrac.h>
@@ -42,9 +43,12 @@
 #include <vector>
 
 class CChain;
+class CScript;
 class ValidationSignals;
 
 struct bilingual_str;
+
+static constexpr std::chrono::minutes DYNAMIC_DUST_FEERATE_UPDATE_INTERVAL{15};
 
 /** Fake height value used in Coin to signify they are only in the memory pool (since 0.8) */
 static const uint32_t MEMPOOL_HEIGHT = 0x7FFFFFFF;
@@ -56,6 +60,13 @@ static constexpr uint64_t ACCEPTABLE_COST = 75'000;
 /** How much work we ask TxGraph to do after a mempool change occurs (either
  * due to a changeset being applied, a new block being found, or a reorg). */
 static constexpr uint64_t POST_CHANGE_COST = 5 * ACCEPTABLE_COST;
+
+inline int64_t maxmempoolMinimumBytes(const int64_t cluster_size_vbytes) {
+    return cluster_size_vbytes * 40;
+}
+inline int64_t limitdescendantsizeMaximumVBytes(const int64_t maxmempool) {
+    return maxmempool / 40;
+}
 
 /**
  * Test whether the LockPoints height and time are still valid on the current chain
@@ -101,9 +112,13 @@ public:
     }
 };
 
+uint160 ScriptHashkey(const CScript& script);
+
 // Multi_index tag names
 struct entry_time {};
 struct index_by_wtxid {};
+
+class CBlockPolicyEstimator;
 
 /**
  * Information about a mempool transaction.
@@ -211,24 +226,30 @@ public:
 
     static const int ROLLING_FEE_HALFLIFE = 60 * 60 * 12; // public only for testing
 
+    using CTxMemPoolEntry_Indices_ = boost::multi_index::indexed_by<
+        // sorted by txid
+        boost::multi_index::hashed_unique<mempoolentry_txid, SaltedTxidHasher>,
+        // sorted by wtxid
+        boost::multi_index::hashed_unique<
+            boost::multi_index::tag<index_by_wtxid>,
+            mempoolentry_wtxid,
+            SaltedWtxidHasher
+        >,
+        // sorted by entry time
+        boost::multi_index::ordered_non_unique<
+            boost::multi_index::tag<entry_time>,
+            boost::multi_index::identity<CTxMemPoolEntry>,
+            CompareTxMemPoolEntryByEntryTime
+        >
+    >;
+#if BOOST_VERSION >= 109100
+    using CTxMemPoolEntry_Indices = CTxMemPoolEntry_Indices_;
+#else
+    struct CTxMemPoolEntry_Indices final : CTxMemPoolEntry_Indices_{};
+#endif
     using indexed_transaction_set = boost::multi_index_container<
         CTxMemPoolEntry,
-        boost::multi_index::indexed_by<
-            // sorted by txid
-            boost::multi_index::hashed_unique<mempoolentry_txid, SaltedTxidHasher>,
-            // sorted by wtxid
-            boost::multi_index::hashed_unique<
-                boost::multi_index::tag<index_by_wtxid>,
-                mempoolentry_wtxid,
-                SaltedWtxidHasher
-            >,
-            // sorted by entry time
-            boost::multi_index::ordered_non_unique<
-                boost::multi_index::tag<entry_time>,
-                boost::multi_index::identity<CTxMemPoolEntry>,
-                CompareTxMemPoolEntryByEntryTime
-            >
-        >
+        CTxMemPoolEntry_Indices
     >;
 
     /**
@@ -261,7 +282,7 @@ public:
     indexed_transaction_set mapTx GUARDED_BY(cs);
 
     using txiter = indexed_transaction_set::nth_index<0>::type::const_iterator;
-    std::vector<std::pair<Wtxid, txiter>> txns_randomized GUARDED_BY(cs); //!< All transactions in mapTx with their wtxids, in arbitrary order
+    std::vector<CTransactionRef> txns_randomized GUARDED_BY(cs); //!< All transactions in mapTx, in random order
 
     typedef std::set<txiter, CompareIteratorByHash> setEntries;
 
@@ -274,6 +295,7 @@ public:
     int64_t GetAncestorCount(const CTxMemPoolEntry &e) const { LOCK(cs); return m_txgraph->GetAncestors(e, TxGraph::Level::MAIN).size(); }
     std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> GetChildren(const CTxMemPoolEntry &entry) const;
     std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> GetParents(const CTxMemPoolEntry &entry) const;
+    std::map<uint160, std::pair<const CTransaction*, const CTransaction*>> mapUsedSPK;
 
 private:
     std::vector<indexed_transaction_set::const_iterator> GetSortedScoreWithTopology() const EXCLUSIVE_LOCKS_REQUIRED(cs);
@@ -294,11 +316,11 @@ private:
 
 public:
     indirectmap<COutPoint, txiter> mapNextTx GUARDED_BY(cs);
-    std::map<Txid, CAmount> mapDeltas GUARDED_BY(cs);
+    std::map<Txid, std::pair<double, CAmount>> mapDeltas GUARDED_BY(cs);
 
     using Options = kernel::MemPoolOptions;
 
-    const Options m_opts;
+    Options m_opts;
 
     /** Create a new CTxMemPool.
      * Sanity checks will be off by default for performance, because otherwise
@@ -340,17 +362,28 @@ public:
      * the tx is not dependent on other mempool transactions to be included in a block.
      */
     bool HasNoInputsOf(const CTransaction& tx) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+    /**
+     * Update all transactions in the mempool which depend on tx to recalculate their priority
+     * and adjust the input value that will age to reflect that the inputs from this transaction have
+     * either just been added to the chain or just been removed.
+     */
+    void UpdateDependentPriorities(const CTransaction &tx, unsigned int nBlockHeight, bool addToChain);
+
+    void UpdateDynamicDustFeerate();
 
     /** Affect CreateNewBlock prioritisation of transactions */
-    void PrioritiseTransaction(const Txid& hash, const CAmount& nFeeDelta);
-    void ApplyDelta(const Txid& hash, CAmount &nFeeDelta) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+    void PrioritiseTransaction(const Txid& hash, double dPriorityDelta, const CAmount& nFeeDelta);
+    void PrioritiseTransaction(const Txid& hash, const CAmount& nFeeDelta) { PrioritiseTransaction(hash, 0., nFeeDelta); }
+    void ApplyDeltas(const Txid& hash, double &dPriorityDelta, CAmount &nFeeDelta) const EXCLUSIVE_LOCKS_REQUIRED(cs);
     void ClearPrioritisation(const Txid& hash) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     struct delta_info {
         /** Whether this transaction is in the mempool. */
         const bool in_mempool;
+        /** The priority delta added using PrioritiseTransaction(). */
+        const double priority_delta;
         /** The fee delta added using PrioritiseTransaction(). */
-        const CAmount delta;
+        const CAmount fee_delta;
         /** The modified fee (base fee + delta) of this entry. Only present if in_mempool=true. */
         std::optional<CAmount> modified_fee;
         /** The prioritised transaction's txid. */
@@ -548,6 +581,8 @@ public:
     std::vector<CTxMemPoolEntryRef> entryAll() const EXCLUSIVE_LOCKS_REQUIRED(cs);
     std::vector<TxMempoolInfo> infoAll() const;
 
+    void FindScriptPubKey(const std::set<CScript>& needles, std::map<COutPoint, Coin>& out_results);
+
     size_t DynamicMemoryUsage() const;
 
     /** Adds a transaction to the unbroadcast set */
@@ -645,9 +680,9 @@ public:
 
         using TxHandle = CTxMemPool::txiter;
 
-        TxHandle StageAddition(const CTransactionRef& tx, CAmount fee, int64_t time, unsigned int entry_height, uint64_t entry_sequence, bool spends_coinbase, int64_t sigops_cost, LockPoints lp);
-
+        TxHandle StageAddition(const CTransactionRef& tx, const CAmount fee, int64_t time, unsigned int entry_height, uint64_t entry_sequence, CoinAgeCache coin_age_cache, bool spends_coinbase, int32_t extra_weight, int64_t sigops_cost, LockPoints lp);
         void StageRemoval(CTxMemPool::txiter it);
+        void UpdateModifiedFee(TxHandle tx, CAmount fee_delta);
 
         const CTxMemPool::setEntries& GetRemovals() const { return m_to_remove; }
 
@@ -690,11 +725,11 @@ public:
 
         void Apply() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+        CTxMemPool* m_pool;
+        CTxMemPool::indexed_transaction_set m_to_add;
     private:
         void ProcessDependencies();
 
-        CTxMemPool* m_pool;
-        CTxMemPool::indexed_transaction_set m_to_add;
         std::vector<CTxMemPool::txiter> m_entry_vec; // track the added transactions' insertion order
         // map from the m_to_add index to the ancestors for the transaction
         std::map<CTxMemPool::txiter, CTxMemPool::setEntries, CompareIteratorByHash> m_ancestors;
@@ -760,6 +795,9 @@ public:
  * It also allows you to sign a double-spend directly in
  * signrawtransactionwithkey and signrawtransactionwithwallet,
  * as long as the conflicting transaction is not yet confirmed.
+ *
+ * Its Cursor also doesn't work. In general, it is broken as a CCoinsView
+ * implementation outside of a few use cases.
  */
 class CCoinsViewMemPool : public CCoinsViewBacked
 {

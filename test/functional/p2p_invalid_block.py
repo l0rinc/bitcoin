@@ -35,8 +35,8 @@ class InvalidBlockRequestTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
-        # whitelist peers to speed up tx relay / mempool sync
-        self.noban_tx_relay = True
+        # Use an ordinary inbound peer to cover invalid-block punishment
+        # behavior without relying on a noban permission.
 
     def run_test(self):
         # Add p2p connection to node0
@@ -86,7 +86,8 @@ class InvalidBlockRequestTest(BitcoinTestFramework):
         assert_equal(orig_hash, block2.hash_int)
         assert_not_equal(block2_orig.vtx, block2.vtx)
 
-        peer.send_blocks_and_test([block2], node, success=False, reject_reason='bad-txns-duplicate')
+        peer.send_blocks_and_test([block2], node, success=False, reject_reason='bad-txns-duplicate', expect_disconnect=True)
+        peer = node.add_p2p_connection(P2PDataStore())
 
         # Check transactions for duplicate inputs (CVE-2018-17144)
         self.log.info("Test duplicate input block.")

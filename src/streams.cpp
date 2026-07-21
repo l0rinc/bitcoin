@@ -6,7 +6,7 @@
 #include <span.h>
 #include <streams.h>
 #include <util/fs_helpers.h>
-#include <util/obfuscation.h>
+#include <util/ioprio.h>
 
 #include <array>
 
@@ -129,6 +129,11 @@ void AutoFile::write_buffer(std::span<std::byte> src)
 bool AutoFile::Commit()
 {
     return ::FileCommit(m_file);
+}
+
+void AutoFile::SetIdlePriority()
+{
+    ioprio_set_file_idle(m_file);
 }
 
 bool AutoFile::Truncate(unsigned size)

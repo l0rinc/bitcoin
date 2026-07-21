@@ -7,6 +7,8 @@
 #define BITCOIN_INIT_H
 
 #include <atomic>
+#include <cstdint>
+#include <optional>
 
 //! Default value for -daemon option
 static constexpr bool DEFAULT_DAEMON = false;
@@ -22,6 +24,9 @@ struct Context;
 }
 namespace node {
 struct NodeContext;
+
+uint64_t CalculateBlockStorageSpaceRequired(uint64_t assumed_blockchain_size_gb, std::optional<uint64_t> prune_target);
+uint64_t CalculateBlockStorageSpaceWarningGB(uint64_t bytes_required);
 } // namespace node
 
 /** Initialize node context shutdown and args variables. */

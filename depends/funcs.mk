@@ -40,24 +40,6 @@ define fetch_file
       $(call fetch_file_inner,$(1),$(FALLBACK_DOWNLOAD_PATH),$(4),$(4),$(5)))
 endef
 
-# Shell script to create a source tarball in $(1)_source from local directory
-# $(1)_local_dir instead of downloading remote sources. Tarball is recreated if
-# any paths in the local directory have a newer mtime, and checksum of the
-# tarball is saved to $(1)_fetched and returned as output.
-define fetch_local_dir_sha256
-    if ! [ -f $($(1)_source) ] || [ -n "$$(find $($(1)_local_dir) -newer $($(1)_source) | head -n1)" ]; then \
-        mkdir -p $(dir $($(1)_source)) && \
-        $(build_TAR) -c -f $($(1)_source) -C $($(1)_local_dir) . && \
-        rm -f $($(1)_fetched); \
-    fi && \
-    if ! [ -f $($(1)_fetched) ] || [ -n "$$(find $($(1)_source) -newer $($(1)_fetched))" ]; then \
-        mkdir -p $(dir $($(1)_fetched)) && \
-        cd $($(1)_source_dir) && \
-        $(build_SHA256SUM) $($(1)_all_sources) > $($(1)_fetched); \
-    fi && \
-    cut -d" " -f1 $($(1)_fetched)
-endef
-
 define int_get_build_recipe_hash
 $(eval $(1)_patches_path?=$(PATCHES_PATH)/$(1))
 $(eval $(1)_all_file_checksums:=$(shell $(build_SHA256SUM) $(meta_depends) packages/$(1).mk $(addprefix $($(1)_patches_path)/,$($(1)_patches)) | cut -d" " -f1))

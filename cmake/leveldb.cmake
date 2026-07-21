@@ -10,6 +10,7 @@ include(CheckCXXSymbolExists)
 check_cxx_symbol_exists(F_FULLFSYNC "fcntl.h" HAVE_FULLFSYNC)
 
 add_library(leveldb STATIC EXCLUDE_FROM_ALL
+  ${PROJECT_SOURCE_DIR}/src/leveldb/db/c.cc
   ${PROJECT_SOURCE_DIR}/src/leveldb/db/builder.cc
   ${PROJECT_SOURCE_DIR}/src/leveldb/db/db_impl.cc
   ${PROJECT_SOURCE_DIR}/src/leveldb/db/db_iter.cc
@@ -72,6 +73,7 @@ target_include_directories(leveldb
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/leveldb>
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/leveldb/include>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/leveldb/helpers/memenv>
 )
 
 add_library(nowarn_leveldb_interface INTERFACE)

@@ -5,11 +5,14 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <clientversion.h>
+#include <common/args.h>
+#include <node/blockmanager_args.h>
 #include <node/blockstorage.h>
 #include <node/context.h>
 #include <node/kernel_notifications.h>
 #include <script/solver.h>
 #include <primitives/block.h>
+#include <util/byte_units.h>
 #include <util/chaintype.h>
 #include <validation.h>
 
@@ -18,7 +21,11 @@
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
 
-using kernel::CBlockFileInfo;
+#include <initializer_list>
+#include <limits>
+#include <string>
+#include <utility>
+
 using node::STORAGE_HEADER_BYTES;
 using node::BlockManager;
 using node::KernelNotifications;
@@ -26,6 +33,60 @@ using node::MAX_BLOCKFILE_SIZE;
 
 // use BasicTestingSetup here for the data directory configuration, setup, and cleanup
 BOOST_FIXTURE_TEST_SUITE(blockmanager_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(blockmanager_args_prune_during_init)
+{
+    KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
+    const auto make_options = [&] {
+        return BlockManager::Options{
+            .chainparams = Params(),
+            .blocks_dir = m_args.GetBlocksDirPath(),
+            .notifications = notifications,
+            .block_tree_db_params = DBParams{
+                .path = m_args.GetDataDirNet() / "blocks" / "index",
+                .cache_bytes = 0,
+            },
+        };
+    };
+
+    const auto apply_args = [&](const std::initializer_list<std::pair<std::string, std::string>>& args) {
+        ArgsManager argsman;
+        for (const auto& [name, value] : args) {
+            argsman.ForceSetArg(name, value);
+        }
+
+        auto opts{make_options()};
+        const auto result{node::ApplyArgsManOptions(argsman, opts)};
+        BOOST_REQUIRE(result);
+        return std::pair{opts.prune_target, opts.prune_target_during_init};
+    };
+
+    BOOST_CHECK_EQUAL(apply_args({{"-prune", "550"}}).first, 550_MiB);
+    BOOST_CHECK_EQUAL(apply_args({{"-prune", "550"}}).second, -1);
+
+    const auto pruned_during_init{apply_args({{"-prune", "550"}, {"-pruneduringinit", "1000"}})};
+    BOOST_CHECK_EQUAL(pruned_during_init.first, 550_MiB);
+    BOOST_CHECK_EQUAL(pruned_during_init.second, 1000_MiB);
+
+    BOOST_CHECK_EQUAL(
+        apply_args({{"-prune", "550"}, {"-pruneduringinit", "1"}}).second,
+        std::numeric_limits<int64_t>::max());
+    BOOST_CHECK_EQUAL(
+        apply_args({{"-prune", "550"}, {"-pruneduringinit", "0"}}).second,
+        std::numeric_limits<int64_t>::max());
+
+    const auto check_invalid = [&](const std::initializer_list<std::pair<std::string, std::string>>& args) {
+        ArgsManager argsman;
+        for (const auto& [name, value] : args) {
+            argsman.ForceSetArg(name, value);
+        }
+        auto opts{make_options()};
+        BOOST_CHECK(!node::ApplyArgsManOptions(argsman, opts));
+    };
+
+    check_invalid({{"-prune", "550"}, {"-pruneduringinit", "-2"}});
+    check_invalid({{"-prune", "550"}, {"-pruneduringinit", "2"}});
+}
 
 BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
 {
@@ -58,6 +119,25 @@ BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
     // add another 8 bytes for the second block's serialization header and we get 293 + 8 = 301
     FlatFilePos actual{blockman.WriteBlock(params->GenesisBlock(), 1)};
     BOOST_CHECK_EQUAL(actual.nPos, STORAGE_HEADER_BYTES + ::GetSerializeSize(TX_WITH_WITNESS(params->GenesisBlock())) + STORAGE_HEADER_BYTES);
+}
+
+BOOST_AUTO_TEST_CASE(blockmanager_get_block_file_info_empty)
+{
+    const auto params{CreateChainParams(ArgsManager{}, ChainType::MAIN)};
+    KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
+    const BlockManager::Options blockman_opts{
+        .chainparams = *params,
+        .blocks_dir = m_args.GetBlocksDirPath(),
+        .notifications = notifications,
+        .block_tree_db_params = DBParams{
+            .path = m_args.GetDataDirNet() / "blocks" / "empty_file_info_index",
+            .cache_bytes = 0,
+        },
+    };
+    BlockManager blockman{*Assert(m_node.shutdown_signal), blockman_opts};
+
+    LOCK(::cs_main);
+    BOOST_CHECK(blockman.GetBlockFileInfo(0) == nullptr);
 }
 
 BOOST_FIXTURE_TEST_CASE(blockmanager_scan_unlink_already_pruned_files, TestChain100Setup)
@@ -219,17 +299,28 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_part_error, TestChain100Setup)
 BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_hash_mismatch, TestingSetup)
 {
     CBlockIndex index;
+    FlatFilePos tip_block_pos;
+    uint256 tip_hash;
     {
         LOCK(cs_main);
         const auto tip{m_node.chainman->ActiveTip()};
         index.nStatus = tip->nStatus;
         index.nDataPos = tip->nDataPos;
         index.phashBlock = &uint256::ONE; // mismatched block hash
+        tip_block_pos = tip->GetBlockPos();
+        tip_hash = tip->GetBlockHash();
     }
 
-    ASSERT_DEBUG_LOG("GetHash() doesn't match index");
     CBlock block;
-    BOOST_CHECK(!m_node.chainman->m_blockman.ReadBlock(block, index));
+    BOOST_CHECK(m_node.chainman->m_blockman.ReadBlock(block, tip_block_pos, tip_hash));
+    {
+        ASSERT_DEBUG_LOG("GetHash() doesn't match index");
+        BOOST_CHECK(!m_node.chainman->m_blockman.ReadBlock(block, tip_block_pos, uint256::ONE));
+    }
+    {
+        ASSERT_DEBUG_LOG("GetHash() doesn't match index");
+        BOOST_CHECK(!m_node.chainman->m_blockman.ReadBlock(block, index));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
@@ -289,7 +380,7 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     // UpdateBlockInfo will, however, update the blockfile metadata.
     // Verify this behavior by attempting (and failing) to write block 3 data
     // to block 2 location.
-    CBlockFileInfo* block_data = blockman.GetBlockFileInfo(0);
+    kernel::CBlockFileInfo* block_data = blockman.GetBlockFileInfo(0);
     BOOST_CHECK_EQUAL(block_data->nBlocks, 2);
     blockman.UpdateBlockInfo(block3, /*nHeight=*/3, /*pos=*/pos2);
     // Metadata is updated...
@@ -309,10 +400,15 @@ BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)
     auto& blockman{chainman.m_blockman};
 
     // Create a prune lock
-    blockman.UpdatePruneLock("test_lock", node::PruneLockInfo{.height_first = 100});
+    BOOST_CHECK(blockman.UpdatePruneLock("test_lock", node::PruneLockInfo{.height_first = 100, .height_last = 150}));
+    BOOST_REQUIRE(blockman.PruneLockExists("test_lock"));
+    BOOST_CHECK_EQUAL(blockman.m_prune_locks.at("test_lock").height_first, 100);
+    BOOST_CHECK_EQUAL(blockman.m_prune_locks.at("test_lock").height_last, 150);
 
-    // Update it to a new height
-    blockman.UpdatePruneLock("test_lock", node::PruneLockInfo{.height_first = 200});
+    // Update it to a new height range
+    BOOST_CHECK(blockman.UpdatePruneLock("test_lock", node::PruneLockInfo{.height_first = 200, .height_last = 250}));
+    BOOST_CHECK_EQUAL(blockman.m_prune_locks.at("test_lock").height_first, 200);
+    BOOST_CHECK_EQUAL(blockman.m_prune_locks.at("test_lock").height_last, 250);
 
     // Delete existing prune lock
     BOOST_CHECK(blockman.DeletePruneLock("test_lock"));

@@ -140,6 +140,47 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
     BOOST_CHECK_EQUAL(pnode4->ConnectedThroughNetwork(), Network::NET_ONION);
 }
 
+BOOST_AUTO_TEST_CASE(cnode_punish_invalid_blocks)
+{
+    NodeId id{0};
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+    const CAddress addr{CService{ipv4Addr, 7777}, NODE_NETWORK};
+
+    const auto make_node = [&](ConnectionType conn_type, NetPermissionFlags permission_flags = NetPermissionFlags::None) {
+        return std::make_unique<CNode>(id++,
+                                       /*sock=*/nullptr,
+                                       addr,
+                                       /*nKeyedNetGroupIn=*/0,
+                                       /*nLocalHostNonceIn=*/0,
+                                       CAddress{},
+                                       /*addrNameIn=*/"",
+                                       conn_type,
+                                       /*inbound_onion=*/false,
+                                       /*network_key=*/0,
+                                       CNodeOptions{.permission_flags = permission_flags});
+    };
+
+    for (const auto conn_type : {
+             ConnectionType::OUTBOUND_FULL_RELAY,
+             ConnectionType::BLOCK_RELAY,
+             ConnectionType::ADDR_FETCH,
+             ConnectionType::PRIVATE_BROADCAST,
+         }) {
+        BOOST_CHECK(make_node(conn_type)->PunishInvalidBlocks());
+        BOOST_CHECK(!make_node(conn_type, NetPermissionFlags::NoBan)->PunishInvalidBlocks());
+    }
+
+    for (const auto conn_type : {
+             ConnectionType::INBOUND,
+             ConnectionType::MANUAL,
+             ConnectionType::FEELER,
+         }) {
+        BOOST_CHECK(!make_node(conn_type)->PunishInvalidBlocks());
+        BOOST_CHECK(!make_node(conn_type, NetPermissionFlags::NoBan)->PunishInvalidBlocks());
+    }
+}
+
 BOOST_AUTO_TEST_CASE(cnetaddr_basic)
 {
     CNetAddr addr;
@@ -803,6 +844,28 @@ BOOST_AUTO_TEST_CASE(LocalAddress_BasicLifecycle)
     BOOST_CHECK(!IsLocal(addr));
 }
 
+BOOST_AUTO_TEST_CASE(LocalAddress_TorDoesNotRequireOutboundReachability)
+{
+    const CService ipv4_addr{UtilBuildAddress(0x002, 0x001, 0x001, 0x001), 1000}; // 2.1.1.1:1000
+
+    CNetAddr onion_net_addr;
+    BOOST_REQUIRE(onion_net_addr.SetSpecial("pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion"));
+    const CService onion_addr{onion_net_addr, 8333};
+
+    g_reachable_nets.Remove(NET_IPV4);
+    g_reachable_nets.Remove(NET_ONION);
+
+    BOOST_CHECK(!AddLocal(ipv4_addr, LOCAL_MANUAL));
+    BOOST_CHECK(!IsLocal(ipv4_addr));
+
+    BOOST_CHECK(AddLocal(onion_addr, LOCAL_MANUAL));
+    BOOST_CHECK(IsLocal(onion_addr));
+
+    RemoveLocal(onion_addr);
+    g_reachable_nets.Add(NET_IPV4);
+    g_reachable_nets.Add(NET_ONION);
+}
+
 BOOST_AUTO_TEST_CASE(LocalAddress_nScore_Overflow)
 {
     g_reachable_nets.Add(NET_IPV4);
@@ -875,7 +938,7 @@ BOOST_AUTO_TEST_CASE(initial_advertise_from_version_message)
                /*inbound_onion=*/false,
                /*network_key=*/2};
 
-    const uint64_t services{NODE_NETWORK | NODE_WITNESS};
+    const uint64_t services{NODE_NETWORK | NODE_WITNESS | NODE_REDUCED_DATA};
     const int64_t time{0};
 
     // Force ChainstateManager::IsInitialBlockDownload() to return false.
@@ -883,7 +946,7 @@ BOOST_AUTO_TEST_CASE(initial_advertise_from_version_message)
     auto& chainman = static_cast<TestChainstateManager&>(*m_node.chainman);
     chainman.JumpOutOfIbd();
 
-    m_node.peerman->InitializeNode(peer, NODE_NETWORK);
+    m_node.peerman->InitializeNode(peer, ServiceFlags(NODE_NETWORK | NODE_REDUCED_DATA));
 
     m_node.peerman->SendMessages(peer);
     connman.FlushSendBuffer(peer); // Drop sent version message
@@ -1631,29 +1694,29 @@ BOOST_AUTO_TEST_CASE(addlocal_onlynet_externalip)
     // Test that `-externalip` addresses bypass `-onlynet`, but score alone does
     // not.
 
-    CAddress addr_onion;
-    BOOST_REQUIRE(addr_onion.SetSpecial("pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion"));
-    BOOST_REQUIRE(addr_onion.IsValid());
-    BOOST_REQUIRE(addr_onion.IsTor());
+    CAddress addr_i2p;
+    BOOST_REQUIRE(addr_i2p.SetSpecial("udhdrtrcetjm5sxzskjyr5ztpeszydbh4dpl3pl4utgqqw2v4jna.b32.i2p"));
+    BOOST_REQUIRE(addr_i2p.IsValid());
+    BOOST_REQUIRE(addr_i2p.IsI2P());
 
     const auto reachable_nets_at_start{g_reachable_nets.All()};
     const bool discover_orig{fDiscover};
 
-    // Simulate using -onlynet=ipv4 -externalip=<onion>
+    // Simulate using -onlynet=ipv4 -externalip=<i2p>
     g_reachable_nets.RemoveAll();
     g_reachable_nets.Add(NET_IPV4);
     fDiscover = false;
 
     // Now AddLocal with a non-manual score should fail for an unreachable network.
-    BOOST_CHECK(!AddLocal(addr_onion, LOCAL_BIND));
-    BOOST_CHECK(!IsLocal(addr_onion));
+    BOOST_CHECK(!AddLocal(addr_i2p, LOCAL_BIND));
+    BOOST_CHECK(!IsLocal(addr_i2p));
 
-    BOOST_CHECK(!AddLocal(addr_onion, LOCAL_MANUAL));
-    BOOST_CHECK(!IsLocal(addr_onion));
+    BOOST_CHECK(!AddLocal(addr_i2p, LOCAL_MANUAL));
+    BOOST_CHECK(!IsLocal(addr_i2p));
 
     // Whereas AddLocal for -externalip should succeed.
-    BOOST_CHECK(AddLocal(addr_onion, LOCAL_MANUAL, /*add_even_if_unreachable=*/true));
-    BOOST_CHECK(IsLocal(addr_onion));
+    BOOST_CHECK(AddLocal(addr_i2p, LOCAL_MANUAL, /*add_even_if_unreachable=*/true));
+    BOOST_CHECK(IsLocal(addr_i2p));
 
     // Normal AddLocal on a reachable network still works.
     const CNetAddr addr_ipv4{LookupHost("1.2.3.4", false).value()};
@@ -1661,7 +1724,7 @@ BOOST_AUTO_TEST_CASE(addlocal_onlynet_externalip)
     BOOST_CHECK(IsLocal(CService{addr_ipv4, GetListenPort()}));
 
     RemoveLocal(CService{addr_ipv4, GetListenPort()});
-    RemoveLocal(addr_onion);
+    RemoveLocal(addr_i2p);
     g_reachable_nets.RemoveAll();
     for (const auto& net : reachable_nets_at_start) {
         g_reachable_nets.Add(net);

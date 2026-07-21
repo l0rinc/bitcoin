@@ -10,6 +10,7 @@
 #include <span.h>
 #include <support/allocators/zeroafterfree.h>
 #include <util/check.h>
+#include <util/fs_helpers.h>
 #include <util/log.h>
 #include <util/obfuscation.h>
 #include <util/overflow.h>
@@ -465,8 +466,15 @@ public:
     /** Wrapper around FileCommit(). */
     bool Commit();
 
+    void SetIdlePriority();
+
     /** Wrapper around TruncateFile(). */
     bool Truncate(unsigned size);
+
+    void AdviseSequential()
+    {
+        ::AdviseSequential(m_file);
+    }
 
     //! Write a mutable buffer more efficiently than write(), obfuscating the buffer in-place.
     void write_buffer(std::span<std::byte> src);
@@ -556,6 +564,17 @@ public:
     {
         if (nRewindIn >= nBufSize)
             throw std::ios_base::failure("Rewind limit must be less than buffer size");
+        m_src.AdviseSequential();
+    }
+
+    ~BufferedFile() { fclose(); }
+
+    int fclose()
+    {
+        if (auto rel{m_src.release()}) {
+            return CloseAndUncache(rel);
+        }
+        return m_src.fclose();
     }
 
     //! check whether we're at the end of the source file

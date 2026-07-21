@@ -63,6 +63,7 @@ enum class FeeReason {
     DOUBLE_ESTIMATE,
     CONSERVATIVE,
     MEMPOOL_MIN,
+    PAYTXFEE,
     FALLBACK,
     REQUIRED,
 };
@@ -146,7 +147,7 @@ struct FeeCalculation
  */
 class CBlockPolicyEstimator : public CValidationInterface
 {
-private:
+public:
     /** Track confirm delays up to 12 blocks for short horizon */
     static constexpr unsigned int SHORT_BLOCK_PERIODS = 12;
     static constexpr unsigned int SHORT_SCALE = 1;
@@ -156,6 +157,7 @@ private:
     /** Track confirm delays up to 1008 blocks for long horizon */
     static constexpr unsigned int LONG_BLOCK_PERIODS = 42;
     static constexpr unsigned int LONG_SCALE = 24;
+private:
     /** Historical estimates that are older than this aren't valid */
     static const unsigned int OLDEST_ESTIMATE_HISTORY = 6 * 1008;
 
@@ -257,7 +259,7 @@ public:
         EXCLUSIVE_LOCKS_REQUIRED(!m_cs_fee_estimator);
 
     /** Record current fee estimations. */
-    void FlushFeeEstimates()
+    bool FlushFeeEstimates() const
         EXCLUSIVE_LOCKS_REQUIRED(!m_cs_fee_estimator);
 
     /** Calculates the age of the file, since last modified */

@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
 #include <consensus/validation.h>
 #include <key_io.h>
 #include <policy/packages.h>
@@ -10,9 +11,11 @@
 #include <policy/truc_policy.h>
 #include <primitives/transaction.h>
 #include <random.h>
+#include <script/sign.h>
 #include <script/script.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
+#include <test/util/transaction_utils.h>
 #include <test/util/txmempool.h>
 #include <validation.h>
 
@@ -20,6 +23,20 @@
 
 
 BOOST_AUTO_TEST_SUITE(txvalidation_tests)
+
+std::optional<std::pair<std::string, CTransactionRef>> SingleTRUCChecks(const CTxMemPool& pool, const CTransactionRef& ptx, const std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef>& mempool_parents, const std::set<Txid>& direct_conflicts, int64_t vsize)
+    EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+{
+    std::string reason;
+    return ::SingleTRUCChecks(pool, ptx, /*reason_prefix=*/"", reason, empty_ignore_rejects, mempool_parents, direct_conflicts, vsize);
+}
+
+std::optional<std::string> PackageTRUCChecks(const CTxMemPool& pool, const CTransactionRef& ptx, int64_t vsize, const Package& package, const std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef>& mempool_parents)
+    EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+{
+    std::string reason;
+    return ::PackageTRUCChecks(pool, ptx, vsize, /*reason_prefix=*/"", reason, empty_ignore_rejects, package, mempool_parents);
+}
 
 /**
  * Ensure that the mempool won't accept coinbase transactions.
@@ -52,6 +69,62 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_reject_coinbase, TestChain100Setup)
     BOOST_CHECK(result.m_state.IsInvalid());
     BOOST_CHECK_EQUAL(result.m_state.GetRejectReason(), "coinbase");
     BOOST_CHECK(result.m_state.GetResult() == TxValidationResult::TX_CONSENSUS);
+}
+
+BOOST_FIXTURE_TEST_CASE(tx_mempool_ignore_truc, TestChain100Setup)
+{
+    CKey parent_key;
+    parent_key.MakeNewKey(true);
+
+    CMutableTransaction parent;
+    parent.version = TRUC_VERSION;
+    parent.vin.emplace_back(COutPoint{m_coinbase_txns[0]->GetHash(), 0});
+    parent.vout.emplace_back(49 * COIN, GetScriptForDestination(PKHash(parent_key.GetPubKey())));
+
+    FillableSigningProvider keystore;
+    keystore.AddKey(coinbaseKey);
+    std::map<COutPoint, Coin> parent_coins;
+    parent_coins.emplace(parent.vin[0].prevout, Coin{m_coinbase_txns[0]->vout[0], /*nHeightIn=*/0, /*fCoinBaseIn=*/true});
+    std::map<int, bilingual_str> input_errors;
+    BOOST_REQUIRE(SignTransaction(parent, &keystore, parent_coins, {.sighash_type = SIGHASH_ALL}, input_errors));
+
+    const auto parent_ref{MakeTransactionRef(parent)};
+    {
+        LOCK(cs_main);
+        const auto parent_result{m_node.chainman->ProcessTransaction(parent_ref)};
+        BOOST_REQUIRE(parent_result.m_result_type == MempoolAcceptResult::ResultType::VALID);
+    }
+
+    CKey output_key;
+    output_key.MakeNewKey(true);
+    std::vector<CTxOut> child_outputs;
+    child_outputs.resize(40, CTxOut{CENT, GetScriptForDestination(PKHash(output_key.GetPubKey()))});
+
+    CMutableTransaction child;
+    child.version = TRUC_VERSION;
+    child.vin.emplace_back(COutPoint{parent_ref->GetHash(), 0});
+    child.vout = child_outputs;
+
+    FillableSigningProvider child_keystore;
+    child_keystore.AddKey(parent_key);
+    std::map<COutPoint, Coin> child_coins;
+    child_coins.emplace(child.vin[0].prevout, Coin{parent_ref->vout[0], /*nHeightIn=*/101, /*fCoinBaseIn=*/false});
+    input_errors.clear();
+    BOOST_REQUIRE(SignTransaction(child, &child_keystore, child_coins, {.sighash_type = SIGHASH_ALL}, input_errors));
+
+    const auto child_ref{MakeTransactionRef(child)};
+    BOOST_REQUIRE_GT(GetVirtualTransactionSize(*child_ref), TRUC_CHILD_MAX_VSIZE);
+
+    {
+        LOCK(cs_main);
+        const auto reject_result{m_node.chainman->ProcessTransaction(child_ref)};
+        BOOST_REQUIRE(reject_result.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+        BOOST_CHECK_EQUAL(reject_result.m_state.GetRejectReason(), "truc-child-toobig");
+
+        const ignore_rejects_type ignore_truc{"truc"};
+        const auto accept_result{m_node.chainman->ProcessTransaction(child_ref, /*test_accept=*/false, ignore_truc)};
+        BOOST_CHECK(accept_result.m_result_type == MempoolAcceptResult::ResultType::VALID);
+    }
 }
 
 // Generate a number of random, nonexistent outpoints.

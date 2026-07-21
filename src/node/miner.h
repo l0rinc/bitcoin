@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,7 @@ using interfaces::BlockRef;
 
 namespace node {
 class KernelNotifications;
+struct NodeContext;
 
 struct CBlockTemplate
 {
@@ -46,6 +48,8 @@ struct CBlockTemplate
     std::vector<CAmount> vTxFees;
     // Sigops per transaction, not including coinbase transaction (unlike CBlock::vtx).
     std::vector<int64_t> vTxSigOpsCost;
+    // Coin-age priorities per transaction, not including coinbase transaction.
+    std::vector<double> vTxPriorities;
     /* A vector of package fee rates, ordered by the sequence in which
      * packages are selected for inclusion in the block template.*/
     std::vector<FeePerVSize> m_package_feerates;
@@ -61,13 +65,17 @@ class BlockAssembler
 {
 private:
     // The constructed block template
-    std::unique_ptr<CBlockTemplate> pblocktemplate;
+    std::shared_ptr<CBlockTemplate> pblocktemplate;
+
+    bool m_account_block_size{false};
 
     // Information on the current status of the block
     uint64_t nBlockWeight;
+    uint64_t nBlockSize;
     uint64_t nBlockTx;
     uint64_t nBlockSigOpsCost;
     CAmount nFees;
+    std::set<Txid> m_in_block;
 
     // Chain context for the block
     int nHeight;
@@ -76,19 +84,25 @@ private:
     const CChainParams& chainparams;
     const CTxMemPool* const m_mempool;
     Chainstate& m_chainstate;
+    const NodeContext& m_node;
 
 public:
+    using Options = BlockCreateOptions;
+
     explicit BlockAssembler(Chainstate& chainstate,
                             const CTxMemPool* mempool,
-                            BlockCreateOptions create_options);
+                            Options create_options,
+                            const NodeContext& node);
 
     /** Construct a new block template */
-    std::unique_ptr<CBlockTemplate> CreateNewBlock();
+    std::shared_ptr<CBlockTemplate> CreateNewBlock();
 
     /** The number of transactions in the last assembled block (excluding coinbase transaction) */
     inline static std::optional<int64_t> m_last_block_num_txs{};
     /** The weight of the last assembled block (including reserved weight for block header, txs count and coinbase tx) */
     inline static std::optional<int64_t> m_last_block_weight{};
+    /** The serialized size of the last assembled block, present when -blockmaxsize is configured. */
+    inline static std::optional<int64_t> m_last_block_size{};
 
 private:
     const BlockCreateOptions m_options;
@@ -97,14 +111,20 @@ private:
     /** Clear the block's state and prepare for assembling a new block */
     void resetBlock();
     /** Add a tx to the block */
-    void AddToBlock(const CTxMemPoolEntry& entry);
+    void AddToBlock(const CTxMemPool& mempool, const CTxMemPoolEntry& entry) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs);
 
     // Methods for how to add transactions to a block.
+    /** Add high coin-age-priority transactions before chunk feerate selection. */
+    void addPriorityTxs(const CTxMemPool& mempool) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs);
     /** Add transactions based on chunk feerate
       *
       * @pre BlockAssembler::m_mempool must not be nullptr
     */
     void addChunks() EXCLUSIVE_LOCKS_REQUIRED(m_mempool->cs);
+
+    // helper functions for addPriorityTxs()
+    bool TestPriorityTransaction(const CTxMemPoolEntry& entry) const;
+    bool HasUnconfirmedParentsNotInBlock(const CTxMemPool& mempool, const CTxMemPoolEntry& entry) const EXCLUSIVE_LOCKS_REQUIRED(mempool.cs);
 
     // helper functions for addChunks()
     /** Test if a new chunk would "fit" in the block */
@@ -140,12 +160,13 @@ void InterruptWait(KernelNotifications& kernel_notifications, bool& interrupt_wa
  * Return a new block template when fees rise to a certain threshold or after a
  * new tip; return nullopt if timeout is reached.
  */
-std::unique_ptr<CBlockTemplate> WaitAndCreateNewBlock(ChainstateManager& chainman,
+std::shared_ptr<CBlockTemplate> WaitAndCreateNewBlock(ChainstateManager& chainman,
                                                       KernelNotifications& kernel_notifications,
                                                       CTxMemPool* mempool,
-                                                      const std::unique_ptr<CBlockTemplate>& block_template,
+                                                      const std::shared_ptr<CBlockTemplate>& block_template,
                                                       const BlockWaitOptions& wait_options,
                                                       const BlockCreateOptions& create_options,
+                                                      const NodeContext& node,
                                                       bool& interrupt_wait);
 
 /* Locks cs_main and returns the block hash and block height of the active chain if it exists; otherwise, returns nullopt.*/

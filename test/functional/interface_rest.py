@@ -55,6 +55,7 @@ class RESTTest (BitcoinTestFramework):
         self.extra_args = [["-rest", "-blockfilterindex=1"], []]
         # whitelist peers to speed up tx relay / mempool sync
         self.noban_tx_relay = True
+        self.uses_wallet = None
 
     def test_rest_request(
             self,
@@ -352,6 +353,9 @@ class RESTTest (BitcoinTestFramework):
         for obj in [json_obj, mempool_info]:
             obj.pop("unbroadcastcount")
         assert_equal(json_obj, mempool_info)
+        json_obj = self.test_rest_request("/mempool/info/with_fee_histogram")
+        mempool_info = self.nodes[0].getmempoolinfo(with_fee_histogram=True)
+        assert_equal(json_obj, mempool_info)
 
         # Check that there are our submitted transactions in the TX memory pool
         json_obj = self.test_rest_request("/mempool/contents")
@@ -391,6 +395,35 @@ class RESTTest (BitcoinTestFramework):
         # Check for error response if mempool_sequence is not "true" or "false"
         resp = self.test_rest_request("/mempool/contents", ret_type=RetType.OBJ, status=400, query_params={"verbose": "false", "mempool_sequence": "TRUE"})
         assert_equal(resp.read().decode('utf-8').strip(), 'The "mempool_sequence" query parameter must be either "true" or "false".')
+
+        # Check the mempool transactions response
+        json_obj = self.test_rest_request("/mempool/transactions/info")
+        rpc_obj = self.nodes[0].listmempooltransactions()
+        assert_equal(json_obj, rpc_obj)
+        assert_equal({tx["txid"] for tx in json_obj["txs"]}, set(txs))
+
+        max_entry_sequence = max(tx["entry_sequence"] for tx in json_obj["txs"])
+        filtered_rpc_obj = self.nodes[0].listmempooltransactions(max_entry_sequence)
+        assert all(tx["entry_sequence"] >= max_entry_sequence for tx in filtered_rpc_obj["txs"])
+        assert_greater_than(len(filtered_rpc_obj["txs"]), 0)
+        assert_equal(
+            self.test_rest_request("/mempool/transactions/info", query_params={"sequence_start": max_entry_sequence}),
+            filtered_rpc_obj,
+        )
+
+        empty_rpc_obj = self.nodes[0].listmempooltransactions(rpc_obj["mempool_sequence"] + 1)
+        assert_equal(empty_rpc_obj["mempool_sequence"], rpc_obj["mempool_sequence"])
+        assert_equal(empty_rpc_obj["txs"], [])
+
+        verbose_rpc_obj = self.nodes[0].listmempooltransactions(0, True)
+        verbose_rest_obj = self.test_rest_request("/mempool/transactions/contents")
+        assert_equal(verbose_rest_obj, verbose_rpc_obj)
+        assert_equal({tx["txid"] for tx in verbose_rpc_obj["txs"]}, set(txs))
+        assert all("vin" in tx and "vout" in tx and "hex" not in tx for tx in verbose_rpc_obj["txs"])
+
+        # Check for error response if sequence_start cannot be parsed
+        resp = self.test_rest_request("/mempool/transactions/info", ret_type=RetType.OBJ, status=400, query_params={"sequence_start": "bad"})
+        assert_equal(resp.read().decode('utf-8').strip(), "Parse error")
 
         # Now mine the transactions
         newblockhash = self.generate(self.nodes[1], 1)
@@ -522,6 +555,24 @@ class RESTTest (BitcoinTestFramework):
 
         resp = self.test_rest_request(f"/deploymentinfo/{INVALID_PARAM}", ret_type=RetType.OBJ, status=400)
         assert_equal(resp.read().decode('utf-8').rstrip(), f"Invalid hash: {INVALID_PARAM}")
+
+        if self.is_wallet_compiled():
+            self.import_deterministic_coinbase_privkeys()
+
+            # Random address so node1's balance doesn't increase
+            not_related_address = "2MxqoHEdNQTyYeX1mHcbrrpzgojbosTpCvJ"
+
+            # Prepare for Fee estimation
+            for i in range(18):
+                self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 0.1)
+                self.sync_all()
+                self.generatetoaddress(self.nodes[1], 1, not_related_address)
+            self.sync_all()
+
+            json_obj = self.test_rest_request("/fee/conservative/1")
+            assert_greater_than(float(json_obj["feerate"]), 0)
+            assert_greater_than(int(json_obj["blocks"]), 0)
+
 
 if __name__ == '__main__':
     RESTTest(__file__).main()

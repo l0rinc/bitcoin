@@ -157,7 +157,6 @@ int main(int argc, char* argv[])
     }
     std::filesystem::path abs_datadir{std::filesystem::absolute(argv[argc-1])};
     std::filesystem::create_directories(abs_datadir);
-
     btck_LoggingOptions logging_options = {
         .log_timestamps = true,
         .log_time_micros = false,

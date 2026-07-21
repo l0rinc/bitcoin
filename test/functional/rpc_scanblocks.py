@@ -3,6 +3,8 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the scanblocks RPC call."""
+from threading import Thread
+
 from test_framework.address import address_to_scriptpubkey
 from test_framework.blockfilter import (
     bip158_basic_element_hash,
@@ -24,6 +26,54 @@ class ScanblocksTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         self.extra_args = [["-blockfilterindex=1"], []]
+
+    def test_status_relevant_blocks(self, node):
+        self.log.info("Check that scanblocks status reports relevant blocks during an active scan")
+        scan_addr = node.get_deterministic_priv_key().address
+        self.generate(node, 2_000, sync_fun=self.no_op)
+        self.wait_until(lambda: all(i["synced"] for i in node.getindexinfo().values()))
+
+        scan_rpc = node.create_new_rpc_connection()
+        status_rpc = node.create_new_rpc_connection()
+        abort_rpc = node.create_new_rpc_connection()
+        stop_height = node.getblockcount()
+        scan_result = {}
+
+        def scan():
+            try:
+                scan_result["result"] = scan_rpc.scanblocks(
+                    "start",
+                    [f"addr({scan_addr})"],
+                    0,
+                    stop_height,
+                    "basic",
+                    {"filter_false_positives": True},
+                )
+            except Exception as e:
+                scan_result["error"] = e
+
+        scan_thread = Thread(target=scan)
+        scan_thread.start()
+        status_seen = {}
+
+        def status_has_relevant_blocks():
+            status = status_rpc.scanblocks("status")
+            if status is None or not status["relevant_blocks"]:
+                return False
+            status_seen["status"] = status
+            return True
+
+        try:
+            self.wait_until(status_has_relevant_blocks, timeout=30)
+            assert_equal(status_seen["status"]["relevant_blocks"][0], node.getblockhash(1))
+            abort_rpc.scanblocks("abort")
+        finally:
+            scan_thread.join(timeout=60)
+
+        assert not scan_thread.is_alive()
+        if "error" in scan_result:
+            raise scan_result["error"]
+        assert "result" in scan_result
 
     def run_test(self):
         node = self.nodes[0]
@@ -130,6 +180,8 @@ class ScanblocksTest(BitcoinTestFramework):
 
         # test aborting the current scan (there is no, must return false)
         assert_equal(node.scanblocks("abort"), False)
+
+        self.test_status_relevant_blocks(node)
 
         # test invalid command
         assert_raises_rpc_error(-8, "Invalid action 'foobar'", node.scanblocks, "foobar")

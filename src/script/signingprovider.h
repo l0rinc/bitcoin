@@ -30,6 +30,9 @@
 
 class MuSig2SecNonce;
 
+static const bool DEFAULT_WALLET_IMPLICIT_SEGWIT = false;
+extern bool g_implicit_segwit;
+
 struct ShortestVectorFirstComparator
 {
     bool operator()(const std::vector<unsigned char>& a, const std::vector<unsigned char>& b) const
@@ -255,6 +258,7 @@ struct FlatSigningProvider final : public SigningProvider
     std::optional<std::reference_wrapper<MuSig2SecNonce>> GetMuSig2SecNonce(const uint256& session_id) const override;
     void DeleteMuSig2Session(const uint256& session_id) const override;
 
+    void AddMasterKey(const CExtKey& key);
     FlatSigningProvider& Merge(FlatSigningProvider&& b) LIFETIMEBOUND;
 };
 

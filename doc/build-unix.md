@@ -8,10 +8,6 @@ Some notes on how to build Bitcoin Core in Unix.
 
 ```bash
 cmake -B build
-```
-Run `cmake -B build -LH` to see the full list of available options.
-
-```bash
 cmake --build build    # Append "-j N" for N parallel jobs
 cmake --install build  # Optional
 ```
@@ -44,12 +40,12 @@ You can either build from self-compiled [depends](/depends/README.md) or
 install the dependencies from your distribution package manager. Dependencies
 for additional features in later columns are optional.
 
-| Package manager         | Required build dependencies | SQLite (wallet) | Cap'n Proto (IPC) | ZMQ <sup><a href="#note1">[1]</a></sup> | USDT | Qt and libqrencode (GUI) |
-| ----------------------- | --------------------------- | --------------- | ----------------- | --- | ---- | ------------------------ |
-| Debian / Ubuntu (`apt`) | `build-essential cmake python3 libboost-dev` | `libsqlite3-dev` | `libcapnp-dev capnproto` | `libzmq3-dev pkgconf` | `systemtap-sdt-dev` | `qt6-base-dev qt6-tools-dev qt6-l10n-tools qt6-tools-dev-tools libgl-dev qt6-wayland libqrencode-dev` |
-| Fedora (`dnf`)          | `gcc-c++ cmake make python3 boost-devel` | `sqlite-devel` | `capnproto capnproto-devel` | `zeromq-devel pkgconf` | `systemtap-sdt-devel` | `qt6-qtbase-devel qt6-qttools-devel qt6-qtwayland qrencode-devel` |
-| Alpine (`apk`)          | `build-base cmake linux-headers python3 boost-dev` | `sqlite-dev` | `capnproto capnproto-dev` | `zeromq-dev` | Not supported | `qt6-qtbase-dev qt6-qttools-dev libqrencode-dev` |
-| Arch (`pacman`)         | `gcc make cmake python boost` | `sqlite` | `capnproto` | `zeromq` | `systemtap` | `qt6-base qt6-tools qt6-wayland qrencode` |
+| Package manager         | Required build dependencies | SQLite (wallet) | Cap'n Proto (IPC) | ZMQ <sup><a href="#note1">[1]</a></sup> | USDT | UPnP | Qt, libqrencode, and image tools (GUI) |
+| ----------------------- | --------------------------- | --------------- | ----------------- | --- | ---- | ---- | ------------------------------------- |
+| Debian / Ubuntu (`apt`) | `build-essential cmake python3 libboost-dev` | `libsqlite3-dev` | `libcapnp-dev capnproto` | `libzmq3-dev pkgconf` | `systemtap-sdt-dev` | `libminiupnpc-dev` | `qtbase5-dev qttools5-dev qttools5-dev-tools qtwayland5 libqrencode-dev librsvg2-bin imagemagick` |
+| Fedora (`dnf`)          | `gcc-c++ cmake make python3 boost-devel` | `sqlite-devel` | `capnproto capnproto-devel` | `zeromq-devel pkgconf` | `systemtap-sdt-devel` | `miniupnpc-devel` | `qt5-qtbase-devel qt5-qttools-devel qt5-qtwayland qrencode-devel librsvg2-tools ImageMagick` |
+| Alpine (`apk`)          | `build-base cmake linux-headers python3 boost-dev` | `sqlite-dev` | `capnproto capnproto-dev` | `zeromq-dev` | Not supported | `miniupnpc-dev` | `qt5-qtbase-dev qt5-qttools-dev libqrencode-dev rsvg-convert imagemagick` |
+| Arch (`pacman`)         | `gcc make cmake python boost` | `sqlite` | `capnproto` | `zeromq` | `systemtap` | `miniupnpc` | `qt5-base qt5-tools qt5-wayland qrencode librsvg imagemagick` |
 
 <a id="note1"></a>1. Some ZMQ packages do not vendor the CMake config files, which requires `pkgconf` or `pkg-config` to be installed.
 
@@ -63,6 +59,8 @@ and use `-DENABLE_WALLET=OFF` to build without the wallet and skip the SQLite de
 Cap'n Proto is needed for IPC functionality (see [multiprocess.md](multiprocess.md)).
 Compile with `-DENABLE_IPC=OFF` if you do not need IPC functionality.
 
+UPnP port mapping is compiled with `-DWITH_MINIUPNPC=ON` and requires miniupnpc.
+
 ZMQ-enabled binaries are compiled with `-DWITH_ZMQ=ON` and require libzmq.
 
 User-Space, Statically Defined Tracing (USDT) requires the systemtap-sdt
@@ -71,12 +69,19 @@ development package and must be enabled via `-DWITH_USDT=ON`.
 GUI dependencies:
 
 Bitcoin Core includes a GUI built with the cross-platform Qt Framework. To compile the GUI, we need to install
-the necessary parts of Qt, the libqrencode and pass `-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
+the necessary parts of Qt, libqrencode, and image processing tools, and pass
+`-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
+
+For Qt 6.5 and later, the xcb cursor runtime package must be installed (`libxcb-cursor0` on Debian/Ubuntu, `xcb-util-cursor` on Fedora).
 
 Additionally, install the Qt Wayland platform plugin for modern desktop environments.
 
 The GUI will be able to encode addresses in QR codes and requires libqrencode.
 Otherwise, if you don't need QR encoding support, use the `-DWITH_QRENCODE=OFF` option to disable this feature in order to compile the GUI.
+
+The GUI builds with Qt 5 by default. You can build with Qt 6 instead by passing
+`-DWITH_QT_VERSION=6` to cmake and installing your distribution's Qt 6
+development packages.
 
 ### Disable-wallet mode
 

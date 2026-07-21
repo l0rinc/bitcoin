@@ -254,13 +254,14 @@ void CreateWalletActivity::createWallet()
 
     std::string name = m_create_wallet_dialog->walletName().toStdString();
     uint64_t flags = 0;
-    // Enable descriptors by default.
-    flags |= WALLET_FLAG_DESCRIPTORS;
     if (m_create_wallet_dialog->isDisablePrivateKeysChecked()) {
         flags |= WALLET_FLAG_DISABLE_PRIVATE_KEYS;
     }
     if (m_create_wallet_dialog->isMakeBlankWalletChecked()) {
         flags |= WALLET_FLAG_BLANK_WALLET;
+    }
+    if (m_create_wallet_dialog->isDescriptorWalletChecked()) {
+        flags |= WALLET_FLAG_DESCRIPTORS;
     }
     if (m_create_wallet_dialog->isExternalSignerChecked()) {
         flags |= WALLET_FLAG_EXTERNAL_SIGNER;
@@ -300,7 +301,12 @@ void CreateWalletActivity::create()
     try {
         signers = node().listExternalSigners();
     } catch (const std::runtime_error& e) {
-        QMessageBox::critical(nullptr, tr("Can't list signers"), e.what());
+        QMessageBox msgBox;
+        msgBox.setIcon(QMessageBox::Critical);
+        msgBox.setWindowTitle(tr("Can't list signers"));
+        msgBox.setText(tr("Unable to execute external signer script. Please check that the script signer path is correct and that the script is functional."));
+        msgBox.setDetailedText(QString::fromStdString(e.what()));
+        msgBox.exec();
     }
     if (signers.size() > 1) {
         QMessageBox::critical(nullptr, tr("Too many external signers found"), QString::fromStdString("More than one external signer found. Please connect only one at a time."));

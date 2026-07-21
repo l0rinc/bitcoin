@@ -21,6 +21,7 @@ add_library(bitcoinkernel
   ../arith_uint256.cpp
   ../chain.cpp
   ../coins.cpp
+  ../common/system_ram.cpp
   ../compressor.cpp
   ../consensus/merkle.cpp
   ../consensus/tx_check.cpp
@@ -33,7 +34,9 @@ add_library(bitcoinkernel
   ../logging.cpp
   ../node/blockstorage.cpp
   ../node/chainstate.cpp
+  ../node/dbcache.cpp
   ../node/utxo_snapshot.cpp
+  ../policy/coin_age_priority.cpp
   ../policy/ephemeral_policy.cpp
   ../policy/feerate.cpp
   ../policy/packages.cpp
@@ -53,6 +56,7 @@ add_library(bitcoinkernel
   ../script/sigcache.cpp
   ../script/solver.cpp
   ../signet.cpp
+  ../stats/stats.cpp
   ../streams.cpp
   ../sync.cpp
   ../txdb.cpp
@@ -67,6 +71,8 @@ add_library(bitcoinkernel
   ../util/fs.cpp
   ../util/fs_helpers.cpp
   ../util/hasher.cpp
+  ../util/ioprio.cpp
+  ../util/mempressure.cpp
   ../util/moneystr.cpp
   ../util/rbf.cpp
   ../util/signalinterrupt.cpp
@@ -83,32 +89,25 @@ add_library(bitcoinkernel
   $<TARGET_OBJECTS:leveldb>
   $<TARGET_OBJECTS:crc32c>
 )
-
-# Compiler warnings that apply only to the kernel and its dependencies.
-# These can be more strict and/or warnings that only apply to shared
-# libs.
-add_library(kernel_warn_interface INTERFACE)
-if(NOT MSVC)
-  try_append_cxx_flags("-Wunique-object-duplication" TARGET kernel_warn_interface SKIP_LINK)
-endif()
-
-# Also manually apply the warnings to the kernel's internal dependencies
-target_link_libraries(bitcoin_clientversion PRIVATE kernel_warn_interface)
-target_link_libraries(bitcoin_crypto PRIVATE kernel_warn_interface)
-target_link_libraries(leveldb PRIVATE kernel_warn_interface)
-target_link_libraries(crc32c PRIVATE kernel_warn_interface)
-
+target_compile_definitions(bitcoinkernel
+  PRIVATE
+    BUILDING_FOR_LIBBITCOINKERNEL
+)
 target_link_libraries(bitcoinkernel
   PRIVATE
     core_interface
-    kernel_warn_interface
+    external_lib_interface
     secp256k1_objs
     $<$<PLATFORM_ID:Windows>:bcrypt>
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
     Boost::headers
 )
 
-target_include_directories(bitcoinkernel PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/leveldb/include>)
+target_include_directories(bitcoinkernel
+  PRIVATE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/leveldb/include>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/leveldb/helpers/memenv>
+)
 
 # Add a convenience libbitcoinkernel target as a synonym for bitcoinkernel.
 add_custom_target(libbitcoinkernel)

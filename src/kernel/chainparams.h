@@ -16,11 +16,40 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+enum class RDTSConsentFlag {
+    RUNTIME_CHECK,
+    IMPLICIT,
+    RUNTIME_WARN,
+    UNSUPPORTED_UNSAFE_NO_ENFORCEMENT,
+};
+
+extern RDTSConsentFlag g_rdts_consent;
+extern bool g_enable_rdts;
+extern bool g_rdts_warning;
+
+typedef std::map<int, uint256> MapCheckpoints;
+
+struct CCheckpointData {
+    MapCheckpoints mapCheckpoints;
+
+    int GetHeight() const {
+        const auto& final_checkpoint = mapCheckpoints.rbegin();
+        return final_checkpoint->first /* height */;
+    }
+
+    bool CheckBlock(int height, const uint256& hash) const {
+        const auto i = mapCheckpoints.find(height);
+        if (i == mapCheckpoints.end()) return true;
+        return hash == i->second;
+    }
+};
 
 struct AssumeutxoHash : public BaseHash<uint256> {
     explicit AssumeutxoHash(const uint256& hash) : BaseHash(hash) {}
@@ -115,6 +144,7 @@ public:
     const std::string& Bech32HRP() const { return bech32_hrp; }
     const std::vector<uint8_t>& FixedSeeds() const { return vFixedSeeds; }
     const HeadersSyncParams& HeadersSync() const { return m_headers_sync_params; }
+    const CCheckpointData& Checkpoints() const { return checkpointData; }
 
     std::optional<AssumeutxoData> AssumeutxoForHeight(int height) const
     {
@@ -134,6 +164,9 @@ public:
         int64_t start_time;
         int64_t timeout;
         int min_activation_height;
+        int max_activation_height{std::numeric_limits<int>::max()};
+        int active_duration{std::numeric_limits<int>::max()};
+        std::optional<uint32_t> threshold{};
     };
 
     struct DeploymentOptions {
@@ -148,6 +181,7 @@ public:
         DeploymentOptions dep_opts{};
         std::optional<std::vector<uint8_t>> challenge{};
         std::optional<std::vector<std::string>> seeds{};
+        int64_t pow_target_spacing{10 * 60};
     };
 
     /**
@@ -195,6 +229,7 @@ protected:
     std::vector<uint8_t> vFixedSeeds;
     bool fDefaultConsistencyChecks;
     bool m_is_mockable_chain;
+    CCheckpointData checkpointData;
     std::vector<AssumeutxoData> m_assumeutxo_data;
     ChainTxData chainTxData;
     HeadersSyncParams m_headers_sync_params;

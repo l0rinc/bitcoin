@@ -26,6 +26,7 @@ struct TransactionStatus {
         Confirmed,          /**< Have 6 or more confirmations (normal tx) or fully mature (mined tx) **/
         /// Normal (sent/received) transactions
         Unconfirmed,        /**< Not yet mined into a block **/
+        AssumedConfirmed,   /**< Confirmed, but background validation hasn't finished  */
         Confirming,         /**< Confirmed, but waiting for the recommended number of confirmations **/
         Conflicted,         /**< Conflicts with other transaction or mempool **/
         Abandoned,          /**< Abandoned from the wallet **/
@@ -73,7 +74,7 @@ public:
     };
 
     /** Number of confirmation recommended for accepting a transaction */
-    static const int RecommendedNumConfirmations = 6;
+    static const int RecommendedNumConfirmations = 16;
 
     TransactionRecord():
             hash(), time(0), type(Other), debit(0), credit(0), idx(0)

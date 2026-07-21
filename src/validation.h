@@ -72,6 +72,8 @@ namespace util {
 class SignalInterrupt;
 } // namespace util
 
+/** Default for using fee filter */
+static const bool DEFAULT_FEEFILTER = true;
 /** Block files containing a block-height within MIN_BLOCKS_TO_KEEP of ActiveChain().Tip() will not be pruned. */
 static const unsigned int MIN_BLOCKS_TO_KEEP = 288;
 static const signed int DEFAULT_CHECKBLOCKS = 6;
@@ -98,6 +100,13 @@ enum class SynchronizationState {
     INIT_DOWNLOAD,
     POST_INIT
 };
+
+enum SpkReuseModes {
+    SRM_ALLOW,
+    SRM_REJECT,
+};
+
+extern SpkReuseModes SpkReuseMode;
 
 /** Documentation for argument 'checklevel'. */
 extern const std::vector<std::string> CHECKLEVEL_DOC;
@@ -260,6 +269,11 @@ struct PackageMempoolAcceptResult
         : m_tx_results{ {wtxid, result} } {}
 };
 
+static const std::string rejectmsg_lowfee_mempool = "mempool min fee not met";
+static const std::string rejectmsg_lowfee_relay = "min relay fee not met";
+static const std::string rejectmsg_mempoolfull = "mempool full";
+static const std::string rejectmsg_zero_mempool_entry_seq = "zero mempool entry sequence";
+
 /**
  * Try to add a transaction to the mempool. This is an internal function and is exposed only for testing.
  * Client code should use ChainstateManager::ProcessTransaction()
@@ -268,15 +282,18 @@ struct PackageMempoolAcceptResult
  * @param[in]  tx                 The transaction to submit for mempool acceptance.
  * @param[in]  accept_time        The timestamp for adding the transaction to the mempool.
  *                                It is also used to determine when the entry expires.
- * @param[in]  bypass_limits      When true, don't enforce mempool fee and capacity limits,
- *                                and set entry_sequence to zero.
+ * @param[in]  ignore_rejects     Set of reject reasons to ignore and bypass, if possible.
  * @param[in]  test_accept        When true, run validation checks but don't submit to mempool.
  *
  * @returns a MempoolAcceptResult indicating whether the transaction was accepted/rejected with reason.
  */
 MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTransactionRef& tx,
-                                       int64_t accept_time, bool bypass_limits, bool test_accept)
-    EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+                                       int64_t accept_time, const ignore_rejects_type& ignore_rejects, bool test_accept) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+static inline MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTransactionRef& tx, int64_t accept_time, bool bypass_limits, bool test_accept) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+    static const ignore_rejects_type ignore_rejects_legacy{rejectmsg_lowfee_mempool, rejectmsg_lowfee_relay, rejectmsg_mempoolfull, rejectmsg_zero_mempool_entry_seq, "truc"};
+    return AcceptToMemoryPool(active_chainstate, tx, accept_time, (bypass_limits ? ignore_rejects_legacy : empty_ignore_rejects), test_accept);
+}
 
 /**
 * Validate (and maybe submit) a package to the mempool. See doc/policy/packages.md for full details
@@ -289,7 +306,7 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTra
 * possible for the package to be partially submitted.
 */
 PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxMemPool& pool,
-                                                   const Package& txns, bool test_accept, const std::optional<CFeeRate>& client_maxfeerate)
+                                                   const Package& txns, bool test_accept, const std::optional<CFeeRate>& client_maxfeerate, const ignore_rejects_type& ignore_rejects=empty_ignore_rejects)
                                                    EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 /* Mempool validation helper functions */
@@ -333,6 +350,8 @@ std::optional<LockPoints> CalculateLockPointsAtTip(
  */
 bool CheckSequenceLocksAtTip(CBlockIndex* tip,
                              const LockPoints& lock_points);
+
+void LimitMempoolSize(CTxMemPool&, CCoinsViewCache&);
 
 /**
  * Closure representing one script verification
@@ -655,6 +674,17 @@ public:
      * nullptr if this chainstate was not created from a snapshot.
      */
     const CBlockIndex* SnapshotBase() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /**
+     * The base of the snapshot this chainstate is validating.
+     *
+     * nullptr if this chainstate was not created from a snapshot or the
+     * snapshot has already been validated.
+     */
+    const CBlockIndex* UnvalidatedSnapshotBase() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        return m_assumeutxo == Assumeutxo::UNVALIDATED ? SnapshotBase() : nullptr;
+    }
 
     //! Return target block which chainstate tip is expected to reach, if this
     //! is a historic chainstate being used to validate a snapshot, or null if
@@ -1173,6 +1203,7 @@ public:
     CChain& ActiveChain() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChainstate().m_chain; }
     int ActiveHeight() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChain().Height(); }
     CBlockIndex* ActiveTip() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChain().Tip(); }
+    std::optional<int> BlocksAheadOfTip() const;
     //! @}
 
     /**
@@ -1311,7 +1342,7 @@ public:
      * @param[in]  tx              The transaction to submit for mempool acceptance.
      * @param[in]  test_accept     When true, run validation checks but don't submit to mempool.
      */
-    [[nodiscard]] MempoolAcceptResult ProcessTransaction(const CTransactionRef& tx, bool test_accept=false)
+    [[nodiscard]] MempoolAcceptResult ProcessTransaction(const CTransactionRef& tx, bool test_accept=false, const ignore_rejects_type& ignore_rejects=empty_ignore_rejects)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     //! Load the block tree and coins database from disk, initializing state if we're running with -reindex
@@ -1365,6 +1396,9 @@ public:
     //! Get range of historical blocks to download.
     std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> GetHistoricalBlockRange() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
+    //! Return the height of the base block of the unvalidated snapshot in use, if one exists.
+    std::optional<int> GetUnvalidatedSnapshotBaseHeight() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
     //! Call ActivateBestChain() on every chainstate.
     util::Result<void> ActivateBestChains() LOCKS_EXCLUDED(::cs_main);
 
@@ -1373,9 +1407,7 @@ public:
     //! header in our block-index not known to be invalid, recalculate it.
     void RecalculateBestHeader() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
-    //! Returns how many blocks the best header is ahead of the current tip,
-    //! or nullopt if the best header does not extend the tip.
-    std::optional<int> BlocksAheadOfTip() const LOCKS_EXCLUDED(::cs_main);
+    bool m_script_check_queue_enabled{true};
 
     CCheckQueue<CScriptCheck>& GetCheckQueue() { return m_script_check_queue; }
 

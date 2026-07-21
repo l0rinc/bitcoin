@@ -130,11 +130,15 @@ void ValidationSignals::UnregisterSharedValidationInterface(std::shared_ptr<CVal
 
 void ValidationSignals::UnregisterValidationInterface(CValidationInterface* callbacks)
 {
+    callbacks->ValidationInterfaceUnregistering();
+
     m_internals->Unregister(callbacks);
 }
 
 void ValidationSignals::UnregisterAllValidationInterfaces()
 {
+    m_internals->Iterate([&](CValidationInterface& callbacks) { callbacks.ValidationInterfaceUnregistering(); });
+
     m_internals->Clear();
 }
 
@@ -272,4 +276,9 @@ void ValidationSignals::BlockChecked(const std::shared_ptr<const CBlock>& block,
 void ValidationSignals::NewPoWValidBlock(const CBlockIndex *pindex, const std::shared_ptr<const CBlock> &block) {
     LOG_EVENT("%s: block hash=%s", __func__, block->GetHash().ToString());
     m_internals->Iterate([&](CValidationInterface& callbacks) { callbacks.NewPoWValidBlock(pindex, block); });
+}
+
+void ValidationSignals::NewBlockTemplate(const std::shared_ptr<node::CBlockTemplate>& blocktemplate) {
+    LOG_EVENT("%s", __func__);
+    m_internals->Iterate([&](CValidationInterface& callbacks) { callbacks.NewBlockTemplate(blocktemplate); });
 }

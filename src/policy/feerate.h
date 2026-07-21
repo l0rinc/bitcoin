@@ -42,8 +42,6 @@ public:
 
     /**
      * Construct a fee rate from a fee in satoshis and a vsize in vB.
-     *
-     * Passing any virtual_bytes less than or equal to 0 will result in 0 fee rate per 0 size.
      */
     CFeeRate(const CAmount& nFeePaid, int32_t virtual_bytes);
 
@@ -73,8 +71,11 @@ public:
         return *this;
     }
     std::string ToString(FeeRateFormat fee_rate_format = FeeRateFormat::BTC_KVB) const;
+    /** Return the fee rate in sat/vB, without units, as a string. */
+    std::string SatsToString() const;
     friend CFeeRate operator*(const CFeeRate& f, int a) { return CFeeRate(a * f.m_feerate.fee, f.m_feerate.size); }
     friend CFeeRate operator*(int a, const CFeeRate& f) { return CFeeRate(a * f.m_feerate.fee, f.m_feerate.size); }
+    friend CFeeRate operator/(const CFeeRate& f, int a) { return CFeeRate(f.m_feerate.fee, a * f.m_feerate.size); }
 
     SERIALIZE_METHODS(CFeeRate, obj) { READWRITE(obj.m_feerate.fee, obj.m_feerate.size); }
 };

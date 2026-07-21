@@ -5,9 +5,11 @@
 #include <test/util/setup_common.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
+#include <util/readwritefile.h>
 
 #include <boost/test/unit_test.hpp>
 
+#include <cstdio>
 #include <fstream>
 #include <ios>
 #include <string>
@@ -137,6 +139,64 @@ BOOST_AUTO_TEST_CASE(rename)
         BOOST_CHECK_EQUAL(contents, path1_contents);
     }
     fs::remove(path2);
+}
+
+BOOST_AUTO_TEST_CASE(allocate_file_range_preserves_existing_bytes)
+{
+    const fs::path path{m_args.GetDataDirBase() / "allocate_file_range.dat"};
+    const std::string original{"0123456789"};
+
+    BOOST_REQUIRE(WriteBinaryFile(path, original));
+    {
+        FILE* file{fsbridge::fopen(path, "r+b")};
+        BOOST_REQUIRE(file);
+        AllocateFileRange(file, 2, 4);
+        BOOST_REQUIRE_EQUAL(std::fclose(file), 0);
+    }
+    auto [read_ok, contents]{ReadBinaryFile(path)};
+    BOOST_REQUIRE(read_ok);
+    BOOST_CHECK_EQUAL(contents, original);
+
+    {
+        FILE* file{fsbridge::fopen(path, "r+b")};
+        BOOST_REQUIRE(file);
+        AllocateFileRange(file, original.size(), 3);
+        BOOST_REQUIRE_EQUAL(std::fclose(file), 0);
+    }
+    auto [extended_ok, extended_contents]{ReadBinaryFile(path)};
+    BOOST_REQUIRE(extended_ok);
+    BOOST_REQUIRE_EQUAL(extended_contents.size(), original.size() + 3);
+    BOOST_CHECK_EQUAL(extended_contents.substr(0, original.size()), original);
+    BOOST_CHECK(extended_contents.substr(original.size()) == std::string(3, '\0'));
+}
+
+BOOST_AUTO_TEST_CASE(file_advice_helpers_keep_file_semantics)
+{
+    const fs::path path{m_args.GetDataDirBase() / "file_advice_helpers.dat"};
+    const std::string original{"abcdef"};
+
+    BOOST_REQUIRE(WriteBinaryFile(path, original));
+    BOOST_CHECK(AdviseSequential(nullptr) == nullptr);
+
+    {
+        FILE* file{fsbridge::fopen(path, "r+b")};
+        BOOST_REQUIRE(file);
+        BOOST_REQUIRE_EQUAL(std::fseek(file, 2, SEEK_SET), 0);
+        BOOST_CHECK_EQUAL(AdviseSequential(file), file);
+        BOOST_CHECK_EQUAL(std::ftell(file), 2);
+
+        char ch{0};
+        BOOST_REQUIRE_EQUAL(std::fread(&ch, 1, 1, file), 1U);
+        BOOST_CHECK_EQUAL(ch, 'c');
+
+        BOOST_REQUIRE_EQUAL(std::fseek(file, 3, SEEK_SET), 0);
+        BOOST_REQUIRE_EQUAL(std::fwrite("Z", 1, 1, file), 1U);
+        BOOST_REQUIRE_EQUAL(CloseAndUncache(file), 0);
+    }
+
+    auto [read_ok, contents]{ReadBinaryFile(path)};
+    BOOST_REQUIRE(read_ok);
+    BOOST_CHECK_EQUAL(contents, "abcZef");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

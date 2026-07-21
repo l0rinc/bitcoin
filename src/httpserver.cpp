@@ -205,10 +205,25 @@ static void RejectRequest(std::unique_ptr<http_bitcoin::HTTPRequest> hreq)
     hreq->WriteReply(HTTP_SERVICE_UNAVAILABLE);
 }
 
-static std::vector<std::pair<std::string, uint16_t>> GetBindAddresses()
+struct HTTPBindAddress {
+    std::string address;
+    uint16_t port;
+    bool is_default;
+};
+
+static bool IsIgnoredDefaultBindError(int err)
+{
+#ifdef WIN32
+    return err == WSAEADDRNOTAVAIL || err == WSAEAFNOSUPPORT || err == WSAEOPNOTSUPP;
+#else
+    return err == EADDRNOTAVAIL || err == ENOENT || err == EAFNOSUPPORT || err == EOPNOTSUPP;
+#endif
+}
+
+static std::vector<HTTPBindAddress> GetBindAddresses()
 {
     uint16_t http_port{static_cast<uint16_t>(gArgs.GetIntArg("-rpcport", BaseParams().RPCPort()))};
-    std::vector<std::pair<std::string, uint16_t>> endpoints;
+    std::vector<HTTPBindAddress> endpoints;
 
     // Determine what addresses to bind to
     // To prevent misconfiguration and accidental exposure of the RPC
@@ -216,13 +231,13 @@ static std::vector<std::pair<std::string, uint16_t>> GetBindAddresses()
     // together. If either is missing, ignore both values, bind to localhost
     // instead, and log warnings.
     if (gArgs.GetArgs("-rpcallowip").empty() || gArgs.GetArgs("-rpcbind").empty()) { // Default to loopback if not allowing external IPs
-        endpoints.emplace_back("::1", http_port);
-        endpoints.emplace_back("127.0.0.1", http_port);
+        endpoints.push_back({"::1", http_port, true});
+        endpoints.push_back({"127.0.0.1", http_port, true});
         if (!gArgs.GetArgs("-rpcallowip").empty()) {
             LogWarning("Option -rpcallowip was specified without -rpcbind; this doesn't usually make sense");
         }
         if (!gArgs.GetArgs("-rpcbind").empty()) {
-            LogWarning("Option -rpcbind was ignored because -rpcallowip was not specified, refusing to allow everyone to connect");
+            InitWarning(_("Option -rpcbind was ignored because -rpcallowip was not specified, refusing to allow everyone to connect\n"));
         }
     } else { // Specific bind addresses
         for (const std::string& strRPCBind : gArgs.GetArgs("-rpcbind")) {
@@ -232,7 +247,7 @@ static std::vector<std::pair<std::string, uint16_t>> GetBindAddresses()
                 LogError("%s\n", InvalidPortErrMsg("-rpcbind", strRPCBind).original);
                 return {}; // empty
             }
-            endpoints.emplace_back(host, port);
+            endpoints.push_back({std::move(host), port, false});
         }
     }
     return endpoints;
@@ -675,8 +690,10 @@ void HTTPRequest::WriteHeader(std::string&& hdr, std::string&& value)
     m_response_headers.Write(std::move(hdr), std::move(value));
 }
 
-util::Expected<void, std::string> HTTPServer::BindAndStartListening(const CService& to)
+util::Expected<void, std::string> HTTPServer::BindAndStartListening(const CService& to, int* out_error)
 {
+    if (out_error) *out_error = 0;
+
     // Create socket for listening for incoming connections
     sockaddr_storage storage;
     auto sa = reinterpret_cast<sockaddr*>(&storage);
@@ -687,9 +704,11 @@ util::Expected<void, std::string> HTTPServer::BindAndStartListening(const CServi
 
     std::unique_ptr<Sock> sock{CreateSock(to.GetSAFamily(), SOCK_STREAM, IPPROTO_TCP)};
     if (!sock) {
+        const int err{WSAGetLastError()};
+        if (out_error) *out_error = err;
         return util::Unexpected{strprintf("Cannot create %s listen socket: %s",
                                           to.ToStringAddrPort(),
-                                          NetworkErrorString(WSAGetLastError()))};
+                                          NetworkErrorString(err))};
     }
 
     // Allow binding if the port is still in TIME_WAIT state after
@@ -728,6 +747,7 @@ util::Expected<void, std::string> HTTPServer::BindAndStartListening(const CServi
 
     if (sock->Bind(sa, len) == SOCKET_ERROR) {
         const int err{WSAGetLastError()};
+        if (out_error) *out_error = err;
         if (err == WSAEADDRINUSE) {
             return util::Unexpected{strprintf("Unable to bind to %s on this computer. %s is probably already running.",
                                               to.ToStringAddrPort(),
@@ -741,9 +761,11 @@ util::Expected<void, std::string> HTTPServer::BindAndStartListening(const CServi
 
     // Listen for incoming connections
     if (sock->Listen(SOMAXCONN) == SOCKET_ERROR) {
+        const int err{WSAGetLastError()};
+        if (out_error) *out_error = err;
         return util::Unexpected{strprintf("Cannot listen on %s: %s",
                                           to.ToStringAddrPort(),
-                                          NetworkErrorString(WSAGetLastError()))};
+                                          NetworkErrorString(err))};
     }
 
     m_listen.emplace_back(std::move(sock));
@@ -1222,28 +1244,40 @@ bool InitHTTPServer()
     g_http_server->SetServerTimeout(std::chrono::seconds(gArgs.GetIntArg("-rpcservertimeout", DEFAULT_HTTP_SERVER_TIMEOUT)));
 
     // Bind HTTP server to specified addresses
-    std::vector<std::pair<std::string, uint16_t>> endpoints{GetBindAddresses()};
+    std::vector<HTTPBindAddress> endpoints{GetBindAddresses()};
     bool bind_success{false};
-    for (const auto& [address_string, port] : endpoints) {
+    bool bind_failure{false};
+    for (const auto& endpoint : endpoints) {
+        const auto& address_string{endpoint.address};
+        const auto port{endpoint.port};
         LogInfo("Binding RPC on address %s port %i", address_string, port);
         const std::optional<CService> addr{Lookup(address_string, port, false)};
         if (addr) {
             if (addr->IsBindAny()) {
                 LogWarning("The RPC server is not safe to expose to untrusted networks such as the public internet");
             }
-            auto result{g_http_server->BindAndStartListening(addr.value())};
+            int bind_error{0};
+            auto result{g_http_server->BindAndStartListening(addr.value(), &bind_error)};
             if (!result) {
-                LogWarning("Binding RPC on address %s failed: %s", addr->ToStringAddrPort(), result.error());
+                if (endpoint.is_default && IsIgnoredDefaultBindError(bind_error)) {
+                    LogWarning("Binding RPC on address %s failed, error ignored because interface was unavailable: %s", addr->ToStringAddrPort(), result.error());
+                } else {
+                    LogWarning("Binding RPC on address %s failed: %s", addr->ToStringAddrPort(), result.error());
+                    bind_failure = true;
+                }
             } else {
                 bind_success = true;
             }
         } else {
             LogWarning("Could not bind RPC on address %s port %i: Address lookup failed.", address_string, port);
+            if (!endpoint.is_default) {
+                bind_failure = true;
+            }
         }
     }
 
-    if (!bind_success) {
-        LogError("Unable to bind any endpoint for RPC server");
+    if (bind_failure || !bind_success) {
+        LogError("Unable to bind all endpoints for RPC server");
         return false;
     }
 

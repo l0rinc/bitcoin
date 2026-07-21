@@ -400,8 +400,9 @@ int SQliteExecHandler::Exec(SQLiteDatabase& database, const std::string& stateme
     return sqlite3_exec(database.m_db, statement.data(), nullptr, nullptr, nullptr);
 }
 
-std::unique_ptr<DatabaseBatch> SQLiteDatabase::MakeBatch()
+std::unique_ptr<DatabaseBatch> SQLiteDatabase::MakeBatch(bool flush_on_close)
 {
+    (void)flush_on_close;
     // We ignore flush_on_close because we don't do manual flushing for SQLite
     return std::make_unique<SQLiteBatch>(*this);
 }

@@ -30,6 +30,14 @@ bool GetAvoidReuseFlag(const CWallet& wallet, const UniValue& param) {
     return avoid_reuse;
 }
 
+bool ParseIncludeWatchonly(const UniValue& include_watchonly, const CWallet& wallet)
+{
+    if (include_watchonly.isNull()) {
+        return wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+    }
+    return include_watchonly.get_bool();
+}
+
 std::string EnsureUniqueWalletName(const JSONRPCRequest& request, std::optional<std::string_view> wallet_name)
 {
     if (auto endpoint_wallet{GetWalletNameFromJSONRPCRequest(request)}) {
@@ -50,6 +58,11 @@ std::string EnsureUniqueWalletName(const JSONRPCRequest& request, std::optional<
     return std::string{*wallet_name};
 }
 
+std::string EnsureUniqueWalletName(const JSONRPCRequest& request, const std::string* wallet_name)
+{
+    return EnsureUniqueWalletName(request, wallet_name ? std::optional<std::string_view>{*wallet_name} : std::nullopt);
+}
+
 std::optional<std::string> GetWalletNameFromJSONRPCRequest(const JSONRPCRequest& request)
 {
     if (request.URI.starts_with(WALLET_ENDPOINT_BASE)) {
@@ -64,17 +77,40 @@ std::shared_ptr<CWallet> GetWalletForJSONRPCRequest(const JSONRPCRequest& reques
     CHECK_NONFATAL(request.mode == JSONRPCRequest::EXECUTE);
     WalletContext& context = EnsureWalletContext(request.context);
 
-    if (auto wallet_name{GetWalletNameFromJSONRPCRequest(request)}) {
-        std::shared_ptr<CWallet> pwallet{GetWallet(context, *wallet_name)};
-        if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Requested wallet does not exist or is not loaded");
+    std::string authorized_wallet_name;
+    const bool have_wallet_restriction{GetWalletRestrictionFromJSONRPCRequest(request, authorized_wallet_name)};
+
+    const auto requested_wallet_name{GetWalletNameFromJSONRPCRequest(request)};
+
+    std::shared_ptr<CWallet> pwallet;
+    size_t count{0};
+
+    if (!have_wallet_restriction) {
+        // Any wallet is permitted; select by endpoint, or use the sole wallet
+        if (requested_wallet_name) {
+            pwallet = GetWallet(context, *requested_wallet_name);
+        } else {
+            auto wallet = GetDefaultWallet(context, count);
+            if (wallet) pwallet = wallet;
+        }
+    } else if (authorized_wallet_name == "-") {
+        // Block wallet access always
+    } else if (!requested_wallet_name || *requested_wallet_name == authorized_wallet_name) {
+        // Select specifically the authorized wallet
+        pwallet = GetWallet(context, authorized_wallet_name);
+    }
+
+    if (pwallet) {
         return pwallet;
     }
 
-    size_t count{0};
-    auto wallet = GetDefaultWallet(context, count);
-    if (wallet) return wallet;
-
-    if (count == 0) {
+    if (requested_wallet_name) {
+        throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Requested wallet does not exist or is not loaded");
+    }
+    const bool no_wallet_available{have_wallet_restriction ?
+        (authorized_wallet_name == "-" || !GetWallet(context, authorized_wallet_name)) :
+        count == 0};
+    if (no_wallet_available) {
         throw JSONRPCError(
             RPC_WALLET_NOT_FOUND, "No wallet is loaded. Load a wallet using loadwallet or create a new one with createwallet. (Note: A default wallet is no longer automatically created)");
     }
@@ -96,6 +132,27 @@ WalletContext& EnsureWalletContext(const std::any& context)
         throw JSONRPCError(RPC_INTERNAL_ERROR, "Wallet context not found");
     }
     return *wallet_context;
+}
+
+LegacyScriptPubKeyMan& EnsureLegacyScriptPubKeyMan(CWallet& wallet, bool also_create)
+{
+    LegacyScriptPubKeyMan* spk_man{wallet.GetLegacyScriptPubKeyMan()};
+    if (!spk_man && also_create) {
+        spk_man = wallet.GetOrCreateLegacyScriptPubKeyMan();
+    }
+    if (!spk_man) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Only legacy wallets are supported by this command");
+    }
+    return *spk_man;
+}
+
+const LegacyScriptPubKeyMan& EnsureConstLegacyScriptPubKeyMan(const CWallet& wallet)
+{
+    const LegacyScriptPubKeyMan* spk_man{wallet.GetLegacyScriptPubKeyMan()};
+    if (!spk_man) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Only legacy wallets are supported by this command");
+    }
+    return *spk_man;
 }
 
 std::string LabelFromValue(const UniValue& value)

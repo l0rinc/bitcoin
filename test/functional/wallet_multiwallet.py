@@ -6,6 +6,7 @@
 
 Verify that a bitcoind node can load multiple wallet files
 """
+from decimal import Decimal
 from threading import Thread
 import os
 import platform
@@ -13,6 +14,7 @@ import shutil
 import stat
 
 from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.messages import MAGIC_BYTES
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.test_node import ErrorMatch
 from test_framework.util import (
@@ -65,6 +67,14 @@ class MultiWalletTest(BitcoinTestFramework):
             return wallet_dir(node, name, "wallet.dat")
         return wallet_dir(node, name)
 
+    def write_fake_sqlite_wallet(self, path):
+        wallet_data = bytearray(512)
+        wallet_data[:16] = b"SQLite format 3\x00"
+        wallet_data[68:72] = MAGIC_BYTES["regtest"]
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(wallet_data)
+
     def run_test(self):
         self.check_chmod = True
         self.check_symlinks = True
@@ -112,7 +122,7 @@ class MultiWalletTest(BitcoinTestFramework):
         self.start_node(0)
         with node.assert_debug_log(unexpected_msgs=['Error scanning directory entries under'], expected_msgs=[]):
             result = node.listwalletdir()
-            assert_equal(result, {'wallets': [{'name': 'default_wallet', 'warnings': []}]})
+            assert_equal(result, {'wallets': [{'name': self.default_wallet_name, "warnings": []}]})
         os.chmod(data_dir(node, 'wallets'), 0)
         with node.assert_debug_log(expected_msgs=['Error scanning directory entries under']):
             result = node.listwalletdir()
@@ -199,9 +209,14 @@ class MultiWalletTest(BitcoinTestFramework):
             return
 
         self.log.info("Test for errors from too many levels of symbolic links")
+        os.mkdir(wallet_dir(node, 'directory_symlink_target'))
+        os.symlink('directory_symlink_target', wallet_dir(node, 'directory_symlink'))
         os.mkdir(wallet_dir(node, 'self_walletdat_symlink'))
         os.symlink('wallet.dat', wallet_dir(node, 'self_walletdat_symlink/wallet.dat'))
-        with node.assert_debug_log(expected_msgs=["Error while scanning wallet dir"]):
+        with node.assert_debug_log(expected_msgs=[
+            "Not recursively searching symlink/reparse point",
+            "Error while scanning wallet dir",
+        ]):
             walletlist = node.listwalletdir()['wallets']
         assert_equal(sorted(map(lambda w: w['name'], walletlist)), sorted(in_wallet_dir))
 
@@ -245,6 +260,11 @@ class MultiWalletTest(BitcoinTestFramework):
         # now if wallets/ exists again, but the rootdir is specified as the walletdir, w4 and w5 should still be loaded
         os.rename(wallet_dir2, wallet_dir(node))
         self.restart_node(0, ['-nowallet', '-walletdir=' + data_dir(node)])
+        self.write_fake_sqlite_wallet(data_dir(node, "ordinary_sqlite_marker", self.wallet_data_filename))
+        self.write_fake_sqlite_wallet(data_dir(node, "blocks", "skipped_wallet", self.wallet_data_filename))
+        wallet_names_from_dir = [wallet["name"] for wallet in node.listwalletdir()["wallets"]]
+        assert "ordinary_sqlite_marker" in wallet_names_from_dir
+        assert all("skipped_wallet" not in wallet_name for wallet_name in wallet_names_from_dir)
         node.loadwallet("w4")
         node.loadwallet("w5")
         assert_equal(set(node.listwallets()), {"w4", "w5"})
@@ -300,6 +320,19 @@ class MultiWalletTest(BitcoinTestFramework):
         batch = w1.batch([w1.getblockchaininfo.get_request(), w1.getwalletinfo.get_request()])
         assert_equal(batch[0]["result"]["chain"], self.chain)
         assert_equal(batch[1]["result"]["walletname"], "w1")
+
+        self.log.info('Test per-wallet setfeerate and settxfee calls')
+        assert_equal(w1.getwalletinfo()['paytxfee'], 0)
+        assert_equal(w2.getwalletinfo()['paytxfee'], 0)
+        w2.setfeerate(200)
+        assert_equal(w1.getwalletinfo()['paytxfee'], 0)
+        assert_equal(w2.getwalletinfo()['paytxfee'], Decimal('0.00200000'))
+        w2.settxfee(0.001)
+        assert_equal(w1.getwalletinfo()['paytxfee'], 0)
+        assert_equal(w2.getwalletinfo()['paytxfee'], Decimal('0.00100000'))
+        w1.setfeerate(30)
+        assert_equal(w1.getwalletinfo()['paytxfee'], Decimal('0.00030000'))
+        assert_equal(w2.getwalletinfo()['paytxfee'], Decimal('0.00100000'))
 
     def test_loading(self, node, wallet_names):
         self.log.info("Test dynamic wallet loading")

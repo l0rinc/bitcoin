@@ -12,6 +12,8 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <chainparamsbase.h>
+#include <clientversion.h>
+#include <common/system.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
@@ -81,6 +83,7 @@ using interfaces::BlockRef;
 using interfaces::BlockTemplate;
 using interfaces::Mining;
 using node::BlockAssembler;
+using node::BlockCreateOptions;
 using node::GetMinimumTime;
 using node::NodeContext;
 using node::RegenerateCommitments;
@@ -200,7 +203,7 @@ static UniValue generateBlocks(ChainstateManager& chainman, Mining& miner, const
         CHECK_NONFATAL(block_template);
 
         std::shared_ptr<const CBlock> block_out;
-        if (!GenerateBlock(chainman, block_template->getBlock(), nMaxTries, block_out, /*process_new_block=*/true)) {
+        if (!GenerateBlock(chainman, CBlock{block_template->getBlock()}, nMaxTries, block_out, /*process_new_block=*/true)) {
             break;
         }
 
@@ -454,6 +457,7 @@ static RPCMethod getmininginfo()
                     RPCResult::Type::OBJ, "", "",
                     {
                         {RPCResult::Type::NUM, "blocks", "The current block"},
+                        {RPCResult::Type::NUM, "currentblocksize", /*optional=*/true, "The block size (including reserved space for block header, txs count and coinbase tx) of the last assembled block (only present if a block was ever assembled, and blockmaxsize is configured)"},
                         {RPCResult::Type::NUM, "currentblockweight", /*optional=*/true, "The block weight (including reserved weight for block header, txs count and coinbase tx) of the last assembled block (only present if a block was ever assembled)"},
                         {RPCResult::Type::NUM, "currentblocktx", /*optional=*/true, "The number of block transactions (excluding coinbase) of the last assembled block (only present if a block was ever assembled)"},
                         {RPCResult::Type::STR_HEX, "bits", "The current nBits, compact representation of the block difficulty target"},
@@ -495,6 +499,7 @@ static RPCMethod getmininginfo()
 
     UniValue obj(UniValue::VOBJ);
     obj.pushKV("blocks", active_chain.Height());
+    if (BlockAssembler::m_last_block_size) obj.pushKV("currentblocksize", *BlockAssembler::m_last_block_size);
     if (BlockAssembler::m_last_block_weight) obj.pushKV("currentblockweight", *BlockAssembler::m_last_block_weight);
     if (BlockAssembler::m_last_block_num_txs) obj.pushKV("currentblocktx", *BlockAssembler::m_last_block_num_txs);
     obj.pushKV("bits", strprintf("%08x", tip.nBits));
@@ -535,9 +540,10 @@ static RPCMethod prioritisetransaction()
                 "Accepts the transaction into mined blocks at a higher (or lower) priority\n",
                 {
                     {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction id."},
-                    {"dummy", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "API-Compatibility for previous API. Must be zero or null.\n"
-            "                  DEPRECATED. For forward compatibility use named arguments and omit this parameter."},
-                    {"fee_delta", RPCArg::Type::NUM, RPCArg::Optional::NO, "The fee value (in satoshis) to add (or subtract, if negative).\n"
+                    {"priority_delta", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "The priority to add or subtract.\n"
+            "                  The transaction selection algorithm considers the tx as it would have a higher priority.\n"
+            "                  (priority of a transaction is calculated: coinage * value_in_satoshis / txsize)\n"},
+                    {"fee_delta", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "The fee value (in satoshis) to add (or subtract, if negative).\n"
             "                  Note, that this value is not a fee rate. It is a value to modify absolute fee of the TX.\n"
             "                  The fee is not actually paid, only the algorithm for selecting transactions into a block\n"
             "                  considers the transaction as it would have paid a higher (or lower) fee."},
@@ -553,12 +559,8 @@ static RPCMethod prioritisetransaction()
     LOCK(cs_main);
 
     auto txid{Txid::FromUint256(ParseHashV(request.params[0], "txid"))};
-    const auto dummy{self.MaybeArg<double>("dummy")};
-    CAmount nAmount = request.params[2].getInt<int64_t>();
-
-    if (dummy && *dummy != 0) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Priority is no longer supported, dummy argument to prioritisetransaction must be 0.");
-    }
+    const double priority_delta{self.MaybeArg<double>("priority_delta").value_or(0.0)};
+    const CAmount nAmount{self.MaybeArg<int64_t>("fee_delta").value_or(0)};
 
     CTxMemPool& mempool = EnsureAnyMemPool(request.context);
 
@@ -568,7 +570,7 @@ static RPCMethod prioritisetransaction()
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Priority is not supported for transactions with dust outputs.");
     }
 
-    mempool.PrioritiseTransaction(txid, nAmount);
+    mempool.PrioritiseTransaction(txid, priority_delta, nAmount);
     return true;
 },
     };
@@ -577,7 +579,7 @@ static RPCMethod prioritisetransaction()
 static RPCMethod getprioritisedtransactions()
 {
     return RPCMethod{"getprioritisedtransactions",
-        "Returns a map of all user-created (see prioritisetransaction) fee deltas by txid, and whether the tx is present in mempool.",
+        "Returns a map of all user-created (see prioritisetransaction) priority and fee deltas by txid, and whether the tx is present in mempool.",
         {},
         RPCResult{
             RPCResult::Type::OBJ_DYN, "", "prioritisation keyed by txid",
@@ -586,6 +588,7 @@ static RPCMethod getprioritisedtransactions()
                     {RPCResult::Type::NUM, "fee_delta", "transaction fee delta in satoshis"},
                     {RPCResult::Type::BOOL, "in_mempool", "whether this transaction is currently in mempool"},
                     {RPCResult::Type::NUM, "modified_fee", /*optional=*/true, "modified fee in satoshis. Only returned if in_mempool=true"},
+                    {RPCResult::Type::NUM, "priority_delta", /*optional=*/true, "transaction priority delta"},
                 }}
             },
         },
@@ -600,10 +603,13 @@ static RPCMethod getprioritisedtransactions()
             UniValue rpc_result{UniValue::VOBJ};
             for (const auto& delta_info : mempool.GetPrioritisedTransactions()) {
                 UniValue result_inner{UniValue::VOBJ};
-                result_inner.pushKV("fee_delta", delta_info.delta);
+                result_inner.pushKV("fee_delta", delta_info.fee_delta);
                 result_inner.pushKV("in_mempool", delta_info.in_mempool);
                 if (delta_info.in_mempool) {
                     result_inner.pushKV("modified_fee", *delta_info.modified_fee);
+                }
+                if (delta_info.priority_delta != 0.0) {
+                    result_inner.pushKV("priority_delta", delta_info.priority_delta);
                 }
                 rpc_result.pushKV(delta_info.txid.GetHex(), std::move(result_inner));
             }
@@ -642,6 +648,8 @@ static std::string gbt_rule_value(const std::string& name, bool gbt_optional_rul
     return s;
 }
 
+static UniValue TemplateToJSON(const Consensus::Params&, const ChainstateManager&, const BlockTemplate*, const CBlockIndex*, const std::set<std::string>& setClientRules, unsigned int nTransactionsUpdatedLast);
+
 static RPCMethod getblocktemplate()
 {
     return RPCMethod{
@@ -657,9 +665,14 @@ static RPCMethod getblocktemplate()
             {"template_request", RPCArg::Type::OBJ, RPCArg::Optional::NO, "Format of the template",
             {
                 {"mode", RPCArg::Type::STR, /* treat as named arg */ RPCArg::Optional::OMITTED, "This must be set to \"template\", \"proposal\" (see BIP 23), or omitted"},
+                {"blockmaxsize", RPCArg::Type::NUM, RPCArg::DefaultHint{"set by -blockmaxsize"}, "limit returned block to specified size (disables template cache)"},
+                {"blockmaxweight", RPCArg::Type::NUM, RPCArg::DefaultHint{"set by -blockmaxweight"}, "limit returned block to specified weight (disables template cache)"},
+                {"blockreservedsigops", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_COINBASE_OUTPUT_MAX_ADDITIONAL_SIGOPS}, "reserve specified number of sigops in returned block for generation transaction (disables template cache)"},
+                {"blockreservedsize", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_BLOCK_RESERVED_SIZE}, "reserve specified size in returned block for generation transaction (disables template cache)"},
+                {"blockreservedweight", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_BLOCK_RESERVED_WEIGHT}, "reserve specified weight in returned block for generation transaction (disables template cache)"},
                 {"capabilities", RPCArg::Type::ARR, /* treat as named arg */ RPCArg::Optional::OMITTED, "A list of strings",
                 {
-                    {"str", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "client side supported feature, 'longpoll', 'coinbasevalue', 'proposal', 'serverlist', 'workid'"},
+                    {"str", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "client side supported feature, 'longpoll', 'coinbasevalue', 'proposal', 'skip_validity_test', 'serverlist', 'workid'"},
                 }},
                 {"rules", RPCArg::Type::ARR, RPCArg::Optional::NO, "A list of strings",
                 {
@@ -667,6 +680,7 @@ static RPCMethod getblocktemplate()
                     {"str", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "other client side supported softfork deployment"},
                 }},
                 {"longpollid", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "delay processing request until the result would vary significantly from the \"longpollid\" of a prior template"},
+                {"minfeerate", RPCArg::Type::NUM, RPCArg::DefaultHint{"set by -blockmintxfee"}, "only include transactions with a minimum sats/vbyte (disables template cache)"},
                 {"data", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "proposed block data to check, encoded in hexadecimal; valid only for mode=\"proposal\""},
             },
             },
@@ -703,6 +717,7 @@ static RPCMethod getblocktemplate()
                             {RPCResult::Type::NUM, "", "transactions before this one (by 1-based index in 'transactions' list) that must be present in the final block if this one is"},
                         }},
                         {RPCResult::Type::NUM, "fee", "difference in value between transaction inputs and outputs (in satoshis); for coinbase transactions, this is a negative Number of the total collected block fees (ie, not including the block subsidy); if key is not present, fee is unknown and clients MUST NOT assume there isn't one"},
+                        {RPCResult::Type::NUM, "priority", /*optional=*/true, "transaction coin-age priority (non-standard)"},
                         {RPCResult::Type::NUM, "sigops", "total SigOps cost, as counted for purposes of block limits; if key is not present, sigop cost is unknown and clients MUST NOT assume it is zero"},
                         {RPCResult::Type::NUM, "weight", "total transaction weight, as counted for purposes of block limits"},
                     }},
@@ -739,6 +754,10 @@ static RPCMethod getblocktemplate()
     NodeContext& node = EnsureAnyNodeContext(request.context);
     ChainstateManager& chainman = EnsureChainman(node);
     Mining& miner = EnsureMining(node);
+
+    BlockCreateOptions options{node.mining_args.Clamped()};
+    const BlockCreateOptions options_def{options};
+    bool bypass_cache{false};
 
     std::string strMode = "template";
     UniValue lpval = NullUniValue;
@@ -786,6 +805,42 @@ static RPCMethod getblocktemplate()
             for (unsigned int i = 0; i < aClientRules.size(); ++i) {
                 const UniValue& v = aClientRules[i];
                 setClientRules.insert(v.get_str());
+            }
+        }
+
+        if (!oparam["blockmaxsize"].isNull()) {
+            options.block_max_size = oparam["blockmaxsize"].getInt<uint64_t>();
+        }
+        if (!oparam["blockmaxweight"].isNull()) {
+            options.block_max_weight = oparam["blockmaxweight"].getInt<uint64_t>();
+        }
+        if (!oparam["blockreservedsize"].isNull()) {
+            options.block_reserved_size = oparam["blockreservedsize"].getInt<uint64_t>();
+        }
+        if (!oparam["blockreservedweight"].isNull()) {
+            options.block_reserved_weight = oparam["blockreservedweight"].getInt<uint64_t>();
+        }
+        if (!oparam["blockreservedsigops"].isNull()) {
+            options.coinbase_output_max_additional_sigops = oparam["blockreservedsigops"].getInt<size_t>();
+        }
+        if (!oparam["minfeerate"].isNull()) {
+            options.block_min_fee_rate = CFeeRate{AmountFromValue(oparam["minfeerate"]), COIN /* sat/vB */};
+        }
+        if (auto result{node::CheckMiningOptions(options, /*use_argnames=*/false)}; !result) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, util::ErrorString(result).original);
+        }
+        options = node::FlattenMiningOptions(std::move(options));
+        bypass_cache |= !(options == options_def);
+
+        // NOTE: Intentionally not setting bypass_cache for skip_validity_test since _using_ the cache is fine
+        const UniValue& client_caps = oparam.find_value("capabilities");
+        if (client_caps.isArray()) {
+            for (unsigned int i = 0; i < client_caps.size(); ++i) {
+                const UniValue& v = client_caps[i];
+                if (!v.isStr()) continue;
+                if (v.get_str() == "skip_validity_test") {
+                    options.test_block_validity = false;
+                }
             }
         }
     }
@@ -850,17 +905,13 @@ static RPCMethod getblocktemplate()
         {
             REVERSE_LOCK(cs_main_lock, cs_main);
             MillisecondsDouble checktxtime{std::chrono::minutes(1)};
-            while (IsRPCRunning()) {
-                // If hashWatchedChain is not a real block hash, this will
-                // return immediately.
+            while (tip == hashWatchedChain && IsRPCRunning()) {
                 std::optional<BlockRef> maybe_tip{miner.waitTipChanged(hashWatchedChain, checktxtime)};
                 // Node is shutting down
                 if (!maybe_tip) break;
                 tip = maybe_tip->hash;
-                if (tip != hashWatchedChain) break;
-
-                // Check transactions for update without holding the mempool
-                // lock to avoid deadlocks.
+                // Timeout: Check transactions for update
+                // without holding the mempool lock to avoid deadlocks
                 if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLastLP) {
                     break;
                 }
@@ -891,8 +942,19 @@ static RPCMethod getblocktemplate()
     static int64_t time_start;
     static std::unique_ptr<BlockTemplate> block_template;
     if (!pindexPrev || pindexPrev->GetBlockHash() != tip ||
+        bypass_cache ||
         (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - time_start > 5))
     {
+        if (bypass_cache || !options.test_block_validity) {
+            // Create one-off template unrelated to cache
+            const auto tx_update_counter = mempool.GetTransactionsUpdated();
+            CBlockIndex* const local_pindexPrev = chainman.m_blockman.LookupBlockIndex(tip);
+            auto tmpl = miner.createNewBlock2(options);
+            CHECK_NONFATAL(tmpl);
+            return TemplateToJSON(consensusParams, chainman, &*tmpl, local_pindexPrev, setClientRules, tx_update_counter);
+        }
+        CHECK_NONFATAL(options == options_def);
+
         // Clear pindexPrev so future calls make a new block, despite any failures from here on
         pindexPrev = nullptr;
 
@@ -913,11 +975,15 @@ static RPCMethod getblocktemplate()
         pindexPrev = pindexPrevNew;
     }
     CHECK_NONFATAL(pindexPrev);
-    CBlock block{block_template->getBlock()};
 
-    // Update nTime
-    UpdateTime(&block, consensusParams, pindexPrev);
-    block.nNonce = 0;
+    return TemplateToJSON(consensusParams, chainman, block_template.get(), pindexPrev, setClientRules, nTransactionsUpdatedLast);
+},
+    };
+}
+
+static UniValue TemplateToJSON(const Consensus::Params& consensusParams, const ChainstateManager& chainman, const BlockTemplate* block_template, const CBlockIndex* const pindexPrev, const std::set<std::string>& setClientRules, const unsigned int nTransactionsUpdatedLast) {
+    CHECK_NONFATAL(block_template);
+    const CBlock& block = block_template->getBlock();
 
     // NOTE: If at some point we support pre-segwit miners post-segwit-activation, this needs to take segwit support into consideration
     const bool fPreSegWit = !DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_SEGWIT);
@@ -926,8 +992,9 @@ static RPCMethod getblocktemplate()
 
     UniValue transactions(UniValue::VARR);
     std::map<Txid, int64_t> setTxIndex;
-    std::vector<CAmount> tx_fees{block_template->getTxFees()};
-    std::vector<int64_t> tx_sigops{block_template->getTxSigops()};
+    const std::vector<CAmount>& tx_fees{block_template->getTxFees()};
+    const std::vector<int64_t>& tx_sigops{block_template->getTxSigops()};
+    const std::vector<double>& tx_coin_age_priorities{block_template->getTxCoinAgePriorities()};
 
     int i = 0;
     for (const auto& it : block.vtx) {
@@ -961,13 +1028,25 @@ static RPCMethod getblocktemplate()
         }
         entry.pushKV("sigops", nTxSigOps);
         entry.pushKV("weight", GetTransactionWeight(tx));
+        if (!tx_coin_age_priorities.empty()) {
+            entry.pushKV("priority", tx_coin_age_priorities.at(index_in_template));
+        }
 
         transactions.push_back(std::move(entry));
     }
 
     UniValue aux(UniValue::VOBJ);
 
-    arith_uint256 hashTarget = arith_uint256().SetCompact(block.nBits);
+    CBlockHeader block_header{block};
+    // Update nTime (and potentially nBits)
+    UpdateTime(&block_header, consensusParams, pindexPrev);
+    block_header.nNonce = 0;
+
+    if (IsThisSoftwareExpired(block_header.nTime)) {
+        throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "node software has expired");
+    }
+
+    arith_uint256 hashTarget = arith_uint256().SetCompact(block_header.nBits);
 
     UniValue aMutable(UniValue::VARR);
     aMutable.push_back("time");
@@ -992,6 +1071,15 @@ static RPCMethod getblocktemplate()
         aRules.push_back("!signet");
     }
 
+    uint32_t vbrequired{0};
+    for (int j = 0; j < static_cast<int>(Consensus::MAX_VERSION_BITS_DEPLOYMENTS); ++j) {
+        const auto pos{static_cast<Consensus::DeploymentPos>(j)};
+        const ThresholdState state{chainman.m_versionbitscache.State(pindexPrev, consensusParams, pos)};
+        if (DeploymentMustSignalAfter(pindexPrev, consensusParams, pos, state)) {
+            vbrequired |= uint32_t{1} << consensusParams.vDeployments[pos].bit;
+        }
+    }
+
     UniValue vbavailable(UniValue::VOBJ);
     const auto gbtstatus = chainman.m_versionbitscache.GBTStatus(*pindexPrev, consensusParams);
 
@@ -999,16 +1087,16 @@ static RPCMethod getblocktemplate()
         vbavailable.pushKV(gbt_rule_value(name, info.gbt_optional_rule), info.bit);
         if (!info.gbt_optional_rule && !setClientRules.contains(name)) {
             // If the client doesn't support this, don't indicate it in the [default] version
-            block.nVersion &= ~info.mask;
+            block_header.nVersion &= ~info.mask;
         }
     }
 
     for (const auto& [name, info] : gbtstatus.locked_in) {
-        block.nVersion |= info.mask;
+        block_header.nVersion |= info.mask;
         vbavailable.pushKV(gbt_rule_value(name, info.gbt_optional_rule), info.bit);
         if (!info.gbt_optional_rule && !setClientRules.contains(name)) {
             // If the client doesn't support this, don't indicate it in the [default] version
-            block.nVersion &= ~info.mask;
+            block_header.nVersion &= ~info.mask;
         }
     }
 
@@ -1020,16 +1108,16 @@ static RPCMethod getblocktemplate()
         }
     }
 
-    result.pushKV("version", block.nVersion);
+    result.pushKV("version", block_header.nVersion);
     result.pushKV("rules", std::move(aRules));
     result.pushKV("vbavailable", std::move(vbavailable));
-    result.pushKV("vbrequired", 0);
+    result.pushKV("vbrequired", vbrequired);
 
     result.pushKV("previousblockhash", block.hashPrevBlock.GetHex());
     result.pushKV("transactions", std::move(transactions));
     result.pushKV("coinbaseaux", std::move(aux));
-    result.pushKV("coinbasevalue", block.vtx[0]->vout[0].nValue);
-    result.pushKV("longpollid", tip.GetHex() + ToString(nTransactionsUpdatedLast));
+    result.pushKV("coinbasevalue", (int64_t)block.vtx[0]->vout[0].nValue);
+    result.pushKV("longpollid", pindexPrev->GetBlockHash().GetHex() + ToString(nTransactionsUpdatedLast));
     result.pushKV("target", hashTarget.GetHex());
     result.pushKV("mintime", GetMinimumTime(pindexPrev, consensusParams.DifficultyAdjustmentInterval()));
     result.pushKV("mutable", std::move(aMutable));
@@ -1047,22 +1135,20 @@ static RPCMethod getblocktemplate()
     if (!fPreSegWit) {
         result.pushKV("weightlimit", MAX_BLOCK_WEIGHT);
     }
-    result.pushKV("curtime", block.GetBlockTime());
-    result.pushKV("bits", strprintf("%08x", block.nBits));
-    result.pushKV("height", pindexPrev->nHeight + 1);
+    result.pushKV("curtime", block_header.GetBlockTime());
+    result.pushKV("bits", strprintf("%08x", block_header.nBits));
+    result.pushKV("height", int64_t{pindexPrev->nHeight + 1});
 
     if (consensusParams.signet_blocks) {
         result.pushKV("signet_challenge", HexStr(consensusParams.signet_challenge));
     }
 
-    if (auto coinbase{block_template->getCoinbaseTx()}; coinbase.required_outputs.size() > 0) {
+    if (const node::CoinbaseTx& coinbase{block_template->getCoinbaseTx()}; coinbase.required_outputs.size() > 0) {
         CHECK_NONFATAL(coinbase.required_outputs.size() == 1); // Only one output is currently expected
         result.pushKV("default_witness_commitment", HexStr(coinbase.required_outputs[0].scriptPubKey));
     }
 
     return result;
-},
-    };
 }
 
 class submitblock_StateCatcher final : public CValidationInterface

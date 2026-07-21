@@ -10,7 +10,10 @@ Test that permissions are correctly calculated and applied
 from test_framework.messages import (
     SEQUENCE_FINAL,
 )
-from test_framework.p2p import P2PDataStore
+from test_framework.p2p import (
+    P2PDataStore,
+    P2PInterface,
+)
 from test_framework.test_node import ErrorMatch
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -35,7 +38,7 @@ class P2PPermissionsTests(BitcoinTestFramework):
             # default permissions (no specific permissions)
             ["-whitelist=127.0.0.1"],
             # Make sure the default values in the command line documentation match the ones here
-            ["relay", "noban", "mempool", "download"])
+            ["addr", "relay", "noban", "mempool", "download"])
 
         self.checkpermission(
             # no permission (even with forcerelay)
@@ -45,14 +48,14 @@ class P2PPermissionsTests(BitcoinTestFramework):
         self.checkpermission(
             # relay permission removed (no specific permissions)
             ["-whitelist=127.0.0.1", "-whitelistrelay=0"],
-            ["noban", "mempool", "download"])
+            ["addr", "noban", "mempool", "download"])
 
         self.checkpermission(
             # forcerelay and relay permission added
             # Legacy parameter interaction which set whitelistrelay to true
             # if whitelistforcerelay is true
             ["-whitelist=127.0.0.1", "-whitelistforcerelay"],
-            ["forcerelay", "relay", "noban", "mempool", "download"])
+            ["addr", "forcerelay", "relay", "noban", "mempool", "download"])
 
         # Let's make sure permissions are merged correctly
         # For this, we need to use whitebind instead of bind
@@ -86,13 +89,27 @@ class P2PPermissionsTests(BitcoinTestFramework):
         self.checkpermission(
             # all permission added
             ["-whitelist=all@127.0.0.1"],
-            ["forcerelay", "noban", "mempool", "bloomfilter", "relay", "download", "addr"])
+            [
+                "blockfilters",
+                "forcerelay",
+                "noban",
+                "mempool",
+                "bloomfilter",
+                "relay",
+                "download",
+                "addr",
+                "forceinbound",
+            ])
 
-        for flag, permissions in [(["-whitelist=noban,out@127.0.0.1"], ["noban", "download"]), (["-whitelist=noban@127.0.0.1"], [])]:
+        self.check_onion_inbound_not_whitelisted()
+
+        for flag, permissions in [(["-whitelist=noban,out@127.0.0.1"], ["bloomfilter", "noban", "download"]), (["-whitelist=noban@127.0.0.1"], ["bloomfilter"])]:
             self.restart_node(0, flag)
             self.connect_nodes(0, 1)
             peerinfo = self.nodes[0].getpeerinfo()[0]
             assert_equal(peerinfo['permissions'], permissions)
+
+        self.check_automatic_outbound_permissions()
 
         self.stop_node(1)
         self.nodes[1].assert_start_raises_init_error(["-whitelist=in,out@127.0.0.1"], "Only direction was set, no permissions", match=ErrorMatch.PARTIAL_REGEX)
@@ -144,8 +161,34 @@ class P2PPermissionsTests(BitcoinTestFramework):
             reject_reason='Not relaying non-mempool transaction {} (wtxid={}) from forcerelay peer=0'.format(txid, tx.wtxid_hex)
         )
 
+    def check_onion_inbound_not_whitelisted(self):
+        self.log.debug("Check that onion inbound peers do not receive address-based whitelist permissions")
+        self.restart_node(1, [
+            "-peerbloomfilters=0",
+            "-whitelist=noban@127.0.0.1",
+            f"-bind=127.0.0.1:{tor_port(self.nodes[1].index)}=onion",
+        ])
+
+        self.nodes[0].addnode(node=f"127.0.0.1:{tor_port(self.nodes[1].index)}", command="onetry")
+        self.wait_until(lambda: len(self.nodes[1].getpeerinfo()) == 1)
+        peerinfo = self.nodes[1].getpeerinfo()[0]
+        assert_equal(peerinfo["network"], "onion")
+        assert_equal(peerinfo["permissions"], [])
+
+    def check_automatic_outbound_permissions(self):
+        self.log.debug("Check that outgoing whitelist permissions apply to automatic outbound peers")
+        for p2p_idx, args, expected_permissions in [
+            (0, ["-peerbloomfilters=0", "-whitelist=noban,out@127.0.0.1"], ["noban", "download"]),
+            (1, ["-peerbloomfilters=0", "-whitelist=noban@127.0.0.1"], []),
+        ]:
+            self.restart_node(0, args)
+            self.nodes[0].add_outbound_p2p_connection(P2PInterface(), p2p_idx=p2p_idx, connection_type="outbound-full-relay")
+            peerinfo = self.nodes[0].getpeerinfo()[0]
+            assert_equal(peerinfo["connection_type"], "outbound-full-relay")
+            assert_equal(peerinfo["permissions"], expected_permissions)
+
     def checkpermission(self, args, expectedPermissions):
-        self.restart_node(1, args)
+        self.restart_node(1, ['-peerbloomfilters=0'] + args)
         self.connect_nodes(0, 1)
         peerinfo = self.nodes[1].getpeerinfo()[0]
         assert_equal(len(expectedPermissions), len(peerinfo['permissions']))

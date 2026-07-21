@@ -169,9 +169,9 @@ RPCMethod getbalance()
                 "The available balance is what the wallet considers currently spendable, and is\n"
                 "thus affected by options which limit spendability such as -spendzeroconfchange.\n",
                 {
-                    {"dummy", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Remains for backward compatibility. Must be excluded or set to \"*\"."},
-                    {"minconf", RPCArg::Type::NUM, RPCArg::Default{0}, "Only include transactions confirmed at least this many times."},
-                    {"include_watchonly", RPCArg::Type::BOOL, RPCArg::Default{false}, "No longer used"},
+                    {"dummy|account", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Set to null to only account for trusted transactions, or \"*\" to account for all transactions."},
+                    {"minconf", RPCArg::Type::NUM, RPCArg::Default{1}, "Only include incoming transactions confirmed at least this many times. (Requires dummy=\"*\")"},
+                    {"include_watchonly", RPCArg::Type::BOOL, RPCArg::DefaultHint{"true for watch-only wallets, otherwise false"}, "Also include balance in watch-only addresses (see 'importaddress')"},
                     {"avoid_reuse", RPCArg::Type::BOOL, RPCArg::Default{true}, "(only available if avoid_reuse wallet flag is set) Do not include balance in dirty outputs; addresses are considered dirty if they have previously been used in a transaction."},
                 },
                 RPCResult{
@@ -196,17 +196,54 @@ RPCMethod getbalance()
 
     LOCK(pwallet->cs_wallet);
 
-    if (self.MaybeArg<std::string_view>("dummy").value_or("*") != "*") {
+    const auto dummy_value{self.MaybeArg<std::string_view>("dummy")};
+    if (dummy_value.value_or("*") != "*") {
         throw JSONRPCError(RPC_METHOD_DEPRECATED, "dummy first argument must be excluded or set to \"*\".");
     }
 
-    const auto min_depth{self.Arg<int>("minconf")};
+    const auto min_depth{dummy_value ? self.Arg<int>("minconf") : 0};
+
+    bool include_watchonly = ParseIncludeWatchonly(request.params[2], *pwallet);
 
     bool avoid_reuse = GetAvoidReuseFlag(*pwallet, request.params[3]);
 
+    if (dummy_value) {
+        if (avoid_reuse) throw JSONRPCError(RPC_INVALID_PARAMETER, "getbalance avoid_reuse flag is not supported if dummy is set to \"*\"");
+        isminefilter filter = ISMINE_SPENDABLE;
+        if (include_watchonly) filter = filter | ISMINE_WATCH_ONLY;
+        return ValueFromAmount(pwallet->GetLegacyBalance(filter, min_depth));
+    }
+
+    if (!request.params[1].isNull()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "getbalance minconf option is only currently supported if dummy is set to \"*\"");
+    }
+
     const auto bal = GetBalance(*pwallet, min_depth, avoid_reuse);
 
-    return ValueFromAmount(bal.m_mine_trusted);
+    return ValueFromAmount(bal.m_mine_trusted + (include_watchonly ? bal.m_watchonly_trusted : 0));
+},
+    };
+}
+
+RPCMethod getunconfirmedbalance()
+{
+    return RPCMethod{"getunconfirmedbalance",
+                "DEPRECATED\nIdentical to getbalances().mine.untrusted_pending\n",
+                {},
+                RPCResult{RPCResult::Type::NUM, "", "The balance"},
+                RPCExamples{""},
+        [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    const std::shared_ptr<const CWallet> pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return UniValue::VNULL;
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    return ValueFromAmount(GetBalance(*pwallet).m_mine_untrusted_pending);
 },
     };
 }
@@ -253,7 +290,7 @@ RPCMethod lockunspent()
             "\nLock the transaction persistently in the wallet database\n"
             + HelpExampleCli("lockunspent", "false \"[{\\\"txid\\\":\\\"a08e6907dbbd3d809776dbfc5d82e371b764ed838b5655e72f463568df1aadf0\\\",\\\"vout\\\":1}]\" true") +
             "\nAs a JSON-RPC call\n"
-            + HelpExampleRpc("lockunspent", "false, \"[{\\\"txid\\\":\\\"a08e6907dbbd3d809776dbfc5d82e371b764ed838b5655e72f463568df1aadf0\\\",\\\"vout\\\":1}]\"")
+            + HelpExampleRpc("lockunspent", "false, [{\"txid\":\"a08e6907dbbd3d809776dbfc5d82e371b764ed838b5655e72f463568df1aadf0\",\"vout\":1}]")
                 },
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
@@ -415,6 +452,12 @@ RPCMethod getbalances()
                     {RPCResult::Type::STR_AMOUNT, "nonmempool", "sum of coins that are spent by transactions not in the mempool (usually an over-estimate due to not accounting for change or spends that conflict with each other)"},
                     {RPCResult::Type::STR_AMOUNT, "used", /*optional=*/true, "(only present if avoid_reuse is set) balance from coins sent to addresses that were previously spent from (potentially privacy violating)"},
                 }},
+                {RPCResult::Type::OBJ, "watchonly", /*optional=*/true, "watchonly balances (not present if wallet does not watch anything)",
+                {
+                    {RPCResult::Type::STR_AMOUNT, "trusted", "trusted balance (outputs created by the wallet or confirmed outputs)"},
+                    {RPCResult::Type::STR_AMOUNT, "untrusted_pending", "untrusted pending balance (outputs created by others that are in the mempool)"},
+                    {RPCResult::Type::STR_AMOUNT, "immature", "balance from immature coinbase outputs"},
+                }},
                 RESULT_LAST_PROCESSED_BLOCK,
             }
             },
@@ -447,6 +490,15 @@ RPCMethod getbalances()
         }
         balances.pushKV("mine", std::move(balances_mine));
     }
+    auto spk_man = wallet.GetLegacyScriptPubKeyMan();
+    if (spk_man && spk_man->HaveWatchOnly()) {
+        UniValue balances_watchonly{UniValue::VOBJ};
+        balances_watchonly.pushKV("trusted", ValueFromAmount(bal.m_watchonly_trusted));
+        balances_watchonly.pushKV("untrusted_pending", ValueFromAmount(bal.m_watchonly_untrusted_pending));
+        balances_watchonly.pushKV("immature", ValueFromAmount(bal.m_watchonly_immature));
+        balances.pushKV("watchonly", std::move(balances_watchonly));
+    }
+
     AppendLastProcessedBlock(balances, wallet);
     return balances;
 },
@@ -497,7 +549,7 @@ RPCMethod listunspent()
                             {RPCResult::Type::STR_AMOUNT, "ancestorfees", /*optional=*/true, "The total fees of in-mempool ancestors (including this one) with fee deltas used for mining priority in " + CURRENCY_ATOM + " (if transaction is in the mempool)"},
                             {RPCResult::Type::STR_HEX, "redeemScript", /*optional=*/true, "The redeem script if the output script is P2SH"},
                             {RPCResult::Type::STR, "witnessScript", /*optional=*/true, "witness script if the output script is P2WSH or P2SH-P2WSH"},
-                            {RPCResult::Type::BOOL, "spendable", "(DEPRECATED) Always true"},
+                            {RPCResult::Type::BOOL, "spendable", "Whether we have the private keys to spend this output"},
                             {RPCResult::Type::BOOL, "solvable", "Whether we know how to spend this output, ignoring the lack of keys"},
                             {RPCResult::Type::BOOL, "reused", /*optional=*/true, "(only present if avoid_reuse is set) Whether this output is reused/dirty (sent to an address that was previously spent from)"},
                             {RPCResult::Type::STR, "desc", /*optional=*/true, "(only when solvable) A descriptor for spending this output"},
@@ -513,9 +565,9 @@ RPCMethod listunspent()
                 RPCExamples{
                     HelpExampleCli("listunspent", "")
             + HelpExampleCli("listunspent", "6 9999999 \"[\\\"" + EXAMPLE_ADDRESS[0] + "\\\",\\\"" + EXAMPLE_ADDRESS[1] + "\\\"]\"")
-            + HelpExampleRpc("listunspent", "6, 9999999 \"[\\\"" + EXAMPLE_ADDRESS[0] + "\\\",\\\"" + EXAMPLE_ADDRESS[1] + "\\\"]\"")
+            + HelpExampleRpc("listunspent", "6, 9999999, [\"" + EXAMPLE_ADDRESS[0] + "\",\"" + EXAMPLE_ADDRESS[1] + "\"]")
             + HelpExampleCli("listunspent", "6 9999999 '[]' true '{ \"minimumAmount\": 0.005 }'")
-            + HelpExampleRpc("listunspent", "6, 9999999, [] , true, { \"minimumAmount\": 0.005 } ")
+            + HelpExampleRpc("listunspent", "6, 9999999, [], true, { \"minimumAmount\": 0.005 } ")
                 },
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
@@ -597,6 +649,7 @@ RPCMethod listunspent()
         cctl.m_min_depth = nMinDepth;
         cctl.m_max_depth = nMaxDepth;
         cctl.m_include_unsafe_inputs = include_unsafe;
+        filter_coins.only_spendable = false;
         filter_coins.check_version_trucness = false;
         LOCK(pwallet->cs_wallet);
         vecOutputs = AvailableCoins(*pwallet, &cctl, /*feerate=*/std::nullopt, filter_coins).All();
@@ -672,7 +725,7 @@ RPCMethod listunspent()
                 entry.pushKV("ancestorfees", ancestor_fees);
             }
         }
-        entry.pushKV("spendable", true); // Any coins we list are always spendable
+        entry.pushKV("spendable", out.spendable);
         entry.pushKV("solvable", out.solvable);
         if (out.solvable) {
             std::unique_ptr<SigningProvider> provider = pwallet->GetSolvingProvider(scriptPubKey);

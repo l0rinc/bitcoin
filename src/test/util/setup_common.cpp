@@ -36,6 +36,7 @@
 #include <node/peerman_args.h>
 #include <node/warnings.h>
 #include <noui.h>
+#include <policy/coin_age_priority.h>
 #include <policy/feerate.h>
 #include <policy/policy.h>
 #include <pow.h>
@@ -56,6 +57,7 @@
 #include <test/util/coverage.h>
 #include <test/util/net.h>
 #include <test/util/random.h>
+#include <test/util/transaction_utils.h>
 #include <test/util/txmempool.h>
 #include <tinyformat.h>
 #include <txmempool.h>
@@ -305,6 +307,7 @@ ChainTestingSetup::ChainTestingSetup(const ChainType chainType, TestOpts opts)
             .chainparams = chainparams,
             .datadir = m_args.GetDataDirNet(),
             .check_block_index = 1,
+            .checkpoints_enabled = false,
             .notifications = *m_node.notifications,
             .signals = m_node.validation_signals.get(),
             // Use no worker threads while fuzzing to avoid non-determinism
@@ -575,6 +578,8 @@ CMutableTransaction TestChain100Setup::CreateValidMempoolTransaction(CTransactio
 
 std::vector<CTransactionRef> TestChain100Setup::PopulateMempool(FastRandomContext& det_rand, size_t num_transactions, bool submit)
 {
+    auto& active_chainstate = m_node.chainman->ActiveChainstate();
+    const auto height = active_chainstate.m_chain.Height();
     std::vector<CTransactionRef> mempool_transactions;
     std::deque<std::pair<COutPoint, CAmount>> unspent_prevouts, undo_info;
     std::transform(m_coinbase_txns.begin(), m_coinbase_txns.end(), std::back_inserter(unspent_prevouts),
@@ -604,22 +609,14 @@ std::vector<CTransactionRef> TestChain100Setup::PopulateMempool(FastRandomContex
         bool success{true};
         if (submit) {
             LOCK2(cs_main, m_node.mempool->cs);
+            const auto coin_age = GetCoinAge(*ptx, active_chainstate.CoinsTip(), height + 1);
             LockPoints lp;
             auto changeset = m_node.mempool->GetChangeSet();
             changeset->StageAddition(ptx, /*fee=*/(total_in - num_outputs * amount_per_output),
-                    /*time=*/0, /*entry_height=*/1, /*entry_sequence=*/0,
-                    /*spends_coinbase=*/false, /*sigops_cost=*/4, lp);
-            if (changeset->CheckMemPoolPolicyLimits()) {
-                changeset->Apply();
-                --num_transactions;
-            } else {
-                success = false;
-                // Add the inputs back to unspent prevouts
-                for (const auto& [prevout, amount] : undo_info) {
-                    unspent_prevouts.emplace_back(prevout, amount);
-                    std::swap(unspent_prevouts.back(), unspent_prevouts[det_rand.randrange(unspent_prevouts.size())]);
-                }
-            }
+                    /*time=*/0, /*entry_height=*/ height, /*entry_sequence=*/0,
+                    coin_age,
+                    /*spends_coinbase=*/false, /*extra_weight=*/0, /*sigops_cost=*/4, lp);
+            changeset->Apply();
         }
         if (success) {
             mempool_transactions.push_back(ptx);
@@ -636,6 +633,42 @@ std::vector<CTransactionRef> TestChain100Setup::PopulateMempool(FastRandomContex
         undo_info.clear();
     }
     return mempool_transactions;
+}
+
+void TestChain100Setup::MockMempoolMinFee(const CFeeRate& target_feerate)
+{
+    LOCK2(cs_main, m_node.mempool->cs);
+    // Transactions in the mempool will affect the new minimum feerate.
+    assert(m_node.mempool->size() == 0);
+    // The target feerate cannot be too low...
+    // ...otherwise the transaction's feerate will need to be negative.
+    assert(target_feerate > m_node.mempool->m_opts.incremental_relay_feerate);
+    // ...otherwise this is not meaningful. The feerate policy uses the maximum of both feerates.
+    assert(target_feerate > m_node.mempool->m_opts.min_relay_feerate);
+
+    // Manually create an invalid transaction. Manually set the fee in the CTxMemPoolEntry to
+    // achieve the exact target feerate.
+    CMutableTransaction mtx = CMutableTransaction();
+    mtx.vin.emplace_back(COutPoint{Txid::FromUint256(m_rng.rand256()), 0});
+    mtx.vout.emplace_back(1 * COIN, GetScriptForDestination(WitnessV0ScriptHash(CScript() << OP_TRUE)));
+    // Set a large size so that the fee evaluated at target_feerate (which is usually in sats/kvB) is an integer.
+    // Otherwise, GetMinFee() may end up slightly different from target_feerate.
+    BulkTransaction(mtx, 4000);
+    const auto tx{MakeTransactionRef(mtx)};
+    LockPoints lp;
+    // The new mempool min feerate is equal to the removed package's feerate + incremental feerate.
+    const auto tx_fee = target_feerate.GetFee(GetVirtualTransactionSize(*tx)) -
+        m_node.mempool->m_opts.incremental_relay_feerate.GetFee(GetVirtualTransactionSize(*tx));
+    {
+        auto changeset = m_node.mempool->GetChangeSet();
+        changeset->StageAddition(tx, /*fee=*/tx_fee,
+                /*time=*/0, /*entry_height=*/1, /*entry_sequence=*/0,
+                COIN_AGE_CACHE_ZERO,
+                /*spends_coinbase=*/true, /*extra_weight=*/0, /*sigops_cost=*/1, lp);
+        changeset->Apply();
+    }
+    m_node.mempool->TrimToSize(0);
+    assert(m_node.mempool->GetMinFee() == target_feerate);
 }
 
 SocketTestingSetup::SocketTestingSetup()

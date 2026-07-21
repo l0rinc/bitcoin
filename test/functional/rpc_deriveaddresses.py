@@ -20,6 +20,16 @@ class DeriveaddressesTest(BitcoinTestFramework):
 
         descriptor = descriptor[:-9]
         assert_raises_rpc_error(-5, "Missing checksum", self.nodes[0].deriveaddresses, descriptor)
+        assert_equal(self.nodes[0].deriveaddresses(descriptor, None, {"require_checksum": False}), [address])
+        assert_equal(self.nodes[0].deriveaddresses(descriptor=descriptor, range=None, require_checksum=False), [address])
+        assert_raises_rpc_error(
+            -5,
+            "Provided checksum '00000000' does not match computed checksum",
+            self.nodes[0].deriveaddresses,
+            descriptor + "#00000000",
+            None,
+            {"require_checksum": False},
+        )
 
         descriptor_pubkey = "wpkh(tpubD6NzVbkrYhZ4WaWSyoBvQwbpLkojyoTZPRsgXELWz3Popb3qkjcJyJUGLnL4qHHoQvao8ESaAstxYSnhyswJ76uZPStJRJCTKvosUCJZL5B/1/1/0)#s9ga3alw"
         address = "bcrt1qjqmxmkpmxt80xz4y3746zgt0q3u3ferr34acd5"

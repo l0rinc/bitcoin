@@ -11,19 +11,23 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   string(APPEND CMAKE_OBJCXX_COMPILE_OBJECT " ${APPEND_CPPFLAGS} ${APPEND_CXXFLAGS}")
 endif()
 
-get_target_property(qt_lib_type Qt6::Core TYPE)
+get_target_property(qt_lib_type "Qt${WITH_QT_VERSION}::Core" TYPE)
 
 function(import_plugins target)
   if(qt_lib_type STREQUAL "STATIC_LIBRARY")
-    set(plugins Qt6::QMinimalIntegrationPlugin)
+    set(plugins "Qt${WITH_QT_VERSION}::QMinimalIntegrationPlugin")
     if(CMAKE_SYSTEM_NAME MATCHES "^(Linux|FreeBSD|OpenBSD)$")
-      list(APPEND plugins Qt6::QXcbIntegrationPlugin)
+      list(APPEND plugins "Qt${WITH_QT_VERSION}::QXcbIntegrationPlugin")
     elseif(WIN32)
-      list(APPEND plugins Qt6::QWindowsIntegrationPlugin Qt6::QModernWindowsStylePlugin)
+      if("${WITH_QT_VERSION}" STREQUAL "5")
+        list(APPEND plugins Qt5::QWindowsIntegrationPlugin Qt5::QWindowsVistaStylePlugin)
+      else()
+        list(APPEND plugins Qt6::QWindowsIntegrationPlugin Qt6::QModernWindowsStylePlugin)
+      endif()
     elseif(APPLE)
-      list(APPEND plugins Qt6::QCocoaIntegrationPlugin Qt6::QMacStylePlugin)
+      list(APPEND plugins "Qt${WITH_QT_VERSION}::QCocoaIntegrationPlugin" "Qt${WITH_QT_VERSION}::QMacStylePlugin")
     endif()
-    qt6_import_plugins(${target}
+    cmake_language(CALL "qt${WITH_QT_VERSION}_import_plugins" ${target}
       INCLUDE ${plugins}
       EXCLUDE_BY_TYPE
         accessiblebridge
@@ -54,13 +58,155 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOUIC_SEARCH_PATHS forms)
 
 set(CMAKE_AUTORCC OFF)
+# TODO: The file(GLOB ...) command should be replaced with an explicit
+# file list. Such a change must be synced with the corresponding change
+# to https://github.com/bitcoin-core/bitcoin-maintainer-tools/blob/main/update-translations.py
+file(GLOB ts_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} locale/*.ts)
+set_source_files_properties(${ts_files} PROPERTIES OUTPUT_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/locale)
+cmake_language(CALL "qt${WITH_QT_VERSION}_add_translation" qm_files ${ts_files})
+
+set(FONT_PATH "res/fonts/OCR-Bitcoin.ttf")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/res/fonts")
+add_custom_command(
+  OUTPUT ${FONT_PATH}
+  COMMAND ${PYTHON_COMMAND} -c "import base64, lzma, sys; sys.stdout.buffer.write(lzma.decompress(base64.b85decode(sys.stdin.read())))" < "${CMAKE_CURRENT_SOURCE_DIR}/${FONT_PATH}.in" > "${FONT_PATH}.new" && mv "${FONT_PATH}.new" "${FONT_PATH}"
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${FONT_PATH}.in
+  VERBATIM
+)
+
+set(ICON_PATH "res/rendered_icons")
+set(ICO_SPECS
+  256 64 48 32 24 20 16
+)
+set(ICNS_SPECS
+  1024
+)
+set(EXTRA_ICON_SPECS
+  290 256
+)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  set(bitcoin_svg "res/src/bitcoin-mac.svg")
+else()
+  set(bitcoin_svg "res/src/bitcoin.svg")
+endif()
+
+set(ICON_SPECS ${ICO_SPECS} ${ICNS_SPECS} ${EXTRA_ICON_SPECS})
+list(REMOVE_DUPLICATES ICON_SPECS)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${ICON_PATH}")
+foreach(size IN LISTS ICON_SPECS)
+  set(png "${ICON_PATH}/bitcoin${size}.png")
+  add_custom_command(
+    OUTPUT ${png}
+    COMMAND "${RSVG_CONVERT}" -f png -d ${size} -p ${size} --output "${png}" "${CMAKE_CURRENT_SOURCE_DIR}/${bitcoin_svg}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${bitcoin_svg}"
+    COMMENT "Generating ${png} from ${bitcoin_svg}"
+    VERBATIM
+  )
+
+  # NOTE: ImageMagick will never convert transparent PNGs to 8-bit ICOs, but GIF is fine
+  set(gif "${ICON_PATH}/bitcoin${size}d8.gif")
+  add_custom_command(
+    OUTPUT ${gif}
+    COMMAND "${IMAGEMAGICK_CONVERT}" "${png}" -colors 256 -channel A -threshold 50% "${gif}"
+    DEPENDS "${png}"
+    COMMENT "Generating ${gif} from ${png}"
+    VERBATIM
+  )
+endforeach()
+
+set(bitcoin_icns "${ICON_PATH}/bitcoin.icns")
+set(ICNS_SRC_FILES ${ICNS_SPECS})
+list(TRANSFORM ICNS_SRC_FILES PREPEND "${ICON_PATH}/bitcoin")
+list(TRANSFORM ICNS_SRC_FILES APPEND ".png")
+add_custom_command(
+  OUTPUT "${bitcoin_icns}"
+  COMMAND "${PNG2ICNS}" "${bitcoin_icns}" ${ICNS_SRC_FILES}
+  DEPENDS ${ICNS_SRC_FILES}
+  COMMENT "Generating ${bitcoin_icns} from individual images"
+  VERBATIM
+)
+add_custom_target(generate_icns DEPENDS "${bitcoin_icns}")
+
+set(bitcoin_ico "${ICON_PATH}/bitcoin.ico")
+set(ICO_SRC_FILES ${ICO_SPECS})
+list(TRANSFORM ICO_SRC_FILES PREPEND "${ICON_PATH}/bitcoin")
+list(TRANSFORM ICO_SRC_FILES APPEND ".png")
+list(PREPEND ICO_SRC_FILES "${ICON_PATH}/bitcoin32d8.gif")
+add_custom_command(
+  OUTPUT "${bitcoin_ico}"
+  COMMAND "${IMAGEMAGICK_CONVERT}" ${ICO_SRC_FILES} "${bitcoin_ico}"
+  DEPENDS ${ICO_SRC_FILES}
+  COMMENT "Generating ${bitcoin_ico} from individual images"
+  VERBATIM
+)
+set(testnet_ico "${ICON_PATH}/bitcoin_testnet.ico")
+add_custom_command(
+  OUTPUT "${testnet_ico}"
+  COMMAND "${IMAGEMAGICK_CONVERT}" ${bitcoin_ico} -modulate 100,100,138.9 -colorspace HSL -channel G -evaluate subtract "11.76%" +channel -colorspace sRGB "${testnet_ico}"
+  DEPENDS ${bitcoin_ico}
+  COMMENT "Generating ${testnet_ico} from ${bitcoin_ico}"
+  VERBATIM
+)
+add_custom_target(generate_ico DEPENDS "${bitcoin_ico}" "${testnet_ico}")
+
+set(logo_svg "res/src/bitcoinknots-logo.svg")
+set(png "${ICON_PATH}/bitcoinknots-logo.png")
+set(size 960)
+add_custom_command(
+  OUTPUT ${png}
+  COMMAND "${RSVG_CONVERT}" -f png -d ${size} -p ${size} --output "${png}" "${CMAKE_CURRENT_SOURCE_DIR}/${logo_svg}"
+  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${logo_svg}"
+  COMMENT "Generating ${png} from ${logo_svg}"
+  VERBATIM
+)
+
+set(nsis_wizard_input "${ICON_PATH}/bitcoin290.png")
+set(nsis_wizard_bmp "${ICON_PATH}/nsis-wizard.bmp")
+add_custom_command(
+  OUTPUT "${nsis_wizard_bmp}"
+  COMMAND "${IMAGEMAGICK_CONVERT}" ${nsis_wizard_input} -crop 164x290+68+0 -border 0x12 -strip BMP3:${nsis_wizard_bmp}
+  DEPENDS ${nsis_wizard_input}
+  COMMENT "Generating ${nsis_wizard_bmp} from ${nsis_wizard_input}"
+  VERBATIM
+)
+set(nsis_header_input "res/src/nsis-header.svg")
+set(nsis_header_source_path "res/src")
+set(nsis_header_svg "${nsis_header_source_path}/nsis-header.svg")
+set(nsis_header_png "${ICON_PATH}/nsis-header.png")
+set(nsis_header_bmp "${ICON_PATH}/nsis-header.bmp")
+set(ABS_FONT_DIR "${CMAKE_CURRENT_BINARY_DIR}/res/fonts")
+file(WRITE "${ABS_FONT_DIR}/fonts.conf" "<fontconfig><dir>${ABS_FONT_DIR}</dir></fontconfig>\n")
+configure_file(${nsis_header_input} ${nsis_header_svg} @ONLY)
+configure_file(${bitcoin_svg} ${nsis_header_source_path}/bitcoin.svg COPYONLY)
+configure_file(res/src/bitcoinknots-logo.svg ${nsis_header_source_path}/bitcoinknots-logo.svg COPYONLY)
+add_custom_command(
+  OUTPUT "${nsis_header_png}"
+  COMMAND "${CMAKE_COMMAND}" -E env "FONTCONFIG_PATH=${ABS_FONT_DIR}" "${RSVG_CONVERT}" -f png -d 57 -p 57 --output "${nsis_header_png}" "${CMAKE_CURRENT_BINARY_DIR}/${nsis_header_svg}"
+  DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/${nsis_header_svg}" "${CMAKE_CURRENT_BINARY_DIR}/${nsis_header_source_path}/bitcoinknots-logo.svg" "${FONT_PATH}"
+  COMMENT "Generating ${nsis_header_png} from ${nsis_header_input}"
+  VERBATIM
+)
+add_custom_command(
+  OUTPUT "${nsis_header_bmp}"
+  COMMAND "${IMAGEMAGICK_CONVERT}" "${nsis_header_png}" -background white -alpha remove BMP3:${nsis_header_bmp}
+  DEPENDS "${nsis_header_png}"
+  COMMENT "Generating ${nsis_header_bmp} from ${nsis_header_png}"
+  VERBATIM
+)
+add_custom_target(generate_nsis_images DEPENDS "${nsis_wizard_bmp}" "${nsis_header_bmp}")
+
 configure_file(bitcoin_locale.qrc bitcoin_locale.qrc USE_SOURCE_PERMISSIONS COPYONLY)
-qt6_add_resources(BITCOIN_QRC bitcoin.qrc)
-qt6_add_resources(BITCOIN_LOCALE_QRC ${CMAKE_CURRENT_BINARY_DIR}/bitcoin_locale.qrc)
+configure_file(bitcoin_rendered.qrc bitcoin_rendered.qrc USE_SOURCE_PERMISSIONS COPYONLY)
+configure_file(font.qrc font.qrc USE_SOURCE_PERMISSIONS COPYONLY)
+cmake_language(CALL "qt${WITH_QT_VERSION}_add_resources" BITCOIN_QRC bitcoin.qrc)
+cmake_language(CALL "qt${WITH_QT_VERSION}_add_resources" BITCOIN_LOCALE_QRC ${CMAKE_CURRENT_BINARY_DIR}/bitcoin_locale.qrc)
+cmake_language(CALL "qt${WITH_QT_VERSION}_add_resources" BITCOIN_RENDERED_QRC ${CMAKE_CURRENT_BINARY_DIR}/bitcoin_rendered.qrc)
+cmake_language(CALL "qt${WITH_QT_VERSION}_add_resources" BITCOIN_FONT_QRC ${CMAKE_CURRENT_BINARY_DIR}/font.qrc)
 # See: https://bugreports.qt.io/browse/QTBUG-141858.
 get_target_property(warn_flags warn_interface INTERFACE_COMPILE_OPTIONS)
 if("-Wtrailing-whitespace=any" IN_LIST warn_flags)
-  set_source_files_properties(${BITCOIN_QRC} ${BITCOIN_LOCALE_QRC} PROPERTIES COMPILE_OPTIONS -Wno-trailing-whitespace)
+  set_source_files_properties(${BITCOIN_QRC} ${BITCOIN_LOCALE_QRC} ${BITCOIN_RENDERED_QRC} ${BITCOIN_FONT_QRC} PROPERTIES COMPILE_OPTIONS -Wno-trailing-whitespace)
 endif()
 unset(warn_flags)
 
@@ -79,6 +225,8 @@ add_library(bitcoinqt STATIC EXCLUDE_FROM_ALL
   bitcoingui.h
   bitcoinunits.cpp
   bitcoinunits.h
+  blockview.cpp
+  blockview.h
   clientmodel.cpp
   clientmodel.h
   csvmodelwriter.cpp
@@ -98,7 +246,9 @@ add_library(bitcoinqt STATIC EXCLUDE_FROM_ALL
   $<$<PLATFORM_ID:Darwin>:macos_appnap.h>
   $<$<PLATFORM_ID:Darwin>:macos_appnap.mm>
   modaloverlay.cpp
+  mempoolstats.cpp
   modaloverlay.h
+  netwatch.cpp
   networkstyle.cpp
   networkstyle.h
   notificator.cpp
@@ -107,12 +257,16 @@ add_library(bitcoinqt STATIC EXCLUDE_FROM_ALL
   optionsdialog.h
   optionsmodel.cpp
   optionsmodel.h
+  pairingpage.cpp
+  pairingpage.h
   peertablemodel.cpp
   peertablemodel.h
   peertablesortproxy.cpp
   peertablesortproxy.h
   platformstyle.cpp
   platformstyle.h
+  qrimagewidget.cpp
+  qrimagewidget.h
   qvalidatedlineedit.cpp
   qvalidatedlineedit.h
   qvaluecombobox.cpp
@@ -121,6 +275,8 @@ add_library(bitcoinqt STATIC EXCLUDE_FROM_ALL
   rpcconsole.h
   splashscreen.cpp
   splashscreen.h
+  tonalutils.cpp
+  tonalutils.h
   trafficgraphwidget.cpp
   trafficgraphwidget.h
   utilitydialog.cpp
@@ -129,6 +285,8 @@ add_library(bitcoinqt STATIC EXCLUDE_FROM_ALL
   $<$<PLATFORM_ID:Windows>:winshutdownmonitor.h>
   ${BITCOIN_QRC}
   ${BITCOIN_LOCALE_QRC}
+  ${BITCOIN_RENDERED_QRC}
+  ${BITCOIN_FONT_QRC}
 )
 target_compile_definitions(bitcoinqt
   PUBLIC
@@ -145,12 +303,13 @@ set_property(SOURCE macnotificationhandler.mm
 )
 target_link_libraries(bitcoinqt
   PUBLIC
-    Qt6::Widgets
+    "Qt${WITH_QT_VERSION}::Widgets"
   PRIVATE
     core_interface
     bitcoin_cli
     leveldb
     Boost::headers
+    $<TARGET_NAME_IF_EXISTS:MiniUPnPc::MiniUPnPc>
     $<TARGET_NAME_IF_EXISTS:QRencode::QRencode>
     $<$<PLATFORM_ID:Darwin>:-framework\ AppKit>
     $<$<CXX_COMPILER_ID:MSVC>:shlwapi>
@@ -195,6 +354,8 @@ if(ENABLE_WALLET)
       sendcoinsentry.h
       signverifymessagedialog.cpp
       signverifymessagedialog.h
+      sweepprivkeydialog.cpp
+      sweepprivkeydialog.h
       transactiondesc.cpp
       transactiondesc.h
       transactiondescdialog.cpp
@@ -223,19 +384,31 @@ if(ENABLE_WALLET)
   target_link_libraries(bitcoinqt
     PRIVATE
       bitcoin_wallet
-      Qt6::Network
+      "Qt${WITH_QT_VERSION}::Network"
   )
 endif()
 
 if(WITH_DBUS)
-  target_link_libraries(bitcoinqt PRIVATE Qt6::DBus)
+  target_link_libraries(bitcoinqt PRIVATE "Qt${WITH_QT_VERSION}::DBus")
+endif()
+if(WITH_TASKBAR_PROGRESS)
+  target_sources(bitcoinqt
+    PRIVATE
+      wintaskbarprogress.cpp
+      wintaskbarprogress.h
+  )
+  target_link_libraries(bitcoinqt
+    PRIVATE
+      $<$<PLATFORM_ID:Windows>:ole32>
+  )
 endif()
 
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   # We want to define static plugins to link ourselves, thus preventing
   # automatic linking against a "sane" set of default static plugins.
-  qt6_import_plugins(bitcoinqt
+  cmake_language(CALL "qt${WITH_QT_VERSION}_import_plugins" bitcoinqt
     EXCLUDE_BY_TYPE
+      bearer
       accessiblebridge
       platforms
       platforms_darwin
@@ -260,8 +433,14 @@ add_executable(bitcoin-qt
   ../init/bitcoin-qt.cpp
 )
 
-add_windows_resources(bitcoin-qt res/bitcoin-qt-res.rc)
-add_windows_application_manifest(bitcoin-qt)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  add_dependencies(bitcoin-qt generate_ico)
+endif()
+
+if(WIN32)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/res/bitcoin-qt-res.rc ${CMAKE_CURRENT_BINARY_DIR}/res/bitcoin-qt-res.rc USE_SOURCE_PERMISSIONS @ONLY)
+  add_windows_resources(bitcoin-qt ${CMAKE_CURRENT_BINARY_DIR}/res/bitcoin-qt-res.rc)
+endif()
 
 target_link_libraries(bitcoin-qt
   core_interface
@@ -306,8 +485,8 @@ else()
   add_custom_target(translate COMMAND ${CMAKE_COMMAND}
     -D "PROJECT_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
     -D "COPYRIGHT_HOLDERS=${COPYRIGHT_HOLDERS}"
-    -D "LCONVERT_EXECUTABLE=$<TARGET_FILE:Qt6::lconvert>"
-    -D "LUPDATE_EXECUTABLE=$<TARGET_FILE:Qt6::lupdate>"
+    -D "LCONVERT_EXECUTABLE=$<TARGET_FILE:Qt${WITH_QT_VERSION}::lconvert>"
+    -D "LUPDATE_EXECUTABLE=$<TARGET_FILE:Qt${WITH_QT_VERSION}::lupdate>"
     -D "XGETTEXT_EXECUTABLE=${XGETTEXT_EXECUTABLE}"
     -P ${PROJECT_SOURCE_DIR}/share/qt/translate.cmake
   )

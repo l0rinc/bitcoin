@@ -16,13 +16,26 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_set>
+#include <utility>
 
 class CCoinsViewCache;
 class CFeeRate;
 class CScript;
+namespace kernel {
+struct MemPoolOptions;
+};
 
+/** Default for -blockmaxsize, which controls the maximum serialized size of block the mining code will create. */
+static constexpr unsigned int DEFAULT_BLOCK_MAX_SIZE{300000};
+/** Default for -blockprioritysize, maximum space for zero/low-fee transactions **/
+static constexpr unsigned int DEFAULT_BLOCK_PRIORITY_SIZE{100000};
+/** Minimum priority for transactions to be accepted into the priority area **/
+static constexpr double MINIMUM_TX_PRIORITY{COIN * 144.0 / 250.0};
 /** Default for -blockmaxweight, which controls the range of block weights the mining code will create **/
-static constexpr unsigned int DEFAULT_BLOCK_MAX_WEIGHT{MAX_BLOCK_WEIGHT};
+static constexpr unsigned int DEFAULT_BLOCK_MAX_WEIGHT{DEFAULT_BLOCK_MAX_SIZE * WITNESS_SCALE_FACTOR};
+/** Default for BlockCreateOptions.block_reserved_size **/
+static constexpr unsigned int DEFAULT_BLOCK_RESERVED_SIZE{1000};
 /** Default for -blockreservedweight **/
 static constexpr unsigned int DEFAULT_BLOCK_RESERVED_WEIGHT{8000};
 /** Default sigops cost to reserve for coinbase transaction outputs when creating block templates. */
@@ -33,7 +46,7 @@ static constexpr unsigned int DEFAULT_COINBASE_OUTPUT_MAX_ADDITIONAL_SIGOPS{400}
  * Setting a lower value is prevented at startup. */
 static constexpr unsigned int MINIMUM_BLOCK_RESERVED_WEIGHT{2000};
 /** Default for -blockmintxfee, which sets the minimum feerate for a transaction in blocks created by mining code **/
-static constexpr unsigned int DEFAULT_BLOCK_MIN_TX_FEE{1};
+static constexpr unsigned int DEFAULT_BLOCK_MIN_TX_FEE{1000};
 /** The maximum weight for transactions we're willing to relay/mine */
 static constexpr int32_t MAX_STANDARD_TX_WEIGHT{400000};
 /** The minimum non-witness size for transactions we're willing to relay/mine: one larger than 64  */
@@ -45,11 +58,37 @@ static constexpr unsigned int MAX_STANDARD_TX_SIGOPS_COST{MAX_BLOCK_SIGOPS_COST/
 /** The maximum number of potentially executed legacy signature operations in a single standard tx */
 static constexpr unsigned int MAX_TX_LEGACY_SIGOPS{2'500};
 /** Default for -incrementalrelayfee, which sets the minimum feerate increase for mempool limiting or replacement **/
-static constexpr unsigned int DEFAULT_INCREMENTAL_RELAY_FEE{100};
+static constexpr unsigned int DEFAULT_INCREMENTAL_RELAY_FEE{1000};
+static constexpr CAmount CORE_INCREMENTAL_RELAY_FEE{100};
+/** Default for -maxscriptsize */
+static constexpr unsigned int DEFAULT_SCRIPT_SIZE_POLICY_LIMIT{1650};
 /** Default for -bytespersigop */
 static constexpr unsigned int DEFAULT_BYTES_PER_SIGOP{20};
+/** Default for -bytespersigopstrict */
+static constexpr unsigned int DEFAULT_BYTES_PER_SIGOP_STRICT{20};
+/** Default for -datacarriercost (multiplied by WITNESS_SCALE_FACTOR) */
+static constexpr unsigned int DEFAULT_WEIGHT_PER_DATA_BYTE{4};
+/** Default for -rejecttokens */
+static constexpr bool DEFAULT_REJECT_TOKENS{false};
+/** Default for -subdustfeepenalty */
+static constexpr bool DEFAULT_SUBDUSTFEEPENALTY{true};
+
+// NOTE: Changes to these three require manually adjusting doc in init.cpp
+/** Default for -permitephemeral=send */
+static constexpr bool DEFAULT_PERMITEPHEMERAL_SEND{false};
+/** Default for -permitephemeral=dust */
+static constexpr bool DEFAULT_PERMITEPHEMERAL_DUST{false};
+/** Default for -permitephemeral=anchor */
+static constexpr bool DEFAULT_PERMITEPHEMERAL_ANCHOR{true};
+
+/** Default for -permitbareanchor */
+static constexpr bool DEFAULT_PERMITBAREANCHOR{true};
+/** Default for -permitbarepubkey */
+static constexpr bool DEFAULT_PERMIT_BAREPUBKEY{false};
 /** Default for -permitbaremultisig */
-static constexpr bool DEFAULT_PERMIT_BAREMULTISIG{true};
+static constexpr bool DEFAULT_PERMIT_BAREMULTISIG{false};
+/** Default for -rejectparasites */
+static constexpr bool DEFAULT_REJECT_PARASITES{true};
 /** The maximum number of witness stack items in a standard P2WSH script */
 static constexpr unsigned int MAX_STANDARD_P2WSH_STACK_ITEMS{100};
 /** The maximum size in bytes of each witness stack item in a standard P2WSH script */
@@ -66,8 +105,11 @@ static constexpr unsigned int MAX_STANDARD_SCRIPTSIG_SIZE{1650};
  * only increase the dust limit after prior releases were already not creating
  * outputs below the new threshold */
 static constexpr unsigned int DUST_RELAY_TX_FEE{3000};
+static const std::string DEFAULT_DUST_DYNAMIC{"off"};
+static const int DEFAULT_DUST_RELAY_MULTIPLIER{3'000};
+static const std::string DEFAULT_SPKREUSE{"allow"};
 /** Default for -minrelaytxfee, minimum relay fee for transactions */
-static constexpr unsigned int DEFAULT_MIN_RELAY_TX_FEE{100};
+static constexpr unsigned int DEFAULT_MIN_RELAY_TX_FEE{1000};
 /** Maximum number of transactions per cluster (default) */
 static constexpr unsigned int DEFAULT_CLUSTER_LIMIT{64};
 /** Maximum size of cluster in virtual kilobytes */
@@ -79,9 +121,14 @@ static constexpr unsigned int DEFAULT_DESCENDANT_LIMIT{25};
 /** Default for -datacarrier */
 static const bool DEFAULT_ACCEPT_DATACARRIER = true;
 /**
- * Default setting for -datacarriersize in vbytes.
+ * Default setting for -datacarriersize. 80 bytes of data, +1 for OP_RETURN,
+ * +2 for the pushdata opcodes.
  */
-static const unsigned int MAX_OP_RETURN_RELAY = MAX_STANDARD_TX_WEIGHT / WITNESS_SCALE_FACTOR;
+/** Default for -permitbaredatacarrier */
+static const bool DEFAULT_PERMITBAREDATACARRIER{false};
+static const unsigned int MAX_OP_RETURN_RELAY = 83;
+/** Default for -datacarrierfullcount */
+static constexpr bool DEFAULT_DATACARRIER_FULLCOUNT{true};
 /**
  * An extra transaction can be added to a package, as long as it only has one
  * ancestor and is no larger than this. Not really any reason to make this
@@ -128,7 +175,8 @@ static constexpr script_verify_flags STANDARD_SCRIPT_VERIFY_FLAGS{MANDATORY_SCRI
                                                              SCRIPT_VERIFY_CONST_SCRIPTCODE |
                                                              SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION |
                                                              SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS |
-                                                             SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE};
+                                                             SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE |
+                                                             REDUCED_DATA_MANDATORY_VERIFY_FLAGS};
 
 /** For convenience, standard but not mandatory verify flags. */
 static constexpr script_verify_flags STANDARD_NOT_MANDATORY_VERIFY_FLAGS{STANDARD_SCRIPT_VERIFY_FLAGS & ~MANDATORY_SCRIPT_VERIFY_FLAGS};
@@ -136,11 +184,14 @@ static constexpr script_verify_flags STANDARD_NOT_MANDATORY_VERIFY_FLAGS{STANDAR
 /** Used as the flags parameter to sequence and nLocktime checks in non-consensus code. */
 static constexpr unsigned int STANDARD_LOCKTIME_VERIFY_FLAGS{LOCKTIME_VERIFY_SEQUENCE};
 
+typedef std::unordered_set<std::string> ignore_rejects_type;
+static const ignore_rejects_type empty_ignore_rejects{};
+
 CAmount GetDustThreshold(const CTxOut& txout, const CFeeRate& dustRelayFee);
 
 bool IsDust(const CTxOut& txout, const CFeeRate& dustRelayFee);
 
-bool IsStandard(const CScript& scriptPubKey, TxoutType& whichType);
+bool IsStandard(const CScript& scriptPubKey, const std::optional<unsigned>& max_datacarrier_bytes, TxoutType& whichType);
 
 /** Get the vout index numbers of all dust outputs */
 std::vector<uint32_t> GetDust(const CTransaction& tx, CFeeRate dust_relay_rate);
@@ -155,14 +206,16 @@ static constexpr decltype(CTransaction::version) TX_MAX_STANDARD_VERSION{3};
 * Check for standard transaction types
 * @return True if all outputs (scriptPubKeys) use only standard transaction forms
 */
-bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_datacarrier_bytes, bool permit_bare_multisig, const CFeeRate& dust_relay_fee, std::string& reason);
+bool IsStandardTx(const CTransaction& tx, const kernel::MemPoolOptions& opts, std::string& out_reason, const ignore_rejects_type& ignore_rejects=empty_ignore_rejects);
 /**
  * Check for standard transaction types
  * @param[in] mapInputs       Map of previous transactions that have outputs we're spending
+ * @param[in] opts            Mempool policy options
  * @returns valid TxValidationState if all inputs (scriptSigs) use only standard transaction forms else returns
  * invalid TxValidationState which states why the first invalid input is not standard
  */
-TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoinsViewCache& mapInputs);
+TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoinsViewCache& mapInputs, const kernel::MemPoolOptions& opts, const ignore_rejects_type& ignore_rejects=empty_ignore_rejects);
+TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoinsViewCache& mapInputs, const ignore_rejects_type& ignore_rejects=empty_ignore_rejects);
 /**
 * Check if the transaction is over standard P2WSH resources limit:
 * 3600bytes witnessScript size, 80bytes per witness stack element, 100 witness stack elements
@@ -170,7 +223,7 @@ TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoin
 *
 * Also enforce a maximum stack item size limit and no annexes for tapscript spends.
 */
-bool IsWitnessStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs);
+bool IsWitnessStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs, const std::string& reason_prefix, std::string& out_reason, const ignore_rejects_type& ignore_rejects=empty_ignore_rejects);
 /**
  * Check whether this transaction spends any witness program but P2A, including not-yet-defined ones.
  * May return `false` early for consensus-invalid transactions.
@@ -178,9 +231,15 @@ bool IsWitnessStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
 bool SpendsNonAnchorWitnessProg(const CTransaction& tx, const CCoinsViewCache& prevouts);
 
 /** Compute the virtual transaction size (weight reinterpreted as bytes). */
+int64_t GetSigOpsAdjustedWeight(int64_t weight, int64_t sigop_cost, unsigned int bytes_per_sigop);
 int64_t GetVirtualTransactionSize(int64_t nWeight, int64_t nSigOpCost, unsigned int bytes_per_sigop);
 int64_t GetVirtualTransactionSize(const CTransaction& tx, int64_t nSigOpCost, unsigned int bytes_per_sigop);
 int64_t GetVirtualTransactionInputSize(const CTxIn& tx, int64_t nSigOpCost, unsigned int bytes_per_sigop);
+
+static inline FeePerVSize ToFeePerVSize(FeePerWeight feerate)
+{
+    return {feerate.fee, (feerate.size + WITNESS_SCALE_FACTOR - 1) / WITNESS_SCALE_FACTOR};
+}
 
 static inline int64_t GetVirtualTransactionSize(const CTransaction& tx)
 {
@@ -192,8 +251,10 @@ static inline int64_t GetVirtualTransactionInputSize(const CTxIn& tx)
     return GetVirtualTransactionInputSize(tx, 0, 0);
 }
 
-int64_t GetSigOpsAdjustedWeight(int64_t weight, int64_t sigop_cost, unsigned int bytes_per_sigop);
+std::pair<CScript, unsigned int> GetScriptForTransactionInput(CScript prevScript, const CTxIn&);
 
-static inline FeePerVSize ToFeePerVSize(FeePerWeight feerate) { return {feerate.fee, (feerate.size + WITNESS_SCALE_FACTOR - 1) / WITNESS_SCALE_FACTOR}; }
+std::pair<size_t, size_t> DatacarrierBytes(const CTransaction& tx, const CCoinsViewCache& view);
+
+int32_t CalculateExtraTxWeight(const CTransaction& tx, const CCoinsViewCache& view, const unsigned int weight_per_data_byte);
 
 #endif // BITCOIN_POLICY_POLICY_H

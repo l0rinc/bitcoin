@@ -35,6 +35,15 @@ const std::string& FormatOutputType(OutputType type);
 std::string FormatAllOutputTypes();
 
 /**
+ * Get a destination of the requested type (if possible) to the specified key.
+ * The caller must make sure LearnRelatedScripts has been called beforehand.
+ */
+CTxDestination GetDestinationForKey(const CPubKey& key, OutputType);
+
+/** Get all destinations (potentially) supported by the wallet for the given key. */
+std::vector<CTxDestination> GetAllDestinationsForKey(const CPubKey& key);
+
+/**
  * Get a destination of the requested type (if possible) to the specified script.
  * This function will automatically add the script (and any other
  * necessary scripts) to the keystore.

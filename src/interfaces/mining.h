@@ -31,25 +31,24 @@ class BlockTemplate
 public:
     virtual ~BlockTemplate() = default;
 
-    virtual CBlockHeader getBlockHeader() = 0;
-    // Block contains a dummy coinbase transaction that should not be used and
+    // Block contains a dummy coinbase transaction that should not be used, and
     // it may not match a transaction constructed from getCoinbaseTx().
-    virtual CBlock getBlock() = 0;
+    virtual const CBlockHeader& getBlockHeader() const = 0;
+    virtual const CBlock& getBlock() const = 0;
 
-    // Fees per transaction, not including coinbase transaction.
-    virtual std::vector<CAmount> getTxFees() = 0;
-    // Sigop cost per transaction, not including coinbase transaction.
-    virtual std::vector<int64_t> getTxSigops() = 0;
+    virtual const std::vector<CAmount>& getTxFees() const = 0;
+    virtual const std::vector<int64_t>& getTxSigops() const = 0;
+    virtual const std::vector<double>& getTxCoinAgePriorities() const = 0;
 
     /** Return fields needed to construct a coinbase transaction */
-    virtual node::CoinbaseTx getCoinbaseTx() = 0;
+    virtual const node::CoinbaseTx& getCoinbaseTx() const = 0;
 
     /**
      * Compute merkle path to the coinbase transaction
      *
      * @return merkle path ordered from the deepest
      */
-    virtual std::vector<uint256> getCoinbaseMerklePath() = 0;
+    virtual std::vector<uint256> getCoinbaseMerklePath() const = 0;
 
     /**
      * Construct and broadcast the block. Modifies the template in place,
@@ -114,19 +113,21 @@ public:
 
     /**
      * Waits for the connected tip to change. During node initialization, this will
-     * wait until the tip is connected (regardless of `timeout`).
+     * wait until the tip is connected.
      *
      * @param[in] current_tip block hash of the current chain tip. Function waits
      *                        for the chain tip to differ from this.
-     * @param[in] timeout     how long to wait for a new tip (default is forever)
-     *
-     * @retval BlockRef hash and height of the current chain tip after this call.
-     * @retval std::nullopt if the node is shut down or interrupt() is called.
+     * @param[in] timeout     how long to wait for a new tip
+     * @returns               Hash and height of the current chain tip after this call.
      */
     virtual std::optional<BlockRef> waitTipChanged(uint256 current_tip, MillisecondsDouble timeout = MillisecondsDouble::max()) = 0;
 
-   /**
-     * Construct a new block template.
+    /**
+     * Construct a new block template. createNewBlock merges provided options
+     * with node mining options. createNewBlock2 uses the provided options as
+     * complete.
+     *
+     * During node initialization, createNewBlock waits until the tip is connected.
      *
      * @param[in] options options for creating the block
      * @param[in] cooldown wait for tip to be connected and IBD to complete.
@@ -134,10 +135,11 @@ public:
      *                     tip to catch up. It's recommended to disable this on
      *                     regtest and signets with only one miner, as these
      *                     could stall.
-     * @retval BlockTemplate a block template.
-     * @retval std::nullptr if the node is shut down or interrupt() is called.
+     * @returns a block template, or nullptr if the node is shut down or
+     *          interrupt() is called.
      */
     virtual std::unique_ptr<BlockTemplate> createNewBlock(const node::BlockCreateOptions& options = {}, bool cooldown = true) = 0;
+    virtual std::unique_ptr<BlockTemplate> createNewBlock2(const node::BlockCreateOptions& create_options) = 0;
 
     /**
      * Interrupts createNewBlock and waitTipChanged.

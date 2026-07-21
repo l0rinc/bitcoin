@@ -48,6 +48,7 @@ from test_framework.script import (
     sign_input_legacy,
 )
 from test_framework.script_util import (
+    key_to_p2pkh_script,
     key_to_p2pk_script,
     script_to_p2sh_script,
 )
@@ -197,7 +198,7 @@ class FullBlockTest(BitcoinTestFramework):
                 self.sign_tx(badtx, attempt_spend_tx)
             badblock = self.update_block(blockname, [badtx])
             reject_reason = (template.block_reject_reason or template.reject_reason)
-            if reject_reason.startswith("mempool-script-verify-flag-failed"):
+            if reject_reason and reject_reason.startswith("mempool-script-verify-flag-failed"):
                 reject_reason = "block-script-verify-flag-failed" + reject_reason[33:]
             self.send_blocks(
                 [badblock], success=False,
@@ -1168,23 +1169,25 @@ class FullBlockTest(BitcoinTestFramework):
         #    b78 creates a tx, which is spent in b79. After b82, both should be in mempool
         #
         #    The resurrected transactions must pass the node's mempool policy, so create
-        #    and spend standard outputs (P2PK using the coinbase pubkey to keep it simple).
+        #    and spend distinct standard P2PKH outputs to avoid SPK reuse policy.
         self.log.info("Test transaction resurrection during a re-org")
-        standard_output_script = key_to_p2pk_script(self.coinbase_pubkey)
+        resurrection_key1, resurrection_pubkey1 = generate_keypair()
+        resurrection_key2, resurrection_pubkey2 = generate_keypair()
+        _, resurrection_pubkey3 = generate_keypair()
         self.move_tip(76)
         self.next_block(77)
-        tx77 = self.create_and_sign_transaction(out[24], 10 * COIN, standard_output_script)
+        tx77 = self.create_and_sign_transaction(out[24], 10 * COIN, key_to_p2pkh_script(resurrection_pubkey1))
         b77 = self.update_block(77, [tx77])
         self.send_blocks([b77], True)
         self.save_spendable_output()
 
         self.next_block(78)
-        tx78 = self.create_and_sign_transaction(tx77, 9 * COIN, standard_output_script)
+        tx78 = self.create_and_sign_transaction(tx77, 9 * COIN, key_to_p2pkh_script(resurrection_pubkey2), resurrection_key1, resurrection_pubkey1)
         b78 = self.update_block(78, [tx78])
         self.send_blocks([b78], True)
 
         self.next_block(79)
-        tx79 = self.create_and_sign_transaction(tx78, 8 * COIN, standard_output_script)
+        tx79 = self.create_and_sign_transaction(tx78, 8 * COIN, key_to_p2pkh_script(resurrection_pubkey3), resurrection_key2, resurrection_pubkey2)
         b79 = self.update_block(79, [tx79])
         self.send_blocks([b79], True)
 
@@ -1274,6 +1277,12 @@ class FullBlockTest(BitcoinTestFramework):
         b89a = self.update_block("89a", [tx])
         self.send_blocks([b89a], success=False, reject_reason='bad-txns-inputs-missingorspent', reconnect=True)
 
+        # Don't use v2transport for the large reorg, which is too slow with the unoptimized python ChaCha20 implementation
+        if self.options.v2transport:
+            self.nodes[0].disconnect_p2ps()
+            self.helper_peer = self.nodes[0].add_outbound_p2p_connection(P2PDataStore(), supports_v2_p2p=False, advertise_v2_p2p=False, p2p_idx=0)
+        self.log.info("Test a re-org of one week's worth of blocks (1088 blocks)")
+
         self.move_tip(88)
         self.log.info("Reject a block with an invalid block header version")
         b_v1 = self.next_block('b_v1', version=1)
@@ -1345,18 +1354,20 @@ class FullBlockTest(BitcoinTestFramework):
 
     # sign a transaction, using the key we know about
     # this signs input 0 in tx, which is assumed to be spending output 0 in spend_tx
-    def sign_tx(self, tx, spend_tx):
+    def sign_tx(self, tx, spend_tx, privkey=None, pubkey=None):
         scriptPubKey = bytearray(spend_tx.vout[0].scriptPubKey)
         if (scriptPubKey[0] == OP_TRUE):  # an anyone-can-spend
             tx.vin[0].scriptSig = CScript()
             return
-        sign_input_legacy(tx, 0, spend_tx.vout[0].scriptPubKey, self.coinbase_key)
+        if pubkey is not None:
+            tx.vin[0].scriptSig = CScript([pubkey])
+        sign_input_legacy(tx, 0, spend_tx.vout[0].scriptPubKey, privkey or self.coinbase_key)
 
-    def create_and_sign_transaction(self, spend_tx, value, output_script=None):
+    def create_and_sign_transaction(self, spend_tx, value, output_script=None, privkey=None, pubkey=None):
         if output_script is None:
             output_script = CScript([OP_TRUE])
         tx = self.create_tx(spend_tx, 0, value, output_script=output_script)
-        self.sign_tx(tx, spend_tx)
+        self.sign_tx(tx, spend_tx, privkey, pubkey)
         return tx
 
     def next_block(self, number, spend=None, additional_coinbase_value=0, *, script=None, version=4, additional_output_scripts=None):
@@ -1429,7 +1440,7 @@ class FullBlockTest(BitcoinTestFramework):
         """Add a P2P connection to the node.
 
         Helper to connect and wait for version handshake."""
-        self.helper_peer = self.nodes[0].add_p2p_connection(P2PDataStore())
+        self.helper_peer = self.nodes[0].add_outbound_p2p_connection(P2PDataStore(), p2p_idx=0)
         # We need to wait for the initial getheaders from the peer before we
         # start populating our blockstore. If we don't, then we may run ahead
         # to the next subtest before we receive the getheaders. We'd then send

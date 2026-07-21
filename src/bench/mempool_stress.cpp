@@ -24,12 +24,16 @@ class CCoinsViewCache;
 static void AddTx(const CTransactionRef& tx, CTxMemPool& pool, FastRandomContext& det_rand) EXCLUSIVE_LOCKS_REQUIRED(cs_main, pool.cs)
 {
     int64_t nTime = 0;
+    constexpr double coin_age{10.0};
     unsigned int nHeight = 1;
     uint64_t sequence = 0;
     bool spendsCoinbase = false;
     unsigned int sigOpCost = 4;
     LockPoints lp;
-    TryAddToMempool(pool, CTxMemPoolEntry(tx, det_rand.randrange(10000)+1000, nTime, nHeight, sequence, spendsCoinbase, sigOpCost, lp));
+    TryAddToMempool(pool, CTxMemPoolEntry(tx, det_rand.randrange(10000)+1000, nTime, nHeight, sequence, {
+        .inputs_coin_age = coin_age,
+        .in_chain_input_value = tx->GetValueOut(),
+    }, spendsCoinbase, /*extra_weight=*/0, sigOpCost, lp));
 }
 
 struct Available {
@@ -116,7 +120,8 @@ static void MemPoolAddTransactions(benchmark::Bench& bench)
         for (auto& tx : transactions) {
             AddTx(tx, pool, det_rand);
         }
-        pool.TrimToSize(0, nullptr);
+        pool.TrimToSize(pool.DynamicMemoryUsage() * 3 / 4);
+        pool.TrimToSize(GetVirtualTransactionSize(*transactions.front()));
     });
 }
 

@@ -121,6 +121,64 @@ class P2PEvict(BitcoinTestFramework):
         self.log.debug("{} protected peers: {}".format(len(protected_peers), protected_peers))
         assert evicted_peers[0] not in protected_peers
 
+        self.check_forceinbound_eviction(check_permissions=True)
+
+    def test_forceinbound_nocap(self):
+        self.check_forceinbound_eviction(check_permissions=False)
+
+    def check_forceinbound_eviction(self, *, check_permissions):
+        self.log.info("Test that whitebind inbounds get extra eviction power")
+        node = self.nodes[0]
+
+        # Allow 10 inbound connections, set whitebind and forceinbound
+        self.restart_node(0, extra_args=['-maxconnections=21', '-whitebind=127.0.0.1:30201', '-whitebind=forceinbound@127.0.0.1:30202'])
+        self.log.debug("Fill connections with unprivileged peers")
+        for i in range(10):
+            node.add_p2p_connection(P2PInterface())
+
+        # Create a peer that expects to be rejected
+        # FIXME: "multiprocess, i686, DEBUG" CI task has a reliable timeout issue for v2transport
+        class RejectedPeer(P2PInterface):
+            def connection_lost(self, exc):
+                return
+
+        allowed_peers = []
+
+        self.log.debug("Generic inbound gets rejected when full")
+        with node.assert_debug_log(["failed to find an eviction candidate - connection dropped (full)"]):
+            node.add_p2p_connection(RejectedPeer(), wait_for_verack=False, supports_v2_p2p=False)
+
+        self.log.debug("Default whitebind inbound gets rejected, even when full")
+        with node.assert_debug_log(["failed to find an eviction candidate - connection dropped (full)"]):
+            node.add_p2p_connection(RejectedPeer(), wait_for_verack=False, supports_v2_p2p=False, dstport=30201)
+
+        self.log.debug("ForceInbound whitebind inbound gets connected, even when full")
+        allowed_peers.append(node.add_p2p_connection(P2PInterface(), dstport=30202))
+
+        peerinfo = node.getpeerinfo()
+        assert_equal(len(peerinfo), 10)
+        for peer in peerinfo:
+            if "30202" in peer["addrbind"]:
+                assert peer["forced_inbound"]
+                if check_permissions:
+                    assert "forceinbound" in peer["permissions"]
+            else:
+                assert not peer["forced_inbound"]
+                if check_permissions:
+                    assert "forceinbound" not in peer["permissions"]
+
+        self.log.debug("Generic inbound gets rejected when whitebind peer is filling inbound slot")
+        with node.assert_debug_log(["failed to find an eviction candidate - connection dropped (full)"]):
+            node.add_p2p_connection(RejectedPeer(), supports_v2_p2p=False, wait_for_verack=False)
+
+        self.log.debug("ForceInbound peers keep replacing unprivileged peers beyond the old cap")
+        for _ in range(8):
+            allowed_peers.append(node.add_p2p_connection(P2PInterface(), dstport=30202))
+
+        peerinfo = node.getpeerinfo()
+        assert_equal(len(peerinfo), 10)
+        assert_equal(sum(peer["forced_inbound"] for peer in peerinfo), 9)
+        assert all(peer.is_connected for peer in allowed_peers)
 
 if __name__ == '__main__':
     P2PEvict(__file__).main()

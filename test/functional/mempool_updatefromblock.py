@@ -22,7 +22,7 @@ MAX_DISCONNECTED_TX_POOL_BYTES = 20_000_000
 class MempoolUpdateFromBlockTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [['-limitclustersize=1000']]
+        self.extra_args = [['-acceptnonstdtxn=1', '-acceptnonstddatacarrier=1', '-datacarrierfullcount=0', '-limitclustersize=1000']]
 
     def trigger_reorg(self, fork_blocks):
         """Trigger reorg of the fork blocks."""

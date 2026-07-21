@@ -3,6 +3,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <kernel/chainparams.h>
 
 #include <chainparamsseeds.h>
@@ -17,6 +19,7 @@
 #include <script/interpreter.h>
 #include <script/script.h>
 #include <script/verify_flags.h>
+#include <tinyformat.h>
 #include <uint256.h>
 #include <util/chaintype.h>
 #include <util/log.h>
@@ -28,11 +31,27 @@
 #include <cstdint>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <span>
+#include <stdexcept>
 #include <utility>
 
 using namespace util::hex_literals;
+
+RDTSConsentFlag g_rdts_consent{RDTS_CONSENT};
+bool g_enable_rdts{g_rdts_consent != RDTSConsentFlag::UNSUPPORTED_UNSAFE_NO_ENFORCEMENT};
+bool g_rdts_warning{false};
+
+// Workaround MSVC bug triggering C7595 when calling consteval constructors in
+// initializer lists.
+// A fix may be on the way:
+// https://developercommunity.visualstudio.com/t/consteval-conversion-function-fails/1579014
+#if defined(_MSC_VER)
+auto consteval_ctor(auto&& input) { return input; }
+#else
+#define consteval_ctor(input) (input)
+#endif
 
 static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
@@ -96,9 +115,21 @@ void CChainParams::ApplyDeploymentOptions(const DeploymentOptions& opts)
     }
 
     for (const auto& [deployment_pos, version_bits_params] : opts.version_bits_parameters) {
-        consensus.vDeployments[deployment_pos].nStartTime = version_bits_params.start_time;
-        consensus.vDeployments[deployment_pos].nTimeout = version_bits_params.timeout;
-        consensus.vDeployments[deployment_pos].min_activation_height = version_bits_params.min_activation_height;
+        auto& deployment{consensus.vDeployments[deployment_pos]};
+        deployment.nStartTime = version_bits_params.start_time;
+        deployment.nTimeout = version_bits_params.timeout;
+        deployment.min_activation_height = version_bits_params.min_activation_height;
+        deployment.max_activation_height = version_bits_params.max_activation_height;
+        deployment.active_duration = version_bits_params.active_duration;
+        if (deployment.active_duration != std::numeric_limits<int>::max() && deployment.active_duration % deployment.period != 0) {
+            throw std::runtime_error(strprintf("active_duration (%d) must be a multiple of period (%d)", deployment.active_duration, deployment.period));
+        }
+        if (version_bits_params.threshold) {
+            if (*version_bits_params.threshold > deployment.period) {
+                throw std::runtime_error(strprintf("threshold (%u) must not exceed period (%u)", *version_bits_params.threshold, deployment.period));
+            }
+            deployment.threshold = *version_bits_params.threshold;
+        }
     }
 }
 
@@ -136,7 +167,24 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 1815; // 90%
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].period = 2016;
 
+        // ReducedData Temporary Softfork (RDTS)
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].bit = 4;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nStartTime = 1764547200; // December 1st, 2025
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].max_activation_height = 965664; // ~September 1st, 2026
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].active_duration = 52416; // ~1 year
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].threshold = 1109; // 55% of 2016
+
         ApplyDeploymentOptions(opts.dep_opts);
+
+        if (g_rdts_consent == RDTSConsentFlag::UNSUPPORTED_UNSAFE_NO_ENFORCEMENT && !g_enable_rdts) {
+            consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
+            consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+            consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].max_activation_height = std::numeric_limits<int>::max();
+            consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].active_duration = std::numeric_limits<int>::max();
+            consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].threshold = 0;
+        }
 
         consensus.nMinimumChainWork = uint256{"0000000000000000000000000000000000000001128750f82f4c366153a3a030"};
         consensus.defaultAssumeValid = uint256{"00000000000000000000ccebd6d74d9194d8dcdc1d177c478e094bfad51ba5ac"}; // 938343
@@ -166,8 +214,9 @@ public:
         // service bits we want, but we should get them updated to support all service bits wanted by any
         // release ASAP to avoid it where possible.
         vSeeds.emplace_back("dnsseed.bluematt.me."); // Matt Corallo, only supports x9
+        vSeeds.emplace_back("dnsseed.bitcoin.dashjr-list-of-p2p-nodes.us."); // Luke Dashjr, support BIP110 seeding (x8000009)
+        vSeeds.emplace_back("seed.bitcoin.haf.ovh."); // Léo Haf, support BIP110 seeding (x8000009)
         vSeeds.emplace_back("seed.bitcoin.jonasschnelli.ch."); // Jonas Schnelli, only supports x1, x5, x9, and xd
-        vSeeds.emplace_back("seed.btc.petertodd.net."); // Peter Todd, only supports x1, x5, x9, and xd
         vSeeds.emplace_back("seed.bitcoin.sprovoost.nl."); // Sjors Provoost
         vSeeds.emplace_back("dnsseed.emzy.de."); // Stephan Oeste
         vSeeds.emplace_back("seed.bitcoin.wiz.biz."); // Jason Maurice
@@ -185,6 +234,50 @@ public:
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
+
+        checkpointData = {
+            {
+                { 11111, uint256{"0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d"}},
+                { 33333, uint256{"000000002dd5588a74784eaa7ab0507a18ad16a236e7b1ce69f00d7ddfb5d0a6"}},
+                { 74000, uint256{"0000000000573993a3c9e41ce34471c079dcf5f52a0e824a81e7f953b8661a20"}},
+                {105000, uint256{"00000000000291ce28027faea320c8d2b054b2e0fe44a773f3eefb151d6bdc97"}},
+                {134444, uint256{"00000000000005b12ffd4cd315cd34ffd4a594f430ac814c91184a0d42d2b0fe"}},
+                {168000, uint256{"000000000000099e61ea72015e79632f216fe6cb33d7899acb35b75c8303b763"}},
+                {193000, uint256{"000000000000059f452a5f7340de6682a977387c17010ff6e6c3bd83ca8b1317"}},
+                {210000, uint256{"000000000000048b95347e83192f69cf0366076336c639f9b7228e9ba171342e"}},
+                {216116, uint256{"00000000000001b4f4b433e81ee46494af945cf96014816a4e2370f11b23df4e"}},
+                {225430, uint256{"00000000000001c108384350f74090433e7fcf79a606b8e797f065b130575932"}},
+                {250000, uint256{"000000000000003887df1f29024b06fc2200b55f8af8f35453d7be294df2d214"}},
+                {279000, uint256{"0000000000000001ae8c72a0b0c301f67e3afca10e819efa9041e458e9bd7e40"}},
+                {295000, uint256{"00000000000000004d9b4ef50f0f9d686fd69db2e03af35a100370c64632a983"}},
+                {393216, uint256{"00000000000000000390df7d2bdc06b9fcb260b39e3fb15b4bc9f62572553924"}},
+                {421888, uint256{"000000000000000004b232ad9492d0729d7f9d6737399ffcdaac1c8160db5ef6"}},
+                {438784, uint256{"0000000000000000040d6ef667d7a52caf93d8e0d1e40fd7155c787b42667179"}},
+                {451840, uint256{"0000000000000000029103c8ade7786e7379623465c72d71d84624eb9c159bea"}},
+                {469766, uint256{"000000000000000000130b2bd812c6a7ae9c02a74fc111806b1dd11e8975da45"}},
+                {481824, uint256{"0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893"}},
+                {514048, uint256{"00000000000000000022fe630be397a62c58972bb81f0a2d1ae8c968511a4659"}},
+                {553472, uint256{"0000000000000000000e06b6698a4f65ab9915f24b23ca2f9d1abf30cc3e9173"}},
+                {571392, uint256{"00000000000000000019c18b43077775fc299a6646ab0e9dbbd5770bf6ca392d"}},
+                {596000, uint256{"0000000000000000000706f93dc673ca366c810f317e7cfe8d951c0107b65223"}},
+                {601723, uint256{"000000000000000000009837f74796532b21d8ccf7def3dcfcb45aa92cd86b9e"}},
+                {617056, uint256{"0000000000000000000ca51b293fb2be2fbaf1acc76dcbbbff7e4d7796380b9e"}},
+                {632549, uint256{"00000000000000000001bae1b2b73ec3fde475c1ed7fdd382c2c49860ec19920"}},
+                {643700, uint256{"00000000000000000002959e9b44507120453344794df09bd1276eb325ed7110"}},
+                {667811, uint256{"00000000000000000007888a9d01313d69d6335df46ea33e875ee6832670c596"}},
+                {688888, uint256{"0000000000000000000e1e3bd783ce0de7b0cdabf2034723595dbcd5a28cf831"}},
+                {704256, uint256{"0000000000000000000465f5acfcd603337994261a4d67a647cb49866c98b538"}},
+                {714000, uint256{"0000000000000000000184f9b9da75c3ab764438f4f3ecd766637648a3a44d0d"}},
+                {737232, uint256{"0000000000000000000709881cc8d33f84815fe8ea1baad9889042146b4d3042"}},
+                {803584, uint256{"000000000000000000003d97a46dbbb4cca4b3e23c39c446df75cfe726163bb5"}},
+                {832080, uint256{"00000000000000000003349bda23ed5efc98145c10620c247ec93896ac249e22"}},
+                {843264, uint256{"0000000000000000000101209b4ab3570862dc3fac8633eb62938a541c55a2ff"}},
+                {846679, uint256{"000000000000000000032b91acdaaf16f8c40d46afeb835c3ac604860f905d56"}},
+                {855000, uint256{"0000000000000000000233ea80aa10d38aa4486cd7033fffc2c4df556d0b9138"}},
+                {885248, uint256{"000000000000000000006e926737e6a349f7581525ad36e743dfe5f4bc3abbb7"}},
+                {908765, uint256{"00000000000000000001b64acb5fe4b40b84092159b6406a6244f46a37fa6c6b"}},
+            }
+        };
 
         m_assumeutxo_data = {
             {
@@ -260,6 +353,14 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 1512; // 75%
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].period = 2016;
 
+        // ReducedData Temporary Softfork (RDTS)
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].bit = 4;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nStartTime = 1764547200; // December 1st, 2025
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].active_duration = 52416; // ~1 year
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].threshold = 1109; // 55% of 2016
+
         ApplyDeploymentOptions(opts.dep_opts);
 
         consensus.nMinimumChainWork = uint256{"0000000000000000000000000000000000000000000017dde1c649f3708d14b6"};
@@ -283,7 +384,6 @@ public:
         vSeeds.clear();
         // nodes with support for servicebits filtering should be at the top
         vSeeds.emplace_back("testnet-seed.bitcoin.jonasschnelli.ch.");
-        vSeeds.emplace_back("seed.tbtc.petertodd.net.");
         vSeeds.emplace_back("seed.testnet.bitcoin.sprovoost.nl.");
         vSeeds.emplace_back("testnet-seed.bluematt.me."); // Just a static list of stable node(s), only supports x9
         vSeeds.emplace_back("seed.testnet.achownodes.xyz."); // Ava Chow, only supports x1, x5, x9, x49, x809, x849, xd, x400, x404, x408, x448, xc08, xc48, x40c
@@ -300,6 +400,12 @@ public:
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
+
+        checkpointData = {
+            {
+                {546, uint256{"000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70"}},
+            }
+        };
 
         m_assumeutxo_data = {
             {
@@ -361,6 +467,14 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 1512; // 75%
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].period = 2016;
+
+        // ReducedData Temporary Softfork (RDTS)
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].bit = 4;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nStartTime = 1764547200; // December 1st, 2025
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].active_duration = 52416; // ~1 year
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].threshold = 1109; // 55% of 2016
 
         ApplyDeploymentOptions(opts.dep_opts);
 
@@ -494,7 +608,7 @@ public:
         consensus.CSVHeight = 1;
         consensus.SegwitHeight = 1;
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
-        consensus.nPowTargetSpacing = 10 * 60;
+        consensus.nPowTargetSpacing = options.pow_target_spacing;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.enforce_BIP94 = false;
         consensus.fPowNoRetargeting = false;
@@ -506,6 +620,11 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 1815; // 90%
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].period = 2016;
+
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].bit = 4;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].min_activation_height = 0;
 
         ApplyDeploymentOptions(options.dep_opts);
 
@@ -590,6 +709,13 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 108; // 75%
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].period = 144; // Faster than normal for regtest (144 instead of 2016)
+
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].bit = 4;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].threshold = 108; // 75%
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].period = 144; // Faster than normal for regtest (144 instead of 2016)
 
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};

@@ -36,6 +36,7 @@
 #include <util/strencodings.h>
 #include <util/translation.h>
 #include <validation.h>
+#include <validationinterface.h>
 #include <versionbits.h>
 
 #include <boost/test/unit_test.hpp>
@@ -55,8 +56,18 @@ using interfaces::BlockTemplate;
 using interfaces::Mining;
 using node::BlockAssembler;
 using node::BlockCreateOptions;
+using node::FlattenMiningOptions;
 
 namespace miner_tests {
+class NewBlockTemplateCatcher final : public CValidationInterface
+{
+public:
+    std::shared_ptr<node::CBlockTemplate> m_template;
+
+protected:
+    void NewBlockTemplate(const std::shared_ptr<node::CBlockTemplate>& blocktemplate) override { m_template = blocktemplate; }
+};
+
 struct MinerTestingSetup : public TestingSetup {
     void TestPackageSelection(const CScript& scriptPubKey, const std::vector<CTransactionRef>& txFirst) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     void TestBasicMining(const CScript& scriptPubKey, const std::vector<CTransactionRef>& txFirst, int baseheight) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
@@ -92,6 +103,24 @@ struct MinerTestingSetup : public TestingSetup {
 } // namespace miner_tests
 
 BOOST_FIXTURE_TEST_SUITE(miner_tests, MinerTestingSetup)
+
+BOOST_AUTO_TEST_CASE(CreateNewBlock_signals_template)
+{
+    auto catcher{std::make_shared<NewBlockTemplateCatcher>()};
+    m_node.validation_signals->RegisterSharedValidationInterface(catcher);
+
+    auto mining{MakeMining()};
+    auto block_template{mining->createNewBlock({
+        .coinbase_output_script = CScript{} << OP_TRUE,
+    }, /*cooldown=*/false)};
+    BOOST_REQUIRE(block_template);
+
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    BOOST_REQUIRE(catcher->m_template);
+    BOOST_CHECK_EQUAL(catcher->m_template->block.GetHash().ToString(), block_template->getBlock().GetHash().ToString());
+
+    m_node.validation_signals->UnregisterSharedValidationInterface(catcher);
+}
 
 static CFeeRate blockMinFeeRate = CFeeRate(DEFAULT_BLOCK_MIN_TX_FEE);
 
@@ -220,6 +249,7 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
         m_node.chainman->ActiveChainstate(),
         &tx_mempool,
         MergeMiningOptions(options, m_node.mining_args),
+        m_node,
     }.CreateNewBlock()->m_package_feerates;
     BOOST_CHECK(block_package_feerates.size() == 2);
 
@@ -285,8 +315,7 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
     tx.vout[0].nValue = 5000000000LL - 100000000;
     tx.vout[1].nValue = 100000000; // 1BTC output
     // Increase size to avoid rounding errors: when the feerate is extremely small (i.e. 1sat/kvB), evaluating the fee
-    // at smaller sizes gives us rounded values that are equal to each other, which means we incorrectly include
-    // hashFreeTx2 + hashLowFeeTx2.
+    // at a smaller transaction size gives us a rounded value of 0.
     BulkTransaction(tx, 4000);
     Txid hashFreeTx2 = tx.GetHash();
     TryAddToMempool(tx_mempool, entry.Fee(0).SpendsCoinbase(true).FromTx(tx));
@@ -294,7 +323,8 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
     // This tx can't be mined by itself
     tx.vin[0].prevout.hash = hashFreeTx2;
     tx.vout.resize(1);
-    feeToUse = blockMinFeeRate.GetFee(freeTxSize);
+    const size_t lowFeeTx2VSize = GetVirtualTransactionSize(CTransaction{tx});
+    feeToUse = blockMinFeeRate.GetFee(lowFeeTx2VSize);
     tx.vout[0].nValue = 5000000000LL - 100000000 - feeToUse;
     Txid hashLowFeeTx2 = tx.GetHash();
     TryAddToMempool(tx_mempool, entry.Fee(feeToUse).SpendsCoinbase(false).FromTx(tx));
@@ -790,8 +820,83 @@ void MinerTestingSetup::TestPrioritisedMining(const CScript& scriptPubKey, const
 }
 
 // NOTE: These tests rely on CreateNewBlock doing its own self-validation!
+BOOST_AUTO_TEST_CASE(blockmaxsize_mining_options)
+{
+    const auto size_only_options{FlattenMiningOptions({
+        .block_max_size = 10'000,
+    })};
+    BOOST_REQUIRE(size_only_options.block_max_size);
+    BOOST_REQUIRE(size_only_options.block_max_weight);
+    BOOST_CHECK_EQUAL(*size_only_options.block_max_size, 10'000U);
+    BOOST_CHECK_EQUAL(*size_only_options.block_max_weight, MAX_BLOCK_WEIGHT);
+
+    const auto near_max_size_options{FlattenMiningOptions({
+        .block_max_size = MAX_BLOCK_SERIALIZED_SIZE - 1,
+    })};
+    BOOST_REQUIRE(near_max_size_options.block_max_weight);
+    BOOST_CHECK_EQUAL(*near_max_size_options.block_max_weight, MAX_BLOCK_WEIGHT);
+
+    const auto size_and_weight_options{FlattenMiningOptions({
+        .block_max_weight = 50'000,
+        .block_max_size = 10'000,
+    })};
+    BOOST_REQUIRE(size_and_weight_options.block_max_weight);
+    BOOST_CHECK_EQUAL(*size_and_weight_options.block_max_weight, 50'000U);
+
+    const auto reserved_size_options{FlattenMiningOptions({
+        .block_reserved_size = 2'000,
+        .block_max_size = 10'000,
+    })};
+    BOOST_CHECK_EQUAL(reserved_size_options.block_reserved_size, 2'000U);
+
+    const auto clamped_default_options{BlockCreateOptions{}.Clamped()};
+    BOOST_REQUIRE(clamped_default_options.block_min_fee_rate);
+    BOOST_REQUIRE(clamped_default_options.print_modified_fee);
+    BOOST_REQUIRE(clamped_default_options.block_reserved_weight);
+    BOOST_REQUIRE(clamped_default_options.block_max_weight);
+    BOOST_REQUIRE(clamped_default_options.block_max_size);
+    BOOST_CHECK(*clamped_default_options.block_min_fee_rate == CFeeRate{DEFAULT_BLOCK_MIN_TX_FEE});
+    BOOST_CHECK_EQUAL(*clamped_default_options.print_modified_fee, node::DEFAULT_PRINT_MODIFIED_FEE);
+    BOOST_CHECK_EQUAL(*clamped_default_options.block_reserved_weight, DEFAULT_BLOCK_RESERVED_WEIGHT);
+    BOOST_CHECK_EQUAL(*clamped_default_options.block_max_weight, DEFAULT_BLOCK_MAX_WEIGHT);
+    BOOST_CHECK_EQUAL(*clamped_default_options.block_max_size, DEFAULT_BLOCK_MAX_SIZE);
+
+    const auto clamped_size_only_options{BlockCreateOptions{.block_max_size = 10'000}.Clamped()};
+    BOOST_REQUIRE(clamped_size_only_options.block_max_size);
+    BOOST_REQUIRE(clamped_size_only_options.block_max_weight);
+    BOOST_CHECK_EQUAL(*clamped_size_only_options.block_max_size, 10'000U);
+    BOOST_CHECK_EQUAL(*clamped_size_only_options.block_max_weight, MAX_BLOCK_WEIGHT);
+
+    auto mining{MakeMining()};
+    BOOST_REQUIRE(mining);
+    const BlockCreateOptions original_mining_args{m_node.mining_args};
+    m_node.mining_args.block_max_size = 999;
+    BOOST_CHECK_EXCEPTION(mining->createNewBlock({}, /*cooldown=*/false),
+                          std::runtime_error,
+                          HasReason("block_max_size (999) is lower than minimum safety value of (1000)"));
+    BOOST_REQUIRE(mining->createNewBlock2(BlockCreateOptions{}.Clamped()));
+    m_node.mining_args = original_mining_args;
+
+    auto low_size{node::CheckMiningOptions({.block_max_size = 999}, /*use_argnames=*/false)};
+    BOOST_REQUIRE(!low_size);
+    BOOST_CHECK_EQUAL(util::ErrorString(low_size).original, "block_max_size (999) is lower than minimum safety value of (1000)");
+    BOOST_CHECK_EXCEPTION(BlockCreateOptions{.block_max_size = 999}.Clamped(),
+                          std::runtime_error,
+                          HasReason("block_max_size (999) is lower than minimum safety value of (1000)"));
+
+    auto high_size{node::CheckMiningOptions({.block_max_size = MAX_BLOCK_SERIALIZED_SIZE + 1}, /*use_argnames=*/false)};
+    BOOST_REQUIRE(!high_size);
+    BOOST_CHECK_EQUAL(util::ErrorString(high_size).original, "block_max_size (4000001) exceeds consensus maximum block serialized size (4000000)");
+
+    auto high_reserved_size{node::CheckMiningOptions({.block_reserved_size = MAX_BLOCK_SERIALIZED_SIZE + 1}, /*use_argnames=*/false)};
+    BOOST_REQUIRE(!high_reserved_size);
+    BOOST_CHECK_EQUAL(util::ErrorString(high_reserved_size).original, "block_reserved_size (4000001) exceeds maximum reserved block serialized size (4000000)");
+}
+
 BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 {
+    gArgs.ForceSetArg("-blockprioritysize", "0");
+
     auto mining{MakeMining()};
     BOOST_REQUIRE(mining);
 

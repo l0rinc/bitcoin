@@ -6,6 +6,7 @@
 #define BITCOIN_TEST_UTIL_SETUP_COMMON_H
 
 #include <common/args.h> // IWYU pragma: export
+#include <common/pcp.h>
 #include <consensus/amount.h>
 #include <kernel/caches.h>
 #include <key.h>
@@ -21,6 +22,7 @@
 #include <util/signalinterrupt.h>
 #include <util/vector.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -28,6 +30,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 class CFeeRate;
@@ -228,6 +231,17 @@ struct TestChain100Setup : public TestingSetup {
      */
     std::vector<CTransactionRef> PopulateMempool(FastRandomContext& det_rand, size_t num_transactions, bool submit);
 
+    /** Mock the mempool minimum feerate by adding a transaction and calling TrimToSize(0),
+     * simulating the mempool "reaching capacity" and evicting by descendant feerate. Note that
+     * this clears the mempool, and the new minimum feerate will depend on the maximum feerate of
+     * transactions removed, so this must be called while the mempool is empty.
+     *
+     * @param target_feerate    The new mempool minimum feerate after this function returns.
+     *                          Must be above max(incremental feerate, min relay feerate),
+     *                          or 1sat/vB with default settings.
+     */
+    void MockMempoolMinFee(const CFeeRate& target_feerate);
+
     FakeNodeClock m_clock{std::chrono::seconds{1598887952}}; // 2020-08-31, arbitrary
     std::vector<CTransactionRef> m_coinbase_txns; // For convenience, coinbase transactions
     CKey coinbaseKey; // private/public key needed to spend coinbase transactions
@@ -279,5 +293,17 @@ private:
 };
 
 CBlock getBlock13b8a();
+
+static inline std::variant<MappingResult, MappingError> NATPMPRequestPortMap(const CNetAddr& gateway, uint16_t port, uint32_t lifetime, int num_tries = 3, std::chrono::milliseconds timeout_per_try = std::chrono::milliseconds{1000})
+{
+    static CThreadInterrupt interrupt;
+    return NATPMPRequestPortMap(gateway, port, lifetime, interrupt, num_tries, timeout_per_try);
+}
+
+static inline std::variant<MappingResult, MappingError> PCPRequestPortMap(const PCPMappingNonce& nonce, const CNetAddr& gateway, const CNetAddr& bind, uint16_t port, uint32_t lifetime, int num_tries = 3, std::chrono::milliseconds timeout_per_try = std::chrono::milliseconds{1000})
+{
+    static CThreadInterrupt interrupt;
+    return PCPRequestPortMap(nonce, gateway, bind, port, lifetime, interrupt, num_tries, timeout_per_try);
+}
 
 #endif // BITCOIN_TEST_UTIL_SETUP_COMMON_H

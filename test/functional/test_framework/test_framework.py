@@ -112,6 +112,10 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         self.rpc_timeout = 60  # Wait for up to 60 seconds for the RPC server to respond
         self.supports_cli = True
         self.bind_to_localhost_only = True
+        self._wallet_option_descriptors = True
+        self._wallet_option_legacy = True
+        self._wallet_option_restrict = False
+        self._wallet_options_added = False
         self.parse_args(test_file)
         self.default_wallet_name = "default_wallet"
         self.wallet_data_filename = "wallet.dat"
@@ -124,7 +128,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         # By default the wallet is not required. Set to true by skip_if_no_wallet().
         # Can also be set to None to indicate that the wallet will be used if available.
         # When False or None, we ignore wallet_names in setup_nodes().
-        self.uses_wallet = False
+        self.uses_wallet = None if self._wallet_options_added else False
         # Disable ThreadOpenConnections by default, so that adding entries to
         # addrman will not result in automatic connections to them.
         self.disable_autoconnect = True
@@ -203,6 +207,11 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                             help="Explicitly use v1 transport (can be used to overwrite global --v2transport option)")
         parser.add_argument("--test_methods", dest="test_methods", nargs='*',
                             help="Run specified test methods sequentially instead of the full test. Use only for methods that do not depend on any context set up in run_test or other methods.")
+        wallet_group = parser.add_mutually_exclusive_group()
+        wallet_group.add_argument("--descriptors", dest="descriptors", default=True, action="store_true",
+                                  help="Use descriptor wallets. This is the default.")
+        wallet_group.add_argument("--legacy-wallet", dest="descriptors", action="store_false",
+                                  help="Use legacy wallets.")
 
         self.add_options(parser)
         # Running TestShell in a Jupyter notebook causes an additional -f argument
@@ -210,6 +219,10 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         # source: https://stackoverflow.com/questions/48796169/how-to-fix-ipykernel-launcher-py-error-unrecognized-arguments-in-jupyter/56349168#56349168
         parser.add_argument("-f", "--fff", help="a dummy argument to fool ipython", default="1")
         self.options = parser.parse_args()
+        if self._wallet_option_restrict:
+            assert self._wallet_option_descriptors != self._wallet_option_legacy
+            if self.options.descriptors != self._wallet_option_descriptors:
+                parser.error("--descriptors is not supported by this test" if not self._wallet_option_descriptors else "--legacy-wallet is not supported by this test")
         if self.options.timeout_factor == 0:
             self.options.timeout_factor = 999
         self.options.timeout_factor = self.options.timeout_factor or (4 if self.options.valgrind else 1)
@@ -404,14 +417,31 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         if wallet_name is not False:
             n = self.nodes[node]
             if wallet_name is not None:
-                n.createwallet(wallet_name=wallet_name, load_on_startup=True)
-            wallet_importprivkey(n.get_wallet_rpc(wallet_name), n.get_deterministic_priv_key().key, 0, label="coinbase")
+                n.createwallet(wallet_name=wallet_name, descriptors=self.options.descriptors, load_on_startup=True)
+                wallet_importprivkey(n.get_wallet_rpc(wallet_name), n.get_deterministic_priv_key().key, 0, label="coinbase")
+            else:
+                n.importprivkey(privkey=n.get_deterministic_priv_key().key, label="coinbase", rescan=True)
 
     def run_test(self):
         """Tests must override this method to define test logic"""
         raise NotImplementedError
 
     # Public helper methods. These can be accessed by the subclass test scripts.
+
+    def add_wallet_options(self, parser, *, descriptors=True, legacy=True):
+        """Declare wallet types supported by this test.
+
+        The common parser already provides --descriptors/--legacy-wallet. This
+        compatibility helper records restrictions for ported Knots tests without
+        adding duplicate command-line options.
+        """
+        assert descriptors or legacy
+        self._wallet_options_added = True
+        self._wallet_option_descriptors = descriptors
+        self._wallet_option_legacy = legacy
+        self._wallet_option_restrict = descriptors != legacy
+        if self._wallet_option_restrict:
+            parser.set_defaults(descriptors=descriptors)
 
     def add_nodes(self, num_nodes: int, extra_args=None, *, rpchost=None, versions=None):
         """Instantiate TestNode objects.
@@ -479,6 +509,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                 use_cli=self.options.usecli,
                 v2transport=self.options.v2transport,
                 uses_wallet=self.uses_wallet,
+                descriptors=self.options.descriptors,
             )
             init.update(extra_init[i])
             test_node_i = TestNode(
@@ -930,6 +961,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                     coverage_dir=None,
                     cwd=self.options.tmpdir,
                     uses_wallet=self.uses_wallet,
+                    descriptors=self.options.descriptors,
                 ))
             self.start_node(CACHE_NODE_ID)
             cache_node = self.nodes[CACHE_NODE_ID]
@@ -1042,6 +1074,20 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         self.uses_wallet = True
         if not self.is_wallet_compiled():
             raise SkipTest("wallet has not been compiled.")
+        if self.options.descriptors:
+            self.skip_if_no_sqlite()
+        else:
+            self.skip_if_no_bdb()
+
+    def skip_if_no_sqlite(self):
+        """Skip the running test if sqlite has not been compiled."""
+        if not self.is_sqlite_compiled():
+            raise SkipTest("sqlite has not been compiled.")
+
+    def skip_if_no_bdb(self):
+        """Skip the running test if BDB has not been compiled."""
+        if not self.is_bdb_compiled():
+            raise SkipTest("BDB has not been compiled.")
 
     def skip_if_no_wallet_tool(self):
         """Skip the running test if bitcoin-wallet has not been compiled."""
@@ -1069,8 +1115,8 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
             raise SkipTest("bench_bitcoin has not been compiled")
 
     def skip_if_no_cli(self):
-        """Skip the running test if bitcoin-cli has not been compiled."""
-        if not self.is_cli_compiled():
+        """Skip the running test if bitcoin-cli is not available."""
+        if not self.is_cli_available():
             raise SkipTest("bitcoin-cli has not been compiled.")
 
     def skip_if_no_ipc(self):
@@ -1116,8 +1162,11 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         """Checks whether bench_bitcoin was compiled."""
         return self.config["components"].getboolean("BUILD_BENCH")
 
-    def is_cli_compiled(self):
-        """Checks whether bitcoin-cli was compiled."""
+    def is_cli_available(self):
+        """Checks whether bitcoin-cli is available."""
+        if "BITCOINCLI" in os.environ:
+            return os.environ["BITCOINCLI"]
+
         return self.config["components"].getboolean("ENABLE_CLI")
 
     def is_external_signer_compiled(self):
@@ -1127,6 +1176,12 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
     def is_wallet_compiled(self):
         """Checks whether the wallet module was compiled."""
         return self.config["components"].getboolean("ENABLE_WALLET")
+
+    def is_specified_wallet_compiled(self):
+        """Checks whether wallet support for the specified type was compiled."""
+        if self.options.descriptors:
+            return self.is_sqlite_compiled()
+        return self.is_bdb_compiled()
 
     def is_wallet_tool_compiled(self):
         """Checks whether bitcoin-wallet was compiled."""
@@ -1159,6 +1214,14 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
     def is_ipc_compiled(self):
         """Checks whether ipc was compiled."""
         return self.config["components"].getboolean("ENABLE_IPC")
+
+    def is_sqlite_compiled(self):
+        """Checks whether the wallet module was compiled with SQLite support."""
+        return self.config["components"].getboolean("USE_SQLITE")
+
+    def is_bdb_compiled(self):
+        """Checks whether the wallet module was compiled with BDB support."""
+        return self.config["components"].getboolean("USE_BDB")
 
     def has_blockfile(self, node, filenum: str):
         return (node.blocks_path/ f"blk{filenum}.dat").is_file()

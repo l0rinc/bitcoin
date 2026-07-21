@@ -32,6 +32,7 @@ enum class AuthCookieResult : uint8_t {
 /**
  * Generate a new RPC authentication cookie and write it to disk
  * @param[in] cookie_perms Filesystem permissions to use for the cookie file.
+ * @param[in] cookie_perms_set_by_arg Whether cookie_perms was set by -rpccookieperms.
  * @param[out] user Generated username, only set if `OK` is returned.
  * @param[out] pass Generated password, only set if `OK` is returned.
  * @retval AuthCookieResult::Disabled Authentication via cookie is disabled.
@@ -39,9 +40,9 @@ enum class AuthCookieResult : uint8_t {
  * @retval AuthCookieResult::Ok Auth data was generated, saved to disk and in `user` and `pass`.
  */
 AuthCookieResult GenerateAuthCookie(const std::optional<fs::perms>& cookie_perms,
-                                            std::string& user,
-                                            std::string& pass);
-
+                                    bool cookie_perms_set_by_arg,
+                                    std::string& user,
+                                    std::string& pass);
 /** Read the RPC authentication cookie from disk */
 AuthCookieResult GetAuthCookie(std::string& cookie_out);
 /** Delete RPC authentication cookie from disk */
@@ -58,6 +59,7 @@ public:
     enum Mode { EXECUTE, GET_HELP, GET_ARGS } mode = EXECUTE;
     std::string URI;
     std::string authUser;
+    std::string m_wallet_restriction{"-"};
     std::string peerAddr;
     std::any context;
     JSONRPCVersion m_json_version = JSONRPCVersion::V1_LEGACY;

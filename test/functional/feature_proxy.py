@@ -46,7 +46,10 @@ import tempfile
 
 from test_framework.socks5 import Socks5Configuration, Socks5Command, Socks5Server, AddressType
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_equal
+from test_framework.util import (
+    assert_equal,
+    p2p_port,
+)
 from test_framework.netutil import test_ipv6_local, test_unix_socket
 
 # Networks returned by RPC getpeerinfo.
@@ -439,7 +442,7 @@ class ProxyTest(BitcoinTestFramework):
 
         self.log.info("Test passing -onlynet=onion without -proxy or -onion but with -listenonion=1 is ok")
         self.start_node(1, extra_args=["-onlynet=onion", "-listenonion=1"])
-        self.stop_node(1)
+        self.stop_node(1, expected_stderr=f'Warning: You are using a common listening port (127.0.0.1:{p2p_port(1)}) for both Tor and local connections. All connections to this port will be assumed to be Tor connections, and will be denied any whitelist permissions. If this is not your intent, setup a separate -bind=<addr>[:<port>]=onion configuration, or set -listenonion=0.')
 
         self.log.info("Test passing unknown network to -onlynet raises expected init error")
         self.nodes[1].extra_args = ["-onlynet=abc"]
@@ -470,8 +473,8 @@ class ProxyTest(BitcoinTestFramework):
         assert_equal(nets["ipv6"]["proxy"], "127.6.6.6:6666")
         self.stop_node(1)
 
-        self.log.info("Test overriding the Onion proxy")
-        self.start_node(1, extra_args=["-proxy=127.1.1.1:1111", "-proxy=127.2.2.2:2222=onion"])
+        self.log.info("Test overriding the Tor proxy")
+        self.start_node(1, extra_args=["-proxy=127.1.1.1:1111", "-proxy=127.2.2.2:2222=tor"])
         nets = networks_dict(self.nodes[1].getnetworkinfo())
         assert_equal(nets["ipv4"]["proxy"], "127.1.1.1:1111")
         assert_equal(nets["ipv6"]["proxy"], "127.1.1.1:1111")

@@ -55,7 +55,7 @@ static bool IsSegwit(const Descriptor& desc) {
 static bool UseMaxSig(const std::optional<CTxIn>& txin, const CCoinControl* coin_control) {
     // Use max sig if watch only inputs were used or if this particular input is an external input
     // to ensure a sufficient fee is attained for the requested feerate.
-    return coin_control && txin && coin_control->IsExternalSelected(txin->prevout);
+    return coin_control && (coin_control->fAllowWatchOnly || (txin && coin_control->IsExternalSelected(txin->prevout)));
 }
 
 /** Get the size of an input (in witness units) once it's signed.
@@ -330,6 +330,8 @@ CoinsResult AvailableCoins(const CWallet& wallet,
     const int min_depth = {coinControl ? coinControl->m_min_depth : DEFAULT_MIN_DEPTH};
     const int max_depth = {coinControl ? coinControl->m_max_depth : DEFAULT_MAX_DEPTH};
     const bool only_safe = {coinControl ? !coinControl->m_include_unsafe_inputs : true};
+    const bool segwit_inputs_only = {coinControl ? coinControl->m_segwit_inputs_only : false};
+    const bool allow_watch_only = {coinControl ? coinControl->fAllowWatchOnly : false};
     const bool can_grind_r = wallet.CanGrindR();
     std::vector<COutPoint> outpoints;
 
@@ -441,14 +443,32 @@ CoinsResult AvailableCoins(const CWallet& wallet,
             continue;
         }
 
+        const isminetype mine{wallet.IsMine(output)};
+        if (mine == ISMINE_NO) {
+            continue;
+        }
+
         bool tx_from_me = CachedTxIsFromMe(wallet, wtx);
 
         std::unique_ptr<SigningProvider> provider = wallet.GetSolvingProvider(output.scriptPubKey);
+        if (segwit_inputs_only) {
+            if (provider) {
+                if (!IsSegWitOutput(*provider, output.scriptPubKey)) continue;
+            } else {
+                int witness_ver;
+                std::vector<unsigned char> witness_prog;
+                if (!output.scriptPubKey.IsWitnessProgram(witness_ver, witness_prog)) continue;
+            }
+        }
 
         int input_bytes = CalculateMaximumSignedInputSize(output, COutPoint(), provider.get(), can_grind_r, coinControl);
         // Because CalculateMaximumSignedInputSize infers a solvable descriptor to get the satisfaction size,
         // it is safe to assume that this input is solvable if input_bytes is greater than -1.
         bool solvable = input_bytes > -1;
+        const bool mine_spendable{(mine & ISMINE_SPENDABLE) != ISMINE_NO};
+        const bool mine_watch_only{(mine & ISMINE_WATCH_ONLY) != ISMINE_NO};
+        bool spendable = mine_spendable || (mine_watch_only && allow_watch_only && solvable);
+        if (!spendable && params.only_spendable) continue;
 
         // Obtain script type
         std::vector<std::vector<uint8_t>> script_solutions;
@@ -467,7 +487,7 @@ CoinsResult AvailableCoins(const CWallet& wallet,
         }
 
         auto available_output_type = GetOutputType(type, is_from_p2sh);
-        auto available_output = COutput(outpoint, output, nDepth, input_bytes, solvable, tx_safe, wtx.GetTxTime(), tx_from_me, feerate);
+        auto available_output = COutput(outpoint, output, nDepth, input_bytes, spendable, solvable, tx_safe, wtx.GetTxTime(), tx_from_me, feerate);
         if (wtx.tx->version == TRUC_VERSION && nDepth == 0 && params.check_version_trucness) {
             unconfirmed_truc_coins.emplace_back(available_output_type, available_output);
             auto [it, _] = truc_txid_by_value.try_emplace(wtx.tx->GetHash(), 0);
@@ -548,10 +568,16 @@ std::map<CTxDestination, std::vector<COutput>> ListCoins(const CWallet& wallet)
     std::map<CTxDestination, std::vector<COutput>> result;
 
     CCoinControl coin_control;
+    // Include watch-only for LegacyScriptPubKeyMan wallets without private keys
+    coin_control.fAllowWatchOnly = wallet.GetLegacyScriptPubKeyMan() && wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
     CoinFilterParams coins_params;
+    coins_params.only_spendable = false;
     coins_params.skip_locked = false;
     for (const COutput& coin : AvailableCoins(wallet, &coin_control, /*feerate=*/std::nullopt, coins_params).All()) {
         CTxDestination address;
+        if (!coin.spendable && !(wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && coin.solvable)) {
+            continue;
+        }
         if (!ExtractDestination(FindNonChangeParentOutput(wallet, coin.outpoint).scriptPubKey, address)) {
             // For backwards compatibility, we convert P2PK output scripts into PKHash destinations
             if (auto pk_dest = std::get_if<PubKeyDestination>(&address)) {
@@ -991,8 +1017,12 @@ static bool IsCurrentForAntiFeeSniping(interfaces::Chain& chain, const uint256& 
     return true;
 }
 
+/**
+ * Set a height-based locktime for new transactions (uses the height of the
+ * current chain tip unless we are not synced with the current chain
+ */
 void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng_fast,
-                                 interfaces::Chain& chain, const uint256& block_hash, int block_height)
+                          interfaces::Chain& chain, const uint256& block_hash, int block_height)
 {
     // All inputs must be added by now
     assert(!tx.vin.empty());
@@ -1047,7 +1077,23 @@ void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng_fast,
     }
 }
 
-uint64_t GetSerializeSizeForRecipient(const CRecipient& recipient)
+void MaybeDiscourageFeeSniping2(const CWallet &wallet,
+                               CMutableTransaction& tx)
+{
+    for (const CTxIn& tx_in : tx.vin) {
+        // Checks sequence values consistent with DiscourageFeeSniping
+        if (tx_in.nSequence != CTxIn::MAX_SEQUENCE_NONFINAL && tx_in.nSequence != MAX_BIP125_RBF_SEQUENCE) {
+            // If an input has an incompatible sequence, we can't do anti-fee-sniping
+            return;
+        }
+    }
+
+    FastRandomContext rng_fast;
+    LOCK(wallet.cs_wallet);
+    DiscourageFeeSniping(tx, rng_fast, wallet.chain(), wallet.GetLastBlockHash(), wallet.GetLastBlockHeight());
+}
+
+size_t GetSerializeSizeForRecipient(const CRecipient& recipient)
 {
     return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(recipient.dest)));
 }

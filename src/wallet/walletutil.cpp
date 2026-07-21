@@ -7,7 +7,10 @@
 #include <chainparams.h>
 #include <common/args.h>
 #include <key_io.h>
+#include <util/check.h>
 #include <util/log.h>
+
+#include <array>
 
 namespace wallet {
 fs::path GetWalletDir()
@@ -30,6 +33,31 @@ fs::path GetWalletDir()
     }
 
     return path;
+}
+
+bool RemoveCreatedWalletDirIfEmpty(const fs::path& wallet_path, std::string_view log_context)
+{
+    if (Assume(fs::is_empty(wallet_path))) {
+        fs::remove(wallet_path);
+        return true;
+    }
+
+    LogInfo("%s: Directory %s is not empty; leaving it alone\n", log_context, fs::PathToString(wallet_path));
+    return false;
+}
+
+bool IsFeatureSupported(int wallet_version, int feature_version)
+{
+    return wallet_version >= feature_version;
+}
+
+WalletFeature GetClosestWalletFeature(int version)
+{
+    static constexpr std::array wallet_features{FEATURE_LATEST, FEATURE_PRE_SPLIT_KEYPOOL, FEATURE_NO_DEFAULT_KEY, FEATURE_HD_SPLIT, FEATURE_HD, FEATURE_COMPRPUBKEY, FEATURE_WALLETCRYPT, FEATURE_BASE};
+    for (const WalletFeature& wf : wallet_features) {
+        if (version >= wf) return wf;
+    }
+    return static_cast<WalletFeature>(0);
 }
 
 WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const OutputType& addr_type, bool internal)

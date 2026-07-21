@@ -37,6 +37,30 @@ static inline CTransactionRef make_tx(const std::vector<CTransactionRef>& inputs
     return MakeTransactionRef(tx);
 }
 
+// Make two child transactions from parent, which must have at least two outputs.
+static inline std::pair<CTransactionRef, CTransactionRef> make_two_siblings(const CTransactionRef parent,
+                                      const std::vector<CAmount>& output_values)
+{
+    assert(parent->vout.size() >= 2);
+
+    CMutableTransaction tx1;
+    tx1.vin.resize(1);
+    tx1.vout.resize(output_values.size());
+    tx1.vin[0].prevout.hash = parent->GetHash();
+    tx1.vin[0].prevout.n = 0;
+    tx1.vin[0].scriptWitness.stack.emplace_back(10);
+
+    for (size_t i = 0; i < output_values.size(); ++i) {
+        tx1.vout[i].scriptPubKey = CScript() << OP_11 << OP_EQUAL;
+        tx1.vout[i].nValue = output_values[i];
+    }
+
+    CMutableTransaction tx2{tx1};
+    tx2.vin[0].prevout.n = 1;
+
+    return std::make_pair(MakeTransactionRef(tx1), MakeTransactionRef(tx2));
+}
+
 static CTransactionRef add_descendants(const CTransactionRef& tx, int32_t num_descendants, CTxMemPool& pool)
     EXCLUSIVE_LOCKS_REQUIRED(::cs_main, pool.cs)
 {
@@ -53,6 +77,37 @@ static CTransactionRef add_descendants(const CTransactionRef& tx, int32_t num_de
     }
     // Return last created tx
     return tx_to_spend;
+}
+
+static CTransactionRef add_descendant_to_parents(const std::vector<CTransactionRef>& parents, CTxMemPool& pool)
+    EXCLUSIVE_LOCKS_REQUIRED(::cs_main, pool.cs)
+{
+    AssertLockHeld(::cs_main);
+    AssertLockHeld(pool.cs);
+    TestMemPoolEntryHelper entry;
+    // Assumes this isn't already spent in mempool
+    auto child_tx = make_tx(/*inputs=*/parents, /*output_values=*/{50 * CENT});
+    TryAddToMempool(pool, entry.FromTx(child_tx));
+    // Return last created tx
+    return child_tx;
+}
+
+// Makes two children for a single parent
+static std::pair<CTransactionRef, CTransactionRef> add_children_to_parent(const CTransactionRef parent, CTxMemPool& pool)
+    EXCLUSIVE_LOCKS_REQUIRED(::cs_main, pool.cs)
+{
+    AssertLockHeld(::cs_main);
+    AssertLockHeld(pool.cs);
+    TestMemPoolEntryHelper entry;
+    // Assumes this isn't already spent in mempool
+    auto children_tx = make_two_siblings(/*parent=*/parent, /*output_values=*/{50 * CENT});
+    TryAddToMempool(pool, entry.FromTx(children_tx.first));
+    TryAddToMempool(pool, entry.FromTx(children_tx.second));
+    return children_tx;
+}
+
+static CTxMemPool::ChangeSet::TxHandle RBFTestStageAddition(CTxMemPool::ChangeSet& changeset, const CTransactionRef& tx, const CAmount fee) {
+    return changeset.StageAddition(tx, fee, 0, 1, 0, COIN_AGE_CACHE_ZERO, false, /*extra_weight=*/0, 4, LockPoints());
 }
 
 BOOST_FIXTURE_TEST_CASE(rbf_helper_functions, TestChain100Setup)
@@ -131,18 +186,30 @@ BOOST_FIXTURE_TEST_CASE(rbf_helper_functions, TestChain100Setup)
     const auto unused_txid = Txid::FromUint256(GetRandHash());
 
     // Tests for EntriesAndTxidsDisjoint
-    BOOST_CHECK(EntriesAndTxidsDisjoint(empty_set, {tx1->GetHash()}, unused_txid) == std::nullopt);
-    BOOST_CHECK(EntriesAndTxidsDisjoint(set_12_normal, {tx3->GetHash()}, unused_txid) == std::nullopt);
-    BOOST_CHECK(EntriesAndTxidsDisjoint({entry2_normal}, {tx2->GetHash()}, unused_txid).has_value());
-    BOOST_CHECK(EntriesAndTxidsDisjoint(set_12_normal, {tx1->GetHash()}, unused_txid).has_value());
-    BOOST_CHECK(EntriesAndTxidsDisjoint(set_12_normal, {tx2->GetHash()}, unused_txid).has_value());
+    bool violates_policy{false};
+    BOOST_CHECK(EntriesAndTxidsDisjoint(empty_set, {{tx1->GetHash(), true}}, unused_txid, &violates_policy) == std::nullopt);
+    BOOST_CHECK(!violates_policy);
+    BOOST_CHECK(EntriesAndTxidsDisjoint(set_12_normal, {{tx3->GetHash(), true}}, unused_txid, &violates_policy) == std::nullopt);
+    BOOST_CHECK(!violates_policy);
+    BOOST_CHECK(EntriesAndTxidsDisjoint({entry2_normal}, {{tx2->GetHash(), true}}, unused_txid, &violates_policy).has_value());
+    BOOST_CHECK(!violates_policy);
+    BOOST_CHECK(EntriesAndTxidsDisjoint(set_12_normal, {{tx1->GetHash(), true}}, unused_txid, &violates_policy).has_value());
+    BOOST_CHECK(!violates_policy);
+    BOOST_CHECK(EntriesAndTxidsDisjoint(set_12_normal, {{tx2->GetHash(), true}}, unused_txid, &violates_policy).has_value());
+    BOOST_CHECK(!violates_policy);
     // EntriesAndTxidsDisjoint does not calculate descendants of iters_conflicting; it uses whatever
     // the caller passed in. As such, no error is returned even though entry2_normal is a descendant of tx1.
-    BOOST_CHECK(EntriesAndTxidsDisjoint({entry2_normal}, {tx1->GetHash()}, unused_txid) == std::nullopt);
+    BOOST_CHECK(EntriesAndTxidsDisjoint({entry2_normal}, {{tx1->GetHash(), true}}, unused_txid, &violates_policy) == std::nullopt);
+    BOOST_CHECK(!violates_policy);
+    BOOST_CHECK(EntriesAndTxidsDisjoint(set_12_normal, {{tx3->GetHash(), false}}, unused_txid, &violates_policy) == std::nullopt);
+    BOOST_CHECK(!violates_policy);
+    BOOST_CHECK(EntriesAndTxidsDisjoint({entry2_normal}, {{tx2->GetHash(), false}}, unused_txid, &violates_policy) == std::nullopt);
+    BOOST_CHECK(violates_policy);
+    violates_policy = false;
 
     // Tests for PaysForRBF
-    const CFeeRate incremental_relay_feerate{DEFAULT_INCREMENTAL_RELAY_FEE};
-    const CFeeRate higher_relay_feerate{2 * DEFAULT_INCREMENTAL_RELAY_FEE};
+    const CFeeRate incremental_relay_feerate{CORE_INCREMENTAL_RELAY_FEE};
+    const CFeeRate higher_relay_feerate{2 * incremental_relay_feerate};
     // Must pay at least as much as the original.
     BOOST_CHECK(PaysForRBF(/*original_fees=*/high_fee,
                            /*replacement_fees=*/high_fee,
@@ -159,6 +226,44 @@ BOOST_FIXTURE_TEST_CASE(rbf_helper_functions, TestChain100Setup)
     BOOST_CHECK(PaysForRBF(high_fee, high_fee + 4, 20, higher_relay_feerate, unused_txid) == std::nullopt);
     BOOST_CHECK(PaysForRBF(low_fee, high_fee, 99999999, incremental_relay_feerate, unused_txid).has_value());
     BOOST_CHECK(PaysForRBF(low_fee, high_fee + 99999999, 99999999, incremental_relay_feerate, unused_txid) == std::nullopt);
+}
+
+BOOST_FIXTURE_TEST_CASE(rbf_changeset_cluster_limits_count_replacements, TestChain100Setup)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    std::vector<CTransactionRef> parents;
+    std::vector<CTransactionRef> children;
+    parents.reserve(DEFAULT_CLUSTER_LIMIT / 2);
+    children.reserve(DEFAULT_CLUSTER_LIMIT / 2);
+
+    for (size_t i{0}; i < DEFAULT_CLUSTER_LIMIT / 2; ++i) {
+        const auto parent_tx{make_tx(/*inputs=*/{m_coinbase_txns.at(i)}, /*output_values=*/{10 * COIN})};
+        TryAddToMempool(pool, entry.Fee(1000).FromTx(parent_tx));
+        const auto child_tx{make_tx(/*inputs=*/{parent_tx}, /*output_values=*/{9 * COIN})};
+        TryAddToMempool(pool, entry.Fee(1000).FromTx(child_tx));
+        parents.push_back(parent_tx);
+        children.push_back(child_tx);
+    }
+
+    const auto replacement_tx{make_tx(/*inputs=*/parents, /*output_values=*/{9 * COIN})};
+    {
+        auto changeset{pool.GetChangeSet()};
+        (void)RBFTestStageAddition(*changeset, replacement_tx, /*fee=*/1000);
+        BOOST_CHECK(!changeset->CheckMemPoolPolicyLimits());
+    }
+    {
+        auto changeset{pool.GetChangeSet()};
+        (void)RBFTestStageAddition(*changeset, replacement_tx, /*fee=*/1000);
+        for (const auto& child_tx : children) {
+            const auto child_iter{pool.GetIter(child_tx->GetHash())};
+            BOOST_REQUIRE(child_iter.has_value());
+            changeset->StageRemoval(*child_iter);
+        }
+        BOOST_CHECK(changeset->CheckMemPoolPolicyLimits());
+    }
 }
 
 BOOST_FIXTURE_TEST_CASE(rbf_conflicts_calculator, TestChain100Setup)
@@ -199,36 +304,44 @@ BOOST_FIXTURE_TEST_CASE(rbf_conflicts_calculator, TestChain100Setup)
     // At this point, we should have 2 clusters in the mempool, each with 52
     // transactions.
 
-    // parent_tx and all children are in one cluster, so we can have as many
-    // conflicts within this cluster as we want without violating the RBF conflicts
-    // limit.
+    // parent_tx and all children are in one cluster, and the transaction count
+    // remains under the RBF conflicts limit.
     const auto parent_entry_1 = pool.GetIter(parent_tx_1->GetHash()).value();
     const auto parent_entry_2 = pool.GetIter(parent_tx_2->GetHash()).value();
     const auto conflicting_transaction = make_tx({parent_tx_1, parent_tx_2}, {50 * CENT});
     CTxMemPool::setEntries all_conflicts, dummy;
     BOOST_CHECK(GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
                                        /*pool=*/ pool,
-                                       /*iters_conflicting=*/ {parent_entry_1, parent_entry_2},
+                                       /*iters_conflicting=*/ {parent_entry_1},
                                        /*all_conflicts=*/ all_conflicts) == std::nullopt);
+    BOOST_CHECK_EQUAL(all_conflicts.size(), NUM_OUTPUTS + 1);
+    all_conflicts.clear();
 
-    dummy.clear();
-    // Conflicting directly with all those conflicts doesn't change anything.
+    // Two such clusters only affect 2 clusters, but would evict 104 potential
+    // entries, so Knots' transaction-count bound rejects the replacement.
+    const auto too_many_entries = GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
+                                                         /*pool=*/ pool,
+                                                         /*iters_conflicting=*/ {parent_entry_1, parent_entry_2},
+                                                         /*all_conflicts=*/ all_conflicts);
+    BOOST_REQUIRE(too_many_entries.has_value());
+    BOOST_CHECK(too_many_entries->find("too many potential replacements") != std::string::npos);
+
+    // Recreate the one-cluster conflict set after the rejected two-cluster case.
     BOOST_CHECK(GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
                                        /*pool=*/ pool,
-                                       /*iters_conflicting=*/ all_conflicts,
-                                       /*all_conflicts=*/ dummy) == std::nullopt);
-    BOOST_CHECK_EQUAL(all_conflicts.size(), dummy.size());
+                                       /*iters_conflicting=*/ {parent_entry_1},
+                                       /*all_conflicts=*/ all_conflicts) == std::nullopt);
+    const auto overlapping_descendants = GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
+                                                                /*pool=*/ pool,
+                                                                /*iters_conflicting=*/ all_conflicts,
+                                                                /*all_conflicts=*/ dummy);
+    BOOST_REQUIRE(overlapping_descendants.has_value());
+    BOOST_CHECK(overlapping_descendants->find("too many potential replacements") != std::string::npos);
     dummy.clear();
 
     // If we mine the parent_tx's, then the clusters split (102 clusters).
     pool.removeForBlock({parent_tx_1, parent_tx_2}, /*nBlockHeight=*/ 1);
 
-    // Add some descendants now to each of the direct children (we can do this now that the clusters have split).
-    for (const auto& child : direct_children) {
-        add_descendants(child, 10, pool);
-    }
-
-    // We can conflict with 100 different clusters, even if they have lots of transactions.
     CTxMemPool::setEntries conflicts;
     for (auto i = 0; i < 100; ++i) {
         conflicts.insert(pool.GetIter(direct_children[i]->GetHash()).value());
@@ -237,13 +350,41 @@ BOOST_FIXTURE_TEST_CASE(rbf_conflicts_calculator, TestChain100Setup)
                                        /*pool=*/ pool,
                                        /*iters_conflicting=*/ conflicts,
                                        /*all_conflicts=*/ dummy) == std::nullopt);
+    dummy.clear();
 
-    // Conflicting with 1 more distinct cluster causes failure, however.
+    // Conflicting with 1 more distinct cluster causes the cluster-count bound to fail.
     conflicts.insert(pool.GetIter(direct_children[100]->GetHash()).value());
+    const auto too_many_clusters = GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
+                                                         /*pool=*/ pool,
+                                                         /*iters_conflicting=*/ conflicts,
+                                                         /*all_conflicts=*/ dummy);
+    BOOST_REQUIRE(too_many_clusters.has_value());
+    BOOST_CHECK(too_many_clusters->find("too many conflicting clusters") != std::string::npos);
+
+    // Add some descendants now to each of the direct children (we can do this now that the clusters have split).
+    for (const auto& child : direct_children) {
+        add_descendants(child, 10, pool);
+    }
+
+    // With descendants, the transaction-count bound still applies before the
+    // cluster-count bound is reached.
+    conflicts.clear();
+    for (auto i = 0; i < 9; ++i) {
+        conflicts.insert(pool.GetIter(direct_children[i]->GetHash()).value());
+    }
     BOOST_CHECK(GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
                                        /*pool=*/ pool,
                                        /*iters_conflicting=*/ conflicts,
-                                       /*all_conflicts=*/ dummy).has_value());
+                                       /*all_conflicts=*/ dummy) == std::nullopt);
+    dummy.clear();
+
+    conflicts.insert(pool.GetIter(direct_children[9]->GetHash()).value());
+    const auto too_many_descendants = GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
+                                                            /*pool=*/ pool,
+                                                            /*iters_conflicting=*/ conflicts,
+                                                            /*all_conflicts=*/ dummy);
+    BOOST_REQUIRE(too_many_descendants.has_value());
+    BOOST_CHECK(too_many_descendants->find("too many potential replacements") != std::string::npos);
 }
 
 BOOST_FIXTURE_TEST_CASE(improves_feerate, TestChain100Setup)
@@ -277,8 +418,8 @@ BOOST_FIXTURE_TEST_CASE(improves_feerate, TestChain100Setup)
     auto changeset = pool.GetChangeSet();
     changeset->StageRemoval(entry1);
     changeset->StageRemoval(entry2);
-    changeset->StageAddition(tx1_conflict, tx1_fee, 0, 1, 0, false, 4, LockPoints());
-    changeset->StageAddition(tx3, tx2_fee, 0, 1, 0, false, 4, LockPoints());
+    RBFTestStageAddition(*changeset, tx1_conflict, tx1_fee);
+    RBFTestStageAddition(*changeset, tx3, tx2_fee);
     const auto res1 = ImprovesFeerateDiagram(*changeset);
     BOOST_CHECK(res1.has_value());
     BOOST_CHECK(res1.value().first == DiagramCheckError::FAILURE);
@@ -289,8 +430,8 @@ BOOST_FIXTURE_TEST_CASE(improves_feerate, TestChain100Setup)
     changeset = pool.GetChangeSet();
     changeset->StageRemoval(entry1);
     changeset->StageRemoval(entry2);
-    changeset->StageAddition(tx1_conflict, tx1_fee+1, 0, 1, 0, false, 4, LockPoints());
-    changeset->StageAddition(tx3, tx2_fee, 0, 1, 0, false, 4, LockPoints());
+    RBFTestStageAddition(*changeset, tx1_conflict, tx1_fee+1);
+    RBFTestStageAddition(*changeset, tx3, tx2_fee);
     BOOST_CHECK(ImprovesFeerateDiagram(*changeset) == std::nullopt);
 
     changeset.reset();
@@ -299,8 +440,8 @@ BOOST_FIXTURE_TEST_CASE(improves_feerate, TestChain100Setup)
     changeset = pool.GetChangeSet();
     changeset->StageRemoval(entry1);
     changeset->StageRemoval(entry2);
-    changeset->StageAddition(tx1_conflict, tx1_fee+1, 0, 1, 0, false, 4, LockPoints());
-    changeset->StageAddition(tx3, tx2_fee, 0, 1, 0, false, 4, LockPoints());
+    RBFTestStageAddition(*changeset, tx1_conflict, tx1_fee+1);
+    RBFTestStageAddition(*changeset, tx3, tx2_fee);
     const auto res2 = ImprovesFeerateDiagram(*changeset);
     BOOST_CHECK(res2.has_value());
     BOOST_CHECK(res2.value().first == DiagramCheckError::FAILURE);
@@ -316,8 +457,8 @@ BOOST_FIXTURE_TEST_CASE(improves_feerate, TestChain100Setup)
     changeset = pool.GetChangeSet();
     changeset->StageRemoval(entry1);
     changeset->StageRemoval(entry2);
-    changeset->StageAddition(tx1_conflict, tx1_fee, 0, 1, 0, false, 4, LockPoints());
-    changeset->StageAddition(entry4.GetSharedTx(), tx2_fee, 0, 1, 0, false, 4, LockPoints());
+    RBFTestStageAddition(*changeset, tx1_conflict, tx1_fee);
+    RBFTestStageAddition(*changeset, entry4.GetSharedTx(), tx2_fee);
     BOOST_CHECK(ImprovesFeerateDiagram(*changeset) == std::nullopt);
     changeset.reset();
 
@@ -330,8 +471,8 @@ BOOST_FIXTURE_TEST_CASE(improves_feerate, TestChain100Setup)
     changeset->StageRemoval(entry1);
     changeset->StageRemoval(entry2);
     changeset->StageRemoval(entry5);
-    changeset->StageAddition(tx1_conflict, tx1_fee, 0, 1, 0, false, 4, LockPoints());
-    changeset->StageAddition(entry4.GetSharedTx(), tx2_fee + entry5->GetModifiedFee() + 1, 0, 1, 0, false, 4, LockPoints());
+    RBFTestStageAddition(*changeset, tx1_conflict, tx1_fee);
+    RBFTestStageAddition(*changeset, entry4.GetSharedTx(), tx2_fee + entry5->GetModifiedFee() + 1);
     const auto res3 = ImprovesFeerateDiagram(*changeset);
     BOOST_CHECK(res3 == std::nullopt);
 }
@@ -343,6 +484,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
     TestMemPoolEntryHelper entry;
 
     const CAmount low_fee{CENT/100};
+    const CAmount normal_fee{CENT/10};
     const CAmount high_fee{CENT};
 
     // low -> high -> medium fee transactions that would result in two chunks together since they
@@ -360,7 +502,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
     {
         auto changeset = pool.GetChangeSet();
         changeset->StageRemoval(entry_low);
-        changeset->StageAddition(replacement_tx, 0, 0, 1, 0, false, 4, LockPoints());
+        RBFTestStageAddition(*changeset, replacement_tx, 0);
         const auto replace_one{changeset->CalculateChunksForRBF()};
         BOOST_CHECK(replace_one.has_value());
         std::vector<FeeFrac> expected_old_chunks{{low_fee, low_size}};
@@ -373,7 +515,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
     {
         auto changeset = pool.GetChangeSet();
         changeset->StageRemoval(entry_low);
-        changeset->StageAddition(replacement_tx, high_fee, 0, 1, 0, false, 4, LockPoints());
+        RBFTestStageAddition(*changeset, replacement_tx, high_fee);
         const auto replace_one_fee{changeset->CalculateChunksForRBF()};
         BOOST_CHECK(replace_one_fee.has_value());
         std::vector<FeeFrac> expected_old_diagram{{low_fee, low_size}};
@@ -392,7 +534,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
         auto changeset = pool.GetChangeSet();
         changeset->StageRemoval(entry_low);
         changeset->StageRemoval(entry_high);
-        changeset->StageAddition(replacement_tx, high_fee, 0, 1, 0, false, 4, LockPoints());
+        RBFTestStageAddition(*changeset, replacement_tx, high_fee);
         const auto replace_single_chunk{changeset->CalculateChunksForRBF()};
         BOOST_CHECK(replace_single_chunk.has_value());
         std::vector<FeeFrac> expected_old_chunks{{low_fee + high_fee, low_size + high_size}};
@@ -405,13 +547,29 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
     {
         auto changeset = pool.GetChangeSet();
         changeset->StageRemoval(entry_high);
-        changeset->StageAddition(replacement_tx, high_fee, 0, 1, 0, false, 4, LockPoints());
+        RBFTestStageAddition(*changeset, replacement_tx, high_fee);
         const auto replace_cpfp_child{changeset->CalculateChunksForRBF()};
         BOOST_CHECK(replace_cpfp_child.has_value());
         std::vector<FeeFrac> expected_old_chunks{{low_fee + high_fee, low_size + high_size}};
         BOOST_CHECK(replace_cpfp_child->first == expected_old_chunks);
         std::vector<FeeFrac> expected_new_chunks{{high_fee, entry_replacement.GetAdjustedWeight()}, {low_fee, low_size}};
         BOOST_CHECK(replace_cpfp_child->second == expected_new_chunks);
+    }
+
+    // A third transaction in the same cluster is still calculable on the
+    // current TxGraph-backed mempool.
+    const auto normal_tx = make_tx(/*inputs=*/ {high_tx}, /*output_values=*/ {995 * CENT});
+    TryAddToMempool(pool, entry.Fee(normal_fee).FromTx(normal_tx));
+    const auto entry_normal = pool.GetIter(normal_tx->GetHash()).value();
+
+    {
+        auto changeset = pool.GetChangeSet();
+        changeset->StageRemoval(entry_low);
+        changeset->StageRemoval(entry_high);
+        changeset->StageRemoval(entry_normal);
+        RBFTestStageAddition(*changeset, replacement_tx, high_fee);
+        const auto replace_too_large{changeset->CalculateChunksForRBF()};
+        BOOST_CHECK(replace_too_large.has_value());
     }
 
     // Make a size 2 cluster that is itself two chunks; evict both txns
@@ -429,7 +587,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
         auto changeset = pool.GetChangeSet();
         changeset->StageRemoval(entry_high_2);
         changeset->StageRemoval(entry_low_2);
-        changeset->StageAddition(replacement_tx, high_fee, 0, 1, 0, false, 4, LockPoints());
+        RBFTestStageAddition(*changeset, replacement_tx, high_fee);
         const auto replace_two_chunks_single_cluster{changeset->CalculateChunksForRBF()};
         BOOST_CHECK(replace_two_chunks_single_cluster.has_value());
         std::vector<FeeFrac> expected_old_chunks{{high_fee, high_size_2}, {low_fee, low_size_2}};
@@ -456,7 +614,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
         changeset->StageRemoval(conflict_1_entry);
         changeset->StageRemoval(conflict_2_entry);
         changeset->StageRemoval(conflict_3_entry);
-        changeset->StageAddition(replacement_tx, high_fee, 0, 1, 0, false, 4, LockPoints());
+        RBFTestStageAddition(*changeset, replacement_tx, high_fee);
         const auto replace_multiple_clusters{changeset->CalculateChunksForRBF()};
         BOOST_CHECK(replace_multiple_clusters.has_value());
         BOOST_CHECK(replace_multiple_clusters->first.size() == 3);
@@ -474,12 +632,31 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
         changeset->StageRemoval(conflict_2_entry);
         changeset->StageRemoval(conflict_3_entry);
         changeset->StageRemoval(conflict_1_child_entry);
-        changeset->StageAddition(replacement_tx, high_fee, 0, 1, 0, false, 4, LockPoints());
+        RBFTestStageAddition(*changeset, replacement_tx, high_fee);
         const auto replace_multiple_clusters_2{changeset->CalculateChunksForRBF()};
 
         BOOST_CHECK(replace_multiple_clusters_2.has_value());
         BOOST_CHECK(replace_multiple_clusters_2->first.size() == 4);
         BOOST_CHECK(replace_multiple_clusters_2->second.size() == 1);
+    }
+
+    // Add another descendant to conflict_1; the current TxGraph-backed mempool
+    // can still calculate the replacement diagram.
+    const auto conflict_1_grand_child = make_tx(/*inputs=*/{conflict_1_child}, /*output_values=*/ {995 * CENT});
+    TryAddToMempool(pool, entry.Fee(high_fee).FromTx(conflict_1_grand_child));
+    const auto conflict_1_grand_child_entry = pool.GetIter(conflict_1_grand_child->GetHash()).value();
+
+    {
+        auto changeset = pool.GetChangeSet();
+        changeset->StageRemoval(conflict_1_entry);
+        changeset->StageRemoval(conflict_2_entry);
+        changeset->StageRemoval(conflict_3_entry);
+        changeset->StageRemoval(conflict_1_child_entry);
+        changeset->StageRemoval(conflict_1_grand_child_entry);
+        RBFTestStageAddition(*changeset, replacement_tx, high_fee);
+        const auto replace_cluster_size_3{changeset->CalculateChunksForRBF()};
+
+        BOOST_CHECK(replace_cluster_size_3.has_value());
     }
 }
 

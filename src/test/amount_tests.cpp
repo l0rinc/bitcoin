@@ -114,6 +114,12 @@ BOOST_AUTO_TEST_CASE(GetFeeTest)
     feeRate = CFeeRate(0);
     BOOST_CHECK(feeRate * 5 == CFeeRate(0));
     BOOST_CHECK(5 * feeRate == CFeeRate(0));
+
+    // check division operator
+    feeRate = CFeeRate(1000);
+    BOOST_CHECK(feeRate / 2 == CFeeRate(500));
+    BOOST_CHECK_EQUAL((feeRate / 3).GetFee(3000), CAmount(1000));
+    BOOST_CHECK((CFeeRate(3000) * 500) / 1000 == CFeeRate(1500));
 }
 
 BOOST_AUTO_TEST_CASE(BinaryOperatorTest)
@@ -140,6 +146,14 @@ BOOST_AUTO_TEST_CASE(ToStringTest)
     BOOST_CHECK_EQUAL(feeRate.ToString(), "0.00000001 BTC/kvB");
     BOOST_CHECK_EQUAL(feeRate.ToString(FeeRateFormat::BTC_KVB), "0.00000001 BTC/kvB");
     BOOST_CHECK_EQUAL(feeRate.ToString(FeeRateFormat::SAT_VB), "0.001 sat/vB");
+}
+
+BOOST_AUTO_TEST_CASE(SatsToStringTest)
+{
+    BOOST_CHECK_EQUAL(CFeeRate(1).SatsToString(), "0.001");
+    BOOST_CHECK_EQUAL(CFeeRate(70).SatsToString(), "0.070");
+    BOOST_CHECK_EQUAL(CFeeRate(3141).SatsToString(), "3.141");
+    BOOST_CHECK_EQUAL(CFeeRate(10002).SatsToString(), "10.002");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

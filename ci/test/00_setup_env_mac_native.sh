@@ -16,6 +16,7 @@ export OSX_SDK=""
 export BITCOIN_CONFIG="\
   --preset=dev-mode \
   -DWITH_USDT=OFF \
+  -DWITH_MINIUPNPC=ON \
   -DREDUCE_EXPORTS=ON \
   -DCMAKE_EXE_LINKER_FLAGS='-Wl,-stack_size -Wl,0x80000' \
 "

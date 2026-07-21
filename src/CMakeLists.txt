@@ -15,16 +15,63 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
 # These need to be included before CMAKE_*_OUTPUT_DIRECTORY variables
 # are set, so output locations of subproject tests and libraries are
 # not overridden.
+if(NOT WITH_SYSTEM_LEVELDB)
 include(../cmake/crc32c.cmake)
 include(../cmake/leveldb.cmake)
-include(../cmake/minisketch.cmake)
+endif()  # WITH_SYSTEM_LEVELDB
+
 add_subdirectory(univalue)
-if (ENABLE_IPC AND NOT WITH_EXTERNAL_LIBMULTIPROCESS)
-  include(../cmake/libmultiprocess.cmake)
-  add_libmultiprocess(ipc/libmultiprocess)
+
+if(NOT WITH_SYSTEM_LIBSECP256K1)
+#=============================
+# secp256k1 subtree
+#=============================
+message("")
+message("Configuring secp256k1 subtree...")
+set(SECP256K1_DISABLE_SHARED ON CACHE BOOL "" FORCE)
+set(SECP256K1_ENABLE_MODULE_ECDH OFF CACHE BOOL "" FORCE)
+set(SECP256K1_ENABLE_MODULE_RECOVERY ON CACHE BOOL "" FORCE)
+set(SECP256K1_ENABLE_MODULE_MUSIG ON CACHE BOOL "" FORCE)
+set(SECP256K1_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
+set(SECP256K1_BUILD_TESTS ${BUILD_TESTS} CACHE BOOL "" FORCE)
+set(SECP256K1_BUILD_EXHAUSTIVE_TESTS ${BUILD_TESTS} CACHE BOOL "" FORCE)
+if(NOT BUILD_TESTS)
+  # Always skip the ctime tests, if we are building no other tests.
+  # Otherwise, they are built if Valgrind is available. See SECP256K1_VALGRIND.
+  set(SECP256K1_BUILD_CTIME_TESTS ${BUILD_TESTS} CACHE BOOL "" FORCE)
 endif()
-include(../cmake/secp256k1.cmake)
-add_secp256k1(secp256k1)
+set(SECP256K1_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+include(GetTargetInterface)
+# -fsanitize and related flags apply to both C++ and C,
+# so we can pass them down to libsecp256k1 as CFLAGS and LDFLAGS.
+get_target_interface(SECP256K1_APPEND_CFLAGS "" sanitize_interface COMPILE_OPTIONS)
+string(STRIP "${SECP256K1_APPEND_CFLAGS} ${APPEND_CPPFLAGS}" SECP256K1_APPEND_CFLAGS)
+string(STRIP "${SECP256K1_APPEND_CFLAGS} ${APPEND_CFLAGS}" SECP256K1_APPEND_CFLAGS)
+set(SECP256K1_APPEND_CFLAGS ${SECP256K1_APPEND_CFLAGS} CACHE STRING "" FORCE)
+get_target_interface(SECP256K1_APPEND_LDFLAGS "" sanitize_interface LINK_OPTIONS)
+string(STRIP "${SECP256K1_APPEND_LDFLAGS} ${APPEND_LDFLAGS}" SECP256K1_APPEND_LDFLAGS)
+set(SECP256K1_APPEND_LDFLAGS ${SECP256K1_APPEND_LDFLAGS} CACHE STRING "" FORCE)
+# We want to build libsecp256k1 with the most tested RelWithDebInfo configuration.
+enable_language(C)
+foreach(config IN LISTS CMAKE_BUILD_TYPE CMAKE_CONFIGURATION_TYPES)
+  if(config STREQUAL "")
+    continue()
+  endif()
+  string(TOUPPER "${config}" config)
+  set(CMAKE_C_FLAGS_${config} "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+endforeach()
+# If the CFLAGS environment variable is defined during building depends
+# and configuring this build system, its content might be duplicated.
+if(DEFINED ENV{CFLAGS})
+  deduplicate_flags(CMAKE_C_FLAGS)
+endif()
+set(CMAKE_EXPORT_COMPILE_COMMANDS OFF)
+add_subdirectory(secp256k1)
+set_target_properties(secp256k1 PROPERTIES
+  EXCLUDE_FROM_ALL TRUE
+)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()  # WITH_SYSTEM_LIBSECP256K1
 
 # Set top-level target output locations.
 if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
@@ -99,6 +146,7 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   chain.cpp
   chainparams.cpp
   chainparamsbase.cpp
+  codex32.cpp
   coins.cpp
   common/args.cpp
   common/bloom.cpp
@@ -113,6 +161,7 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   common/settings.cpp
   common/signmessage.cpp
   common/system.cpp
+  common/system_ram.cpp
   common/url.cpp
   compressor.cpp
   core_io.cpp
@@ -129,6 +178,7 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   netaddress.cpp
   netbase.cpp
   outputtype.cpp
+  policy/coin_age_priority.cpp
   policy/feerate.cpp
   policy/policy.cpp
   pow.cpp
@@ -152,6 +202,7 @@ target_link_libraries(bitcoin_common
     bitcoin_util
     univalue
     secp256k1
+    $<TARGET_NAME_IF_EXISTS:Boost::headers>
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
     $<$<PLATFORM_ID:Windows>:ws2_32>
 )
@@ -174,6 +225,8 @@ if(ENABLE_WALLET)
       bitcoin_wallet
       bitcoin_common
       bitcoin_util
+      univalue
+      Boost::headers
     )
     install_binary_component(bitcoin-wallet HAS_MANPAGE)
   endif()
@@ -220,6 +273,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   node/chainstate.cpp
   node/chainstatemanager_args.cpp
   node/coin.cpp
+  node/dbcache.cpp
   node/coins_view_args.cpp
   node/connection_types.cpp
   node/context.cpp
@@ -234,7 +288,6 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   node/miner.cpp
   node/mining_args.cpp
   node/mini_miner.cpp
-  node/minisketchwrapper.cpp
   node/peerman_args.cpp
   node/psbt.cpp
   node/timeoffsets.cpp
@@ -269,6 +322,9 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   rpc/txoutproof.cpp
   script/sigcache.cpp
   signet.cpp
+  stats/init.cpp
+  stats/rpc_stats.cpp
+  stats/stats.cpp
   torcontrol.cpp
   txdb.cpp
   txgraph.cpp
@@ -287,9 +343,9 @@ target_link_libraries(bitcoin_node
     bitcoin_util
     $<TARGET_NAME_IF_EXISTS:bitcoin_zmq>
     leveldb
-    minisketch
     univalue
     $<TARGET_NAME_IF_EXISTS:Boost::headers>
+    $<TARGET_NAME_IF_EXISTS:MiniUPnPc::MiniUPnPc>
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
 )
 if(WITH_EMBEDDED_ASMAP)
@@ -397,6 +453,10 @@ if(BUILD_GUI)
   add_subdirectory(qt)
 endif()
 
+
+if(BUILD_BITCOINCONSENSUS_LIB)
+  add_subdirectory(consensus)
+endif()
 
 if(BUILD_KERNEL_LIB)
   add_subdirectory(kernel)

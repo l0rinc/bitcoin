@@ -23,20 +23,17 @@ void noui_ThreadSafeMessageBox(const bilingual_str& message, unsigned int style)
     style &= ~CClientUIInterface::SECURE;
 
     std::string strCaption;
-    switch (style) {
-    case CClientUIInterface::MSG_ERROR:
+    const unsigned int icon{style & CClientUIInterface::ICON_MASK};
+    if (icon == CClientUIInterface::ICON_ERROR) {
         strCaption = "Error: ";
         if (!fSecure) LogError("%s\n", message.original);
-        break;
-    case CClientUIInterface::MSG_WARNING:
+    } else if (icon == CClientUIInterface::ICON_WARNING) {
         strCaption = "Warning: ";
         if (!fSecure) LogWarning("%s\n", message.original);
-        break;
-    case CClientUIInterface::MSG_INFORMATION:
+    } else if (style == CClientUIInterface::MSG_INFORMATION) {
         strCaption = "Information: ";
         if (!fSecure) LogInfo("%s\n", message.original);
-        break;
-    default:
+    } else {
         if (!fSecure) LogInfo("%s%s\n", strCaption, message.original);
     }
 

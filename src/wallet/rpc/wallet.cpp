@@ -32,7 +32,18 @@ static const std::map<uint64_t, std::string> WALLET_FLAG_CAVEATS{
      "You need to rescan the blockchain in order to correctly mark used "
      "destinations in the past. Until this is done, some destinations may "
      "be considered unused, even if the opposite is the case."},
+    {WALLET_FLAG_EXTERNAL_SIGNER,
+     "Wallet must be unloaded and loaded for change to take effect. "
+     "The ability to toggle this flag may be removed in a future update."},
 };
+
+/** Checks if a CKey is in the given wallet, compressed or otherwise. */
+bool HaveKey(const SigningProvider& wallet, const CKey& key)
+{
+    CKey key2;
+    key2.Set(key.begin(), key.end(), !key.IsCompressed());
+    return wallet.HaveKey(key.GetPubKey().GetID()) || wallet.HaveKey(key2.GetPubKey().GetID());
+}
 
 static RPCMethod getwalletinfo()
 {
@@ -44,12 +55,19 @@ static RPCMethod getwalletinfo()
                     {
                         {
                         {RPCResult::Type::STR, "walletname", "the wallet name"},
-                        {RPCResult::Type::NUM, "walletversion", "(DEPRECATED) only related to unsupported legacy wallet, returns the latest version 169900 for backwards compatibility"},
-                        {RPCResult::Type::STR, "format", "the database format (only sqlite)"},
+                        {RPCResult::Type::NUM, "walletversion", "the wallet version"},
+                        {RPCResult::Type::STR, "format", "the database format (bdb or sqlite)"},
+                        {RPCResult::Type::STR_AMOUNT, "balance", "DEPRECATED. Identical to getbalances().mine.trusted"},
+                        {RPCResult::Type::STR_AMOUNT, "unconfirmed_balance", "DEPRECATED. Identical to getbalances().mine.untrusted_pending"},
+                        {RPCResult::Type::STR_AMOUNT, "immature_balance", "DEPRECATED. Identical to getbalances().mine.immature"},
                         {RPCResult::Type::NUM, "txcount", "the total number of transactions in the wallet"},
+                        {RPCResult::Type::NUM_TIME, "keypoololdest", /*optional=*/true, "the " + UNIX_EPOCH_TIME + " of the oldest pre-generated key in the key pool. Legacy wallets only."},
                         {RPCResult::Type::NUM, "keypoolsize", "how many new keys are pre-generated (only counts external keys)"},
                         {RPCResult::Type::NUM, "keypoolsize_hd_internal", /*optional=*/true, "how many new keys are pre-generated for internal use (used for change outputs, only appears if the wallet is using this feature, otherwise external keys are used)"},
                         {RPCResult::Type::NUM_TIME, "unlocked_until", /*optional=*/true, "the " + UNIX_EPOCH_TIME + " until which the wallet is unlocked for transfers, or 0 if the wallet is locked (only present for passphrase-encrypted wallets)"},
+                        {RPCResult::Type::STR_AMOUNT, "mintxfee", "the minimum transaction fee configuration, set in " + CURRENCY_UNIT + "/kvB"},
+                        {RPCResult::Type::STR_AMOUNT, "paytxfee", "the transaction fee configuration, set in " + CURRENCY_UNIT + "/kvB"},
+                        {RPCResult::Type::STR_HEX, "hdseedid", /*optional=*/true, "the Hash160 of the HD seed (only present when HD is enabled)"},
                         {RPCResult::Type::BOOL, "private_keys_enabled", "false if privatekeys are disabled for this wallet (enforced watch-only wallet)"},
                         {RPCResult::Type::BOOL, "avoid_reuse", "whether this wallet tracks clean/dirty coins in terms of reuse"},
                         {RPCResult::Type::OBJ, "scanning", "current scanning details, or false if no scan is in progress",
@@ -85,19 +103,34 @@ static RPCMethod getwalletinfo()
 
     UniValue obj(UniValue::VOBJ);
 
-    const int latest_legacy_wallet_minversion{169900};
-
     size_t kpExternalSize = pwallet->KeypoolCountExternalKeys();
+    const auto bal = GetBalance(*pwallet);
     obj.pushKV("walletname", pwallet->GetName());
-    obj.pushKV("walletversion", latest_legacy_wallet_minversion);
+    obj.pushKV("walletversion", pwallet->GetVersion());
     obj.pushKV("format", pwallet->GetDatabase().Format());
+    obj.pushKV("balance", ValueFromAmount(bal.m_mine_trusted));
+    obj.pushKV("unconfirmed_balance", ValueFromAmount(bal.m_mine_untrusted_pending));
+    obj.pushKV("immature_balance", ValueFromAmount(bal.m_mine_immature));
     obj.pushKV("txcount", pwallet->mapWallet.size());
+    if (const auto kp_oldest{pwallet->GetOldestKeyPoolTime()}) {
+        obj.pushKV("keypoololdest", *kp_oldest);
+    }
     obj.pushKV("keypoolsize", kpExternalSize);
     obj.pushKV("keypoolsize_hd_internal", pwallet->GetKeyPoolSize() - kpExternalSize);
+
+    LegacyScriptPubKeyMan* spk_man = pwallet->GetLegacyScriptPubKeyMan();
+    if (spk_man) {
+        CKeyID seed_id = spk_man->GetHDChain().seed_id;
+        if (!seed_id.IsNull()) {
+            obj.pushKV("hdseedid", seed_id.GetHex());
+        }
+    }
 
     if (pwallet->HasEncryptionKeys()) {
         obj.pushKV("unlocked_until", pwallet->nRelockTime);
     }
+    obj.pushKV("mintxfee", ValueFromAmount(pwallet->m_min_fee.GetFeePerK()));
+    obj.pushKV("paytxfee", ValueFromAmount(pwallet->m_pay_tx_fee.GetFeePerK()));
     obj.pushKV("private_keys_enabled", !pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
     obj.pushKV("avoid_reuse", pwallet->IsWalletFlagSet(WALLET_FLAG_AVOID_REUSE));
     if (pwallet->IsScanning()) {
@@ -250,6 +283,14 @@ static RPCMethod loadwallet()
     WalletContext& context = EnsureWalletContext(request.context);
     const std::string name(request.params[0].get_str());
 
+    {
+        std::string authorized_wallet_name;
+        const bool have_wallet_restriction = GetWalletRestrictionFromJSONRPCRequest(request, authorized_wallet_name);
+        if (have_wallet_restriction && authorized_wallet_name != name) {
+            throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Wallet usage is restricted.");
+        }
+    }
+
     DatabaseOptions options;
     DatabaseStatus status;
     ReadDatabaseArgs(*context.args, options);
@@ -318,6 +359,16 @@ static RPCMethod setwalletflag()
 
     auto flag = STRING_TO_WALLET_FLAG.at(flag_str);
 
+    if (flag == WALLET_FLAG_EXTERNAL_SIGNER) {
+#ifdef ENABLE_EXTERNAL_SIGNER
+        if (!pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) || !pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "This flag can only be set on a watch-only descriptor wallet");
+        }
+#else
+        throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without external signing support (required for external signing)");
+#endif
+    }
+
     if (!(flag & MUTABLE_WALLET_FLAGS)) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Wallet flag is immutable: %s", flag_str));
     }
@@ -379,6 +430,14 @@ static RPCMethod createwallet()
         },
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
+    {
+        std::string authorized_wallet_name;
+        const bool have_wallet_restriction = GetWalletRestrictionFromJSONRPCRequest(request, authorized_wallet_name);
+        if (have_wallet_restriction && authorized_wallet_name != request.params[0].get_str()) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Wallet usage is restricted.");
+        }
+    }
+
     WalletContext& context = EnsureWalletContext(request.context);
     uint64_t flags = 0;
     if (!request.params[1].isNull() && request.params[1].get_bool()) {
@@ -402,9 +461,12 @@ static RPCMethod createwallet()
     if (!request.params[4].isNull() && request.params[4].get_bool()) {
         flags |= WALLET_FLAG_AVOID_REUSE;
     }
-    flags |= WALLET_FLAG_DESCRIPTORS;
-    if (!self.Arg<bool>("descriptors")) {
-        throw JSONRPCError(RPC_WALLET_ERROR, "descriptors argument must be set to \"true\"; it is no longer possible to create a legacy wallet.");
+    const bool use_descriptors{self.Arg<bool>("descriptors")};
+    if (use_descriptors) {
+        flags |= WALLET_FLAG_DESCRIPTORS;
+#ifndef USE_SQLITE
+        throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without sqlite support (required for descriptor wallets)");
+#endif
     }
     if (!request.params[7].isNull() && request.params[7].get_bool()) {
 #ifdef ENABLE_EXTERNAL_SIGNER
@@ -413,6 +475,12 @@ static RPCMethod createwallet()
         throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without external signing support (required for external signing)");
 #endif
     }
+
+#ifndef USE_BDB
+    if (!(flags & WALLET_FLAG_DESCRIPTORS)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without bdb support (required for legacy wallets)");
+    }
+#endif
 
     DatabaseOptions options;
     DatabaseStatus status;
@@ -458,7 +526,14 @@ static RPCMethod unloadwallet()
     const std::string wallet_name{EnsureUniqueWalletName(request, self.MaybeArg<std::string_view>("wallet_name"))};
 
     WalletContext& context = EnsureWalletContext(request.context);
-    std::shared_ptr<CWallet> wallet = GetWallet(context, wallet_name);
+    std::shared_ptr<CWallet> wallet;
+    {
+        std::string authorized_wallet_name;
+        const bool have_wallet_restriction = GetWalletRestrictionFromJSONRPCRequest(request, authorized_wallet_name);
+        if ((!have_wallet_restriction) || authorized_wallet_name == wallet_name) {
+            wallet = GetWallet(context, wallet_name);
+        }
+    }
     if (!wallet) {
         throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Requested wallet does not exist or is not loaded");
     }
@@ -502,7 +577,7 @@ RPCMethod simulaterawtransaction()
             },
             {"options", RPCArg::Type::OBJ_NAMED_PARAMS, RPCArg::Optional::OMITTED, "",
                 {
-                    {"include_watchonly", RPCArg::Type::BOOL, RPCArg::Default{false}, "(DEPRECATED) No longer used"},
+                    {"include_watchonly", RPCArg::Type::BOOL, RPCArg::DefaultHint{"true for watch-only wallets, otherwise false"}, "Whether to include watch-only addresses (see RPC importaddress)"},
                 },
             },
         },
@@ -523,6 +598,23 @@ RPCMethod simulaterawtransaction()
     const CWallet& wallet = *rpc_wallet;
 
     LOCK(wallet.cs_wallet);
+
+    UniValue include_watchonly(UniValue::VNULL);
+    if (request.params[1].isObject()) {
+        UniValue options = request.params[1];
+        RPCTypeCheckObj(options,
+            {
+                {"include_watchonly", UniValueType(UniValue::VBOOL)},
+            },
+            true, true);
+
+        include_watchonly = options["include_watchonly"];
+    }
+
+    isminefilter filter = ISMINE_SPENDABLE;
+    if (ParseIncludeWatchonly(include_watchonly, wallet)) {
+        filter |= ISMINE_WATCH_ONLY;
+    }
 
     const auto& txs = request.params[0].get_array();
     CAmount changes{0};
@@ -556,7 +648,7 @@ RPCMethod simulaterawtransaction()
                 if (coins.at(outpoint).IsSpent()) {
                     throw JSONRPCError(RPC_INVALID_PARAMETER, "One or more transaction inputs are missing or have been spent already");
                 }
-                changes -= wallet.GetDebit(txin);
+                changes -= wallet.GetDebit(txin, filter);
             }
             spent.insert(outpoint);
         }
@@ -569,7 +661,7 @@ RPCMethod simulaterawtransaction()
         const auto& hash = mtx.GetHash();
         for (size_t i = 0; i < mtx.vout.size(); ++i) {
             const auto& txout = mtx.vout[i];
-            bool is_mine = wallet.IsMine(txout);
+            bool is_mine = 0 < (wallet.IsMine(txout) & filter);
             changes += new_utxos[COutPoint(hash, i)] = is_mine ? txout.nValue : 0;
         }
     }
@@ -613,7 +705,10 @@ static RPCMethod migratewallet()
         },
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
         {
-            const std::string wallet_name{EnsureUniqueWalletName(request, self.MaybeArg<std::string_view>("wallet_name"))};
+            // New wallets do not necessarily have the same name as the migrated wallet
+            EnsureNotWalletRestricted(request);
+
+            const std::string wallet_name{EnsureUniqueWalletName(request, self.MaybeArg<std::string>("wallet_name"))};
 
             SecureString wallet_pass;
             wallet_pass.reserve(100);
@@ -922,6 +1017,140 @@ RPCMethod addhdkey()
     };
 }
 
+static RPCMethod sethdseed()
+{
+    return RPCMethod{
+        "sethdseed",
+        "Set or generate a new HD wallet seed. Non-HD wallets will not be upgraded to being a HD wallet. Wallets that are already\n"
+        "HD will have a new HD seed set so that new keys added to the keypool will be derived from this new seed.\n"
+        "\nNote that you will need to MAKE A NEW BACKUP of your wallet after setting the HD wallet seed." + HELP_REQUIRING_PASSPHRASE +
+        "Note: This command is only compatible with legacy wallets.\n",
+        {
+            {"newkeypool", RPCArg::Type::BOOL, RPCArg::Default{true}, "Whether to flush old unused addresses, including change addresses, from the keypool and regenerate it.\n"
+                "If true, the next address from getnewaddress and change address from getrawchangeaddress will be from this new seed.\n"
+                "If false, addresses (including change addresses if the wallet already had HD Chain Split enabled) from the existing\n"
+                "keypool will be used until it has been depleted."},
+            {"seed", RPCArg::Type::STR, RPCArg::DefaultHint{"random seed"}, "The WIF private key to use as the new HD seed.\n"
+                "The seed value can be retrieved using the dumpwallet command. It is the private key marked hdseed=1"},
+        },
+        RPCResult{RPCResult::Type::NONE, "", ""},
+        RPCExamples{
+            HelpExampleCli("sethdseed", "")
+            + HelpExampleCli("sethdseed", "false")
+            + HelpExampleCli("sethdseed", "true \"wifkey\"")
+            + HelpExampleRpc("sethdseed", "true, \"wifkey\"")
+        },
+        [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return UniValue::VNULL;
+
+    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*wallet, /*also_create=*/true);
+
+    if (wallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Cannot set a HD seed to a wallet with private keys disabled");
+    }
+
+    LOCK2(wallet->cs_wallet, spk_man.cs_KeyStore);
+
+    if (!wallet->CanSupportFeature(FEATURE_HD)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Cannot set an HD seed on a non-HD wallet. Use the upgradewallet RPC in order to upgrade a non-HD wallet to HD");
+    }
+
+    EnsureWalletIsUnlocked(*wallet);
+
+    bool flush_key_pool{true};
+    if (!request.params[0].isNull()) {
+        flush_key_pool = request.params[0].get_bool();
+    }
+
+    CPubKey master_pub_key;
+    if (request.params[1].isNull()) {
+        master_pub_key = spk_man.GenerateNewSeed();
+    } else {
+        CKey key{DecodeSecret(request.params[1].get_str())};
+        if (!key.IsValid()) {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
+        }
+
+        if (HaveKey(spk_man, key)) {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Already have this key (either as an HD seed or as a loose private key)");
+        }
+
+        master_pub_key = spk_man.DeriveNewSeed(key);
+    }
+
+    spk_man.SetHDSeed(master_pub_key);
+    if (flush_key_pool) spk_man.NewKeyPool();
+
+    return UniValue::VNULL;
+},
+    };
+}
+
+static RPCMethod upgradewallet()
+{
+    return RPCMethod{"upgradewallet",
+        "Upgrade the wallet. Upgrades to the latest version if no version number is specified.\n"
+        "New keys may be generated and a new wallet backup will need to be made.",
+        {
+            {"version", RPCArg::Type::NUM, RPCArg::Default{int{FEATURE_LATEST}}, "The version number to upgrade to. Default is the latest wallet version."},
+        },
+        RPCResult{
+            RPCResult::Type::OBJ, "", "",
+            {
+                {RPCResult::Type::STR, "wallet_name", "Name of wallet this operation was performed on"},
+                {RPCResult::Type::NUM, "previous_version", "Version of wallet before this operation"},
+                {RPCResult::Type::NUM, "current_version", "Version of wallet after this operation"},
+                {RPCResult::Type::STR, "result", /*optional=*/true, "Description of result, if no error"},
+                {RPCResult::Type::STR, "error", /*optional=*/true, "Error message (if there is one)"},
+            },
+        },
+        RPCExamples{
+            HelpExampleCli("upgradewallet", "169900")
+            + HelpExampleRpc("upgradewallet", "169900")
+        },
+        [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    if (!wallet) return UniValue::VNULL;
+
+    EnsureWalletIsUnlocked(*wallet);
+
+    int version{0};
+    if (!request.params[0].isNull()) {
+        version = request.params[0].getInt<int>();
+    }
+
+    bilingual_str error;
+    const int previous_version{wallet->GetVersion()};
+    const bool wallet_upgraded{wallet->UpgradeWallet(version, error)};
+    const int current_version{wallet->GetVersion()};
+    std::string result;
+
+    if (wallet_upgraded) {
+        if (previous_version == current_version) {
+            result = "Already at latest version. Wallet version unchanged.";
+        } else {
+            result = strprintf("Wallet upgraded successfully from version %i to version %i.", previous_version, current_version);
+        }
+    }
+
+    UniValue obj(UniValue::VOBJ);
+    obj.pushKV("wallet_name", wallet->GetName());
+    obj.pushKV("previous_version", previous_version);
+    obj.pushKV("current_version", current_version);
+    if (!result.empty()) {
+        obj.pushKV("result", result);
+    } else {
+        CHECK_NONFATAL(!error.empty());
+        obj.pushKV("error", error.original);
+    }
+    return obj;
+},
+    };
+}
+
 static RPCMethod exportwatchonlywallet()
 {
     return RPCMethod{"exportwatchonlywallet",
@@ -971,7 +1200,9 @@ RPCMethod getnewaddress();
 RPCMethod getrawchangeaddress();
 RPCMethod setlabel();
 RPCMethod listaddressgroupings();
+RPCMethod addmultisigaddress();
 RPCMethod keypoolrefill();
+RPCMethod newkeypool();
 RPCMethod getaddressesbylabel();
 RPCMethod listlabels();
 #ifdef ENABLE_EXTERNAL_SIGNER
@@ -979,8 +1210,16 @@ RPCMethod walletdisplayaddress();
 #endif // ENABLE_EXTERNAL_SIGNER
 
 // backup
+RPCMethod dumpprivkey();
+RPCMethod dumpmasterprivkey();
+RPCMethod importprivkey();
+RPCMethod importaddress();
+RPCMethod importpubkey();
+RPCMethod dumpwallet();
+RPCMethod importwallet();
 RPCMethod importprunedfunds();
 RPCMethod removeprunedfunds();
+RPCMethod importmulti();
 RPCMethod importdescriptors();
 RPCMethod listdescriptors();
 RPCMethod backupwallet();
@@ -990,6 +1229,7 @@ RPCMethod restorewallet();
 RPCMethod getreceivedbyaddress();
 RPCMethod getreceivedbylabel();
 RPCMethod getbalance();
+RPCMethod getunconfirmedbalance();
 RPCMethod lockunspent();
 RPCMethod listlockunspent();
 RPCMethod getbalances();
@@ -1004,6 +1244,8 @@ RPCMethod encryptwallet();
 // spend
 RPCMethod sendtoaddress();
 RPCMethod sendmany();
+RPCMethod setfeerate();
+RPCMethod settxfee();
 RPCMethod fundrawtransaction();
 RPCMethod bumpfee();
 RPCMethod psbtbumpfee();
@@ -1032,6 +1274,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"rawtransactions", &fundrawtransaction},
         {"wallet", &abandontransaction},
         {"wallet", &abortrescan},
+        {"wallet", &addmultisigaddress},
         {"wallet", &addhdkey},
         {"wallet", &backupwallet},
         {"wallet", &bumpfee},
@@ -1039,6 +1282,9 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &createwallet},
         {"wallet", &createwalletdescriptor},
         {"wallet", &restorewallet},
+        {"wallet", &dumpprivkey},
+        {"wallet", &dumpmasterprivkey},
+        {"wallet", &dumpwallet},
         {"wallet", &encryptwallet},
         {"wallet", &exportwatchonlywallet},
         {"wallet", &getaddressesbylabel},
@@ -1050,11 +1296,18 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &getreceivedbyaddress},
         {"wallet", &getreceivedbylabel},
         {"wallet", &gettransaction},
+        {"wallet", &getunconfirmedbalance},
         {"wallet", &getbalances},
         {"wallet", &getwalletinfo},
+        {"wallet", &importaddress},
         {"wallet", &importdescriptors},
+        {"wallet", &importmulti},
+        {"wallet", &importprivkey},
         {"wallet", &importprunedfunds},
+        {"wallet", &importpubkey},
+        {"wallet", &importwallet},
         {"wallet", &keypoolrefill},
+        {"wallet", &newkeypool},
         {"wallet", &listaddressgroupings},
         {"wallet", &listdescriptors},
         {"wallet", &listlabels},
@@ -1074,14 +1327,19 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &send},
         {"wallet", &sendmany},
         {"wallet", &sendtoaddress},
+        {"wallet", &sethdseed},
         {"wallet", &setlabel},
+        {"wallet", &setfeerate},
+        {"wallet", &settxfee},
         {"wallet", &setwalletflag},
         {"wallet", &signmessage},
         {"wallet", &signrawtransactionwithwallet},
         {"wallet", &simulaterawtransaction},
         {"wallet", &sendall},
         {"wallet", &unloadwallet},
+        {"wallet", &upgradewallet},
         {"wallet", &walletcreatefundedpsbt},
+
 #ifdef ENABLE_EXTERNAL_SIGNER
         {"wallet", &walletdisplayaddress},
 #endif // ENABLE_EXTERNAL_SIGNER

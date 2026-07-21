@@ -146,6 +146,13 @@ enum class script_verify_flag_name : uint8_t {
     // Making unknown public key versions (in BIP 342 scripts) non-standard
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE,
 
+    // Enforce MAX_SCRIPT_ELEMENT_SIZE_REDUCED instead of MAX_SCRIPT_ELEMENT_SIZE.
+    // The P2SH redeemScript push is exempted.
+    // Taproot control blocks are limited to TAPROOT_CONTROL_MAX_SIZE_REDUCED.
+    // Taproot annex is also invalid.
+    // OP_IF is also forbidden inside Tapscript.
+    SCRIPT_VERIFY_REDUCED_DATA,
+
     // Constants to point to the highest flag in use. Add new flags above this line.
     //
     SCRIPT_VERIFY_END_MARKER
@@ -158,6 +165,12 @@ static constexpr int MAX_SCRIPT_VERIFY_FLAGS_BITS = static_cast<int>(SCRIPT_VERI
 static_assert(0 < MAX_SCRIPT_VERIFY_FLAGS_BITS && MAX_SCRIPT_VERIFY_FLAGS_BITS <= 63);
 
 static constexpr script_verify_flags::value_type MAX_SCRIPT_VERIFY_FLAGS = ((script_verify_flags::value_type{1} << MAX_SCRIPT_VERIFY_FLAGS_BITS) - 1);
+
+static constexpr script_verify_flags REDUCED_DATA_MANDATORY_VERIFY_FLAGS{
+    SCRIPT_VERIFY_REDUCED_DATA |
+    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM |
+    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION |
+    SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS};
 
 bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, script_verify_flags flags, ScriptError* serror);
 
@@ -245,6 +258,8 @@ static constexpr size_t TAPROOT_CONTROL_BASE_SIZE = 33;
 static constexpr size_t TAPROOT_CONTROL_NODE_SIZE = 32;
 static constexpr size_t TAPROOT_CONTROL_MAX_NODE_COUNT = 128;
 static constexpr size_t TAPROOT_CONTROL_MAX_SIZE = TAPROOT_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * TAPROOT_CONTROL_MAX_NODE_COUNT;
+static constexpr size_t TAPROOT_CONTROL_MAX_NODE_COUNT_REDUCED = 7;
+static constexpr size_t TAPROOT_CONTROL_MAX_SIZE_REDUCED = TAPROOT_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * TAPROOT_CONTROL_MAX_NODE_COUNT_REDUCED;
 
 extern const HashWriter HASHER_TAPSIGHASH; //!< Hasher with tag "TapSighash" pre-fed to it.
 extern const HashWriter HASHER_TAPLEAF;    //!< Hasher with tag "TapLeaf" pre-fed to it.
@@ -332,6 +347,8 @@ public:
     bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror = nullptr) const override;
     bool CheckLockTime(const CScriptNum& nLockTime) const override;
     bool CheckSequence(const CScriptNum& nSequence) const override;
+
+    bool m_require_sighash_all{false};
 };
 
 using TransactionSignatureChecker = GenericTransactionSignatureChecker<CTransaction>;

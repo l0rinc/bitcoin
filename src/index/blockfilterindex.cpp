@@ -23,6 +23,7 @@
 #include <util/hasher.h>
 #include <util/log.h>
 #include <util/syserror.h>
+#include <util/translation.h>
 
 #include <cerrno>
 #include <exception>
@@ -65,6 +66,7 @@ std::string BlockFilterThreadName(BlockFilterType filter_type)
 {
     switch (filter_type) {
     case BlockFilterType::BASIC: return "blkfltbscidx";
+    case BlockFilterType::V0: return "blkfltv0idx";
     case BlockFilterType::INVALID: return "";
     } // no default case, so the compiler can warn about missing cases
     assert(false);
@@ -95,6 +97,11 @@ BlockFilterIndex::BlockFilterIndex(std::unique_ptr<interfaces::Chain> chain, Blo
 
     m_db = std::make_unique<BaseIndex::DB>(path / "db", n_cache_size, f_memory, f_wipe);
     m_filter_fileseq = std::make_unique<FlatFileSeq>(std::move(path), "fltr", FLTR_FILE_CHUNK_SIZE);
+}
+
+bilingual_str BlockFilterIndex::GetDisableAction() const
+{
+    return strprintf(_("remove \"%s\" from -blockfilterindex"), BlockFilterTypeName(m_filter_type));
 }
 
 interfaces::Chain::NotifyOptions BlockFilterIndex::CustomOptions()

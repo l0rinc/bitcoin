@@ -44,18 +44,31 @@ from test_framework.util import (
     assert_raises_rpc_error,
     get_fee,
 )
-from test_framework.wallet import (
-    MiniWallet,
-    MiniWalletMode,
-)
+from test_framework.wallet import MiniWallet, MiniWalletMode
 
 
 DIFFICULTY_ADJUSTMENT_INTERVAL = 144
 MAX_FUTURE_BLOCK_TIME = 2 * 3600
 MAX_TIMEWARP = 600
+ASSUMED_BLOCK_OVERHEAD_SIZE = 1000
+ASSUMED_BLOCK_OVERHEAD_WEIGHT = ASSUMED_BLOCK_OVERHEAD_SIZE * WITNESS_SCALE_FACTOR
 VERSIONBITS_TOP_BITS = 0x20000000
 VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT = 28
 DEFAULT_BLOCK_MIN_TX_FEE = 1 # default `-blockmintxfee` setting [sat/kvB]
+MAX_BLOCK_SERIALIZED_SIZE = 4_000_000
+MAX_SIGOP_COST = 80000
+
+
+def assert_template(node, block, expect, rehash=True):
+    if rehash:
+        block.hashMerkleRoot = block.calc_merkle_root()
+    rsp = node.getblocktemplate(template_request={
+        'data': block.serialize().hex(),
+        'mode': 'proposal',
+        'rules': ['segwit'],
+    })
+    assert_equal(rsp, expect)
+
 
 class MiningTest(BitcoinTestFramework):
     def set_test_params(self):
@@ -76,6 +89,7 @@ class MiningTest(BitcoinTestFramework):
         assert_equal(mining_info['blocks'], 200)
         assert_equal(mining_info['currentblocktx'], 0)
         assert_equal(mining_info['currentblockweight'], DEFAULT_BLOCK_RESERVED_WEIGHT)
+        assert 'currentblocksize' not in mining_info
 
         self.log.info('test blockversion')
         self.restart_node(0, extra_args=[f'-mocktime={t}', '-blockversion=1337'])
@@ -143,21 +157,28 @@ class MiningTest(BitcoinTestFramework):
         # Clear mempool
         self.generate(self.wallet, 1, sync_fun=self.no_op)
 
-    def test_blockmintxfee_parameter(self):
-        self.log.info("Test -blockmintxfee setting")
+    def test_blockmintxfee_parameter(self, *, use_rpc=False):
+        if not use_rpc:
+            self.log.info("Test -blockmintxfee setting")
         self.restart_node(0, extra_args=['-minrelaytxfee=0', '-persistmempool=0'])
         node = self.nodes[0]
 
         # test default (no parameter), zero and a bunch of arbitrary blockmintxfee rates [sat/kvB]
         for blockmintxfee_sat_kvb in (DEFAULT_BLOCK_MIN_TX_FEE, 0, 5, 10, 50, 100, 500, 1000, 2500, 5000, 21000, 333333, 2500000):
             blockmintxfee_btc_kvb = blockmintxfee_sat_kvb / Decimal(COIN)
-            if blockmintxfee_sat_kvb == DEFAULT_BLOCK_MIN_TX_FEE:
+            if use_rpc:
+                blockmintxfee_sat_vb = blockmintxfee_sat_kvb / 1000
+                self.log.info(f"-> Test RPC param minfeerate={blockmintxfee_sat_vb} ({blockmintxfee_sat_kvb} sat/kvB)...")
+                self.restart_node(0, extra_args=['-minrelaytxfee=0', '-persistmempool=0'])
+                self.wallet.rescan_utxos()  # to avoid spending outputs of txs that are not in mempool anymore after restart
+            elif blockmintxfee_sat_kvb == DEFAULT_BLOCK_MIN_TX_FEE:
                 self.log.info(f"-> Default -blockmintxfee setting ({blockmintxfee_sat_kvb} sat/kvB)...")
             else:
                 blockmintxfee_parameter = f"-blockmintxfee={blockmintxfee_btc_kvb:.8f}"
                 self.log.info(f"-> Test {blockmintxfee_parameter} ({blockmintxfee_sat_kvb} sat/kvB)...")
                 self.restart_node(0, extra_args=[blockmintxfee_parameter, '-minrelaytxfee=0', '-persistmempool=0'])
-            assert_equal(node.getmininginfo()['blockmintxfee'], blockmintxfee_btc_kvb)
+            expected_blockmintxfee = DEFAULT_BLOCK_MIN_TX_FEE / Decimal(COIN) if use_rpc else blockmintxfee_btc_kvb
+            assert_equal(node.getmininginfo()['blockmintxfee'], expected_blockmintxfee)
 
             # submit one tx with exactly the blockmintxfee rate, and one slightly below
             tx_with_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=blockmintxfee_btc_kvb, confirmed_only=True)
@@ -173,7 +194,11 @@ class MiningTest(BitcoinTestFramework):
                 node.prioritisetransaction(tx_below_min_feerate["txid"], 0, -11)
 
             # check that tx below specified fee-rate is neither in template nor in the actual block
-            block_template = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
+            req = NORMAL_GBT_REQUEST_PARAMS
+            if use_rpc:
+                req = copy.deepcopy(req)
+                req['minfeerate'] = blockmintxfee_sat_vb
+            block_template = node.getblocktemplate(req)
             block_template_txids = [tx['txid'] for tx in block_template['transactions']]
 
             # Unless blockmintxfee is 0, the template shouldn't contain free transactions.
@@ -188,12 +213,120 @@ class MiningTest(BitcoinTestFramework):
             block_txids = [tx['txid'] for tx in block['tx']]
 
             assert tx_with_min_feerate['txid'] in block_template_txids
-            assert tx_with_min_feerate['txid'] in block_txids
             assert tx_below_min_feerate['txid'] not in block_template_txids
-            assert tx_below_min_feerate['txid'] not in block_txids
 
-            # Restart node to clear mempool for the next test
+            if not use_rpc:
+                assert tx_with_min_feerate['txid'] in block_txids
+                assert tx_below_min_feerate['txid'] not in block_txids
+
+            # Restart node to clear mempool for the next test.
             self.restart_node(0)
+
+    def test_rpc_params(self):
+        self.log.info("Test minfeerate RPC param")
+        self.test_blockmintxfee_parameter(use_rpc=True)
+
+        node = self.nodes[0]
+        wallet = MiniWallet(node, mode=MiniWalletMode.RAW_P2PK)
+        self.wallet.send_to(from_node=node, scriptPubKey=wallet.get_output_script(), amount=40 * COIN)
+        self.wallet.send_to(from_node=node, scriptPubKey=wallet.get_output_script(), amount=40 * COIN)
+        self.generate(wallet, 1, sync_fun=self.no_op)
+
+        self.log.info("Preparing mempool")
+        self.restart_node(0, extra_args=['-limitancestorcount=1000', '-limitdescendantcount=1000', '-limitclustersize=7000'])
+
+        # Fill the mempool
+        target_mempool_size = 200000
+        last_tx_size = 0
+        utxo = wallet.get_utxo()  # save for small coins
+        while node.getmempoolinfo()['bytes'] < target_mempool_size - last_tx_size:
+            tx = wallet.send_self_transfer_multi(
+                from_node=self.nodes[0],
+                num_outputs=1000,
+            )
+            last_tx_size = len(tx['hex']) / 2
+        while node.getmempoolinfo()['bytes'] < 200000:
+            tx = wallet.send_self_transfer_multi(
+                utxos_to_spend=[utxo],
+                from_node=node,
+                num_outputs=100,
+            )
+            utxo = wallet.get_utxo()
+
+        self.log.info("Test blockmaxsize RPC param")
+        req = copy.deepcopy(NORMAL_GBT_REQUEST_PARAMS)
+        normal_size = ASSUMED_BLOCK_OVERHEAD_SIZE + (sum(len(tx['data']) for tx in self.nodes[0].getblocktemplate(req)['transactions']) // 2)
+        last_size = ASSUMED_BLOCK_OVERHEAD_SIZE
+        for target_size in (50000, 100000, 150000):
+            self.log.info(f"-> Test RPC param blockmaxsize={target_size}...")
+            req['blockmaxsize'] = target_size
+            tmpl = self.nodes[0].getblocktemplate(req)
+            blk_size = ASSUMED_BLOCK_OVERHEAD_SIZE + (sum(len(tx['data']) for tx in tmpl['transactions']) // 2)
+            assert blk_size < normal_size
+            assert blk_size < target_size
+            assert blk_size > last_size
+            last_size = blk_size
+
+        self.log.info("Test blockreservedsize RPC param")
+        req = copy.deepcopy(NORMAL_GBT_REQUEST_PARAMS)
+        req['blockmaxsize'] = 150000
+        normal_size = (sum(len(tx['data']) for tx in self.nodes[0].getblocktemplate(req)['transactions']) // 2)
+        last_size = 0
+        for reserved_size in (100000, 10000, 100):
+            self.log.info(f"-> Test RPC param blockreservedsize={reserved_size}...")
+            req['blockreservedsize'] = reserved_size
+            tmpl = self.nodes[0].getblocktemplate(req)
+            blk_size = (sum(len(tx['data']) for tx in tmpl['transactions']) // 2)
+            assert blk_size < normal_size if reserved_size > 1000 else blk_size >= normal_size
+            assert blk_size + reserved_size <= req['blockmaxsize']
+            assert blk_size > last_size
+            last_size = blk_size
+
+        self.log.info("Test blockmaxweight RPC param")
+        req = copy.deepcopy(NORMAL_GBT_REQUEST_PARAMS)
+        normal_weight = ASSUMED_BLOCK_OVERHEAD_WEIGHT + sum(tx['weight'] for tx in self.nodes[0].getblocktemplate(req)['transactions'])
+        last_weight = ASSUMED_BLOCK_OVERHEAD_WEIGHT
+        for target_weight in (200000, 400000, 600000):
+            self.log.info(f"-> Test RPC param blockmaxweight={target_weight}...")
+            req['blockmaxweight'] = target_weight
+            tmpl = self.nodes[0].getblocktemplate(req)
+            blk_weight = ASSUMED_BLOCK_OVERHEAD_WEIGHT + sum(tx['weight'] for tx in tmpl['transactions'])
+            assert blk_weight < normal_weight
+            assert blk_weight < target_weight
+            assert blk_weight > last_weight
+            last_weight = blk_weight
+
+        self.log.info("Test blockreservedweight RPC param")
+        req = copy.deepcopy(NORMAL_GBT_REQUEST_PARAMS)
+        req['blockmaxweight'] = 600000
+        normal_weight = sum(tx['weight'] for tx in self.nodes[0].getblocktemplate(req)['transactions'])
+        last_weight = 0
+        for reserved_weight in (400000, 40000, MINIMUM_BLOCK_RESERVED_WEIGHT):
+            self.log.info(f"-> Test RPC param blockreservedweight={reserved_weight}...")
+            req['blockreservedweight'] = reserved_weight
+            tmpl = self.nodes[0].getblocktemplate(req)
+            blk_weight = sum(tx['weight'] for tx in tmpl['transactions'])
+            assert blk_weight < normal_weight if reserved_weight > 4000 else blk_weight >= normal_weight
+            assert blk_weight + reserved_weight <= req['blockmaxweight']
+            assert blk_weight > last_weight
+            last_weight = blk_weight
+
+        self.log.info("Test blockreservedsigops RPC param")
+        req = copy.deepcopy(NORMAL_GBT_REQUEST_PARAMS)
+        normal_sigops = sum(tx['sigops'] for tx in self.nodes[0].getblocktemplate(req)['transactions'])
+        assert normal_sigops
+        last_sigops = 0
+        baseline_sigops = MAX_SIGOP_COST - normal_sigops
+        for reserved_sigops in (800, 400, 100):
+            reserved_sigops += baseline_sigops
+            self.log.info(f"-> Test RPC param blockreservedsigops={reserved_sigops}...")
+            req['blockreservedsigops'] = reserved_sigops
+            tmpl = self.nodes[0].getblocktemplate(req)
+            blk_sigops = sum(tx['sigops'] for tx in tmpl['transactions'])
+            assert blk_sigops < normal_sigops if reserved_sigops > 400 else blk_sigops > normal_sigops
+            assert blk_sigops + reserved_sigops <= MAX_SIGOP_COST
+            assert blk_sigops > last_sigops
+            last_sigops = blk_sigops
 
     def test_timewarp(self):
         self.log.info("Test timewarp attack mitigation (BIP94)")
@@ -280,15 +413,19 @@ class MiningTest(BitcoinTestFramework):
                 fee_rate=fee_rate,
             )
 
-    def verify_block_template(self, expected_tx_count, expected_weight):
+    def verify_block_template(self, expected_tx_count, expected_weight, template_request=None):
         """
         Create a block template and check that it satisfies the expected transaction count and total weight.
         """
-        response = self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
+        response = self.nodes[0].getblocktemplate(template_request or NORMAL_GBT_REQUEST_PARAMS)
         self.log.info(f"Testing block template: contains {expected_tx_count} transactions, and total weight <= {expected_weight}")
         assert_equal(len(response["transactions"]), expected_tx_count)
         total_weight = sum(transaction["weight"] for transaction in response["transactions"])
         assert_greater_than_or_equal(expected_weight, total_weight)
+        return response
+
+    def get_block_template_accounted_size(self, block_template):
+        return 1000 + sum(len(transaction["data"]) // 2 for transaction in block_template["transactions"])
 
     def test_block_max_weight(self):
         self.log.info("Testing default and custom -blockmaxweight startup options.")
@@ -296,6 +433,8 @@ class MiningTest(BitcoinTestFramework):
         LARGE_TXS_COUNT = 10
         LARGE_VSIZE = int(((MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT) / WITNESS_SCALE_FACTOR) / LARGE_TXS_COUNT)
         HIGH_FEERATE = Decimal("0.0003")
+        large_tx_args = ["-acceptnonstdtxn=1"]
+        self.restart_node(0, extra_args=large_tx_args)
 
         # Ensure the mempool is empty
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
@@ -320,10 +459,61 @@ class MiningTest(BitcoinTestFramework):
             expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
         )
 
-        # Test block template creation with custom -blockmaxweight
+        self.log.info("Testing getblocktemplate block assembly option overrides.")
+        custom_block_size = 10_000
+        block_template = self.verify_block_template(
+            expected_tx_count=2,
+            expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
+            template_request={**NORMAL_GBT_REQUEST_PARAMS, "blockmaxsize": custom_block_size},
+        )
+        assert_greater_than_or_equal(custom_block_size, self.get_block_template_accounted_size(block_template))
+
         custom_block_weight = MAX_BLOCK_WEIGHT - 2000
+        self.verify_block_template(
+            expected_tx_count=11,
+            expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT - 2000,
+            template_request={**NORMAL_GBT_REQUEST_PARAMS, "blockmaxweight": custom_block_weight},
+        )
+
+        block_template = self.nodes[0].getblocktemplate({**NORMAL_GBT_REQUEST_PARAMS, "minfeerate": 10_000})
+        assert_equal(len(block_template["transactions"]), 0)
+
+        assert_raises_rpc_error(
+            -8,
+            "block_max_size (999) is lower than minimum safety value of (1000)",
+            self.nodes[0].getblocktemplate,
+            {**NORMAL_GBT_REQUEST_PARAMS, "blockmaxsize": 999},
+        )
+
+        self.verify_block_template(
+            expected_tx_count=LARGE_TXS_COUNT,
+            expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
+        )
+
+        self.log.info("Testing custom -blockmaxsize startup option.")
+        self.restart_node(0, extra_args=[f"-blockmaxsize={custom_block_size}", *large_tx_args])
+        block_template = self.verify_block_template(
+            expected_tx_count=2,
+            expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
+        )
+        accounted_size = self.get_block_template_accounted_size(block_template)
+        assert_greater_than_or_equal(custom_block_size, accounted_size)
+        assert_equal(self.nodes[0].getmininginfo()["currentblocksize"], accounted_size)
+
+        self.log.info("Testing custom -blockmaxsize startup option near the consensus maximum.")
+        near_max_block_size = MAX_BLOCK_SERIALIZED_SIZE - 1
+        self.restart_node(0, extra_args=[f"-blockmaxsize={near_max_block_size}", *large_tx_args])
+        block_template = self.verify_block_template(
+            expected_tx_count=LARGE_TXS_COUNT,
+            expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
+        )
+        accounted_size = self.get_block_template_accounted_size(block_template)
+        assert_greater_than_or_equal(near_max_block_size, accounted_size)
+        assert_equal(self.nodes[0].getmininginfo()["currentblocksize"], accounted_size)
+
+        # Test block template creation with custom -blockmaxweight
         # Reducing the weight by 2000 units will prevent 1 large transaction from fitting into the block.
-        self.restart_node(0, extra_args=[f"-blockmaxweight={custom_block_weight}"])
+        self.restart_node(0, extra_args=[f"-blockmaxweight={custom_block_weight}", *large_tx_args])
 
         self.log.info("Testing the block template with custom -blockmaxweight to include 9 large and 2 normal transactions.")
         self.verify_block_template(
@@ -333,7 +523,7 @@ class MiningTest(BitcoinTestFramework):
 
         # Ensure the block weight does not exceed the maximum
         self.log.info(f"Testing that the block weight will never exceed {MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT}.")
-        self.restart_node(0, extra_args=[f"-blockmaxweight={MAX_BLOCK_WEIGHT}"])
+        self.restart_node(0, extra_args=[f"-blockmaxweight={MAX_BLOCK_WEIGHT}", *large_tx_args])
         self.log.info("Sending 2 additional normal transactions to fill the mempool to the maximum block weight.")
         self.send_transactions(utxos[LARGE_TXS_COUNT + 2:], NORMAL_FEERATE, NORMAL_VSIZE)
         self.log.info(f"Testing that the mempool's weight matches the maximum block weight: {MAX_BLOCK_WEIGHT}.")
@@ -347,7 +537,7 @@ class MiningTest(BitcoinTestFramework):
 
         self.log.info("Test -blockreservedweight startup option.")
         # Lowering the -blockreservedweight by 4000 will allow for two more transactions.
-        self.restart_node(0, extra_args=["-blockreservedweight=4000"])
+        self.restart_node(0, extra_args=["-blockreservedweight=4000", *large_tx_args])
         self.verify_block_template(
             expected_tx_count=12,
             expected_weight=MAX_BLOCK_WEIGHT - 4000,
@@ -399,6 +589,7 @@ class MiningTest(BitcoinTestFramework):
         assert_equal(mining_info['chain'], self.chain)
         assert 'currentblocktx' not in mining_info
         assert 'currentblockweight' not in mining_info
+        assert 'currentblocksize' not in mining_info
         assert_equal(mining_info['bits'], nbits_str(REGTEST_N_BITS))
         assert_equal(mining_info['target'], target_str(REGTEST_TARGET))
         # We don't care about precision, round to avoid mismatch under Valgrind:
@@ -527,6 +718,7 @@ class MiningTest(BitcoinTestFramework):
         self.test_fees_and_sigops()
         self.test_blockmintxfee_parameter()
         self.test_block_max_weight()
+        self.test_rpc_params()
         self.test_timewarp()
         self.test_pruning()
         self.test_height_in_locktime()

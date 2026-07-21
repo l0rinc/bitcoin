@@ -8,7 +8,7 @@ export LC_ALL=C.UTF-8
 
 export CI_IMAGE_NAME_TAG="mirror.gcr.io/ubuntu:26.04"
 export CONTAINER_NAME=ci_native_valgrind
-export PACKAGES="clang llvm libclang-rt-dev valgrind python3-zmq libboost-dev libzmq3-dev libsqlite3-dev libcapnp-dev capnproto python3-pip"
+export PACKAGES="clang llvm libclang-rt-dev valgrind python3-zmq libboost-dev libminiupnpc-dev libzmq3-dev libsqlite3-dev libcapnp-dev capnproto python3-pip"
 export PIP_PACKAGES="--break-system-packages pycapnp"
 export USE_VALGRIND=1
 export NO_DEPENDS=1
@@ -19,6 +19,7 @@ export GOAL="install"
 export BITCOIN_CONFIG="\
  --preset=dev-mode \
  -DBUILD_GUI=OFF \
+ -DWITH_MINIUPNPC=ON \
  -DWITH_USDT=OFF \
  -DCMAKE_C_COMPILER=clang \
  -DCMAKE_CXX_COMPILER=clang++ \

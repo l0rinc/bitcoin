@@ -4,34 +4,43 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test datacarrier functionality"""
 from test_framework.messages import (
+    COutPoint,
+    CTransaction,
+    CTxIn,
+    CTxInWitness,
     CTxOut,
     MAX_OP_RETURN_RELAY,
+    WITNESS_SCALE_FACTOR,
 )
 from test_framework.script import (
     CScript,
+    OP_1,
+    OP_2DROP,
+    OP_DROP,
     OP_RETURN,
+    taproot_construct,
 )
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.test_node import TestNode
 from test_framework.util import (
-    assert_equal,
     assert_raises_rpc_error,
+    assert_equal,
+    JSONRPCException,
 )
 from test_framework.wallet import MiniWallet
 
 from random import randbytes
 
-# The historical maximum, now used to test coverage
-CUSTOM_DATACARRIER_ARG = 83
+CUSTOM_DATACARRIER_ARG = MAX_OP_RETURN_RELAY
 
 class DataCarrierTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 4
         self.extra_args = [
-            [], # default is uncapped
+            ["-acceptnonstddatacarrier=1", "-datacarrierfullcount"], # default capped at MAX_OP_RETURN_RELAY
             ["-datacarrier=0"], # no relay of datacarrier
-            ["-datacarrier=1", f"-datacarriersize={CUSTOM_DATACARRIER_ARG}"],
-            ["-datacarrier=1", "-datacarriersize=2"],
+            ["-corepolicy=0", "-datacarrier=1", f"-datacarriersize={CUSTOM_DATACARRIER_ARG}"],
+            ["-datacarrier=1", "-datacarriersize=2", "-acceptnonstddatacarrier=1", "-datacarrierfullcount", "-permitbaredatacarrier=1"],
         ]
 
     def test_null_data_transaction(self, node: TestNode, data, success: bool) -> None:
@@ -46,32 +55,128 @@ class DataCarrierTest(BitcoinTestFramework):
             self.wallet.sendrawtransaction(from_node=node, tx_hex=tx_hex)
             assert tx.txid_hex in node.getrawmempool(True), f'{tx_hex} not in mempool'
         else:
-            assert_raises_rpc_error(-26, "datacarrier", self.wallet.sendrawtransaction, from_node=node, tx_hex=tx_hex)
+            try:
+                self.wallet.sendrawtransaction(from_node=node, tx_hex=tx_hex)
+            except JSONRPCException as e:
+                assert_equal(e.error["code"], -26)
+                assert any(reason in e.error["message"] for reason in ["datacarrier", "scriptpubkey"]), e.error["message"]
+            else:
+                raise AssertionError(f"{tx_hex} unexpectedly accepted")
+
+    def test_opnet_transaction(self, node: TestNode, success: bool, reject_reason="txn-datacarrier-exceeded") -> None:
+        minimal_script = CScript([OP_2DROP, OP_DROP, b'op', OP_DROP, OP_1])
+        internal_key = b'\x01' * 32
+        tap = taproot_construct(internal_key, [("leaf", minimal_script), ("dummy", CScript([OP_1]))])
+        leaf = tap.leaves["leaf"]
+        control_block = bytes([leaf.version | tap.negflag]) + tap.internal_pubkey + leaf.merklebranch
+        assert len(control_block) == 65
+
+        utxo = self.wallet.get_utxo()
+        funding_tx = CTransaction()
+        funding_tx.vin = [CTxIn(COutPoint(int(utxo['txid'], 16), utxo['vout']))]
+        funding_value = int(utxo['value'] * 100_000_000) - 1000
+        funding_tx.vout = [CTxOut(funding_value, tap.scriptPubKey)]
+        funding_tx.version = 2
+        self.wallet.sign_tx(funding_tx)
+        funding_tx.rehash()
+        self.nodes[0].sendrawtransaction(funding_tx.serialize().hex())
+        self.generate(self.nodes[0], 1, sync_fun=self.sync_blocks)
+
+        spend_tx = CTransaction()
+        spend_tx.version = 2
+        spend_tx.vin = [CTxIn(COutPoint(int(funding_tx.hash, 16), 0))]
+        spend_tx.vout = [CTxOut(funding_value - 1000, tap.scriptPubKey)]
+        spend_tx.wit.vtxinwit = [CTxInWitness()]
+        spend_tx.wit.vtxinwit[0].scriptWitness.stack = [
+            b'',                    # stack[0]: empty (minimises opnet bytes)
+            b'',                    # stack[1]: cleared by OP_2DROP
+            b'',                    # stack[2]: cleared by OP_2DROP
+            bytes(minimal_script),  # stack[3]: tapscript containing \x02op
+            control_block,          # stack[4]: control block (65 bytes)
+        ]
+        tx_hex = spend_tx.serialize().hex()
+
+        if success:
+            self.wallet.sendrawtransaction(from_node=node, tx_hex=tx_hex)
+            assert spend_tx.rehash() in node.getrawmempool(True)
+        else:
+            assert_raises_rpc_error(-26, reject_reason,
+                                    self.wallet.sendrawtransaction, from_node=node, tx_hex=tx_hex)
+
+    def create_bare_datacarrier_transaction(self):
+        utxo = self.wallet.get_utxo(mark_as_spent=False)
+        tx = CTransaction()
+        tx.vin = [CTxIn(COutPoint(int(utxo['txid'], 16), utxo['vout']))]
+        tx.vout = [CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN, b"a" * 40]))]
+        tx.version = 2
+        self.wallet.sign_tx(tx)
+        tx.rehash()
+        return tx
+
+    def test_bare_datacarrier_transaction(self):
+        tx = self.create_bare_datacarrier_transaction()
+        tx_hex = tx.serialize().hex()
+
+        assert_raises_rpc_error(-26, "bare-datacarrier",
+                                self.wallet.sendrawtransaction, from_node=self.nodes[2], tx_hex=tx_hex)
+        self.wallet.sendrawtransaction(from_node=self.nodes[0], tx_hex=tx_hex)
+        assert tx.txid_hex in self.nodes[0].getrawmempool(True)
+
+    def create_op_return_transaction(self, data):
+        tx = self.wallet.create_self_transfer(fee_rate=0)["tx"]
+        tx.vout.append(CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN, data])))
+        tx.vout[0].nValue -= 10_000
+        tx.rehash()
+        return tx
+
+    def test_datacarriercost_adjusted_vsize(self):
+        if not hasattr(self, "wallet"):
+            self.wallet = MiniWallet(self.nodes[0])
+        data = b"a" * (MAX_OP_RETURN_RELAY - 3)
+
+        self.log.info("Testing default -datacarriercost does not add output-data weight.")
+        default_tx = self.create_op_return_transaction(data)
+        default_txid = self.wallet.sendrawtransaction(from_node=self.nodes[0], tx_hex=default_tx.serialize().hex())
+        assert_equal(self.nodes[0].getmempoolentry(default_txid)["vsize"], default_tx.get_vsize())
+        self.generate(self.nodes[0], 1, sync_fun=self.no_op)
+
+        self.log.info("Testing -datacarriercost=2 adds one extra vbyte per output data byte.")
+        self.restart_node(0, extra_args=["-datacarriercost=2", "-persistmempool=0"])
+        cost_tx = self.create_op_return_transaction(data)
+        cost_txid = self.wallet.sendrawtransaction(from_node=self.nodes[0], tx_hex=cost_tx.serialize().hex())
+        data_carrier_bytes = len(cost_tx.vout[1].scriptPubKey)
+        extra_weight = data_carrier_bytes * WITNESS_SCALE_FACTOR
+        expected_vsize = (cost_tx.get_weight() + extra_weight + WITNESS_SCALE_FACTOR - 1) // WITNESS_SCALE_FACTOR
+        assert_equal(self.nodes[0].getmempoolentry(cost_txid)["vsize"], expected_vsize)
+        self.generate(self.nodes[0], 1, sync_fun=self.no_op)
+        self.restart_node(0, extra_args=self.extra_args[0])
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
 
-        # Test that bare multisig is allowed by default. Do it here rather than create a new test for it.
-        assert_equal(self.nodes[0].getmempoolinfo()["permitbaremultisig"], True)
+        mempool_info = [node.getmempoolinfo() for node in self.nodes]
 
-        assert_equal(self.nodes[0].getmempoolinfo()["maxdatacarriersize"], MAX_OP_RETURN_RELAY)
-        assert_equal(self.nodes[1].getmempoolinfo()["maxdatacarriersize"], 0)
-        assert_equal(self.nodes[2].getmempoolinfo()["maxdatacarriersize"], CUSTOM_DATACARRIER_ARG)
-        assert_equal(self.nodes[3].getmempoolinfo()["maxdatacarriersize"], 2)
+        # Test that bare multisig is allowed by default when the current-Core
+        # getmempoolinfo field is available.
+        if "permitbaremultisig" in mempool_info[0]:
+            assert_equal(mempool_info[0]["permitbaremultisig"], True)
 
-        # By default, any size is allowed.
+        if "maxdatacarriersize" in mempool_info[0]:
+            assert_equal(mempool_info[0]["maxdatacarriersize"], MAX_OP_RETURN_RELAY)
+            assert_equal(mempool_info[1]["maxdatacarriersize"], 0)
+            assert_equal(mempool_info[2]["maxdatacarriersize"], CUSTOM_DATACARRIER_ARG)
+            assert_equal(mempool_info[3]["maxdatacarriersize"], 2)
 
-        # If it is custom set to 83, the historical value,
+        # By default and when explicitly set to 83,
         # only 80 bytes are used for data (+1 for OP_RETURN, +2 for the pushdata opcodes).
         custom_size_data = randbytes(CUSTOM_DATACARRIER_ARG - 3)
         too_long_data = randbytes(CUSTOM_DATACARRIER_ARG - 2)
-        extremely_long_data = randbytes(MAX_OP_RETURN_RELAY - 200)
         one_byte = randbytes(1)
         zero_bytes = randbytes(0)
 
-        self.log.info("Testing a null data transaction succeeds for default arg regardless of size.")
-        self.test_null_data_transaction(node=self.nodes[0], data=too_long_data, success=True)
-        self.test_null_data_transaction(node=self.nodes[0], data=extremely_long_data, success=True)
+        self.log.info("Testing null data transaction with default -datacarrier and -datacarriersize values.")
+        self.test_null_data_transaction(node=self.nodes[0], data=custom_size_data, success=True)
+        self.test_null_data_transaction(node=self.nodes[0], data=too_long_data, success=False)
 
         self.log.info("Testing a null data transaction with -datacarrier=false.")
         self.test_null_data_transaction(node=self.nodes[1], data=custom_size_data, success=False)
@@ -99,6 +204,21 @@ class DataCarrierTest(BitcoinTestFramework):
         self.test_null_data_transaction(node=self.nodes[1], data=one_byte, success=False)
         self.test_null_data_transaction(node=self.nodes[2], data=one_byte, success=True)
         self.test_null_data_transaction(node=self.nodes[3], data=one_byte, success=False)
+
+        self.log.info("Testing an OPNet transaction (just pushing 'op') with default -datacarriersize.")
+        self.test_opnet_transaction(node=self.nodes[0], success=True)
+
+        self.log.info("Testing an OPNet transaction is rejected by default non-standard datacarrier policy.")
+        self.test_opnet_transaction(node=self.nodes[2], success=False, reject_reason="txn-datacarrier-nonstandard")
+
+        self.log.info("Testing an OPNet transaction (just pushing 'op') with -datacarriersize=2.")
+        self.test_opnet_transaction(node=self.nodes[3], success=False)
+
+        self.log.info("Testing bare datacarrier rejection and -permitbaredatacarrier.")
+        self.test_bare_datacarrier_transaction()
+
+        self.test_datacarriercost_adjusted_vsize()
+
 
 if __name__ == '__main__':
     DataCarrierTest(__file__).main()

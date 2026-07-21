@@ -86,8 +86,6 @@ In a typical situation, this suffices to run behind a Tor proxy:
 
     bitcoind -proxy=127.0.0.1:9050
 
-`bitcoin node` or `bitcoin gui` can also be substituted for `bitcoind`.
-
 ## 2. Automatically create a Bitcoin Core onion service
 
 Bitcoin Core makes use of Tor's control socket API to create and destroy
@@ -228,7 +226,7 @@ as well, use `discover` instead:
 
     bitcoind ... -discover
 
-and open port 8333 on your firewall (or use port mapping, i.e., `-natpmp`).
+and open port 8333 on your firewall (or use port mapping, i.e., `-upnp` or `-natpmp`).
 
 If you only want to use Tor to reach .onion addresses, but not use it as a proxy
 for normal IPv4/IPv6 communication, use:

@@ -98,6 +98,29 @@ def assert_not_equal(thing1, thing2, *, error_message=""):
         raise AssertionError(f"Both values are {thing1}{f', {error_message}' if error_message else ''}")
 
 
+def assert_equal_without_usage(actual, expected):
+    """
+    Assert that testmempoolaccept results match expected values, ignoring the 'usage' field.
+    This helper is for tests that were written before the 'usage' field was added.
+    """
+    if isinstance(actual, list) and isinstance(expected, list):
+        assert_equal(len(actual), len(expected))
+        for act, exp in zip(actual, expected):
+            assert_equal_without_usage(act, exp)
+    elif isinstance(actual, dict) and isinstance(expected, dict):
+        # Check that all expected keys match
+        for key in expected:
+            assert key in actual, f"Expected key '{key}' not in actual result"
+            if key != 'usage':  # Skip usage comparison
+                assert_equal(actual[key], expected[key])
+        # Verify usage exists and is positive if transaction was validated
+        if 'usage' in actual:
+            assert isinstance(actual['usage'], int), "usage should be an integer"
+            assert actual['usage'] > 0, "usage should be positive"
+    else:
+        assert_equal(actual, expected)
+
+
 def assert_greater_than(thing1, thing2):
     if thing1 <= thing2:
         raise AssertionError("%s <= %s" % (str(thing1), str(thing2)))
@@ -237,6 +260,18 @@ def assert_array_result(object_array, to_match, expected, should_not_find=False)
         raise AssertionError("No objects matched %s" % (str(to_match)))
     if num_matched > 0 and should_not_find:
         raise AssertionError("Objects were found %s" % (str(to_match)))
+
+def assert_scale(number, expected_scale=8):
+    """Assert number has expected scale, e.g. fractional digits; number of
+    digits after the decimal. The default of 8 corresponds to a Bitcoin amount."""
+    number = str(number)
+    mantissa = number.split('.')[-1].upper()
+    if mantissa[:3] == '0E-':
+        assert_equal(mantissa, '0E-{}'.format(expected_scale))  # zeros in exponent notation
+    elif mantissa == number:
+        assert_equal(0, expected_scale)  # no mantissa, ergo, expected scale must be 0
+    else:
+        assert_equal(len(mantissa), expected_scale)
 
 
 # Utility functions
@@ -548,7 +583,9 @@ def write_config(config_path, *, n, chain, extra_config="", disable_autoconnect=
         # in tests.
         f.write("peertimeout=999999999\n")
         f.write("printtoconsole=0\n")
-        f.write("natpmp=0\n") # Avoid non-loopback network traffic during tests.
+        # Avoid non-loopback network traffic during tests.
+        f.write("upnp=0\n")
+        f.write("natpmp=0\n")
         f.write("shrinkdebugfile=0\n")
         # To improve SQLite wallet performance so that the tests don't timeout, use -unsafesqlitesync
         f.write("unsafesqlitesync=1\n")
@@ -649,14 +686,14 @@ def check_node_connections(*, node, num_in, num_out):
 #############################
 
 
-# Create large OP_RETURN txouts that can be appended to a transaction
+# Create large standard txouts that can be appended to a transaction
 # to make it large (helper for constructing large transactions). The
 # total serialized size of the txouts is about 66k vbytes.
 def gen_return_txouts():
     from .messages import CTxOut
-    from .script import CScript, OP_RETURN
-    txouts = [CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN, b'\x01'*67437]))]
-    assert_equal(sum([len(txout.serialize()) for txout in txouts]), 67456)
+    from .script import CScript
+    txouts = [CTxOut(nValue=1000, scriptPubKey=CScript([0, b'\x01' * 32])) for _ in range(1569)]
+    assert_equal(sum([len(txout.serialize()) for txout in txouts]), 67467)
     return txouts
 
 
@@ -670,6 +707,9 @@ def create_lots_of_big_transactions(mini_wallet, node, fee, tx_batch_size, txout
             utxo_to_spend=None if use_internal_utxos else utxos.pop(),
             fee=fee,
         )["tx"]
+        extra_output_value = sum(txout.nValue for txout in txouts)
+        assert tx.vout[0].nValue > extra_output_value
+        tx.vout[0].nValue -= extra_output_value
         tx.vout.extend(txouts)
         res = node.testmempoolaccept([tx.serialize().hex()])[0]
         assert_equal(res['fees']['base'], fee)
@@ -714,7 +754,13 @@ def sync_txindex(test_framework, node):
     test_framework.wait_until(lambda: node.getindexinfo("txindex")["txindex"]["synced"])
     test_framework.log.debug(f"Synced in {time.time() - sync_start} seconds")
 
+
 def wallet_importprivkey(wallet_rpc, privkey, timestamp, *, label=""):
+    wallet_info = wallet_rpc.getwalletinfo()
+    if not wallet_info.get("descriptors", False):
+        wallet_rpc.importprivkey(privkey, label, timestamp != "now")
+        return
+
     desc = descsum_create("combo(" + privkey + ")")
     req = [{
         "desc": desc,
@@ -723,6 +769,7 @@ def wallet_importprivkey(wallet_rpc, privkey, timestamp, *, label=""):
     }]
     import_res = wallet_rpc.importdescriptors(req)
     assert_equal(import_res[0]["success"], True)
+
 
 def is_dir_writable(dir_path: pathlib.Path) -> bool:
     """Return True if we can create a file in the directory, False otherwise"""

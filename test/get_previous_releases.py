@@ -30,6 +30,21 @@ SHA256_SUMS = {
     "706e0472dbc933ed2757650d54cbcd780fd3829ebf8f609b32780c7eedebdbc9": {"tag": "v0.14.3", "archive": "bitcoin-0.14.3-x86_64-linux-gnu.tar.gz"},
     "5ea84b6a4c1b03d5f4d1a718fbed215e2fd0e66ca7d59ca6141218d163ce1301": {"tag": "v0.14.3", "archive": "bitcoin-0.14.3-win64.zip"},
 
+    "d40f18b4e43c6e6370ef7db9131f584fbb137276ec2e3dba67a4b267f81cb644": {"tag": "v0.15.2", "archive": "bitcoin-0.15.2-aarch64-linux-gnu.tar.gz"},
+    "54fb877a148a6ad189a1e1ab1ff8b11181e58ff2aaf430da55b3fd46ae549a6b": {"tag": "v0.15.2", "archive": "bitcoin-0.15.2-arm-linux-gnueabihf.tar.gz"},
+    "87e9340ff3d382d543b2b69112376077f0c8b4f7450d372e83b68f5a1e22b2df": {"tag": "v0.15.2", "archive": "bitcoin-0.15.2-osx64.tar.gz"},
+    "566be44190fd76daa01f13d428939dadfb8e3daacefc8fa17f433cad28f73bd5": {"tag": "v0.15.2", "archive": "bitcoin-0.15.2-x86_64-linux-gnu.tar.gz"},
+
+    "0768c6c15caffbaca6524824c9563b42c24f70633c681c2744649158aa3fd484": {"tag": "v0.16.3", "archive": "bitcoin-0.16.3-aarch64-linux-gnu.tar.gz"},
+    "fb2818069854a6ad20ea03b28b55dbd35d8b1f7d453e90b83eace5d0098a2a87": {"tag": "v0.16.3", "archive": "bitcoin-0.16.3-arm-linux-gnueabihf.tar.gz"},
+    "78c3bff3b619a19aed575961ea43cc9e142959218835cf51aede7f0b764fc25d": {"tag": "v0.16.3", "archive": "bitcoin-0.16.3-osx64.tar.gz"},
+    "5d422a9d544742bc0df12427383f9c2517433ce7b58cf672b9a9b17c2ef51e4f": {"tag": "v0.16.3", "archive": "bitcoin-0.16.3-x86_64-linux-gnu.tar.gz"},
+
+    "5a6b35d1a348a402f2d2d6ab5aed653a1a1f13bc63aaaf51605e3501b0733b7a": {"tag": "v0.17.2", "archive": "bitcoin-0.17.2-aarch64-linux-gnu.tar.gz"},
+    "d1913a5d19c8e8da4a67d1bd5205d03c8614dfd2e02bba2fe3087476643a729e": {"tag": "v0.17.2", "archive": "bitcoin-0.17.2-arm-linux-gnueabihf.tar.gz"},
+    "a783ba20706dbfd5b47fbedf42165fce70fbbc7d78003305d964f6b3da14887f": {"tag": "v0.17.2", "archive": "bitcoin-0.17.2-osx64.tar.gz"},
+    "943f9362b9f11130177839116f48f809d83478b4c28591d486ee9a7e35179da6": {"tag": "v0.17.2", "archive": "bitcoin-0.17.2-x86_64-linux-gnu.tar.gz"},
+
     "60c93e3462c303eb080be7cf623f1a7684b37fd47a018ad3848bc23e13c84e1c": {"tag": "v0.20.1", "archive": "bitcoin-0.20.1-aarch64-linux-gnu.tar.gz"},
     "55b577e0fb306fb429d4be6c9316607753e8543e5946b542d75d876a2f08654c": {"tag": "v0.20.1", "archive": "bitcoin-0.20.1-arm-linux-gnueabihf.tar.gz"},
     "b9024dde373ea7dad707363e07ec7e265383204127539ae0c234bff3a61da0d1": {"tag": "v0.20.1", "archive": "bitcoin-0.20.1-osx64.tar.gz"},

@@ -33,9 +33,12 @@ from test_framework.messages import (
     CTxInWitness,
     CTxOut,
     hash256,
+    MAX_OP_RETURN_RELAY,
+    ser_compact_size,
 )
 from test_framework.script import (
     CScript,
+    OP_1,
     OP_NOP,
     OP_RETURN,
     OP_TRUE,
@@ -43,7 +46,6 @@ from test_framework.script import (
     taproot_construct,
 )
 from test_framework.script_util import (
-    bulk_vout,
     key_to_p2pk_script,
     key_to_p2pkh_script,
     key_to_p2sh_p2wpkh_script,
@@ -80,7 +82,7 @@ class MiniWalletMode(Enum):
     ----------------+-------------------+-----------+----------+------------+----------
     ADDRESS_OP_TRUE | anyone-can-spend  |  bech32m  |   yes    |    no      |   no
     RAW_OP_TRUE     | anyone-can-spend  |  - (raw)  |   no     |    yes     |   no
-    RAW_P2PK        | pay-to-public-key |  - (raw)  |   yes    |    yes     |   yes
+    RAW_P2PK        | p2pkh             |  base58   |   yes    |    yes     |   yes
     """
     ADDRESS_OP_TRUE = 1
     RAW_OP_TRUE = 2
@@ -103,7 +105,7 @@ class MiniWallet:
             self._priv_key = ECKey()
             self._priv_key.set((1).to_bytes(32, 'big'), True)
             pub_key = self._priv_key.get_pubkey()
-            self._scriptPubKey = key_to_p2pk_script(pub_key.get_bytes())
+            self._scriptPubKey = key_to_p2pkh_script(pub_key.get_bytes())
         elif mode == MiniWalletMode.ADDRESS_OP_TRUE:
             internal_key = None if tag_name is None else compute_xonly_pubkey(hash256(tag_name.encode()))[0]
             self._address, self._taproot_info = create_deterministic_address_bcrt1_p2tr_op_true(internal_key)
@@ -123,9 +125,29 @@ class MiniWallet:
         """Pad a transaction with extra outputs until it reaches a target vsize.
         returns the tx
         """
-        tx.vout.append(CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN])))
-        bulk_vout(tx, target_vsize)
+        if target_vsize < tx.get_vsize():
+            raise RuntimeError(f"target_vsize {target_vsize} is less than transaction virtual size {tx.get_vsize()}")
 
+        dummy_vbytes = target_vsize - tx.get_vsize()
+        if dummy_vbytes > 0:
+            # determine number of needed padding bytes
+            min_output_size = 8 + 1 + 1
+            max_output_size = 8 + 1 + MAX_OP_RETURN_RELAY
+            n_max_outputs = (dummy_vbytes - min_output_size) // max_output_size
+            last_output_size = dummy_vbytes - (n_max_outputs * max_output_size)
+            n_outputs_before = len(tx.vout)
+
+            tx.vout.extend([CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN] + [OP_1] * (MAX_OP_RETURN_RELAY - 1)))] * n_max_outputs)
+            tx.vout.append(CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN] + [OP_1] * (last_output_size - 8 - 1 - 1))))
+
+            # compensate for the increase of the compact-size encoded script length
+            # (note that the length encoding of the unpadded output script needs one byte)
+            extra_len_size = len(ser_compact_size(len(tx.vout))) - 1
+            if extra_len_size:
+                assert tx.vout[n_outputs_before].scriptPubKey[-extra_len_size:] == bytes([OP_1] * extra_len_size)
+                tx.vout[n_outputs_before] = CTxOut(nValue=0, scriptPubKey=CScript(tx.vout[n_outputs_before].scriptPubKey[:-extra_len_size]))
+
+        assert_equal(tx.get_vsize(), target_vsize)
 
     def get_balance(self):
         return sum(u['value'] for u in self._utxos)
@@ -176,8 +198,9 @@ class MiniWallet:
             # with the DER header/skeleton data of 6 bytes added, plus 2 bytes scriptSig overhead
             # (OP_PUSHn and SIGHASH_ALL), this leads to a scriptSig target size of 73 bytes
             tx.vin[0].scriptSig = b''
-            while not len(tx.vin[0].scriptSig) == 73:
-                tx.vin[0].scriptSig = b''
+            while not len(tx.vin[0].scriptSig) == 107:
+                pub_key = self._priv_key.get_pubkey()
+                tx.vin[0].scriptSig = CScript([pub_key.get_bytes()])
                 sign_input_legacy(tx, 0, self._scriptPubKey, self._priv_key)
                 if not fixed_length:
                     break
@@ -369,7 +392,7 @@ class MiniWallet:
         if self._mode in (MiniWalletMode.RAW_OP_TRUE, MiniWalletMode.ADDRESS_OP_TRUE):
             vsize = Decimal(104)  # anyone-can-spend
         elif self._mode == MiniWalletMode.RAW_P2PK:
-            vsize = Decimal(168)  # P2PK (73 bytes scriptSig + 35 bytes scriptPubKey + 60 bytes other)
+            vsize = Decimal(192)  # P2PK (73+34 bytes scriptSig + 25 bytes scriptPubKey + 60 bytes other)
         else:
             assert False
         if target_vsize and not fee:  # respect fee_rate if target vsize is passed
@@ -391,6 +414,8 @@ class MiniWallet:
         return tx
 
     def sendrawtransaction(self, *, from_node, tx_hex, maxfeerate=0, **kwargs):
+        if self._mode == MiniWalletMode.RAW_OP_TRUE and 'ignore_rejects' not in kwargs:
+            kwargs['ignore_rejects'] = ('scriptsig-not-pushonly', 'scriptpubkey', 'bad-txns-input-script-unknown')
         txid = from_node.sendrawtransaction(hexstring=tx_hex, maxfeerate=maxfeerate, **kwargs)
         self.scan_tx(from_node.decoderawtransaction(tx_hex))
         return txid

@@ -13,6 +13,7 @@
 #include <uint256.h>
 #include <util/fs.h>
 #include <util/threadinterrupt.h>
+#include <util/translation.h>
 #include <validationinterface.h>
 
 #include <atomic>
@@ -144,6 +145,9 @@ public:
 
     /// Get the name of the index for display in logs.
     const std::string& GetName() const LIFETIMEBOUND { return m_name; }
+
+    /// Get the action the user should take to disable this index.
+    virtual bilingual_str GetDisableAction() const = 0;
 
     /// Return custom notification options for index.
     [[nodiscard]] virtual interfaces::Chain::NotifyOptions CustomOptions() { return {}; }

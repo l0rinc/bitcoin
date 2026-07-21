@@ -20,6 +20,7 @@
 // Windows .rc files include this header, but they cannot cope with real C++ code.
 #if !defined(RC_INVOKED)
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -32,7 +33,19 @@ extern const std::string UA_NAME;
 
 
 std::string FormatFullVersion();
-std::string FormatSubVersion(const std::string& name, int nClientVersion, const std::vector<std::string>& comments);
+std::string FormatSubVersion(const std::string& name, int nClientVersion, const std::vector<std::string>& comments, bool base_name_only = false);
+
+static constexpr int64_t SECONDS_PER_WEEK = 604800;
+static constexpr int64_t SECONDS_PER_YEAR = 31558060;
+
+static constexpr int POSIX_EPOCH_YEAR = 1970;
+static constexpr int64_t DEFAULT_SOFTWARE_EXPIRY_OFFSET = 26784000;  // Around Nov 7
+static constexpr int64_t DEFAULT_SOFTWARE_EXPIRY = ((COPYRIGHT_YEAR - POSIX_EPOCH_YEAR) * SECONDS_PER_YEAR) + (SECONDS_PER_YEAR * 2) + DEFAULT_SOFTWARE_EXPIRY_OFFSET;
+extern int64_t g_software_expiry;
+
+static constexpr int64_t SOFTWARE_EXPIRY_WARN_PERIOD = SECONDS_PER_WEEK * 4;
+
+bool IsThisSoftwareExpired(int64_t nTime);
 
 #endif // RC_INVOKED
 

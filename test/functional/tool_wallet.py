@@ -4,22 +4,34 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test bitcoin-wallet."""
 
+import json
 import os
+import random
 import stat
+import string
 import subprocess
 import textwrap
 
 from collections import OrderedDict
 
+from test_framework.bdb import dump_bdb_kv
+from test_framework.descriptors import descsum_create
+from test_framework.messages import ser_string
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
     assert_greater_than,
     sha256sum_file,
 )
+from test_framework.wallet import getnewdestination
 
 
 class ToolWalletTest(BitcoinTestFramework):
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
+        parser.add_argument("--bdbro", action="store_true", help="Use the BerkeleyRO internal parser when dumping a Berkeley DB wallet file")
+        parser.add_argument("--swap-bdb-endian", action="store_true", help="When making Legacy BDB wallets, always make them byte swapped internally")
+
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
@@ -45,10 +57,10 @@ class ToolWalletTest(BitcoinTestFramework):
             assert_equal(p.poll(), 1)
             assert error in stderr.strip()
 
-    def assert_tool_output(self, output, *args):
+    def assert_tool_output(self, output, *args, stderr=''):
         p = self.bitcoin_wallet_process(*args)
         stdout, stderr = p.communicate()
-        assert_equal(stderr, '')
+        assert_equal(stderr, stderr)
         assert_equal(stdout, output)
         assert_equal(p.poll(), 0)
 
@@ -95,6 +107,12 @@ class ToolWalletTest(BitcoinTestFramework):
             file_magic = f.read(16)
             assert_equal(file_magic, b'SQLite format 3\x00')
 
+    def assert_is_bdb(self, filename):
+        with open(filename, 'rb') as f:
+            f.seek(12, 0)
+            file_magic = f.read(4)
+            assert file_magic == b'\x00\x05\x31\x62' or file_magic == b'\x62\x31\x05\x00'
+
     def write_dump(self, dump, filename, magic=None, skip_checksum=False):
         if magic is None:
             magic = "BITCOIN_CORE_WALLET_DUMP"
@@ -110,22 +128,52 @@ class ToolWalletTest(BitcoinTestFramework):
                 row = ",".join(["checksum", dump["checksum"]]) + "\n"
                 f.write(row)
 
-    def do_tool_createfromdump(self, wallet_name, dumpfile):
+    def assert_dump(self, expected, received):
+        e = expected.copy()
+        r = received.copy()
+
+        # BDB will add a "version" record that is not present in sqlite. In
+        # that case, ignore the record and checksum from both dumps.
+        v_key = "0776657273696f6e" # Version key
+        if v_key in e and v_key not in r:
+            del e[v_key]
+            del e["checksum"]
+            del r["checksum"]
+        if v_key not in e and v_key in r:
+            del r[v_key]
+            del e["checksum"]
+            del r["checksum"]
+
+        assert_equal(len(e), len(r))
+        for k, v in e.items():
+            assert_equal(v, r[k])
+
+    def do_tool_createfromdump(self, wallet_name, dumpfile, file_format=None):
         dumppath = self.nodes[0].datadir_path / dumpfile
         rt_dumppath = self.nodes[0].datadir_path / "rt-{}.dump".format(wallet_name)
 
+        dump_data = self.read_dump(dumppath)
+
         args = ["-wallet={}".format(wallet_name),
                 "-dumpfile={}".format(dumppath)]
+        if file_format is not None:
+            args.append("-format={}".format(file_format))
         args.append("createfromdump")
 
         load_output = ""
-        self.assert_tool_output(load_output, *args)
+        if file_format is not None and file_format != dump_data["format"]:
+            load_output += "Warning: Dumpfile wallet format \"{}\" does not match command line specified format \"{}\".\n".format(dump_data["format"], file_format)
+        self.assert_tool_output('', *args, stderr=load_output)
         assert (self.nodes[0].wallets_path / wallet_name).is_dir()
 
-        self.assert_tool_output("The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n", '-wallet={}'.format(wallet_name), '-dumpfile={}'.format(rt_dumppath), 'dump')
+        self.assert_tool_output('', '-wallet={}'.format(wallet_name), '-dumpfile={}'.format(rt_dumppath), 'dump', stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
 
+        rt_dump_data = self.read_dump(rt_dumppath)
         wallet_dat = self.nodes[0].wallets_path / wallet_name / "wallet.dat"
-        self.assert_is_sqlite(wallet_dat)
+        if rt_dump_data["format"] == "bdb":
+            self.assert_is_bdb(wallet_dat)
+        else:
+            self.assert_is_sqlite(wallet_dat)
 
     def test_invalid_tool_commands_and_args(self):
         self.log.info('Testing that various invalid commands raise with specific error messages')
@@ -257,7 +305,7 @@ class ToolWalletTest(BitcoinTestFramework):
 
         self.log.info('Checking basic dump')
         wallet_dump = self.nodes[0].datadir_path / "wallet.dump"
-        self.assert_tool_output('The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n', '-wallet=todump', '-dumpfile={}'.format(wallet_dump), 'dump')
+        self.assert_tool_output('', '-wallet=todump', '-dumpfile={}'.format(wallet_dump), 'dump', stderr='The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n')
 
         dump_data = self.read_dump(wallet_dump)
         orig_dump = dump_data.copy()
@@ -267,14 +315,20 @@ class ToolWalletTest(BitcoinTestFramework):
         assert_equal(dump_data["format"], file_format)
 
         self.log.info('Checking that a dumpfile cannot be overwritten')
-        self.assert_raises_tool_error('File {} already exists. If you are sure this is what you want, move it out of the way first.'.format(wallet_dump),  '-wallet=todump2', '-dumpfile={}'.format(wallet_dump), 'dump')
+        if self.options.descriptors:
+            expected_warnings_dump = expected_warnings_restore = ""
+        else:
+            expected_warnings_dump = "dump: WARNING: BDB-backed wallets have a wallet id that is not currently dumped.\n"
+            expected_warnings_restore = "Warning: BDB-backed wallets have a wallet id that is not currently restored.\n"
+        self.assert_raises_tool_error(f'{expected_warnings_dump}File {wallet_dump} already exists. If you are sure this is what you want, move it out of the way first.',  '-wallet=todump2', '-dumpfile={}'.format(wallet_dump), 'dump')
 
         self.log.info('Checking createfromdump arguments')
         self.assert_raises_tool_error('No dump file provided. To use createfromdump, -dumpfile=<filename> must be provided.', '-wallet=todump', 'createfromdump')
         non_exist_dump = self.nodes[0].datadir_path / "wallet.nodump"
+        self.assert_raises_tool_error('Error parsing command line arguments: Invalid parameter -format=notaformat', '-wallet=todump', '-format=notaformat', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
         self.assert_raises_tool_error('Dump file {} does not exist.'.format(non_exist_dump), '-wallet=todump', '-dumpfile={}'.format(non_exist_dump), 'createfromdump')
         wallet_path = self.nodes[0].wallets_path / "todump2"
-        self.assert_raises_tool_error('Failed to create database path \'{}\'. Database already exists.'.format(wallet_path), '-wallet=todump2', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
+        self.assert_raises_tool_error(f'{expected_warnings_restore}Failed to create database path \'{wallet_path}\'. Database already exists.', '-wallet=todump2', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
         self.assert_raises_tool_error("Invalid parameter -descriptors", '-descriptors', '-wallet=todump2', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
 
         self.log.info('Checking createfromdump')
@@ -304,22 +358,104 @@ class ToolWalletTest(BitcoinTestFramework):
         checksum = dump_data["checksum"]
         dump_data["checksum"] = "1" * 64
         self.write_dump(dump_data, bad_sum_wallet_dump)
-        self.assert_raises_tool_error('Error: Dumpfile checksum does not match. Computed {}, expected {}'.format(checksum, "1" * 64), '-wallet=bad', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
+        self.assert_raises_tool_error(f'{expected_warnings_restore}Error: Dumpfile checksum does not match. Computed {checksum}, expected {"1" * 64}', '-wallet=bad', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
         assert not (self.nodes[0].wallets_path / "badload").is_dir()
         bad_sum_wallet_dump = self.nodes[0].datadir_path / "wallet-bad_sum2.dump"
         del dump_data["checksum"]
         self.write_dump(dump_data, bad_sum_wallet_dump, skip_checksum=True)
-        self.assert_raises_tool_error('Error: Missing checksum', '-wallet=badload', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
+        self.assert_raises_tool_error(f'{expected_warnings_restore}Error: Missing checksum', '-wallet=badload', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
         assert not (self.nodes[0].wallets_path / "badload").is_dir()
         bad_sum_wallet_dump = self.nodes[0].datadir_path / "wallet-bad_sum3.dump"
         dump_data["checksum"] = "2" * 10
         self.write_dump(dump_data, bad_sum_wallet_dump)
-        self.assert_raises_tool_error('Error: Checksum is not the correct size', '-wallet=badload', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
+        self.assert_raises_tool_error(f'{expected_warnings_restore}Error: Checksum is not the correct size', '-wallet=badload', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
         assert not (self.nodes[0].wallets_path / "badload").is_dir()
         dump_data["checksum"] = "3" * 66
         self.write_dump(dump_data, bad_sum_wallet_dump)
-        self.assert_raises_tool_error('Error: Checksum is not the correct size', '-wallet=badload', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
+        self.assert_raises_tool_error(f'{expected_warnings_restore}Error: Checksum is not the correct size', '-wallet=badload', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
         assert not (self.nodes[0].wallets_path / "badload").is_dir()
+        if not self.options.descriptors:
+            os.rename(self.nodes[0].wallets_path / "wallet.dat", self.nodes[0].wallets_path / "../default.wallet.dat")
+            (self.nodes[0].wallets_path / "db.log").unlink(missing_ok=True)
+        self.assert_raises_tool_error('Wallet name cannot be empty', '-wallet=', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
+        assert self.nodes[0].wallets_path.exists()
+        assert not (self.nodes[0].wallets_path / "wallet.dat").exists()
+        if not self.options.descriptors:
+            assert not (self.nodes[0].wallets_path / "db.log").exists()
+
+        self.log.info('Checking createfromdump rejects an unnamed wallet')
+        self.assert_raises_tool_error('Wallet name cannot be empty', '-wallet=', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
+        assert not (self.nodes[0].wallets_path / "wallet.dat").exists()
+        if not self.options.descriptors:
+            os.rename(self.nodes[0].wallets_path / "../default.wallet.dat", self.nodes[0].wallets_path / "wallet.dat")
+
+    def test_importfromcoldcard(self):
+        self.log.info("Checking importfromcoldcard")
+        if self.nodes[0].running:
+            self.stop_node(0)
+
+        warning = 'WARNING: The "importfromcoldcard" command is experimental and will likely be removed or changed incompatibly in a future version.\n'
+
+        self.log.info("Checking importfromcoldcard arguments")
+        self.assert_raises_tool_error(
+            "To use importfromcoldcard, -dumpfile=<filename> must be provided.",
+            "-wallet=coldcard_missing_file",
+            "importfromcoldcard",
+        )
+        assert not (self.nodes[0].wallets_path / "coldcard_missing_file").exists()
+
+        missing_dump = self.nodes[0].datadir_path / "coldcard-missing.txt"
+        self.assert_raises_tool_error(
+            f"File {missing_dump} does not exist.",
+            "-wallet=coldcard_missing_dump",
+            f"-dumpfile={missing_dump}",
+            "importfromcoldcard",
+        )
+        assert not (self.nodes[0].wallets_path / "coldcard_missing_dump").exists()
+
+        self.log.info("Checking importfromcoldcard malformed dump handling")
+        malformed_dump = self.nodes[0].datadir_path / "coldcard-malformed.txt"
+        malformed_dump.write_text("not a Coldcard export\n", encoding="utf8")
+        self.assert_raises_tool_error(
+            (1, warning + f"Unable to parse {malformed_dump}"),
+            "-wallet=coldcard_malformed",
+            f"-dumpfile={malformed_dump}",
+            "importfromcoldcard",
+        )
+        assert not (self.nodes[0].wallets_path / "coldcard_malformed").exists()
+
+        self.log.info("Checking importfromcoldcard descriptor import")
+        _, _, address = getnewdestination("bech32")
+        descriptor = descsum_create(f"addr({address})")
+        coldcard_dump = self.nodes[0].datadir_path / "coldcard-valid.txt"
+        coldcard_dump.write_text(
+            "# Coldcard descriptor export\n"
+            f"importdescriptors '{json.dumps([{'desc': descriptor, 'timestamp': 'now', 'label': 'coldcard import'}])}'\n",
+            encoding="utf8",
+        )
+
+        wallet_name = "coldcard_import"
+        p = self.bitcoin_wallet_process(
+            f"-wallet={wallet_name}",
+            f"-dumpfile={coldcard_dump}",
+            "importfromcoldcard",
+        )
+        stdout, stderr = p.communicate()
+        assert_equal(p.poll(), 0)
+        assert_equal(stderr, warning + '{\n  "success": true\n}\n')
+        assert_equal(stdout, textwrap.dedent(f"""\
+            Wallet info
+            ===========
+            Name: {wallet_name}
+            Format: sqlite
+            Descriptors: yes
+            Encrypted: no
+            HD (hd seed available): no
+            Keypool Size: 0
+            Transactions: 0
+            Address Book: 1
+        """))
+        self.assert_is_sqlite(self.nodes[0].wallets_path / wallet_name / "wallet.dat")
 
     def test_chainless_conflicts(self):
         self.log.info("Test wallet tool when wallet contains conflicting transactions")
@@ -378,6 +514,25 @@ class ToolWalletTest(BitcoinTestFramework):
         ''')
         self.assert_tool_output(expected_output, "-wallet=conflicts", "info")
 
+    def test_dump_endianness(self):
+        self.log.info("Testing dumps of the same contents with different BDB endianness")
+
+        self.start_node(0)
+        self.nodes[0].createwallet("endian")
+        self.stop_node(0)
+
+        wallet_dump = self.nodes[0].datadir_path / "endian.dump"
+        self.assert_tool_output('', "-wallet=endian", f"-dumpfile={wallet_dump}", "dump", stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
+        expected_dump = self.read_dump(wallet_dump)
+
+        self.do_tool_createfromdump("native_endian", "endian.dump", "bdb")
+        native_dump = self.read_dump(self.nodes[0].datadir_path / "rt-native_endian.dump")
+        self.assert_dump(expected_dump, native_dump)
+
+        self.do_tool_createfromdump("other_endian", "endian.dump", "bdb_swap")
+        other_dump = self.read_dump(self.nodes[0].datadir_path / "rt-other_endian.dump")
+        self.assert_dump(expected_dump, other_dump)
+
     def test_dump_very_large_records(self):
         self.log.info("Test that wallets with large records are successfully dumped")
 
@@ -406,7 +561,7 @@ class ToolWalletTest(BitcoinTestFramework):
         self.stop_node(0)
 
         wallet_dump = self.nodes[0].datadir_path / "bigrecords.dump"
-        self.assert_tool_output("The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n", "-wallet=bigrecords", f"-dumpfile={wallet_dump}", "dump")
+        self.assert_tool_output('', "-wallet=bigrecords", f"-dumpfile={wallet_dump}", "dump", stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
         dump = self.read_dump(wallet_dump)
         for k,v in dump.items():
             if tx["hex"] in v:
@@ -423,6 +578,31 @@ class ToolWalletTest(BitcoinTestFramework):
         assert not (self.nodes[0].wallets_path / "legacy").exists()
         self.assert_raises_tool_error("The -dumpfile option cannot be used with the 'create' command.", "-wallet=legacy", "-dumpfile=wallet.dump", "create")
 
+    def test_dump_unclean_lsns(self):
+        if not self.options.bdbro:
+            return
+        self.log.info("Test that a legacy wallet that has not been compacted is not dumped by bdbro")
+
+        self.start_node(0, extra_args=["-flushwallet=0"])
+        self.nodes[0].createwallet("unclean_lsn")
+        wallet = self.nodes[0].get_wallet_rpc("unclean_lsn")
+        # First unload and load normally to make sure everything is written.
+        wallet.unloadwallet()
+        self.nodes[0].loadwallet("unclean_lsn")
+        # Next cause a bunch of writes by filling the keypool.
+        wallet.keypoolrefill(wallet.getwalletinfo()["keypoolsize"] + 100)
+        # Lastly kill bitcoind so that the LSNs don't get reset.
+        self.nodes[0].kill_process()
+
+        wallet_dump = self.nodes[0].datadir_path / "unclean_lsn.dump"
+        self.assert_raises_tool_error("LSNs are not reset, this database is not completely flushed. Please reopen then close the database with a version that has BDB support", "-wallet=unclean_lsn", f"-dumpfile={wallet_dump}", "dump")
+
+        # File can be dumped after reloading it normally.
+        self.start_node(0)
+        self.nodes[0].loadwallet("unclean_lsn")
+        self.stop_node(0)
+        self.assert_tool_output('', "-wallet=unclean_lsn", f"-dumpfile={wallet_dump}", "dump", stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
+
     def test_no_create_unnamed(self):
         self.log.info("Test that unnamed (default) wallets cannot be created")
 
@@ -431,6 +611,44 @@ class ToolWalletTest(BitcoinTestFramework):
 
         self.assert_raises_tool_error("Wallet name cannot be empty", "-wallet=", "-dumpfile=wallet.dump", "createfromdump")
         assert not (self.nodes[0].wallets_path / "wallet.dat").exists()
+
+    def test_compare_legacy_dump_with_framework_bdb_parser(self):
+        self.log.info("Verify that legacy wallet database dump matches the one from the test framework's BDB parser")
+        wallet_name = "bdb_ro_test"
+        self.start_node(0)
+        # add some really large labels (above twice the largest valid page size) to create BDB overflow pages
+        self.nodes[0].createwallet(wallet_name)
+        wallet_rpc = self.nodes[0].get_wallet_rpc(wallet_name)
+        generated_labels = {}
+        for i in range(10):
+            address = getnewdestination()[2]
+            large_label = ''.join([random.choice(string.ascii_letters) for _ in range(150000)])
+            wallet_rpc.setlabel(address, large_label)
+            generated_labels[address] = large_label
+        # fill the keypool to create BDB internal pages
+        wallet_rpc.keypoolrefill(1000)
+        self.stop_node(0)
+
+        wallet_dumpfile = self.nodes[0].datadir_path / "bdb_ro_test.dump"
+        self.assert_tool_output('', "-wallet={}".format(wallet_name), "-dumpfile={}".format(wallet_dumpfile), "dump", stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
+
+        expected_dump = self.read_dump(wallet_dumpfile)
+        # remove extra entries from wallet tool dump that are not actual key/value pairs from the database
+        del expected_dump['BITCOIN_CORE_WALLET_DUMP']
+        del expected_dump['format']
+        del expected_dump['checksum']
+        bdb_ro_parser_dump_raw = dump_bdb_kv(self.nodes[0].wallets_path / wallet_name / "wallet.dat")
+        bdb_ro_parser_dump = OrderedDict()
+        assert any([len(bytes.fromhex(value)) >= 150000 for value in expected_dump.values()])
+        for key, value in sorted(bdb_ro_parser_dump_raw.items()):
+            bdb_ro_parser_dump[key.hex()] = value.hex()
+        assert_equal(bdb_ro_parser_dump, expected_dump)
+
+        # check that all labels were created with the correct address
+        for address, label in generated_labels.items():
+            key_bytes = b'\x04name' + ser_string(address.encode())
+            assert key_bytes in bdb_ro_parser_dump_raw
+            assert_equal(bdb_ro_parser_dump_raw[key_bytes], ser_string(label.encode()))
 
     def run_test(self):
         self.wallet_path = self.nodes[0].wallets_path / self.default_wallet_name / self.wallet_data_filename
@@ -441,10 +659,16 @@ class ToolWalletTest(BitcoinTestFramework):
         self.test_tool_wallet_create_on_existing_wallet()
         self.test_getwalletinfo_on_different_wallet()
         self.test_dump_createfromdump()
+        self.test_importfromcoldcard()
         self.test_chainless_conflicts()
+        if not self.options.descriptors:
+            self.test_dump_endianness()
+            self.test_dump_unclean_lsns()
         self.test_dump_very_large_records()
         self.test_no_create_legacy()
         self.test_no_create_unnamed()
+        if not self.options.descriptors and self.is_bdb_compiled() and not self.options.swap_bdb_endian:
+            self.test_compare_legacy_dump_with_framework_bdb_parser()
 
 
 if __name__ == '__main__':

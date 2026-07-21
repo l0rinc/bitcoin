@@ -21,12 +21,14 @@
 #include <test/util/logging.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
+#include <util/mempressure.h>
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
 #include <wallet/coincontrol.h>
 #include <wallet/context.h>
 #include <wallet/receive.h>
+#include <wallet/scriptpubkeyman.h>
 #include <wallet/spend.h>
 #include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
@@ -44,6 +46,46 @@ static_assert(DEFAULT_TRANSACTION_MINFEE >= DEFAULT_MIN_RELAY_TX_FEE, "wallet mi
 static_assert(WALLET_INCREMENTAL_RELAY_FEE >= DEFAULT_INCREMENTAL_RELAY_FEE, "wallet incremental fee is smaller than default incremental relay fee");
 
 BOOST_FIXTURE_TEST_SUITE(wallet_tests, WalletTestingSetup)
+
+BOOST_AUTO_TEST_CASE(default_confirm_target_is_one_day)
+{
+    BOOST_CHECK_EQUAL(m_wallet.m_confirm_target, 144U);
+}
+
+BOOST_AUTO_TEST_CASE(upgrade_wallet_feature_boundaries)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    {
+        LOCK(wallet.cs_wallet);
+        wallet.SetMinVersion(FEATURE_COMPRPUBKEY);
+    }
+
+    bilingual_str error;
+    BOOST_CHECK(wallet.UpgradeWallet(FEATURE_HD - 1, error));
+    BOOST_CHECK(error.empty());
+    BOOST_CHECK_EQUAL(wallet.GetVersion(), FEATURE_COMPRPUBKEY);
+
+    error = {};
+    BOOST_CHECK(!wallet.UpgradeWallet(FEATURE_WALLETCRYPT, error));
+    BOOST_CHECK(!error.empty());
+    BOOST_CHECK_EQUAL(wallet.GetVersion(), FEATURE_COMPRPUBKEY);
+
+    CWallet hd_wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    {
+        LOCK(hd_wallet.cs_wallet);
+        hd_wallet.SetMinVersion(FEATURE_HD);
+    }
+
+    error = {};
+    BOOST_CHECK(!hd_wallet.UpgradeWallet(FEATURE_HD_SPLIT, error));
+    BOOST_CHECK(!error.empty());
+    BOOST_CHECK_EQUAL(hd_wallet.GetVersion(), FEATURE_HD);
+
+    error = {};
+    BOOST_CHECK(hd_wallet.UpgradeWallet(/*version=*/0, error));
+    BOOST_CHECK(error.empty());
+    BOOST_CHECK_EQUAL(hd_wallet.GetVersion(), FEATURE_LATEST);
+}
 
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {
@@ -88,6 +130,14 @@ BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
         // Wallet should update the non-range descriptor successfully
         BOOST_CHECK(wallet.AddWalletDescriptor(w_desc, provider, "", false));
     }
+}
+
+BOOST_FIXTURE_TEST_CASE(remove_created_wallet_dir_if_empty, BasicTestingSetup)
+{
+    const fs::path empty_dir{m_path_root / "empty_wallet_dir"};
+    BOOST_REQUIRE(fs::create_directories(empty_dir));
+    BOOST_CHECK(RemoveCreatedWalletDirIfEmpty(empty_dir, "wallet test"));
+    BOOST_CHECK(!fs::exists(empty_dir));
 }
 
 BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
@@ -528,6 +578,53 @@ BOOST_FIXTURE_TEST_CASE(wallet_disableprivkeys, TestChain100Setup)
     BOOST_CHECK(!wallet->GetNewDestination(OutputType::BECH32, ""));
 }
 
+BOOST_FIXTURE_TEST_CASE(cached_tx_get_amounts_watchonly_filter, TestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    LOCK(wallet.cs_wallet);
+    wallet.SetupLegacyScriptPubKeyMan();
+    auto* spkm{wallet.GetLegacyScriptPubKeyMan()};
+    BOOST_REQUIRE(spkm);
+
+    const CKey spend_key{GenerateRandomKey()};
+    const CKey watch_key{GenerateRandomKey()};
+    const CScript spend_script{GetScriptForRawPubKey(spend_key.GetPubKey())};
+    const CScript watch_script{GetScriptForRawPubKey(watch_key.GetPubKey())};
+    {
+        LOCK(spkm->cs_KeyStore);
+        BOOST_REQUIRE(spkm->AddKeyPubKey(spend_key, spend_key.GetPubKey()));
+        BOOST_REQUIRE(spkm->AddWatchOnly(watch_script, /*nCreateTime=*/1));
+    }
+
+    CMutableTransaction tx;
+    tx.vout.emplace_back(1 * COIN, spend_script);
+    tx.vout.emplace_back(2 * COIN, watch_script);
+    CWalletTx* wtx{wallet.AddToWallet(MakeTransactionRef(tx), TxStateInactive{})};
+    BOOST_REQUIRE(wtx);
+
+    std::list<COutputEntry> received;
+    std::list<COutputEntry> sent;
+    CAmount fee{0};
+
+    CachedTxGetAmounts(wallet, *wtx, received, sent, fee, ISMINE_SPENDABLE, /*include_change=*/false);
+    BOOST_CHECK_EQUAL(fee, 0);
+    BOOST_CHECK(sent.empty());
+    BOOST_REQUIRE_EQUAL(received.size(), 1U);
+    BOOST_CHECK_EQUAL(received.front().amount, 1 * COIN);
+
+    CachedTxGetAmounts(wallet, *wtx, received, sent, fee, ISMINE_WATCH_ONLY, /*include_change=*/false);
+    BOOST_CHECK_EQUAL(fee, 0);
+    BOOST_CHECK(sent.empty());
+    BOOST_REQUIRE_EQUAL(received.size(), 1U);
+    BOOST_CHECK_EQUAL(received.front().amount, 2 * COIN);
+
+    CachedTxGetAmounts(wallet, *wtx, received, sent, fee, ISMINE_ALL, /*include_change=*/false);
+    BOOST_CHECK_EQUAL(fee, 0);
+    BOOST_CHECK(sent.empty());
+    BOOST_REQUIRE_EQUAL(received.size(), 2U);
+    BOOST_CHECK_EQUAL(received.front().amount + received.back().amount, 3 * COIN);
+}
+
 // Explicit calculation which is used to test the wallet constant
 // We get the same virtual size due to rounding(weight/4) for both use_max_sig values
 static size_t CalculateNestedKeyhashInputSize(bool use_max_sig)
@@ -611,6 +708,9 @@ BOOST_FIXTURE_TEST_CASE(wallet_descriptor_test, BasicTestingSetup)
 //! rescanning where new transactions in new blocks could be lost.
 BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
 {
+    // FIXME: this test fails for some reason if there's a flush
+    g_low_memory_threshold = 0;
+
     m_args.ForceSetArg("-unsafesqlitesync", "1");
     // Create new wallet with known key and unload it.
     WalletContext context;
@@ -649,8 +749,8 @@ BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
     m_coinbase_txns.push_back(CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey())).vtx[0]);
     auto block_tx = TestSimpleSpend(*m_coinbase_txns[0], 0, coinbaseKey, GetScriptForRawPubKey(key.GetPubKey()));
     m_coinbase_txns.push_back(CreateAndProcessBlock({block_tx}, GetScriptForRawPubKey(coinbaseKey.GetPubKey())).vtx[0]);
-    auto mempool_tx = TestSimpleSpend(*m_coinbase_txns[1], 0, coinbaseKey, GetScriptForRawPubKey(key.GetPubKey()));
-    BOOST_CHECK(m_node.chain->broadcastTransaction(MakeTransactionRef(mempool_tx), DEFAULT_TRANSACTION_MAXFEE, node::TxBroadcast::MEMPOOL_NO_BROADCAST, error));
+    auto mempool_tx = TestSimpleSpend(*m_coinbase_txns[1], 0, coinbaseKey, GetScriptForDestination(PKHash(key.GetPubKey())));
+    BOOST_CHECK_MESSAGE(m_node.chain->broadcastTransaction(MakeTransactionRef(mempool_tx), DEFAULT_TRANSACTION_MAXFEE, node::TxBroadcast::MEMPOOL_NO_BROADCAST, error), error);
 
 
     // Reload wallet and make sure new transactions are detected despite events
@@ -691,8 +791,8 @@ BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
             m_coinbase_txns.push_back(CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey())).vtx[0]);
             block_tx = TestSimpleSpend(*m_coinbase_txns[2], 0, coinbaseKey, GetScriptForRawPubKey(key.GetPubKey()));
             m_coinbase_txns.push_back(CreateAndProcessBlock({block_tx}, GetScriptForRawPubKey(coinbaseKey.GetPubKey())).vtx[0]);
-            mempool_tx = TestSimpleSpend(*m_coinbase_txns[3], 0, coinbaseKey, GetScriptForRawPubKey(key.GetPubKey()));
-            BOOST_CHECK(m_node.chain->broadcastTransaction(MakeTransactionRef(mempool_tx), DEFAULT_TRANSACTION_MAXFEE, node::TxBroadcast::MEMPOOL_NO_BROADCAST, error));
+            mempool_tx = TestSimpleSpend(*m_coinbase_txns[3], 0, coinbaseKey, GetScriptForDestination(PKHash(key.GetPubKey())));
+            BOOST_CHECK_MESSAGE(m_node.chain->broadcastTransaction(MakeTransactionRef(mempool_tx), DEFAULT_TRANSACTION_MAXFEE, node::TxBroadcast::MEMPOOL_NO_BROADCAST, error), error);
             m_node.validation_signals->SyncWithValidationInterfaceQueue();
         });
     wallet = TestLoadWallet(context);

@@ -111,11 +111,20 @@ static CTransactionRef CreatePlaceholderTx(bool segwit)
     return ptx;
 }
 
+static CTransactionRef CreateMissingInputsTx(FastRandomContext& det_rand)
+{
+    CMutableTransaction mtx;
+    mtx.vin.emplace_back(Txid::FromUint256(det_rand.rand256()), 0);
+    mtx.vin[0].scriptWitness.stack.push_back({1});
+    mtx.vout.emplace_back(CENT, CScript());
+    return MakeTransactionRef(mtx);
+}
+
 BOOST_FIXTURE_TEST_CASE(tx_rejection_types, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
     FastRandomContext det_rand{true};
-    node::TxDownloadOptions DEFAULT_OPTS{pool, det_rand, true};
+    node::TxDownloadOptions DEFAULT_OPTS{.m_mempool = pool, .m_rng = det_rand, .m_deterministic_txrequest = true};
 
     // A new TxDownloadManagerImpl is created for each tx so we can just reuse the same one.
     TxValidationState state;
@@ -173,7 +182,7 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
     FastRandomContext det_rand{true};
-    node::TxDownloadOptions DEFAULT_OPTS{pool, det_rand, true};
+    node::TxDownloadOptions DEFAULT_OPTS{.m_mempool = pool, .m_rng = det_rand, .m_deterministic_txrequest = true};
     NodeId nodeid{1};
     node::TxDownloadConnectionInfo DEFAULT_CONN{/*m_preferred=*/false, /*m_relay_permissions=*/false, /*m_wtxid_relay=*/true};
 
@@ -337,6 +346,31 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
             BOOST_CHECK_MESSAGE(ok, err_msg);
         }
     }
+}
+
+BOOST_FIXTURE_TEST_CASE(max_orphan_txs_limit, TestChain100Setup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadOptions opts{.m_mempool = pool, .m_rng = det_rand, .m_max_orphan_txs = 3, .m_deterministic_txrequest = true};
+    node::TxDownloadManager txdownloadman{opts};
+    const NodeId nodeid{1};
+    const node::TxDownloadConnectionInfo conn{/*m_preferred=*/false, /*m_relay_permissions=*/false, /*m_wtxid_relay=*/true};
+    txdownloadman.ConnectedPeer(nodeid, conn);
+
+    TxValidationState missing_inputs;
+    missing_inputs.Invalid(TxValidationResult::TX_MISSING_INPUTS, "");
+
+    for (int i{0}; i < 4; ++i) {
+        txdownloadman.MempoolRejectedTx(CreateMissingInputsTx(det_rand), missing_inputs, nodeid, /*first_time_failure=*/true);
+    }
+    BOOST_CHECK_EQUAL(txdownloadman.GetOrphanTransactions().size(), 3);
+
+    txdownloadman.SetMaxOrphanTxs(1);
+    BOOST_CHECK_EQUAL(txdownloadman.GetOrphanTransactions().size(), 1);
+
+    txdownloadman.SetMaxOrphanTxs(0);
+    BOOST_CHECK(txdownloadman.GetOrphanTransactions().empty());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

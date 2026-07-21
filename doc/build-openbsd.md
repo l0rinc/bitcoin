@@ -39,6 +39,38 @@ git clone https://github.com/bitcoin/bitcoin.git
 
 ### 3. Install Optional Dependencies
 
+#### Wallet Dependencies
+
+It is not necessary to build wallet functionality to run either `bitcoind` or `bitcoin-qt`.
+
+###### Descriptor Wallet Support
+
+SQLite is required to support [descriptor wallets](descriptors.md).
+
+``` bash
+pkg_add sqlite3
+```
+
+###### Legacy Wallet Support
+BerkeleyDB is only required to support legacy wallets.
+
+It is recommended to use Berkeley DB 4.8. You cannot use the BerkeleyDB library
+from ports. However you can build it yourself, [using depends](/depends).
+
+Refer to [depends/README.md](/depends/README.md) for detailed instructions.
+
+```bash
+gmake -C depends NO_BOOST=1 NO_IPC=1 NO_QT=1 NO_SQLITE=1 NO_UPNP=1 NO_ZMQ=1 NO_USDT=1
+...
+to: /path/to/bitcoin/depends/*-unknown-openbsd*
+```
+
+Then set `BDB_PREFIX`:
+
+```bash
+export BDB_PREFIX="[path displayed above]"
+```
+
 #### GUI Dependencies
 ###### Qt6
 
@@ -83,8 +115,8 @@ pkg_add python py3-zmq  # Select the newest version of the python package if nec
 
 There are many ways to configure Bitcoin Core, here are a few common examples:
 
-##### Wallet and GUI:
-This enables wallet support and the GUI, assuming SQLite and Qt 6 are installed.
+##### Descriptor Wallet and GUI:
+This enables descriptor wallet support and the GUI, assuming SQLite and Qt 6 are installed.
 
 ```bash
 cmake -B build -DBUILD_GUI=ON
@@ -96,7 +128,7 @@ Run `cmake -B build -LH` to see the full list of available options.
 
 ```bash
 cmake --build build     # Append "-j N" for N parallel jobs.
-ctest --test-dir build  # Append "-j N" for N parallel tests.
+ctest --test-dir build  # Append "-j N" for N parallel tests. Some tests are disabled if Python 3 is not available.
 ```
 
 ## Resource limits

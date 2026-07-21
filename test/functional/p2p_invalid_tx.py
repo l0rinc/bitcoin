@@ -33,8 +33,8 @@ class InvalidTxRequestTest(BitcoinTestFramework):
         """Add a P2P connection to the node.
 
         Helper to connect and wait for version handshake."""
-        for _ in range(num_connections):
-            self.nodes[0].add_p2p_connection(P2PDataStore())
+        for i in range(num_connections):
+            self.nodes[0].add_outbound_p2p_connection(P2PDataStore(), p2p_idx=i)
 
     def reconnect_p2p(self, **kwargs):
         """Tear down and bootstrap the P2P connection to the node.
@@ -137,14 +137,14 @@ class InvalidTxRequestTest(BitcoinTestFramework):
 
         assert_equal(expected_mempool, set(node.getrawmempool()))
 
-        self.log.info('Test orphanage can store more than 100 transactions')
+        self.log.info('Test orphan pool overflow')
         orphan_tx_pool = [CTransaction() for _ in range(101)]
         for i in range(len(orphan_tx_pool)):
             orphan_tx_pool[i].vin.append(CTxIn(outpoint=COutPoint(i, 333)))
             orphan_tx_pool[i].vout.append(CTxOut(nValue=11 * COIN, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE))
 
-        node.p2ps[0].send_txs_and_test(orphan_tx_pool, node, success=False)
-        self.wait_until(lambda: len(node.getorphantxs()) >= 101)
+        with node.assert_debug_log(['orphanage count limit, removed 1 tx']):
+            node.p2ps[0].send_txs_and_test(orphan_tx_pool, node, success=False)
 
         self.log.info('Test orphan with rejected parents')
         rejected_parent = CTransaction()
@@ -154,8 +154,8 @@ class InvalidTxRequestTest(BitcoinTestFramework):
             node.p2ps[0].send_txs_and_test([rejected_parent], node, success=False)
 
         self.log.info('Test that a peer disconnection causes erase its transactions from the orphan pool')
-        self.reconnect_p2p(num_connections=1)
-        self.wait_until(lambda: len(node.getorphantxs()) == 0)
+        with node.assert_debug_log(['Erased 100 orphan transaction(s) from peer=']):
+            self.reconnect_p2p(num_connections=1)
 
         self.log.info('Test that a transaction in the orphan pool is included in a new tip block causes erase this transaction from the orphan pool')
         tx_withhold_until_block_A = CTransaction()

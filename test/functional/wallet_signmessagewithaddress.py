@@ -12,8 +12,8 @@ from test_framework.util import (
 class SignMessagesWithAddressTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
-        self.num_nodes = 1
-        self.extra_args = [["-addresstype=legacy"]]
+        self.num_nodes = 2
+        self.extra_args = [["-addresstype=legacy"], []]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -31,6 +31,13 @@ class SignMessagesWithAddressTest(BitcoinTestFramework):
         other_signature = self.nodes[0].signmessage(other_address, message)
         assert not self.nodes[0].verifymessage(other_address, signature, message)
         assert not self.nodes[0].verifymessage(address, other_signature, message)
+
+        self.log.info('test signing BIP322 messages with wallet-owned segwit addresses')
+        for address_type in ["bech32", "bech32m"]:
+            segwit_address = self.nodes[1].getnewaddress(address_type=address_type)
+            segwit_signature = self.nodes[1].signmessage(segwit_address, message)
+            assert self.nodes[1].verifymessage(segwit_address, segwit_signature, message)
+            assert not self.nodes[1].verifymessage(segwit_address, segwit_signature, message + " changed")
 
         self.log.info('test parameter validity and error codes')
         # signmessage has two required parameters

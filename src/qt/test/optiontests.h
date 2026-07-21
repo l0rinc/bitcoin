@@ -23,6 +23,7 @@ private Q_SLOTS:
     void integerGetArgBug();
     void parametersInteraction();
     void extractFilter();
+    void makeHtmlLink();
 
 private:
     interfaces::Node& m_node;

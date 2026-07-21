@@ -20,6 +20,7 @@
 #include <logging.h>
 #include <node/blockstorage.h>
 #include <node/chainstate.h>
+#include <node/dbcache.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
@@ -225,10 +226,18 @@ btck_SynchronizationState cast_state(SynchronizationState state)
 btck_Warning cast_btck_warning(kernel::Warning warning)
 {
     switch (warning) {
+    case kernel::Warning::RULES_NOT_CONSENTED:
+        return btck_Warning_RULES_NOT_CONSENTED;
     case kernel::Warning::UNKNOWN_NEW_RULES_ACTIVATED:
         return btck_Warning_UNKNOWN_NEW_RULES_ACTIVATED;
     case kernel::Warning::LARGE_WORK_INVALID_CHAIN:
         return btck_Warning_LARGE_WORK_INVALID_CHAIN;
+    case kernel::Warning::UNKNOWN_NEW_RULES_SIGNAL_VBITS:
+        return btck_Warning_UNKNOWN_NEW_RULES_SIGNAL_VBITS;
+    case kernel::Warning::UNKNOWN_NEW_RULES_SIGNAL_INTVER:
+        return btck_Warning_UNKNOWN_NEW_RULES_SIGNAL_INTVER;
+    case kernel::Warning::SOFTWARE_EXPIRY:
+        return btck_Warning_SOFTWARE_EXPIRY;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
@@ -314,7 +323,7 @@ public:
     {
         if (m_cbs.progress) m_cbs.progress(m_cbs.user_data, title.original.c_str(), title.original.length(), progress_percent, resume_possible ? 1 : 0);
     }
-    void warningSet(kernel::Warning id, const bilingual_str& message) override
+    void warningSet(kernel::Warning id, const bilingual_str& message, bool) override
     {
         if (m_cbs.warning_set) m_cbs.warning_set(m_cbs.user_data, cast_btck_warning(id), message.original.c_str(), message.original.length());
     }
@@ -468,7 +477,7 @@ struct ChainstateManagerOptions {
               .notifications = *context->m_notifications,
               .block_tree_db_params = DBParams{
                   .path = data_dir / "blocks" / "index",
-                  .cache_bytes = kernel::CacheSizes{DEFAULT_KERNEL_CACHE}.block_tree_db,
+                  .cache_bytes = kernel::CacheSizes{node::GetDefaultDBCache()}.block_tree_db,
               }}},
           m_context{context}, m_chainstate_load_options{node::ChainstateLoadOptions{}}
     {
@@ -1001,6 +1010,8 @@ btck_BlockValidationResult btck_block_validation_state_get_block_validation_resu
         return btck_BlockValidationResult_TIME_FUTURE;
     case BlockValidationResult::BLOCK_HEADER_LOW_WORK:
         return btck_BlockValidationResult_HEADER_LOW_WORK;
+    case BlockValidationResult::BLOCK_CHECKPOINT:
+        return btck_BlockValidationResult_CHECKPOINT;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
@@ -1083,7 +1094,7 @@ btck_ChainstateManager* btck_chainstate_manager_create(
     try {
         const auto chainstate_load_opts{WITH_LOCK(opts.m_mutex, return opts.m_chainstate_load_options)};
 
-        kernel::CacheSizes cache_sizes{DEFAULT_KERNEL_CACHE};
+        kernel::CacheSizes cache_sizes{node::GetDefaultDBCache()};
         auto [status, chainstate_err]{node::LoadChainstate(*chainman, cache_sizes, chainstate_load_opts)};
         if (status != node::ChainstateLoadStatus::SUCCESS) {
             LogError("Failed to load chain state from your data directory: %s", chainstate_err.original);

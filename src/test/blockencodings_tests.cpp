@@ -15,7 +15,7 @@
 
 #include <boost/test/unit_test.hpp>
 
-const std::vector<std::pair<Wtxid, CTransactionRef>> empty_extra_txn;
+const std::vector<CTransactionRef> empty_extra_txn;
 
 BOOST_FIXTURE_TEST_SUITE(blockencodings_tests, RegTestingSetup)
 
@@ -57,8 +57,8 @@ static CBlock BuildBlockTestCase(FastRandomContext& ctx) {
 }
 
 // Number of shared use_counts we expect for a tx we haven't touched
-// (block + mempool entry + our copy from the GetSharedTx call)
-constexpr long SHARED_TX_OFFSET{3};
+// (block + mempool entry + mempool txns_randomized + our copy from the GetSharedTx call)
+constexpr long SHARED_TX_OFFSET{4};
 
 BOOST_AUTO_TEST_CASE(SimpleRoundTripTest)
 {
@@ -104,6 +104,8 @@ BOOST_AUTO_TEST_CASE(SimpleRoundTripTest)
         {
             PartiallyDownloadedBlock tmp = partialBlock;
             partialBlock.FillBlock(block2, {block.vtx[2]}, /*segwit_active=*/true); // Current implementation doesn't check txn here, but don't require that
+            BOOST_CHECK(partialBlock.header.IsNull());
+            BOOST_CHECK(partialBlock.FillBlock(block2, {block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_INVALID);
             partialBlock = tmp;
         }
         bool mutated;
@@ -319,7 +321,7 @@ BOOST_AUTO_TEST_CASE(ReceiveWithExtraTransactions) {
     const CTransactionRef non_block_tx = MakeTransactionRef(std::move(mtx));
 
     CBlock block(BuildBlockTestCase(rand_ctx));
-    std::vector<std::pair<Wtxid, CTransactionRef>> extra_txn;
+    std::vector<CTransactionRef> extra_txn;
     extra_txn.resize(10);
 
     LOCK2(cs_main, pool.cs);
@@ -343,9 +345,15 @@ BOOST_AUTO_TEST_CASE(ReceiveWithExtraTransactions) {
         BOOST_CHECK( partial_block.IsTxAvailable(2));
 
         // Add an unrelated tx to extra_txn:
-        extra_txn[0] = {non_block_tx->GetWitnessHash(), non_block_tx};
+        extra_txn[0] = non_block_tx;
+        PartiallyDownloadedBlock partial_block_with_unrelated_extra(&pool);
+        BOOST_CHECK(partial_block_with_unrelated_extra.InitData(cmpctblock, extra_txn) == READ_STATUS_OK);
+        BOOST_CHECK(partial_block_with_unrelated_extra.IsTxAvailable(0));
+        BOOST_CHECK(!partial_block_with_unrelated_extra.IsTxAvailable(1));
+        BOOST_CHECK(partial_block_with_unrelated_extra.IsTxAvailable(2));
+
         // and a tx from the block that's not in the mempool:
-        extra_txn[1] = {block.vtx[1]->GetWitnessHash(), block.vtx[1]};
+        extra_txn[1] = block.vtx[1];
 
         BOOST_CHECK(partial_block_with_extra.InitData(cmpctblock, extra_txn) == READ_STATUS_OK);
         BOOST_CHECK(partial_block_with_extra.IsTxAvailable(0));

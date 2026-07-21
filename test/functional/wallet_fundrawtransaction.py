@@ -9,6 +9,7 @@ from decimal import Decimal
 from itertools import product
 from math import ceil
 from test_framework.address import address_to_scriptpubkey
+from test_framework.blocktools import COINBASE_MATURITY
 
 from test_framework.descriptors import descsum_create
 from test_framework.extendedkey import ExtendedPrivateKey
@@ -44,9 +45,9 @@ class RawTransactionsTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 4
         self.extra_args = [[
+            "-deprecatedrpc=settxfee",
             "-minrelaytxfee=0.00001000",
         ] for i in range(self.num_nodes)]
-
         self.setup_clean_chain = True
         # whitelist peers to speed up tx relay / mempool sync
         self.noban_tx_relay = True
@@ -140,6 +141,8 @@ class RawTransactionsTest(BitcoinTestFramework):
         self.test_locked_wallet()
         self.test_many_inputs_fee()
         self.test_many_inputs_send()
+        self.test_witness_only()
+        self.test_witness_only_unsolvable_watchonly()
         self.test_op_return()
         self.test_watchonly()
         self.test_all_watched_funds()
@@ -220,6 +223,82 @@ class RawTransactionsTest(BitcoinTestFramework):
         rawtxfund = self.nodes[2].fundrawtransaction(rawtx, fee_rate=self.fee_rate_sats_per_vb)
         dec_tx  = self.nodes[2].decoderawtransaction(rawtxfund['hex'])
         assert len(dec_tx['vin']) > 0  #test that we have enough inputs
+
+    def check_witness_inputs(self, vins):
+        for vin in vins:
+            # check vin is a segwit input
+            utxo = self.nodes[2].gettxout(vin['txid'], vin['vout'])
+            info = self.nodes[2].getaddressinfo(utxo['scriptPubKey']['address'])
+            if not (info['iswitness'] or info['embedded']['iswitness']):
+                return False
+
+        return True
+
+    def test_witness_only(self):
+        self.log.info("Testing fundrawtxn with witness inputs only")
+
+        self.generate(self.nodes[0], COINBASE_MATURITY + 10)
+        self.nodes[2].sendall(recipients=[self.nodes[0].getnewaddress()])
+
+        output_types = ['legacy', 'p2sh-segwit', 'bech32']
+        if self.options.descriptors:
+            output_types.append('bech32m')
+        # Create coins
+        for _ in range(10):
+            for output_type in output_types:
+                self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(address_type=output_type), 1)
+
+        self.generate(self.nodes[0], 1)
+
+        inputs = [ ]
+        target_addr = self.nodes[2].getnewaddress()
+        segwit_balance = (len(output_types) - 1) * 10
+
+        # make sure legacy inputs are not accepted in witness only mode if no witness inputs are found
+        # trying to spend more than segwit total should fail
+        outputs = { target_addr : segwit_balance + Decimal('0.00000001') }
+        rawtx = self.nodes[2].createrawtransaction(inputs, outputs)
+        assert_raises_rpc_error(-4, "Insufficient funds", self.nodes[2].fundrawtransaction, rawtx, {'segwit_inputs_only': True, 'subtractFeeFromOutputs': [0]})
+
+        # make sure all inputs are of type witness
+        outputs = { target_addr : segwit_balance }
+        rawtx = self.nodes[2].createrawtransaction(inputs, outputs)
+        rawtxfund = self.nodes[2].fundrawtransaction(rawtx, {'segwit_inputs_only': True, 'subtractFeeFromOutputs': [0]})
+        dec_tx = self.nodes[2].decoderawtransaction(rawtxfund['hex'])
+
+        assert len(dec_tx['vin']) > 0
+        assert(self.check_witness_inputs(dec_tx['vin']))
+
+    def test_witness_only_unsolvable_watchonly(self):
+        self.log.info("Test fundrawtxn witness-only mode with unsolvable watch-only input")
+
+        wallet_name = "unsolvable_watchonly"
+        self.nodes[3].createwallet(wallet_name=wallet_name, disable_private_keys=True, descriptors=True, blank=True)
+        watchonly = self.nodes[3].get_wallet_rpc(wallet_name)
+
+        watchonly_address = self.nodes[0].getnewaddress(address_type="bech32")
+        watchonly.importaddress(watchonly_address, "", False)
+        watchonly_info = watchonly.getaddressinfo(watchonly_address)
+        assert_equal(watchonly_info["ismine"], True)
+        assert_equal(watchonly_info["solvable"], False)
+
+        watchonly_utxo = self.create_outpoints(self.nodes[0], outputs=[{watchonly_address: Decimal("1.0")}])[0]
+        self.generate(self.nodes[0], 1)
+
+        watchonly_coin = next(utxo for utxo in watchonly.listunspent() if utxo["txid"] == watchonly_utxo["txid"])
+        assert_equal(watchonly_coin["solvable"], False)
+
+        rawtx = watchonly.createrawtransaction([], {self.nodes[0].getnewaddress(): Decimal("0.5")})
+        assert_raises_rpc_error(
+            -4,
+            "Missing solving data for estimating transaction size",
+            watchonly.fundrawtransaction,
+            rawtx,
+            {"segwit_inputs_only": True, "fee_rate": self.fee_rate_sats_per_vb},
+        )
+
+        watchonly.unloadwallet()
+
 
     def test_simple_two_coins(self):
         self.log.info("Test fundrawtxn with 2 coins")
@@ -762,7 +841,12 @@ class RawTransactionsTest(BitcoinTestFramework):
         }]
         wwatch.importdescriptors(desc_import)
 
-        # Backward compatibility test (2nd params is includeWatching)
+        result = wwatch.fundrawtransaction(rawtx)
+        res_dec = self.nodes[0].decoderawtransaction(result["hex"])
+        assert_equal(len(res_dec["vin"]), 1)
+        assert_equal(res_dec["vin"][0]["txid"], self.watchonly_utxo['txid'])
+
+        # Backward compatibility test (2nd param is includeWatching)
         result = wwatch.fundrawtransaction(rawtx, True)
         res_dec = self.nodes[0].decoderawtransaction(result["hex"])
         assert_equal(len(res_dec["vin"]), 1)
@@ -993,6 +1077,30 @@ class RawTransactionsTest(BitcoinTestFramework):
 
         # The total subtracted from the outputs is equal to the fee.
         assert_equal(share[0] + share[2] + share[3], result[0]['fee'])
+
+        # test funding with custom min_conf
+        inputs = []
+        outputs = {self.nodes[2].getnewaddress(): 1}
+        rawtx = self.nodes[3].createrawtransaction(inputs, outputs)
+        unspent = self.nodes[3].listunspent()
+        assert len(unspent) == 1
+        input_confs = unspent[0]['confirmations']
+        assert_raises_rpc_error(
+            -8,
+            "Negative min_conf",
+            self.nodes[3].fundrawtransaction,
+            rawtx,
+            {'min_conf': -1},
+        )
+        assert_raises_rpc_error(
+            -8,
+            "min_conf and minconf options should not both be set. Use minconf (min_conf is deprecated).",
+            self.nodes[3].fundrawtransaction,
+            rawtx,
+            {'min_conf': input_confs, 'minconf': input_confs},
+        )
+        assert_raises_rpc_error(-4, "Insufficient funds", self.nodes[3].fundrawtransaction, rawtx,  {'min_conf': input_confs + 1})
+        result = self.nodes[3].fundrawtransaction(rawtx, {'min_conf': input_confs})
 
     def test_subtract_fee_with_presets(self):
         self.log.info("Test fundrawtxn subtract fee from outputs with preset inputs that are sufficient")
@@ -1536,7 +1644,13 @@ class RawTransactionsTest(BitcoinTestFramework):
         default_wallet.sendtoaddress(wallet.getnewaddress(address_type="legacy"), 10)
         self.generate(self.nodes[0], 1)
 
-        assert_equal(wallet.listunspent(), watchonly.listunspent())
+        spendable_unspent = wallet.listunspent()
+        watchonly_unspent = watchonly.listunspent()
+        assert_equal(len(spendable_unspent), 1)
+        assert_equal(len(watchonly_unspent), 1)
+        assert_equal(spendable_unspent[0].pop("spendable"), True)
+        watchonly_unspent[0].pop("spendable")
+        assert_equal(spendable_unspent, watchonly_unspent)
 
         ret_addr = default_wallet.getnewaddress()
         tx = wallet.createrawtransaction([], [{ret_addr: 5}])

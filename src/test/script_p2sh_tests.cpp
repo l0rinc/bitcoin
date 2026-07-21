@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <consensus/tx_verify.h>
+#include <kernel/mempool_options.h>
 #include <key.h>
 #include <policy/policy.h>
 #include <policy/settings.h>
@@ -21,13 +22,22 @@
 // Helpers:
 static bool IsStandardTx(const CTransaction& tx, bool permit_bare_multisig, std::string& reason)
 {
-    return IsStandardTx(tx, std::nullopt, permit_bare_multisig, CFeeRate{DUST_RELAY_TX_FEE}, reason);
+    const kernel::MemPoolOptions opts{
+        .permit_bare_pubkey = true,
+        .permit_bare_multisig = permit_bare_multisig,
+    };
+    return IsStandardTx(tx, opts, reason);
 }
 
 static bool IsStandardTx(const CTransaction& tx, std::string& reason)
 {
-    return IsStandardTx(tx, std::nullopt, /*permit_bare_multisig=*/true, CFeeRate{DUST_RELAY_TX_FEE}, reason) &&
-           IsStandardTx(tx, std::nullopt, /*permit_bare_multisig=*/false, CFeeRate{DUST_RELAY_TX_FEE}, reason);
+    kernel::MemPoolOptions opts{
+        .permit_bare_pubkey = true,
+        .permit_bare_multisig = true,
+    };
+    if (!IsStandardTx(tx, opts, reason)) return false;
+    opts.permit_bare_multisig = false;
+    return IsStandardTx(tx, opts, reason);
 }
 
 static std::vector<unsigned char> Serialize(const CScript& s)
@@ -398,7 +408,7 @@ BOOST_AUTO_TEST_CASE(ValidateInputsStandardness)
 
     const auto txToNonStd1_res = ::ValidateInputsStandardness(CTransaction(txToNonStd1), coins);
     BOOST_CHECK(txToNonStd1_res.IsInvalid());
-    BOOST_CHECK_EQUAL(txToNonStd1_res.GetRejectReason(), "bad-txns-nonstandard-inputs");
+    BOOST_CHECK_EQUAL(txToNonStd1_res.GetRejectReason(), "bad-txns-input-scriptcheck-sigops");
     BOOST_CHECK_EQUAL(txToNonStd1_res.GetDebugMessage(), "p2sh redeemscript sigops exceed limit (input 0: 16 > 15)");
 
     BOOST_CHECK_EQUAL(GetP2SHSigOpCount(CTransaction(txToNonStd1), coins), 16U);
@@ -414,7 +424,7 @@ BOOST_AUTO_TEST_CASE(ValidateInputsStandardness)
 
     const auto txToNonStd2_res = ::ValidateInputsStandardness(CTransaction(txToNonStd2), coins);
     BOOST_CHECK(txToNonStd2_res.IsInvalid());
-    BOOST_CHECK_EQUAL(txToNonStd2_res.GetRejectReason(), "bad-txns-nonstandard-inputs");
+    BOOST_CHECK_EQUAL(txToNonStd2_res.GetRejectReason(), "bad-txns-input-scriptcheck-sigops");
     BOOST_CHECK_EQUAL(txToNonStd2_res.GetDebugMessage(), "p2sh redeemscript sigops exceed limit (input 0: 20 > 15)");
     BOOST_CHECK_EQUAL(GetP2SHSigOpCount(CTransaction(txToNonStd2), coins), 20U);
 
@@ -428,7 +438,7 @@ BOOST_AUTO_TEST_CASE(ValidateInputsStandardness)
 
     const auto txToNonStd2_no_scriptSig_res = ::ValidateInputsStandardness(CTransaction(txToNonStd2_no_scriptSig), coins);
     BOOST_CHECK(txToNonStd2_no_scriptSig_res.IsInvalid());
-    BOOST_CHECK_EQUAL(txToNonStd2_no_scriptSig_res.GetRejectReason(), "bad-txns-nonstandard-inputs");
+    BOOST_CHECK_EQUAL(txToNonStd2_no_scriptSig_res.GetRejectReason(), "bad-txns-input-scriptcheck-missing");
     BOOST_CHECK_EQUAL(txToNonStd2_no_scriptSig_res.GetDebugMessage(), "input 0 P2SH redeemscript missing");
     BOOST_CHECK_EQUAL(GetP2SHSigOpCount(CTransaction(txToNonStd2), coins), 20U);
 
@@ -443,10 +453,11 @@ BOOST_AUTO_TEST_CASE(ValidateInputsStandardness)
 
     const auto txToNonStd3_res = ::ValidateInputsStandardness(CTransaction(txToNonStd3), coins);
     BOOST_CHECK(txToNonStd3_res.IsInvalid());
-    BOOST_CHECK_EQUAL(txToNonStd3_res.GetRejectReason(), "bad-txns-nonstandard-inputs");
+    BOOST_CHECK_EQUAL(txToNonStd3_res.GetRejectReason(), "bad-txns-input-script-unknown");
     BOOST_CHECK_EQUAL(txToNonStd3_res.GetDebugMessage(), "input 0 script unknown");
 
-    // TxoutType::INCORRECT_SCRIPTSIG
+    // TxoutType::INCORRECT_SCRIPTSIG. This is rejected by IsStandardTx unless
+    // scriptsig-not-pushonly is ignored, in which case consensus checks catch it.
     CMutableTransaction txToNonStd4;
     txToNonStd4.vout.resize(1);
     txToNonStd4.vout[0].scriptPubKey = GetScriptForDestination(PKHash(key[1].GetPubKey()));
@@ -457,9 +468,7 @@ BOOST_AUTO_TEST_CASE(ValidateInputsStandardness)
     txToNonStd4.vin[0].scriptSig = op_return_script;
 
     const auto txToNonStd4_res = ::ValidateInputsStandardness(CTransaction(txToNonStd4), coins);
-    BOOST_CHECK(txToNonStd4_res.IsInvalid());
-    BOOST_CHECK_EQUAL(txToNonStd4_res.GetRejectReason(), "bad-txns-nonstandard-inputs");
-    BOOST_CHECK_EQUAL(txToNonStd4_res.GetDebugMessage(), "p2sh scriptsig malformed (input 0: OP_RETURN was encountered)");
+    BOOST_CHECK(txToNonStd4_res.IsValid());
 
     // TxoutType::WITNESS_UNKNOWN
     CMutableTransaction txWitnessUnknown;
@@ -471,7 +480,7 @@ BOOST_AUTO_TEST_CASE(ValidateInputsStandardness)
     txWitnessUnknown.vin[0].prevout.hash = txFrom.GetHash();
     const auto txWitnessUnknown_res = ::ValidateInputsStandardness(CTransaction(txWitnessUnknown), coins);
     BOOST_CHECK(txWitnessUnknown_res.IsInvalid());
-    BOOST_CHECK_EQUAL(txWitnessUnknown_res.GetRejectReason(), "bad-txns-nonstandard-inputs");
+    BOOST_CHECK_EQUAL(txWitnessUnknown_res.GetRejectReason(), "bad-txns-input-witness-unknown");
     BOOST_CHECK_EQUAL(txWitnessUnknown_res.GetDebugMessage(), "input 0 witness program is undefined");
 }
 

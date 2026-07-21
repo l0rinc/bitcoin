@@ -9,6 +9,7 @@
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <univalue.h>
 
 BOOST_FIXTURE_TEST_SUITE(node_warnings_tests, BasicTestingSetup)
 
@@ -43,10 +44,21 @@ BOOST_AUTO_TEST_CASE(warnings)
     BOOST_CHECK(messages[0].original == "warning 1");
     BOOST_CHECK(messages[1].original == "warning 2 - revision 1");
 
+    const auto warnings_arr{node::GetWarningsForRpc(warnings, false)};
+    BOOST_REQUIRE(warnings_arr.isArray());
+    BOOST_REQUIRE_EQUAL(warnings_arr.size(), 2);
+    BOOST_CHECK_EQUAL(warnings_arr[0].get_str(), "warning 1");
+    BOOST_CHECK_EQUAL(warnings_arr[1].get_str(), "warning 2 - revision 1");
+
+    const auto warnings_str{node::GetWarningsForRpc(warnings, true)};
+    BOOST_REQUIRE(warnings_str.isStr());
+    BOOST_CHECK_EQUAL(warnings_str.get_str(), "warning 1\nwarning 2 - revision 1");
+
     // Clearing all warnings should also clear all messages
     BOOST_CHECK(warnings.Unset(warning_1));
     BOOST_CHECK(warnings.Unset(warning_2));
     BOOST_CHECK(warnings.GetMessages().size() == 0);
+    BOOST_CHECK_EQUAL(node::GetWarningsForRpc(warnings, true).get_str(), "");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

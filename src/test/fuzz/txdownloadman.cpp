@@ -175,7 +175,7 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
     bilingual_str error;
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
     FastRandomContext det_rand{true};
-    node::TxDownloadManager txdownloadman{node::TxDownloadOptions{pool, det_rand, true}};
+    node::TxDownloadManager txdownloadman{node::TxDownloadOptions{.m_mempool = pool, .m_rng = det_rand, .m_deterministic_txrequest = true}};
 
     std::chrono::microseconds time{244466666};
 
@@ -299,7 +299,7 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
     bilingual_str error;
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
     FastRandomContext det_rand{true};
-    node::TxDownloadManagerImpl txdownload_impl{node::TxDownloadOptions{pool, det_rand, true}};
+    node::TxDownloadManagerImpl txdownload_impl{node::TxDownloadOptions{.m_mempool = pool, .m_rng = det_rand, .m_deterministic_txrequest = true}};
 
     std::chrono::microseconds time{244466666};
 

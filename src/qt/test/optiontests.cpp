@@ -37,6 +37,7 @@ void OptionTests::migrateSettings()
     QSettings settings;
     settings.setValue("nDatabaseCache", 600);
     settings.setValue("nThreadsScriptVerif", 12);
+    settings.setValue("fUseUPnP", false);
     settings.setValue("fListen", false);
     settings.setValue("bPrune", true);
     settings.setValue("nPruneSize", 3);
@@ -49,6 +50,7 @@ void OptionTests::migrateSettings()
 
     QVERIFY(settings.contains("nDatabaseCache"));
     QVERIFY(settings.contains("nThreadsScriptVerif"));
+    QVERIFY(settings.contains("fUseUPnP"));
     QVERIFY(settings.contains("fListen"));
     QVERIFY(settings.contains("bPrune"));
     QVERIFY(settings.contains("nPruneSize"));
@@ -62,6 +64,7 @@ void OptionTests::migrateSettings()
     QVERIFY(options.Init(error));
     QVERIFY(!settings.contains("nDatabaseCache"));
     QVERIFY(!settings.contains("nThreadsScriptVerif"));
+    QVERIFY(!settings.contains("fUseUPnP"));
     QVERIFY(!settings.contains("fListen"));
     QVERIFY(!settings.contains("bPrune"));
     QVERIFY(!settings.contains("nPruneSize"));
@@ -145,4 +148,23 @@ void OptionTests::extractFilter()
 
     filter = QString("Image (*.png *.jpg)");
     QCOMPARE(GUIUtil::ExtractFirstSuffixFromFilter(filter), "png");
+}
+
+void OptionTests::makeHtmlLink()
+{
+    QCOMPARE(
+        GUIUtil::MakeHtmlLink(QStringLiteral("Open https://bitcoinknots.org")),
+        QStringLiteral(R"(Open <a href="https://bitcoinknots.org">https&#x2060;:&#x2060;/&#x2060;/&#x2060;bitcoinknots.org</a>)"));
+
+    QCOMPARE(
+        GUIUtil::MakeHtmlLink(QStringLiteral("Open https://bitcoinknots.org.")),
+        QStringLiteral(R"(Open <a href="https://bitcoinknots.org">https&#x2060;:&#x2060;/&#x2060;/&#x2060;bitcoinknots.org</a>.)"));
+
+    QCOMPARE(
+        GUIUtil::MakeHtmlLink(QStringLiteral("<qt>https://bitcoinknots.org</qt>")),
+        QStringLiteral(R"(<qt><a href="https://bitcoinknots.org">https&#x2060;:&#x2060;/&#x2060;/&#x2060;bitcoinknots.org</a></qt>)"));
+
+    QCOMPARE(
+        GUIUtil::MakeHtmlLink(QStringLiteral("Open http://bitcoinknots.org")),
+        QStringLiteral("Open http://bitcoinknots.org"));
 }

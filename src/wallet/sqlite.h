@@ -88,6 +88,8 @@ public:
 
     void SetExecHandler(std::unique_ptr<SQliteExecHandler>&& handler) { m_exec_handler = std::move(handler); }
 
+    void Flush() override {}
+
     void Close() override;
 
     std::unique_ptr<DatabaseCursor> GetNewCursor() override;
@@ -147,6 +149,10 @@ public:
     /** Close the database */
     void Close() override;
 
+    void Flush() override {}
+    bool PeriodicFlush() override { return false; }
+    void IncrementUpdateCounter() override { ++nUpdateCounter; }
+
     /** Rewrite the entire database on disk */
     bool Rewrite() override;
 
@@ -166,7 +172,7 @@ public:
     std::string Format() override { return "sqlite"; }
 
     /** Make a SQLiteBatch connected to this database */
-    std::unique_ptr<DatabaseBatch> MakeBatch() override;
+    std::unique_ptr<DatabaseBatch> MakeBatch(bool flush_on_close = true) override;
 
     /** Return true if there is an on-going txn in this connection */
     bool HasActiveTxn();

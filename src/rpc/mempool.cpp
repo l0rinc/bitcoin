@@ -11,27 +11,35 @@
 #include <common/args.h>
 #include <consensus/validation.h>
 #include <core_io.h>
+#include <core_memusage.h>
 #include <index/txospenderindex.h>
 #include <kernel/mempool_entry.h>
 #include <net_processing.h>
 #include <netbase.h>
+#include <node/context.h>
 #include <node/mempool_persist_args.h>
 #include <node/types.h>
 #include <policy/rbf.h>
 #include <policy/settings.h>
 #include <primitives/transaction.h>
+#include <rpc/mempool.h>
+#include <rpc/rawtransaction.h>
 #include <rpc/server.h>
 #include <rpc/server_util.h>
 #include <rpc/util.h>
 #include <txmempool.h>
 #include <univalue.h>
+#include <util/any.h>
 #include <util/fs.h>
 #include <util/moneystr.h>
 #include <util/strencodings.h>
 #include <util/time.h>
 #include <util/vector.h>
+#include <validation.h>
 
+#include <limits>
 #include <map>
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -71,11 +79,20 @@ static RPCMethod sendrawtransaction()
             {"hexstring", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The hex string of the raw transaction"},
             {"maxfeerate", RPCArg::Type::AMOUNT, RPCArg::Default{FormatMoney(DEFAULT_MAX_RAW_TX_FEE_RATE.GetFeePerK())},
              "Reject transactions whose fee rate is higher than the specified value, expressed in " + CURRENCY_UNIT +
-                 "/kvB.\nFee rates larger than 1BTC/kvB are rejected.\nSet to 0 to accept any fee rate."},
+                 "/kvB.\nFee rates larger than 1BTC/kvB are rejected.\nSet to 0 to accept any fee rate.",
+                RPCArgOptions{.skip_type_check = true}  // for ignore_rejects compatibility
+            },
             {"maxburnamount", RPCArg::Type::AMOUNT, RPCArg::Default{FormatMoney(DEFAULT_MAX_BURN_AMOUNT)},
              "Reject transactions with provably unspendable outputs (e.g. 'datacarrier' outputs that use the OP_RETURN opcode) greater than the specified value, expressed in " + CURRENCY_UNIT + ".\n"
              "If burning funds through unspendable outputs is desired, increase this value.\n"
-             "This check is based on heuristics and does not guarantee spendability of outputs.\n"},
+             "This check is based on heuristics and does not guarantee spendability of outputs.\n",
+                RPCArgOptions{.skip_type_check = true}  // for ignore_rejects compatibility
+            },
+            {"ignore_rejects", RPCArg::Type::ARR, RPCArg::Default{UniValue::VARR}, "Rejection conditions to ignore, eg 'txn-mempool-conflict'",
+                {
+                    {"reject_reason", RPCArg::Type::STR, RPCArg::Optional::OMITTED, ""},
+                },
+            },
         },
         RPCResult{
             RPCResult::Type::STR_HEX, "", "The transaction hash in hex"
@@ -92,7 +109,24 @@ static RPCMethod sendrawtransaction()
                 },
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
         {
-            const CAmount max_burn_amount = request.params[2].isNull() ? 0 : AmountFromValue(request.params[2]);
+            CFeeRate max_raw_tx_fee_rate{DEFAULT_MAX_RAW_TX_FEE_RATE};
+            CAmount max_burn_amount{0};
+            const UniValue* json_ign_rejs = &request.params[3];
+
+            if (request.params[1].isArray() && request.params[2].isNull() && request.params[3].isNull()) {
+                // ignore_rejects used to occupy this position (v0.12.0.knots20160226.rc1-v0.17.1.knots20181229)
+                json_ign_rejs = &request.params[1];
+            } else {
+                if (!request.params[1].isNull()) {
+                    max_raw_tx_fee_rate = ParseFeeRate(self.Arg<UniValue>("maxfeerate"));
+                }
+                if (request.params[2].isArray() && request.params[3].isNull()) {
+                    // ignore_rejects used to occupy this position (v0.18.0.knots20190502-v23.0.knots20220529)
+                    json_ign_rejs = &request.params[2];
+                } else if (!request.params[2].isNull()) {
+                    max_burn_amount = AmountFromValue(request.params[2]);
+                }
+            }
 
             CMutableTransaction mtx;
             if (!DecodeHexTx(mtx, request.params[0].get_str())) {
@@ -107,10 +141,13 @@ static RPCMethod sendrawtransaction()
 
             CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
 
-            const CFeeRate max_raw_tx_fee_rate{ParseFeeRate(self.Arg<UniValue>("maxfeerate"))};
-
-            int64_t virtual_size = GetVirtualTransactionSize(*tx);
-            CAmount max_raw_tx_fee = max_raw_tx_fee_rate.GetFee(virtual_size);
+            ignore_rejects_type ignore_rejects;
+            if (!json_ign_rejs->isNull()) {
+                for (size_t i = 0; i < json_ign_rejs->size(); ++i) {
+                    const UniValue& json_ign_rej = (*json_ign_rejs)[i];
+                    ignore_rejects.insert(json_ign_rej.get_str());
+                }
+            }
 
             std::string err_string;
             AssertLockNotHeld(cs_main);
@@ -127,12 +164,7 @@ static RPCMethod sendrawtransaction()
             }
             const auto method = private_broadcast_enabled ? node::TxBroadcast::NO_MEMPOOL_PRIVATE_BROADCAST
                                                           : node::TxBroadcast::MEMPOOL_AND_BROADCAST_TO_ALL;
-            const TransactionError err = BroadcastTransaction(node,
-                                                              tx,
-                                                              err_string,
-                                                              max_raw_tx_fee,
-                                                              method,
-                                                              /*wait_callback=*/true);
+            const TransactionError err = BroadcastTransaction(node, tx, err_string, max_raw_tx_fee_rate, method, /*wait_callback=*/true, ignore_rejects);
             if (TransactionError::OK != err) {
                 throw JSONRPCTransactionError(err, err_string);
             }
@@ -293,6 +325,11 @@ static RPCMethod testmempoolaccept()
             {"maxfeerate", RPCArg::Type::AMOUNT, RPCArg::Default{FormatMoney(DEFAULT_MAX_RAW_TX_FEE_RATE.GetFeePerK())},
              "Reject transactions whose fee rate is higher than the specified value, expressed in " + CURRENCY_UNIT +
                  "/kvB.\nFee rates larger than 1BTC/kvB are rejected.\nSet to 0 to accept any fee rate."},
+            {"ignore_rejects", RPCArg::Type::ARR, RPCArg::Default{UniValue::VARR}, "Rejection conditions to ignore, eg 'txn-mempool-conflict'",
+                {
+                    {"reject_reason", RPCArg::Type::STR, RPCArg::Optional::OMITTED, ""},
+                },
+            },
         },
         RPCResult{
             RPCResult::Type::ARR, "", "The result of the mempool acceptance test for each raw transaction in the input array.\n"
@@ -301,12 +338,13 @@ static RPCMethod testmempoolaccept()
             {
                 {RPCResult::Type::OBJ, "", "",
                 {
-                    {RPCResult::Type::STR_HEX, "txid", "The transaction hash in hex"},
+                    {RPCResult::Type::STR_HEX, "txid", "The transaction id"},
                     {RPCResult::Type::STR_HEX, "wtxid", "The transaction witness hash in hex"},
                     {RPCResult::Type::STR, "package-error", /*optional=*/true, "Package validation error, if any (only possible if rawtxs had more than 1 transaction)."},
                     {RPCResult::Type::BOOL, "allowed", /*optional=*/true, "Whether this tx would be accepted to the mempool and pass client-specified maxfeerate. "
                                                        "If not present, the tx was not fully validated due to a failure in another tx in the list."},
                     {RPCResult::Type::NUM, "vsize", /*optional=*/true, "Virtual transaction size as defined in BIP 141. This is different from actual serialized size for witness transactions as witness data is discounted (only present when 'allowed' is true)"},
+                    {RPCResult::Type::NUM, "usage", "Memory usage of transaction for this node"},
                     {RPCResult::Type::OBJ, "fees", /*optional=*/true, "Transaction fees (only present if 'allowed' is true)",
                     {
                         {RPCResult::Type::STR_AMOUNT, "base", "transaction fee in " + CURRENCY_UNIT},
@@ -340,6 +378,16 @@ static RPCMethod testmempoolaccept()
 
             const CFeeRate max_raw_tx_fee_rate{ParseFeeRate(self.Arg<UniValue>("maxfeerate"))};
 
+            const UniValue* json_ign_rejs = &request.params[2];
+            ignore_rejects_type ignore_rejects;
+            if (!json_ign_rejs->isNull()) {
+                for (size_t i = 0; i < json_ign_rejs->size(); ++i) {
+                    const UniValue& json_ign_rej = (*json_ign_rejs)[i];
+                    const std::string& ign_rej = json_ign_rej.get_str();
+                    ignore_rejects.insert(ign_rej);
+                }
+            }
+
             std::vector<CTransactionRef> txns;
             txns.reserve(raw_transactions.size());
             for (const auto& rawtx : raw_transactions.getValues()) {
@@ -357,9 +405,9 @@ static RPCMethod testmempoolaccept()
             Chainstate& chainstate = chainman.ActiveChainstate();
             const PackageMempoolAcceptResult package_result = [&] {
                 LOCK(::cs_main);
-                if (txns.size() > 1) return ProcessNewPackage(chainstate, mempool, txns, /*test_accept=*/true, /*client_maxfeerate=*/{});
+                if (txns.size() > 1) return ProcessNewPackage(chainstate, mempool, txns, /*test_accept=*/true, /*client_maxfeerate=*/{}, ignore_rejects);
                 return PackageMempoolAcceptResult(txns[0]->GetWitnessHash(),
-                                                  chainman.ProcessTransaction(txns[0], /*test_accept=*/true));
+                                                  chainman.ProcessTransaction(txns[0], /*test_accept=*/true, ignore_rejects));
             }();
 
             UniValue rpc_result(UniValue::VARR);
@@ -372,6 +420,7 @@ static RPCMethod testmempoolaccept()
                 UniValue result_inner(UniValue::VOBJ);
                 result_inner.pushKV("txid", tx->GetHash().GetHex());
                 result_inner.pushKV("wtxid", tx->GetWitnessHash().GetHex());
+                result_inner.pushKV("usage", RecursiveDynamicUsage(tx));
                 if (package_result.m_state.GetResult() == PackageValidationResult::PCKG_POLICY) {
                     result_inner.pushKV("package-error", package_result.m_state.ToString());
                 }
@@ -389,7 +438,8 @@ static RPCMethod testmempoolaccept()
                     // Check that fee does not exceed maximum fee
                     const int64_t virtual_size = tx_result.m_vsize.value();
                     const CAmount max_raw_tx_fee = max_raw_tx_fee_rate.GetFee(virtual_size);
-                    if (max_raw_tx_fee && fee > max_raw_tx_fee) {
+                    if (max_raw_tx_fee && fee > max_raw_tx_fee &&
+                        0 == (ignore_rejects.count("absurdly-high-fee") + ignore_rejects.count("max-fee-exceeded"))) {
                         result_inner.pushKV("allowed", false);
                         result_inner.pushKV("reject-reason", "max-fee-exceeded");
                         exit_early = true;
@@ -450,11 +500,14 @@ static std::vector<RPCResult> MempoolEntryDescription()
         RPCResult{RPCResult::Type::NUM, "weight", "transaction weight as defined in BIP 141."},
         RPCResult{RPCResult::Type::NUM_TIME, "time", "local time transaction entered pool in seconds since 1 Jan 1970 GMT"},
         RPCResult{RPCResult::Type::NUM, "height", "block height when transaction entered pool"},
+        RPCResult{RPCResult::Type::NUM, "startingpriority", "Priority when transaction entered pool"},
+        RPCResult{RPCResult::Type::NUM, "currentpriority", "Transaction priority now"},
         RPCResult{RPCResult::Type::NUM, "descendantcount", "number of in-mempool descendant transactions (including this one)"},
         RPCResult{RPCResult::Type::NUM, "descendantsize", "virtual transaction size of in-mempool descendants (including this one)"},
         RPCResult{RPCResult::Type::NUM, "ancestorcount", "number of in-mempool ancestor transactions (including this one)"},
         RPCResult{RPCResult::Type::NUM, "ancestorsize", "virtual transaction size of in-mempool ancestors (including this one)"},
         RPCResult{RPCResult::Type::NUM, "chunkweight", "sigops-adjusted weight (as defined in BIP 141 and modified by '-bytespersigop') of this transaction's chunk"},
+        RPCResult{RPCResult::Type::STR_HEX, "hash", "hash of entire serialized transaction"},
         RPCResult{RPCResult::Type::STR_HEX, "wtxid", "hash of serialized transaction, including witness data"},
         RPCResult{RPCResult::Type::OBJ, "fees", "",
             {
@@ -468,15 +521,13 @@ static std::vector<RPCResult> MempoolEntryDescription()
             {RPCResult{RPCResult::Type::STR_HEX, "transactionid", "parent transaction id"}}},
         RPCResult{RPCResult::Type::ARR, "spentby", "unconfirmed transactions spending outputs from this transaction",
             {RPCResult{RPCResult::Type::STR_HEX, "transactionid", "child transaction id"}}},
+        RPCResult{RPCResult::Type::BOOL, "bip125-replaceable", "Whether this transaction signals BIP125 replaceability or has an unconfirmed ancestor signaling BIP125 replaceability.\n"},
         RPCResult{RPCResult::Type::BOOL, "unbroadcast", "Whether this transaction is currently unbroadcast (initial broadcast not yet acknowledged by any peers)"},
     };
-    if (IsDeprecatedRPCEnabled("bip125")) {
-        list.emplace_back(RPCResult::Type::BOOL, "bip125-replaceable", "Whether this transaction signals BIP125 replaceability or has an unconfirmed ancestor signaling BIP125 replaceability. (DEPRECATED)\n");
-    }
     return list;
 }
 
-void AppendChunkInfo(UniValue& all_chunks, FeePerWeight chunk_feerate, std::vector<const CTxMemPoolEntry *> chunk_txs)
+void AppendChunkInfo(UniValue& all_chunks, FeePerWeight chunk_feerate, std::vector<const CTxMemPoolEntry*> chunk_txs)
 {
     UniValue chunk(UniValue::VOBJ);
     chunk.pushKV("chunkfee", ValueFromAmount(chunk_feerate.fee));
@@ -489,7 +540,7 @@ void AppendChunkInfo(UniValue& all_chunks, FeePerWeight chunk_feerate, std::vect
     all_chunks.push_back(std::move(chunk));
 }
 
-static void clusterToJSON(const CTxMemPool& pool, UniValue& info, std::vector<const CTxMemPoolEntry *> cluster) EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+static void clusterToJSON(const CTxMemPool& pool, UniValue& info, std::vector<const CTxMemPoolEntry*> cluster) EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
 {
     AssertLockHeld(pool.cs);
     int total_weight{0};
@@ -499,18 +550,13 @@ static void clusterToJSON(const CTxMemPool& pool, UniValue& info, std::vector<co
     info.pushKV("clusterweight", total_weight);
     info.pushKV("txcount", cluster.size());
 
-    // Output the cluster by chunk. This isn't handed to us by the mempool, but
-    // we can calculate it by looking at the chunk feerates of each transaction
-    // in the cluster.
     FeePerWeight current_chunk_feerate = pool.GetMainChunkFeerate(*cluster[0]);
-    std::vector<const CTxMemPoolEntry *> current_chunk;
+    std::vector<const CTxMemPoolEntry*> current_chunk;
     current_chunk.reserve(cluster.size());
 
     UniValue all_chunks(UniValue::VARR);
     for (const auto& tx : cluster) {
         if (current_chunk_feerate.size == 0) {
-            // We've iterated all the transactions in the previous chunk; so
-            // append it to the output.
             AppendChunkInfo(all_chunks, pool.GetMainChunkFeerate(*current_chunk[0]), current_chunk);
             current_chunk.clear();
             current_chunk_feerate = pool.GetMainChunkFeerate(*tx);
@@ -519,11 +565,10 @@ static void clusterToJSON(const CTxMemPool& pool, UniValue& info, std::vector<co
         current_chunk_feerate.size -= tx->GetAdjustedWeight();
     }
     AppendChunkInfo(all_chunks, pool.GetMainChunkFeerate(*current_chunk[0]), current_chunk);
-    current_chunk.clear();
     info.pushKV("chunks", std::move(all_chunks));
 }
 
-static void entryToJSON(const CTxMemPool& pool, UniValue& info, const CTxMemPoolEntry& e) EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+static void entryToJSON(const CTxMemPool& pool, UniValue& info, const CTxMemPoolEntry& e, const int next_block_height) EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
 {
     AssertLockHeld(pool.cs);
 
@@ -533,12 +578,15 @@ static void entryToJSON(const CTxMemPool& pool, UniValue& info, const CTxMemPool
     info.pushKV("vsize", e.GetTxSize());
     info.pushKV("weight", e.GetTxWeight());
     info.pushKV("time", count_seconds(e.GetTime()));
-    info.pushKV("height", e.GetHeight());
+    info.pushKV("height", (int)e.GetHeight());
+    info.pushKV("startingpriority", e.GetStartingPriority());
+    info.pushKV("currentpriority", e.GetPriority(next_block_height));
     info.pushKV("descendantcount", descendant_count);
     info.pushKV("descendantsize", descendant_size);
     info.pushKV("ancestorcount", ancestor_count);
     info.pushKV("ancestorsize", ancestor_size);
     info.pushKV("wtxid", e.GetTx().GetWitnessHash().ToString());
+    info.pushKV("hash", info["wtxid"]);
     auto feerate = pool.GetMainChunkFeerate(e);
     info.pushKV("chunkweight", feerate.size);
 
@@ -572,32 +620,34 @@ static void entryToJSON(const CTxMemPool& pool, UniValue& info, const CTxMemPool
     }
 
     info.pushKV("spentby", std::move(spent));
-    info.pushKV("unbroadcast", pool.IsUnbroadcastTx(tx.GetHash()));
-
     // Add opt-in RBF status
-    if (IsDeprecatedRPCEnabled("bip125")) {
-        bool rbfStatus = false;
-        RBFTransactionState rbfState = IsRBFOptIn(tx, pool);
-        if (rbfState == RBFTransactionState::UNKNOWN) {
-            throw JSONRPCError(RPC_MISC_ERROR, "Transaction is not in mempool");
-        } else if (rbfState == RBFTransactionState::REPLACEABLE_BIP125) {
-            rbfStatus = true;
-        }
-        info.pushKV("bip125-replaceable", rbfStatus);
+    bool rbfStatus = false;
+    RBFTransactionState rbfState = IsRBFOptIn(tx, pool);
+    if (rbfState == RBFTransactionState::UNKNOWN) {
+        throw JSONRPCError(RPC_MISC_ERROR, "Transaction is not in mempool");
+    } else if (rbfState == RBFTransactionState::REPLACEABLE_BIP125) {
+        rbfStatus = true;
     }
+    info.pushKV("bip125-replaceable", rbfStatus);
+    info.pushKV("unbroadcast", pool.IsUnbroadcastTx(tx.GetHash()));
 }
 
-UniValue MempoolToJSON(const CTxMemPool& pool, bool verbose, bool include_mempool_sequence)
+UniValue MempoolToJSON(ChainstateManager &chainman, const CTxMemPool& pool, bool verbose, bool include_mempool_sequence)
 {
     if (verbose) {
         if (include_mempool_sequence) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Verbose results cannot contain mempool sequence values.");
         }
+        LOCK(::cs_main);
+        const CChain& active_chain = chainman.ActiveChain();
+        const int next_block_height = active_chain.Height() + 1;
         LOCK(pool.cs);
+        // TODO: Release cs_main after mempool.cs acquired
+
         UniValue o(UniValue::VOBJ);
         for (const CTxMemPoolEntry& e : pool.entryAll()) {
             UniValue info(UniValue::VOBJ);
-            entryToJSON(pool, info, e);
+            entryToJSON(pool, info, e, next_block_height);
             // Mempool has unique entries so there is no advantage in using
             // UniValue::pushKV, which checks if the key already exists in O(N).
             // UniValue::pushKVEnd is used instead which currently is O(1).
@@ -668,6 +718,130 @@ static RPCMethod getmempoolfeeratediagram()
     };
 }
 
+static RPCMethod maxmempool()
+{
+    return RPCMethod{"maxmempool",
+        "Sets the allocated memory for the memory pool.\n",
+        {
+            {"megabytes", RPCArg::Type::NUM, RPCArg::Optional::NO, "The memory allocated in MB"},
+        },
+        RPCResult{RPCResult::Type::NONE, "", ""},
+        RPCExamples{HelpExampleCli("maxmempool", "150") + HelpExampleRpc("maxmempool", "150")},
+        [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    const int64_t nSize{request.params[0].getInt<int32_t>()};
+    const int64_t nMempoolSizeMax{nSize * 1'000'000};
+
+    CTxMemPool& mempool{EnsureAnyMemPool(request.context)};
+    LOCK2(::cs_main, mempool.cs);
+
+    const int64_t nMempoolSizeMin{maxmempoolMinimumBytes(mempool.m_opts.limits.cluster_size_vbytes)};
+    if (nMempoolSizeMax < 0 || nMempoolSizeMax < nMempoolSizeMin) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("MaxMempool size %d is too small", nSize));
+    }
+    mempool.m_opts.max_size_bytes = nMempoolSizeMax;
+
+    auto node_context = util::AnyPtr<NodeContext>(request.context);
+    if (node_context && node_context->chainman) {
+        Chainstate& active_chainstate = node_context->chainman->ActiveChainstate();
+        LimitMempoolSize(mempool, active_chainstate.CoinsTip());
+    }
+
+    return NullUniValue;
+}
+    };
+}
+
+static RPCMethod listmempooltransactions()
+{
+    return RPCMethod{"listmempooltransactions",
+        "Returns all transactions in the mempool. Can be filtered by mempool_sequence\n"
+        "\nAllows for syncing with current mempool entries via polling (not zmq).",
+        {
+            {"start_sequence", RPCArg::Type::NUM, RPCArg::Default{0}, "The mempool_sequence to start the results to. Defaults to 0 (zero, all transactions)."},
+            {"verbose", RPCArg::Type::BOOL, RPCArg::Default{false}, "True for a json object, false for array of transaction ids"},
+        },
+        {
+            RPCResult{"for verbose = false",
+                RPCResult::Type::OBJ, "", "",
+                {
+                    {RPCResult::Type::NUM, "mempool_sequence", "The current max mempool sequence value."},
+                    {RPCResult::Type::ARR, "txs", "",
+                    {
+                        {RPCResult::Type::OBJ, "", "",
+                        {
+                            {RPCResult::Type::NUM, "entry_sequence", "The mempool sequence value for this transaction entry."},
+                            {RPCResult::Type::STR_HEX, "txid", "The transaction id"},
+                        }},
+                    }},
+                }},
+            RPCResult{"for verbose = true",
+                RPCResult::Type::OBJ, "", "",
+                {
+                    {RPCResult::Type::NUM, "mempool_sequence", "The current max mempool sequence value."},
+                    {RPCResult::Type::ARR, "txs", "",
+                    {
+                        {RPCResult::Type::OBJ, "", "",
+                        {
+                            Cat<std::vector<RPCResult>>(
+                                {
+                                    {RPCResult::Type::NUM, "entry_sequence", "The mempool sequence value for this transaction entry."},
+                                },
+                                DecodeTxDoc(/*txid_field_doc=*/"The transaction id of the mempool transaction")),
+                        }},
+                    }},
+                }},
+        },
+        RPCExamples{
+            HelpExampleCli("listmempooltransactions", "true")
+            + HelpExampleRpc("listmempooltransactions", "true")
+        },
+        [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    uint64_t start_mempool_sequence{0};
+    if (!request.params[0].isNull()) {
+        start_mempool_sequence = request.params[0].getInt<uint64_t>();
+    }
+
+    bool verbose{false};
+    if (!request.params[1].isNull()) {
+        verbose = request.params[1].get_bool();
+    }
+
+    return MempoolTxsToJSON(EnsureAnyMemPool(request.context), verbose, start_mempool_sequence);
+},
+    };
+}
+
+UniValue MempoolTxsToJSON(const CTxMemPool& pool, bool verbose, uint64_t sequence_start)
+{
+    LOCK(pool.cs);
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("mempool_sequence", pool.GetSequence());
+
+    UniValue txs(UniValue::VARR);
+    for (const CTxMemPoolEntry& entry : pool.mapTx) {
+        if (entry.GetSequence() < sequence_start) {
+            continue;
+        }
+
+        UniValue txentry(UniValue::VOBJ);
+        txentry.pushKV("entry_sequence", entry.GetSequence());
+
+        if (verbose) {
+            TxToUniv(entry.GetTx(), /*block_hash=*/uint256::ZERO, /*entry=*/txentry, /*include_hex=*/false);
+        } else {
+            txentry.pushKV("txid", entry.GetTx().GetHash().ToString());
+        }
+
+        txs.push_back(txentry);
+    }
+
+    result.pushKV("txs", txs);
+    return result;
+}
+
 static RPCMethod getrawmempool()
 {
     return RPCMethod{
@@ -714,7 +888,9 @@ static RPCMethod getrawmempool()
         include_mempool_sequence = request.params[1].get_bool();
     }
 
-    return MempoolToJSON(EnsureAnyMemPool(request.context), fVerbose, include_mempool_sequence);
+    NodeContext& node = EnsureAnyNodeContext(request.context);
+    ChainstateManager& chainman = EnsureChainman(node);
+    return MempoolToJSON(chainman, EnsureAnyMemPool(request.context), fVerbose, include_mempool_sequence);
 },
     };
 }
@@ -751,7 +927,12 @@ static RPCMethod getmempoolancestors()
     auto txid{Txid::FromUint256(ParseHashV(request.params[0], "txid"))};
 
     const CTxMemPool& mempool = EnsureAnyMemPool(request.context);
+    ChainstateManager& chainman = EnsureAnyChainman(request.context);
+    LOCK(::cs_main);
+    const CChain& active_chain = chainman.ActiveChain();
+    const int next_block_height = active_chain.Height() + 1;
     LOCK(mempool.cs);
+    // TODO: Release cs_main after mempool.cs acquired
 
     const auto entry{mempool.GetEntry(txid)};
     if (entry == nullptr) {
@@ -771,7 +952,7 @@ static RPCMethod getmempoolancestors()
         for (CTxMemPool::txiter ancestorIt : ancestors) {
             const CTxMemPoolEntry &e = *ancestorIt;
             UniValue info(UniValue::VOBJ);
-            entryToJSON(mempool, info, e);
+            entryToJSON(mempool, info, e, next_block_height);
             o.pushKV(e.GetTx().GetHash().ToString(), std::move(info));
         }
         return o;
@@ -812,7 +993,12 @@ static RPCMethod getmempooldescendants()
     auto txid{Txid::FromUint256(ParseHashV(request.params[0], "txid"))};
 
     const CTxMemPool& mempool = EnsureAnyMemPool(request.context);
+    ChainstateManager& chainman = EnsureAnyChainman(request.context);
+    LOCK(::cs_main);
+    const CChain& active_chain = chainman.ActiveChain();
+    const int next_block_height = active_chain.Height() + 1;
     LOCK(mempool.cs);
+    // TODO: Release cs_main after mempool.cs acquired
 
     const auto it{mempool.GetIter(txid)};
     if (!it) {
@@ -836,7 +1022,7 @@ static RPCMethod getmempooldescendants()
         for (CTxMemPool::txiter descendantIt : setDescendants) {
             const CTxMemPoolEntry &e = *descendantIt;
             UniValue info(UniValue::VOBJ);
-            entryToJSON(mempool, info, e);
+            entryToJSON(mempool, info, e, next_block_height);
             o.pushKV(e.GetTx().GetHash().ToString(), std::move(info));
         }
         return o;
@@ -899,7 +1085,12 @@ static RPCMethod getmempoolentry()
     auto txid{Txid::FromUint256(ParseHashV(request.params[0], "txid"))};
 
     const CTxMemPool& mempool = EnsureAnyMemPool(request.context);
+    ChainstateManager& chainman = EnsureAnyChainman(request.context);
+    LOCK(::cs_main);
+    const CChain& active_chain = chainman.ActiveChain();
+    const int next_block_height = active_chain.Height() + 1;
     LOCK(mempool.cs);
+    // TODO: Release cs_main after mempool.cs acquired
 
     const auto entry{mempool.GetEntry(txid)};
     if (entry == nullptr) {
@@ -907,7 +1098,7 @@ static RPCMethod getmempoolentry()
     }
 
     UniValue info(UniValue::VOBJ);
-    entryToJSON(mempool, info, *entry);
+    entryToJSON(mempool, info, *entry, next_block_height);
     return info;
 },
     };
@@ -950,8 +1141,7 @@ static RPCMethod gettxspendingprevout()
         },
         RPCExamples{
             HelpExampleCli("gettxspendingprevout", "\"[{\\\"txid\\\":\\\"a08e6907dbbd3d809776dbfc5d82e371b764ed838b5655e72f463568df1aadf0\\\",\\\"vout\\\":3}]\"")
-            + HelpExampleRpc("gettxspendingprevout", "\"[{\\\"txid\\\":\\\"a08e6907dbbd3d809776dbfc5d82e371b764ed838b5655e72f463568df1aadf0\\\",\\\"vout\\\":3}]\"")
-            + HelpExampleCliNamed("gettxspendingprevout", {{"outputs", "[{\"txid\":\"a08e6907dbbd3d809776dbfc5d82e371b764ed838b5655e72f463568df1aadf0\",\"vout\":3}]"}, {"return_spending_tx", true}})
+            + HelpExampleRpc("gettxspendingprevout", "[{\"txid\":\"a08e6907dbbd3d809776dbfc5d82e371b764ed838b5655e72f463568df1aadf0\",\"vout\":3}]")
         },
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -1059,7 +1249,7 @@ static RPCMethod gettxspendingprevout()
     };
 }
 
-UniValue MempoolInfoToJSON(const CTxMemPool& pool)
+UniValue MempoolInfoToJSON(const CTxMemPool& pool, const std::optional<MempoolHistogramFeeRates>& histogram_floors)
 {
     // Make sure this call is atomic in the pool.
     LOCK(pool.cs);
@@ -1073,14 +1263,95 @@ UniValue MempoolInfoToJSON(const CTxMemPool& pool)
     ret.pushKV("mempoolminfee", ValueFromAmount(std::max(pool.GetMinFee(), pool.m_opts.min_relay_feerate).GetFeePerK()));
     ret.pushKV("minrelaytxfee", ValueFromAmount(pool.m_opts.min_relay_feerate.GetFeePerK()));
     ret.pushKV("incrementalrelayfee", ValueFromAmount(pool.m_opts.incremental_relay_feerate.GetFeePerK()));
+    ret.pushKV("dustrelayfee", ValueFromAmount(pool.m_opts.dust_relay_feerate.GetFeePerK()));
+    ret.pushKV("dustrelayfeefloor", ValueFromAmount(pool.m_opts.dust_relay_feerate_floor.GetFeePerK()));
+    if (pool.m_opts.dust_relay_target == 0) {
+        ret.pushKV("dustdynamic", "off");
+    } else {
+        std::string multiplier_str = strprintf("%u", pool.m_opts.dust_relay_multiplier / 1000);
+        if (pool.m_opts.dust_relay_multiplier % 1000) {
+            multiplier_str += strprintf(".%03u", pool.m_opts.dust_relay_multiplier % 1000);
+            while (multiplier_str.back() == '0') multiplier_str.pop_back();
+        }
+        if (pool.m_opts.dust_relay_target < 0) {
+            ret.pushKV("dustdynamic", strprintf("%s*target:%u", multiplier_str, -pool.m_opts.dust_relay_target));
+        } else { // pool.m_opts.dust_relay_target > 0
+            ret.pushKV("dustdynamic", strprintf("%s*mempool:%u", multiplier_str, pool.m_opts.dust_relay_target));
+        }
+    }
     ret.pushKV("unbroadcastcount", pool.GetUnbroadcastTxs().size());
     ret.pushKV("permitbaremultisig", pool.m_opts.permit_bare_multisig);
     ret.pushKV("maxdatacarriersize", pool.m_opts.max_datacarrier_bytes.value_or(0));
     ret.pushKV("limitclustercount", pool.m_opts.limits.cluster_count);
     ret.pushKV("limitclustersize", pool.m_opts.limits.cluster_size_vbytes);
     ret.pushKV("optimal", pool.m_txgraph->DoWork(0)); // 0 work is a quick check for known optimality
-    if (IsDeprecatedRPCEnabled("fullrbf")) {
-        ret.pushKV("fullrbf", true);
+    ret.pushKV("fullrbf", (pool.m_opts.rbf_policy == RBFPolicy::Always));
+    switch (pool.m_opts.rbf_policy) {
+    case RBFPolicy::Never : ret.pushKV("rbf_policy", "never"); break;
+    case RBFPolicy::OptIn : ret.pushKV("rbf_policy", "optin"); break;
+    case RBFPolicy::Always: ret.pushKV("rbf_policy", "always"); break;
+    }
+    switch (pool.m_opts.truc_policy) {
+    case TRUCPolicy::Reject : ret.pushKV("truc_policy", "reject"); break;
+    case TRUCPolicy::Accept : ret.pushKV("truc_policy", "accept"); break;
+    case TRUCPolicy::Enforce: ret.pushKV("truc_policy", "enforce"); break;
+    }
+
+    if (histogram_floors) {
+        const MempoolHistogramFeeRates& floors{histogram_floors.value()};
+
+        std::vector<uint64_t> sizes(floors.size(), 0);
+        std::vector<uint64_t> count(floors.size(), 0);
+        std::vector<CAmount> fees(floors.size(), 0);
+
+        for (const CTxMemPoolEntry& e : pool.mapTx) {
+            const CAmount fee{e.GetFee()};
+            const uint32_t size{uint32_t(e.GetTxSize())};
+
+            const auto ancestor_data{pool.CalculateAncestorData(e)};
+            const auto descendant_data{pool.CalculateDescendantData(e)};
+            const CAmount afees{std::get<2>(ancestor_data)}, dfees{std::get<2>(descendant_data)};
+            const uint32_t asize{uint32_t(std::get<1>(ancestor_data))}, dsize{uint32_t(std::get<1>(descendant_data))};
+
+            // Do not use CFeeRate here, since it rounds up, and this should be rounding down
+            const CAmount fpb{fee / size};     // Fee rate per byte
+            const CAmount afpb{afees / asize}; // Fee rate per byte including ancestors
+            const CAmount dfpb{dfees / dsize}; // Fee rate per byte including descendants
+
+            // Fee rate per byte including ancestors & descendants
+            // (fee/size are included in both, so subtracted to avoid double-counting)
+            const CAmount tfpb{(afees + dfees - fee) / (asize + dsize - size)};
+
+            const CAmount fee_rate{std::max(std::min(dfpb, tfpb), std::min(fpb, afpb))};
+
+            // Distribute fee rates
+            for (size_t i = floors.size(); i > 0;) {
+                --i;
+                if (fee_rate >= floors[i]) {
+                    sizes[i] += size;
+                    ++count[i];
+                    fees[i] += fee;
+                    break;
+                }
+            }
+        }
+
+        CAmount total_fees{0};
+        UniValue info(UniValue::VOBJ);
+        for (size_t i = 0; i < floors.size(); ++i) {
+            UniValue info_sub(UniValue::VOBJ);
+            info_sub.pushKV("sizes", sizes.at(i));
+            info_sub.pushKV("count", count.at(i));
+            info_sub.pushKV("fees", fees.at(i));
+            info_sub.pushKV("from_feerate", floors.at(i));
+            info_sub.pushKV("to_feerate", i == floors.size() - 1 ? std::numeric_limits<int64_t>::max() : floors[i + 1]);
+
+            total_fees += fees.at(i);
+            info.pushKV(ToString(floors.at(i)), info_sub);
+        }
+
+        info.pushKV("total_fees", total_fees);
+        ret.pushKV("fee_histogram", info);
     }
     return ret;
 }
@@ -1088,8 +1359,14 @@ UniValue MempoolInfoToJSON(const CTxMemPool& pool)
 static RPCMethod getmempoolinfo()
 {
     return RPCMethod{"getmempoolinfo",
-        "Returns details on the active state of the TX memory pool.",
-        {},
+        "Returns details on the active state of the TX memory pool.\n",
+        {
+            {"fee_histogram|with_fee_histogram", {RPCArg::Type::ARR, RPCArg::Type::BOOL}, RPCArg::Optional::OMITTED, "Fee statistics grouped by fee rate ranges",
+                {
+                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::NO, "Fee rate (in " + CURRENCY_ATOM + "/vB) to group the fees by"},
+                },
+            },
+        },
         RPCResult{
             RPCResult::Type::OBJ, "", "",
             [](){
@@ -1103,26 +1380,72 @@ static RPCMethod getmempoolinfo()
                     {RPCResult::Type::STR_AMOUNT, "mempoolminfee", "Minimum fee rate in " + CURRENCY_UNIT + "/kvB for tx to be accepted. Is the maximum of minrelaytxfee and minimum mempool fee"},
                     {RPCResult::Type::STR_AMOUNT, "minrelaytxfee", "Current minimum relay fee for transactions"},
                     {RPCResult::Type::NUM, "incrementalrelayfee", "minimum fee rate increment for mempool limiting or replacement in " + CURRENCY_UNIT + "/kvB"},
+                    {RPCResult::Type::NUM, "dustrelayfee", "Current fee rate used to define dust, the value of an output so small it will cost more to spend than its value, in " + CURRENCY_UNIT + "/kvB"},
+                    {RPCResult::Type::NUM, "dustrelayfeefloor", "Minimum fee rate used to define dust in " + CURRENCY_UNIT + "/kvB"},
+                    {RPCResult::Type::STR, "dustdynamic", "Method for automatic adjustments to dustrelayfee (one of: off, target:<blocks>, or mempool:<kB>)"},
                     {RPCResult::Type::NUM, "unbroadcastcount", "Current number of transactions that haven't passed initial broadcast yet"},
+                    {RPCResult::Type::BOOL, "fullrbf", "True if the mempool accepts RBF without replaceability signaling inspection"},
+                    {RPCResult::Type::STR, "rbf_policy", "Policy used for replacing conflicting transactions by fee (one of: never, optin, always)"},
+                    {RPCResult::Type::STR, "truc_policy", "Behaviour for transactions requesting limits (one of: reject, accept, enforce)"},
                     {RPCResult::Type::BOOL, "permitbaremultisig", "True if the mempool accepts transactions with bare multisig outputs"},
                     {RPCResult::Type::NUM, "maxdatacarriersize", "Maximum number of bytes that can be used by OP_RETURN outputs in the mempool"},
                     {RPCResult::Type::NUM, "limitclustercount", "Maximum number of transactions that can be in a cluster (configured by -limitclustercount)"},
                     {RPCResult::Type::NUM, "limitclustersize", "Maximum size of a cluster in virtual bytes (configured by -limitclustersize)"},
                     {RPCResult::Type::BOOL, "optimal", "If the mempool is in a known-optimal transaction ordering"},
+                    {RPCResult::Type::OBJ, "fee_histogram", /*optional=*/true, "",
+                        {
+                            {RPCResult::Type::OBJ_DYN, "<fee_rate_group>", "Fee rate group named by its lower bound (in " + CURRENCY_ATOM + "/vB), identical to the \"from_feerate\" field below",
+                            {
+                                {RPCResult::Type::NUM, "sizes", "Cumulative size of all transactions in the fee rate group (in vBytes)"},
+                                {RPCResult::Type::NUM, "count", "Number of transactions in the fee rate group"},
+                                {RPCResult::Type::NUM, "fees", "Cumulative fees of all transactions in the fee rate group (in " + CURRENCY_ATOM + ")"},
+                                {RPCResult::Type::NUM, "from_feerate", "Group contains transactions with fee rates equal or greater than this value (in " + CURRENCY_ATOM + "/vB)"},
+                                {RPCResult::Type::NUM, "to_feerate", /*optional=*/true, "Group contains transactions with fee rates equal or less than this value (in " + CURRENCY_ATOM + "/vB)"},
+                            }},
+                            {RPCResult::Type::NUM, "total_fees", "Total available fees in mempool (in " + CURRENCY_ATOM + ")"},
+                        },
+                        RPCResultOptions{.skip_type_check = true}},
                 };
-                if (IsDeprecatedRPCEnabled("fullrbf")) {
-                    list.emplace_back(RPCResult::Type::BOOL, "fullrbf", "True if the mempool accepts RBF without replaceability signaling inspection (DEPRECATED)");
-                }
                 return list;
             }()
             },
         RPCExamples{
-            HelpExampleCli("getmempoolinfo", "")
-            + HelpExampleRpc("getmempoolinfo", "")
+            HelpExampleCli("getmempoolinfo", "") +
+            HelpExampleCli("getmempoolinfo", R"("[0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 17, 20, 25, 30, 40, 50, 60, 70, 80, 100, 120, 140, 170, 200]")") +
+            HelpExampleRpc("getmempoolinfo", "") +
+            HelpExampleRpc("getmempoolinfo", R"([0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 17, 20, 25, 30, 40, 50, 60, 70, 80, 100, 120, 140, 170, 200])")
         },
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
-    return MempoolInfoToJSON(EnsureAnyMemPool(request.context));
+    MempoolHistogramFeeRates histogram_floors;
+    std::optional<MempoolHistogramFeeRates> histogram_floors_opt{std::nullopt};
+
+    if (request.params[0].isBool()) {
+        if (request.params[0].isTrue()) {
+            histogram_floors_opt = MempoolInfoToJSON_const_histogram_floors;
+        }
+    } else if (!request.params[0].isNull()) {
+        const UniValue histogram_floors_univalue{request.params[0].get_array()};
+
+        if (histogram_floors_univalue.empty()) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid number of parameters");
+        }
+
+        for (size_t i = 0; i < histogram_floors_univalue.size(); ++i) {
+            const int64_t value{histogram_floors_univalue[i].getInt<int64_t>()};
+
+            if (value < 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Non-negative values are expected");
+            } else if (i > 0 && histogram_floors.back() >= value) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Strictly increasing values are expected");
+            }
+
+            histogram_floors.push_back(value);
+        }
+        histogram_floors_opt = std::move(histogram_floors);
+    }
+
+    return MempoolInfoToJSON(EnsureAnyMemPool(request.context), histogram_floors_opt);
 },
     };
 }
@@ -1158,6 +1481,8 @@ static RPCMethod importmempool()
         RPCResult{RPCResult::Type::OBJ, "", "", std::vector<RPCResult>{}},
         RPCExamples{HelpExampleCli("importmempool", "/path/to/mempool.dat") + HelpExampleRpc("importmempool", "/path/to/mempool.dat")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
+            EnsureNotWalletRestricted(request);
+
             const NodeContext& node{EnsureAnyNodeContext(request.context)};
 
             CTxMemPool& mempool{EnsureMemPool(node)};
@@ -1232,7 +1557,7 @@ static std::vector<RPCResult> OrphanDescription()
         RPCResult{RPCResult::Type::STR_HEX, "txid", "The transaction hash in hex"},
         RPCResult{RPCResult::Type::STR_HEX, "wtxid", "The transaction witness hash in hex"},
         RPCResult{RPCResult::Type::NUM, "bytes", "The serialized transaction size in bytes"},
-        RPCResult{RPCResult::Type::NUM, "vsize", "The virtual transaction size as defined in BIP 141. This is different from actual serialized size for witness transactions as witness data is discounted."},
+        RPCResult{RPCResult::Type::NUM, "vsize", "The virtual transaction size as defined in BIP 141. This is different from actual serialized size for witness transactions as witness data is discounted. CAUTION: Since orphan transactions are missing input data, this can be incorrect!"},
         RPCResult{RPCResult::Type::NUM, "weight", "The transaction weight as defined in BIP 141."},
         RPCResult{RPCResult::Type::ARR, "from", "",
         {
@@ -1359,7 +1684,7 @@ static RPCMethod submitpackage()
                 {RPCResult::Type::OBJ_DYN, "tx-results", "The transaction results keyed by wtxid. An entry is returned for every submitted wtxid.",
                 {
                     {RPCResult::Type::OBJ, "wtxid", "transaction wtxid", {
-                        {RPCResult::Type::STR_HEX, "txid", "The transaction hash in hex"},
+                        {RPCResult::Type::STR_HEX, "txid", "The transaction id"},
                         {RPCResult::Type::STR_HEX, "other-wtxid", /*optional=*/true, "The wtxid of a different transaction with the same txid but different witness found in the mempool. This means the submitted transaction was ignored."},
                         {RPCResult::Type::NUM, "vsize", /*optional=*/true, "Sigops-adjusted virtual transaction size."},
                         {RPCResult::Type::OBJ, "fees", /*optional=*/true, "Transaction fees", {
@@ -1557,8 +1882,10 @@ void RegisterMempoolRPCCommands(CRPCTable& t)
         {"blockchain", &getrawmempool},
         {"blockchain", &importmempool},
         {"blockchain", &savemempool},
+        {"blockchain", &maxmempool},
         {"hidden", &getorphantxs},
         {"rawtransactions", &submitpackage},
+        {"rawtransactions", &listmempooltransactions},
     };
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);

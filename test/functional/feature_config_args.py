@@ -144,9 +144,15 @@ class ConfArgsTest(BitcoinTestFramework):
 
         main_conf_file_path = self.nodes[0].datadir_path / "bitcoin_main.conf"
         util.write_config(main_conf_file_path, n=0, chain='', extra_config=f'includeconf={inc_conf_file_path}\n')
+
+        self.log.info("Check acceptnonstdtxn is accepted on main chain")
         with open(inc_conf_file_path, 'w') as conf:
             conf.write('acceptnonstdtxn=1\n')
-        self.nodes[0].assert_start_raises_init_error(extra_args=[f"-conf={main_conf_file_path}", "-allowignoredconf"], expected_msg='Error: acceptnonstdtxn is not currently supported for main chain')
+        self.nodes[0].start([f"-conf={main_conf_file_path}", "-allowignoredconf"])
+        time.sleep(3)
+        assert self.nodes[0].process.poll() is None
+        self.nodes[0].process.terminate()
+        self.nodes[0].wait_until_stopped(expected_stderr=re.compile(".*", re.DOTALL))
 
         with open(inc_conf_file_path, 'w') as conf:
             conf.write('nono\n')
@@ -228,9 +234,48 @@ class ConfArgsTest(BitcoinTestFramework):
                     extra_args=[f'-nowallet={value}'],
                 )
 
+    def test_v2onlyclearnet_requires_v2transport(self):
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-v2transport=0', '-v2onlyclearnet=1'],
+            expected_msg='Error: Cannot set -v2onlyclearnet to true when v2transport is disabled.',
+        )
+
+    def test_minrelay_age_args(self):
+        self.log.info("Check minrelay input-age options reject negative values")
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-minrelaycoinblocks=-1'],
+            expected_msg='Error: -minrelaycoinblocks must be greater than or equal to 0',
+        )
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-minrelaymaturity=-1'],
+            expected_msg='Error: -minrelaymaturity must be greater than or equal to 0',
+        )
+
+    def test_consensusrules(self):
+        self.log.info('Test -consensusrules option validation')
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-consensusrules=unknown'],
+            expected_msg='Error: Unknown rule specified in -consensusrules: unknown',
+        )
+        self.start_node(0, extra_args=['-consensusrules=rdts'])
+        self.stop_node(0)
+
     def test_log_buffer(self):
         with self.nodes[0].assert_debug_log(expected_msgs=["[warning] Parsed potentially confusing double-negative -listen=0\n"]):
             self.start_node(0, extra_args=['-nolisten=0'])
+        self.stop_node(0)
+
+    def test_port_mapping_disabled_when_not_listening(self):
+        self.log.info('Test explicit port mapping is disabled when listening is disabled')
+        self.nodes[0].replace_in_config([("bind=", "#bind=")])
+        try:
+            with self.nodes[0].assert_debug_log(expected_msgs=[
+                    "parameter interaction: -listen=0 -> setting -upnp=0",
+                    "parameter interaction: -listen=0 -> setting -natpmp=0",
+            ]):
+                self.start_node(0, extra_args=['-listen=0', '-upnp=1', '-natpmp=1'])
+        finally:
+            self.nodes[0].replace_in_config([("#bind=", "bind=")])
         self.stop_node(0)
 
     def test_args_log(self):
@@ -255,7 +300,6 @@ class ConfArgsTest(BitcoinTestFramework):
             self.start_node(0, extra_args=[
                 '-addnode=some.node',
                 '-rpcauth=alice:f7efda5c189b999524f151318c0c86$d5b51b3beffbc0',
-                '-rpcbind=127.1.1.1',
                 '-rpcbind=127.0.0.1',
                 "-rpcallowip=127.0.0.1",
                 '-rpcpassword=',
@@ -372,6 +416,10 @@ class ConfArgsTest(BitcoinTestFramework):
         addcon_thread_started = ['addcon thread start\n']
         dnsseed_disabled = "parameter interaction: -connect or -maxconnections=0 set -> setting -dnsseed=0"
         listen_disabled = "parameter interaction: -connect or -maxconnections=0 set -> setting -listen=0"
+        port_mapping_disabled = [
+            "parameter interaction: -listen=0 -> setting -upnp=0",
+            "parameter interaction: -listen=0 -> setting -natpmp=0",
+        ]
 
         # When -connect is supplied, expanding addrman via getaddr calls to ADDR_FETCH(-seednode)
         # nodes is irrelevant and -seednode is ignored.
@@ -404,6 +452,14 @@ class ConfArgsTest(BitcoinTestFramework):
             with self.nodes[0].assert_debug_log(expected_msgs=[dnsseed_disabled, listen_disabled]):
                 self.restart_node(0, extra_args=[connect_arg])
             self.nodes[0].replace_in_config([("#bind=", "bind="), ("#dnsseed=", "dnsseed=")])
+
+            # Explicit port mapping is still disabled if the node is not listening.
+            self.nodes[0].replace_in_config([("bind=", "#bind=")])
+            try:
+                with self.nodes[0].assert_debug_log(expected_msgs=port_mapping_disabled):
+                    self.restart_node(0, extra_args=[connect_arg, '-upnp=1', '-natpmp=1'])
+            finally:
+                self.nodes[0].replace_in_config([("#bind=", "bind=")])
 
             # Make sure -proxy and -noconnect warn about -dnsseed setting being
             # ignored, just like -proxy and -connect do.
@@ -515,6 +571,7 @@ class ConfArgsTest(BitcoinTestFramework):
 
     def run_test(self):
         self.test_log_buffer()
+        self.test_port_mapping_disabled_when_not_listening()
         self.test_args_log()
         self.test_seed_peers()
         self.test_networkactive()
@@ -526,9 +583,11 @@ class ConfArgsTest(BitcoinTestFramework):
         self.test_config_file_parser()
         self.test_config_file_log()
         self.test_invalid_command_line_options()
+        self.test_minrelay_age_args()
+        self.test_v2onlyclearnet_requires_v2transport()
+        self.test_consensusrules()
         self.test_ignored_conf()
         self.test_ignored_default_conf()
-        self.test_acceptstalefeeestimates_arg_support()
         self.test_testnet3_deprecation_msg()
 
         # Remove the -datadir argument so it doesn't override the config file

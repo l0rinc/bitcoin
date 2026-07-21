@@ -29,9 +29,11 @@ add_executable(test_bitcoin
   btcsignals_tests.cpp
   caches_tests.cpp
   chain_tests.cpp
+  chainparams_tests.cpp
   chainstate_write_tests.cpp
   checkqueue_tests.cpp
   cluster_linearize_tests.cpp
+  codex32_tests.cpp
   coins_tests.cpp
   coinscachepair_tests.cpp
   coinstatsindex_tests.cpp
@@ -63,7 +65,6 @@ add_executable(test_bitcoin
   miner_tests.cpp
   miniminer_tests.cpp
   miniscript_tests.cpp
-  minisketch_tests.cpp
   multisig_tests.cpp
   bip328_tests.cpp
   net_peer_connection_tests.cpp
@@ -138,6 +139,7 @@ add_executable(test_bitcoin
   validation_tests.cpp
   validationinterface_tests.cpp
   versionbits_tests.cpp
+  ../stats/test/stats_tests.cpp
 )
 
 include(TargetDataSources)
@@ -161,16 +163,16 @@ add_windows_application_manifest(test_bitcoin)
 target_link_libraries(test_bitcoin
   core_interface
   test_util
+  $<TARGET_NAME_IF_EXISTS:bitcoinconsensus>
   bitcoin_cli
   bitcoin_node
   bitcoin_consensus
-  minisketch
   secp256k1
   Boost::headers
   $<TARGET_NAME_IF_EXISTS:USDT::headers>
 )
 
-if(ENABLE_WALLET)
+if(USE_SQLITE)
   add_subdirectory(${PROJECT_SOURCE_DIR}/src/wallet/test wallet)
 endif()
 
@@ -218,4 +220,5 @@ endfunction()
 
 add_all_test_targets()
 
-install_binary_component(test_bitcoin INTERNAL)
+make_libbitcoinconsensus_dll_available(test_bitcoin)
+install_binary_component(test_bitcoin)

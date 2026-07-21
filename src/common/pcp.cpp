@@ -18,6 +18,8 @@
 #include <util/strencodings.h>
 #include <util/threadinterrupt.h>
 
+std::atomic<bool> g_pcp_warn_for_unauthorized{false};
+
 namespace {
 
 // RFC6886 NAT-PMP and RFC6887 Port Control Protocol (PCP) implementation.
@@ -381,7 +383,7 @@ std::variant<MappingResult, MappingError> NATPMPRequestPortMap(const CNetAddr &g
         if (result_code != NATPMP_RESULT_SUCCESS) {
             if (result_code == NATPMP_RESULT_NOT_AUTHORIZED) {
                 static std::atomic<bool> warned{false};
-                if (!warned.exchange(true)) {
+                if (g_pcp_warn_for_unauthorized.load() || !warned.exchange(true)) {
                     LogWarning("natpmp: Port mapping failed with result %s\n", NATPMPResultString(result_code));
                 } else {
                     LogDebug(BCLog::NET, "natpmp: Port mapping failed with result %s\n", NATPMPResultString(result_code));
@@ -524,7 +526,7 @@ std::variant<MappingResult, MappingError> PCPRequestPortMap(const PCPMappingNonc
     if (result_code != PCP_RESULT_SUCCESS) {
         if (result_code == PCP_RESULT_NOT_AUTHORIZED) {
             static std::atomic<bool> warned{false};
-            if (!warned.exchange(true)) {
+            if (g_pcp_warn_for_unauthorized.load() || !warned.exchange(true)) {
                 LogWarning("pcp: Mapping failed with result %s\n", PCPResultString(result_code));
             } else {
                 LogDebug(BCLog::NET, "pcp: Mapping failed with result %s\n", PCPResultString(result_code));

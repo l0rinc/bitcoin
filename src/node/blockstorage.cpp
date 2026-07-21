@@ -30,14 +30,11 @@
 #include <util/check.h>
 #include <util/expected.h>
 #include <util/fs.h>
-#include <util/log.h>
-#include <util/obfuscation.h>
+#include <util/ioprio.h>
 #include <util/overflow.h>
-#include <util/result.h>
 #include <util/signalinterrupt.h>
 #include <util/strencodings.h>
 #include <util/syserror.h>
-#include <util/time.h>
 #include <util/translation.h>
 #include <validation.h>
 
@@ -49,6 +46,7 @@
 #include <map>
 #include <optional>
 #include <ostream>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <system_error>
@@ -60,6 +58,7 @@ static constexpr uint8_t DB_BLOCK_INDEX{'b'};
 static constexpr uint8_t DB_FLAG{'F'};
 static constexpr uint8_t DB_REINDEX_FLAG{'R'};
 static constexpr uint8_t DB_LAST_BLOCK{'l'};
+static constexpr uint8_t DB_PRUNE_LOCK{'L'};
 // Keys used in previous version that might still be found in the DB:
 // BlockTreeDB::DB_TXINDEX_BLOCK{'T'};
 // BlockTreeDB::DB_TXINDEX{'t'}
@@ -89,7 +88,7 @@ bool BlockTreeDB::ReadLastBlockFile(int& nFile)
     return Read(DB_LAST_BLOCK, nFile);
 }
 
-void BlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFileInfo*>>& fileInfo, int nLastFile, const std::vector<const CBlockIndex*>& blockinfo)
+void BlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFileInfo*>>& fileInfo, int nLastFile, const std::vector<const CBlockIndex*>& blockinfo, const std::unordered_map<std::string, node::PruneLockInfo>& prune_locks)
 {
     CDBBatch batch(*this);
     for (const auto& [file, info] : fileInfo) {
@@ -99,7 +98,41 @@ void BlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFi
     for (const CBlockIndex* bi : blockinfo) {
         batch.Write(std::make_pair(DB_BLOCK_INDEX, bi->GetBlockHash()), CDiskBlockIndex{bi});
     }
+    for (const auto& prune_lock : prune_locks) {
+        if (prune_lock.second.temporary) continue;
+        batch.Write(std::make_pair(DB_PRUNE_LOCK, prune_lock.first), prune_lock.second);
+    }
     WriteBatch(batch, true);
+}
+
+void BlockTreeDB::WritePruneLock(const std::string& name, const node::PruneLockInfo& lock_info)
+{
+    if (lock_info.temporary) return;
+    Write(std::make_pair(DB_PRUNE_LOCK, name), lock_info);
+}
+
+void BlockTreeDB::DeletePruneLock(const std::string& name)
+{
+    Erase(std::make_pair(DB_PRUNE_LOCK, name));
+}
+
+bool BlockTreeDB::LoadPruneLocks(std::unordered_map<std::string, node::PruneLockInfo>& prune_locks, const util::SignalInterrupt& interrupt) {
+    std::unique_ptr<CDBIterator> pcursor(NewIterator());
+    for (pcursor->Seek(DB_PRUNE_LOCK); pcursor->Valid(); pcursor->Next()) {
+        if (interrupt) return false;
+
+        std::pair<uint8_t, std::string> key;
+        if ((!pcursor->GetKey(key)) || key.first != DB_PRUNE_LOCK) break;
+
+        node::PruneLockInfo& lock_info = prune_locks[key.second];
+        if (!pcursor->GetValue(lock_info)) {
+            LogError("%s: failed to %s prune lock '%s'\n", __func__, "read", key.second);
+            return false;
+        }
+        lock_info.temporary = false;
+    }
+
+    return true;
 }
 
 void BlockTreeDB::WriteFlag(const std::string& name, bool fValue)
@@ -174,27 +207,32 @@ namespace node {
 bool CBlockIndexWorkComparator::operator()(const CBlockIndex* pa, const CBlockIndex* pb) const
 {
     // First sort by most total work, ...
-    if (pa->nChainWork > pb->nChainWork) return false;
-    if (pa->nChainWork < pb->nChainWork) return true;
+    if (pa->nChainWork != pb->nChainWork) {
+        return pa->nChainWork < pb->nChainWork;
+    }
 
     // ... then by earliest activatable time, ...
-    if (pa->nSequenceId < pb->nSequenceId) return false;
-    if (pa->nSequenceId > pb->nSequenceId) return true;
+    if (pa->nSequenceId != pb->nSequenceId) {
+        return pa->nSequenceId > pb->nSequenceId;
+    }
 
     // Use pointer address as tie breaker (should only happen with blocks
     // loaded from disk, as those share the same id: 0 for blocks on the
     // best chain, 1 for all others).
-    if (pa < pb) return false;
-    if (pa > pb) return true;
-
-    // Identical blocks.
-    return false;
+    return pa > pb;
 }
 
 bool CBlockIndexHeightOnlyComparator::operator()(const CBlockIndex* pa, const CBlockIndex* pb) const
 {
     return pa->nHeight < pb->nHeight;
 }
+
+/** The number of blocks to keep below the deepest prune lock.
+ *  There is nothing special about this number. It is higher than what we
+ *  expect to see in regular mainnet reorgs, but not so high that it would
+ *  noticeably interfere with the pruning mechanism.
+ * */
+static constexpr int PRUNE_LOCK_BUFFER{10};
 
 std::vector<CBlockIndex*> BlockManager::GetAllBlockIndices()
 {
@@ -300,6 +338,24 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
     m_dirty_fileinfo.insert(fileNumber);
 }
 
+bool BlockManager::DoPruneLocksForbidPruning(const CBlockFileInfo& block_file_info)
+{
+    AssertLockHeld(cs_main);
+    for (const auto& prune_lock : m_prune_locks) {
+        if (prune_lock.second.height_first == std::numeric_limits<uint64_t>::max()) continue;
+        // Remove the buffer and one additional block here to get actual height that is outside of the buffer
+        const uint64_t lock_height{(prune_lock.second.height_first <= PRUNE_LOCK_BUFFER + 1) ? 1 : (prune_lock.second.height_first - PRUNE_LOCK_BUFFER - 1)};
+        const uint64_t lock_height_last{SaturatingAdd(prune_lock.second.height_last, static_cast<uint64_t>(PRUNE_LOCK_BUFFER))};
+        if (block_file_info.nHeightFirst > lock_height_last) continue;
+        if (block_file_info.nHeightLast <= lock_height) continue;
+        // TODO: Check each block within the file against the prune_lock range
+
+        LogDebug(BCLog::PRUNE, "%s limited pruning to height %d\n", prune_lock.first, lock_height);
+        return true;
+    }
+    return false;
+}
+
 void BlockManager::FindFilesToPruneManual(
     std::set<int>& setFilesToPrune,
     int nManualPruneHeight,
@@ -321,12 +377,35 @@ void BlockManager::FindFilesToPruneManual(
             continue;
         }
 
+        if (DoPruneLocksForbidPruning(m_blockfile_info[fileNumber])) continue;
+
         PruneOneBlockFile(fileNumber);
         setFilesToPrune.insert(fileNumber);
         count++;
     }
     LogInfo("[%s] Prune (Manual): prune_height=%d removed %d blk/rev pairs",
         chain.GetRole(), last_block_can_prune, count);
+}
+
+uint64_t BlockManager::GetPruneTargetForChainstate(const Chainstate& chain, ChainstateManager& chainman) const
+{
+    const auto number_of_chainstates{chainman.HistoricalChainstate() ? 2 : 1};
+    const uint64_t min_overall_target{MIN_DISK_SPACE_FOR_BLOCK_FILES * number_of_chainstates};
+    auto target = std::max(min_overall_target, GetPruneTarget());
+    uint64_t target_boost{0};
+    if (m_opts.prune_target_during_init > -1 && chainman.IsInitialBlockDownload()) {
+        const uint64_t prune_during_init{static_cast<uint64_t>(m_opts.prune_target_during_init)};
+        if (prune_during_init <= target) {
+            target = std::max(min_overall_target, prune_during_init);
+        } else if (chain.GetRole().validated) {
+            // Only the background/normal gets the benefit
+            // NOTE: This assumes only one such chainstate exists
+            target_boost = prune_during_init - target;
+        }
+    }
+    // Distribute our -prune budget over all chainstates.
+    target = (target / number_of_chainstates) + target_boost;
+    return target;
 }
 
 void BlockManager::FindFilesToPrune(
@@ -336,16 +415,7 @@ void BlockManager::FindFilesToPrune(
     ChainstateManager& chainman)
 {
     LOCK(::cs_main);
-    // Compute `target` value with maximum size (in bytes) of blocks below the
-    // `last_prune` height which should be preserved and not pruned. The
-    // `target` value will be derived from the -prune preference provided by the
-    // user. If there is a historical chainstate being used to populate indexes
-    // and validate the snapshot, the target is divided by two so half of the
-    // block storage will be reserved for the historical chainstate, and the
-    // other half will be reserved for the most-work chainstate.
-    const int num_chainstates{chainman.HistoricalChainstate() ? 2 : 1};
-    const auto target = std::max(
-        MIN_DISK_SPACE_FOR_BLOCK_FILES, GetPruneTarget() / num_chainstates);
+    const auto target{GetPruneTargetForChainstate(chain, chainman)};
     const uint64_t target_sync_height = chainman.m_best_header->nHeight;
 
     if (chain.m_chain.Height() < 0 || target == 0) {
@@ -396,6 +466,8 @@ void BlockManager::FindFilesToPrune(
                 continue;
             }
 
+            if (DoPruneLocksForbidPruning(m_blockfile_info[fileNumber])) continue;
+
             PruneOneBlockFile(fileNumber);
             // Queue up the files for removal
             setFilesToPrune.insert(fileNumber);
@@ -410,15 +482,31 @@ void BlockManager::FindFilesToPrune(
              min_block_to_prune, last_block_can_prune, count);
 }
 
-void BlockManager::UpdatePruneLock(const std::string& name, const PruneLockInfo& lock_info) {
+bool BlockManager::PruneLockExists(const std::string& name) const {
+    return m_prune_locks.count(name);
+}
+
+bool BlockManager::UpdatePruneLock(const std::string& name, const PruneLockInfo& lock_info, const bool sync) {
     AssertLockHeld(::cs_main);
-    m_prune_locks[name] = lock_info;
+    if (sync) {
+        m_block_tree_db->WritePruneLock(name, lock_info);
+    }
+    PruneLockInfo& stored_lock_info = m_prune_locks[name];
+    if (lock_info.temporary && !stored_lock_info.temporary) {
+        // Erase non-temporary lock from disk
+        m_block_tree_db->DeletePruneLock(name);
+    }
+    stored_lock_info = lock_info;
+    return true;
 }
 
 bool BlockManager::DeletePruneLock(const std::string& name)
 {
     AssertLockHeld(::cs_main);
-    return m_prune_locks.erase(name) > 0;
+    const bool existed{m_prune_locks.erase(name) > 0};
+    // Since there is no reasonable expectation for any follow-up to this prune lock, ensure it gets committed to disk immediately.
+    m_block_tree_db->DeletePruneLock(name);
+    return existed;
 }
 
 CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
@@ -443,6 +531,8 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
             GetConsensus(), [this](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return this->InsertBlockIndex(hash); }, m_interrupt)) {
         return false;
     }
+
+    if (!m_block_tree_db->LoadPruneLocks(m_prune_locks, m_interrupt)) return false;
 
     if (snapshot_blockhash) {
         const std::optional<AssumeutxoData> maybe_au_data = GetParams().AssumeutxoForBlockhash(*snapshot_blockhash);
@@ -542,7 +632,7 @@ void BlockManager::WriteBlockIndexDB()
         m_dirty_blockindex.erase(it++);
     }
     int max_blockfile{this->MaxBlockfileNum()};
-    m_block_tree_db->WriteBatchSync(vFiles, max_blockfile, vBlocks);
+    m_block_tree_db->WriteBatchSync(vFiles, max_blockfile, vBlocks, m_prune_locks);
 }
 
 bool BlockManager::LoadBlockIndexDB(const std::optional<uint256>& snapshot_blockhash)
@@ -623,6 +713,18 @@ void BlockManager::ScanAndUnlinkAlreadyPrunedFiles()
     }
 
     UnlinkPrunedFiles(block_files_to_prune);
+}
+
+const CBlockIndex* BlockManager::GetLastCheckpoint(const CCheckpointData& data)
+{
+    const MapCheckpoints& checkpoints = data.mapCheckpoints;
+
+    for (const MapCheckpoints::value_type& i : checkpoints | std::views::reverse) {
+        const uint256& hash = i.second;
+        const CBlockIndex* pindex = LookupBlockIndex(hash);
+        if (pindex) return pindex;
+    }
+    return nullptr;
 }
 
 bool BlockManager::IsBlockPruned(const CBlockIndex& block) const
@@ -709,6 +811,7 @@ void BlockManager::CleanupBlockRevFiles() const
 CBlockFileInfo* BlockManager::GetBlockFileInfo(size_t n)
 {
     AssertLockHeld(::cs_main);
+    if (n >= m_blockfile_info.size()) return nullptr;
     return &m_blockfile_info.at(n);
 }
 
@@ -1047,12 +1150,12 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
     return true;
 }
 
-bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::optional<uint256>& expected_hash) const
+bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::optional<uint256>& expected_hash, const bool lowprio) const
 {
     block.SetNull();
 
     // Open history file to read
-    const auto block_data{ReadRawBlock(pos)};
+    auto block_data{ReadRawBlock(pos, /*block_part=*/std::nullopt, /*lowprio=*/lowprio)};
     if (!block_data) {
         return false;
     }
@@ -1088,13 +1191,13 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
     return true;
 }
 
-bool BlockManager::ReadBlock(CBlock& block, const CBlockIndex& index) const
+bool BlockManager::ReadBlock(CBlock& block, const CBlockIndex& index, const bool lowprio) const
 {
     const FlatFilePos block_pos{WITH_LOCK(cs_main, return index.GetBlockPos())};
-    return ReadBlock(block, block_pos, index.GetBlockHash());
+    return ReadBlock(block, block_pos, index.GetBlockHash(), /*lowprio=*/lowprio);
 }
 
-BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& pos, std::optional<std::pair<size_t, size_t>> block_part) const
+BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& pos, std::optional<std::pair<size_t, size_t>> block_part, const bool lowprio) const
 {
     if (pos.nPos < STORAGE_HEADER_BYTES) {
         // If nPos is less than STORAGE_HEADER_BYTES, we can't read the header that precedes the block data
@@ -1103,11 +1206,15 @@ BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& p
         LogError("Failed for %s while reading raw block storage header", pos.ToString());
         return util::Unexpected{ReadRawError::IO};
     }
+    IOPRIO_IDLER(lowprio);
+
     AutoFile filein{OpenBlockFile({pos.nFile, pos.nPos - STORAGE_HEADER_BYTES}, /*fReadOnly=*/true)};
     if (filein.IsNull()) {
         LogError("OpenBlockFile failed for %s while reading raw block", pos.ToString());
         return util::Unexpected{ReadRawError::IO};
     }
+
+    if (lowprio) filein.SetIdlePriority();
 
     try {
         MessageStartChars blk_start;
@@ -1211,7 +1318,7 @@ static auto InitBlocksdirXorKey(const BlockManager::Options& opts)
     } else {
         // Create initial or missing xor key file
         AutoFile xor_key_file{fsbridge::fopen(xor_key_path,
-#ifdef __MINGW64__
+#if 0
             "wb" // Temporary workaround for https://github.com/bitcoin/bitcoin/issues/30210
 #else
             "wbx"

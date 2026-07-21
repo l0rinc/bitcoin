@@ -11,28 +11,70 @@ import time
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal, assert_not_equal
 from test_framework.messages import (
+    NODE_REDUCED_DATA,
     NODE_NETWORK,
     NODE_NETWORK_LIMITED,
     NODE_NONE,
     NODE_P2P_V2,
     NODE_WITNESS,
     msg_verack,
+    msg_version,
 )
-from test_framework.p2p import P2PInterface
-from test_framework.util import p2p_port
+from test_framework.p2p import (
+    P2P_SERVICES,
+    P2P_SUBVERSION,
+    P2P_VERSION,
+    P2P_VERSION_RELAY,
+    P2PInterface,
+)
+from test_framework.util import (
+    assert_equal,
+    p2p_port,
+)
 
 
 # Desirable service flags for outbound non-pruned and pruned peers. Note that
 # the desirable service flags for pruned peers are dynamic and only apply if
 #  1. the peer's service flag NODE_NETWORK_LIMITED is set *and*
 #  2. the local chain is close to the tip (<24h)
-DESIRABLE_SERVICE_FLAGS_FULL = NODE_NETWORK | NODE_WITNESS
-DESIRABLE_SERVICE_FLAGS_PRUNED = NODE_NETWORK_LIMITED | NODE_WITNESS
+
+# Base service flags (without BIP-110)
+BASE_SERVICE_FLAGS_FULL = NODE_NETWORK | NODE_WITNESS
+BASE_SERVICE_FLAGS_PRUNED = NODE_NETWORK_LIMITED | NODE_WITNESS
+
+# Full service flags (with BIP-110)
+FULL_SERVICE_FLAGS_FULL = NODE_NETWORK | NODE_WITNESS | NODE_REDUCED_DATA
+FULL_SERVICE_FLAGS_PRUNED = NODE_NETWORK_LIMITED | NODE_WITNESS | NODE_REDUCED_DATA
+
+
+class UserAgentPeer(P2PInterface):
+    def __init__(self, subver):
+        super().__init__()
+        self.subver = subver
+
+    def peer_connect_send_version(self, services):
+        vt = msg_version()
+        vt.nVersion = P2P_VERSION
+        vt.strSubVer = self.subver
+        vt.relay = P2P_VERSION_RELAY
+        vt.nServices = services
+        vt.addrTo.ip = self.dstaddr
+        vt.addrTo.port = self.dstport
+        vt.addrFrom.ip = "0.0.0.0"
+        vt.addrFrom.port = 0
+        self.on_connection_send_msg = vt
 
 
 class P2PHandshakeTest(BitcoinTestFramework):
     def set_test_params(self):
-        self.num_nodes = 1
+        self.num_nodes = 2
+        self.extra_args = [
+            ["-maxstaleoutbound=2",],
+            ["-maxstaleoutbound=0",],
+        ]
+
+    def setup_network(self):
+        self.setup_nodes()
 
     def add_outbound_connection(self, node, connection_type, services, wait_for_disconnect):
         peer = node.add_outbound_p2p_connection(
@@ -66,9 +108,25 @@ class P2PHandshakeTest(BitcoinTestFramework):
                 assert_equal((services & desirable_service_flags), desirable_service_flags)
                 self.add_outbound_connection(node, conn_type, services, wait_for_disconnect=False)
 
+    def test_startingheight(self, node):
+        for fake_startheight in [-2**31, -1, 0, 1000000, 2**31 - 1]:
+            peer = node.add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
+            version = msg_version()
+            version.nVersion = P2P_VERSION
+            version.strSubVer = P2P_SUBVERSION
+            version.nServices = P2P_SERVICES
+            version.nStartingHeight = fake_startheight
+            peer.send_without_ping(version)
+            peer.wait_for_verack()
+            self.wait_until(lambda: len(node.getpeerinfo()) == 1)
+            assert_equal(node.getpeerinfo()[0]["startingheight"], fake_startheight)
+            peer.peer_disconnect()
+            peer.wait_for_disconnect()
+            self.wait_until(lambda: len(node.getpeerinfo()) == 0)
+
     def generate_at_mocktime(self, time):
         self.nodes[0].setmocktime(time)
-        self.generate(self.nodes[0], 1)
+        self.generate(self.nodes[0], 1, sync_fun=self.no_op)
         self.nodes[0].setmocktime(0)
 
     def run_test(self):
@@ -80,19 +138,81 @@ class P2PHandshakeTest(BitcoinTestFramework):
             verack_conn.send_and_ping(msg_verack())
         node.disconnect_p2ps()
 
-        self.log.info("Check that lacking desired service flags leads to disconnect (non-pruned peers)")
+        self.log.info("Check that peer user agents are preserved for RPC and escaped in logs")
+        unsafe_subver = "/User/Agent: test![]{}~/"
+        escaped_subver = "/User/Agent: test%21%5B%5D%7B%7D%7E/"
+        with node.assert_debug_log(
+                expected_msgs=[f"receive version message: {escaped_subver}"],
+                unexpected_msgs=[unsafe_subver]):
+            ua_peer = node.add_p2p_connection(
+                UserAgentPeer(unsafe_subver),
+                services=P2P_SERVICES,
+                wait_for_verack=False,
+            )
+            ua_peer.wait_for_verack()
+            ua_peer.sync_with_ping()
+        assert_equal(node.getpeerinfo()[0]["subver"], unsafe_subver)
+        node.disconnect_p2ps()
+
+        self.log.info("Check that peer's announced starting height is remembered")
+        self.test_startingheight(node)
+
+        self.log.info("Check that peers lacking base service flags are disconnected")
+        # These should always be disconnected regardless of BIP-110 counter
         self.test_desirable_service_flags(node, [NODE_NONE, NODE_NETWORK, NODE_WITNESS],
-                                          DESIRABLE_SERVICE_FLAGS_FULL, expect_disconnect=True)
-        self.test_desirable_service_flags(node, [NODE_NETWORK | NODE_WITNESS],
-                                          DESIRABLE_SERVICE_FLAGS_FULL, expect_disconnect=False)
+                                          BASE_SERVICE_FLAGS_FULL, expect_disconnect=True)
+
+        self.log.info("Check that first 2 non-BIP110 peers connect, 3rd is rejected")
+        # Connect first 2 non-BIP110 peers and keep them connected
+        non_bip110_services = NODE_NETWORK | NODE_WITNESS
+        if self.options.v2transport:
+            non_bip110_services |= NODE_P2P_V2
+        peer1 = node.add_outbound_p2p_connection(
+            P2PInterface(), p2p_idx=0, wait_for_disconnect=False,
+            connection_type="outbound-full-relay", services=non_bip110_services,
+            supports_v2_p2p=self.options.v2transport, advertise_v2_p2p=self.options.v2transport)
+        peer1.sync_with_ping()
+        peer2 = node.add_outbound_p2p_connection(
+            P2PInterface(), p2p_idx=1, wait_for_disconnect=False,
+            connection_type="outbound-full-relay", services=non_bip110_services,
+            supports_v2_p2p=self.options.v2transport, advertise_v2_p2p=self.options.v2transport)
+        peer2.sync_with_ping()
+        assert len(node.getpeerinfo()) == 2
+        # Third non-BIP110 peer should be rejected
+        with node.assert_debug_log(["peer lacks NODE_REDUCED_DATA and already have 2 non-BIP110 outbound peers"]):
+            node.add_outbound_p2p_connection(
+                P2PInterface(), p2p_idx=2, wait_for_disconnect=True,
+                connection_type="outbound-full-relay", services=non_bip110_services,
+                supports_v2_p2p=self.options.v2transport, advertise_v2_p2p=self.options.v2transport)
+        # Clean up - disconnect the 2 non-BIP110 peers
+        peer1.peer_disconnect()
+        peer2.peer_disconnect()
+        peer1.wait_for_disconnect()
+        peer2.wait_for_disconnect()
+        self.wait_until(lambda: len(node.getpeerinfo()) == 0)
+
+        self.log.info("Check that -maxstaleoutbound=0 rejects the first non-BIP110 peer")
+        limit_zero_node = self.nodes[1]
+        with limit_zero_node.assert_debug_log(["peer lacks NODE_REDUCED_DATA and already have 0 non-BIP110 outbound peers (limit 0)"]):
+            limit_zero_node.add_outbound_p2p_connection(
+                P2PInterface(), p2p_idx=0, wait_for_disconnect=True,
+                connection_type="outbound-full-relay", services=non_bip110_services,
+                supports_v2_p2p=self.options.v2transport, advertise_v2_p2p=self.options.v2transport)
+
+        self.log.info("Check that -maxstaleoutbound=0 still accepts BIP110 peers")
+        self.add_outbound_connection(limit_zero_node, "outbound-full-relay", FULL_SERVICE_FLAGS_FULL, wait_for_disconnect=False)
+
+        self.log.info("Check that BIP110 peers always connect")
+        self.test_desirable_service_flags(node, [NODE_NETWORK | NODE_WITNESS | NODE_REDUCED_DATA],
+                                          BASE_SERVICE_FLAGS_FULL, expect_disconnect=False)
 
         self.log.info("Check that limited peers are only desired if the local chain is close to the tip (<24h)")
         self.generate_at_mocktime(int(time.time()) - 25 * 3600)  # tip outside the 24h window, should fail
-        self.test_desirable_service_flags(node, [NODE_NETWORK_LIMITED | NODE_WITNESS],
-                                          DESIRABLE_SERVICE_FLAGS_FULL, expect_disconnect=True)
+        self.test_desirable_service_flags(node, [NODE_NETWORK_LIMITED | NODE_WITNESS | NODE_REDUCED_DATA],
+                                          BASE_SERVICE_FLAGS_FULL, expect_disconnect=True)
         self.generate_at_mocktime(int(time.time()) - 23 * 3600)  # tip inside the 24h window, should succeed
-        self.test_desirable_service_flags(node, [NODE_NETWORK_LIMITED | NODE_WITNESS],
-                                          DESIRABLE_SERVICE_FLAGS_PRUNED, expect_disconnect=False)
+        self.test_desirable_service_flags(node, [NODE_NETWORK_LIMITED | NODE_WITNESS | NODE_REDUCED_DATA],
+                                          BASE_SERVICE_FLAGS_PRUNED, expect_disconnect=False)
 
         self.log.info("Check that feeler connections get disconnected immediately")
         with node.assert_debug_log(["feeler connection completed"]):
@@ -103,7 +223,6 @@ class P2PHandshakeTest(BitcoinTestFramework):
             node_listen_addr = f"127.0.0.1:{p2p_port(0)}"
             node.addconnection(node_listen_addr, "outbound-full-relay", self.options.v2transport)
             self.wait_until(lambda: len(node.getpeerinfo()) == 0)
-
 
 if __name__ == '__main__':
     P2PHandshakeTest(__file__).main()

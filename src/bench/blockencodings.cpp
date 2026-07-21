@@ -30,7 +30,10 @@
 static void AddTx(const CTransactionRef& tx, const CAmount& fee, CTxMemPool& pool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, pool.cs)
 {
     LockPoints lp;
-    TryAddToMempool(pool, CTxMemPoolEntry(tx, fee, /*time=*/0, /*entry_height=*/1, /*entry_sequence=*/0, /*spends_coinbase=*/false, /*sigops_cost=*/4, lp));
+    TryAddToMempool(pool, CTxMemPoolEntry(tx, fee, /*time=*/0, /*entry_height=*/1,
+                                          /*entry_sequence=*/0, COIN_AGE_CACHE_ZERO,
+                                          /*spends_coinbase=*/false, /*extra_weight=*/0,
+                                          /*sigops_cost=*/4, lp));
 }
 
 namespace {
@@ -73,7 +76,7 @@ static void BlockEncodingBench(benchmark::Bench& bench, size_t n_pool, size_t n_
 
     LOCK2(cs_main, pool.cs);
 
-    std::vector<std::pair<Wtxid, CTransactionRef>> extratxn;
+    std::vector<CTransactionRef> extratxn;
     extratxn.reserve(n_extra);
 
     // bump up the size of txs
@@ -102,7 +105,7 @@ static void BlockEncodingBench(benchmark::Bench& bench, size_t n_pool, size_t n_
         AddTx(refs[i], /*fee=*/refs[i]->vout[0].nValue, pool);
     }
     for (size_t i = n_pool; i < n_pool + n_extra; ++i) {
-        extratxn.emplace_back(refs[i]->GetWitnessHash(), refs[i]);
+        extratxn.emplace_back(refs[i]);
     }
 
     BenchCBHAST cmpctblock{rng, 3000};
@@ -125,13 +128,13 @@ static void BlockEncodingNoExtra(benchmark::Bench& bench)
 
 static void BlockEncodingStdExtra(benchmark::Bench& bench)
 {
-    static_assert(DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN == 100);
-    BlockEncodingBench(bench, 50000, 100);
+    static_assert(DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN == 32768);
+    BlockEncodingBench(bench, 50000, 32768);
 }
 
 static void BlockEncodingLargeExtra(benchmark::Bench& bench)
 {
-    BlockEncodingBench(bench, 50000, 5000);
+    BlockEncodingBench(bench, 50000, 50000);
 }
 
 BENCHMARK(BlockEncodingNoExtra);

@@ -28,7 +28,11 @@ from .authproxy import (
     serialization_fallback,
 )
 from . import coverage
-from .messages import NODE_P2P_V2
+from .descriptors import descsum_create
+from .messages import (
+    MAX_OP_RETURN_RELAY,
+    NODE_P2P_V2,
+)
 from .p2p import P2P_SERVICES, P2P_SUBVERSION
 from .util import (
     MAX_NODES,
@@ -111,6 +115,7 @@ class TestNode():
         version=None,
         v2transport=False,
         uses_wallet=False,
+        descriptors=True,
         ipcbind=False,
     ):
         self.index = i
@@ -160,6 +165,13 @@ class TestNode():
                 self.ipc_socket_path = Path(self.ipc_tmp_dir.name) / "node.sock"
                 self.args.append(f"-ipcbind=unix:{self.ipc_socket_path}")
 
+        if self.version is None:
+            self.args += [
+                "-corepolicy",
+                "-softwareexpiry=0",
+                "-walletimplicitsegwit",
+            ]
+
         if self.version_is_at_least(190000):
             self.args.append("-logthreadnames")
         if self.version_is_at_least(219900):
@@ -182,6 +194,7 @@ class TestNode():
 
         self.cli = None
         self.use_cli = use_cli
+        self.descriptors = descriptors
 
         self.running = False
         self.process = None
@@ -238,10 +251,10 @@ class TestNode():
     def __getattr__(self, name):
         """Dispatches any unrecognised messages to the RPC connection or a CLI instance."""
         if self.use_cli:
-            return getattr(self.cli, name)
+            return getattr(RPCOverloadWrapper(self.cli, True, self.descriptors), name)
         else:
             assert self.rpc_connected and self._rpc is not None, self._node_msg("Error: no RPC connection")
-            return getattr(self._rpc, name)
+            return getattr(RPCOverloadWrapper(self._rpc, descriptors=self.descriptors), name)
 
     def start(self, extra_args=None, *, cwd=None, stdout=None, stderr=None, env=None, **kwargs):
         """Start the node."""
@@ -259,6 +272,12 @@ class TestNode():
             extra_args.append(f"-bind=127.0.0.1:{tor_port(self.index)}=onion")
 
         self.use_v2transport = "-v2transport=1" in extra_args or (self.default_to_v2 and "-v2transport=0" not in extra_args)
+
+        for arg in extra_args:
+            if arg.startswith("-datacarriersize=") and int(arg[17:]) > MAX_OP_RETURN_RELAY:
+                extra_args = list(extra_args)
+                extra_args.append("-acceptnonstdtxn=1")
+                break
 
         # Add a new stdout and stderr file each time bitcoind is started
         if stderr is None:
@@ -311,7 +330,7 @@ class TestNode():
         else:  # mode==CLI
             return TestNodeCLI(self.binaries)(
                 f"-datadir={self.datadir_path}",
-                f"-rpcclienttimeout={client_timeout}",
+                f"-rpcclienttimeout={int(client_timeout)}",
                 f"-rpcconnect={host}",
                 f"-rpcport={port}",
             )
@@ -441,6 +460,14 @@ class TestNode():
         assert called_by_framework, "Direct call of this mining RPC is discouraged. Please use one of the self.generate* methods on the test framework, which sync the nodes to avoid intermittent test issues. You may use sync_fun=self.no_op to disable the sync explicitly."
         return self.__getattr__('generatetodescriptor')(*args, **kwargs)
 
+    def getprioritisedtransactions(self, *args, **kwargs):
+        res = self.__getattr__('getprioritisedtransactions')(*args, **kwargs)
+        assert not (args or kwargs)
+        for res_val in res.values():
+            if res_val.get('priority_delta') == 0:
+                del res_val['priority_delta']
+        return res
+
     def setmocktime(self, timestamp):
         """Wrapper for setmocktime RPC, sets self.mocktime"""
         if timestamp == 0:
@@ -452,11 +479,11 @@ class TestNode():
 
     def get_wallet_rpc(self, wallet_name):
         if self.use_cli:
-            return self.cli("-rpcwallet={}".format(wallet_name))
+            return RPCOverloadWrapper(self.cli("-rpcwallet={}".format(wallet_name)), True, self.descriptors)
         else:
             assert self.rpc_connected and self._rpc, self._node_msg("RPC not connected")
             wallet_path = "wallet/{}".format(urllib.parse.quote(wallet_name))
-            return self._rpc / wallet_path
+            return RPCOverloadWrapper(self._rpc / wallet_path, descriptors=self.descriptors)
 
     def version_is_at_least(self, ver):
         return self.version is None or self.version >= ver
@@ -584,6 +611,12 @@ class TestNode():
         assert_equal(type(unexpected_msgs), list)
         remaining_expected = list(expected_msgs)
 
+        if not self.debug_log_path.exists():
+            # File must exist for this to work
+            os.makedirs(self.debug_log_path.parent, exist_ok=True)
+            with open(self.debug_log_path, mode='a', encoding='utf-8'):
+                pass
+
         time_end = time.time() + timeout * self.timeout_factor
         prev_size = self.debug_log_size(encoding="utf-8")  # Must use same encoding that is used to read() below
 
@@ -612,7 +645,7 @@ class TestNode():
                                     f'not found in log:\n\n{join_log(log)}\n\n')
 
     @contextlib.contextmanager
-    def busy_wait_for_debug_log(self, expected_msgs, timeout=60):
+    def busy_wait_for_debug_log(self, expected_msgs, timeout=60, *, forbid_msgs=()):
         """
         Block until we see a particular debug log message fragment or until we exceed the timeout.
         """
@@ -623,13 +656,23 @@ class TestNode():
         yield
 
         while True:
+            found = True
             with open(self.debug_log_path, "rb") as dl:
                 dl.seek(prev_size)
                 log = dl.read()
 
-            while remaining_expected and remaining_expected[-1] in log:
-                remaining_expected.pop()
-            if not remaining_expected:
+            for msg in forbid_msgs:
+                if msg in log:
+                    print_log = " - " + "\n - ".join(log.decode("utf8", errors="replace").splitlines())
+                    self._raise_assertion_error(
+                        'Forbidden message "{}" partially matched log:\n\n{}\n\n'.format(
+                            str(msg), print_log))
+
+            for expected_msg in expected_msgs:
+                if expected_msg not in log:
+                    found = False
+
+            if found:
                 return
 
             if time.time() >= time_end:
@@ -954,3 +997,96 @@ class TestNodeCLI():
             return json.loads(cli_stdout, parse_float=decimal.Decimal)
         except (json.JSONDecodeError, decimal.InvalidOperation):
             return cli_stdout.rstrip("\n")
+
+class RPCOverloadWrapper():
+    def __init__(self, rpc, cli=False, descriptors=False):
+        self.rpc = rpc
+        self.is_cli = cli
+        self.descriptors = descriptors
+
+    def __getattr__(self, name):
+        return getattr(self.rpc, name)
+
+    def createwallet_passthrough(self, *args, **kwargs):
+        return self.__getattr__("createwallet")(*args, **kwargs)
+
+    def createwallet(self, wallet_name, disable_private_keys=None, blank=None, passphrase='', avoid_reuse=None, descriptors=None, load_on_startup=None, external_signer=None):
+        if descriptors is None:
+            descriptors = self.descriptors
+        return self.__getattr__('createwallet')(wallet_name, disable_private_keys, blank, passphrase, avoid_reuse, descriptors, load_on_startup, external_signer)
+
+    def importprivkey(self, privkey, label=None, rescan=None):
+        wallet_info = self.getwalletinfo()
+        if 'descriptors' not in wallet_info or ('descriptors' in wallet_info and not wallet_info['descriptors']):
+            return self.__getattr__('importprivkey')(privkey, label, rescan)
+        desc = descsum_create('combo(' + privkey + ')')
+        req = [{
+            'desc': desc,
+            'timestamp': 0 if rescan else 'now',
+            'label': label if label else ''
+        }]
+        import_res = self.importdescriptors(req)
+        if not import_res[0]['success']:
+            raise JSONRPCException(import_res[0]['error'])
+
+    def addmultisigaddress(self, nrequired, keys, label=None, address_type=None):
+        wallet_info = self.getwalletinfo()
+        if 'descriptors' not in wallet_info or ('descriptors' in wallet_info and not wallet_info['descriptors']):
+            return self.__getattr__('addmultisigaddress')(nrequired, keys, label, address_type)
+        if isinstance(label, dict):
+            options = dict(label)  # copy, so we can pop and check for emptiness
+            assert address_type is None
+            address_type = options.pop('address_type', None)
+            label = options.pop('label', None)
+            assert not options
+        cms = self.createmultisig(nrequired, keys, address_type)
+        req = [{
+            'desc': cms['descriptor'],
+            'timestamp': 0,
+            'label': label if label else ''
+        }]
+        import_res = self.importdescriptors(req)
+        if not import_res[0]['success']:
+            raise JSONRPCException(import_res[0]['error'])
+        return cms
+
+    def importpubkey(self, pubkey, label=None, rescan=None):
+        wallet_info = self.getwalletinfo()
+        if 'descriptors' not in wallet_info or ('descriptors' in wallet_info and not wallet_info['descriptors']):
+            return self.__getattr__('importpubkey')(pubkey, label, rescan)
+        desc = descsum_create('combo(' + pubkey + ')')
+        req = [{
+            'desc': desc,
+            'timestamp': 0 if rescan else 'now',
+            'label': label if label else ''
+        }]
+        import_res = self.importdescriptors(req)
+        if not import_res[0]['success']:
+            raise JSONRPCException(import_res[0]['error'])
+
+    def _deleted_importaddress(self, address, label=None, rescan=None, p2sh=None):
+        wallet_info = self.getwalletinfo()
+        if 'descriptors' not in wallet_info or ('descriptors' in wallet_info and not wallet_info['descriptors']):
+            return self.__getattr__('importaddress')(address, label, rescan, p2sh)
+        is_hex = False
+        try:
+            int(address ,16)
+            is_hex = True
+            desc = descsum_create('raw(' + address + ')')
+        except Exception:
+            desc = descsum_create('addr(' + address + ')')
+        reqs = [{
+            'desc': desc,
+            'timestamp': 0 if rescan else 'now',
+            'label': label if label else ''
+        }]
+        if is_hex and p2sh:
+            reqs.append({
+                'desc': descsum_create('p2sh(raw(' + address + '))'),
+                'timestamp': 0 if rescan else 'now',
+                'label': label if label else ''
+            })
+        import_res = self.importdescriptors(reqs)
+        for res in import_res:
+            if not res['success']:
+                raise JSONRPCException(res['error'])

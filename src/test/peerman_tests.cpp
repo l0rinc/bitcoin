@@ -4,9 +4,11 @@
 
 #include <chain.h>
 #include <chainparams.h>
+#include <common/args.h>
 #include <consensus/params.h>
 #include <interfaces/mining.h>
 #include <net_processing.h>
+#include <node/peerman_args.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <protocol.h>
@@ -42,6 +44,33 @@ static void mineBlock(node::NodeContext& node, FakeNodeClock& clock, std::chrono
     node.validation_signals->SyncWithValidationInterfaceQueue(); // drain events queue
 }
 
+BOOST_AUTO_TEST_CASE(peerman_args_block_reconstruction_extra_txn)
+{
+    ArgsManager argsman;
+    argsman.ForceSetArg("-maxorphantx", "7");
+    argsman.ForceSetArg("-blockreconstructionextratxn", "12");
+    argsman.ForceSetArg("-blockreconstructionextratxnsize", "1.25");
+    argsman.ForceSetArg("-maxstaleoutbound", "3");
+
+    PeerManager::Options options;
+    node::ApplyArgsManOptions(argsman, options);
+
+    BOOST_CHECK_EQUAL(options.max_orphan_txs, 7);
+    BOOST_CHECK_EQUAL(options.max_extra_txs, 12);
+    BOOST_CHECK_EQUAL(options.max_extra_txs_size, 1'250'000);
+    BOOST_CHECK_EQUAL(options.maxstaleoutbound, 3);
+
+    ArgsManager argsman_negative;
+    argsman_negative.ForceSetArg("-maxorphantx", "-1");
+    argsman_negative.ForceSetArg("-blockreconstructionextratxnsize", "-1");
+    argsman_negative.ForceSetArg("-maxstaleoutbound", "-1");
+    PeerManager::Options negative_options;
+    node::ApplyArgsManOptions(argsman_negative, negative_options);
+    BOOST_CHECK_EQUAL(negative_options.max_orphan_txs, 0);
+    BOOST_CHECK_EQUAL(negative_options.max_extra_txs_size, 0);
+    BOOST_CHECK_EQUAL(negative_options.maxstaleoutbound, 0);
+}
+
 // Verifying when network-limited peer connections are desirable based on the node's proximity to the tip
 BOOST_AUTO_TEST_CASE(connections_desirable_service_flags)
 {
@@ -50,6 +79,7 @@ BOOST_AUTO_TEST_CASE(connections_desirable_service_flags)
     auto consensus = m_node.chainman->GetParams().GetConsensus();
 
     // Check we start connecting to full nodes
+    // Note: NODE_REDUCED_DATA requirement is enforced separately in VERSION processing
     ServiceFlags peer_flags{NODE_WITNESS | NODE_NETWORK_LIMITED};
     BOOST_CHECK(peerman->GetDesirableServiceFlags(peer_flags) == ServiceFlags(NODE_NETWORK | NODE_WITNESS));
 

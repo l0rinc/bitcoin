@@ -34,6 +34,7 @@ from test_framework.script_util import (
 )
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
+    assert_approx,
     assert_equal,
     assert_greater_than_or_equal,
     assert_is_hex_string,
@@ -244,12 +245,14 @@ class SegWitTest(BitcoinTestFramework):
         tx1_hex = self.nodes[0].gettransaction(txid1)['hex']
         tx1 = tx_from_hex(tx1_hex)
 
-        # Check that wtxid is properly reported in mempool entry (txid1)
-        assert_equal(self.nodes[0].getmempoolentry(txid1)["wtxid"], tx1.wtxid_hex)
+        # Check that hash and wtxid are properly reported in mempool entry (txid1)
+        entry = self.nodes[0].getmempoolentry(txid1)
+        assert_equal(entry["hash"], tx1.wtxid_hex)
+        assert_equal(entry["wtxid"], tx1.wtxid_hex)
 
         # Check that weight and vsize are properly reported in mempool entry (txid1)
-        assert_equal(self.nodes[0].getmempoolentry(txid1)["vsize"], tx1.get_vsize())
-        assert_equal(self.nodes[0].getmempoolentry(txid1)["weight"], tx1.get_weight())
+        assert_equal(entry["vsize"], tx1.get_vsize())
+        assert_equal(entry["weight"], tx1.get_weight())
 
         # Now create tx2, which will spend from txid1.
         tx = CTransaction()
@@ -260,12 +263,14 @@ class SegWitTest(BitcoinTestFramework):
         tx = tx_from_hex(tx2_hex)
         assert not tx.wit.is_null()
 
-        # Check that wtxid is properly reported in mempool entry (txid2)
-        assert_equal(self.nodes[0].getmempoolentry(txid2)["wtxid"], tx.wtxid_hex)
+        # Check that hash and wtxid are properly reported in mempool entry (txid2)
+        entry = self.nodes[0].getmempoolentry(txid2)
+        assert_equal(entry["hash"], tx.wtxid_hex)
+        assert_equal(entry["wtxid"], tx.wtxid_hex)
 
         # Check that weight and vsize are properly reported in mempool entry (txid2)
-        assert_equal(self.nodes[0].getmempoolentry(txid2)["vsize"], tx.get_vsize())
-        assert_equal(self.nodes[0].getmempoolentry(txid2)["weight"], tx.get_weight())
+        assert_equal(entry["vsize"], tx.get_vsize())
+        assert_equal(entry["weight"], tx.get_weight())
 
         # Now create tx3, which will spend from txid2
         tx = CTransaction()
@@ -282,15 +287,41 @@ class SegWitTest(BitcoinTestFramework):
         assert txid2 in template_txids
         assert txid3 in template_txids
 
-        # Check that wtxid is properly reported in mempool entry (txid3)
-        assert_equal(self.nodes[0].getmempoolentry(txid3)["wtxid"], tx.wtxid_hex)
+        # Check that hash and wtxid are properly reported in mempool entry (txid3)
+        entry = self.nodes[0].getmempoolentry(txid3)
+        assert_equal(entry["hash"], tx.wtxid_hex)
+        assert_equal(entry["wtxid"], tx.wtxid_hex)
 
         # Check that weight and vsize are properly reported in mempool entry (txid3)
-        assert_equal(self.nodes[0].getmempoolentry(txid3)["vsize"], tx.get_vsize())
-        assert_equal(self.nodes[0].getmempoolentry(txid3)["weight"], tx.get_weight())
+        assert_equal(entry["vsize"], tx.get_vsize())
+        assert_equal(entry["weight"], tx.get_weight())
 
         # Mine a block to clear the gbt cache again.
         self.generate(self.nodes[0], 1)
+
+        self.log.info("Signing with all-segwit inputs reveals fee rate")
+        addr = self.nodes[0].getnewaddress(address_type='p2sh-segwit')
+        txid = self.nodes[0].sendtoaddress(addr, 1)
+        tx = self.nodes[0].getrawtransaction(txid, True)
+        n = -1
+        value = -1
+        for o in tx["vout"]:
+            if o["scriptPubKey"]["address"] == addr:
+                n = o["n"]
+                value = Decimal(o["value"])
+                break
+        assert n > -1
+        assert_equal(value, 1)
+        fee = Decimal("0.00010000")
+        value_out = value - fee
+        self.generatetoaddress(self.nodes[0], 1, self.nodes[0].getnewaddress())
+        raw = self.nodes[0].createrawtransaction([{"txid": txid, "vout": n}], [{self.nodes[0].getnewaddress(): value_out}])
+        signed = self.nodes[0].signrawtransactionwithwallet(raw)
+        assert_equal(signed["complete"], True)
+        txsize = self.nodes[0].decoderawtransaction(signed['hex'])['vsize']
+        exp_feerate = 1000 * fee / Decimal(txsize)
+        assert_approx(signed["feerate"], exp_feerate, Decimal("0.00000010"))
+        assert_equal(Decimal(signed["fee"]), fee)
 
 
 if __name__ == '__main__':

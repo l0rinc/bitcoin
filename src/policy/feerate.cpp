@@ -35,3 +35,9 @@ std::string CFeeRate::ToString(FeeRateFormat fee_rate_format) const
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
+
+std::string CFeeRate::SatsToString() const
+{
+    const CAmount feerate_per_kvb{GetFeePerK()};
+    return strprintf("%d.%03d", feerate_per_kvb / 1000, feerate_per_kvb % 1000);
+}

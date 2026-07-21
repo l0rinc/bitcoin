@@ -11,6 +11,7 @@
 #include <consensus/validation.h>
 #include <crypto/hex_base.h>
 #include <key_io.h>
+#include <policy/feerate.h>
 #include <prevector.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
@@ -151,7 +152,7 @@ static bool CheckTxScriptsSanity(const CMutableTransaction& tx)
     return true;
 }
 
-static bool DecodeTx(CMutableTransaction& tx, const std::vector<unsigned char>& tx_data, bool try_no_witness, bool try_witness)
+bool DecodeTx(CMutableTransaction& tx, const std::vector<unsigned char>& tx_data, bool try_no_witness, bool try_witness)
 {
     // General strategy:
     // - Decode both with extended serialization (which interprets the 0x0001 tag as a marker for
@@ -291,6 +292,11 @@ UniValue ValueFromAmount(const CAmount amount)
     }
     return UniValue(UniValue::VNUM,
             strprintf("%s%d.%08d", amount < 0 ? "-" : "", quotient, remainder));
+}
+
+UniValue ValueFromFeeRate(const CFeeRate& fee_rate)
+{
+    return UniValue(UniValue::VNUM, fee_rate.SatsToString());
 }
 
 std::string FormatScript(const CScript& script)

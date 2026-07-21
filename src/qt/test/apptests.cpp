@@ -5,6 +5,7 @@
 #include <qt/test/apptests.h>
 
 #include <chainparams.h>
+#include <common/args.h>
 #include <key.h>
 #include <logging.h>
 #include <qt/bitcoin.h>
@@ -15,13 +16,17 @@
 #include <validation.h>
 
 #include <QAction>
+#include <QApplication>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QRegularExpression>
 #include <QScopedPointer>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QString>
 #include <QTest>
 #include <QTextEdit>
+#include <QTimer>
 #include <QtGlobal>
 #include <QtTest/QtTestWidgets>
 #include <QtTest/QtTestGui>
@@ -39,6 +44,8 @@ void TestRpcCommand(RPCConsole* console)
 {
     QTextEdit* messagesWidget = console->findChild<QTextEdit*>("messagesWidget");
     QLineEdit* lineEdit = console->findChild<QLineEdit*>("lineEdit");
+    QVERIFY(messagesWidget);
+    QVERIFY(lineEdit);
     QSignalSpy mw_spy(messagesWidget, &QTextEdit::textChanged);
     QVERIFY(mw_spy.isValid());
     QTest::keyClicks(lineEdit, "getblockchaininfo");
@@ -49,11 +56,67 @@ void TestRpcCommand(RPCConsole* console)
     const QString pattern = QStringLiteral("\"chain\": \"(\\w+)\"");
     QCOMPARE(FindInConsole(output, pattern), QString("regtest"));
 }
+
+void TestClearHistoryCommand(RPCConsole* console)
+{
+    QTextEdit* messagesWidget = console->findChild<QTextEdit*>("messagesWidget");
+    QLineEdit* lineEdit = console->findChild<QLineEdit*>("lineEdit");
+    QVERIFY(messagesWidget);
+    QVERIFY(lineEdit);
+
+    QSettings settings;
+    settings.beginWriteArray("nRPCConsoleWindowHistory");
+    settings.setArrayIndex(0);
+    settings.setValue("cmd", "getblockchaininfo");
+    settings.setArrayIndex(1);
+    settings.setValue("cmd", "walletpassphrase hunter2 60");
+    settings.endArray();
+    settings.sync();
+
+    console->message(RPCConsole::CMD_REQUEST, "sensitive-command");
+    QVERIFY(messagesWidget->toPlainText().contains("sensitive-command"));
+
+    QTest::keyClicks(lineEdit, "/clearhistory");
+    QTimer::singleShot(0, [] {
+        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            box->done(QMessageBox::Yes);
+        }
+    });
+    QTest::keyClick(lineEdit, Qt::Key_Return);
+
+    QCOMPARE(lineEdit->text(), QString{});
+    const QString output = messagesWidget->toPlainText();
+    QVERIFY(!output.contains("sensitive-command"));
+    QVERIFY(output.contains("Command history and console output cleared."));
+
+    QCOMPARE(settings.beginReadArray("nRPCConsoleWindowHistory"), 0);
+    settings.endArray();
+}
 } // namespace
 
 //! Entry point for BitcoinApplication tests.
 void AppTests::appTests()
 {
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        // Disable for mac on "minimal" platform to avoid crashes inside the Qt
+        // framework when it tries to look up unimplemented cocoa functions,
+        // and fails to handle returned nulls
+        // (https://bugreports.qt.io/browse/QTBUG-49686).
+        qWarning() << "Skipping AppTests on mac build with 'minimal' platform set due to Qt bugs. To run AppTests, invoke "
+                      "with 'QT_QPA_PLATFORM=cocoa test_bitcoin-qt' on mac, or else use a linux or windows build.";
+        return;
+    }
+#endif
+
+    {
+        // Need to ensure datadir is setup so resetting settings can delete the non-existent bitcoin_rw.conf
+        std::string error;
+        if (!gArgs.ReadConfigFiles(error, true)) {
+            qWarning() << "Error in readConfigFiles";
+        }
+    }
+
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
     m_app.parameterSetup();
     QVERIFY(m_app.createOptionsModel(/*resetSettings=*/true));
@@ -87,6 +150,7 @@ void AppTests::consoleTests(RPCConsole* console)
 {
     HandleCallback callback{"consoleTests", *this};
     TestRpcCommand(console);
+    TestClearHistoryCommand(console);
 }
 
 //! Destructor to shut down after the last expected callback completes.

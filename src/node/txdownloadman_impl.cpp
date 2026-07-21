@@ -87,6 +87,11 @@ std::vector<TxOrphanage::OrphanInfo> TxDownloadManager::GetOrphanTransactions() 
 {
     return m_impl->GetOrphanTransactions();
 }
+void TxDownloadManager::SetMaxOrphanTxs(uint32_t max_orphan_txs)
+{
+    m_impl->m_opts.m_max_orphan_txs = max_orphan_txs;
+    m_impl->m_orphanage->LimitOrphans(max_orphan_txs);
+}
 
 // TxDownloadManagerImpl
 void TxDownloadManagerImpl::ActiveTipChange()
@@ -418,6 +423,11 @@ node::RejectedTxTodo TxDownloadManagerImpl::MempoolRejectedTx(const CTransaction
                 // Once added to the orphan pool, a tx is considered AlreadyHave, and we shouldn't request it anymore.
                 m_txrequest.ForgetTxHash(tx.GetHash().ToUint256());
                 m_txrequest.ForgetTxHash(tx.GetWitnessHash().ToUint256());
+
+                // DoS prevention: do not allow m_orphanage to grow unbounded (see CVE-2012-3789).
+                // The modern orphanage has memory/latency limits too, but Knots keeps -maxorphantx
+                // as an additional unique-orphan transaction count cap.
+                m_orphanage->LimitOrphans(m_opts.m_max_orphan_txs);
             } else {
                 unique_parents.clear();
                 LogDebug(BCLog::MEMPOOL, "not keeping orphan with rejected parents %s (wtxid=%s)\n",

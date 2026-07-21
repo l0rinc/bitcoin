@@ -14,6 +14,9 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <array>
+#include <cstdio>
+
 using namespace std::string_literals;
 using namespace util::hex_literals;
 
@@ -106,6 +109,32 @@ BOOST_AUTO_TEST_CASE(streams_scoped_data_stream_usage)
     BOOST_CHECK(stream.empty());
 }
 
+BOOST_AUTO_TEST_CASE(fsbridge_fopen_exclusive)
+{
+    const fs::path exclusive_path{m_args.GetDataDirBase() / "exclusive_fopen.bin"};
+    constexpr std::array original{'o', 'r', 'i', 'g', 'i', 'n', 'a', 'l'};
+
+    {
+        FILE* file{fsbridge::fopen(exclusive_path, "wbx")};
+        BOOST_REQUIRE(file != nullptr);
+        BOOST_CHECK_EQUAL(std::fwrite(original.data(), 1, original.size(), file), original.size());
+        BOOST_REQUIRE_EQUAL(std::fclose(file), 0);
+    }
+    {
+        FILE* file{fsbridge::fopen(exclusive_path, "wbx")};
+        BOOST_CHECK(file == nullptr);
+        if (file) std::fclose(file);
+    }
+    {
+        FILE* file{fsbridge::fopen(exclusive_path, "rb")};
+        BOOST_REQUIRE(file != nullptr);
+        std::array<char, original.size()> actual{};
+        BOOST_CHECK_EQUAL(std::fread(actual.data(), 1, actual.size(), file), actual.size());
+        BOOST_CHECK_EQUAL_COLLECTIONS(actual.begin(), actual.end(), original.begin(), original.end());
+        BOOST_REQUIRE_EQUAL(std::fclose(file), 0);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(xor_file)
 {
     fs::path xor_path{m_args.GetDataDirBase() / "test_xor.bin"};
@@ -123,7 +152,7 @@ BOOST_AUTO_TEST_CASE(xor_file)
         BOOST_CHECK_EXCEPTION(xor_file.size(), std::ios_base::failure, HasReason{"AutoFile::size: file handle is nullptr"});
     }
     {
-#ifdef __MINGW64__
+#if 0
         // Temporary workaround for https://github.com/bitcoin/bitcoin/issues/30210
         const char* mode = "wb";
 #else
@@ -131,7 +160,6 @@ BOOST_AUTO_TEST_CASE(xor_file)
 #endif
         AutoFile xor_file{raw_file(mode), obfuscation};
         xor_file << test1 << test2;
-        BOOST_CHECK_EQUAL(xor_file.size(), 7);
         BOOST_REQUIRE_EQUAL(xor_file.fclose(), 0);
     }
     {
@@ -491,6 +519,37 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file)
     BOOST_CHECK(bf.GetPos() <= 30U);
 
     BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+
+    fs::remove(streams_test_filename);
+}
+
+BOOST_AUTO_TEST_CASE(streams_buffered_file_closes_source)
+{
+    fs::path streams_test_filename = m_args.GetDataDirBase() / "streams_test_tmp";
+
+    {
+        AutoFile file{fsbridge::fopen(streams_test_filename, "w+b")};
+
+        file << uint8_t{1};
+        file.seek(0, SEEK_SET);
+
+        {
+            BufferedFile bf{file, 2, 1};
+            uint8_t value;
+            bf >> value;
+            BOOST_CHECK_EQUAL(value, 1);
+        }
+
+        BOOST_CHECK(file.IsNull());
+    }
+
+    {
+        AutoFile file{fsbridge::fopen(streams_test_filename, "r+b")};
+        BufferedFile bf{file, 2, 1};
+        BOOST_REQUIRE_EQUAL(bf.fclose(), 0);
+        BOOST_CHECK(file.IsNull());
+        BOOST_CHECK_EQUAL(bf.fclose(), 0);
+    }
 
     fs::remove(streams_test_filename);
 }

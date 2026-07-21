@@ -2,11 +2,15 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <common/args.h>
 #include <common/system.h>
+#include <node/mempool_args.h>
+#include <policy/coin_age_priority.h>
 #include <policy/policy.h>
 #include <test/util/time.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
+#include <util/result.h>
 #include <util/time.h>
 
 #include <test/util/setup_common.h>
@@ -23,6 +27,46 @@ class MemPoolTest final : public CTxMemPool
 public:
     using CTxMemPool::GetMinFee;
 };
+
+BOOST_AUTO_TEST_CASE(MempoolDustDynamicParse)
+{
+    static constexpr unsigned int max_target{1008};
+
+    auto off{ParseDustDynamicOpt("off", max_target)};
+    BOOST_REQUIRE(off);
+    BOOST_CHECK_EQUAL(off->first, 0);
+    BOOST_CHECK_EQUAL(off->second, DEFAULT_DUST_RELAY_MULTIPLIER);
+    auto zero{ParseDustDynamicOpt("0", max_target)};
+    BOOST_REQUIRE(zero);
+    BOOST_CHECK_EQUAL(zero->first, 0);
+    BOOST_CHECK_EQUAL(zero->second, DEFAULT_DUST_RELAY_MULTIPLIER);
+    auto target{ParseDustDynamicOpt("target:6", max_target)};
+    BOOST_REQUIRE(target);
+    BOOST_CHECK_EQUAL(target->first, -6);
+    BOOST_CHECK_EQUAL(target->second, DEFAULT_DUST_RELAY_MULTIPLIER);
+    auto target_half{ParseDustDynamicOpt("0.5*target:6", max_target)};
+    BOOST_REQUIRE(target_half);
+    BOOST_CHECK_EQUAL(target_half->first, -6);
+    BOOST_CHECK_EQUAL(target_half->second, 500);
+    auto mempool{ParseDustDynamicOpt("mempool:250", max_target)};
+    BOOST_REQUIRE(mempool);
+    BOOST_CHECK_EQUAL(mempool->first, 250);
+    BOOST_CHECK_EQUAL(mempool->second, DEFAULT_DUST_RELAY_MULTIPLIER);
+    auto mempool_precise{ParseDustDynamicOpt("10.001*mempool:250", max_target)};
+    BOOST_REQUIRE(mempool_precise);
+    BOOST_CHECK_EQUAL(mempool_precise->first, 250);
+    BOOST_CHECK_EQUAL(mempool_precise->second, 10001);
+
+    BOOST_CHECK(!ParseDustDynamicOpt("0*target:6", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("0.0001*target:6", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("x*target:6", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("target:1", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("target:1009", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("target:x", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("mempool:0", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("mempool:x", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("unknown", max_target));
+}
 
 BOOST_AUTO_TEST_CASE(MempoolLookupTest)
 {
@@ -48,6 +92,259 @@ BOOST_AUTO_TEST_CASE(MempoolLookupTest)
 
     // Lookup by Wtxid
     BOOST_CHECK(pool.get(CTransaction(tx).GetWitnessHash()));
+}
+
+BOOST_AUTO_TEST_CASE(MempoolPermitEphemeralParse)
+{
+    auto parse_options = [](const std::string& arg) {
+        ArgsManager argsman;
+        argsman.ForceSetArg("-permitephemeral", arg);
+        kernel::MemPoolOptions opts;
+        const auto result{ApplyArgsManOptions(argsman, Params(), opts)};
+        BOOST_REQUIRE(result);
+        return opts;
+    };
+
+    auto all{parse_options("1")};
+    BOOST_CHECK(all.permitephemeral_anchor);
+    BOOST_CHECK(all.permitephemeral_send);
+    BOOST_CHECK(all.permitephemeral_dust);
+
+    auto none{parse_options("reject")};
+    BOOST_CHECK(!none.permitephemeral_anchor);
+    BOOST_CHECK(!none.permitephemeral_send);
+    BOOST_CHECK(!none.permitephemeral_dust);
+
+    auto anchor_only{parse_options("anchor,-send,-dust")};
+    BOOST_CHECK(anchor_only.permitephemeral_anchor);
+    BOOST_CHECK(!anchor_only.permitephemeral_send);
+    BOOST_CHECK(!anchor_only.permitephemeral_dust);
+
+    auto send_zero{parse_options("send,-dust")};
+    BOOST_CHECK(send_zero.permitephemeral_anchor);
+    BOOST_CHECK(send_zero.permitephemeral_send);
+    BOOST_CHECK(!send_zero.permitephemeral_dust);
+
+    auto send_dust{parse_options("send,dust")};
+    BOOST_CHECK(send_dust.permitephemeral_anchor);
+    BOOST_CHECK(send_dust.permitephemeral_send);
+    BOOST_CHECK(send_dust.permitephemeral_dust);
+
+    auto dust_without_anchor{parse_options("-anchor,dust")};
+    BOOST_CHECK(!dust_without_anchor.permitephemeral_anchor);
+    BOOST_CHECK(dust_without_anchor.permitephemeral_send);
+    BOOST_CHECK(dust_without_anchor.permitephemeral_dust);
+
+    auto unknown{parse_options("unknown")};
+    BOOST_CHECK(unknown.permitephemeral_anchor);
+    BOOST_CHECK(!unknown.permitephemeral_send);
+    BOOST_CHECK(!unknown.permitephemeral_dust);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolMinRelayAgeParse)
+{
+    ArgsManager argsman;
+    argsman.ForceSetArg("-minrelaycoinblocks", "123");
+    argsman.ForceSetArg("-minrelaymaturity", "4");
+
+    kernel::MemPoolOptions opts;
+    BOOST_CHECK_EQUAL(opts.minrelaycoinblocks, 0);
+    BOOST_CHECK_EQUAL(opts.minrelaymaturity, 0);
+    const auto result{ApplyArgsManOptions(argsman, Params(), opts)};
+    BOOST_REQUIRE(result);
+    BOOST_CHECK_EQUAL(opts.minrelaycoinblocks, 123);
+    BOOST_CHECK_EQUAL(opts.minrelaymaturity, 4);
+
+    argsman.ForceSetArg("-minrelaycoinblocks", "-1");
+    BOOST_CHECK(!ApplyArgsManOptions(argsman, Params(), opts));
+
+    argsman.ForceSetArg("-minrelaycoinblocks", "0");
+    argsman.ForceSetArg("-minrelaymaturity", "-1");
+    BOOST_CHECK(!ApplyArgsManOptions(argsman, Params(), opts));
+}
+
+BOOST_AUTO_TEST_CASE(MempoolMaxMempoolSizeParse)
+{
+    ArgsManager max_args;
+    max_args.ForceSetArg("-maxmempool", "500");
+
+    kernel::MemPoolOptions max_opts;
+    const auto max_result{ApplyArgsManOptions(max_args, Params(), max_opts)};
+    BOOST_REQUIRE(max_result);
+    BOOST_CHECK_EQUAL(max_opts.max_size_bytes, 500'000'000);
+
+    ArgsManager too_high_args;
+    too_high_args.ForceSetArg("-maxmempool", "501");
+
+    kernel::MemPoolOptions too_high_opts;
+    const auto too_high_result{ApplyArgsManOptions(too_high_args, Params(), too_high_opts)};
+    if constexpr (sizeof(void*) == 4) {
+        BOOST_REQUIRE(!too_high_result);
+        BOOST_CHECK_EQUAL(util::ErrorString(too_high_result).original, "-maxmempool is set to 501 but can't be over 500 MB on 32-bit systems");
+    } else {
+        BOOST_REQUIRE(too_high_result);
+        BOOST_CHECK_EQUAL(too_high_opts.max_size_bytes, 501'000'000);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(MempoolMaxTxLegacySigopsParse)
+{
+    ArgsManager argsman;
+    argsman.ForceSetArg("-maxtxlegacysigops", "1234");
+
+    kernel::MemPoolOptions opts;
+    BOOST_CHECK_EQUAL(opts.maxtxlegacysigops, MAX_TX_LEGACY_SIGOPS);
+    const auto result{ApplyArgsManOptions(argsman, Params(), opts)};
+    BOOST_REQUIRE(result);
+    BOOST_CHECK_EQUAL(opts.maxtxlegacysigops, 1234);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolCoinAgePriorityCache)
+{
+    constexpr CAmount input_value{10 * COIN};
+
+    CMutableTransaction tx;
+    tx.vin.resize(1);
+    tx.vin[0].scriptSig = CScript() << std::vector<unsigned char>(110, 0);
+    tx.vout.emplace_back(input_value, CScript() << OP_TRUE);
+    const auto tx_ref{MakeTransactionRef(tx)};
+
+    const int64_t sigops_cost{4};
+    const int32_t tx_size{static_cast<int32_t>(GetVirtualTransactionSize(GetTransactionWeight(*tx_ref), sigops_cost, ::nBytesPerSigOp))};
+    const unsigned int modified_size{CalculateModifiedSize(*tx_ref, tx_size)};
+    BOOST_CHECK_LT(modified_size, static_cast<unsigned int>(tx_size));
+
+    const double starting_priority{ComputePriority2(input_value, modified_size)};
+    CTxMemPoolEntry entry{tx_ref, /*fee=*/0, /*time=*/0, /*entry_height=*/100, /*entry_sequence=*/0,
+                          CoinAgeCache{.inputs_coin_age = input_value, .in_chain_input_value = input_value},
+                          /*spends_coinbase=*/false, /*extra_weight=*/0, sigops_cost, LockPoints{}};
+
+    BOOST_CHECK_EQUAL(entry.GetStartingPriority(), starting_priority);
+    BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/101), starting_priority);
+
+    const double priority_after_two_blocks{starting_priority + (2.0 * input_value) / modified_size};
+    BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/103), priority_after_two_blocks);
+
+    entry.UpdateCachedPriority(/*currentHeight=*/103, /*valueInCurrentBlock=*/5 * COIN);
+    BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/103), priority_after_two_blocks);
+    BOOST_CHECK_EQUAL(entry.GetInternalCoinAgeCache().in_chain_input_value, 15 * COIN);
+    BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/104), priority_after_two_blocks + (15.0 * COIN) / modified_size);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolUpdateDependentPriorities)
+{
+    constexpr CAmount input_value{10 * COIN};
+
+    CMutableTransaction parent_tx;
+    parent_tx.vin.resize(1);
+    parent_tx.vin[0].scriptSig = CScript() << OP_1;
+    parent_tx.vout.emplace_back(input_value, CScript() << OP_TRUE);
+
+    CMutableTransaction child_tx;
+    child_tx.vin.resize(1);
+    child_tx.vin[0].prevout = COutPoint{parent_tx.GetHash(), 0};
+    child_tx.vin[0].scriptSig = CScript() << OP_2;
+    child_tx.vout.emplace_back(input_value, CScript() << OP_TRUE);
+    const auto child_tx_ref{MakeTransactionRef(child_tx)};
+    const unsigned int modified_size{CalculateModifiedSize(*child_tx_ref, GetVirtualTransactionSize(*child_tx_ref))};
+
+    CTxMemPool& test_pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+    TryAddToMempool(test_pool, entry.Fee(0).FromTx(child_tx));
+
+    LOCK2(::cs_main, test_pool.cs);
+    const auto child_entry{test_pool.GetIter(child_tx.GetHash())};
+    BOOST_REQUIRE(child_entry);
+    BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/102), 0);
+
+    const CTransaction parent{parent_tx};
+    test_pool.UpdateDependentPriorities(parent, /*nBlockHeight=*/101, /*addToChain=*/true);
+    BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/101), 0);
+    BOOST_CHECK_EQUAL((*child_entry)->GetInternalCoinAgeCache().in_chain_input_value, input_value);
+    BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/102), static_cast<double>(input_value) / modified_size);
+
+    test_pool.UpdateDependentPriorities(parent, /*nBlockHeight=*/102, /*addToChain=*/false);
+    BOOST_CHECK_EQUAL((*child_entry)->GetInternalCoinAgeCache().in_chain_input_value, 0);
+    BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/103), static_cast<double>(input_value) / modified_size);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolEntryExtraWeight)
+{
+    CMutableTransaction tx;
+    tx.vin.resize(1);
+    tx.vout.emplace_back(1 * COIN, CScript() << OP_TRUE);
+    const auto tx_ref{MakeTransactionRef(tx)};
+
+    static constexpr int32_t extra_weight{400};
+    static constexpr int64_t sigops_cost{4};
+    CTxMemPoolEntry base_entry{tx_ref, /*fee=*/0, /*time=*/0, /*entry_height=*/1, /*entry_sequence=*/0,
+                               COIN_AGE_CACHE_ZERO, /*spends_coinbase=*/false, /*extra_weight=*/0,
+                               sigops_cost, LockPoints{}};
+    CTxMemPoolEntry weighted_entry{tx_ref, /*fee=*/0, /*time=*/0, /*entry_height=*/1, /*entry_sequence=*/0,
+                                   COIN_AGE_CACHE_ZERO, /*spends_coinbase=*/false, extra_weight,
+                                   sigops_cost, LockPoints{}};
+
+    BOOST_CHECK_EQUAL(weighted_entry.GetTxWeight(), base_entry.GetTxWeight());
+    BOOST_CHECK_EQUAL(weighted_entry.GetExtraWeight(), extra_weight);
+    BOOST_CHECK_EQUAL(weighted_entry.GetTxSize(), GetVirtualTransactionSize(GetTransactionWeight(*tx_ref) + extra_weight, sigops_cost, ::nBytesPerSigOp));
+    BOOST_CHECK_EQUAL(weighted_entry.GetAdjustedWeight(), GetSigOpsAdjustedWeight(GetTransactionWeight(*tx_ref) + extra_weight, sigops_cost, ::nBytesPerSigOp));
+    BOOST_CHECK_GT(weighted_entry.GetTxSize(), base_entry.GetTxSize());
+    BOOST_CHECK_GT(weighted_entry.GetAdjustedWeight(), base_entry.GetAdjustedWeight());
+}
+
+BOOST_AUTO_TEST_CASE(MempoolPriorityAndFeeDeltas)
+{
+    CMutableTransaction tx;
+    tx.vin.emplace_back(Txid::FromUint256(uint256::ONE), 0);
+    tx.vout.emplace_back(COIN, CScript() << OP_TRUE);
+    const Txid txid{tx.GetHash()};
+
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+    TryAddToMempool(pool, entry.Fee(5000).FromTx(tx));
+
+    const unsigned int transactions_updated{pool.GetTransactionsUpdated()};
+    constexpr double priority_delta{123.5};
+    constexpr CAmount fee_delta{2000};
+    pool.PrioritiseTransaction(txid, priority_delta, fee_delta);
+    BOOST_CHECK_EQUAL(pool.GetTransactionsUpdated(), transactions_updated + 1);
+
+    {
+        LOCK(pool.cs);
+        double applied_priority{0.0};
+        CAmount applied_fee{0};
+        pool.ApplyDeltas(txid, applied_priority, applied_fee);
+        BOOST_CHECK_EQUAL(applied_priority, priority_delta);
+        BOOST_CHECK_EQUAL(applied_fee, fee_delta);
+
+        const auto iter{pool.GetIter(txid)};
+        BOOST_REQUIRE(iter);
+        BOOST_CHECK_EQUAL((*iter)->GetModifiedFee(), 7000);
+    }
+
+    const auto prioritised{pool.GetPrioritisedTransactions()};
+    BOOST_REQUIRE_EQUAL(prioritised.size(), 1);
+    BOOST_CHECK(prioritised.front().in_mempool);
+    BOOST_CHECK_EQUAL(prioritised.front().priority_delta, priority_delta);
+    BOOST_CHECK_EQUAL(prioritised.front().fee_delta, fee_delta);
+    BOOST_REQUIRE(prioritised.front().modified_fee);
+    BOOST_CHECK_EQUAL(*prioritised.front().modified_fee, 7000);
+    BOOST_CHECK(prioritised.front().txid == txid);
+
+    pool.PrioritiseTransaction(txid, -priority_delta, -fee_delta);
+    BOOST_CHECK(pool.GetPrioritisedTransactions().empty());
+    {
+        LOCK(pool.cs);
+        double applied_priority{0.0};
+        CAmount applied_fee{0};
+        pool.ApplyDeltas(txid, applied_priority, applied_fee);
+        BOOST_CHECK_EQUAL(applied_priority, 0.0);
+        BOOST_CHECK_EQUAL(applied_fee, 0);
+
+        const auto iter{pool.GetIter(txid)};
+        BOOST_REQUIRE(iter);
+        BOOST_CHECK_EQUAL((*iter)->GetModifiedFee(), 5000);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
@@ -146,6 +443,8 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
 {
     auto& pool = static_cast<MemPoolTest&>(*Assert(m_node.mempool));
     LOCK2(cs_main, pool.cs);
+    pool.m_opts.min_relay_feerate = CFeeRate{CORE_INCREMENTAL_RELAY_FEE};
+    pool.m_opts.incremental_relay_feerate = CFeeRate{CORE_INCREMENTAL_RELAY_FEE};
     TestMemPoolEntryHelper entry;
 
     CMutableTransaction tx1 = CMutableTransaction();
@@ -193,7 +492,7 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     BOOST_CHECK(!pool.exists(tx3.GetHash()));
 
     CFeeRate maxFeeRateRemoved(2500, GetVirtualTransactionSize(CTransaction(tx3)) + GetVirtualTransactionSize(CTransaction(tx2)));
-    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE);
+    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + pool.m_opts.incremental_relay_feerate.GetFeePerK());
 
     CMutableTransaction tx4 = CMutableTransaction();
     tx4.vin.resize(2);
@@ -244,7 +543,6 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     tx7.vout[1].nValue = 10 * COIN;
 
     TryAddToMempool(pool, entry.Fee(700LL).FromTx(tx4));
-    auto usage_with_tx4_only = pool.DynamicMemoryUsage();
     TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
     TryAddToMempool(pool, entry.Fee(110LL).FromTx(tx6));
     TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
@@ -257,47 +555,45 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     BOOST_CHECK(pool.exists(tx4.GetHash()));
     BOOST_CHECK(!pool.exists(tx7.GetHash()));
 
-    // Tx5 and Tx6 may be removed as well because they're in the same chunk as
-    // tx7, but this behavior need not be guaranteed.
+    if (!pool.exists(tx5.GetHash()))
+        TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
+    if (!pool.exists(tx7.GetHash()))
+        TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
 
     if (!pool.exists(tx5.GetHash()))
         TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
     if (!pool.exists(tx6.GetHash()))
         TryAddToMempool(pool, entry.Fee(110LL).FromTx(tx6));
-    TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
+    if (!pool.exists(tx7.GetHash()))
+        TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
 
-    // If we trim sufficiently, everything but tx4 should be removed.
-    pool.TrimToSize(usage_with_tx4_only + 1);
-    BOOST_CHECK(pool.exists(tx4.GetHash()));
-    BOOST_CHECK(!pool.exists(tx5.GetHash()));
-    BOOST_CHECK(!pool.exists(tx6.GetHash()));
-    BOOST_CHECK(!pool.exists(tx7.GetHash()));
-
-    TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
-    TryAddToMempool(pool, entry.Fee(110LL).FromTx(tx6));
-    TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
+    if (!pool.exists(tx5.GetHash()))
+        TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
+    if (!pool.exists(tx7.GetHash()))
+        TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
 
     std::vector<CTransactionRef> vtx;
     FakeNodeClock clock{42s};
     constexpr std::chrono::seconds HALFLIFE{CTxMemPool::ROLLING_FEE_HALFLIFE};
+    const CAmount incremental_relay_fee{pool.m_opts.incremental_relay_feerate.GetFeePerK()};
     clock += HALFLIFE;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE);
+    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + incremental_relay_fee);
     // ... we should keep the same min fee until we get a block
     pool.removeForBlock(vtx, 1);
     clock += HALFLIFE;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE)/2.0));
+    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + incremental_relay_fee)/2.0));
     // ... then feerate should drop 1/2 each halflife
 
     clock += HALFLIFE / 2;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(pool.DynamicMemoryUsage() * 5 / 2).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE)/4.0));
+    BOOST_CHECK_EQUAL(pool.GetMinFee(pool.DynamicMemoryUsage() * 5 / 2).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + incremental_relay_fee)/4.0));
     // ... with a 1/2 halflife when mempool is < 1/2 its target size
 
     clock += HALFLIFE / 4;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(pool.DynamicMemoryUsage() * 9 / 2).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE)/8.0));
+    BOOST_CHECK_EQUAL(pool.GetMinFee(pool.DynamicMemoryUsage() * 9 / 2).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + incremental_relay_fee)/8.0));
     // ... with a 1/4 halflife when mempool is < 1/4 its target size
 
     clock += 5 * HALFLIFE;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), DEFAULT_INCREMENTAL_RELAY_FEE);
+    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), incremental_relay_fee);
     // ... but feerate should never drop below DEFAULT_INCREMENTAL_RELAY_FEE
 
     clock += HALFLIFE;

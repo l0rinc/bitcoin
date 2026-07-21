@@ -96,7 +96,7 @@ class FeatureIndexPruneTest(BitcoinTestFramework):
 
         self.log.info("prune some blocks")
         for node in self.nodes[:2]:
-            with node.assert_debug_log(['limited pruning to height 689']):
+            with node.assert_debug_log(['Prune: UnlinkPrunedFiles deleted blk/rev (00000)']):
                 pruneheight_new = node.pruneblockchain(400)
                 # the prune heights used here and below are magic numbers that are determined by the
                 # thresholds at which block files wrap, so they depend on disk serialization and default block file size.
@@ -152,8 +152,8 @@ class FeatureIndexPruneTest(BitcoinTestFramework):
             self.stop_node(i)
 
         self.log.info("make sure we get an init error when starting the nodes again with the indices")
-        filter_msg = "Error: basic block filter index best block of the index goes beyond pruned data (including undo data). Please disable the index or reindex (which will download the whole blockchain again)"
-        stats_msg = "Error: coinstatsindex best block of the index goes beyond pruned data (including undo data). Please disable the index or reindex (which will download the whole blockchain again)"
+        filter_msg = f"Error: Index \"basic block filter index\" needs block data (including undo data) that has been pruned.{os.linesep}Restart with -reindex to rebuild (re-downloading the entire blockchain), or remove \"basic\" from -blockfilterindex to disable."
+        stats_msg = f"Error: Index \"coinstatsindex\" needs block data (including undo data) that has been pruned.{os.linesep}Restart with -reindex to rebuild (re-downloading the entire blockchain), or set -coinstatsindex=0 to disable."
         end_msg = f"{os.linesep}Error: A fatal internal error occurred, see debug.log for details: Failed to start indexes, shutting down…"
         for i, msg in enumerate([filter_msg, stats_msg, filter_msg]):
             self.nodes[i].assert_start_raises_init_error(extra_args=self.extra_args[i], expected_msg=msg+end_msg)
@@ -193,7 +193,7 @@ class FeatureIndexPruneTest(BitcoinTestFramework):
         self.sync_index(height=2500)
 
         for node in self.nodes[:2]:
-            with node.assert_debug_log(['limited pruning to height 2489']):
+            with node.assert_debug_log(['Prune: UnlinkPrunedFiles deleted blk/rev (00007)']):
                 pruneheight_new = node.pruneblockchain(2500)
                 assert_equal(pruneheight_new, 2013)
 

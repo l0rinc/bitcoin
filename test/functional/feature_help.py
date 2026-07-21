@@ -42,6 +42,12 @@ class HelpTest(BitcoinTestFramework):
         assert b'Options' in output
         self.log.info(f"Help text received: {output[0:60]} (...)")
 
+        self.log.info("Start bitcoin with negated help options to make sure it does not start")
+        for arg, option in [('-nohelp', '-help'), ('-noh', '-h'), ('-no?', '-?')]:
+            self.nodes[0].start(extra_args=[arg])
+            _, output = self.get_node_output(ret_code_expected=1)
+            assert f'Negating of {option} is meaningless and therefore forbidden'.encode() in output
+
         self.log.info("Start bitcoin with -version for version information")
         self.nodes[0].start(extra_args=['-version'])
         # Node should exit immediately and output version to stdout.

@@ -149,10 +149,12 @@ class AssumeValidTest(BitcoinTestFramework):
             p2p0.send_and_ping(msg_block(self.blocks[0]))
         with self.nodes[0].assert_debug_log(expected_msgs=[
             "Block validation error: block-script-verify-flag-failed",
+            "got DoS score 100 on invalid block; tolerating",
         ]):
             for i in range(1, 103):
                 p2p0.send_without_ping(msg_block(self.blocks[i]))
-            p2p0.wait_for_disconnect()
+            p2p0.sync_with_ping()
+            assert p2p0.is_connected
             assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
             assert_equal(next(filter(lambda x: x["hash"] == self.blocks[-1].hash_hex, self.nodes[0].getchaintips()))["status"], "invalid")
 
@@ -184,10 +186,12 @@ class AssumeValidTest(BitcoinTestFramework):
             p2p2.send_and_ping(msg_block(self.blocks[0]))
         with self.nodes[2].assert_debug_log(expected_msgs=[
             "Block validation error: block-script-verify-flag-failed",
+            "got DoS score 100 on invalid block; tolerating",
         ]):
             for i in range(1, 103):
                 p2p2.send_without_ping(msg_block(self.blocks[i]))
-            p2p2.wait_for_disconnect()
+            p2p2.sync_with_ping()
+            assert p2p2.is_connected
             assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
             assert_equal(next(filter(lambda x: x["hash"] == self.blocks[199].hash_hex, self.nodes[2].getchaintips()))["status"], "invalid")
 

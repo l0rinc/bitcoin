@@ -7,7 +7,15 @@
 #include <hash.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
+#include <util/hasher.h>
 #include <util/strencodings.h>
+
+#include <array>
+#ifdef __GLIBCXX__
+#include <bits/functional_hash.h>
+#endif
+
+#include <type_traits>
 
 #include <boost/test/unit_test.hpp>
 
@@ -44,6 +52,16 @@ BOOST_AUTO_TEST_CASE(murmurhash3)
     T(0xb4698defU, 0x00000000, "001122334455667788");
 
 #undef T
+}
+
+BOOST_AUTO_TEST_CASE(salted_outpoint_hasher_cache_policy)
+{
+    constexpr bool nothrow_invocable{std::is_nothrow_invocable_v<const SaltedOutpointHasher&, const COutPoint&>};
+    BOOST_CHECK(!nothrow_invocable);
+#ifdef __GLIBCXX__
+    // With a fast hasher, the may-throw contract above selects cached hash nodes on libstdc++.
+    BOOST_CHECK(std::__is_fast_hash<SaltedOutpointHasher>::value);
+#endif
 }
 
 /*
@@ -120,6 +138,28 @@ BOOST_AUTO_TEST_CASE(siphash)
         BOOST_CHECK_EQUAL(hasher3.Finalize(), siphash_4_2_testvec[x]);
         hasher3.Write(uint64_t(x)|(uint64_t(x+1)<<8)|(uint64_t(x+2)<<16)|(uint64_t(x+3)<<24)|
                      (uint64_t(x+4)<<32)|(uint64_t(x+5)<<40)|(uint64_t(x+6)<<48)|(uint64_t(x+7)<<56));
+    }
+
+    std::array<unsigned char, 128> split_data;
+    for (size_t i{0}; i < split_data.size(); ++i) {
+        split_data[i] = static_cast<unsigned char>(i);
+    }
+    for (size_t len{0}; len <= split_data.size(); ++len) {
+        const auto message{std::span{split_data}.first(len)};
+        const uint64_t expected{CSipHasher(0x0706050403020100ULL, 0x0F0E0D0C0B0A0908ULL).Write(message).Finalize()};
+
+        CSipHasher bytewise{0x0706050403020100ULL, 0x0F0E0D0C0B0A0908ULL};
+        for (size_t i{0}; i < message.size(); ++i) {
+            bytewise.Write(message.subspan(i, 1));
+        }
+        BOOST_CHECK_EQUAL(bytewise.Finalize(), expected);
+
+        for (size_t split{0}; split <= message.size(); ++split) {
+            CSipHasher split_hasher{0x0706050403020100ULL, 0x0F0E0D0C0B0A0908ULL};
+            split_hasher.Write(message.first(split));
+            split_hasher.Write(message.subspan(split));
+            BOOST_CHECK_EQUAL(split_hasher.Finalize(), expected);
+        }
     }
 
     HashWriter ss{};

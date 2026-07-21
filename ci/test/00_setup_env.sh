@@ -32,6 +32,8 @@ source "${FILE_ENV}"
 echo "Fallback to default values in env (if not yet set)"
 # The number of parallel jobs to pass down to make and test_runner.py
 export MAKEJOBS=${MAKEJOBS:--j$(if command -v nproc > /dev/null 2>&1; then nproc; else sysctl -n hw.logicalcpu; fi)}
+# Whether to prefer BusyBox over GNU utilities
+export USE_BUSY_BOX=${USE_BUSY_BOX:-false}
 
 export RUN_UNIT_TESTS=${RUN_UNIT_TESTS:-true}
 export RUN_FUNCTIONAL_TESTS=${RUN_FUNCTIONAL_TESTS:-true}
@@ -58,7 +60,7 @@ export BASE_OUTDIR=${BASE_OUTDIR:-$BASE_SCRATCH_DIR/out}
 # The folder for previous release binaries.
 # This folder exists only on the ci guest, and on the ci host as a volume.
 export PREVIOUS_RELEASES_DIR=${PREVIOUS_RELEASES_DIR:-$BASE_ROOT_DIR/prev_releases}
-export CI_BASE_PACKAGES=${CI_BASE_PACKAGES:-build-essential pkgconf curl ca-certificates ccache python3-dev rsync git procps bison e2fsprogs cmake ninja-build}
+export CI_BASE_PACKAGES=${CI_BASE_PACKAGES:-build-essential pkgconf curl ca-certificates ccache python3-dev rsync git procps bison e2fsprogs cmake ninja-build icnsutils librsvg2-bin imagemagick}
 export GOAL=${GOAL:-install}
 export DIR_QA_ASSETS=${DIR_QA_ASSETS:-${BASE_SCRATCH_DIR}/qa-assets}
 export CI_RETRY_EXE=${CI_RETRY_EXE:-"retry"}

@@ -8,7 +8,7 @@
 #include <consensus/amount.h>
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
-#include <node/types.h>
+#include <key_io.h>
 #include <policy/fees/block_policy_estimator.h>
 #include <primitives/transaction.h>
 #include <rpc/server.h>
@@ -21,6 +21,7 @@
 #include <util/ui_change_type.h>
 #include <wallet/coincontrol.h>
 #include <wallet/context.h>
+#include <wallet/dump.h>
 #include <wallet/feebumper.h>
 #include <wallet/fees.h>
 #include <wallet/load.h>
@@ -30,6 +31,7 @@
 #include <wallet/wallet.h>
 
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -47,6 +49,16 @@ using interfaces::WalletMigrationResult;
 using interfaces::WalletTx;
 using interfaces::WalletTxOut;
 using interfaces::WalletTxStatus;
+
+std::set<CScript> AddressesToKeys(std::vector<std::string> addresses)
+{
+    std::set<CScript> keys;
+    for (const auto& address : addresses) {
+        CScript scriptPubKey = GetScriptForDestination(DecodeDestination(address));
+        keys.insert(scriptPubKey);
+    }
+    return keys;
+}
 
 namespace wallet {
 // All members of the classes in this namespace are intentionally public, as the
@@ -70,7 +82,7 @@ WalletTx MakeWalletTx(CWallet& wallet, const CWalletTx& wtx)
         result.txout_is_change.push_back(OutputIsChange(wallet, txout));
         result.txout_address.emplace_back();
         result.txout_address_is_mine.emplace_back(ExtractDestination(txout.scriptPubKey, result.txout_address.back()) ?
-                                                      wallet.IsMine(result.txout_address.back()) :
+                                                      bool(wallet.IsMine(result.txout_address.back()) & ISMINE_SPENDABLE) :
                                                       false);
     }
     result.credit = CachedTxGetCredit(wallet, wtx, /*avoid_reuse=*/true);
@@ -104,6 +116,7 @@ WalletTxStatus MakeWalletTxStatus(const CWallet& wallet, const CWalletTx& wtx)
     result.is_abandoned = wtx.isAbandoned();
     result.is_coinbase = wtx.IsCoinBase();
     result.is_in_main_chain = wtx.isConfirmed();
+    result.is_assumed = wallet.IsTxAssumed(wtx);
     return result;
 }
 
@@ -151,7 +164,18 @@ public:
         return m_wallet->ChangeWalletPassphrase(old_wallet_passphrase, new_wallet_passphrase);
     }
     void abortRescan() override { m_wallet->AbortRescan(); }
-    bool backupWallet(const std::string& filename) override { return m_wallet->BackupWallet(filename); }
+    bool canBackupToDbDump() override {
+        return (m_wallet->GetDatabase().Format() != "bdb");
+    }
+    bool backupWallet(const std::string& filename, const WalletBackupFormat format, bilingual_str& error) override {
+        switch (format) {
+            case WalletBackupFormat::DbDump:
+                return DumpWallet(m_wallet->GetDatabase(), error, filename);
+            case WalletBackupFormat::Raw:
+                return m_wallet->BackupWallet(filename);
+        }
+        return false;
+    }
     std::string getWalletName() override { return m_wallet->GetName(); }
     util::Result<CTxDestination> getNewDestination(const OutputType type, const std::string& label) override
     {
@@ -166,15 +190,23 @@ public:
         }
         return false;
     }
-    SigningResult signMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) override
+    SigningResult signMessage(const MessageSignatureFormat format, const std::string& message, const CTxDestination& address, std::string& str_sig) override
     {
-        return m_wallet->SignMessage(message, pkhash, str_sig);
+        return m_wallet->SignMessage(format, message, address, str_sig);
     }
     bool isSpendable(const CTxDestination& dest) override
     {
         LOCK(m_wallet->cs_wallet);
         return m_wallet->IsMine(dest);
     }
+    bool haveWatchOnly() override
+    {
+        auto spk_man = m_wallet->GetLegacyScriptPubKeyMan();
+        if (spk_man) {
+            return spk_man->HaveWatchOnly();
+        }
+        return false;
+    };
     bool setAddressBook(const CTxDestination& dest, const std::string& name, const std::optional<AddressPurpose>& purpose) override
     {
         return m_wallet->SetAddressBook(dest, name, purpose);
@@ -237,6 +269,23 @@ public:
     {
         LOCK(m_wallet->cs_wallet);
         return m_wallet->DisplayAddress(dest);
+    }
+    bool checkAddressForUsage(const std::vector<std::string>& addresses) const override
+    {
+        LOCK(m_wallet->cs_wallet);
+        return m_wallet->FindScriptPubKeyUsed(AddressesToKeys(addresses));
+    }
+    bool findAddressUsage(const std::vector<std::string>& addresses, std::function<void(const std::string&, const WalletTx&, uint32_t)> callback) const override
+    {
+        LOCK(m_wallet->cs_wallet);
+        return m_wallet->FindScriptPubKeyUsed(AddressesToKeys(addresses), [&callback, this](const CWalletTx& wtx, uint32_t output_index){
+            CTxDestination dest;
+            bool success = ExtractDestination(wtx.tx->vout[output_index].scriptPubKey, dest);
+            assert(success);  // It shouldn't be possible to end up here with anything unrecognised
+            std::string address = EncodeDestination(dest);
+            WalletTx interface_wtx = MakeWalletTx(*m_wallet, wtx);
+            callback(address, interface_wtx, output_index);
+        });
     }
     bool lockCoin(const COutPoint& output, const bool write_to_db) override
     {
@@ -381,6 +430,12 @@ public:
         result.immature_balance = bal.m_mine_immature;
         result.used_balance = bal.m_mine_used;
         result.nonmempool_balance = bal.m_mine_nonmempool;
+        result.have_watch_only = haveWatchOnly();
+        if (result.have_watch_only) {
+            result.watch_only_balance = bal.m_watchonly_trusted;
+            result.unconfirmed_watch_only_balance = bal.m_watchonly_untrusted_pending;
+            result.immature_watch_only_balance = bal.m_watchonly_immature;
+        }
         return result;
     }
     bool tryGetBalances(WalletBalances& balances, uint256& block_hash) override
@@ -415,25 +470,25 @@ public:
 
         return total_amount;
     }
-    bool txinIsMine(const CTxIn& txin) override
+    isminetype txinIsMine(const CTxIn& txin) override
     {
         LOCK(m_wallet->cs_wallet);
         return InputIsMine(*m_wallet, txin);
     }
-    bool txoutIsMine(const CTxOut& txout) override
+    isminetype txoutIsMine(const CTxOut& txout) override
     {
         LOCK(m_wallet->cs_wallet);
         return m_wallet->IsMine(txout);
     }
-    CAmount getDebit(const CTxIn& txin) override
+    CAmount getDebit(const CTxIn& txin, isminefilter filter) override
     {
         LOCK(m_wallet->cs_wallet);
-        return m_wallet->GetDebit(txin);
+        return m_wallet->GetDebit(txin, filter);
     }
-    CAmount getCredit(const CTxOut& txout) override
+    CAmount getCredit(const CTxOut& txout, isminefilter filter) override
     {
         LOCK(m_wallet->cs_wallet);
-        return OutputGetCredit(*m_wallet, txout);
+        return OutputGetCredit(*m_wallet, txout, filter);
     }
     CoinsList listCoins() override
     {
@@ -484,6 +539,7 @@ public:
     bool hasExternalSigner() override { return m_wallet->IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER); }
     bool privateKeysDisabled() override { return m_wallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS); }
     bool taprootEnabled() override {
+        if (m_wallet->IsLegacy()) return false;
         auto spk_man = m_wallet->GetScriptPubKeyMan(OutputType::BECH32M, /*internal=*/false);
         return spk_man != nullptr;
     }
@@ -493,6 +549,7 @@ public:
     {
         RemoveWallet(m_context, m_wallet, /*load_on_start=*/false);
     }
+    bool isLegacy() override { return m_wallet->IsLegacy(); }
     std::unique_ptr<Handler> handleUnload(UnloadFn fn) override
     {
         return MakeSignalHandler(m_wallet->NotifyUnload.connect(fn));
@@ -516,6 +573,10 @@ public:
         return MakeSignalHandler(m_wallet->NotifyTransactionChanged.connect(
             [fn](const Txid& txid, ChangeType status) { fn(txid, status); }));
     }
+    std::unique_ptr<Handler> handleWatchOnlyChanged(WatchOnlyChangedFn fn) override
+    {
+        return MakeSignalHandler(m_wallet->NotifyWatchonlyChanged.connect(fn));
+    }
     std::unique_ptr<Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn fn) override
     {
         return MakeSignalHandler(m_wallet->NotifyCanGetAddressesChanged.connect(fn));
@@ -536,13 +597,18 @@ public:
     }
     ~WalletLoaderImpl() override { stop(); }
 
+    //! HACK to workaround libc++ bugs (assigning from other locations such as sweepprivkeys breaks std::any_cast type checking); see also https://github.com/llvm/llvm-project/issues/55684
+    void assignContextHACK(std::any& a) override
+    {
+        a = &m_context;
+    }
     //! ChainClient methods
     void registerRpcs() override
     {
         for (const CRPCCommand& command : GetWalletRPCCommands()) {
             m_rpc_commands.emplace_back(command.category, command.name, [this, &command](const JSONRPCRequest& request, UniValue& result, bool last_handler) {
                 JSONRPCRequest wallet_request = request;
-                wallet_request.context = &m_context;
+                assignContextHACK(wallet_request.context);
                 return command.actor(wallet_request, result, last_handler);
             }, command.argNames, command.unique_id);
             m_rpc_handlers.emplace_back(m_context.chain->handleRpc(m_rpc_commands.back()));

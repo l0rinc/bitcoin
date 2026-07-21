@@ -60,6 +60,8 @@ NODE_WITNESS = (1 << 3)
 NODE_COMPACT_FILTERS = (1 << 6)
 NODE_NETWORK_LIMITED = (1 << 10)
 NODE_P2P_V2 = (1 << 11)
+NODE_REPLACE_BY_FEE = (1 << 26)
+NODE_REDUCED_DATA = (1 << 27)
 
 MSG_TX = 1
 MSG_BLOCK = 2
@@ -69,6 +71,7 @@ MSG_WTX = 5
 MSG_WITNESS_FLAG = 1 << 30
 MSG_TYPE_MASK = 0xffffffff >> 2
 MSG_WITNESS_TX = MSG_TX | MSG_WITNESS_FLAG
+MSG_FILTERED_WITNESS_BLOCK = MSG_FILTERED_BLOCK | MSG_WITNESS_FLAG
 
 FILTER_TYPE_BASIC = 0
 
@@ -79,8 +82,8 @@ DEFAULT_DESCENDANT_LIMIT = 25  # default max number of in-mempool descendants
 DEFAULT_CLUSTER_LIMIT = 64     # default max number of transactions in a cluster
 
 
-# Default setting for -datacarriersize.
-MAX_OP_RETURN_RELAY = 100_000
+# Default setting for -datacarriersize. 80 bytes of data, +1 for OP_RETURN, +2 for the pushdata opcodes.
+MAX_OP_RETURN_RELAY = 83
 
 
 DEFAULT_MEMPOOL_EXPIRY_HOURS = 336  # hours
@@ -90,6 +93,7 @@ TX_MAX_STANDARD_VERSION = 3
 
 MAGIC_BYTES = {
     "mainnet": b"\xf9\xbe\xb4\xd9",
+    "testnet3": b"\x0b\x11\x09\x07",
     "testnet4": b"\x1c\x16\x3f\x28",
     "regtest": b"\xfa\xbf\xb5\xda",
     "signet": b"\x0a\x03\xcf\x40",
@@ -428,6 +432,7 @@ class CInv:
         MSG_TX | MSG_WITNESS_FLAG: "WitnessTx",
         MSG_BLOCK | MSG_WITNESS_FLAG: "WitnessBlock",
         MSG_FILTERED_BLOCK: "filtered Block",
+        MSG_FILTERED_WITNESS_BLOCK: "filtered WitnessBlock",
         MSG_CMPCT_BLOCK: "CompactBlock",
         MSG_WTX: "WTX",
     }
@@ -615,7 +620,7 @@ class CTxWitness:
 
 
 class CTransaction:
-    __slots__ = ("nLockTime", "version", "vin", "vout", "wit")
+    __slots__ = ("hash", "nLockTime", "sha256", "version", "vin", "vout", "wit")
 
     def __init__(self, tx=None):
         if tx is None:
@@ -624,12 +629,16 @@ class CTransaction:
             self.vout = []
             self.wit = CTxWitness()
             self.nLockTime = 0
+            self.sha256 = None
+            self.hash = None
         else:
             self.version = tx.version
             self.vin = copy.deepcopy(tx.vin)
             self.vout = copy.deepcopy(tx.vout)
             self.nLockTime = tx.nLockTime
             self.wit = copy.deepcopy(tx.wit)
+            self.sha256 = tx.sha256
+            self.hash = tx.hash
 
     def deserialize(self, f):
         self.version = int.from_bytes(f.read(4), "little")
@@ -717,6 +726,12 @@ class CTransaction:
         """Return txid (transaction hash without witness) as integer."""
         return uint256_from_str(self.txid)
 
+    def rehash(self):
+        """Compatibility helper for tests that expect mutable tx hash refresh."""
+        self.sha256 = self.txid_int
+        self.hash = self.txid_hex
+        return self.hash
+
     def is_valid(self):
         for tout in self.vout:
             if tout.nValue < 0 or tout.nValue > 21000000 * COIN:
@@ -791,6 +806,20 @@ class CBlockHeader:
     def hash_int(self):
         """Return block header hash as integer."""
         return uint256_from_str(hash256(self._serialize_header()))
+
+    @property
+    def hash(self):
+        """Compatibility alias for the block header hash as hex string."""
+        return self.hash_hex
+
+    @property
+    def sha256(self):
+        """Compatibility alias for the block header hash as integer."""
+        return self.hash_int
+
+    def rehash(self):
+        """Compatibility helper for tests that expect mutable block hash refresh."""
+        return self.hash
 
     def __repr__(self):
         return "CBlockHeader(nVersion=%i hashPrevBlock=%064x hashMerkleRoot=%064x nTime=%s nBits=%08x nNonce=%08x)" \

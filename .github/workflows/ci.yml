@@ -19,6 +19,7 @@ concurrency:
 
 env:
   CI_FAILFAST_TEST_LEAVE_DANGLING: 1  # GHA does not care about dangling processes and setting this variable avoids killing the CI script itself on error
+  MAKEJOBS: '-j10'
 
 defaults:
   run:
@@ -96,7 +97,7 @@ jobs:
           git config user.name "CI"
       - run: |
           sudo apt-get update
-          sudo apt-get install clang mold ccache build-essential cmake ninja-build pkgconf python3-zmq libboost-dev libsqlite3-dev systemtap-sdt-dev libzmq3-dev qt6-base-dev qt6-tools-dev qt6-l10n-tools libqrencode-dev capnproto libcapnp-dev -y
+          sudo apt-get install clang mold ccache build-essential cmake ninja-build pkgconf python3-zmq libboost-dev libsqlite3-dev systemtap-sdt-dev libminiupnpc-dev libzmq3-dev qt6-base-dev qt6-tools-dev qt6-l10n-tools libqrencode-dev capnproto libcapnp-dev -y
           sudo pip3 install --break-system-packages pycapnp
       - name: Compile and run tests
         run: |
@@ -135,8 +136,6 @@ jobs:
       BASE_ROOT_DIR: ${{ github.workspace }}/repo_archive
 
     steps:
-      - *ANNOTATION_PR_NUMBER
-
       - &CHECKOUT
         name: Checkout
         uses: actions/checkout@v6
@@ -159,7 +158,7 @@ jobs:
         run: |
           # A workaround for "The `brew link` step did not complete successfully" error.
           brew install --quiet python@3 || brew link --overwrite python@3
-          brew install --quiet coreutils ninja pkgconf ccache boost zeromq qt@6 qrencode capnp
+          brew install --quiet coreutils ninja pkgconf ccache boost miniupnpc zeromq qt@6 qrencode capnp imagemagick libicns librsvg
 
       - name: Set Ccache directory
         run: echo "CCACHE_DIR=${RUNNER_TEMP}/ccache_dir" >> "$GITHUB_ENV"
@@ -214,13 +213,17 @@ jobs:
             job-name: 'Windows native, fuzz, VS'
 
     steps:
-      - *ANNOTATION_PR_NUMBER
-
       - *CHECKOUT
 
-      - &IMPORT_VS_ENV
-        name: Import Visual Studio env vars
-        run: py -3 .github/ci-windows.py "standard" github_import_vs_env
+      - name: Set up VS Developer Prompt
+        shell: pwsh -Command "$PSVersionTable; $PSNativeCommandUseErrorActionPreference = $true; $ErrorActionPreference = 'Stop'; & '{0}'"
+        run: |
+          $vswherePath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installationPath = & $vswherePath -latest -property installationPath
+          & "${env:COMSPEC}" /s /c "`"$installationPath\Common7\Tools\vsdevcmd.bat`" -arch=x64 -no_logo && set" | foreach-object {
+            $name, $value = $_ -split '=', 2
+            echo "$name=$value" >> $env:GITHUB_ENV
+          }
 
       - name: Get tool information
         run: |
@@ -232,6 +235,11 @@ jobs:
           echo "${VCToolsVersion-}" | tee toolset_version
           py -3 --version
           bash --version
+
+      - name: Apply vcpkg workarounds
+        run: |
+          # Workaround for libevent, which requires CMake 3.1 but is incompatible with CMake >= 4.0.
+          sed -i '1s/^/set(ENV{CMAKE_POLICY_VERSION_MINIMUM} 3.5)\n/' "${VCPKG_INSTALLATION_ROOT}/scripts/ports.cmake"
 
       - name: Restore vcpkg downloads cache
         id: vcpkg-downloads-cache
@@ -289,6 +297,15 @@ jobs:
         run: |
           py -3 .github/ci-windows.py ${{ matrix.job-type }} run_tests
 
+      - name: Run fuzz tests
+        if: matrix.job-type == 'fuzz'
+        working-directory: build
+        env:
+          BITCOINFUZZ: '${{ github.workspace }}\build\bin\Release\fuzz.exe'
+        shell: cmd
+        run: |
+          py -3 test\fuzz\test_runner.py --par %NUMBER_OF_PROCESSORS% --loglevel DEBUG %RUNNER_TEMP%\qa-assets\fuzz_corpora
+
   record-frozen-commit:
     # Record frozen commit, so that the native tests on cross-builds can run on
     # the exact same commit id of the build.
@@ -326,12 +343,7 @@ jobs:
       DANGER_CI_ON_HOST_FOLDERS: 1
 
     steps:
-      - *ANNOTATION_PR_NUMBER
-
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.record-frozen-commit.outputs.commit }}
+      - *CHECKOUT
 
       - name: Configure environment
         uses: ./.github/actions/configure-environment
@@ -445,7 +457,7 @@ jobs:
             file-env: './ci/test/00_setup_env_arm.sh'
             provider: 'gha'
 
-          - name: 'ASan + LSan + UBSan + integer'
+          - name: 'ASan + LSan + UBSan + integer, no depends, USDT'
             warp-runner: 'warp-ubuntu-2404-x64-8x' # has to match container in ci/test/00_setup_env_native_asan.sh for tracing tools
             fallback-runner: 'ubuntu-24.04'
             timeout-minutes: 120
@@ -493,7 +505,7 @@ jobs:
             timeout-minutes: 120
             file-env: './ci/test/00_setup_env_i686_no_ipc.sh'
 
-          - name: 'fuzzer,address,undefined,integer'
+          - name: 'fuzzer,address,undefined,integer, no depends'
             warp-runner: 'warp-ubuntu-latest-x64-16x'
             fallback-runner: 'ubuntu-latest'
             timeout-minutes: 240

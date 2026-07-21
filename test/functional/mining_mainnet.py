@@ -45,6 +45,7 @@ class MiningMainnetTest(BitcoinTestFramework):
         self.num_nodes = 1
         self.setup_clean_chain = True
         self.chain = "" # main
+        self.extra_args = [["-consensusrules=rdts"]] * self.num_nodes
 
     def add_options(self, parser):
         parser.add_argument(
@@ -52,6 +53,8 @@ class MiningMainnetTest(BitcoinTestFramework):
             default='data/mainnet_alt.json',
             help='Block data file (default: %(default)s)',
         )
+
+        self.add_wallet_options(parser)
 
     def mine(self, height, prev_hash, blocks, node):
         self.log.debug(f"height={height}")
@@ -65,12 +68,14 @@ class MiningMainnetTest(BitcoinTestFramework):
         # The alternate mainnet chain was mined with non-timelocked coinbase txs.
         block.vtx[0].nLockTime = 0
         block.vtx[0].vin[0].nSequence = SEQUENCE_FINAL
+        block.vtx[0].rehash()
         block.hashMerkleRoot = block.calc_merkle_root()
+        block.rehash()
         block_hex = block.serialize(with_witness=False).hex()
         self.log.debug(block_hex)
         assert_equal(node.submitblock(block_hex), None)
         prev_hash = node.getbestblockhash()
-        assert_equal(prev_hash, block.hash_hex)
+        assert_equal(prev_hash, block.hash)
         return prev_hash
 
 
@@ -83,7 +88,7 @@ class MiningMainnetTest(BitcoinTestFramework):
         path = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.options.datafile)
         prev_hash = node.getbestblockhash()
         blocks = None
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             blocks = json.load(f)
             n_blocks = len(blocks['timestamps'])
             assert_equal(n_blocks, 2016)
@@ -119,7 +124,5 @@ class MiningMainnetTest(BitcoinTestFramework):
         assert_equal(block_info['difficulty'], 1)
         assert_equal(block_info['bits'], nbits_str(DIFF_1_N_BITS))
         assert_equal(block_info['target'], target_str(DIFF_1_TARGET))
-
-
 if __name__ == '__main__':
     MiningMainnetTest(__file__).main()

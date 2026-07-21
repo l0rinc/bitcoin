@@ -423,7 +423,6 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
     // Read data file and do some very basic sanity checking
     // buckets and bucketMap are not updated yet, so don't access them
     // If there is a read failure, we'll just discard this entire object anyway
-    uint64_t maxConfirms, maxPeriods;
 
     // The current version will store the decay with each individual TxConfirmStats and also keep a scale factor
     filein >> Using<EncodedDoubleFormatter>(decay);
@@ -444,10 +443,9 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
         throw std::runtime_error("Corrupt estimates file. Mismatch in tx count bucket count");
     }
     filein >> Using<VectorFormatter<VectorFormatter<EncodedDoubleFormatter>>>(confAvg);
-    maxPeriods = confAvg.size();
-    maxConfirms = scale * maxPeriods;
+    const size_t maxPeriods = confAvg.size();
 
-    if (maxConfirms <= 0 || maxConfirms > 6 * 24 * 7) { // one week
+    if (maxPeriods == 0 || scale > (6 * 24 * 7) / maxPeriods) { // one week
         throw std::runtime_error("Corrupt estimates file.  Must maintain estimates for between 1 and 1008 (one week) confirms");
     }
     for (unsigned int i = 0; i < maxPeriods; i++) {
@@ -470,6 +468,7 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
     // to match the number of confirms and buckets
     resizeInMemoryCounters(numBuckets);
 
+    const size_t maxConfirms = scale * maxPeriods;
     LogDebug(BCLog::ESTIMATEFEE, "Reading estimates: %u buckets counting confirms up to %u blocks\n",
              numBuckets, maxConfirms);
 }
@@ -616,7 +615,7 @@ void CBlockPolicyEstimator::processTransaction(const NewMempoolTransactionInfo& 
     // - the node is not behind
     // - the transaction is not dependent on any other transactions in the mempool
     // - it's not part of a package.
-    const bool validForFeeEstimation = !tx.m_mempool_limit_bypassed && !tx.m_submitted_in_package && tx.m_chainstate_is_current && tx.m_has_no_mempool_parents;
+    const bool validForFeeEstimation = tx.m_ignore_rejects.empty() && !tx.m_submitted_in_package && tx.m_chainstate_is_current && tx.m_has_no_mempool_parents;
 
     // Only want to be updating estimates when our blockchain is synced,
     // otherwise we'll miscalculate how many blocks its taking to get included.
@@ -960,19 +959,20 @@ void CBlockPolicyEstimator::Flush() {
     FlushFeeEstimates();
 }
 
-void CBlockPolicyEstimator::FlushFeeEstimates()
+bool CBlockPolicyEstimator::FlushFeeEstimates() const
 {
     AutoFile est_file{fsbridge::fopen(m_estimation_filepath, "wb")};
     if (est_file.IsNull() || !Write(est_file)) {
         LogWarning("Failed to write fee estimates to %s. Continue anyway.", fs::PathToString(m_estimation_filepath));
         (void)est_file.fclose();
-        return;
+        return false;
     }
     if (est_file.fclose() != 0) {
         LogWarning("Failed to close fee estimates file %s: %s. Continuing anyway.", fs::PathToString(m_estimation_filepath), SysErrorString(errno));
-        return;
+        return false;
     }
     LogDebug(BCLog::ESTIMATEFEE, "Flushed fee estimates to %s.", fs::PathToString(m_estimation_filepath));
+    return true;
 }
 
 bool CBlockPolicyEstimator::Write(AutoFile& fileout) const

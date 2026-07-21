@@ -97,7 +97,7 @@ The following can be set when running make: `make FOO=bar`
 - `NO_QT`: Don't download/build/cache Qt and its dependencies
 - `NO_QR`: Don't download/build/cache packages needed for enabling qrencode
 - `NO_ZMQ`: Don't download/build/cache packages needed for enabling ZeroMQ
-- `NO_WALLET`: Don't download/build/cache libs needed to enable the wallet (SQLite)
+- `NO_WALLET`: Don't download/build/cache libs needed to enable the wallet (BDB and SQLite)
 - `NO_USDT`: Don't download/build/cache packages needed for enabling USDT tracepoints
 - `NO_IPC`: Don't build Cap’n Proto and libmultiprocess packages. Default on Windows.
 - `DEBUG`: Disable some optimizations and enable more runtime checking
@@ -193,6 +193,51 @@ For linux RISC-V 64-bit cross compilation (there are no packages for 32-bit):
 For linux S390X cross compilation:
 
     sudo apt-get install g++-s390x-linux-gnu binutils-s390x-linux-gnu
+
+### Install the required dependencies: FreeBSD
+
+    pkg install bash cmake curl gmake
+
+### Install the required dependencies: NetBSD
+
+    pkgin install bash cmake curl gmake perl
+
+### Install the required dependencies: OpenBSD
+
+    pkg_add bash cmake curl gmake gtar
+
+### Dependency Options
+
+The following can be set when running make: `make FOO=bar`
+
+- `SOURCES_PATH`: Downloaded sources will be placed here
+- `BASE_CACHE`: Built packages will be placed here
+- `SDK_PATH`: Path where SDKs can be found (used by macOS)
+- `FALLBACK_DOWNLOAD_PATH`: If a source file can't be fetched, try here before giving up
+- `C_STANDARD`: Set the C standard version used. Defaults to `c11`.
+- `CXX_STANDARD`: Set the C++ standard version used. Defaults to `c++20`.
+- `NO_BOOST`: Don't download/build/cache Boost
+- `NO_LIBEVENT`: Don't download/build/cache Libevent
+- `NO_QT`: Don't download/build/cache Qt and its dependencies
+- `NO_QR`: Don't download/build/cache packages needed for enabling qrencode
+- `NO_ZMQ`: Don't download/build/cache packages needed for enabling ZeroMQ
+- `NO_WALLET`: Don't download/build/cache libs needed to enable the wallet
+- `NO_BDB`: Don't download/build/cache BerkeleyDB
+- `NO_SQLITE`: Don't download/build/cache SQLite
+- `NO_UPNP`: Don't download/build/cache packages needed for enabling UPnP
+- `NO_USDT`: Don't download/build/cache packages needed for enabling USDT tracepoints
+- `MULTIPROCESS`: Build libmultiprocess (experimental)
+- `DEBUG`: Disable some optimizations and enable more runtime checking
+- `HOST_ID_SALT`: Optional salt to use when generating host package ids
+- `BUILD_ID_SALT`: Optional salt to use when generating build package ids
+- `LOG`: Use file-based logging for individual packages. During a package build its log file
+  resides in the `depends` directory, and the log file is printed out automatically in case
+  of build error. After successful build log files are moved along with package archives
+- `LTO`: Enable options needed for LTO. Does not add `-flto` related options to *FLAGS.
+- `NO_HARDEN=1`: Don't use hardening options when building packages
+
+If some packages are not built, for example `make NO_WALLET=1`, the appropriate CMake cache
+variables will be set when generating the Bitcoin Core buildsystem. In this case, `-DENABLE_WALLET=OFF`.
 
 ### Additional targets
 

@@ -50,6 +50,7 @@ private:
     [[nodiscard]] bool RevertBlock(const interfaces::BlockInfo& block);
 
     bool AllowPrune() const override { return true; }
+    bilingual_str GetDisableAction() const override { return _("set -coinstatsindex=0"); }
 
 protected:
     bool CustomInit(const std::optional<interfaces::BlockRef>& block) override;

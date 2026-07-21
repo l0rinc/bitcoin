@@ -9,6 +9,8 @@
 #include <common/args.h>
 #include <consensus/params.h>
 #include <deploymentinfo.h>
+#include <kernel/chainparams.h>
+#include <logging.h>
 #include <tinyformat.h>
 #include <util/chaintype.h>
 #include <util/log.h>
@@ -47,8 +49,8 @@ static void HandleDeploymentArgs(const ArgsManager& args, CChainParams::Deployme
 
     for (const std::string& strDeployment : args.GetArgs("-vbparams")) {
         std::vector<std::string> vDeploymentParams = SplitString(strDeployment, ':');
-        if (vDeploymentParams.size() < 3 || 4 < vDeploymentParams.size()) {
-            throw std::runtime_error("Version bits parameters malformed, expecting deployment:start:end[:min_activation_height]");
+        if (vDeploymentParams.size() < 3 || 7 < vDeploymentParams.size()) {
+            throw std::runtime_error("Version bits parameters malformed, expecting deployment:start:end[:min_activation_height[:max_activation_height[:active_duration[:threshold]]]]");
         }
         CChainParams::VersionBitsParameters vbparams{};
         const auto start_time{ToIntegral<int64_t>(vDeploymentParams[1])};
@@ -62,7 +64,7 @@ static void HandleDeploymentArgs(const ArgsManager& args, CChainParams::Deployme
         }
         vbparams.timeout = *timeout;
         if (vDeploymentParams.size() >= 4) {
-            const auto min_activation_height{ToIntegral<int64_t>(vDeploymentParams[3])};
+            const auto min_activation_height{ToIntegral<int32_t>(vDeploymentParams[3])};
             if (!min_activation_height) {
                 throw std::runtime_error(strprintf("Invalid min_activation_height (%s)", vDeploymentParams[3]));
             }
@@ -70,13 +72,40 @@ static void HandleDeploymentArgs(const ArgsManager& args, CChainParams::Deployme
         } else {
             vbparams.min_activation_height = 0;
         }
+        if (vDeploymentParams.size() >= 5) {
+            const auto max_activation_height{ToIntegral<int32_t>(vDeploymentParams[4])};
+            if (!max_activation_height) {
+                throw std::runtime_error(strprintf("Invalid max_activation_height (%s)", vDeploymentParams[4]));
+            }
+            vbparams.max_activation_height = *max_activation_height;
+        }
+        if (vDeploymentParams.size() >= 6) {
+            const auto active_duration{ToIntegral<int32_t>(vDeploymentParams[5])};
+            if (!active_duration) {
+                throw std::runtime_error(strprintf("Invalid active_duration (%s)", vDeploymentParams[5]));
+            }
+            vbparams.active_duration = *active_duration;
+        }
+        if (vDeploymentParams.size() >= 7) {
+            const auto threshold{ToIntegral<uint32_t>(vDeploymentParams[6])};
+            if (!threshold) {
+                throw std::runtime_error(strprintf("Invalid threshold (%s)", vDeploymentParams[6]));
+            }
+            if (*threshold > 0) {
+                vbparams.threshold = *threshold;
+            }
+        }
+        if (vbparams.timeout != Consensus::BIP9Deployment::NO_TIMEOUT && vbparams.max_activation_height < std::numeric_limits<int>::max()) {
+            throw std::runtime_error(strprintf("Cannot specify both timeout (%ld) and max_activation_height (%d) for deployment %s. Use timeout for BIP9 or max_activation_height for mandatory activation deadline, not both.", vbparams.timeout, vbparams.max_activation_height, vDeploymentParams[0]));
+        }
         bool found = false;
         for (int j=0; j < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; ++j) {
             if (vDeploymentParams[0] == VersionBitsDeploymentInfo[j].name) {
                 options.version_bits_parameters[Consensus::DeploymentPos(j)] = vbparams;
                 found = true;
-                LogInfo("Setting version bits activation parameters for %s to start=%ld, timeout=%ld, min_activation_height=%d",
-                        vDeploymentParams[0], vbparams.start_time, vbparams.timeout, vbparams.min_activation_height);
+                const std::string threshold_desc{vbparams.threshold ? strprintf("%u", *vbparams.threshold) : "default"};
+                LogInfo("Setting version bits activation parameters for %s to start=%ld, timeout=%ld, min_activation_height=%d, max_activation_height=%d, active_duration=%d, threshold=%s",
+                        vDeploymentParams[0], vbparams.start_time, vbparams.timeout, vbparams.min_activation_height, vbparams.max_activation_height, vbparams.active_duration, threshold_desc);
                 break;
             }
         }
@@ -112,6 +141,15 @@ void ReadSigNetArgs(const ArgsManager& args, CChainParams::SigNetOptions& option
         }
         options.challenge.emplace(*val);
     }
+    if (const auto signetblocktime{args.GetIntArg("-signetblocktime")}) {
+        if (!args.IsArgSet("-signetchallenge")) {
+            throw std::runtime_error("-signetblocktime cannot be set without -signetchallenge");
+        }
+        if (*signetblocktime <= 0) {
+            throw std::runtime_error("-signetblocktime must be greater than 0");
+        }
+        options.pow_target_spacing = *signetblocktime;
+    }
     HandleDeploymentArgs(args, options.dep_opts);
 }
 
@@ -132,6 +170,17 @@ const CChainParams &Params() {
 
 std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, const ChainType chain)
 {
+    g_rdts_consent = static_cast<RDTSConsentFlag>(args.GetIntArg("rdts_consent_flag", static_cast<int64_t>(g_rdts_consent)));
+    g_enable_rdts = g_rdts_consent != RDTSConsentFlag::UNSUPPORTED_UNSAFE_NO_ENFORCEMENT;
+    if (g_rdts_consent == RDTSConsentFlag::UNSUPPORTED_UNSAFE_NO_ENFORCEMENT && !g_enable_rdts) {
+        for (const auto& rulesok : args.GetArgs(CONSENSUSRULES_CONFIG_NAME)) {
+            if (rulesok == CONSENSUSRULES_REQUIRED) {
+                g_enable_rdts = true;
+                break;
+            }
+        }
+    }
+
     switch (chain) {
     case ChainType::MAIN: {
         auto opts = CChainParams::MainNetOptions{};

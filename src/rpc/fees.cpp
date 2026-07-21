@@ -13,6 +13,7 @@
 #include <rpc/server.h>
 #include <rpc/server_util.h>
 #include <rpc/util.h>
+#include <sync.h>
 #include <txmempool.h>
 #include <univalue.h>
 #include <util/fees.h>
@@ -219,10 +220,37 @@ static RPCMethod estimaterawfee()
     };
 }
 
+static RPCMethod savefeeestimates()
+{
+    return RPCMethod{
+        "savefeeestimates",
+        "Dumps the fee estimates to disk. It will fail until the previous dump is fully loaded.\n",
+        {},
+        RPCResult{RPCResult::Type::NONE, "", ""},
+        RPCExamples{
+            HelpExampleCli("savefeeestimates", "")
+            + HelpExampleRpc("savefeeestimates", "")
+        },
+        [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    static Mutex dump_mutex;
+    LOCK(dump_mutex);
+    CBlockPolicyEstimator& fee_estimator = EnsureAnyFeeEstimator(request.context);
+
+    if (!fee_estimator.FlushFeeEstimates()) {
+        throw JSONRPCError(RPC_MISC_ERROR, "Unable to dump fee estimates to disk");
+    }
+
+    return NullUniValue;
+},
+    };
+}
+
 void RegisterFeeRPCCommands(CRPCTable& t)
 {
     static const CRPCCommand commands[]{
         {"util", &estimatesmartfee},
+        {"util", &savefeeestimates},
         {"hidden", &estimaterawfee},
     };
     for (const auto& c : commands) {

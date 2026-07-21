@@ -39,6 +39,44 @@ git clone https://github.com/bitcoin/bitcoin.git
 
 ### 3. Install Optional Dependencies
 
+#### Wallet Dependencies
+It is not necessary to build wallet functionality to run either `bitcoind` or `bitcoin-qt`.
+
+###### Descriptor Wallet Support
+
+`sqlite3` is required to support [descriptor wallets](descriptors.md).
+Skip if you don't intend to use descriptor wallets.
+```bash
+pkg install sqlite3
+```
+
+###### Legacy Wallet Support
+BerkeleyDB is only required if legacy wallet support is required.
+
+It is required to use Berkeley DB 4.8. You **cannot** use the BerkeleyDB library
+from ports. However, you can build DB 4.8 yourself [using depends](/depends).
+
+```bash
+pkg install gmake
+gmake -C depends NO_BOOST=1 NO_IPC=1 NO_QT=1 NO_SQLITE=1 NO_UPNP=1 NO_ZMQ=1 NO_USDT=1
+```
+
+When the build is complete, the Berkeley DB installation location will be displayed:
+
+```
+to: /path/to/bitcoin/depends/x86_64-unknown-freebsd[release-number]
+```
+
+Finally, set `BDB_PREFIX` to this path according to your shell:
+
+```
+csh: setenv BDB_PREFIX [path displayed above]
+```
+
+```
+sh/bash: export BDB_PREFIX=[path displayed above]
+```
+
 #### GUI Dependencies
 ###### Qt6
 
@@ -46,7 +84,7 @@ Bitcoin Core includes a GUI built with the cross-platform Qt Framework. To compi
 the necessary parts of Qt, the libqrencode and pass `-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
 
 ```bash
-pkg install qt6-base qt6-tools
+pkg install qt6-buildtools qt6-core qt6-gui qt6-linguisttools qt6-testlib qt6-widgets
 ```
 
 ###### libqrencode
@@ -101,5 +139,5 @@ cmake -B build -DENABLE_WALLET=OFF
 
 ```bash
 cmake --build build     # Append "-j N" for N parallel jobs.
-ctest --test-dir build  # Append "-j N" for N parallel tests.
+ctest --test-dir build  # Append "-j N" for N parallel tests. Some tests are disabled if Python 3 is not available.
 ```

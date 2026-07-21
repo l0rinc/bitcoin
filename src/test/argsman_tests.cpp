@@ -13,9 +13,12 @@
 #include <util/strencodings.h>
 
 #include <array>
-#include <optional>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <map>
+#include <optional>
+#include <sstream>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -251,6 +254,22 @@ BOOST_AUTO_TEST_CASE(util_ParseInvalidParameters)
     argv[1] = "-test.registered";
     BOOST_CHECK(!test.ParseParameters(2, argv, error));
     BOOST_CHECK_EQUAL(error, "Invalid parameter -test.registered");
+}
+
+BOOST_AUTO_TEST_CASE(util_ParseNegatedHelpParameters)
+{
+    const auto check_negated_help = [](const char* arg, const char* expected_error) {
+        TestArgsManager test;
+        SetupHelpOptions(test);
+        const char* argv[] = {"ignored", arg};
+        std::string error;
+        BOOST_CHECK(!test.ParseParameters(2, argv, error));
+        BOOST_CHECK_EQUAL(error, expected_error);
+    };
+
+    check_negated_help("-nohelp", "Negating of -help is meaningless and therefore forbidden");
+    check_negated_help("-noh", "Negating of -h is meaningless and therefore forbidden");
+    check_negated_help("-no?", "Negating of -? is meaningless and therefore forbidden");
 }
 
 static void TestParse(const std::string& str, bool expected_bool, int64_t expected_int)
@@ -594,6 +613,152 @@ BOOST_AUTO_TEST_CASE(util_ReadConfigStream)
     BOOST_CHECK(test_args.GetArg("-h", "xxx") == "0");
 }
 
+BOOST_AUTO_TEST_CASE(util_ReadConfigStreamSettingsTarget)
+{
+    TestArgsManager test_args;
+    test_args.SetupArgs({
+        {"-foo", ArgsManager::ALLOW_ANY},
+        {"-bar", ArgsManager::ALLOW_ANY},
+    });
+
+    std::istringstream stream{
+        "foo=alpha\n"
+        "[regtest]\n"
+        "bar=beta\n"};
+    std::string error;
+    std::map<std::string, std::vector<common::SettingsValue>> target;
+
+    BOOST_REQUIRE(test_args.ReadConfigStream(stream, "target.conf", error, false, &target));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_REQUIRE_EQUAL(target.size(), 2);
+    BOOST_REQUIRE_EQUAL(target.at("foo").size(), 1);
+    BOOST_REQUIRE_EQUAL(target.at("bar").size(), 1);
+    BOOST_CHECK_EQUAL(target.at("foo").front().get_str(), "alpha");
+    BOOST_CHECK_EQUAL(target.at("bar").front().get_str(), "beta");
+
+    test_args.LockSettings([&](const common::Settings& settings) {
+        BOOST_CHECK(settings.ro_config.empty());
+    });
+}
+
+BOOST_AUTO_TEST_CASE(util_ModifyRWConfigFileOnArgsManager)
+{
+    TestArgsManager args;
+    args.ForceSetArg("-datadir", fs::PathToString(m_path_root));
+    args.ForceSetArg("-confrw", "test_rw.conf");
+
+    std::string error;
+    BOOST_REQUIRE(args.ReadConfigFiles(error, /*ignore_invalid_keys=*/true));
+    BOOST_CHECK_EQUAL(error, "");
+
+    const fs::path rw_path{args.GetRWConfigFilePath()};
+    fs::path settings_path;
+    BOOST_REQUIRE(args.GetSettingsPath(&settings_path));
+    BOOST_CHECK_EQUAL(settings_path, args.GetDataDirNet() / BITCOIN_SETTINGS_FILENAME);
+
+    args.ModifyRWConfigFile("foo", "bar");
+    {
+        std::ifstream input{rw_path.std_path()};
+        BOOST_REQUIRE(input.good());
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        BOOST_CHECK_EQUAL(buffer.str(), "foo=bar\n");
+    }
+    {
+        TestArgsManager reader;
+        reader.ForceSetArg("-datadir", fs::PathToString(m_path_root));
+        BOOST_REQUIRE(reader.ReadSettingsFile());
+        reader.LockSettings([&](const common::Settings& settings) {
+            BOOST_REQUIRE_EQUAL(settings.rw_settings.count("foo"), 1);
+            BOOST_CHECK_EQUAL(settings.rw_settings.at("foo").get_str(), "bar");
+        });
+    }
+
+    args.ModifyRWConfigFile("foo", "baz");
+    {
+        std::ifstream input{rw_path.std_path()};
+        BOOST_REQUIRE(input.good());
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        BOOST_CHECK_EQUAL(buffer.str(), "foo=baz\n");
+    }
+
+    args.ModifyRWConfigFile("rwonly", "1", /*also_settings_json=*/false);
+    args.LockSettings([&](const common::Settings& settings) {
+        BOOST_REQUIRE_EQUAL(settings.rw_config.count("rwonly"), 1);
+        BOOST_CHECK_EQUAL(settings.rw_config.at("rwonly").front().get_str(), "1");
+        BOOST_CHECK(!settings.rw_settings.contains("rwonly"));
+    });
+    {
+        TestArgsManager reader;
+        reader.ForceSetArg("-datadir", fs::PathToString(m_path_root));
+        BOOST_REQUIRE(reader.ReadSettingsFile());
+        reader.LockSettings([&](const common::Settings& settings) {
+            BOOST_REQUIRE_EQUAL(settings.rw_settings.count("foo"), 1);
+            BOOST_CHECK_EQUAL(settings.rw_settings.at("foo").get_str(), "baz");
+            BOOST_CHECK(!settings.rw_settings.contains("rwonly"));
+        });
+    }
+
+    args.EraseRWConfigFile();
+    fs::path reset_path{rw_path};
+    reset_path += ".reset";
+    BOOST_CHECK(!fs::exists(rw_path));
+    BOOST_CHECK(fs::exists(reset_path));
+
+    TestArgsManager no_settings_args;
+    const fs::path no_settings_datadir{fs::absolute(m_path_root / "no_settings")};
+    fs::create_directories(no_settings_datadir);
+    no_settings_args.ForceSetArg("-datadir", fs::PathToString(no_settings_datadir));
+    no_settings_args.ForceSetArg("-confrw", "test_rw.conf");
+    no_settings_args.ForceSetArgV("-settings", common::SettingsValue{false});
+
+    BOOST_REQUIRE(no_settings_args.ReadConfigFiles(error, /*ignore_invalid_keys=*/true));
+    BOOST_CHECK_EQUAL(error, "");
+    const fs::path no_settings_rw_path{no_settings_args.GetRWConfigFilePath()};
+    BOOST_CHECK(!no_settings_args.GetSettingsPath());
+    no_settings_args.ModifyRWConfigFile("foo", "bar");
+    {
+        std::ifstream input{no_settings_rw_path.std_path()};
+        BOOST_REQUIRE(input.good());
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        BOOST_CHECK_EQUAL(buffer.str(), "foo=bar\n");
+    }
+    BOOST_CHECK(!fs::exists(no_settings_datadir / "settings.json"));
+}
+
+BOOST_AUTO_TEST_CASE(util_RWConfigHasPruneOption)
+{
+    TestArgsManager args;
+    args.SetupArgs({{"-prune", ArgsManager::ALLOW_ANY}});
+    args.ForceSetArg("-datadir", fs::PathToString(m_path_root));
+    args.ForceSetArg("-confrw", "test_prune_rw.conf");
+
+    std::string error;
+    BOOST_REQUIRE(args.ReadConfigFiles(error));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_CHECK(!args.RWConfigHasPruneOption());
+
+    const fs::path rw_path{args.GetRWConfigFilePath()};
+    {
+        std::ofstream output{rw_path.std_path()};
+        output << "prune=1907\n";
+    }
+
+    BOOST_REQUIRE(args.ReadConfigFiles(error));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_CHECK(args.RWConfigHasPruneOption());
+
+    fs::remove(rw_path);
+    BOOST_REQUIRE(args.ReadConfigFiles(error));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_CHECK(!args.RWConfigHasPruneOption());
+
+    args.ModifyRWConfigFile("prune", "1908");
+    BOOST_CHECK(args.RWConfigHasPruneOption());
+}
+
 BOOST_AUTO_TEST_CASE(util_GetArg)
 {
     TestArgsManager testArgs;
@@ -632,6 +797,31 @@ BOOST_AUTO_TEST_CASE(util_GetArg)
     BOOST_CHECK_EQUAL(testArgs.GetArg("pritest2", "default"), "a");
     BOOST_CHECK_EQUAL(testArgs.GetArg("pritest3", "default"), "a");
     BOOST_CHECK_EQUAL(testArgs.GetArg("pritest4", "default"), "b");
+}
+
+BOOST_AUTO_TEST_CASE(util_ForceSetArgInt64)
+{
+    TestArgsManager args;
+    args.ForceSetArg("-value", int64_t{-123});
+    BOOST_CHECK_EQUAL(args.GetArg("-value", "unset"), "-123");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-value", 0), -123);
+}
+
+BOOST_AUTO_TEST_CASE(util_ForceSetArgV)
+{
+    TestArgsManager args;
+
+    args.ForceSetArgV("-bool", common::SettingsValue{false});
+    BOOST_CHECK_EQUAL(args.GetSetting("-bool").write(), "false");
+    BOOST_CHECK_EQUAL(args.GetArg("-bool", "unset"), "0");
+    BOOST_CHECK(!args.GetBoolArg("-bool", true));
+
+    common::SettingsValue number;
+    number.setInt(int64_t{-456});
+    args.ForceSetArgV("-number", number);
+    BOOST_CHECK_EQUAL(args.GetSetting("-number").write(), "-456");
+    BOOST_CHECK_EQUAL(args.GetArg("-number", "unset"), "-456");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-number", 0), -456);
 }
 
 BOOST_AUTO_TEST_CASE(util_AddCommand)

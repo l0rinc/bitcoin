@@ -123,8 +123,8 @@ def check_ELF_CONTROL_FLOW(binary) -> bool:
 
 def check_ELF_FORTIFY(binary) -> bool:
 
-    # bitcoin wrapper does not currently contain any fortified functions
-    if '--monolithic' in binary.strings:
+    # bitcoin-util does not currently contain any fortified functions
+    if any(' bitcoin-util utility version ' in s for s in binary.strings):
         return True
 
     chk_funcs = set()

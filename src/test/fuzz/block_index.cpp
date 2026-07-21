@@ -13,7 +13,7 @@
 #include <util/byte_units.h>
 #include <validation.h>
 
-using kernel::CBlockFileInfo;
+#include <unordered_map>
 
 namespace {
 
@@ -22,7 +22,7 @@ const BasicTestingSetup* g_setup;
 // Hardcoded block hash and nBits to make sure the blocks we store pass the pow check.
 uint256 g_block_hash;
 
-bool operator==(const CBlockFileInfo& a, const CBlockFileInfo& b)
+bool operator==(const kernel::CBlockFileInfo& a, const kernel::CBlockFileInfo& b)
 {
     return a.nBlocks == b.nBlocks &&
         a.nSize == b.nSize &&
@@ -65,13 +65,13 @@ FUZZ_TARGET(block_index, .init = init_block_index)
 
     // Generate a number of block files to be stored in the index.
     int files_count = fuzzed_data_provider.ConsumeIntegralInRange(1, 100);
-    std::vector<std::unique_ptr<CBlockFileInfo>> files;
+    std::vector<std::unique_ptr<kernel::CBlockFileInfo>> files;
     files.reserve(files_count);
-    std::vector<std::pair<int, const CBlockFileInfo*>> files_info;
+    std::vector<std::pair<int, const kernel::CBlockFileInfo*>> files_info;
     files_info.reserve(files_count);
     for (int i = 0; i < files_count; i++) {
-        if (auto file_info = ConsumeDeserializable<CBlockFileInfo>(fuzzed_data_provider)) {
-            files.push_back(std::make_unique<CBlockFileInfo>(std::move(*file_info)));
+        if (auto file_info = ConsumeDeserializable<kernel::CBlockFileInfo>(fuzzed_data_provider)) {
+            files.push_back(std::make_unique<kernel::CBlockFileInfo>(std::move(*file_info)));
             files_info.emplace_back(i, files.back().get());
         } else {
             return;
@@ -92,11 +92,12 @@ FUZZ_TARGET(block_index, .init = init_block_index)
     }
 
     // Store these files and blocks in the block index. It should not fail.
-    block_index.WriteBatchSync(files_info, files_count - 1, blocks_info);
+    const std::unordered_map<std::string, node::PruneLockInfo> prune_locks;
+    block_index.WriteBatchSync(files_info, files_count - 1, blocks_info, prune_locks);
 
     // We should be able to read every block file info we stored. Its value should correspond to
     // what we stored above.
-    CBlockFileInfo info;
+    kernel::CBlockFileInfo info;
     for (const auto& [n, file_info]: files_info) {
         assert(block_index.ReadBlockFileInfo(n, info));
         assert(info == *file_info);

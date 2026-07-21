@@ -843,6 +843,38 @@ class CompactBlocksTest(BitcoinTestFramework):
         msg = msg_cmpctblock(comp_block.to_p2p())
         test_node.send_await_disconnect(msg)
 
+    def test_witness_mutated_blocktxn_response(self, test_node):
+        node = self.nodes[0]
+        utxo = self.utxos.pop()
+
+        block = self.build_block_with_transactions(node, utxo, 5)
+        add_witness_commitment(block)
+        block.solve()
+
+        mutated_coinbase = CTransaction(block.vtx[0])
+        mutated_coinbase.wit.vtxinwit = []
+        assert_equal(mutated_coinbase.txid_hex, block.vtx[0].txid_hex)
+        assert_not_equal(mutated_coinbase.wtxid_hex, block.vtx[0].wtxid_hex)
+
+        comp_block = HeaderAndShortIDs()
+        comp_block.initialize_from_block(block, prefill_list=list(range(1, len(block.vtx))), use_witness=True)
+        test_node.send_without_ping(msg_headers([block]))
+        test_node.wait_for_getdata([block.hash_int], timeout=30)
+        test_node.clear_getblocktxn()
+        test_node.send_and_ping(msg_cmpctblock(comp_block.to_p2p()))
+        self.getblocktxn_expected(test_node, block.hash_int, indices=[0])
+
+        msg = msg_blocktxn()
+        msg.block_transactions = BlockTransactions(block.hash_int, [mutated_coinbase])
+        test_node.send_and_ping(msg)
+        assert_not_equal(node.getbestblockhash(), block.hash_hex)
+        test_node.wait_for_getdata([block.hash_int], timeout=10)
+        assert test_node.last_message["getdata"].inv[0].type in (MSG_BLOCK, MSG_BLOCK | MSG_WITNESS_FLAG)
+
+        test_node.send_and_ping(msg_block(block))
+        assert_equal(node.getbestblockhash(), block.hash_hex)
+        self.utxos.append([block.vtx[-1].txid_int, 0, block.vtx[-1].vout[0].nValue])
+
     # peer generates a block and sends it to node, which makes the peer a
     # candidate for high-bandwidth 'to' (up to 3 peers according to BIP 152)
     def make_peer_hb_to_candidate(self, node, peer):
@@ -1096,11 +1128,10 @@ class CompactBlocksTest(BitcoinTestFramework):
         self.test_end_to_end_block_relay([self.segwit_node, self.additional_segwit_node])
 
         self.log.info("Testing handling of invalid compact blocks...")
-        self.test_invalid_tx_in_compactblock(self.segwit_node)
+        self.test_invalid_tx_in_compactblock(self.outbound_node)
 
-        # The previous test will lead to a disconnection. Reconnect before continuing.
-        self.segwit_node = self.nodes[0].add_p2p_connection(TestP2PConn())
-        self.segwit_node.send_and_ping(msg_sendcmpct())
+        self.log.info("Testing witness-mutated blocktxn fallback...")
+        self.test_witness_mutated_blocktxn_response(self.segwit_node)
 
         self.log.info("Testing handling of multiple blocktxn responses...")
         self.test_multiple_blocktxn_response(self.segwit_node)

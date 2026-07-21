@@ -6,6 +6,7 @@
 #define BITCOIN_QT_WALLETMODEL_H
 
 #include <key.h>
+#include <primitives/transaction.h>
 
 #include <qt/walletmodeltransaction.h>
 
@@ -13,9 +14,11 @@
 #include <primitives/transaction_identifier.h>
 #include <support/allocators/secure.h>
 
+#include <string>
 #include <vector>
 
 #include <QObject>
+#include <QValidator>
 
 enum class OutputType;
 
@@ -81,6 +84,8 @@ public:
 
     // Check address for validity
     bool validateAddress(const QString& address) const;
+    bool checkAddressForUsage(const std::vector<std::string>& addresses) const;
+    bool findAddressUsage(const QStringList& addresses, std::function<void(const QString&, const interfaces::WalletTx&, uint32_t)> callback) const;
 
     // Return status record for SendCoins, contains error id + information
     struct SendCoinsReturn
@@ -162,10 +167,12 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_address_book_changed;
     std::unique_ptr<interfaces::Handler> m_handler_transaction_changed;
     std::unique_ptr<interfaces::Handler> m_handler_show_progress;
+    std::unique_ptr<interfaces::Handler> m_handler_watch_only_changed;
     std::unique_ptr<interfaces::Handler> m_handler_can_get_addrs_changed;
     ClientModel* m_client_model;
     interfaces::Node& m_node;
 
+    bool fHaveWatchOnly{false};
     bool fForceCheckBalanceChanged{false};
 
     // Wallet has an options model for wallet-specific options
@@ -209,6 +216,9 @@ Q_SIGNALS:
     // Show progress dialog e.g. for rescan
     void showProgress(const QString &title, int nProgress);
 
+    // Watch-only address added
+    void notifyWatchonlyChanged(bool fHaveWatchonly);
+
     // Signal that wallet is about to be removed
     void unload();
 
@@ -227,8 +237,22 @@ public Q_SLOTS:
     void updateTransaction();
     /* New, updated or removed address book entry */
     void updateAddressBook(const QString &address, const QString &label, bool isMine, wallet::AddressPurpose purpose, int status);
+    /* Watch-only address added */
+    void updateWatchOnlyFlag(bool fHaveWatchonly);
     /* Current, immature or unconfirmed balance might have changed - emit 'balanceChanged' if so */
     void pollBalanceChanged();
+};
+
+class BitcoinAddressUnusedInWalletValidator : public QValidator
+{
+    Q_OBJECT
+
+    const WalletModel& m_wallet_model;
+
+public:
+    explicit BitcoinAddressUnusedInWalletValidator(const WalletModel&, QObject *parent=nullptr);
+
+    State validate(QString &input, int &pos) const override;
 };
 
 #endif // BITCOIN_QT_WALLETMODEL_H

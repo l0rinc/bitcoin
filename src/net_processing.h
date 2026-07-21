@@ -12,6 +12,7 @@
 #include <node/types.h>
 #include <private_broadcast.h>
 #include <protocol.h>
+#include <threadsafety.h>
 #include <uint256.h>
 #include <util/expected.h>
 #include <validationinterface.h>
@@ -19,6 +20,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -39,9 +41,13 @@ class Warnings;
 
 /** Whether transaction reconciliation protocol should be enabled by default. */
 static constexpr bool DEFAULT_TXRECONCILIATION_ENABLE{false};
+/** Default for -maxorphantx, maximum number of orphan transactions kept in memory */
+static const uint32_t DEFAULT_MAX_ORPHAN_TRANSACTIONS{100};
+static constexpr size_t BLOCK_RECONSTRUCTION_EXTRA_TXN_PER_TXN_SIZE_LIMIT{100000};
+static const size_t DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN_SIZE{10000000};
 /** Default number of non-mempool transactions to keep around for block reconstruction. Includes
     orphan, replaced, and rejected transactions. */
-static const uint32_t DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN{100};
+static const uint32_t DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN{32768};
 static const bool DEFAULT_PEERBLOOMFILTERS = false;
 static const bool DEFAULT_PEERBLOCKFILTERS = false;
 /** Maximum number of outstanding CMPCTBLOCK requests for the same block. */
@@ -51,10 +57,12 @@ static const unsigned int MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK = 3;
 static const unsigned int MAX_HEADERS_RESULTS = 2000;
 /** The compactblocks version we support. See BIP 152. */
 static constexpr uint64_t CMPCTBLOCKS_VERSION{2};
+static constexpr int DEFAULT_MAXSTALEOUTBOUND{8};
 
 struct CNodeStateStats {
     int nSyncHeight = -1;
     int nCommonHeight = -1;
+    int m_starting_height = -1;
     NodeClock::duration m_ping_wait;
     std::vector<int> vHeightInFlight;
     bool m_relay_txs;
@@ -67,6 +75,8 @@ struct CNodeStateStats {
     ServiceFlags their_services;
     int64_t presync_height{-1};
     std::chrono::seconds time_offset{0};
+    NodeSeconds m_last_block_announcement;
+    int m_misbehavior_score{0};
 };
 
 struct PeerManagerInfo {
@@ -83,9 +93,12 @@ public:
         bool ignore_incoming_txs{DEFAULT_BLOCKSONLY};
         //! Whether transaction reconciliation protocol is enabled
         bool reconcile_txs{DEFAULT_TXRECONCILIATION_ENABLE};
+        //! Maximum number of orphan transactions kept in memory.
+        uint32_t max_orphan_txs{DEFAULT_MAX_ORPHAN_TRANSACTIONS};
         //! Number of non-mempool transactions to keep around for block reconstruction. Includes
         //! orphan, replaced, and rejected transactions.
         uint32_t max_extra_txs{DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN};
+        size_t max_extra_txs_size{DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN_SIZE};
         //! Whether all P2P messages are captured to disk
         bool capture_messages{false};
         //! Whether or not the internal RNG behaves deterministically (this is
@@ -96,6 +109,7 @@ public:
         uint32_t max_headers_result{MAX_HEADERS_RESULTS};
         //! Whether private broadcast is used for sending transactions.
         bool private_broadcast{DEFAULT_PRIVATE_BROADCAST};
+        unsigned int maxstaleoutbound{DEFAULT_MAXSTALEOUTBOUND};
     };
 
     static std::unique_ptr<PeerManager> make(CConnman& connman, AddrMan& addrman,
@@ -104,18 +118,20 @@ public:
     virtual ~PeerManager() = default;
 
     /**
-     * Attempt to manually fetch block from a given peer. We must already have the header.
+     * Attempt to manually fetch block from a given peer.
      *
      * @param[in]  peer_id      The peer id
      * @param[in]  block_index  The blockindex
      */
-    virtual util::Expected<void, std::string> FetchBlock(NodeId peer_id, const CBlockIndex& block_index) = 0;
+    util::Expected<void, std::string> FetchBlock(NodeId peer_id, const CBlockIndex& block_index);
+    virtual util::Expected<void, std::string> FetchBlock(NodeId peer_id, const uint256& hash, const CBlockIndex* block_index) = 0;
 
     /** Begin running background tasks, should only be called once */
     virtual void StartScheduledTasks(CScheduler& scheduler) = 0;
 
     /** Get statistics from node state */
     virtual bool GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) const = 0;
+    virtual void LimitOrphanTxSize(uint32_t nMaxOrphans) = 0;
 
     virtual std::vector<node::TxOrphanage::OrphanInfo> GetOrphanTransactions() = 0;
 
@@ -193,6 +209,9 @@ public:
      * we do not have a confirmed set of service flags.
     */
     virtual ServiceFlags GetDesirableServiceFlags(ServiceFlags services) const = 0;
+
+    /** Get number of peers from which we're downloading blocks */
+    virtual int GetNumberOfPeersWithValidatedDownloads() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main) = 0;
 };
 
 #endif // BITCOIN_NET_PROCESSING_H

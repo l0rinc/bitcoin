@@ -11,13 +11,13 @@
 #include <wallet/wallet.h>
 
 namespace wallet {
-bool InputIsMine(const CWallet& wallet, const CTxIn& txin) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
+isminetype InputIsMine(const CWallet& wallet, const CTxIn& txin) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
 
-/** Returns whether all of the inputs belong to the wallet*/
-bool AllInputsMine(const CWallet& wallet, const CTransaction& tx);
+/** Returns whether all of the inputs match the filter. */
+bool AllInputsMine(const CWallet& wallet, const CTransaction& tx, const isminefilter& filter = ISMINE_SPENDABLE);
 
-CAmount OutputGetCredit(const CWallet& wallet, const CTxOut& txout);
-CAmount TxGetCredit(const CWallet& wallet, const CTransaction& tx);
+CAmount OutputGetCredit(const CWallet& wallet, const CTxOut& txout, const isminefilter& filter = ISMINE_SPENDABLE);
+CAmount TxGetCredit(const CWallet& wallet, const CTransaction& tx, const isminefilter& filter = ISMINE_SPENDABLE);
 
 bool ScriptIsChange(const CWallet& wallet, const CScript& script) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
 bool OutputIsChange(const CWallet& wallet, const CTxOut& txout) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
@@ -38,6 +38,7 @@ void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
                         std::list<COutputEntry>& listReceived,
                         std::list<COutputEntry>& listSent,
                         CAmount& nFee,
+                        const isminefilter& filter,
                         bool include_change);
 bool CachedTxIsFromMe(const CWallet& wallet, const CWalletTx& wtx);
 bool CachedTxIsTrusted(const CWallet& wallet, const CWalletTx& wtx, std::set<Txid>& trusted_parents) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
@@ -49,6 +50,9 @@ struct Balance {
     CAmount m_mine_immature{0};          //!< Immature coinbases in the main chain
     CAmount m_mine_used{0};              //!< Trusted/untrusted/immature funds in utxos that have already been spent from (only populated if AVOID REUSE wallet flag is set)
     CAmount m_mine_nonmempool{0};        //!< Coins spent by wallet txs that are not in the mempool
+    CAmount m_watchonly_trusted{0};
+    CAmount m_watchonly_untrusted_pending{0};
+    CAmount m_watchonly_immature{0};
 };
 Balance GetBalance(const CWallet& wallet, int min_depth = 0, bool avoid_reuse = true, bool include_nonmempool = false);
 

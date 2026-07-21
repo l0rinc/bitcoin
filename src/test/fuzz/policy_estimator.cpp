@@ -49,12 +49,13 @@ FUZZ_TARGET(policy_estimator, .init = initialize_policy_estimator)
                     return;
                 }
                 const CTransaction tx{*mtx};
-                const auto entry{ConsumeTxMemPoolEntry(fuzzed_data_provider, tx, current_height)};
+                if (!SanityCheckForConsumeTxMemPoolEntry(tx)) return;
+                const CTxMemPoolEntry& entry = ConsumeTxMemPoolEntry(fuzzed_data_provider, tx);
                 const auto tx_submitted_in_package = fuzzed_data_provider.ConsumeBool();
                 const auto tx_has_mempool_parents = fuzzed_data_provider.ConsumeBool();
                 const auto tx_info = NewMempoolTransactionInfo(entry.GetSharedTx(), entry.GetFee(),
                                                                entry.GetTxSize(), entry.GetHeight(),
-                                                               /*mempool_limit_bypassed=*/false,
+                                                               empty_ignore_rejects,
                                                                tx_submitted_in_package,
                                                                /*chainstate_is_current=*/true,
                                                                tx_has_mempool_parents);
@@ -72,7 +73,8 @@ FUZZ_TARGET(policy_estimator, .init = initialize_policy_estimator)
                         break;
                     }
                     const CTransaction tx{*mtx};
-                    mempool_entries.push_back(ConsumeTxMemPoolEntry(fuzzed_data_provider, tx, current_height));
+                    if (!SanityCheckForConsumeTxMemPoolEntry(tx)) return;
+                    mempool_entries.push_back(ConsumeTxMemPoolEntry(fuzzed_data_provider, tx));
                 }
                 std::vector<RemovedMempoolTransactionInfo> txs;
                 txs.reserve(mempool_entries.size());

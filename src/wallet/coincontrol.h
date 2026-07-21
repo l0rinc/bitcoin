@@ -89,9 +89,13 @@ public:
     std::optional<OutputType> m_change_type;
     //! If false, only safe inputs will be used
     bool m_include_unsafe_inputs = false;
+    //! If true, only segwit inputs are selected
+    bool m_segwit_inputs_only = false;
     //! If true, the selection process can add extra unselected inputs from the wallet
     //! while requires all selected inputs be used
     bool m_allow_other_inputs = true;
+    //! Includes watch-only outputs which are solvable
+    bool fAllowWatchOnly = false;
     //! Override automatic min/max checks on fee, m_feerate must be set if true
     bool fOverrideFeeRate = false;
     //! Override the wallet's fee rate if set

@@ -62,6 +62,7 @@ class FeeFilterTest(BitcoinTestFramework):
         self.test_feefilter_forcerelay()
         self.test_feefilter()
         self.test_feefilter_blocksonly()
+        self.test_feefilter_option()
 
     def test_feefilter_forcerelay(self):
         self.log.info('Check that peers without forcerelay permission (default) get a feefilter message')
@@ -129,6 +130,17 @@ class FeeFilterTest(BitcoinTestFramework):
         feefilter_peer = self.nodes[0].add_p2p_connection(FeefilterConn())
         feefilter_peer.sync_with_ping()
         feefilter_peer.assert_feefilter_received(False)
+
+    def test_feefilter_option(self):
+        self.log.info("Check that -nofeefilter disables sending fee filters")
+        self.restart_node(0, ["-nofeefilter"])
+        feefilter_peer = self.nodes[0].add_p2p_connection(FeefilterConn())
+        feefilter_peer.sync_with_ping()
+        feefilter_peer.assert_feefilter_received(False)
+
+        self.log.info("Check that fee filters are sent again with the default option")
+        self.restart_node(0)
+        self.nodes[0].add_p2p_connection(FeefilterConn()).assert_feefilter_received(True)
 
 
 if __name__ == '__main__':

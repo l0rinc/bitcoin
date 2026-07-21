@@ -115,17 +115,17 @@ class BIP66Test(BitcoinTestFramework):
         # rejected from the mempool for exactly that reason.
         spendtx_txid = spendtx.txid_hex
         spendtx_wtxid = spendtx.wtxid_hex
-        assert_equal(
-            [{
+        expected = {
                 'txid': spendtx_txid,
                 'wtxid': spendtx_wtxid,
                 'allowed': False,
                 'reject-reason': 'mempool-script-verify-flag-failed (Non-canonical DER signature)',
                 'reject-details': 'mempool-script-verify-flag-failed (Non-canonical DER signature), ' +
-                                  f"input 0 of {spendtx_txid} (wtxid {spendtx_wtxid}), spending {coin_txid}:0"
-            }],
-            self.nodes[0].testmempoolaccept(rawtxs=[spendtx.serialize().hex()], maxfeerate=0),
-        )
+                                  f"input 0 of {spendtx_txid} (wtxid {spendtx_wtxid}), spending {coin_txid}:0",
+        }
+        result = self.nodes[0].testmempoolaccept(rawtxs=[spendtx.serialize().hex()], maxfeerate=0)[0]
+        result.pop('usage')
+        assert_equal(result, expected)
 
         # Now we verify that a block with this transaction is also invalid.
         block.vtx.append(spendtx)
@@ -136,6 +136,19 @@ class BIP66Test(BitcoinTestFramework):
             peer.send_and_ping(msg_block(block))
             assert_equal(int(self.nodes[0].getbestblockhash(), 16), tip)
             peer.sync_with_ping()
+
+        self.log.info("Test invalid block script error with script check threads disabled")
+        inline_spendtx = self.create_tx(self.coinbase_txids[1])
+        unDERify(inline_spendtx)
+        inline_block = create_block(tip, height=DERSIG_HEIGHT, ntime=block_time + 1, version=4, txlist=[inline_spendtx])
+        inline_block.solve()
+
+        self.nodes[0].setscriptthreadsenabled(False)
+        with self.nodes[0].assert_debug_log(expected_msgs=['Block validation error: block-script-verify-flag-failed (Non-canonical DER signature)']):
+            peer.send_and_ping(msg_block(inline_block))
+            assert_equal(int(self.nodes[0].getbestblockhash(), 16), tip)
+            peer.sync_with_ping()
+        self.nodes[0].setscriptthreadsenabled(True)
 
         self.log.info("Test that a block with a DERSIG-compliant transaction is accepted")
         block.vtx[1] = self.create_tx(self.coinbase_txids[1])

@@ -19,8 +19,13 @@
 #include <util/fs.h>
 #include <util/time.h>
 #include <util/translation.h>
+#ifdef USE_BDB
+#include <wallet/bdb.h>
+#endif
 #include <wallet/migrate.h>
+#ifdef USE_SQLITE
 #include <wallet/sqlite.h>
+#endif
 #include <wallet/wallet.h>
 
 #include <atomic>
@@ -66,7 +71,12 @@ const std::unordered_set<std::string> LEGACY_TYPES{CRYPTED_KEY, CSCRIPT, DEFAULT
 void LogDBInfo()
 {
     // Add useful DB information here. This will be printed during startup.
+#ifdef USE_SQLITE
     LogInfo("Using SQLite Version %s", SQLiteDatabaseVersion());
+#endif
+#ifdef USE_BDB
+    LogInfo("Using BerkeleyDB version %s", BerkeleyDatabaseVersion());
+#endif
 }
 
 //
@@ -148,6 +158,11 @@ bool WalletBatch::WriteCryptedKey(const CPubKey& vchPubKey,
     return true;
 }
 
+bool WalletBatch::WriteCScript(const uint160& hash, const CScript& script)
+{
+    return WriteIC(std::make_pair(DBKeys::CSCRIPT, hash), script);
+}
+
 bool WalletBatch::WriteMasterKey(unsigned int nID, const CMasterKey& kMasterKey)
 {
     return WriteIC(std::make_pair(DBKeys::MASTER_KEY, nID), kMasterKey, true);
@@ -202,6 +217,25 @@ bool WalletBatch::WriteOrderPosNext(int64_t nOrderPosNext)
     return WriteIC(DBKeys::ORDERPOSNEXT, nOrderPosNext);
 }
 
+bool WalletBatch::ReadPool(int64_t nPool, CKeyPool& keypool)
+{
+    return m_batch->Read(std::make_pair(DBKeys::POOL, nPool), keypool);
+}
+
+bool WalletBatch::WritePool(int64_t nPool, const CKeyPool& keypool)
+{
+    return WriteIC(std::make_pair(DBKeys::POOL, nPool), keypool);
+}
+
+bool WalletBatch::ErasePool(int64_t nPool)
+{
+    return EraseIC(std::make_pair(DBKeys::POOL, nPool));
+}
+
+bool WalletBatch::WriteMinVersion(int nVersion)
+{
+    return WriteIC(DBKeys::MINVERSION, nVersion);
+}
 bool WalletBatch::WriteActiveScriptPubKeyMan(uint8_t type, const uint256& id, bool internal)
 {
     std::string key = internal ? DBKeys::ACTIVEINTERNALSPK : DBKeys::ACTIVEEXTERNALSPK;
@@ -443,11 +477,17 @@ static DBErrors LoadWalletFlags(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIV
             pwallet->WalletLogPrintf("Error reading wallet database: Unknown non-tolerable wallet flags found\n");
             return DBErrors::TOO_NEW;
         }
-        // All wallets must be descriptor wallets unless opened with a bdb_ro db
-        // bdb_ro is only used for legacy to descriptor migration.
-        if (pwallet->GetDatabase().Format() != "bdb_ro" && !pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
-            return DBErrors::LEGACY_WALLET;
-        }
+    }
+    return DBErrors::LOAD_OK;
+}
+
+static DBErrors LoadMinVersion(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+{
+    AssertLockHeld(pwallet->cs_wallet);
+    int nMinVersion = 0;
+    if (batch.Read(DBKeys::MINVERSION, nMinVersion)) {
+        if (nMinVersion > FEATURE_LATEST) return DBErrors::TOO_NEW;
+        pwallet->LoadMinVersion(nMinVersion);
     }
     return DBErrors::LOAD_OK;
 }
@@ -698,6 +738,18 @@ static DBErrors LoadLegacyWalletRecords(CWallet* pwallet, DatabaseBatch& batch, 
     });
     result = std::max(result, watch_meta_res.m_result);
 
+    // Load keypool
+    LoadResult pool_res = LoadRecords(pwallet, batch, DBKeys::POOL,
+        [] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) {
+        int64_t nIndex;
+        key >> nIndex;
+        CKeyPool keypool;
+        value >> keypool;
+        pwallet->GetOrCreateLegacyDataSPKM()->LoadKeyPool(nIndex, keypool);
+        return DBErrors::LOAD_OK;
+    });
+    result = std::max(result, pool_res.m_result);
+
     // Deal with old "wkey" and "defaultkey" records.
     // These are not actually loaded, but we need to check for them
 
@@ -733,6 +785,15 @@ static DBErrors LoadLegacyWalletRecords(CWallet* pwallet, DatabaseBatch& batch, 
         // Only do logging and time first key update if there were no critical errors
         pwallet->WalletLogPrintf("Legacy Wallet Keys: %u plaintext, %u encrypted, %u w/ metadata, %u total.\n",
                key_res.m_records, ckey_res.m_records, keymeta_res.m_records, key_res.m_records + ckey_res.m_records);
+
+        // nTimeFirstKey is only reliable if all keys have metadata
+        if (pwallet->IsLegacy() && (key_res.m_records + ckey_res.m_records + watch_script_res.m_records) != (keymeta_res.m_records + watch_meta_res.m_records)) {
+            auto spk_man = pwallet->GetLegacyScriptPubKeyMan();
+            if (spk_man) {
+                LOCK(spk_man->cs_KeyStore);
+                spk_man->UpdateTimeFirstKey(1);
+            }
+        }
     }
 
     return result;
@@ -1112,6 +1173,8 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
     if (has_last_client) pwallet->WalletLogPrintf("Last client version = %d\n", last_client);
 
     try {
+        if ((result = LoadMinVersion(pwallet, *m_batch)) != DBErrors::LOAD_OK) return result;
+
         // Load wallet flags, so they are known when processing other records.
         // The FLAGS key is absent during wallet creation.
         if ((result = LoadWalletFlags(pwallet, *m_batch)) != DBErrors::LOAD_OK) return result;
@@ -1166,6 +1229,14 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 
     if (any_unordered)
         result = pwallet->ReorderTransactions();
+
+    // Upgrade all of the wallet keymetadata to have the hd master key id
+    // This operation is not atomic, but if it fails, updated entries are still backwards compatible with older software
+    try {
+        pwallet->UpgradeKeyMetadata();
+    } catch (...) {
+        result = DBErrors::CORRUPT;
+    }
 
     // Upgrade all of the descriptor caches to cache the last hardened xpub
     // This operation is not atomic, but if it fails, only new entries are added so it is backwards compatible
@@ -1222,6 +1293,33 @@ bool RunWithinTxn(WalletDatabase& database, std::string_view process_desc, const
     return RunWithinTxn(batch, process_desc, func);
 }
 
+void MaybeCompactWalletDB(WalletContext& context)
+{
+    static std::atomic<bool> fOneThread(false);
+    if (fOneThread.exchange(true)) {
+        return;
+    }
+
+    for (const std::shared_ptr<CWallet>& pwallet : GetWallets(context)) {
+        WalletDatabase& dbh = pwallet->GetDatabase();
+
+        unsigned int nUpdateCounter = dbh.nUpdateCounter;
+
+        if (dbh.nLastSeen != nUpdateCounter) {
+            dbh.nLastSeen = nUpdateCounter;
+            dbh.nLastWalletUpdate = GetTime();
+        }
+
+        if (dbh.nLastFlushed != nUpdateCounter && GetTime() - dbh.nLastWalletUpdate >= 2) {
+            if (dbh.PeriodicFlush()) {
+                dbh.nLastFlushed = nUpdateCounter;
+            }
+        }
+    }
+
+    fOneThread = false;
+}
+
 bool WalletBatch::WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent)
 {
     auto key{std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest), std::string("used")))};
@@ -1243,6 +1341,11 @@ bool WalletBatch::EraseAddressData(const CTxDestination& dest)
     DataStream prefix;
     prefix << DBKeys::DESTDATA << EncodeDestination(dest);
     return m_batch->ErasePrefix(prefix);
+}
+
+bool WalletBatch::WriteHDChain(const CHDChain& chain)
+{
+    return WriteIC(DBKeys::HDCHAIN, chain);
 }
 
 bool WalletBatch::WriteWalletFlags(const uint64_t flags)
@@ -1308,7 +1411,7 @@ std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const Databas
     std::optional<DatabaseFormat> format;
     if (exists) {
         if (IsBDBFile(BDBDataFile(path))) {
-            format = DatabaseFormat::BERKELEY_RO;
+            format = options.require_format == DatabaseFormat::BERKELEY_RO ? DatabaseFormat::BERKELEY_RO : DatabaseFormat::BERKELEY;
         }
         if (IsSQLiteFile(SQLiteDataFile(path))) {
             if (format) {
@@ -1358,11 +1461,27 @@ std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const Databas
     }
 
     if (format == DatabaseFormat::SQLITE) {
+#ifdef USE_SQLITE
         return MakeSQLiteDatabase(path, options, status, error);
+#else
+        error = Untranslated(strprintf("Failed to open database path '%s'. Build does not support SQLite database format.", fs::PathToString(path)));
+        status = DatabaseStatus::FAILED_BAD_FORMAT;
+        return nullptr;
+#endif
     }
 
     if (format == DatabaseFormat::BERKELEY_RO) {
         return MakeBerkeleyRODatabase(path, options, status, error);
+    }
+
+    if (format == DatabaseFormat::BERKELEY || format == DatabaseFormat::BERKELEY_SWAP) {
+#ifdef USE_BDB
+        return MakeBerkeleyDatabase(path, options, status, error);
+#else
+        error = Untranslated(strprintf("Failed to open database path '%s'. Build does not support Berkeley DB database format.", fs::PathToString(path)));
+        status = DatabaseStatus::FAILED_LEGACY_DISABLED;
+        return nullptr;
+#endif
     }
 
     error = Untranslated(STR_INTERNAL_BUG("Could not determine wallet format"));

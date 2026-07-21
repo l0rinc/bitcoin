@@ -107,6 +107,9 @@ class AvoidReuseTest(BitcoinTestFramework):
         assert_equal(sorted(self.nodes[0].getwalletinfo()["flags"]), sorted(["descriptor_wallet", "last_hardened_xpub_cached"]))
         assert_equal(self.nodes[1].getwalletinfo()["avoid_reuse"], True)
         assert_equal(sorted(self.nodes[1].getwalletinfo()["flags"]), sorted(["descriptor_wallet", "last_hardened_xpub_cached", "avoid_reuse"]))
+        assert_raises_rpc_error(-8, 'getbalance avoid_reuse flag is not supported if dummy is set to "*"',
+                                self.nodes[1].getbalance, "*")
+        assert_equal(self.nodes[1].getbalance("*", 0, False, False), self.nodes[1].getbalance(avoid_reuse=False))
 
         self.restart_node(1)
         self.connect_nodes(0, 1)

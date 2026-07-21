@@ -47,6 +47,11 @@ struct BlockCreateOptions {
      */
     std::optional<bool> print_modified_fee{};
     /**
+     * The default reserved size for the fixed-size block header,
+     * transaction count and coinbase transaction.
+     */
+    uint64_t block_reserved_size{DEFAULT_BLOCK_RESERVED_SIZE};
+    /**
      * The default reserved weight for the fixed-size block header,
      * transaction count and coinbase transaction. Minimum: 2000 weight units
      * (MINIMUM_BLOCK_RESERVED_WEIGHT).
@@ -63,6 +68,13 @@ struct BlockCreateOptions {
      * block_reserved_weight leaves no room for non-coinbase transactions.
      */
     std::optional<uint64_t> block_max_weight{};
+    /**
+     * Maximum serialized block size, defaults to -blockmaxsize.
+     *
+     * Providing a value causes the block assembler to account for transaction
+     * serialized sizes in addition to weight.
+     */
+    std::optional<uint64_t> block_max_size{};
     /**
      * The maximum additional sigops which the pool will add in coinbase
      * transaction outputs.
@@ -89,6 +101,10 @@ struct BlockCreateOptions {
      * Should only be disabled for tests / benchmarks.
      */
     bool test_block_validity{true};
+
+    BlockCreateOptions Clamped() const;
+
+    friend bool operator==(const BlockCreateOptions& a, const BlockCreateOptions& b) noexcept = default;
 };
 
 struct BlockWaitOptions {

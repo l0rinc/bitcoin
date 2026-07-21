@@ -6,6 +6,7 @@
     "boost-multi-index"
   ],
   "default-features": [
+    "miniupnpc",
     "qt",
     "tests",
     "wallet",
@@ -30,6 +31,12 @@
         "libqrencode"
       ]
     },
+    "miniupnpc": {
+      "description": "Enable UPnP port mapping",
+      "dependencies": [
+        "miniupnpc"
+      ]
+    },
     "tests": {
       "description": "Build test_bitcoin.exe executable",
       "dependencies": [
@@ -48,5 +55,11 @@
         "zeromq"
       ]
     }
-  }
+  },
+  "overrides": [
+    {
+      "name": "miniupnpc",
+      "version": "2.3.2"
+    }
+  ]
 }

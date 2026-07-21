@@ -133,7 +133,7 @@ BOOST_AUTO_TEST_CASE(rpc_namedonlyparams)
 
     // Make sure options object specified through args array conflicts.
     BOOST_CHECK_EXCEPTION(TransformParams(JSON(R"({"args": [1, 2, {"opt1": 10}], "opt2": 20})"), arg_names), UniValue,
-                          HasJSON(R"({"code":-8,"message":"Parameter options specified twice both as positional and named argument"})"));
+                          HasJSON(R"({"code":-8,"message":"Cannot specify both 'options' and named parameter opt2"})"));
 }
 
 BOOST_AUTO_TEST_CASE(rpc_rawparams)
@@ -314,6 +314,17 @@ BOOST_AUTO_TEST_CASE(rpc_parse_monetary_values)
     BOOST_CHECK_THROW(AmountFromValue(ValueFromString("93e+9")), UniValue); //overflow error
 }
 
+BOOST_AUTO_TEST_CASE(rpc_parse_fee_rate_values)
+{
+    // Test ValueFromFeeRate() and CFeeRate()
+    // ...using default CFeeRate constructor
+    BOOST_CHECK_EQUAL(ValueFromFeeRate(CFeeRate(AmountFromValue(0.00001234))).get_real(), 1.234);
+    BOOST_CHECK_EQUAL(ValueFromFeeRate(CFeeRate(AmountFromValue(0.1234))).get_real(), 12340.000);
+    BOOST_CHECK_EQUAL(ValueFromFeeRate(CFeeRate(AmountFromValue(1234))).get_real(), 123400000.000);
+    // ...using CFeeRate constructor with bytes 1000
+    BOOST_CHECK_EQUAL(ValueFromFeeRate(CFeeRate(AmountFromValue(0.00001234), 1000)).get_real(), 1.234);
+}
+
 BOOST_AUTO_TEST_CASE(rpc_ban)
 {
     BOOST_CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
@@ -424,6 +435,26 @@ BOOST_AUTO_TEST_CASE(rpc_convert_values_generatetoaddress)
     BOOST_CHECK_EQUAL(result[0].getInt<int>(), 1);
     BOOST_CHECK_EQUAL(result[1].get_str(), "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU");
     BOOST_CHECK_EQUAL(result[2].getInt<int>(), 9);
+}
+
+BOOST_AUTO_TEST_CASE(rpc_convert_values_dumptxoutset)
+{
+    UniValue result;
+
+    BOOST_CHECK_NO_THROW(result = RPCConvertValues("dumptxoutset", {"utxo.dat", R"(["txid","vout"])", "false", ":"}));
+    BOOST_CHECK_EQUAL(result[0].get_str(), "utxo.dat");
+    BOOST_REQUIRE(result[1].isArray());
+    BOOST_CHECK_EQUAL(result[1][0].get_str(), "txid");
+    BOOST_CHECK_EQUAL(result[1][1].get_str(), "vout");
+    BOOST_CHECK(!result[2].get_bool());
+    BOOST_CHECK_EQUAL(result[3].get_str(), ":");
+
+    BOOST_CHECK_NO_THROW(result = RPCConvertNamedValues("dumptxoutset", {"path=utxo.dat", R"(format=["txid"])", "show_header=false", "separator=:"}));
+    BOOST_CHECK_EQUAL(result.find_value("path").get_str(), "utxo.dat");
+    BOOST_REQUIRE(result.find_value("format").isArray());
+    BOOST_CHECK_EQUAL(result.find_value("format")[0].get_str(), "txid");
+    BOOST_CHECK(!result.find_value("show_header").get_bool());
+    BOOST_CHECK_EQUAL(result.find_value("separator").get_str(), ":");
 }
 
 BOOST_AUTO_TEST_CASE(rpc_getblockstats_calculate_percentiles_by_weight)
@@ -613,7 +644,7 @@ BOOST_AUTO_TEST_CASE(rpc_arg_helper)
         {"req_str", RPCArg::Type::STR, RPCArg::Optional::NO, ""},
         // Default arg
         {"def_uint64_t", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_UINT64_T}, ""},
-        {"def_string", RPCArg::Type::STR, RPCArg::Default{DEFAULT_STRING}, ""},
+        {"def_string|def_string_legacy", RPCArg::Type::STR, RPCArg::Default{DEFAULT_STRING}, ""},
         {"def_bool", RPCArg::Type::BOOL, RPCArg::Default{DEFAULT_BOOL}, ""},
         // Optional arg without default
         {"opt_double", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, ""},

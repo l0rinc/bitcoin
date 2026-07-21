@@ -19,6 +19,7 @@ std::string StateName(ThresholdState state)
     case LOCKED_IN: return "locked_in";
     case ACTIVE: return "active";
     case FAILED: return "failed";
+    case EXPIRED: return "expired";
     }
     return "invalid";
 }
@@ -28,6 +29,8 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex*
     int nPeriod = Period();
     int nThreshold = Threshold();
     int min_activation_height = MinActivationHeight();
+    int max_activation_height = MaxActivationHeight();
+    int active_duration = ActiveDuration();
     int64_t nTimeStart = BeginTime();
     int64_t nTimeTimeout = EndTime();
 
@@ -67,6 +70,23 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex*
     assert(cache.contains(pindexPrev));
     ThresholdState state = cache[pindexPrev];
 
+    // Everything is already cached. Return immediately.
+    if (vToCompute.empty()) {
+        return state;
+    }
+
+    // For temporary deployments, we need to know when ACTIVE started to determine the
+    // ACTIVE -> EXPIRED transition. We get this by calling GetStateSinceHeightFor, which
+    // internally calls GetStateFor on earlier periods. Those calls could recurse back here
+    // and call GetStateSinceHeightFor again, but the early return above prevents this:
+    // the walk-back above guarantees all periods before pindexPrev are already cached,
+    // and GetStateSinceHeightFor only walks backwards, so its GetStateFor calls always hit
+    // the cache, have empty vToCompute, and return immediately via the early return.
+    int activation_height = 0;
+    if (state == ThresholdState::ACTIVE && active_duration < std::numeric_limits<int>::max()) {
+        activation_height = GetStateSinceHeightFor(pindexPrev, cache);
+    }
+
     // Now walk forward and compute the state of descendants of pindexPrev
     while (!vToCompute.empty()) {
         ThresholdState stateNext = state;
@@ -91,8 +111,15 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex*
                     pindexCount = pindexCount->pprev;
                 }
                 if (count >= nThreshold) {
+                    // Normal BIP9 activation via signaling
+                    stateNext = ThresholdState::LOCKED_IN;
+                } else if (max_activation_height < std::numeric_limits<int>::max() && pindexPrev->nHeight + 1 >= max_activation_height - nPeriod) {
+                    // Force LOCKED_IN one period before max_activation_height
+                    // This ensures activation happens AT max_activation_height (not one period later)
+                    // Overrides timeout to guarantee activation
                     stateNext = ThresholdState::LOCKED_IN;
                 } else if (pindexPrev->GetMedianTimePast() >= nTimeTimeout) {
+                    // Timeout without activation
                     stateNext = ThresholdState::FAILED;
                 }
                 break;
@@ -101,11 +128,21 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex*
                 // Progresses into ACTIVE provided activation height will have been reached.
                 if (pindexPrev->nHeight + 1 >= min_activation_height) {
                     stateNext = ThresholdState::ACTIVE;
+                    if (active_duration < std::numeric_limits<int>::max()) {
+                        activation_height = pindexPrev->nHeight + 1;
+                    }
+                }
+                break;
+            }
+            case ThresholdState::ACTIVE: {
+                if (active_duration < std::numeric_limits<int>::max() &&
+                    pindexPrev->nHeight + 1 >= activation_height + active_duration) {
+                    stateNext = ThresholdState::EXPIRED;
                 }
                 break;
             }
             case ThresholdState::FAILED:
-            case ThresholdState::ACTIVE: {
+            case ThresholdState::EXPIRED: {
                 // Nothing happens, these are terminal states.
                 break;
             }
@@ -240,6 +277,7 @@ BIP9GBTStatus VersionBitsCache::GBTStatus(const CBlockIndex& block_index, const 
         switch (state) {
         case DEFINED:
         case FAILED:
+        case EXPIRED:
             // Not exposed to GBT
             break;
         case STARTED:
@@ -254,6 +292,12 @@ BIP9GBTStatus VersionBitsCache::GBTStatus(const CBlockIndex& block_index, const 
         }
     }
     return result;
+}
+
+ThresholdState VersionBitsCache::State(const CBlockIndex* pindexPrev, const Consensus::Params& params, Consensus::DeploymentPos pos)
+{
+    LOCK(m_mutex);
+    return VersionBitsConditionChecker(params, pos).GetStateFor(pindexPrev, m_caches[pos]);
 }
 
 bool VersionBitsCache::IsActiveAfter(const CBlockIndex* pindexPrev, const Consensus::Params& params, Consensus::DeploymentPos pos)
@@ -334,7 +378,7 @@ std::vector<std::pair<int, bool>> VersionBitsCache::CheckUnknownActivations(cons
 {
     LOCK(m_mutex);
     std::vector<std::pair<int, bool>> result;
-    for (int bit = 0; bit < VERSIONBITS_NUM_BITS; ++bit) {
+    for (int bit = 0; bit < VERSIONBITS_NUM_WARNING_BITS; ++bit) {
         WarningBitsConditionChecker checker(chainparams, m_caches, bit);
         ThresholdState state = checker.GetStateFor(pindex, m_warning_caches.at(bit));
         if (state == ACTIVE || state == LOCKED_IN) {

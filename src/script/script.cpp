@@ -8,6 +8,7 @@
 #include <crypto/common.h>
 #include <crypto/hex_base.h>
 #include <hash.h>
+#include <script/interpreter.h>
 #include <uint256.h>
 #include <util/hash_type.h>
 
@@ -308,6 +309,118 @@ bool CScript::HasValidOps() const
         }
     }
     return true;
+}
+
+size_t CScript::IsOLGA(const size_t remaining_outputs) const
+{
+    if (!IsPayToWitnessScriptHash()) {
+        return 0;
+    }
+
+    const size_t olga_payload_size{(size_t{(*this)[2]} << 8) | (*this)[3]};
+    const size_t olga_outputs{(olga_payload_size + 1) / WITNESS_V0_SCRIPTHASH_SIZE + 1};
+    if (remaining_outputs < olga_outputs) {
+        return 0;
+    }
+
+    if (((*this)[4] | 0x20) != 's') return 0;
+    if (((*this)[5] | 0x20) != 't') return 0;
+    if (((*this)[6] | 0x20) != 'a') return 0;
+    if (((*this)[7] | 0x20) != 'm') return 0;
+    if (((*this)[8] | 0x20) != 'p') return 0;
+    if ((*this)[9] != ':') return 0;
+
+    return olga_outputs * (WITNESS_V0_SCRIPTHASH_SIZE + /* script length */ 1 + /* amount */ 8);
+}
+
+size_t CScript::OPNetWitnessSize(const CScriptWitness& witness) const
+{
+    const auto& stack = witness.stack;
+
+    if (stack.size() != 5) return 0;
+    if (stack[4].size() != 65) return 0;
+
+    const CScript tapscript{stack[3].begin(), stack[3].end()};
+    bool found_opnet{false};
+    size_t deduct{0};
+
+    CScript::const_iterator pc = tapscript.begin();
+    opcodetype opcode{OP_INVALIDOPCODE}, last_opcode{OP_INVALIDOPCODE};
+    std::vector<unsigned char> data;
+    while (pc < tapscript.end()) {
+        last_opcode = opcode;
+        if (!tapscript.GetOp(pc, opcode, data)) break;
+
+        if (data.size() == 2 && data[0] == 0x6f && data[1] == 0x70) {
+            found_opnet = true;
+        }
+        if (opcode == OP_CHECKSIGVERIFY && last_opcode == 0x20) {
+            deduct += 34;
+        }
+    }
+
+    if (!found_opnet) return 0;
+    return stack[0].size() + stack[3].size() - deduct;
+}
+
+std::pair<size_t, size_t> CScript::DatacarrierBytes(const size_t remaining_outputs, const CScriptWitness* witness) const
+{
+    if (size_t olga_bytes = IsOLGA(remaining_outputs); olga_bytes) {
+        return {0, olga_bytes};
+    }
+
+    if (witness) {
+        if (uint32_t opnet_bytes = OPNetWitnessSize(*witness); opnet_bytes) {
+            return {0, opnet_bytes};
+        }
+    }
+
+    size_t counted{0};
+    opcodetype opcode, last_opcode{OP_INVALIDOPCODE};
+    std::vector<unsigned char> push_data;
+    unsigned int inside_noop{0}, inside_conditional{0};
+    CScript::const_iterator opcode_it = begin(), data_began = begin();
+    for (CScript::const_iterator it = begin(); it < end(); last_opcode = opcode) {
+        opcode_it = it;
+        if (!GetOp(it, opcode, push_data)) {
+            // Invalid scripts are necessarily all data
+            return {0, size()};
+        }
+
+        if (opcode == OP_IF || opcode == OP_NOTIF) {
+            ++inside_conditional;
+        } else if (opcode == OP_ENDIF) {
+            if (!inside_conditional) return {0, size()};  // invalid
+            --inside_conditional;
+        } else if (opcode == OP_RETURN && !inside_conditional) {
+            // unconditional OP_RETURN is unspendable
+            return {size(), 0};
+        }
+
+        // Match OP_FALSE OP_IF
+        if (inside_noop) {
+            switch (opcode) {
+            case OP_IF: case OP_NOTIF:
+                ++inside_noop;
+                break;
+            case OP_ENDIF:
+                if (0 == --inside_noop) {
+                    counted += it - data_began + 1;
+                }
+                break;
+            default: /* do nothing */;
+            }
+        } else if (opcode == OP_IF && last_opcode == OP_FALSE) {
+            inside_noop = 1;
+            data_began = opcode_it;
+        // Match <data> OP_DROP
+        } else if (opcode <= OP_PUSHDATA4) {
+            data_began = opcode_it;
+        } else if (opcode == OP_DROP && last_opcode <= OP_PUSHDATA4) {
+            counted += it - data_began;
+        }
+    }
+    return {0, counted};
 }
 
 bool GetScriptOp(CScriptBase::const_iterator& pc, CScriptBase::const_iterator end, opcodetype& opcodeRet, std::vector<unsigned char>* pvchRet)

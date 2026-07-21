@@ -23,6 +23,7 @@ class uint256;
 struct CBlockLocator;
 
 namespace wallet {
+class CKeyPool;
 class CMasterKey;
 class CWallet;
 class CWalletTx;
@@ -37,6 +38,8 @@ void LogDBInfo();
  * - WalletBatch is an abstract modifier object for the wallet database, and encapsulates a database
  *   batch update as well as methods to act on the database. It should be agnostic to the database implementation.
  */
+
+static const bool DEFAULT_FLUSHWALLET = true;
 
 /** Error statuses for the wallet database.
  * Values are in order of severity. When multiple errors occur, the most severe (highest value) will be returned.
@@ -137,6 +140,7 @@ class CKeyMetadata
 {
 public:
     static const int VERSION_BASIC=1;
+    static const int VERSION_WITH_FLAGS = 2;  // not supported, but preserved
     static const int VERSION_WITH_HDDATA=10;
     static const int VERSION_WITH_KEY_ORIGIN = 12;
     static const int CURRENT_VERSION=VERSION_WITH_KEY_ORIGIN;
@@ -144,6 +148,7 @@ public:
     int64_t nCreateTime; // 0 means unknown
     std::string hdKeypath; //optional HD/bip32 keypath. Still used to determine whether a key is a seed. Also kept for backwards compatibility
     CKeyID hd_seed_id; //id of the HD seed used to derive this key
+    uint8_t unsupported_key_flags;
     KeyOriginInfo key_origin; // Key origin info with path and fingerprint
     bool has_key_origin = false; //!< Whether the key_origin is useful
 
@@ -162,6 +167,8 @@ public:
         READWRITE(obj.nVersion, obj.nCreateTime);
         if (obj.nVersion >= VERSION_WITH_HDDATA) {
             READWRITE(obj.hdKeypath, obj.hd_seed_id);
+        } else if (obj.nVersion >= VERSION_WITH_FLAGS) {
+            READWRITE(obj.unsupported_key_flags);
         }
         if (obj.nVersion >= VERSION_WITH_KEY_ORIGIN)
         {
@@ -202,6 +209,10 @@ private:
         if (!m_batch->Write(key, value, fOverwrite)) {
             return false;
         }
+        m_database.IncrementUpdateCounter();
+        if (m_database.nUpdateCounter % 1000 == 0) {
+            m_batch->Flush();
+        }
         return true;
     }
 
@@ -211,11 +222,16 @@ private:
         if (!m_batch->Erase(key)) {
             return false;
         }
+        m_database.IncrementUpdateCounter();
+        if (m_database.nUpdateCounter % 1000 == 0) {
+            m_batch->Flush();
+        }
         return true;
     }
 
 public:
     explicit WalletBatch(WalletDatabase &database) :
+        m_database(database),
         m_batch(database.MakeBatch())
     {
     }
@@ -237,6 +253,8 @@ public:
     bool WriteMasterKey(unsigned int nID, const CMasterKey& kMasterKey);
     bool EraseMasterKey(unsigned int id);
 
+    bool WriteCScript(const uint160& hash, const CScript& redeemScript);
+
     bool WriteWatchOnly(const CScript &script, const CKeyMetadata &keymeta);
     bool EraseWatchOnly(const CScript &script);
 
@@ -248,6 +266,11 @@ public:
 
     bool WriteOrderPosNext(int64_t nOrderPosNext);
 
+    bool ReadPool(int64_t nPool, CKeyPool& keypool);
+    bool WritePool(int64_t nPool, const CKeyPool& keypool);
+    bool ErasePool(int64_t nPool);
+
+    bool WriteMinVersion(int nVersion);
     bool WriteDescriptorKey(const uint256& desc_id, const CPubKey& pubkey, const CPrivKey& privkey);
     bool WriteCryptedDescriptorKey(const uint256& desc_id, const CPubKey& pubkey, const std::vector<unsigned char>& secret);
     bool WriteDescriptor(const uint256& desc_id, const WalletDescriptor& descriptor);
@@ -272,6 +295,9 @@ public:
     //! Write the given client_version.
     bool WriteVersion(int client_version) { return m_batch->Write(DBKeys::VERSION, CLIENT_VERSION); }
 
+    //! write the hdchain model (external chain child index counter)
+    bool WriteHDChain(const CHDChain& chain);
+
     //! Delete records of the given types
     bool EraseRecords(const std::unordered_set<std::string>& types);
 
@@ -288,6 +314,7 @@ public:
     void RegisterTxnListener(const DbTxnListener& l);
 
 private:
+    WalletDatabase& m_database;
     std::unique_ptr<DatabaseBatch> m_batch;
 
     // External functions listening to the current db txn outcome.
@@ -308,6 +335,9 @@ private:
  * @return true if the db txn executed successfully, false otherwise.
  */
 bool RunWithinTxn(WalletDatabase& database, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func);
+
+//! Compacts BDB state so that wallet.dat is self-contained (if there are changes).
+void MaybeCompactWalletDB(WalletContext& context);
 
 bool LoadKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);
 bool LoadCryptedKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);

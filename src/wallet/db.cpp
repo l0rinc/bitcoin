@@ -6,12 +6,14 @@
 #include <chainparams.h>
 #include <common/args.h>
 #include <util/fs.h>
+#include <util/fs_helpers.h>
 #include <util/log.h>
 #include <wallet/db.h>
 
 #include <algorithm>
 #include <exception>
 #include <fstream>
+#include <set>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -22,13 +24,43 @@ bool operator<(std::span<const std::byte> a, BytePrefix b) { return std::ranges:
 
 std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& wallet_dir)
 {
+    const fs::path data_dir{fs::weakly_canonical(gArgs.GetDataDirNet())};
+    const fs::path blocks_dir{fs::weakly_canonical(gArgs.GetBlocksDirPath())};
+
+    // Here we place the top level dirs we want to skip in case walletdir is datadir or blocksdir
+    // Those directories are referenced in doc/files.md
+    const std::set<fs::path> ignore_paths = {
+                                        blocks_dir,
+                                        data_dir / "blktree",
+                                        data_dir / "blocks",
+                                        data_dir / "chainstate",
+                                        data_dir / "coins",
+                                        data_dir / "database",
+                                        data_dir / "indexes",
+                                        data_dir / "regtest",
+                                        data_dir / "signet",
+                                        data_dir / "testnet3"
+                                        };
+
     std::vector<std::pair<fs::path, std::string>> paths;
     std::error_code ec;
 
     for (auto it = fs::recursive_directory_iterator(wallet_dir, ec); it != fs::recursive_directory_iterator(); it.increment(ec)) {
         assert(!ec); // Loop should exit on error.
+
+        // We don't want to iterate through those special node dirs
+        if (ignore_paths.count(it->path())) {
+            it.disable_recursion_pending();
+            continue;
+        }
+
         try {
             const fs::path path{it->path().lexically_relative(wallet_dir)};
+
+            if (IsSymlink(it->path())) {
+                LogWarning("Not recursively searching symlink/reparse point at '%s'", fs::PathToString(it->path()));
+                it.disable_recursion_pending();
+            }
 
             if (it->status().type() == fs::file_type::directory) {
                 if (IsBDBFile(BDBDataFile(it->path()))) {
@@ -154,6 +186,8 @@ void ReadDatabaseArgs(const ArgsManager& args, DatabaseOptions& options)
 {
     // Override current options with args values, if any were specified
     options.use_unsafe_sync = args.GetBoolArg("-unsafesqlitesync", options.use_unsafe_sync);
+    options.use_shared_memory = !args.GetBoolArg("-privdb", !options.use_shared_memory);
+    options.max_log_mb = args.GetIntArg("-dblogsize", options.max_log_mb);
 }
 
 } // namespace wallet

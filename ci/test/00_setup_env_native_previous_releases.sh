@@ -10,15 +10,15 @@ export CONTAINER_NAME=ci_native_previous_releases
 export CI_IMAGE_NAME_TAG="mirror.gcr.io/ubuntu:22.04"
 # Use minimum supported python3.10 and gcc-12, see doc/dependencies.md
 export PACKAGES="gcc-12 g++-12 python3-zmq"
-export DEP_OPTS="CC=gcc-12 CXX=g++-12"
+export DEP_OPTS="NO_UPNP=1 CC=gcc-12 CXX=g++-12"
 export TEST_RUNNER_EXTRA="--previous-releases --coverage --extended --exclude feature_dbcrash"  # Run extended tests so that coverage does not fail, but exclude the very slow dbcrash
 export GOAL="install"
 export CI_LIMIT_STACK_SIZE=1
 export DOWNLOAD_PREVIOUS_RELEASES=true
 # Use -Werror as the CMake version does not support CMAKE_COMPILE_WARNING_AS_ERROR
 export BITCOIN_CONFIG="\
- --preset=dev-mode \
- -DREDUCE_EXPORTS=ON \
+ -DWITH_ZMQ=ON -DBUILD_GUI=ON -DREDUCE_EXPORTS=ON \
+ -DBUILD_BITCOINCONSENSUS_LIB=OFF \
  -DCMAKE_BUILD_TYPE=Debug \
  -DCMAKE_C_FLAGS='-funsigned-char -Werror' \
  -DCMAKE_C_FLAGS_DEBUG='-g2 -O2' \

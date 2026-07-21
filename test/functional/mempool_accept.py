@@ -9,7 +9,6 @@ from decimal import Decimal
 import math
 
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.blocktools import MAX_STANDARD_TX_WEIGHT
 from test_framework.mempool_util import (
     DEFAULT_MIN_RELAY_TX_FEE,
     DEFAULT_INCREMENTAL_RELAY_FEE,
@@ -56,11 +55,15 @@ from test_framework.wallet import MiniWallet
 from test_framework.wallet_util import generate_keypair
 
 
+DEFAULT_DUST_RELAY_TX_FEE = 3000
+
+
 class MempoolAcceptanceTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.extra_args = [[
             '-txindex','-permitbaremultisig=0',
+            '-mempoolfullrbf=0',
         ]] * self.num_nodes
         self.supports_cli = False
 
@@ -70,6 +73,7 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         for r in result_test:
             # Skip these checks for now
             r.pop('wtxid')
+            r.pop('usage')
             if "fees" in r:
                 r["fees"].pop("effective-feerate")
                 r["fees"].pop("effective-includes")
@@ -93,6 +97,54 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         # Settings are listed in BTC/kvB
         assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal(DEFAULT_MIN_RELAY_TX_FEE) / COIN)
         assert_equal(node.getmempoolinfo()['incrementalrelayfee'], Decimal(DEFAULT_INCREMENTAL_RELAY_FEE) / COIN)
+        assert_equal(node.getmempoolinfo()['dustrelayfee'], Decimal(DEFAULT_DUST_RELAY_TX_FEE) / COIN)
+        assert_equal(node.getmempoolinfo()['dustrelayfeefloor'], Decimal(DEFAULT_DUST_RELAY_TX_FEE) / COIN)
+        assert_equal(node.getmempoolinfo()['dustdynamic'], 'off')
+
+        self.log.info("Check -dustdynamic modes reported by getmempoolinfo")
+        self.restart_node(0, extra_args=self.extra_args[0] + ['-dustdynamic=mempool:250', '-dustrelayfee=0.00001000', '-persistmempool=0'])
+        node = self.nodes[0]
+        assert_equal(node.getmempoolinfo()['dustrelayfeefloor'], Decimal(1000) / COIN)
+        assert_equal(node.getmempoolinfo()['dustdynamic'], '3*mempool:250')
+        self.restart_node(0, extra_args=self.extra_args[0] + ['-dustdynamic=0.5*target:2', '-persistmempool=0'])
+        node = self.nodes[0]
+        assert_equal(node.getmempoolinfo()['dustdynamic'], '0.5*target:2')
+        self.restart_node(0, extra_args=self.extra_args[0])
+        node = self.nodes[0]
+
+        self.log.info('Check -spkreuse=0 rejects duplicate output scriptPubKeys')
+        tx = self.wallet.create_self_transfer_multi(num_outputs=2)['tx']
+        raw_tx_spkreuse = tx.serialize().hex()
+        assert_equal(node.testmempoolaccept([raw_tx_spkreuse])[0]['allowed'], True)
+        self.restart_node(0, extra_args=self.extra_args[0] + ['-spkreuse=0', '-persistmempool=0'])
+        assert_equal(node.testmempoolaccept([raw_tx_spkreuse])[0]['reject-reason'], 'txn-spk-reused-twinoutputs')
+        assert_equal(node.getmempoolinfo()['size'], self.mempool_size)
+
+        self.log.info('Check -spkreuse=0 handles mempool scriptPubKey reuse through replacement')
+        reused_spk = script_to_p2wsh_script(CScript([OP_TRUE]))
+
+        def create_spk_claim(*, fee):
+            utxo = self.wallet.get_utxo()
+            tx = CTransaction()
+            tx.vin = [CTxIn(COutPoint(int(utxo['txid'], 16), utxo['vout']), nSequence=MAX_BIP125_RBF_SEQUENCE)]
+            tx.vout = [CTxOut(int(COIN * utxo['value']) - fee, reused_spk)]
+            tx.version = 2
+            self.wallet.sign_tx(tx)
+            return tx
+
+        tx_spk_first = create_spk_claim(fee=1_000)
+        txid_spk_first = node.sendrawtransaction(hexstring=tx_spk_first.serialize().hex(), maxfeerate=0)
+        self.mempool_size += 1
+        tx_spk_second = create_spk_claim(fee=50_000)
+        assert_equal(node.testmempoolaccept([tx_spk_second.serialize().hex()], maxfeerate=0)[0]['allowed'], True)
+        assert_equal(node.getmempoolinfo()['size'], self.mempool_size)
+        txid_spk_second = node.sendrawtransaction(hexstring=tx_spk_second.serialize().hex(), maxfeerate=0)
+        assert txid_spk_first not in node.getrawmempool()
+        assert txid_spk_second in node.getrawmempool()
+        assert_equal(node.getmempoolinfo()['size'], self.mempool_size)
+        self.restart_node(0, extra_args=self.extra_args[0])
+        node = self.nodes[0]
+        self.mempool_size = 0
 
         self.log.info('Should not accept garbage to testmempoolaccept')
         assert_raises_rpc_error(-3, 'JSON value of type string is not of expected type array', lambda: node.testmempoolaccept(rawtxs='ff00baar'))
@@ -169,13 +221,25 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         self.log.info('A transaction that replaces a mempool transaction')
         tx = tx_from_hex(raw_tx_0)
         tx.vout[0].nValue -= int(fee * COIN)  # Double the fee
+        tx.vin[0].nSequence = MAX_BIP125_RBF_SEQUENCE + 1  # Now, opt out of RBF
         raw_tx_0 = tx.serialize().hex()
         txid_0 = tx.txid_hex
         self.check_mempool_result(
             result_expected=[{'txid': txid_0, 'allowed': True, 'vsize': tx.get_vsize(), 'fees': {'base': (2 * fee)}}],
             rawtxs=[raw_tx_0],
         )
+
+        self.log.info('A transaction that conflicts with an unconfirmed tx')
+        # Send the transaction that replaces the mempool transaction and opts out of replaceability
         node.sendrawtransaction(hexstring=tx.serialize().hex(), maxfeerate=0)
+        # take original raw_tx_0
+        tx = tx_from_hex(raw_tx_0)
+        tx.vout[0].nValue -= int(4 * fee * COIN)  # Set more fee
+        self.check_mempool_result(
+            result_expected=[{'txid': tx.rehash(), 'allowed': False, 'reject-reason': 'txn-mempool-conflict'}],
+            rawtxs=[tx.serialize().hex()],
+            maxfeerate=0,
+        )
 
         self.log.info('A transaction with missing inputs, that never existed')
         tx = tx_from_hex(raw_tx_0)
@@ -347,43 +411,34 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
             rawtxs=[tx.serialize().hex()],
         )
 
-        # Multiple OP_RETURN and more than 83 bytes, even if over MAX_SCRIPT_ELEMENT_SIZE
-        # are standard since v30
+        # Multiple OP_RETURN and more than 83 bytes, even if over MAX_SCRIPT_ELEMENT_SIZE,
+        # are rejected by Knots' output-size policy.
         tx = tx_from_hex(raw_tx_reference)
         tx.vout.append(CTxOut(0, CScript([OP_RETURN, b'\xff'])))
         tx.vout.append(CTxOut(0, CScript([OP_RETURN, b'\xff' * 50000])))
 
         self.check_mempool_result(
-            result_expected=[{'txid': tx.txid_hex, 'allowed': True, 'vsize': tx.get_vsize(), 'fees': {'base': Decimal('0.05')}}],
+            result_expected=[{'txid': tx.txid_hex, 'allowed': False, 'reject-reason': 'scriptpubkey'}],
             rawtxs=[tx.serialize().hex()],
             maxfeerate=0
         )
 
         self.log.info("A transaction with several OP_RETURN outputs.")
         tx = tx_from_hex(raw_tx_reference)
-        op_return_count = 42
+        op_return_count = 10
         tx.vout[0].nValue = int(tx.vout[0].nValue / op_return_count)
         tx.vout[0].scriptPubKey = CScript([OP_RETURN, b'\xff'])
         tx.vout = [tx.vout[0]] * op_return_count
         self.check_mempool_result(
-            result_expected=[{"txid": tx.txid_hex, "allowed": True, "vsize": tx.get_vsize(), "fees": {"base": Decimal("0.05000026")}}],
+            result_expected=[{"txid": tx.txid_hex, "allowed": False, "reject-reason": "multi-op-return"}],
             rawtxs=[tx.serialize().hex()],
         )
 
-        self.log.info("A transaction with an OP_RETURN output that bumps into the max standardness tx size.")
+        self.log.info("A transaction with an OP_RETURN output larger than Knots' output-data limit.")
         tx = tx_from_hex(raw_tx_reference)
-        tx.vout[0].scriptPubKey = CScript([OP_RETURN])
-        data_len = int(MAX_STANDARD_TX_WEIGHT / 4) - tx.get_vsize() - 5 - 4  # -5 for PUSHDATA4 and -4 for script size
-        tx.vout[0].scriptPubKey = CScript([OP_RETURN, b"\xff" * (data_len)])
-        assert_equal(tx.get_vsize(), int(MAX_STANDARD_TX_WEIGHT / 4))
+        tx.vout[0].scriptPubKey = CScript([OP_RETURN, b"\xff" * 84])
         self.check_mempool_result(
-            result_expected=[{"txid": tx.txid_hex, "allowed": True, "vsize": tx.get_vsize(), "fees": {"base": Decimal("0.1") - Decimal("0.05")}}],
-            rawtxs=[tx.serialize().hex()],
-        )
-        tx.vout[0].scriptPubKey = CScript([OP_RETURN, b"\xff" * (data_len + 1)])
-        assert_greater_than(tx.get_vsize(), int(MAX_STANDARD_TX_WEIGHT / 4))
-        self.check_mempool_result(
-            result_expected=[{"txid": tx.txid_hex, "allowed": False, "reject-reason": "tx-size"}],
+            result_expected=[{"txid": tx.txid_hex, "allowed": False, "reject-reason": "scriptpubkey"}],
             rawtxs=[tx.serialize().hex()],
         )
 
@@ -448,7 +503,7 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         anchor_nonempty_wit_spend.wit.vtxinwit[0].scriptWitness.stack.append(b"f")
 
         self.check_mempool_result(
-            result_expected=[{'txid': anchor_nonempty_wit_spend.txid_hex, 'allowed': False, 'reject-reason': 'bad-witness-nonstandard'}],
+            result_expected=[{'txid': anchor_nonempty_wit_spend.rehash(), 'allowed': False, 'reject-reason': 'bad-witness-anchor-not-empty'}],
             rawtxs=[anchor_nonempty_wit_spend.serialize().hex()],
             maxfeerate=0,
         )
@@ -484,7 +539,7 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         nested_anchor_spend.vout.append(CTxOut(nested_anchor_tx.vout[0].nValue - int(fee*COIN), script_to_p2wsh_script(CScript([OP_TRUE]))))
 
         self.check_mempool_result(
-            result_expected=[{'txid': nested_anchor_spend.txid_hex, 'allowed': False, 'reject-reason': 'mempool-script-verify-flag-failed (Witness version reserved for soft-fork upgrades)'}],
+            result_expected=[{'txid': nested_anchor_spend.rehash(), 'allowed': False, 'reject-reason': 'mempool-script-verify-flag-failed (Witness version reserved for soft-fork upgrades)'}],
             rawtxs=[nested_anchor_spend.serialize().hex()],
             maxfeerate=0,
         )

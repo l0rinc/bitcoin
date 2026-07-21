@@ -165,7 +165,7 @@ class PackageRBFTest(BitcoinTestFramework):
         failure_package_hex3, failure_package_txns3 = self.create_simple_package(coin, parent_fee=DEFAULT_FEE, child_fee=DEFAULT_CHILD_FEE + incremental_sats_short)
         assert_equal(package_3_size, sum([tx.get_vsize() for tx in failure_package_txns3]))
         pkg_results3 = node.submitpackage(failure_package_hex3)
-        assert_equal(f"package RBF failed: insufficient anti-DoS fees, rejecting replacement {failure_package_txns3[1].txid_hex}, not enough additional fees to relay; {incremental_sats_short:.8f} < {incremental_sats_required:.8f}", pkg_results3["package_msg"])
+        assert_equal(f"package RBF failed: insufficient anti-DoS fees, rejecting replacement {failure_package_txns3[1].rehash()}, not enough additional fees to relay; {incremental_sats_short:.8f} < {incremental_sats_required:.8f}", pkg_results3["package_msg"])
         self.assert_mempool_contents(expected=package_txns1)
 
         success_package_hex3, success_package_txns3 = self.create_simple_package(coin, parent_fee=DEFAULT_FEE, child_fee=DEFAULT_CHILD_FEE + incremental_sats_required)
@@ -215,8 +215,7 @@ class PackageRBFTest(BitcoinTestFramework):
         package_child = self.wallet.create_self_transfer(fee_rate=child_feerate, utxo_to_spend=package_parent["new_utxos"][0])
 
         pkg_results = node.submitpackage([package_parent["hex"], package_child["hex"]], maxfeerate=0)
-        assert_equal("transaction failed", pkg_results["package_msg"])
-        assert_equal(f"too many potential replacements, rejecting replacement {package_parent['txid']}; too many conflicting clusters (101 > 100)", pkg_results["tx-results"][package_parent["wtxid"]]["error"])
+        assert_equal(f"package RBF failed: too many potential replacements, rejecting replacement {package_child['txid']}; too many conflicting clusters (101 > 100)", pkg_results["package_msg"])
         self.assert_mempool_contents(expected=expected_txns)
 
         # Make singleton tx to conflict with in next batch
@@ -231,16 +230,36 @@ class PackageRBFTest(BitcoinTestFramework):
         package_parent = self.wallet.create_self_transfer_multi(utxos_to_spend=double_spending_coins, fee_per_output=parent_fee_per_conflict)
         package_child = self.wallet.create_self_transfer(fee_rate=child_feerate, utxo_to_spend=package_parent["new_utxos"][0])
         pkg_results = node.submitpackage([package_parent["hex"], package_child["hex"]], maxfeerate=0)
-        assert_equal("transaction failed", pkg_results["package_msg"])
-        assert_equal(f"too many potential replacements, rejecting replacement {package_parent['txid']}; too many conflicting clusters (101 > 100)", pkg_results["tx-results"][package_parent["wtxid"]]["error"])
+        assert_equal(f"package RBF failed: too many potential replacements, rejecting replacement {package_child['txid']}; too many conflicting clusters (101 > 100)", pkg_results["package_msg"])
         self.assert_mempool_contents(expected=expected_txns)
 
-        # Finally, conflict with MAX_REPLACEMENT_CANDIDATES clusters
+        # MAX_REPLACEMENT_CANDIDATES clusters can still be too many
+        # replacements when each cluster contains descendants.
         package_parent = self.wallet.create_self_transfer_multi(utxos_to_spend=parent_coins[:-1], fee_per_output=parent_fee_per_conflict)
         package_child = self.wallet.create_self_transfer(fee_rate=child_feerate, utxo_to_spend=package_parent["new_utxos"][0])
         pkg_results = node.submitpackage([package_parent["hex"], package_child["hex"]], maxfeerate=0)
+        assert_equal(f"package RBF failed: too many potential replacements, rejecting replacement {package_child['txid']}; too many potential replacements (102 > 100)", pkg_results["package_msg"])
+        self.assert_mempool_contents(expected=expected_txns)
+
+        self.generate(node, 1)
+
+        # Finally, evict exactly MAX_REPLACEMENT_CANDIDATES transactions across fewer clusters.
+        num_two_tx_clusters = MAX_REPLACEMENT_CANDIDATES // 2
+        parent_coins = self.coins[:num_two_tx_clusters]
+        del self.coins[:num_two_tx_clusters]
+
+        size_two_clusters = []
+        for coin in parent_coins:
+            size_two_clusters.append(self.wallet.send_self_transfer_chain(from_node=node, chain_length=2, utxo_to_spend=coin))
+        expected_txns = [txn["tx"] for parent_child_txns in size_two_clusters for txn in parent_child_txns]
+        assert_equal(len(expected_txns), MAX_REPLACEMENT_CANDIDATES)
+        self.assert_mempool_contents(expected=expected_txns)
+
+        package_parent = self.wallet.create_self_transfer_multi(utxos_to_spend=parent_coins, fee_per_output=parent_fee_per_conflict)
+        package_child = self.wallet.create_self_transfer(fee_rate=child_feerate, utxo_to_spend=package_parent["new_utxos"][0])
+        pkg_results = node.submitpackage([package_parent["hex"], package_child["hex"]], maxfeerate=0)
         assert_equal(pkg_results["package_msg"], "success")
-        self.assert_mempool_contents(expected=[singleton_tx["tx"], size_three_clusters[-1][0]["tx"], size_three_clusters[-1][1]["tx"], size_three_clusters[-1][2]["tx"], package_parent["tx"], package_child["tx"]] )
+        self.assert_mempool_contents(expected=[package_parent["tx"], package_child["tx"]])
 
         self.generate(node, 1)
 

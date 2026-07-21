@@ -1,0 +1,361 @@
+commit	subject	files_changed	consensus_risk	serious_bugfix	cherry_pick_to_core	suspicious_activity	replay_result	notes
+a40890485f483753f2c063dadacf184643cfae67	Multiselect in coincontrol treewidget and display selected count	4	no	no	unlikely	no	applied	
+48b4612cca15b1aa3aa621fd7f0968ed626f54b2	GUI/CoinControl: Remove selection-only counter and minimise diff	4	no	no	unlikely	no	applied	
+3cf4f0e4c797aa092d37f11d5dde30dbdab3583c	GUI: Restore "request payment" button text	2	no	no	unlikely	no	applied	
+0e9e25ade0ca5a524626e7dcb6e81311d1759f4d	Bugfix: GUI: Disable editing of sending addresses	3	no	possible	consider	no	applied	
+59f52de21f907c906b93e9069e030ba21a752ea5	qt: Add -guisettingsdir option	2	no	no	unlikely	no	applied	
+f66053ea85cd7760a2cf4ed73bc622c2e348801e	Enlarge Network Traffic Graph	1	no	no	unlikely	no	applied	
+befa6e0dafed7711de5f6bda645657af06468048	Bugfix: GUI/Addressbook: Drop confusing message about signed messages	1	no	possible	consider	no	applied	
+5321a6a55a334b84b7ef633524056b9498a340f2	wallet: Preserve unsupported key origin flags	1	no	no	no	no	applied	
+b6d70ddc06eb5b42be7426e1efb79f7dc0576629	Network Graph layout	1	no	no	unlikely	no	applied	
+06ec7f56dfb8d29b8aacccc4c0206ee029a075af	test: Support -cli tests using external bitcoin-cli	1	no	no	unlikely	no	applied	
+6600eecd04a9cbd26985a9325f13ca01774593a0	[Qt] support for persisted rpc console history	1	no	no	unlikely	no	applied	
+ec076f45dfeb3be6bfbc2cee854a32c4acbc45a0	Qt/RPCConsole: Refactor RPCConsole::WriteCommandHistory out of ~RPCConsole	2	no	no	unlikely	no	applied	
+0cd5fc301d6742db88d47a46088003e846f7862d	Qt/RPCConsole: If filtered commands are found in history at startup, erase them best we can	1	no	no	unlikely	no	applied	
+8864a1f790e6c3ba0abe28933ad2cb99ede5a423	Network Graph - Create y_value function	2	no	no	unlikely	no	applied	
+ad431ff5d18d1f76b43aef98d9e67019bb9824f2	Enable non-linear network traffic graph	2	no	no	unlikely	no	applied	
+f9d9a1d1cfd08096aa4f734e8d9134eac80e6e9b	Bugfix: GUI/QRImageWidget: Correctly calculate sizes	2	no	possible	consider	no	applied	
+91d24c84ba4bc929df96ffd46c591ad3a92757bd	Bugfix: GUI/QRImageWidget: If text won't fit, split across multiple lines	1	no	possible	consider	no	applied	
+4c5143d56c98d4f9f961059692f155bbe2248c44	GUI/QRImageWidget: Allow image to grow up to 25% wider to accomidate single-line text	1	no	no	unlikely	no	applied	
+41ff6c343e9d2badad55d8edd755492d86f65d20	Bugfix: Skip tests for tools not being built	2	no	possible	consider	no	applied_manual	
+49287e0ab4ad51d7a40cb9b6990a34a218b58c98	contrib/init: (OpenRC) use -daemonwait to wait for startup completion	1	no	no	unlikely	no	applied	
+89cb2b6d91e927307d2ed8e3bfc8c5739025979d	contrib/init: (OpenRC) use ${SVCNAME} in BITCOIND_PIDFILE default	2	no	no	unlikely	no	applied	
+5e04731447b0290d4a3cf9c6b400508359188629	rpc: add period_start to version bits statistics	2	no	no	unlikely	no	applied	
+33258aef4cb661c7f8bb09f7ee5944b5c30e3ea5	GUI: Alt-P shortcut key for paste button in Open URI dialog	1	no	no	unlikely	no	applied	
+c22bbba96891c03607715dafffdcb609858fb61b	GUI: Peers: When sorting by address, sort by network first	1	no	no	unlikely	no	applied	
+4d5beb29126b7933d48453d330e42bf04483dfe6	gui: avoid unclean exit due to permissions issues when setting start on system startup	1	no	no	unlikely	no	applied	
+f77451c8c11b9d41f5b6fa8659d947b0c99051e7	qt: Fix shortcut ambiguities	1	no	no	unlikely	no	applied	
+5fde8fbe0850218403c54d0cee04ecb2f36d79a0	qt: Add colon to third party URLS data field	1	no	no	unlikely	no	applied	
+b0c8dfaca2ccd8d4f100ad325cebd038f988cc52	rpc: Don't FlushStateToDisk when pruneblockchain(0)	1	no	no	no	no	applied	
+df874f848a42f3bb7a7c4a7afd6431f1007de4a2	net: Ensure CNode.cleanSubVer is always assigned before nVersion	1	no	no	no	no	applied	
+238f042ff2ca377edac61fdb925f266aacf1bd52	Bugfix: GUI: Peers: If subversion is actually blank, show blank	1	no	possible	consider	no	applied	
+35fbd4886e4abde98fd07fa4f89beea8b4efc47b	Bugfix: GUI: Peers: When selecting a new peer, reset fields to N/A before loading data	3	no	possible	consider	no	applied	
+cfe5bbe6ccd4cac703e3a6d28f05b05c562a54e3	Bugfix: GUI: Peers: Peers without any permissions are "None", not "N/A"	2	no	possible	consider	no	applied	
+d8434da3c14ed6723d86ef2cd266008d366e1413	Allow configuring target block time for a signet	4	review	no	consider	no	applied	
+be3ae51ece862fc072d2574c34c808315ebdbff9	rpc: make importaddress compatible with descriptors wallet	7	review	no	consider	no	applied	
+4436094508e7d9c4be81d055eb09a323beca41a8	GUI: Initialise DBus notifications in another thread	2	no	no	unlikely	no	applied	
+e9f3b5ff6de57a7ba1c313a4fb7c6522782ccf38	Bugfix: GUI: When restoring table columns, still set their minimum column width and stretch on last section	2	no	possible	consider	no	applied	
+a3dbdda92248ddfe7e864be7fbc6a898bc85c34b	Revert "qt: Move transactionView properties settings to constructor"	1	no	no	unlikely	no	applied	
+379728eeab1f924b1330c0f7c94e5ac3664df2ac	Revert "qt: Move recentRequestsView properties settings to constructor"	1	no	no	unlikely	no	applied	
+8e428cc1188568aaeeaeb8f1f4498ae5b738a5e2	Revert "qt: Drop buggy TableViewLastColumnResizingFixer class"	6	no	no	unlikely	no	applied	
+2b67ea465c72461eca7d07897b6476f583bf9a19	Bugfix: net_processing: Restore "Already requested" error for FetchBlock	1	no	possible	consider	no	applied	
+d7e08d408c34b9ffbd5475d3c351fdec3087cc5a	QA: rpc_getblockfrompeer: Test that a non-existent peer generates an error, even if we already have the block	1	no	no	unlikely	no	applied	
+017ab85cecc7252bc2dc8e6bc6c7456ecef83389	QA: rpc_getblockfrompeer: Test specific error for trying to fetch from peer twice	1	no	no	unlikely	no	applied	
+610dcbabe4055b9b90ba41cbde08e98146461a1a	GUI: Pass PlatformStyle through ClientModel into PeerTableModel	7	no	no	unlikely	no	applied	
+c592f7cf16919a497165b0555d91ec3f283232be	GUI: Peers: Add direction table column before "Address" with arrow	4	no	no	unlikely	no	applied	
+727a2f83cca477ee812f976dd6bf108674b54eb6	GUI: Make Peers table aware of runtime palette change	3	no	no	unlikely	no	applied	
+656ac00d1e29da2c018628bbc96597c6b34a5d45	GUI: Peers: Update table column widths and labels	2	no	no	unlikely	no	applied	
+89b43dd8d898d070d9a7f809bdd77d4305791e9a	Revert "gui: peersWidget - ResizeToContents Age and IP/Netmask columns"	1	no	no	unlikely	no	applied	
+dc97030bfc997471de9af75382ef96d8d55e187c	wallet: allow external_signer flag toggle	3	no	no	unlikely	no	applied	
+6925c383d30b8112bf464c30170c9834ede4089f	Wallet/RPC: setwalletflag: Warn about wallet reload required to toggle external signer flag	1	no	no	no	no	applied	
+3ad197c5c692450a30fedec5e4d432ea00da73c1	Restore ability to display addresses in GUI	5	no	no	unlikely	no	applied	
+8070c3feb75b11068ca928f8fd55969dcbb40f39	rpc: Add min_conf option to fundrawtransaction and walletcreatefundedpsbt [as deprecated]	1	no	no	no	no	applied	
+af7c9d152aa27e0925f592cf823052a9e4538946	qa: Test fundrawtransaction and walletcreatefundedpsbt with min_conf	2	no	no	unlikely	no	applied	
+a16d1512f468de18ec1a856eddc4a41ceff5c705	RPC/Wallet: Check for negative min_conf in FundTransaction	1	no	no	no	no	applied	
+5ed6ea5f315f90d01edb4b3dbec06ab87ac11f4a	RPC: Backward compatibility with Knots 0.19-0.21.0 validateaddress (address_type param and error_index output)	2	no	no	unlikely	no	applied	
+ef1c43e51dfc6493ccbfcd0637f130750a41c6f0	RPC/blockchain: Add getblockfrompeer nodeid alias for backward compatibility	2	no	no	no	no	applied	
+42b25bbd9397b8b2fe16f8f2e70547a04543eb16	fix: unnecessary continuation after finding mutation	1	review	no	consider	no	applied	
+48c91aabdb8a4128aab71b0c3766b91975d14ac8	validateaddress: Strictly check value of deprecated address_type parameter	2	no	no	unlikely	no	applied	
+7115f632a26b0875628e7a3382d7846d5d98b568	RPC/output_script: validateaddress: Correct error code for erroneous deprecated address_type value	2	no	no	unlikely	no	applied	
+70dcdd7aa7f9093c6faac84760db8ccc95090209	Wallet: Avoid using change types newer than user's preferred address type	3	no	no	unlikely	no	applied	
+1128a6bfffc7676e11f0a367a6558721ec1fb45e	Refactor: GUI: Make `modernize-use-default-member-init` happy with `columnResizingFixer`	2	no	no	unlikely	no	applied	
+c2612273ef0b3ef127ba03c87f2a3303f0b9d299	RPC: Support specifying different types for param aliases	2	no	no	no	no	applied	
+2fcf74eb45bab8d9215d079f652923c4cdf656a6	RPC/Net: Allow addconnection on non-regtest networks	1	no	no	no	no	applied	
+577c04c80e2da144145f822f101648e7e59fb9d5	Bugfix: util: Correctly handle Number value types in GetArg/GetBoolArg	2	no	possible	consider	no	applied	
+9b9b8a52fda60ae15abba600f196b6c36fec8a10	util: Add a ForceSetArgV that can handle non-strings	2	no	no	no	no	applied	
+ba16f9c966615752a6137796442e6eaac1ed57ee	interfaces/chain: Provide a way to ask the user a question during init	2	no	no	no	no	applied	
+afb41baa06cc9c8997ca5a4b3e4d8b85f432d346	Bugfix: GUI: Allow the user to start anyway when loading a wallet errors	1	no	possible	consider	no	applied	
+ae1ddc9f1d442aea6b766467fdae1a4c29c9b2cc	scripted-diff: test: rename `strCmd` to `command`	2	no	no	no	no	applied	
+f1e300838a8423eb9f496cb234b44fe062b7a7c3	Support multiple -*notify commands	4	no	no	no	no	applied	
+c0a914fc7d31512015aad83c9874cb5d6f6c373a	init: Optimise -startupnotify slightly	1	no	no	no	no	applied	
+e5160731d27d111a40334c864818fc35356a2103	RPC/Wallet: Convert walletprocesspsbt to use options parameter	4	no	no	unlikely	no	applied	
+e4acb761d42cbd658f9ddc4d5d3eabdb5ecd4650	dumpmasterprivkey command	3	no	no	unlikely	no	applied	
+2504a07906308ddc103f763abc4a06f87c895b3e	Bugfix: RPC/Wallet: dumpwallet should include hdkeypath metadata outside of comment	2	no	possible	consider	no	applied_manual	
+66a0e619dd0b3758c2db58fa436acce7296f922e	Bugfix: RPC/Wallet: dumpwallet should include hdseedid metadata	1	no	possible	consider	no	applied	
+7022a6ca05300d24cfea7bf771b59e5325eb5cc8	GUI: Accept Ctrl-D as a shortcut to close the RPC console	1	no	no	unlikely	no	applied	
+84afd82ac5bfa370d03fd652f84c9c56b9a0acb0	Bugfix: devtools/symbol-check: Check PE libraries case-insensitively	1	no	possible	consider	no	applied	
+8d40addbd259176ddddab8eaf21aceca435234c8	rpc: validate fee estimation mode case insensitive	2	no	no	unlikely	no	applied	
+be8ae64b82e2c5b003a8703668ce1751442288e4	rpc: validate conf_target is set alongside estimate_mode	2	no	no	unlikely	no	applied	
+fc7954a1488b815dac4311b5a461fe5bf2a20b19	Wallet: Keep track of what addresses are used in wallet transactions (memory only)	3	no	no	no	no	applied	
+022887d933db47227db5dddb75cc6377b4c1b889	Wallet: Add fairly-efficient [negative] check that an address is not known to be used	2	no	no	no	no	applied	
+a00bc6f395ecd2f9657b9edd4c9c77883a0dc718	RPC/Wallet: Add "use_txids" to output of getaddressinfo	2	no	no	unlikely	no	applied	
+aebfd947d20dc13d920a919e2ac147be1d7390c6	RPC/blockchain: Restore ability for pruned nodes to getblockfrompeer future blocks	2	no	no	unlikely	no	applied	
+98ca8bc71ec2dcaabfc57f1e2b7b279f95728af7	QA: wallet_taproot: Workaround fee estimation limitation for sendall cleanup as well	1	no	no	unlikely	no	applied	
+d206f2b726468c85fbc835c19d0830c7c7c068ab	QA: wallet_taproot: Ensure transaction created by sendall has enough fee to get into the mempool	1	no	no	unlikely	no	applied	
+a8b4eb70c0591e8b0ecfcc9c6ac8cb7de7c8cf06	Wallet: Increase default confirmation target to 144	1	no	no	no	no	applied	
+f8fec8f26dda1bcbc2d3832bcd5568d5176be099	p2p, bugfix: detect addnode cjdns peers in GetAddedNodeInfo()	1	no	possible	consider	no	skipped_empty_or_duplicate	
+ca1300fbc5ac61e0117851e58c06f6dcecb62d0c	test: add GetAddedNodeInfo() CJDNS regression unit test	1	no	no	no	no	skipped_empty_or_duplicate	
+28823f30dc1a865cd44a6b7598ea968f92b75c56	p2p, bugfix: correctly detect CJDNS addnode entries in AddNode()	1	no	possible	consider	no	applied	
+be4541abe5969ff4b4a26c983d024006f2cec94b	test: AddNode() CJDNS regression unit tests	1	no	no	no	no	applied	
+88fe778d9d377b5819c51839bdd842912162230d	BufferedFile: fclose at destruction	2	no	no	no	no	applied	
+82908e28a587db3a3f0c56c07b73ca2aa9bcfd38	interfaces/wallet: Add checkAddressForUsage and findAddressUsage	2	no	no	no	no	applied	
+86c5b4f00a122230055c98ebbf49d0ba0f19127c	GUI: Add GUIUtil::dateStr	2	no	no	unlikely	no	applied	
+08ce9ecf4568fcaf1000ff108a6065a36e08ac2d	GUI: SendConfirmationDialog: Defer button setup until exec	2	no	no	unlikely	no	applied	
+0ba948aa4f91b8a03a34eb2b9cf372e89f21d5df	GUI: SendConfirmationDialog: Enable changing the actual buttons used	4	no	no	unlikely	no	applied	
+42e4f1324655615fdacef45d43c1be89032b4d3c	GUI: WalletModel: Wrap checkAddressForUsage and findAddressUsage	2	no	no	unlikely	no	applied	
+4b943c42fd50aa566af6c7891fe1ff55c101a69d	GUI: QValidatedLineEdit: Add support for a warning-but-valid state	3	no	no	unlikely	no	applied	
+bde17b613840b3643e0c8b1b772bf4fdafb55d94	GUI: Implement BitcoinAddressUnusedInWalletValidator	2	no	no	unlikely	no	applied	
+668e18bf70b9c0232b2a7cf16490ba5308f01bfb	GUI: Use warning indicator for send coins entries with reused addresses	1	no	no	unlikely	no	applied	
+25ea55c25d7ff3e51752dfc3ea6817e7a1562e4c	GUI: Add a warning prompt when sending to an already-used address	5	no	no	unlikely	no	applied	
+8463aef09fe4c6e3806e3b8a4c967c297302b96f	Optimized siphash implementation	2	no	no	no	no	applied	
+21a3dd41987abe4652a78c8cce5f9d98796447cc	Diff-minimise	2	no	no	no	no	applied	
+9166bb76d5cbef95d37503485dd0f33c1ea5feb0	qt: Add "Alternating Row Color" settings for the Peers Tab	7	no	no	unlikely	no	applied	
+d1815ce04df2097f18200f40650694e0ddfef52c	Diff-minimise	2	no	no	unlikely	no	applied	
+52ecf5b65ec43b3d0ab45cf07854794604194c2f	GUI: Enable customisation of QR Code font	7	no	no	unlikely	no	applied	
+2393def608de4e95001aa3d1a8018ea884a8663d	GUI: Change default QR Code font to embedded	1	no	no	unlikely	no	applied	
+6d2bc57f0e2a053eb7907e0718c6d6f96120fb0c	rpc, p2p: allow `disconnectnode` with subnet	1	no	no	no	no	applied	
+dc36f2b555df243d1b784ce1d360287119541b16	test: add coverage for `subnet` in `disconnectnode` RPC	1	no	no	unlikely	no	applied	
+12a8863b80590dd606e10e0fa13763e658d9c540	QA: p2p_disconnect_ban: Explicitly select nodes for test, and reconnect after disconnecting	1	no	no	unlikely	no	applied	
+7e3988fe54967a04bd3d18867c7d278f3b530d15	RPC/net: disconnectnode: Support disconnecting by IP (without a port)	2	no	no	unlikely	no	applied	
+0c38bbd194e2314d3bf8ff3c2e50db46da7dfc38	QA: wallet_reindex: Use `importdescriptors` directly rather than abusing test_framework's `importaddress` wrapper	1	no	no	unlikely	no	applied	
+816d59c61a0df22e2da9c42d01d76b499e88026d	Diff-minimise	2	no	no	unlikely	no	applied	
+f72496a06a9999f3f703d842d610f5b670d89efa	Keep ProcessDescriptorImport exported for bitcoin-wallet importfromcoldcard	1	no	no	no	no	applied	
+7df9ede91c914c4afbcf51b6d6743e651e20fef4	GUI: Support returning positions from BitcoinAddress{Entry,Check}Validator::validate	2	no	no	unlikely	no	applied	
+f87f5dcfea72b8b51328e1491c165ac2f24ae015	GUI: Point out position of invalid characters in Bech32 addresses	2	no	no	unlikely	no	applied	
+2b7b7b23ff46d6285a614a165654d94219d25838	GUI: Choose colour for incorrect characters in address based on user theme	1	no	no	unlikely	no	applied	
+3b761c44eb825a4ba39e722b53a215f6c362dd25	Diff-minimise	1	no	no	unlikely	no	applied	
+fe21e5bc03a88dd048a80363c088ea13a5e370f5	GUI: setWalletActionsEnabled: Keep historyAction disabled if privacy mode is already on	1	no	no	unlikely	no	applied	
+8fb8c3a1f798b85235b01a7ab30c6c0ee77c6967	Revert "Remove -feefilter option"	3	no	no	no	no	applied	
+e981b95fb61315271221f4dc342a4b69cae41d4d	doc: Move -feefilter option to correct category	1	no	no	no	no	applied	
+2f7b38db868c8d87bf860b3a4ef505f29114d19a	RPC: add transaction hash to mempool entry output	2	no	no	unlikely	no	applied	
+e2358f135eaff20769ff1bb6df726ea2baf28e34	Add Neutrino filter for p2wpkh script types	2	no	no	no	no	applied	
+07f650094314d13ab15cf63de91588ea6cb095a4	Add possible values to cli description	1	no	no	no	no	applied	
+bc26ff972a57185a4c9cef81e81f2a8a89d55e06	Apply suggestions from code review	2	no	no	no	no	applied	
+bf2306334aa470e413d54d671d272de7618d0618	Adding tests for p2wpkh filter type	1	no	no	no	no	applied	
+a86d1d41db0a1f2ec818e455598580802d87a422	Make the filter element for witness ver0	3	no	no	no	no	applied	
+4cf9f24adc9fb0d8a513e08a93d1cea02d3ed7af	Act on review	2	no	no	no	no	applied	
+812f2100448e9a6c53e9a535eb7b6aac5eaf86bc	Move the filter logic to a single method named BuildFilterElements	1	no	no	no	no	applied	
+c05c0506f2fa6f85923b754b3285018b73872720	Change the BuildFilterElements default args	1	no	no	no	no	applied	
+cc050ebafc9140a854595991ff4b77fe538230e9	Act on review	1	no	no	no	no	applied	
+ee629e7448b5dcbcc4eaeed4bb845123e76712b2	QA: blockfilter_tests: Diff-minimise	1	no	no	no	no	applied	
+b85232d74623959a8afd0afe605e5c5c218a0a87	Only enable basic blockfilterindex if enabled with type omitted	1	no	no	no	no	applied	
+6825ae0c786dc5647395380ffee7977d90df64e6	wallet, rpc: add anti-fee-sniping to `send` and `sendall`	5	no	no	unlikely	no	applied_manual	
+ee5c7aa786cdc9e2d9928596264ef2bd1180d361	Revert "wallet: Remove unused GetLegacyBalance" (complex)	2	no	no	no	no	applied	
+14bf4726c472f53867fd5354ae6b2204bc6d1507	Bugfix: wallet: GetLegacyBalance: Rather than include two conflicting unconfirmed transactions in the same balance, only include such transactions when they are in our mempool (which cannot have conflicts)	1	no	possible	consider	no	applied	
+283cd1f0650b18a39253dead2f9345142a1211db	wallet: let ListWalletDir do not iterate trough our blocksdata.	1	no	no	no	no	applied	
+20130089e3981685cae31289872058e938d36b16	rpc: getblock fixups	1	no	possible	consider	no	applied	
+8765a4ce0ee62f0e327707731bff0c6a169db1a8	rpc: getrawtransaction fixups	1	no	possible	consider	no	applied	
+6e9506fe316ef9fd0e4166616ae424f29dc40e72	rpc: decodepsbt fixups	1	no	possible	consider	no	applied	
+c57b199cc8dd395707ef35eac3fb2b780d104835	rpc: decodescript fixups	1	no	possible	consider	no	applied	
+6bdd9e209820256eb2759f76757a5a1379d9e36a	rpc: gettxout fixups	1	no	possible	consider	no	applied	
+35cdcb3309d3ab4042e75cef74ee718dde43929a	Minimise (diff & string changes)	2	no	no	no	no	applied	
+a303cde2fd11b4d60e7674ecf2a8ada1c0c33ca6	Allow acceptstalefeeestimates on all networks	2	no	no	unlikely	no	applied	
+4b3cc3d48e505e3143e1c02a9676150418101f6f	policy: Delete buggy GetVirtualTransactionSize(CTransaction&)	20	review	no	consider	review	applied_manual	
+1cee5b1ac727b3c94601aa1bd9cced12d2b308ca	node: Refactor BroadcastTransaction to accept a CFeeRate maximum	4	no	no	no	no	applied	
+335d928d9634c0cd514b6b08982903738af63c3f	Bugfix: RPC/Mempool: Pass CFeeRate to BroadcastTransaction to correctly account for non-weight vsize	1	no	possible	consider	no	applied	
+6f62772773966f03d20a4eafbec2ecbefcee4473	Bugfix: GUI/PSBTOperationsDialog: Pass feerate limit as a CFeeRate instead of assuming 1kvB	1	no	possible	consider	no	applied	
+117fc4c6fed7290df8ae45e21276398be01629a9	Diff-minimise	17	review	no	consider	no	applied	
+50b7a50a61ccc5a6d2e75b19f40e913ef56b691b	RPC: Keep .cookie if it was replaced after being generated	1	no	no	no	no	applied	
+d5170c321b01f8c68f128a10fe0b8a5c08cf37cb	Fix Requested Payments History Multiselect	4	no	no	unlikely	no	applied	
+349a10c74720cab1f4f88bbc5d8613b9cb648a3c	Bugfix: GUI/ReceiveCoinsDialog: Use correct Qt plural forms for context menu	1	no	possible	consider	no	applied	
+aa4d482f8eb3b6ba699c94494d6887de11b638f3	GUI/RecentRequestsTableModel: Return a null string for "no amount" in edit mode	1	no	no	unlikely	no	applied	
+92d697d16d2372de6ef5ebfb496bbcd5c9b28beb	GUI/ReceiveCoinsDialog: Allow copying labels/messages/amounts as long as at least one selected request has it populated	1	no	no	unlikely	no	applied	
+e411000afae359029e634e537c273394ea09f496	Diff-minimise & revert ReceiveCoinsDialog context menu plural forms to singular for now	2	no	no	unlikely	no	applied	
+200d869e95277f1ba5e9154d78b3f74b824d0a2c	Diff-minimise	3	no	no	unlikely	no	applied	
+4f06564f36a6b2cd380bb4b6ef07c2c9ea4b5e76	Bugfix: init: Correct conversion of AssumedBlockchainSize to use GB	1	no	possible	consider	no	applied	
+4c62285bb93b763cbc29e2ab5fe81d221f471084	Bugfix: init: For first-run disk space check, advise user of correct pruned size rather than full blockchain size	1	no	possible	consider	no	applied	
+e4e4a81317c2b5cd997d31a46823dc9972a803a7	Bugfix: RPC: Return all warnings in get{blockchain,mining,network}info (even in deprecated String mode)	1	no	possible	consider	no	applied	
+d153093ba28279aa3540bee3298eb5d9356f68aa	net: Add blockfilters white{bind,list} permission flag	4	no	no	no	no	applied	
+aa2885797e9a5c8c613171ed95e7a02de4b0b226	Include "blockfilters" in NetPermissions::ToStrings as appropriate	3	no	no	unlikely	no	applied	
+a0d0807abc25d5f29b6466b296a5c659c26d0592	Refactor to avoid conflicts in new p2p permissions	3	no	no	unlikely	no	applied	
+d3bcf469ce47348fdb17f3929eb72195203bbab5	Diff-minimise	2	no	no	no	no	applied	
+63fd84f7f14e7b77f57364d5f5463b5e6455cac5	policy: add CFeeRate::SatsToString helper without units	3	review	no	consider	review	applied	
+d302fef9a37869fa2ddd3fce13a02ea461814516	core_io: Add ValueFromFeeRate helper	2	no	no	no	no	applied	
+1ac478093ab5938fe6381245ac4e33b903033a62	test: add ValueFromFeeRate/CFeeRate unit tests	1	no	no	no	no	applied	
+1d3a37aa649503483443f4e88f7ce7cce8317040	wallet: introduce setfeerate, an improved settxfee in sat/vB	3	no	no	no	no	applied	
+c9790040621cc0c1e889b08307d676e0fe4d469e	QA: wallet_basic: Split wtx expected_fields over multiple lines to minimise merge conflicts	1	no	no	unlikely	no	applied	
+a22be508da47888cf73e3994ad366a6b5c20cbbc	RPC/Wallet: Convert descriptorprocesspsbt to use options parameter	3	no	no	unlikely	no	applied	
+e756e98ddd003548b0ad1b3f5b227036de9ef196	Diff-minimise	1	no	no	no	no	applied	
+f7473e4b22d269b0c3e6e801bf25afc0ffc6b7c1	Witness-only option for fundrawtransaction	5	no	no	unlikely	no	applied	
+b172716e3a7676f329da218bdb1efb5c32f58807	Wallet: Keep segwit_inputs_only in simple variable for duration of AvailableCoins	1	no	no	no	no	applied	
+4130132013d6e76a3f942c494dd7023c802d0f8d	Bugfix: QA/wallet_fundrawtransaction: Ensure segwit_inputs_only gets tested correctly	1	no	possible	consider	no	applied	
+a9f6f721aa48e2d399eb4b7944c0ac7480bc91fd	net: Apply outgoing connection permissions to automatic outgoing connections	2	no	no	no	no	applied	
+dbbb11e5603bed380eed04c35dbb099277298fc0	QA: p2p_invalid_messages: Check misbehaving with noban,out whitelisting	1	no	no	unlikely	no	applied	
+3f3dbb60d190e76074ec2da7b303d68f89fe28ee	wallet: track background validation height	2	no	no	no	no	applied	
+a6c53bb24436ecc1ae717b032c0cccdd704044eb	wallet: add IsTxAssumed() to WalletTxStatus	4	no	no	no	no	applied	
+3e281590c7dfa6d97191c41792d3b9604632d1a7	gui: add assumed confirmed state	4	no	no	unlikely	no	applied	
+b939a667b9b722899002bc93383c41575d6f7a68	Wallet: Pass dump_filename to DumpWallet as an argument	4	no	no	no	no	applied	
+922b6d2eea4b2c093a9fbad519a508b600fdd337	interfaces/Wallet: Add the ability to choose a backup format	3	no	no	unlikely	no	applied	
+941ac9409474df71d968cba8576860af9aa06eba	interfaces/Wallet: Add DumpWallet format to backupWallet interface	2	no	no	no	no	applied	
+ce0a8555e543ab9060ed61a5e4906e7dd63c03fa	GUI: Support backup to DumpWallet format	1	no	no	unlikely	no	applied	
+1bb949be278402e74325e13712c3ed27a1f542ca	GUI: Omit DbDump option for backup of BDB wallets	3	no	no	unlikely	no	applied	
+0c7ac920724fe980ee98b1aa58235373b1598104	RPC: Support first param name in GetParamIndex (and Arg<T>)	1	no	no	no	no	applied	
+d09a74c7e4f5022eaa0ba8b22d40a65bbe60f217	RPC/Wallet: Hacky fix for getbalance bugs	2	no	possible	consider	no	applied	
+cf5ec99cb05aa82430b5c2536d7224b7cd6b10fa	Bugfix: Wallet: Use CHECK_NONFATAL for findBlock in GetLegacyBalance	1	no	possible	consider	no	applied	
+93446f937a545fc1ff39af5a313b6a71204df28d	RPC/Wallet: getbalance: Avoid calling modern GetBalance when its result is unused	1	no	no	no	no	applied	
+be412ac6bc1ebfacc29c7d1934b112fc98b257aa	RPC/Wallet: getbalance: Throw an error if avoid_reuse is set but ignored	1	no	no	no	no	applied	
+d4b5aa0f04a927994d903dda907c4a12343ea6e1	doc: RPC/Wallet: Attempt to explain the dummy parameter	1	no	no	no	no	applied	
+3544a262569c348fedd59b42bbb24df240c193a3	eviction: track one random unprotected node to evict if forced	4	no	no	no	no	applied	
+711dadb54679474e0b92f17935cb9340eeb9cb6c	net: add new permission ForceInbound	2	no	no	no	no	applied	
+067f80e1b51c007ac7c3e6cb2028601e3d7b1cc5	net: nodes with ForceInbound permission force eviction	2	no	no	no	no	applied	
+3db935abd1d284132e31f8262530db05c44f13c0	test: cover ForceInbound permission success even when connections are full	1	no	no	unlikely	no	applied	
+902b4a8edc36d5ae93d773e2d1fabb5e7b319e01	contrib: manpages shouldn't "see also" themselves	1	no	no	unlikely	no	applied	
+be15feb951ec10b89ad3e6363aa0c3853099568a	rpc: add format command with support for args_cli	6	no	no	no	no	applied	
+7dd6f5b7fcd68e9ba45269b800f25ee3e4b6326b	test: keeps bitcoin-cli autocomplete in sync	4	no	no	unlikely	no	applied	
+8ed92bf6c754acd4034c6682bbfc176615af9ef1	Bugfix: QA: tool_cli_bash_completion: Typo in self.options	1	no	possible	consider	no	applied	
+bdb4ca4195c88b5fcc05bb6093f1543c72cd4d1c	rpc: Add support to populate PSBT input utxos via rpc	5	no	no	unlikely	no	applied	
+6cef608adf058332605789ef46789107c0df32f4	RPC/Net: Allow changing the connection_type for addnode onetry	1	no	no	no	no	applied	
+a444354c8a103e9af207e467d0caef0e6fc350c4	RPC/Net: addnode: Backward compatibility with connection_type in position 3	1	no	no	no	no	applied	
+9eaa8b53506b821264d6d75d73788570d7f8e85c	Handle MSG_FILTERED_WITNESS_BLOCK messages	2	no	no	no	no	applied	
+4c9dc4bbe6b23ae7dba7badbdb6dd6c3d0f74e08	rpc: add relevant_blocks to scanblocks status	1	no	no	no	no	applied	
+5b2d0216d871bd481f733506a2e8f80b8a34eca0	doc: add release notes for 30713	1	no	no	unlikely	no	applied	
+599a0811acb6a877b8b599bae494bfbebd07cd4d	corrected lockunspent rpc quoting	1	no	no	no	no	applied	
+2f7f2fae6318b6579aee7a95df3012d70cf8a435	further RPC example corrections	4	no	no	no	no	applied	
+a2badef7e42aab2acaa7dbb56cd0ca29f9d7fbaa	GUI: Always show pruning explanation to avoid checkbox jumping around	2	no	no	unlikely	no	applied	
+45d0868760b2e149cdd44c3d3beda166a7e3f843	GUI/Wallet: Strip ".dat" from end of wallet display names	1	no	no	unlikely	no	applied	
+6c78d40b891235cddc08060ad1e99743ea65ac54	RPC/blockchain: Allow using getblockfrompeer without already having the block header	4	no	no	unlikely	no	applied	
+ce3641a0e59620514a17f13ebae166f7c32761b5	QA: rpc_getblockfrompeer: Test that fetch-without-header actually works	1	no	no	unlikely	no	applied	
+eea8588f070917cb68f08c92877f8cb726b7d1dd	RPC/rawtx: descriptorprocesspsbt: Convert prevtxs param to options object only	2	no	no	no	no	applied	
+9a798150979dbecfdad2ab094a48ae7b744f35b7	net_permissions: Include "addr" permission on implicit whitelist entries	2	no	no	unlikely	no	applied	
+75b826c7294f7ddd66b2c5c1d1966f7f238632ee	Enforce checkpoints at their specific block height	3	review	no	consider	review	applied	
+c06b4194b3e27eaa1c0e45e1c643c0abafcb9f3a	QA: Check that a few defined mainchain checkpoints are working	1	no	no	no	review	applied	
+0fcc5ed47de88f583329bd6895ba84d8500052ea	QA: Functional test for checkpoint enforcement	1	no	no	unlikely	review	applied_manual	
+b2221bd0ae291c43288e8c414a853072a2b5bd43	GUI: Adjust recommended # of blocks confirmed to 16	2	no	no	unlikely	no	applied	
+17966748271f7820c287d0cadb06df65fed14862	Revert "guix: temporarily disable powerpcle taget"	1	no	no	unlikely	no	applied	
+620e79b72f6dd6eb0bd2798c4da893081d8e7f39	RPC: Add getblocklocations call	4	no	no	unlikely	no	applied	
+91c9e1463915e734ba3a87b77e28b28378e46756	Bugfix: RPC/blockchain: Hold cs_main for CBlockIndex access as needed to avoid races in getblocklocations	1	no	possible	consider	no	applied	
+32c2b6e32693dd185b2298e72c26e8e50dc51c2d	RPC/Blockchain: Bugfix: Correct getblocklocations example RPC method name	1	no	possible	consider	no	applied	
+e56f5e725544336ce2d47ff7c30abfe88d1a70c7	Bugfix: RPC/Blockchain: Correct getblocklocations return type	1	no	possible	consider	no	applied	
+e1a10af807d6252951920c4f6de4648734ec2f88	Bugfix: QA/fuzz: Add getblocklocations to RPC_COMMANDS_SAFE_FOR_FUZZING	1	no	possible	consider	no	applied	
+099f47c89f9a9d4e8d0705c969ba6a73b27116da	QA: rpc_getblocklocations: Support for testing with blocksxor enabled	1	no	no	unlikely	no	applied	
+020f2ab02845bba48a337e37da431e8de8bd4700	RPC: introduce 'getblockfileinfo' RPC command	4	no	no	no	no	applied	
+b5764509d07ff42498d5c5376837ea09d01b0ca3	test: rpc_getblockfrompeer.py, remove magic numbers usage	1	no	no	unlikely	no	applied	
+af6f73734e2ed2efab306851e27363b5b7579582	QA: tool_cli_bash_completion: Whitespace linter fix	1	no	no	unlikely	no	applied	
+c22a69eed1bbb126bdd5d3b7593f2afb46dfb4ec	RPC: addmultisigaddress / createmultisig: parameterize _createmultisig_redeemScript to allow sorting of public keys (BIP67)	11	review	no	consider	no	applied	
+88e4bd655a05eb0620a720db0b8c62918cedd1de	RPC: Use options object rather than adding a "sort" boolean for multisig methods	6	no	no	unlikely	no	applied	
+93ece76021c4e51dd6a09fd26f7ba88d26c2994b	script: GetScriptForRawPubKey: More efficient key-encoding loop	1	review	no	consider	no	applied	
+b73523bdb2266ffff2f8fc829de9eccbc99d0f49	doc/bips: Add BIP 67	1	no	no	unlikely	no	applied	
+647fd47dfe1f86cd122e6c307f0198bf4c11292f	Ensure whilst sorting only compressed public keys are used	2	no	no	no	no	applied	
+949e953d9343be7b667af24c01d8693053463bd4	Add more tests to sort_multisig.py / wallet_labels.py	2	no	no	unlikely	no	applied	
+355ca0d57505012df4c6550dc23e2117db95a151	script: Optimise GetScriptForMultisig slightly	1	review	no	consider	no	applied	
+ecd45f5e6c969a068b093742702410e946f3e816	QA: rpc_sort_multisig: Rename variables to avoid keyword conflict with `sorted`	1	no	no	unlikely	no	applied	
+30d940a219e0ea23ec53c9be077b5cbb7520735d	RPC: createmultisig/addmultisigaddress: Support named args for options	4	no	no	unlikely	no	applied	
+2f1bf089f7540356daf8c88ab81341d1248ad81b	validation: sync utxo state after block sync	3	no	no	no	no	applied	
+bbcec3aed748fdf59da76151d7d2f6f09b98635a	test: add test for SyncCoinsTipAfterChainSync	2	no	no	unlikely	no	applied	
+12c22b8235c7672c32448990e32f2f5ce1eea3aa	rpc: implement getgeneralinfo	3	no	no	unlikely	no	applied	
+47e4c8fbc6d4d9b01f9465ca5ef5b352740462ab	QA: Actually check getgeneralinfo results are correct	1	no	no	unlikely	no	applied	
+550f67c5d16ceac4c3da7a0775a601121383b2c2	Bugfix: QA: rpc_getgeneralinfo: Adapt test for startuptime ignoring mocktime	1	no	possible	consider	no	applied	
+60f1178c6bbbfc88af86c11ca17ffe5d3a19dc49	Bugfix: QA/fuzz: Add getgeneralinfo to RPC_COMMANDS_SAFE_FOR_FUZZING	1	no	possible	consider	no	applied	
+2c172d3a0d656e0d8a3e41d26eaa548fd772b6eb	RPC: Add getrpcwhitelist method	6	no	no	unlikely	no	applied	
+42d2ea53e840a0d93de5882068998cc9f599ee71	RPC: getrpcwhitelist: Return methods as a JSON Object for future expansion to sub-call permissions	2	no	no	unlikely	no	applied	
+441df44731881d3f2c4a9fee1594ba1145cbc160	Bugfix: RPC: Correct types in getrpcwhitelist RPC docs	1	no	possible	consider	no	applied	
+4432c6b5b7c8d113b354e9b1ec74591bfc24f1fd	RPC: getrpcwhitelist: Return all methods (or none) if no explicit whitelist defined	3	no	no	unlikely	no	applied	
+a13f2b66f400c94ef0f15af2c3ccdffab85edaf8	Bugfix: QA/fuzz: Add getrpcwhitelist to RPC_COMMANDS_SAFE_FOR_FUZZING	1	no	possible	consider	no	applied	
+3abda6a0017cabe6b542e7c7d3abcd2db998cbab	Bugfix: QA: test_node: Ensure debug.log exists at start of assert_debug_log	1	no	possible	consider	no	applied	
+87f2141bda041e78d85617a3f1270c9f88351f08	GUI: BitcoinAddressCheckValidator: Avoid hiding standard validate method signature needlessly	1	no	no	unlikely	no	applied	
+90676086b1c61963652928e2e80120b8365facae	fixup! test: cover ForceInbound permission success even when connections are full	1	no	no	unlikely	no	applied	
+2b3e19e9e854722b7bb04d11a579dc9df9435bda	net: only allow 8 simultaneous forced inbound connections	3	no	no	unlikely	no	applied	
+b0d90d28854ec5c98a25f804e2f6a19be596ec6a	net: add forced_inbound to getpeerinfo	5	no	no	unlikely	no	applied	
+a2225405a53c8a1d0c1a081f8c3afd82ae6ae400	net: Remove forcedinbound limit antifeature	3	no	no	unlikely	no	applied	
+7cefd1a42cef52afdad25e4fb39ad9ffb4ec437d	GUI: Make various dialogs less modal	5	no	no	unlikely	no	applied	
+95c21b1fdd14f89d762b46b0162bd2fcca1e5a93	[build] bump version to 29.0rc1	1	no	no	no	no	applied	
+86a3ce62096b2faefd01366a6f300fff6f8b9c0b	[doc] update man pages for 29.0rc1	6	no	no	unlikely	no	applied	
+21f423939e521aa61b96689b9f8ee61c59abf5eb	[examples] generate example bitcoin.conf	1	no	no	unlikely	no	applied	
+47e2fa86dc5433852fd9e5050a23de2accfdca8d	[doc] release notes link for 29.0	1	no	no	unlikely	no	applied	
+4e438d326ea55ac0f98f89e41e69b56354e801e7	build: use make < 3.82 syntax for define directive	2	no	no	unlikely	no	applied_manual	
+472d582bfec4dcdecb5f4d9bbbe41ea7961ca62b	[build] bump to 29.0rc2	1	no	no	no	no	applied	
+8082f88d1a434b3ba1018c6592affe759d53df48	[doc] update man pages for 29.0rc2	6	no	no	unlikely	no	applied	
+74df31cb0bdef9cce31ae62ed71a1e386cba0274	[doc] update example bitcoin.conf with missing options	1	no	no	unlikely	no	applied	
+7c05ef567328031641b7197b30508d0989bd15a7	[build] bump to 29.0rc3	1	no	no	no	no	applied	
+f80ab9a5d8cd5418655fe1a6f01c77926e2cc2e5	[doc] update man pages for 29.0rc3	6	no	no	unlikely	no	applied	
+a7b4350e2147e3699dcf3b4edafdf007ed6673b9	Revert "Use more specific path when including `memenv.h` header"	2	no	no	no	no	applied	
+c244d6306821d0ba25be15102a156f8be17c2d1c	crypto/sha256: Use pragmas to enforce necessary intrinsics for GCC and Clang	3	no	no	no	no	applied	
+4d9aff4d0b26350b1a3984146876ab6dd501c5ac	cmake: For intrinsics checks, use pragmas to explicitly enable them for GCC and Clang if possible	1	no	no	no	no	applied	
+57becdf59e55b686d05c7497908310c132edc2fd	http: Fail initialization when any bind fails	2	no	no	unlikely	no	applied	
+c89da5080b0854bc1227a46fa9baf8e720b2d1d3	httpserver: Clone evhttp_bind_socket_with_handle locally	1	no	no	no	no	applied	
+a4c8d3fd17907e0baac4383c0bcad3e9f8af7748	httpserver: Preserve socket error from listen across closesocket cleanup	1	no	no	no	no	applied	
+22544f94ee4a73d785585b424fb12270c518369c	httpserver: Collapse bind_socket into my_bind_socket_with_handle	1	no	no	no	no	applied	
+a12268e51aa16abc4676b16b8e2f304826cc5f4f	httpserver: Collapse make_addrinfo into my_bind_socket_with_handle	1	no	no	no	no	applied	
+e849d70691b2b58000be3081b67396cce6c19418	httpserver: Only make a single bind_socket_ai call from my_bind_socket_with_handle	1	no	no	no	no	applied	
+a229993220296426678593a8508e1a4f84c70746	httpserver: Collapse bind_socket_ai into my_bind_socket_with_handle	1	no	no	no	no	applied	
+582e28daf89794b3fa91f8c67396fa2727daee4a	httpserver: Adapt my_bind_socket_with_handle to local code style	1	no	no	no	no	applied	
+682d31cb2fc185ac1ba23abc2452f530de972ee3	httpserver: Simplify my_bind_socket_with_handle	1	no	no	no	no	applied	
+abdc85c2afcda02e1bca6cf562038a9a8fc336d9	httpserver: Check for and tolerate more possible system limitations	1	no	no	no	no	applied	
+fbe185ce7a76e3c8d36042df27f9a34ec9a95cff	Bugfix: httpserver: Close listen socket if we fail to make an evhttp handle	1	no	possible	consider	no	applied	
+fc1d58d4d037d2468077871d0cfb88b2bdd9a75d	httpserver: Workaround libevent bug by tolerating specific failure to support IPv6 binds (for default bind only)	1	no	no	no	no	applied	
+fe3bba8c29d183e4186a4994fc5bfabd7d822793	SanitizeString: Support optional escaping of disallowed characters	2	no	no	no	no	applied	
+b9d2634b81dba44d1ea9c5a8d5a8ba80700588ab	net_processing: Escape rather than remove any printable characters in UAs	3	no	no	no	no	applied	
+97130ac516ffe729153122aacd0b8a23e0650100	Try to use posix_fadvise with CBufferedFile	3	no	no	no	no	applied	
+549717f0a8a583f625948c78af77e87af6885d5a	fs_helpers: Guard _POSIX_C_SOURCE check within #ifdef	1	no	no	no	no	applied	
+916c1b855eccb75dc65ece1f9c02aa3d89685d65	The three arguments -nohelp, -noh, and -no? were previously silently accepted and interpreted as -help, -h, and -? respectively. As negating these arguments is meaningless, this is now blocked and properly communicated to the user.	2	no	no	no	no	applied	
+1c4d2d54d892f4f1f6e7607083736de76dd0901a	Bugfix: ZMQ: Leave notifiers intact rather than shut them down if they fail a notification once	1	no	possible	consider	no	applied	
+268fb1e0e373ffa83c9fd014f2c50f7d03c275c3	Bugfix: ZMQ: Don't try to use zmq_strerror when reading block from disk fails	1	no	possible	consider	no	applied	
+ba28af94bd5ca4fead299641657cf59fc13ec658	ZMQ: If reading block from disk fails, log the block hash	1	no	no	no	no	applied	
+050f4bbce9fd2f3e4b00b4c2c83475ef74e2e9f2	Diff-minimise	1	no	no	no	no	applied	
+2677bec14d1cee9e379b6845e944bf61c8456ab4	Diff-minimise	2	no	no	unlikely	no	applied	
+ca4a9cfecda0a35ac93de36ae552dc89b3790391	GUI: Treat assumed-confirmed txs as unconfirmed	1	no	no	unlikely	no	applied	
+c2b631708bd07a0f697a1f54bd48b9343689ff47	GUI: Treat assumed-confirmed txs as unconfirmed also in TransactionDesc	1	no	no	unlikely	no	applied	
+c89db663a42e6c075d6dd0e0cb7cdc350b829986	RPC/Wallet: Move wtx "confirmations" to "confirmations_assumed" if assumeutxo is applicable	1	no	no	no	review	applied	
+abdcbf48f4734f82143cd0f137c6717605648769	RPC/blockchain: gettxout: Move "confirmations" to "confirmations_assumed" when assumeutxo is applicable	1	no	no	no	review	applied	
+7a832effaa6d0da338bfb22c13b0cf2665bd940b	RPC/rawtransaction: getrawtransaction: Move "confirmations" to "confirmations_assumed" when assumeutxo is applicable	1	no	no	no	review	applied	
+9f6d3fbe78eaa1ab558e0cf439687b9f850bae22	Bugfix: RPC: Check for blank rpcauth on a per-param basis	1	no	possible	consider	no	applied	
+39bde96b6dfc6add6f74059ce53047883a651a39	QA: rpc_users: Test blank rpcauth in combination with non-blank	1	no	no	unlikely	no	applied	
+51588287fb5eeb5b161a856191c731d9e2ebb20d	QA: rpc_users: Test behaviour of -norpcauth	1	no	no	unlikely	no	applied	
+d469848b6f4f89d0c781ffc04da96c723fe1babd	cmake: Add unsupported `WITH_SYSTEM_LEVELDB` option	3	no	no	no	no	applied	
+0186d199a3dd405dce0862df51e6ccff947ea832	init: Sanity check LevelDB build/runtime versions	3	review	no	consider	no	applied	
+f2ac68746b20ba7bbf96315451ddbb2b9b5cab43	Use internal LevelDB test interface to bump LevelDB mmap limit up to 4096 like Bitcoin Core's fork	1	no	no	no	no	applied	
+d22a914b5604baa0250de4084d6954f5e186c528	QA/sanity_tests: Run dbwrapper_SanityCheck	1	no	no	no	no	applied	
+80cda0d5d6f788f6493f7514cb31ce1d8b828e20	dbwrapper: Return util::Result for SanityCheck	4	review	no	consider	no	applied	
+7e75b074b2e7e7efdbf3c34c9edde9e9f06d8d3c	cmake: Add unsupported `WITH_SYSTEM_LIBSECP256K1` option	2	no	no	no	no	applied	
+b13efc347e76c668c24bb82c3732bdc869ff651c	cmake: Check for necessary libsecp256k1 modules	1	no	no	no	no	applied	
+8fbdf93878fbedf7d183b2ebde5a0ce485b66bd4	Sanity check to detect LLVM bug 96267	3	review	no	consider	no	applied	
+15609dca5aea51b371fead8f863f348333e07749	build: Abstract release tarball generation to a utility script make_release_tarball	2	no	no	unlikely	no	applied	
+9a517f47ddbc1a43146c0748948f7a5c70006ff4	build: Micromanage tar when generating source tarball	2	no	no	unlikely	no	applied	
+bac3477e7c426053fbf22cbc8e8e7212bfc7c09c	Remove embedded libminisketch (and its tests/fuzz) from build	3	no	no	no	no	applied	
+6b29300f7068bde452f0b084d353510984a8ec43	guix: Exclude minisketch files from release tarball	1	no	no	unlikely	no	applied	
+e49dfac324193d4ae08b822f432fc4f5ccdf8802	rpccookieperms: Set permissions on temporary file, prior to writing the cookie	1	no	no	no	no	applied	
+83c29e97020b3bae884d6dc6a6d1c2df0cfc5ee3	script: Return total sum of input amounts from SignTransaction when available	6	review	no	consider	no	applied	
+6ea56f2c1ae4f2df5c9b48bd04851cb52675dfda	wallet: Show fee in results for signrawtransaction* when known	4	no	no	no	no	applied	
+8a18d12a902af941e808d3d469f36ae52c5e4343	wallet: Display fee rate in signrawtransaction*	3	no	no	no	no	applied	
+8bf1fed8415c699b1ac440f63e7f53b923e17b50	test: add test to segwit tests for fee rate when signing raw tx	1	no	no	unlikely	no	applied	
+c6c88992ea5649aeb613af934026b4520cb4a183	Introduce fee histogram in getmempoolinfo RPC command	4	no	no	no	no	applied	
+029d0411c54d91e1c837bdc487c777fcd1c44469	test: Add mempool fee histogram test coverage	2	no	no	unlikely	no	applied	
+0e10d83c991737205b041fb51328cb51f920cb3e	RPC/blockchain: Consider ancestor, descendant, and combined fee rates for histogram in getmempoolinfo	2	no	no	unlikely	no	applied	
+dc4052ed8602546ca37eef7b3919b70eda7365c1	Bugfix: QA: Ensure mempool_fee_histogram can adapt to feerate rounding correctly	1	no	possible	consider	no	applied	
+824fd5c175ea813f92f60cfa9cfe566298ea82c1	RPC/blockchain: getmempoolinfo: Enable specifying with_fee_histogram as a boolean to use a sensible default set of fee rate levels	4	no	no	unlikely	no	applied	
+6ab57096c135f7abe32029ca093d7c24364a811c	Add mempool/fee_histogram option to rest API	1	no	no	no	no	applied	
+4068d6fe6bfe13246f1eaf76237cd6b469697ee9	RPC/mempool: Add "to" (end of range) field to fee histogram	2	no	no	unlikely	no	applied	
+ec34e9a424122d7d99bf9bb579c27aae10e37d79	RPC/blockchain: getmempoolinfo: Return fee_histogram in older format (only)	2	no	no	unlikely	no	applied	
+e888c5d1c1fa248c5783b1ef88a5e19486d91f87	Bugfix: RPC/blockchain: Correct type of "to_feerate" result in getmempoolinfo fee histogram	1	no	possible	consider	no	applied	
+1a829d20e12810a1b22359af1a5cf189024c8fb2	RPC/mempool: Skip result type checks for fee_histogram in getmempoolinfo	1	no	no	no	no	applied	
+a822d5bda8c136e1e149330f4ee5554bf5124786	Bugfix: QA: Ensure mempool_fee_histogram expected feerates rounded down	1	no	possible	consider	no	applied	
+e9ce90337a6f4c281285d57c29a0e529a6c84f1d	Bugfix: RPC/blockchain: Actually round feerates down for getmempoolinfo fee histograms	2	no	possible	consider	no	applied	
+0697e9577877e2cdf2e9a9199f1aef87d9a5047f	QA: interface_rest: Check /mempool/info/with_fee_histogram matches RPC	1	no	no	unlikely	no	applied	
+85c8d477b069bfd1de5c5e90dba70389efa77a08	RPC/Mempool: Avoid extra decrement of unsigned below 0 when building fee histogram	1	no	no	no	no	applied	
+f818d33bd5b73d07b8a6a5e66c9c825888e21af5	Bugfix: QA: mempool_fee_histogram: Compare to actual vsize/fee rather than hard-coding a particular constant	1	no	possible	consider	no	applied	
+0c963ae2c193ee5f9e6485c30010f9c1482cc813	Add -uaappend option to append a literal string to user agent	1	no	no	no	no	applied	
+b6ca5e9f0c94c14c71a0bdf63d124f516712f053	QA: Test -uaappend	1	no	no	unlikely	no	applied	
+8ee12141570140f56f5cfefd793825a8787656a6	Roll back (tip - 1) prune locks when doing a reorg	1	review	no	consider	no	applied	
+0b4bd4e1340798c3ac798aacb76fbeb8de9776cf	Move prune lock checking into BlockManager	4	review	no	consider	no	applied	
+f4b3368b13529db4cf7aa3233316f9d58370e1dd	blockstorage: Add height_last to PruneLockInfo	2	no	no	no	no	applied	
+b4e1c9614e9dcda1ee6518d2209a35ae826533be	Add internal interfaces for prune locks	4	no	no	no	no	applied	
+4822c21812b0cd8f33421b4b9275dbb810d99747	Support for persisting prune locks in blocks/index db	6	review	no	consider	no	applied	
+b64d1e9b7b254312cb3d71b2dad7cc44b432c125	RPC: blockchain: Add listprunelocks and setprunelock methods	3	no	no	no	no	applied	
+196b501198d0d1b51eb96df57f379558583775e0	QA: Test prune locks via RPC	1	no	no	unlikely	no	applied	
+ef060ac6a5c49f256b4c26eead9a463c15511e18	RPC/Blockchain: Optimise setprunelock "delete all" slightly	1	no	no	no	no	applied	
+1d1c92d40d912f9a9f714ba5f785b824040afc04	Bugfix: QA/fuzz: Add listprunelocks and setprunelock to RPC_COMMANDS_SAFE_FOR_FUZZING	1	no	possible	consider	no	applied	
+162f0dba2f203ecb4509840a8616bd635af4ef0d	Bugfix: RPC: blockchain: Actually include "temporary" flag in listprunelocks result	2	no	possible	consider	no	applied	
+a7a205dc7d4e224ad2786311323a11e788208c09	rpc: Support -rpcauthfile argument	2	no	no	no	no	applied	
+8d26afaf5d512174654b91160f9c181b42d55a48	rpcauth.py: Combine rpcauth parameter in common	1	no	no	unlikely	no	applied	
+edb3686495cb1af56c280fcf5f39ab933d68a85b	rpcauth: Support storing credentials in a file	1	no	no	unlikely	no	applied	
+d797e00345a4c5b3193a2585ea41e7fc877c0267	Bugfix: rpcauth: Specify encoding for output file	1	no	possible	consider	no	applied	
+a34ee591e3b0a1b9dd80996949e0283557431e2a	rpcauthfile: Support multiple lines each with a different auth config	2	no	no	unlikely	no	applied	
+0545fb92154578fa281892928151b539d3fbd0bb	QA: rpc_users: Add tests for rpcauthfile	1	no	no	unlikely	no	applied	
+6d5fadc1ba3a0bf4dbead2026b54ce51f4110c3c	Bugfix: httprpc: Allow a blank -rpcauth or -rpcauthfile to void all prior such options of its own kind	1	no	possible	consider	no	applied	
+3af4b08cc19d5c2a86be0c903f001bf0e2b33428	httprpc: Optimise -rpcauthfile loading slightly	1	no	no	no	no	applied	
+32f13406288a0888aeaf3b3364cd61c9a29547e5	Revert "Bugfix: httprpc: Allow a blank -rpcauth or -rpcauthfile to void all prior such options of its own kind"	1	no	possible	consider	no	applied	
+a5e24757585a94ac2e79718859d8aadf7cb2f005	Ignore -rpcauthfile params if -norpcauth is used	2	no	no	unlikely	no	applied	
+f2e5b295320da417311d7569f623f036eb6280bb	GUI: Intro: Output a std::unique_ptr<Intro> from Intro::showIfNeeded	3	no	no	unlikely	no	applied	
+e1e2ca9786d675414e03d1d87c41433b3d532285	GUI: Intro: Have user choose assumevalid	5	no	no	unlikely	review	applied	
+7445c5b786999958ed382249f1f81f454934ad18	validation: Make LimitMempoolSize public	2	review	no	consider	no	applied	
+f3dceb936e48a54f39e95f0e461904c20fc6d3ae	Abstract minimum maxmempool to maxmempoolMinimumBytes function (in txmempool)	2	no	no	no	no	applied	
+771e99c7466c1aab11fec5e0bbc966b9f92c7b15	Add maxmempool RPC	4	no	no	no	no	applied	
+e3d45ed80998987a87e7cf6166ff9e58a81b77e7	util: Add "importfromcoldcard" command to bitcoin-wallet tool	4	no	no	no	no	applied	
+0b7664c0380aad43bdbe8bacd194c287e9fc78cf	wallettool: Add experimental warning to importfromcoldcard command	1	no	no	no	no	applied	
+b55d758d0df540798c96e7185b8e92e320cd93e8	Add formatBytesps function	2	no	no	unlikely	no	applied	
+4315bbfb13a7999f6c6a2853c79487afe9107217	Show ToolTip on Network Traffic graph	4	no	no	unlikely	no	applied	
+703f5c57ca7c63381db937488ea859c2dce819f7	GUI: Fix nits in traffic graph tooltip	2	no	no	unlikely	no	applied	
+02f94a1025cb46dd829d2f954b318ed741553b49	refactor: FormatISO8601Time without gmtime*	1	no	no	no	no	applied	
+17a4115654747ef08d168da70ccd9bb49216813d	Revert "gui: fix misleading signmessage error with segwit"	2	no	no	unlikely	no	applied	
+6e937e04ba6ace1a9f36573606e87486faf62aaa	verifymessage: Implement BIP 137 for Segwit support	3	no	no	unlikely	no	applied	
+567a2962f383646ac41316fa4dbc8bd7c599084c	verifymessage: Allow legacy signed messages to validate for Segwit (Electrum compatibility)	2	no	no	unlikely	no	applied	

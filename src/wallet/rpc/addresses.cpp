@@ -7,6 +7,7 @@
 #include <core_io.h>
 #include <key_io.h>
 #include <rpc/util.h>
+#include <script/signingprovider.h>
 #include <script/script.h>
 #include <script/solver.h>
 #include <util/bip32.h>
@@ -55,6 +56,8 @@ RPCMethod getnewaddress()
         std::optional<OutputType> parsed = ParseOutputType(request.params[1].get_str());
         if (!parsed) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Unknown address type '%s'", request.params[1].get_str()));
+        } else if (parsed.value() == OutputType::BECH32M && pwallet->GetLegacyScriptPubKeyMan()) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Legacy wallets cannot provide bech32m addresses");
         }
         output_type = parsed.value();
     }
@@ -101,6 +104,8 @@ RPCMethod getrawchangeaddress()
         std::optional<OutputType> parsed = ParseOutputType(request.params[0].get_str());
         if (!parsed) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Unknown address type '%s'", request.params[0].get_str()));
+        } else if (parsed.value() == OutputType::BECH32M && pwallet->GetLegacyScriptPubKeyMan()) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Legacy wallets cannot provide bech32m addresses");
         }
         output_type = parsed.value();
     }
@@ -215,6 +220,170 @@ RPCMethod listaddressgroupings()
     };
 }
 
+RPCMethod addmultisigaddress()
+{
+    return RPCMethod{"addmultisigaddress",
+                "Add an nrequired-to-sign multisignature address to the wallet. Requires a new wallet backup.\n"
+                "Each key is a Bitcoin address or hex-encoded public key.\n"
+                "This functionality is only intended for use with non-watchonly addresses.\n"
+                "See `importaddress` for watchonly p2sh address support.\n"
+                "If 'label' is specified, assign address to that label.\n"
+                "Public keys can be sorted according to BIP67 during the request if required.\n"
+                "Note: This command is only compatible with legacy wallets.\n",
+                {
+                    {"nrequired", RPCArg::Type::NUM, RPCArg::Optional::NO, "The number of required signatures out of the n keys or addresses."},
+                    {"keys", RPCArg::Type::ARR, RPCArg::Optional::NO, "The bitcoin addresses or hex-encoded public keys",
+                        {
+                            {"key", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "bitcoin address or hex-encoded public key"},
+                        },
+                        },
+                    {"options|label", {RPCArg::Type::OBJ_NAMED_PARAMS, RPCArg::Type::STR}, RPCArg::Optional::OMITTED, "",
+                        {
+                            {"address_type", RPCArg::Type::STR, RPCArg::DefaultHint{"set by -addresstype"}, "The address type to use. Options are \"legacy\", \"p2sh-segwit\", and \"bech32\".", RPCArgOptions{.also_positional = true}},
+                            {"label", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "A label to assign the address to.", RPCArgOptions{.also_positional = true}},
+                            {"sort", RPCArg::Type::BOOL, RPCArg::Default{false}, "Whether to sort public keys according to BIP67."},
+                        },
+                        RPCArgOptions{.oneline_description="options"}},
+                    {"address_type", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "", RPCArgOptions{.hidden=true}},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR, "address", "The value of the new multisig address"},
+                        {RPCResult::Type::STR_HEX, "redeemScript", "The string value of the hex-encoded redemption script"},
+                        {RPCResult::Type::STR, "descriptor", "The descriptor for this multisig"},
+                        {RPCResult::Type::ARR, "warnings", /*optional=*/true, "Any warnings resulting from the creation of this multisig",
+                        {
+                            {RPCResult::Type::STR, "", ""},
+                        }},
+                    }
+                },
+                RPCExamples{
+            "\nAdd a multisig address from 2 addresses\n"
+            + HelpExampleCli("addmultisigaddress", "2 \"[\\\"" + EXAMPLE_ADDRESS[0] + "\\\",\\\"" + EXAMPLE_ADDRESS[1] + "\\\"]\"") +
+            "\nAs a JSON-RPC call\n"
+            + HelpExampleRpc("addmultisigaddress", "2, [\"" + EXAMPLE_ADDRESS[0] + "\",\"" + EXAMPLE_ADDRESS[1] + "\"]")
+                },
+        [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return UniValue::VNULL;
+
+    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*pwallet);
+
+    LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
+
+    int required = request.params[0].getInt<int>();
+
+    std::string label;
+    OutputType output_type = pwallet->m_default_address_type;
+    bool sort = false;
+
+    if (!request.params[2].isNull()) {
+        if (request.params[2].type() == UniValue::VSTR) {
+            // Backward compatibility
+            label = LabelFromValue(request.params[2]);
+        } else {
+            const UniValue& options = request.params[2];
+            RPCTypeCheckObj(options,
+                {
+                    {"address_type", UniValueType(UniValue::VSTR)},
+                    {"label", UniValueType(UniValue::VSTR)},
+                    {"sort", UniValueType(UniValue::VBOOL)},
+                },
+                true, true);
+
+            if (options.exists("address_type")) {
+                if (!request.params[3].isNull()) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "address_type provided in both options and 4th parameter");
+                }
+                std::optional<OutputType> parsed = ParseOutputType(options["address_type"].get_str());
+                if (!parsed) {
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Unknown address type '%s'", options["address_type"].get_str()));
+                }
+                output_type = parsed.value();
+            }
+
+            if (options.exists("label")) {
+                label = LabelFromValue(options["label"]);
+            }
+
+            if (options.exists("sort")) {
+                sort = options["sort"].get_bool();
+            }
+        }
+    }
+
+    // Get the public keys
+    const UniValue& keys_or_addrs = request.params[1].get_array();
+    std::vector<CPubKey> pubkeys;
+    for (unsigned int i = 0; i < keys_or_addrs.size(); ++i) {
+        if (IsHex(keys_or_addrs[i].get_str()) && (keys_or_addrs[i].get_str().length() == 66 || keys_or_addrs[i].get_str().length() == 130)) {
+            pubkeys.push_back(HexToPubKey(keys_or_addrs[i].get_str()));
+        } else {
+            pubkeys.push_back(AddrToPubKey(spk_man, keys_or_addrs[i].get_str()));
+        }
+        if (sort && !pubkeys.back().IsCompressed()) {
+            throw std::runtime_error(strprintf("Compressed key required for BIP67: %s", keys_or_addrs[i].get_str()));
+        }
+    }
+
+    if (!request.params[3].isNull()) {
+        std::optional<OutputType> parsed = ParseOutputType(request.params[3].get_str());
+        if (!parsed) {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Unknown address type '%s'", request.params[3].get_str()));
+        } else if (parsed.value() == OutputType::BECH32M) {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Bech32m multisig addresses cannot be created with legacy wallets");
+        }
+        output_type = parsed.value();
+    }
+
+    // Construct using pay-to-script-hash:
+    FlatSigningProvider provider;
+    CScript inner;
+    CTxDestination dest = AddAndGetMultisigDestination(required, pubkeys, output_type, provider, inner, sort);
+
+    // Import scripts into the wallet
+    for (const auto& [id, script] : provider.scripts) {
+        // Due to a bug in the legacy wallet, the p2sh maximum script size limit is also imposed on 'p2sh-segwit' and 'bech32' redeem scripts.
+        // Even when redeem scripts over MAX_SCRIPT_ELEMENT_SIZE bytes are valid for segwit output types, we don't want to
+        // enable it because:
+        // 1) It introduces a compatibility-breaking change requiring downgrade protection; older wallets would be unable to interact with these "new" legacy wallets.
+        // 2) Considering the ongoing deprecation of the legacy spkm, this issue adds another good reason to transition towards descriptors.
+        if (script.size() > MAX_SCRIPT_ELEMENT_SIZE) throw JSONRPCError(RPC_WALLET_ERROR, "Unsupported multisig script size for legacy wallet. Upgrade to descriptors to overcome this limitation for p2sh-segwit or bech32 scripts");
+
+        if (!spk_man.AddCScript(script)) {
+            if (CScript inner_script; spk_man.GetCScript(CScriptID(script), inner_script)) {
+                CHECK_NONFATAL(inner_script == script); // Nothing to add, script already contained by the wallet
+                continue;
+            }
+            throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Error importing script into the wallet"));
+        }
+    }
+
+    // Store destination in the addressbook
+    pwallet->SetAddressBook(dest, label, AddressPurpose::SEND);
+
+    // Make the descriptor
+    std::unique_ptr<Descriptor> descriptor = InferDescriptor(GetScriptForDestination(dest), spk_man);
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("address", EncodeDestination(dest));
+    result.pushKV("redeemScript", HexStr(inner));
+    result.pushKV("descriptor", descriptor->ToString());
+
+    UniValue warnings(UniValue::VARR);
+    if (descriptor->GetOutputType() != output_type) {
+        // Only warns if the user has explicitly chosen an address type we cannot generate
+        warnings.push_back("Unable to make chosen address type, please ensure no uncompressed public keys are present.");
+    }
+    if (!warnings.empty()) result.pushKV("warnings", warnings);
+
+    return result;
+},
+    };
+}
+
 RPCMethod keypoolrefill()
 {
     return RPCMethod{"keypoolrefill",
@@ -234,6 +403,10 @@ RPCMethod keypoolrefill()
     std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
     if (!pwallet) return UniValue::VNULL;
 
+    if (pwallet->IsLegacy() && pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+    }
+
     LOCK(pwallet->cs_wallet);
 
     // 0 is interpreted by TopUpKeyPool() as the default keypool size given by -keypool
@@ -251,6 +424,38 @@ RPCMethod keypoolrefill()
         throw JSONRPCError(RPC_WALLET_ERROR, "Error refreshing keypool.");
     }
     pwallet->RefreshAllTXOs();
+
+    return UniValue::VNULL;
+},
+    };
+}
+
+RPCMethod newkeypool()
+{
+    return RPCMethod{
+        "newkeypool",
+        "Entirely clears and refills the keypool.\n"
+        "WARNING: On non-HD wallets, this will require a new backup immediately, to include the new keys.\n"
+        "When restoring a backup of an HD wallet created before the newkeypool command is run, funds received to\n"
+        "new addresses may not appear automatically. They have not been lost, but the wallet may not find them.\n"
+        "This can be fixed by running the newkeypool command on the backup and then rescanning, so the wallet\n"
+        "re-generates the required keys." +
+            HELP_REQUIRING_PASSPHRASE,
+        {},
+        RPCResult{RPCResult::Type::NONE, "", ""},
+        RPCExamples{
+            HelpExampleCli("newkeypool", "")
+            + HelpExampleRpc("newkeypool", "")
+        },
+        [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return UniValue::VNULL;
+
+    LOCK(pwallet->cs_wallet);
+
+    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*pwallet, true);
+    spk_man.NewKeyPool();
 
     return UniValue::VNULL;
 },
@@ -426,7 +631,8 @@ RPCMethod getaddressinfo()
                         {RPCResult::Type::STR, "address", "The bitcoin address validated."},
                         {RPCResult::Type::STR_HEX, "scriptPubKey", "The hex-encoded output script generated by the address."},
                         {RPCResult::Type::BOOL, "ismine", "If the address is yours."},
-                        {RPCResult::Type::BOOL, "iswatchonly", "(DEPRECATED) Always false."},
+                        {RPCResult::Type::BOOL, "isactive", "If the key is in the active keypool (always equal to \"ismine\" in descriptor wallets)."},
+                        {RPCResult::Type::BOOL, "iswatchonly", "If the address is watchonly."},
                         {RPCResult::Type::BOOL, "solvable", "If we know how to spend coins sent to this address, ignoring the possible lack of private keys."},
                         {RPCResult::Type::STR, "desc", /*optional=*/true, "A descriptor for spending coins sent to this address (only when solvable)."},
                         {RPCResult::Type::STR, "parent_desc", /*optional=*/true, "The descriptor used to derive this address if this is a descriptor wallet"},
@@ -462,6 +668,10 @@ RPCMethod getaddressinfo()
                         {
                             {RPCResult::Type::STR, "label name", "Label name (defaults to \"\")."},
                         }},
+                        {RPCResult::Type::ARR, "use_txids", "",
+                        {
+                            {RPCResult::Type::STR_HEX, "txid", "The ids of transactions involving this wallet which received with the address"},
+                        }},
                     }
                 },
                 RPCExamples{
@@ -496,8 +706,9 @@ RPCMethod getaddressinfo()
 
     std::unique_ptr<SigningProvider> provider = pwallet->GetSolvingProvider(scriptPubKey);
 
-    bool mine = pwallet->IsMine(dest);
-    ret.pushKV("ismine", mine);
+    isminetype mine = pwallet->IsMine(dest);
+    ret.pushKV("ismine", bool(mine & ISMINE_SPENDABLE));
+    ret.pushKV("isactive", pwallet->IsDestinationActive(dest));
 
     if (provider) {
         auto inferred = InferDescriptor(scriptPubKey, *provider);
@@ -523,7 +734,7 @@ RPCMethod getaddressinfo()
         }
     }
 
-    ret.pushKV("iswatchonly", false);
+    ret.pushKV("iswatchonly", bool(mine & ISMINE_WATCH_ONLY));
 
     UniValue detail = DescribeWalletAddress(*pwallet, dest);
     ret.pushKVs(std::move(detail));
@@ -554,6 +765,15 @@ RPCMethod getaddressinfo()
         labels.push_back(address_book_entry->GetLabel());
     }
     ret.pushKV("labels", std::move(labels));
+
+    // NOTE: Intentionally not special-casing a single txid: while addresses
+    // should never be reused, it's not unexpected to have RBF result in
+    // multiple txids for a single use.
+    UniValue use_txids(UniValue::VARR);
+    pwallet->FindScriptPubKeyUsed(std::set<CScript>{scriptPubKey}, [&use_txids](const CWalletTx&wtx) {
+        use_txids.push_back(wtx.GetHash().GetHex());
+    });
+    ret.pushKV("use_txids", std::move(use_txids));
 
     return ret;
 },

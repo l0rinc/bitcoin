@@ -154,6 +154,38 @@ class WalletDescriptorTest(BitcoinTestFramework):
         addr = recv_wrpc.getnewaddress()
         send_wrpc.sendtoaddress(addr, 10)
 
+        # Make sure things are disabled
+        self.log.info("Test disabled RPCs")
+        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.importprivkey, "cVpF924EspNh8KjYsfhgY96mmxvT6DgdWiTYMtMjuM74hJaU5psW")
+        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.importpubkey, send_wrpc.getaddressinfo(send_wrpc.getnewaddress())["pubkey"])
+        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.importmulti, [])
+        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.addmultisigaddress, 1, [recv_wrpc.getnewaddress()])
+        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.dumpprivkey, recv_wrpc.getnewaddress())
+        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.dumpwallet, 'wallet.dump')
+        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.importwallet, 'wallet.dump')
+        assert_raises_rpc_error(-4, "Only legacy wallets are supported by this command", recv_wrpc.rpc.sethdseed)
+        assert_raises_rpc_error(-4, "Cannot import address in wallet with private keys enabled", recv_wrpc.importaddress, send_wrpc.getnewaddress())
+
+        # Test importaddress
+        self.log.info("Test watch-only descriptor wallet")
+        self.nodes[0].createwallet(wallet_name="watch-only-desc", disable_private_keys=True, descriptors=True, blank=True)
+        wallet_watch_only = self.nodes[0].get_wallet_rpc("watch-only-desc")
+        wallet_watch_only.importaddress(addr)
+        assert_equal(wallet_watch_only.getaddressinfo(addr)['ismine'], True)
+        assert_equal(wallet_watch_only.getaddressinfo(addr)['solvable'], False)
+        assert_equal(wallet_watch_only.getbalances()["mine"]['untrusted_pending'], 10)
+
+        raw_addr = recv_wrpc.getnewaddress()
+        raw_script = recv_wrpc.getaddressinfo(raw_addr)["scriptPubKey"]
+        send_wrpc.sendtoaddress(raw_addr, 3)
+        wallet_watch_only.importaddress(raw_script, "raw-script")
+        assert_equal(wallet_watch_only.getbalances()["mine"]['untrusted_pending'], 13)
+        assert_raises_rpc_error(-4, "P2SH import feature disabled for descriptors' wallet", wallet_watch_only.importaddress, raw_script, "raw-script", False, True)
+        imported_descs = [d["desc"] for d in wallet_watch_only.listdescriptors()["descriptors"]]
+        assert any(d.startswith(f"addr({addr})#") for d in imported_descs)
+        assert any(d.startswith(f"raw({raw_script})#") for d in imported_descs)
+        self.nodes[0].unloadwallet("watch-only-desc")
+
         self.log.info("Test encryption")
         # Get the master fingerprint before encrypt
         info1 = send_wrpc.getaddressinfo(send_wrpc.getnewaddress())

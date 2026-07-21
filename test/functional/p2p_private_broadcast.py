@@ -420,6 +420,7 @@ class P2PPrivateBroadcast(BitcoinTestFramework):
             # may be retrieved after startup from the Tor control, but it will not be, so
             # the RPC should throw.
             "-torcontrol=127.0.0.1:1",
+            f"-bind=127.0.0.1:{tor_port(0)}=onion",
             "-listenonion",
         ])
         assert_raises_rpc_error(-1, "none of the Tor or I2P networks is reachable",
