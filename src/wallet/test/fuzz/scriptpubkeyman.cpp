@@ -89,6 +89,14 @@ static DescriptorScriptPubKeyMan* CreateDescriptor(WalletDescriptor& wallet_desc
     return &spk_manager_res.value().get();
 };
 
+static void AssertScriptPubKeyState(const DescriptorScriptPubKeyMan& spk_manager)
+{
+    const auto script_pub_keys{spk_manager.GetScriptPubKeys()};
+    for (const CScript& script : script_pub_keys) {
+        assert(spk_manager.IsMine(script));
+    }
+}
+
 FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -109,6 +117,7 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
     if (!wallet_desc.has_value()) return;
     auto spk_manager{CreateDescriptor(wallet_desc->first, wallet_desc->second, wallet)};
     if (spk_manager == nullptr) return;
+    AssertScriptPubKeyState(*spk_manager);
 
     if (fuzzed_data_provider.ConsumeBool()) {
         auto wallet_desc{CreateWalletDescriptor(fuzzed_data_provider)};
@@ -118,7 +127,10 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
         std::string error;
         if (spk_manager->CanUpdateToWalletDescriptor(wallet_desc->first, error)) {
             auto new_spk_manager{CreateDescriptor(wallet_desc->first, wallet_desc->second, wallet)};
-            if (new_spk_manager != nullptr) spk_manager = new_spk_manager;
+            if (new_spk_manager != nullptr) {
+                spk_manager = new_spk_manager;
+                AssertScriptPubKeyState(*spk_manager);
+            }
         }
     }
 
@@ -153,7 +165,12 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                 auto spks{spk_manager->GetScriptPubKeys()};
                 if (!spks.empty()) {
                     auto& spk{PickValue(fuzzed_data_provider, spks)};
-                    (void)spk_manager->MarkUnusedAddresses(spk);
+                    const auto marked_destinations{spk_manager->MarkUnusedAddresses(spk)};
+                    for (const auto& marked_destination : marked_destinations) {
+                        const CScript marked_script{GetScriptForDestination(marked_destination.dest)};
+                        assert(spk_manager->IsMine(marked_script));
+                        assert(spk_manager->GetScriptPubKeys().contains(marked_script));
+                    }
                 }
             },
             [&] {
@@ -166,6 +183,9 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                         if (dest) {
                             assert(IsValidDestination(*dest));
                             assert(spk_manager->IsHDEnabled());
+                            const CScript script{GetScriptForDestination(*dest)};
+                            assert(spk_manager->IsMine(script));
+                            assert(spk_manager->GetScriptPubKeys().contains(script));
                         }
                     }
                 }
@@ -212,6 +232,7 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
     (void)spk_manager->GetDescriptorString(descriptor, /*priv=*/fuzzed_data_provider.ConsumeBool());
     (void)spk_manager->GetEndRange();
     (void)spk_manager->GetKeyPoolSize();
+    AssertScriptPubKeyState(*spk_manager);
 }
 
 FUZZ_TARGET(spkm_migration, .init = initialize_spkm_migration)
