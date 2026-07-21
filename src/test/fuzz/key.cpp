@@ -308,11 +308,21 @@ FUZZ_TARGET(ellswift_roundtrip, .init = initialize_key)
     ent32.resize(32);
 
     auto encoded_ellswift = key.EllSwiftCreate(ent32);
+    const EllSwiftPubKey encoded_ellswift_copy{std::span<const std::byte>{encoded_ellswift.data(), EllSwiftPubKey::size()}};
+    assert(encoded_ellswift_copy == encoded_ellswift);
     auto decoded_pubkey = encoded_ellswift.Decode();
+    assert(decoded_pubkey == key.GetPubKey());
+    assert(decoded_pubkey.IsFullyValid());
+
+    // BIP324 decodes an arbitrary fixed-size peer value, and every 64-byte value is a valid EllSwift encoding.
+    auto peer_ellswift_bytes = fdp.ConsumeBytes<std::byte>(EllSwiftPubKey::size());
+    peer_ellswift_bytes.resize(EllSwiftPubKey::size());
+    const EllSwiftPubKey peer_ellswift{std::span<const std::byte>{peer_ellswift_bytes.data(), peer_ellswift_bytes.size()}};
+    assert(peer_ellswift.Decode().IsFullyValid());
 
     uint256 hash{ConsumeUInt256(fdp)};
     std::vector<unsigned char> sig;
-    key.Sign(hash, sig);
+    assert(key.Sign(hash, sig));
     assert(decoded_pubkey.Verify(hash, sig));
 }
 
