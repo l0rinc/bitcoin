@@ -336,9 +336,9 @@ EllSwiftPubKey CKey::EllSwiftCreate(std::span<const std::byte> ent32) const
 
 ECDHSecret CKey::ComputeBIP324ECDHSecret(const EllSwiftPubKey& their_ellswift, const EllSwiftPubKey& our_ellswift, bool initiating) const
 {
-    assert(keydata);
+    Assert(keydata);
 
-    ECDHSecret output;
+    ECDHSecret output{};
     // BIP324 uses the initiator as party A, and the responder as party B. Remap the inputs
     // accordingly:
     bool success = secp256k1_ellswift_xdh(secp256k1_context_static,
@@ -350,7 +350,7 @@ ECDHSecret CKey::ComputeBIP324ECDHSecret(const EllSwiftPubKey& their_ellswift, c
                                           secp256k1_ellswift_xdh_hash_function_bip324,
                                           nullptr);
     // Should always succeed for valid keys (assert above).
-    assert(success);
+    Assert(success);
     return output;
 }
 
