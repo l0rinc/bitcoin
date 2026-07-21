@@ -22,9 +22,7 @@
 #include <validation.h>
 
 #include <cstddef>
-#include <map>
 #include <memory>
-#include <utility>
 
 namespace kernel {
 
@@ -82,27 +80,6 @@ void RemoveCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& c
 //! It is also possible, though very unlikely, that a change in this
 //! construction could cause a previously invalid (and potentially malicious)
 //! UTXO snapshot to be considered valid.
-template <typename T>
-static void ApplyHash(T& hash_obj, const Txid& hash, const std::map<uint32_t, Coin>& outputs)
-{
-    for (auto it = outputs.begin(); it != outputs.end(); ++it) {
-        ApplyCoinHash(hash_obj, COutPoint(hash, it->first), it->second);
-    }
-}
-
-static void ApplyStats(CCoinsStats& stats, const std::map<uint32_t, Coin>& outputs)
-{
-    assert(!outputs.empty());
-    stats.nTransactions++;
-    for (auto it = outputs.begin(); it != outputs.end(); ++it) {
-        stats.nTransactionOutputs++;
-        if (stats.total_amount.has_value()) {
-            stats.total_amount = CheckedAdd(*stats.total_amount, it->second.out.nValue);
-        }
-        stats.nBogoSize += GetBogoSize(it->second.out.scriptPubKey);
-    }
-}
-
 //! Calculate statistics about the unspent transaction output set
 template <typename T>
 static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, const CCoinsViewDB& view, node::BlockManager& blockman, const std::function<void()>& interruption_point)
@@ -117,19 +94,23 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, const CCoinsViewD
     CCoinsStats stats{Assert(pindex)->nHeight, pindex->GetBlockHash()};
 
     Txid prevkey;
-    std::map<uint32_t, Coin> outputs;
+    bool have_prevkey{false};
     while (pcursor->Valid()) {
         if (interruption_point) interruption_point();
         COutPoint key;
         Coin coin;
         if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
-            if (!outputs.empty() && key.hash != prevkey) {
-                ApplyStats(stats, outputs);
-                ApplyHash(hash_obj, prevkey, outputs);
-                outputs.clear();
+            if (!have_prevkey || key.hash != prevkey) {
+                stats.nTransactions++;
+                prevkey = key.hash;
+                have_prevkey = true;
             }
-            prevkey = key.hash;
-            outputs[key.n] = std::move(coin);
+            stats.nTransactionOutputs++;
+            if (stats.total_amount.has_value()) {
+                stats.total_amount = CheckedAdd(*stats.total_amount, coin.out.nValue);
+            }
+            stats.nBogoSize += GetBogoSize(coin.out.scriptPubKey);
+            ApplyCoinHash(hash_obj, key, coin);
             stats.coins_count++;
         } else {
             LogError("%s: unable to read value\n", __func__);
@@ -137,11 +118,6 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, const CCoinsViewD
         }
         pcursor->Next();
     }
-    if (!outputs.empty()) {
-        ApplyStats(stats, outputs);
-        ApplyHash(hash_obj, prevkey, outputs);
-    }
-
     FinalizeHash(hash_obj, stats);
 
     stats.nDiskSize = view.EstimateSize();
