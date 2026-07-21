@@ -1409,6 +1409,8 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
 
     // Return the constructed transaction data.
     CTransactionRef tx = MakeTransactionRef(std::move(txNew));
+    assert(tx->vin.size() == selected_coins.size());
+    assert(current_fee == result.GetSelectedValue() - CalculateOutputValue(*tx));
 
     // Limit size
     if ((sign && GetTransactionWeight(*tx) > MAX_STANDARD_TX_WEIGHT) ||
