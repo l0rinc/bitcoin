@@ -1071,6 +1071,7 @@ void CBlockPolicyEstimator::FlushUnconfirmed()
         auto mi = mapMemPoolTxs.begin();
         _removeTx(mi->first, false); // this calls erase() on mapMemPoolTxs
     }
+    assert(mapMemPoolTxs.empty());
     const auto endclear{SteadyClock::now()};
     LogDebug(BCLog::ESTIMATEFEE, "Recorded %u unconfirmed txs from mempool in %.3fs\n", num_entries, Ticks<SecondsDouble>(endclear - startclear));
 }
