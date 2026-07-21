@@ -2,15 +2,19 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <logging.h>
 #include <util/threadpool.h>
 
+#include <logging.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 
 #include <atomic>
+#include <functional>
 #include <future>
+#include <latch>
 #include <queue>
+#include <semaphore>
+#include <vector>
 
 struct ExpectedException : std::runtime_error {
     explicit ExpectedException(const std::string& msg) : std::runtime_error(msg) {}
@@ -50,6 +54,99 @@ static void StartPoolIfNeeded()
 {
     if (g_pool.WorkersCount() == g_num_workers) return;
     g_pool.Start(g_num_workers);
+}
+
+static void AssertSubmitRejected(ThreadPool::SubmitError expected_error)
+{
+    const auto single_result{g_pool.Submit([] {})};
+    assert(!single_result);
+    assert(single_result.error() == expected_error);
+
+    std::vector<std::function<void()>> no_tasks;
+    const auto range_result{g_pool.Submit(std::move(no_tasks))};
+    assert(!range_result);
+    assert(range_result.error() == expected_error);
+}
+
+static void ExerciseLifecycleContracts()
+{
+    assert(g_pool.WorkersCount() == g_num_workers);
+    assert(g_pool.WorkQueueSize() == 0);
+
+    // Occupy every worker so ProcessTask() must execute queued work on the
+    // controller thread and Interrupt() must preserve that queued work.
+    std::counting_semaphore<> release_workers{0};
+    std::latch workers_started{static_cast<ptrdiff_t>(g_num_workers)};
+    std::vector<std::future<void>> blocking_futures;
+    blocking_futures.reserve(g_num_workers);
+    for (size_t i{0}; i < g_num_workers; ++i) {
+        blocking_futures.emplace_back(*Assert(g_pool.Submit([&] {
+            workers_started.count_down();
+            release_workers.acquire();
+        })));
+    }
+    workers_started.wait();
+
+    constexpr uint32_t NUM_MANUAL_TASKS{8};
+    std::atomic_uint32_t manual_counter{0};
+    std::vector<std::future<void>> manual_futures;
+    manual_futures.reserve(NUM_MANUAL_TASKS);
+    for (uint32_t i{0}; i < NUM_MANUAL_TASKS; ++i) {
+        manual_futures.emplace_back(*Assert(g_pool.Submit([&manual_counter] {
+            manual_counter.fetch_add(1, std::memory_order_relaxed);
+        })));
+    }
+    assert(g_pool.WorkQueueSize() == NUM_MANUAL_TASKS);
+
+    uint32_t manually_processed{0};
+    while (g_pool.ProcessTask())
+        ++manually_processed;
+    assert(manually_processed == NUM_MANUAL_TASKS);
+    assert(manual_counter.load(std::memory_order_relaxed) == NUM_MANUAL_TASKS);
+    assert(g_pool.WorkQueueSize() == 0);
+    for (auto& future : manual_futures)
+        future.get();
+
+    // Queue work, interrupt acceptance, and then prove that already accepted
+    // work drains before workers exit.
+    std::atomic_uint32_t interrupted_counter{0};
+    auto interrupted_future{*Assert(g_pool.Submit([&interrupted_counter] {
+        interrupted_counter.fetch_add(1, std::memory_order_relaxed);
+    }))};
+    assert(g_pool.WorkQueueSize() == 1);
+    g_pool.Interrupt();
+    AssertSubmitRejected(ThreadPool::SubmitError::Interrupted);
+    release_workers.release(static_cast<ptrdiff_t>(g_num_workers));
+    for (auto& future : blocking_futures)
+        future.get();
+    interrupted_future.get();
+    assert(interrupted_counter.load(std::memory_order_relaxed) == 1);
+
+    g_pool.Stop();
+    assert(g_pool.WorkersCount() == 0);
+    assert(g_pool.WorkQueueSize() == 0);
+    AssertSubmitRejected(ThreadPool::SubmitError::Inactive);
+
+    // Stop resets the lifecycle so the same long-lived fuzzer process can
+    // start a fresh pool, as Core does across server lifecycles.
+    g_pool.Start(g_num_workers);
+    assert(g_pool.WorkersCount() == g_num_workers);
+
+    std::atomic_uint32_t range_counter{0};
+    std::vector<std::function<void()>> range_tasks;
+    constexpr uint32_t NUM_RANGE_TASKS{6};
+    range_tasks.reserve(NUM_RANGE_TASKS);
+    for (uint32_t i{0}; i < NUM_RANGE_TASKS; ++i) {
+        range_tasks.emplace_back([&range_counter] {
+            range_counter.fetch_add(1, std::memory_order_relaxed);
+        });
+    }
+    auto range_futures{std::move(*Assert(g_pool.Submit(std::move(range_tasks))))};
+    assert(range_futures.size() == NUM_RANGE_TASKS);
+    for (auto& future : range_futures)
+        future.get();
+    assert(range_counter.load(std::memory_order_relaxed) == NUM_RANGE_TASKS);
+    assert(g_pool.WorkQueueSize() == 0);
 }
 
 static void setup_threadpool_test()
@@ -112,4 +209,6 @@ FUZZ_TARGET(threadpool, .init = setup_threadpool_test)
     assert(g_pool.WorkQueueSize() == 0);
     assert(task_counter.load() == expected_task_counter);
     assert(fail_counter == expected_fail_tasks);
+
+    ExerciseLifecycleContracts();
 }
