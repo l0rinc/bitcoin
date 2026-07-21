@@ -171,6 +171,34 @@ void AssertSnapshotMetadataRoundTrip(const SnapshotMetadata& metadata)
     assert(reparsed.m_coins_count == metadata.m_coins_count);
 }
 
+void AssertBlockLocatorRoundTrip(const CBlockLocator& locator)
+{
+    auto serialized{Serialize(locator)};
+    CBlockLocator reparsed;
+    serialized >> reparsed;
+    assert(serialized.empty());
+    assert(reparsed.vHave == locator.vHave);
+}
+
+void DeserializeAndAssertBlockLocator(FuzzBufferType buffer, CBlockLocator& locator)
+{
+    SpanReader reader{buffer};
+    try {
+        reader >> locator;
+    } catch (const std::ios_base::failure&) {
+        throw invalid_fuzzing_input_exception();
+    }
+
+    const auto serialized{Serialize(locator)};
+    // The historical version is intentionally ignored and normalized on write.
+    const size_t version_size{GetSerializeSize(CBlockLocator::DUMMY_VERSION)};
+    assert(serialized.size() >= version_size);
+    assert(serialized.size() <= buffer.size());
+    assert(reader.size() == buffer.size() - serialized.size());
+    assert(std::memcmp(serialized.data() + version_size, buffer.data() + version_size,
+                       serialized.size() - version_size) == 0);
+}
+
 void AssertBlockTransactionsRoundTrip(const BlockTransactions& block_transactions)
 {
     for (const auto& transaction : block_transactions.txn) {
@@ -286,7 +314,8 @@ FUZZ_TARGET_DESERIALIZE(block_deserialize, {
 })
 FUZZ_TARGET_DESERIALIZE(blocklocator_deserialize, {
     CBlockLocator bl;
-    DeserializeFromFuzzingInput(buffer, bl);
+    DeserializeAndAssertBlockLocator(buffer, bl);
+    AssertBlockLocatorRoundTrip(bl);
 })
 FUZZ_TARGET_DESERIALIZE(blockmerkleroot, {
     CBlock block;
