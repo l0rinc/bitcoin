@@ -32,6 +32,7 @@
 #include <undo.h>
 
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <optional>
 #include <stdexcept>
@@ -125,6 +126,41 @@ void AssertSnapshotMetadataRoundTrip(const SnapshotMetadata& metadata)
     assert(serialized.empty());
     assert(reparsed.m_base_blockhash == metadata.m_base_blockhash);
     assert(reparsed.m_coins_count == metadata.m_coins_count);
+}
+
+void AssertBlockTransactionsRoundTrip(const BlockTransactions& block_transactions)
+{
+    for (const auto& transaction : block_transactions.txn) {
+        assert(transaction);
+    }
+
+    auto serialized{Serialize(block_transactions)};
+    BlockTransactions reparsed;
+    serialized >> reparsed;
+    assert(serialized.empty());
+    assert(reparsed.blockhash == block_transactions.blockhash);
+    assert(reparsed.txn.size() == block_transactions.txn.size());
+    for (size_t i = 0; i < block_transactions.txn.size(); ++i) {
+        assert(reparsed.txn[i]);
+        assert(*reparsed.txn[i] == *block_transactions.txn[i]);
+    }
+}
+
+void DeserializeAndAssertBlockTransactions(FuzzBufferType buffer)
+{
+    BlockTransactions block_transactions;
+    SpanReader reader{buffer};
+    try {
+        reader >> block_transactions;
+    } catch (const std::ios_base::failure&) {
+        throw invalid_fuzzing_input_exception();
+    }
+
+    auto serialized{Serialize(block_transactions)};
+    assert(serialized.size() <= buffer.size());
+    assert(reader.size() == buffer.size() - serialized.size());
+    assert(std::memcmp(serialized.data(), buffer.data(), serialized.size()) == 0);
+    AssertBlockTransactionsRoundTrip(block_transactions);
 }
 
 } // namespace
@@ -317,8 +353,7 @@ FUZZ_TARGET_DESERIALIZE(txoutcompressor_deserialize, {
     assert(MoneyRange(to.nValue));
 })
 FUZZ_TARGET_DESERIALIZE(blocktransactions_deserialize, {
-    BlockTransactions bt;
-    DeserializeFromFuzzingInput(buffer, bt);
+    DeserializeAndAssertBlockTransactions(buffer);
 })
 FUZZ_TARGET_DESERIALIZE(blocktransactionsrequest_deserialize, {
     BlockTransactionsRequest btr;
