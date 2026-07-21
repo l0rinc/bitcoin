@@ -204,6 +204,21 @@ void AssertInvRoundTrip(const CInv& inv)
     assert(reparsed.hash == inv.hash);
 }
 
+void AssertBlockFileInfoRoundTrip(const CBlockFileInfo& info)
+{
+    auto serialized{Serialize(info)};
+    CBlockFileInfo reparsed;
+    serialized >> reparsed;
+    assert(serialized.empty());
+    assert(reparsed.nBlocks == info.nBlocks);
+    assert(reparsed.nSize == info.nSize);
+    assert(reparsed.nUndoSize == info.nUndoSize);
+    assert(reparsed.nHeightFirst == info.nHeightFirst);
+    assert(reparsed.nHeightLast == info.nHeightLast);
+    assert(reparsed.nTimeFirst == info.nTimeFirst);
+    assert(reparsed.nTimeLast == info.nTimeLast);
+}
+
 void DeserializeAndAssertBlockLocator(FuzzBufferType buffer, CBlockLocator& locator)
 {
     SpanReader reader{buffer};
@@ -268,7 +283,8 @@ FUZZ_TARGET(addr_info_deserialize, .init = initialize_deserialize)
 }
 FUZZ_TARGET_DESERIALIZE(block_file_info_deserialize, {
     CBlockFileInfo block_file_info;
-    DeserializeFromFuzzingInput(buffer, block_file_info);
+    DeserializeAndAssertCanonicalPrefix(buffer, block_file_info);
+    AssertBlockFileInfoRoundTrip(block_file_info);
 })
 FUZZ_TARGET_DESERIALIZE(block_header_and_short_txids_deserialize, {
     CBlockHeaderAndShortTxIDs block_header_and_short_txids;
