@@ -196,7 +196,8 @@ CPubKey CKey::GetPubKey() const {
     CPubKey result;
     int ret = secp256k1_ec_pubkey_create(secp256k1_context_sign, &pubkey, UCharCast(begin()));
     assert(ret);
-    secp256k1_ec_pubkey_serialize(secp256k1_context_static, (unsigned char*)result.begin(), &clen, &pubkey, fCompressed ? SECP256K1_EC_COMPRESSED : SECP256K1_EC_UNCOMPRESSED);
+    ret = secp256k1_ec_pubkey_serialize(secp256k1_context_static, (unsigned char*)result.begin(), &clen, &pubkey, fCompressed ? SECP256K1_EC_COMPRESSED : SECP256K1_EC_UNCOMPRESSED);
+    assert(ret);
     assert(result.size() == clen);
     assert(result.IsValid());
     return result;
@@ -315,6 +316,8 @@ bool CKey::Derive(CKey& keyChild, ChainCode &ccChild, unsigned int nChild, const
     keyChild.Set(begin(), begin() + 32, true);
     bool ret = secp256k1_ec_seckey_tweak_add(secp256k1_context_static, (unsigned char*)keyChild.begin(), vout.data());
     if (!ret) keyChild.ClearKeyData();
+    assert(ret == keyChild.IsValid());
+    assert(!ret || keyChild.IsCompressed());
     return ret;
 }
 
