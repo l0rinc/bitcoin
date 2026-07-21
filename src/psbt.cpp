@@ -13,6 +13,8 @@
 #include <util/result.h>
 #include <util/strencodings.h>
 
+#include <limits>
+
 using common::PSBTError;
 
 PartiallySignedTransaction::PartiallySignedTransaction(const CMutableTransaction& tx, uint32_t version) : m_version(version)
@@ -82,6 +84,10 @@ bool PartiallySignedTransaction::Merge(const PartiallySignedTransaction& psbt)
     m_proprietary.insert(psbt.m_proprietary.begin(), psbt.m_proprietary.end());
     unknown.insert(psbt.unknown.begin(), psbt.unknown.end());
 
+    assert(inputs.size() == psbt.inputs.size());
+    assert(outputs.size() == psbt.outputs.size());
+    assert(GetVersion() == psbt.GetVersion());
+    assert(GetUniqueID() == this_id);
     return true;
 }
 
@@ -814,6 +820,16 @@ bool FinalizePSBT(PartiallySignedTransaction& psbtx)
         complete &= (SignPSBTInput(DUMMY_SIGNING_PROVIDER, psbtx, i, &txdata, {.sighash_type = input.sighash_type, .finalize = true}, /*out_sigdata=*/nullptr) == PSBTError::OK);
     }
 
+    if (!complete) {
+        return false;
+    }
+    const std::optional<PrecomputedTransactionData> final_txdata{PrecomputePSBTData(psbtx)};
+    if (!final_txdata) {
+        return false;
+    }
+    for (unsigned int i = 0; i < psbtx.inputs.size(); ++i) {
+        complete &= PSBTInputSignedAndVerified(psbtx, i, &*final_txdata);
+    }
     return complete;
 }
 
@@ -830,9 +846,17 @@ bool FinalizeAndExtractPSBT(PartiallySignedTransaction& psbtx, CMutableTransacti
         return false;
     }
     result = *unsigned_tx;
+    assert(result.vin.size() == psbtx.inputs.size());
+    assert(result.vout.size() == psbtx.outputs.size());
     for (unsigned int i = 0; i < result.vin.size(); ++i) {
+        assert(result.vin[i].prevout == psbtx.inputs[i].GetOutPoint());
+        assert(result.vin[i].nSequence == psbtx.inputs[i].sequence.value_or(std::numeric_limits<uint32_t>::max()));
         result.vin[i].scriptSig = psbtx.inputs[i].final_script_sig;
         result.vin[i].scriptWitness = psbtx.inputs[i].final_script_witness;
+    }
+    for (unsigned int i = 0; i < result.vout.size(); ++i) {
+        assert(result.vout[i].nValue == psbtx.outputs[i].amount);
+        assert(result.vout[i].scriptPubKey == psbtx.outputs[i].script);
     }
     return true;
 }

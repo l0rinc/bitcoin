@@ -12,6 +12,7 @@
 #include <test/util/random.h>
 #include <util/check.h>
 
+#include <cassert>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -20,6 +21,82 @@
 using node::AnalyzePSBT;
 using node::PSBTAnalysis;
 using node::PSBTInputAnalysis;
+
+static std::vector<uint8_t> SerializePSBT(const PartiallySignedTransaction& psbt)
+{
+    std::vector<uint8_t> serialized;
+    VectorWriter{serialized, 0, psbt};
+    return serialized;
+}
+
+static void AssertTransactionEnvelope(const PartiallySignedTransaction& psbt, const CMutableTransaction& tx)
+{
+    const auto unsigned_tx{psbt.GetUnsignedTx()};
+    assert(unsigned_tx);
+    assert(tx.version == unsigned_tx->version);
+    assert(tx.nLockTime == unsigned_tx->nLockTime);
+    assert(tx.vin.size() == unsigned_tx->vin.size());
+    assert(tx.vout == unsigned_tx->vout);
+    for (size_t i{0}; i < tx.vin.size(); ++i) {
+        assert(tx.vin[i].prevout == unsigned_tx->vin[i].prevout);
+        assert(tx.vin[i].nSequence == unsigned_tx->vin[i].nSequence);
+    }
+}
+
+static void AssertExtractedTransaction(const PartiallySignedTransaction& psbt, const CMutableTransaction& tx)
+{
+    AssertTransactionEnvelope(psbt, tx);
+    assert(tx.vin.size() == psbt.inputs.size());
+    for (size_t i{0}; i < tx.vin.size(); ++i) {
+        assert(tx.vin[i].scriptSig == psbt.inputs[i].final_script_sig);
+        assert(tx.vin[i].scriptWitness.stack == psbt.inputs[i].final_script_witness.stack);
+    }
+}
+
+static void AssertAnalysis(const PartiallySignedTransaction& psbt, const PSBTAnalysis& analysis)
+{
+    (void)PSBTRoleName(analysis.next);
+    if (analysis.error.empty()) {
+        assert(analysis.inputs.size() == psbt.inputs.size());
+    } else {
+        assert(analysis.inputs.empty());
+        assert(analysis.next == PSBTRole::CREATOR);
+        assert(!analysis.estimated_vsize);
+        assert(!analysis.estimated_feerate);
+        assert(!analysis.fee);
+    }
+}
+
+static void AssertMergedPSBT(const PartiallySignedTransaction& base, const PartiallySignedTransaction& merged)
+{
+    const auto base_id{base.GetUniqueID()};
+    assert(base_id);
+    assert(merged.GetVersion() == base.GetVersion());
+    assert(merged.GetUniqueID() == base_id);
+    assert(merged.inputs.size() == base.inputs.size());
+    assert(merged.outputs.size() == base.outputs.size());
+}
+
+static void AssertRemovableTransactions(const PartiallySignedTransaction& psbt)
+{
+    bool can_remove{true};
+    for (const PSBTInput& input : psbt.inputs) {
+        int witness_version;
+        std::vector<unsigned char> witness_program;
+        if (input.witness_utxo.IsNull() ||
+            !input.witness_utxo.scriptPubKey.IsWitnessProgram(witness_version, witness_program) ||
+            witness_version == 0 ||
+            (input.sighash_type && (*input.sighash_type & SIGHASH_ANYONECANPAY))) {
+            can_remove = false;
+            break;
+        }
+    }
+    if (can_remove) {
+        for (const PSBTInput& input : psbt.inputs) {
+            assert(!input.non_witness_utxo);
+        }
+    }
+}
 
 FUZZ_TARGET(psbt)
 {
@@ -49,6 +126,7 @@ FUZZ_TARGET(psbt)
     Assert(psbt_ser == roundtrip_ser);
 
     const PSBTAnalysis analysis = AnalyzePSBT(psbt);
+    AssertAnalysis(psbt, analysis);
     (void)PSBTRoleName(analysis.next);
     for (const PSBTInputAnalysis& input_analysis : analysis.inputs) {
         (void)PSBTRoleName(input_analysis.next);
@@ -123,12 +201,20 @@ FUZZ_TARGET(psbt)
     }
 
     psbt_mut = psbt;
-    (void)FinalizePSBT(psbt_mut);
+    if (FinalizePSBT(psbt_mut)) {
+        const auto txdata{PrecomputePSBTData(psbt_mut)};
+        assert(txdata);
+        for (size_t i{0}; i < psbt_mut.inputs.size(); ++i) {
+            assert(PSBTInputSignedAndVerified(psbt_mut, i, &*txdata));
+        }
+    }
 
     psbt_mut = psbt;
     CMutableTransaction result;
     if (FinalizeAndExtractPSBT(psbt_mut, result)) {
+        AssertExtractedTransaction(psbt_mut, result);
         const PartiallySignedTransaction psbt_from_tx{result};
+        AssertTransactionEnvelope(psbt_from_tx, result);
     }
 
     PartiallySignedTransaction psbt_merge = psbt;
@@ -138,19 +224,32 @@ FUZZ_TARGET(psbt)
         psbt_merge = *psbt_merge_res;
     }
     psbt_mut = psbt;
-    (void)psbt_mut.Merge(psbt_merge);
+    const auto merge_before{SerializePSBT(psbt_mut)};
+    if (psbt_mut.Merge(psbt_merge)) {
+        AssertMergedPSBT(psbt, psbt_mut);
+    } else {
+        assert(SerializePSBT(psbt_mut) == merge_before);
+    }
     psbt_mut = psbt;
     std::optional<PartiallySignedTransaction> comb_res = CombinePSBTs({psbt_mut, psbt_merge});
     if (comb_res) {
+        AssertMergedPSBT(psbt, *comb_res);
         psbt_mut = *comb_res;
+    } else {
+        assert(psbt.GetVersion() != psbt_merge.GetVersion() || psbt.GetUniqueID() != psbt_merge.GetUniqueID());
     }
     for (const auto& psbt_in : psbt_merge.inputs) {
-        (void)psbt_mut.AddInput(psbt_in);
+        const size_t input_count{psbt_mut.inputs.size()};
+        const bool added{psbt_mut.AddInput(psbt_in)};
+        assert(psbt_mut.inputs.size() == input_count + added);
     }
     for (const auto& psbt_out : psbt_merge.outputs) {
-        (void)psbt_mut.AddOutput(psbt_out);
+        const size_t output_count{psbt_mut.outputs.size()};
+        const bool added{psbt_mut.AddOutput(psbt_out)};
+        assert(psbt_mut.outputs.size() == output_count + added);
     }
     psbt_mut.unknown.insert(psbt_merge.unknown.begin(), psbt_merge.unknown.end());
 
     RemoveUnnecessaryTransactions(psbt_mut);
+    AssertRemovableTransactions(psbt_mut);
 }
