@@ -5315,3 +5315,63 @@ Validation after applying the minimal source change:
 ninja -C build bitcoind -j1
 ctest --test-dir build --output-on-failure -R '^(dbwrapper_tests|coinsviewoverlay_tests|coinsviewoverlay_tests_noworkers)$'
 ```
+
+### LevelDB mmap policy: direct cold UTXO-RPC follow-up
+
+The full reindex result above predicted the same benefit for APIs that walk the
+ordered UTXO database. This follow-up compared the fix commit
+`219c09d86b` with its immediate parent `cc52508eb8` (global `MADV_RANDOM`
+plus the bounded `MADV_WILLNEED` recovery) using separately built GCC/g++ 14
+Release binaries. The parent was built in detached worktree
+`/mnt/my_storage/bitcoin-perf-scratch/rpc-mmap-random/`; the fixed binary was
+the build validated by the preceding commit.
+
+Each invocation mounted a fresh writable OverlayFS upperdir over the completed
+full-reindex upperdir `reindex-writebuf/default-full-1/upper` and the unchanged
+local `BitcoinData` lowerdir. The daemon ran with wallet/network/listening
+disabled and `-checkblocks=1`. It first replayed the same twenty indexed blocks
+from height 957759 to the local source's height 957779; this setup work was not
+timed. After `getblockcount` confirmed 957779, the harness ran `sync; echo 3 >
+/proc/sys/vm/drop_caches`, then timed only the synchronous `bitcoin-cli` RPC
+with `-rpcclienttimeout=0`. Every daemon shut down cleanly. Raw command output,
+daemon logs, and OverlayFS sizes are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/rpc-mmap/{fixed,random}-*/metrics/`.
+
+`gettxoutsetinfo` received two cold samples per policy in opposite orders:
+
+| policy | wall samples | median | result SHA256 |
+| --- | --- | ---: | --- |
+| default mmap (`219c09d86b`) | 195.29, 195.52 s | 195.405 s (3:15.41) | `17c523f13fa4a06fa35d64c4af5b6e5a5be8647758d1132dbff032271c4483e5` |
+| global random parent (`cc52508eb8`) | 229.13, 232.45 s | 230.790 s (3:50.79) | `17c523f13fa4a06fa35d64c4af5b6e5a5be8647758d1132dbff032271c4483e5` |
+
+The fixed policy improves the median by **15.33%** while returning byte-identical
+JSON: height 957779, 166,350,731 UTXOs, 115,034,891 transactions, and
+`hash_serialized_3=ed1ed399ab6c15d571999b81cdabe07de50e7b1b58f5e07ab29c2770fbf1d2b3`.
+The client itself consumed no CPU; its wall time is the synchronous daemon scan.
+
+One cold pair each directly covers the other requested RPCs:
+
+| RPC and workload | default mmap | global random parent | default change | output proof |
+| --- | ---: | ---: | ---: | --- |
+| `scantxoutset start ["raw(00140000000000000000000000000000000000000000)"]` | 164.00 s | 191.95 s | **-14.56%** | identical JSON SHA256 `5153941e4dba629174ce6029c5a58892cb7fbaafa5a249898e8ef4b6a9efb1a0` |
+| `dumptxoutset dump.dat latest` | 302.12 s | 340.01 s | **-11.14%** | same base hash/height, 166,350,731 coins, UTXO-set hash, and 9,499,680,598-byte snapshot SHA256 `f85de775f38c3aea3d07e7d210181b836e189f3d04a6af6e74a721946fd3d3d4` |
+
+`dumptxoutset` benefits less because its 9.5 GB snapshot write is also inside
+the timed operation; the matching serialized snapshot proves the gain does not
+come from omitted work. `scantxoutset` used a deterministic raw witness script
+which intentionally has matching UTXOs, so the result proves both the full scan
+and observable correctness rather than just an empty-success path.
+
+Two harness-only attempts are not measurements: the initial startup assumed
+height 957759 but correctly discovered the twenty indexed blocks to 957779,
+and `-checkblocks=0` was found to mean full-chain verification rather than no
+verification in this tree. The first `dumptxoutset` call omitted the now-required
+`latest`/`rollback` snapshot type and failed before opening a dump scan. The
+final commands above correct all three issues.
+
+These results convert the expected RPC reach into direct HDD evidence for the
+already-committed mmap fix. They remain specific to one rotational ext4 RAID1
+host, this 957779 chainstate, a cold page cache, and the exact descriptor and
+snapshot type. The repeated `gettxoutsetinfo` order reversal gives confidence
+in its result; `scantxoutset` and `dumptxoutset` have one pair each and should
+be repeated before making a cross-device or percentage-guarantee claim.
