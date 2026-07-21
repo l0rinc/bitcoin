@@ -262,6 +262,15 @@ void CTxMemPool::addNewTransaction(CTxMemPool::txiter newit)
 
 void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
 {
+    AssertLockHeld(cs);
+    Assert(it != mapTx.end());
+    // Both indexes must agree before removal notifications expose the transition.
+    for (const CTxIn& txin : it->GetTx().vin) {
+        const auto next{mapNextTx.find(txin.prevout)};
+        Assert(next != mapNextTx.end());
+        Assert(next->second == it);
+    }
+
     // We increment mempool sequence value no matter removal reason
     // even if not directly reported below.
     uint64_t mempool_sequence = GetAndIncrementSequence();

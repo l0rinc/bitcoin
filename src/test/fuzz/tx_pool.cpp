@@ -67,6 +67,133 @@ struct MockedTxPool : public CTxMemPool {
     }
 };
 
+struct MempoolEntryState final {
+    Wtxid wtxid;
+    std::chrono::seconds time;
+    CAmount fee;
+    int32_t vsize;
+    int64_t fee_delta;
+
+    friend bool operator==(const MempoolEntryState&, const MempoolEntryState&) = default;
+};
+
+struct MempoolState final {
+    std::map<Txid, MempoolEntryState> entries;
+    std::map<Txid, CAmount> fee_deltas;
+    std::set<Txid> unbroadcast;
+    uint64_t total_tx_size{0};
+    CAmount total_fee{0};
+    uint64_t sequence{0};
+    unsigned transactions_updated{0};
+    bool load_tried{false};
+
+    friend bool operator==(const MempoolState&, const MempoolState&) = default;
+};
+
+MempoolState CaptureMempoolState(const CTxMemPool& tx_pool)
+{
+    MempoolState state;
+    for (const auto& info : tx_pool.infoAll()) {
+        const auto [_, inserted] = state.entries.emplace(
+            info.tx->GetHash(),
+            MempoolEntryState{info.tx->GetWitnessHash(), info.m_time, info.fee, info.vsize, info.nFeeDelta});
+        Assert(inserted);
+    }
+    state.fee_deltas = WITH_LOCK(tx_pool.cs, return tx_pool.mapDeltas);
+    state.unbroadcast = tx_pool.GetUnbroadcastTxs();
+    state.total_tx_size = WITH_LOCK(tx_pool.cs, return tx_pool.GetTotalTxSize());
+    state.total_fee = WITH_LOCK(tx_pool.cs, return tx_pool.GetTotalFee());
+    state.sequence = WITH_LOCK(tx_pool.cs, return tx_pool.GetSequence());
+    state.transactions_updated = tx_pool.GetTransactionsUpdated();
+    state.load_tried = tx_pool.GetLoadTried();
+    return state;
+}
+
+void AssertNoNewMempoolEntries(const MempoolState& before, const MempoolState& after)
+{
+    for (const auto& [txid, _] : after.entries) {
+        Assert(before.entries.contains(txid));
+    }
+}
+
+void AssertATMPTransition(const MempoolState& before, const MempoolState& after,
+                          const CTransactionRef& tx, const MempoolAcceptResult& result)
+{
+    Assert(result.m_result_type == MempoolAcceptResult::ResultType::VALID ||
+           result.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+
+    if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
+        const auto txid{tx->GetHash()};
+        Assert(after.entries.contains(txid));
+        Assert(after.entries.at(txid).wtxid == tx->GetWitnessHash());
+        for (const auto& [after_txid, _] : after.entries) {
+            Assert(before.entries.contains(after_txid) || after_txid == txid);
+        }
+        for (const auto& replaced : result.m_replaced_transactions) {
+            Assert(!after.entries.contains(replaced->GetHash()));
+        }
+        return;
+    }
+
+    // A failed ATMP call may evict old entries only when the failure is
+    // reconsiderable (for example, a full mempool). It must never add one.
+    AssertNoNewMempoolEntries(before, after);
+    if (result.m_state.GetResult() != TxValidationResult::TX_RECONSIDERABLE) {
+        Assert(before == after);
+    }
+}
+
+std::set<Txid> LocalTxids(const std::set<CTransactionRef>& transactions,
+                          const MempoolState& before, const MempoolState& after)
+{
+    std::set<Txid> txids;
+    for (const auto& tx : transactions) {
+        const auto txid{tx->GetHash()};
+        // ValidationSignals is shared by the setup's mempools. Ignore a
+        // callback that cannot belong to this local state transition.
+        if (before.entries.contains(txid) || after.entries.contains(txid)) {
+            Assert(txids.insert(txid).second);
+        }
+    }
+    return txids;
+}
+
+void AssertValidationDelta(const MempoolState& before, const MempoolState& after,
+                           const std::set<CTransactionRef>& removed,
+                           const std::set<CTransactionRef>& added)
+{
+    std::set<Txid> expected_removed;
+    for (const auto& [txid, _] : before.entries) {
+        if (!after.entries.contains(txid)) expected_removed.insert(txid);
+    }
+    std::set<Txid> expected_added;
+    for (const auto& [txid, _] : after.entries) {
+        if (!before.entries.contains(txid)) expected_added.insert(txid);
+    }
+    Assert(expected_removed == LocalTxids(removed, before, after));
+    Assert(expected_added == LocalTxids(added, before, after));
+    const auto expected_updates{expected_removed.size() + expected_added.size()};
+    Assert(after.transactions_updated >= before.transactions_updated);
+    // A transaction can be added and evicted during one call, so the counter
+    // may include transient entries that are absent from the net state delta.
+    Assert(after.transactions_updated - before.transactions_updated >= expected_updates);
+    for (const auto& tx : removed) {
+        if (!before.entries.contains(tx->GetHash()) && !after.entries.contains(tx->GetHash())) continue;
+        Assert(before.entries.contains(tx->GetHash()));
+        Assert(!after.entries.contains(tx->GetHash()));
+    }
+    for (const auto& tx : added) {
+        if (!before.entries.contains(tx->GetHash()) && !after.entries.contains(tx->GetHash())) continue;
+        Assert(!before.entries.contains(tx->GetHash()));
+        Assert(after.entries.contains(tx->GetHash()));
+    }
+}
+
+void CheckMempoolContracts(MockedTxPool& tx_pool, Chainstate& chainstate)
+{
+    WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
+}
+
 void initialize_tx_pool()
 {
     static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
@@ -118,7 +245,7 @@ void SetMempoolConstraints(ArgsManager& args, FuzzedDataProvider& fuzzed_data_pr
 
 void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Chainstate& chainstate)
 {
-    WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
+    CheckMempoolContracts(tx_pool, chainstate);
     {
         BlockCreateOptions options{
             .block_min_fee_rate = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)},
@@ -144,24 +271,32 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         }
         tx_pool.UpdateTransactionsFromBlock(hashes_to_update);
     }
+    CheckMempoolContracts(tx_pool, chainstate);
     const auto info_all = tx_pool.infoAll();
     if (!info_all.empty()) {
         const auto& tx_to_remove = *PickValue(fuzzed_data_provider, info_all).tx;
         WITH_LOCK(tx_pool.cs, tx_pool.removeRecursive(tx_to_remove, MemPoolRemovalReason::BLOCK /* dummy */));
         assert(tx_pool.size() < info_all.size());
+        CheckMempoolContracts(tx_pool, chainstate);
     }
 
     if (fuzzed_data_provider.ConsumeBool()) {
         // Try eviction
-        LOCK2(::cs_main, tx_pool.cs);
-        tx_pool.TrimToSize(fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0U, tx_pool.DynamicMemoryUsage() * 2));
+        {
+            LOCK2(::cs_main, tx_pool.cs);
+            tx_pool.TrimToSize(fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0U, tx_pool.DynamicMemoryUsage() * 2));
+        }
+        CheckMempoolContracts(tx_pool, chainstate);
     }
     if (fuzzed_data_provider.ConsumeBool()) {
         // Try expiry
-        LOCK2(::cs_main, tx_pool.cs);
-        tx_pool.Expire(GetMockTime() - std::chrono::seconds(fuzzed_data_provider.ConsumeIntegral<uint32_t>()));
+        {
+            LOCK2(::cs_main, tx_pool.cs);
+            tx_pool.Expire(GetMockTime() - std::chrono::seconds(fuzzed_data_provider.ConsumeIntegral<uint32_t>()));
+        }
+        CheckMempoolContracts(tx_pool, chainstate);
     }
-    WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
+    CheckMempoolContracts(tx_pool, chainstate);
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
 }
 
@@ -236,6 +371,26 @@ void CheckATMPInvariants(const MempoolAcceptResult& res, bool txid_in_mempool, b
         Assert(false);
         break;
     }
+    }
+}
+
+void CheckPackageResultInvariants(const MempoolAcceptResult& res)
+{
+    Assert(res.m_result_type == MempoolAcceptResult::ResultType::VALID ||
+           res.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+    if (res.m_result_type == MempoolAcceptResult::ResultType::VALID) {
+        Assert(res.m_state.IsValid());
+        Assert(res.m_vsize);
+        Assert(res.m_base_fees);
+        Assert(res.m_effective_feerate);
+        Assert(res.m_wtxids_fee_calculations);
+        Assert(!res.m_other_wtxid);
+    } else {
+        Assert(res.m_state.IsInvalid());
+        Assert(!res.m_vsize);
+        Assert(!res.m_base_fees);
+        Assert(res.m_effective_feerate.has_value() == res.m_wtxids_fee_calculations.has_value());
+        Assert(!res.m_other_wtxid);
     }
 }
 
@@ -350,6 +505,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         }
 
         // Remember all removed and added transactions
+        const auto before_package_test = CaptureMempoolState(tx_pool);
         std::set<CTransactionRef> removed;
         std::set<CTransactionRef> added;
         auto txr = std::make_shared<TransactionsDelta>(removed, added);
@@ -359,22 +515,28 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         // The result is not guaranteed to be the same as what is returned by ATMP.
         const auto result_package = WITH_LOCK(::cs_main,
                                     return ProcessNewPackage(chainstate, tx_pool, {tx}, true, /*client_maxfeerate=*/{}));
+        Assert(CaptureMempoolState(tx_pool) == before_package_test);
         // If something went wrong due to a package-specific policy, it might not return a
         // validation result for the transaction.
         if (result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
-            auto it = result_package.m_tx_results.find(tx->GetWitnessHash());
+            const auto it = result_package.m_tx_results.find(tx->GetWitnessHash());
             Assert(it != result_package.m_tx_results.end());
-            Assert(it->second.m_result_type == MempoolAcceptResult::ResultType::VALID ||
-                   it->second.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+            CheckPackageResultInvariants(it->second);
         }
 
+        const auto before_atmp = CaptureMempoolState(tx_pool);
         const auto res = WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, tx, GetTime(), /*bypass_limits=*/false, /*test_accept=*/false));
         const bool accepted = res.m_result_type == MempoolAcceptResult::ResultType::VALID;
         node.validation_signals->SyncWithValidationInterfaceQueue();
         node.validation_signals->UnregisterSharedValidationInterface(txr);
 
-        bool txid_in_mempool = tx_pool.exists(tx->GetHash());
-        bool wtxid_in_mempool = tx_pool.exists(tx->GetWitnessHash());
+        const auto after_atmp = CaptureMempoolState(tx_pool);
+        AssertATMPTransition(before_atmp, after_atmp, tx, res);
+        AssertValidationDelta(before_atmp, after_atmp, removed, added);
+        CheckMempoolContracts(tx_pool, chainstate);
+
+        const bool txid_in_mempool = tx_pool.exists(tx->GetHash());
+        const bool wtxid_in_mempool = tx_pool.exists(tx->GetWitnessHash());
         CheckATMPInvariants(res, txid_in_mempool, wtxid_in_mempool);
 
         Assert(accepted != added.empty());
@@ -475,11 +637,15 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
         ever_bypassed_limits |= bypass_limits;
 
         const auto tx = MakeTransactionRef(mut_tx);
+        const auto before_atmp = CaptureMempoolState(tx_pool);
         const auto res = WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, tx, GetTime(), bypass_limits, /*test_accept=*/false));
         const bool accepted = res.m_result_type == MempoolAcceptResult::ResultType::VALID;
+        const auto after_atmp = CaptureMempoolState(tx_pool);
+        AssertATMPTransition(before_atmp, after_atmp, tx, res);
+        CheckMempoolContracts(tx_pool, chainstate);
         if (accepted) {
-            assert(tx_pool.exists(tx->GetHash()));
-            assert(tx_pool.exists(tx->GetWitnessHash()));
+            Assert(tx_pool.exists(tx->GetHash()));
+            Assert(tx_pool.exists(tx->GetWitnessHash()));
         }
         if (accepted) {
             txids.push_back(tx->GetHash());
