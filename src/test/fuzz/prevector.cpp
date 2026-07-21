@@ -4,11 +4,14 @@
 
 #include <prevector.h>
 #include <serialize.h>
+#include <script/script.h>
 #include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 
+#include <cstdint>
 #include <ranges>
+#include <span>
 #include <vector>
 namespace {
 
@@ -26,8 +29,30 @@ class prevector_tester
     typedef typename pretype::size_type Size;
 
 public:
-    void test() const
+    void check_state(const realtype& real, const pretype& pre) const
     {
+        assert(real.size() == pre.size());
+        assert(real.empty() == pre.empty());
+        assert(pre.capacity() >= N);
+        assert(pre.capacity() >= pre.size());
+        assert(pre.allocated_memory() == (pre.capacity() > N ? sizeof(T) * pre.capacity() : 0));
+        assert(pre.data() == pre.begin().operator->());
+        assert(pre.end().operator->() == pre.data() + pre.size());
+        if (!real.empty()) {
+            assert(real.front() == pre.front());
+            assert(real.back() == pre.back());
+        }
+    }
+
+    void check_state() const
+    {
+        check_state(real_vector, pre_vector);
+        check_state(real_vector_alt, pre_vector_alt);
+    }
+
+    void test_one(const realtype& real_vector, const pretype& pre_vector) const
+    {
+        check_state(real_vector, pre_vector);
         const pretype& const_pre_vector = pre_vector;
         assert(real_vector.size() == pre_vector.size());
         assert(real_vector.empty() == pre_vector.empty());
@@ -65,6 +90,12 @@ public:
         for (Size s = 0; s < ss1.size(); s++) {
             assert(ss1[s] == ss2[s]);
         }
+    }
+
+    void test() const
+    {
+        test_one(real_vector, pre_vector);
+        test_one(real_vector_alt, pre_vector_alt);
     }
 
     void resize(Size s)
@@ -157,6 +188,7 @@ public:
     void shrink_to_fit()
     {
         pre_vector.shrink_to_fit();
+        assert(pre_vector.capacity() == (pre_vector.size() > N ? pre_vector.size() : N));
     }
 
     void swap() noexcept
@@ -200,18 +232,17 @@ public:
     }
 };
 
-} // namespace
-
-FUZZ_TARGET(prevector)
+template <unsigned int N, typename T>
+void RunPrevector(std::span<const uint8_t> buffer)
 {
     FuzzedDataProvider prov(buffer.data(), buffer.size());
-    prevector_tester<8, int> test;
+    prevector_tester<N, T> test;
 
     LIMITED_WHILE (prov.remaining_bytes(), 3000) {
         switch (prov.ConsumeIntegralInRange<int>(0, 13 + 3 * (test.size() > 0))) {
         case 0: {
             auto position = prov.ConsumeIntegralInRange<size_t>(0, test.size());
-            auto value = prov.ConsumeIntegral<int>();
+            auto value = prov.ConsumeIntegral<T>();
             test.insert(position, value);
         } break;
         case 1:
@@ -220,7 +251,7 @@ FUZZ_TARGET(prevector)
         case 2: {
             auto position = prov.ConsumeIntegralInRange<size_t>(0, test.size());
             auto count = 1 + prov.ConsumeBool();
-            auto value = prov.ConsumeIntegral<int>();
+            auto value = prov.ConsumeIntegral<T>();
             test.insert(position, count, value);
         } break;
         case 3: {
@@ -230,22 +261,22 @@ FUZZ_TARGET(prevector)
             break;
         }
         case 4:
-            test.push_back(prov.ConsumeIntegral<int>());
+            test.push_back(prov.ConsumeIntegral<T>());
             break;
         case 5: {
-            int values[4];
+            T values[4];
             int num = 1 + prov.ConsumeIntegralInRange<int>(0, 3);
             for (int k = 0; k < num; ++k) {
-                values[k] = prov.ConsumeIntegral<int>();
+                values[k] = prov.ConsumeIntegral<T>();
             }
             test.insert_range(prov.ConsumeIntegralInRange<size_t>(0, test.size()), values, values + num);
             break;
         }
         case 6: {
             int num = 1 + prov.ConsumeIntegralInRange<int>(0, 15);
-            std::vector<int> values(num);
+            std::vector<T> values(num);
             for (auto& v : values) {
-                v = prov.ConsumeIntegral<int>();
+                v = prov.ConsumeIntegral<T>();
             }
             test.resize_uninitialized(values);
             break;
@@ -261,7 +292,7 @@ FUZZ_TARGET(prevector)
             break;
         case 10: {
             auto n = prov.ConsumeIntegralInRange<size_t>(0, 32767);
-            auto value = prov.ConsumeIntegral<int>();
+            auto value = prov.ConsumeIntegral<T>();
             test.assign(n, value);
         } break;
         case 11:
@@ -275,7 +306,7 @@ FUZZ_TARGET(prevector)
             break;
         case 14: {
             auto pos = prov.ConsumeIntegralInRange<size_t>(0, test.size() - 1);
-            auto value = prov.ConsumeIntegral<int>();
+            auto value = prov.ConsumeIntegral<T>();
             test.update(pos, value);
         } break;
         case 15:
@@ -285,7 +316,16 @@ FUZZ_TARGET(prevector)
             test.pop_back();
             break;
         }
+        test.check_state();
     }
 
     test.test();
+}
+
+} // namespace
+
+FUZZ_TARGET(prevector)
+{
+    RunPrevector<8, int>(buffer);
+    RunPrevector<CScriptBase::STATIC_SIZE, uint8_t>(buffer);
 }

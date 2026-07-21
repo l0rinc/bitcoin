@@ -125,7 +125,21 @@ private:
     const T* indirect_ptr(difference_type pos) const { return reinterpret_cast<const T*>(_union.indirect_contents.indirect) + pos; }
     bool is_direct() const { return _size <= N; }
 
+    void assert_valid() const
+    {
+        if (is_direct()) {
+            assert(_size <= N);
+            return;
+        }
+        assert(_size > N);
+        assert(_union.indirect_contents.indirect);
+        assert(_union.indirect_contents.capacity > N);
+        const size_type logical_size{_size - N - 1};
+        assert(logical_size <= _union.indirect_contents.capacity);
+    }
+
     void change_capacity(size_type new_capacity) {
+        assert_valid();
         if (new_capacity <= N) {
             if (!is_direct()) {
                 T* indirect = indirect_ptr(0);
@@ -154,10 +168,17 @@ private:
                 _size += N + 1;
             }
         }
+        assert_valid();
     }
 
-    T* item_ptr(difference_type pos) { return is_direct() ? direct_ptr(pos) : indirect_ptr(pos); }
-    const T* item_ptr(difference_type pos) const { return is_direct() ? direct_ptr(pos) : indirect_ptr(pos); }
+    T* item_ptr(difference_type pos) {
+        assert_valid();
+        return is_direct() ? direct_ptr(pos) : indirect_ptr(pos);
+    }
+    const T* item_ptr(difference_type pos) const {
+        assert_valid();
+        return is_direct() ? direct_ptr(pos) : indirect_ptr(pos);
+    }
 
     void fill(T* dst, ptrdiff_t count, const T& value = T{}) {
         std::fill_n(dst, count, value);
@@ -224,6 +245,8 @@ public:
         : _union(std::move(other._union)), _size(other._size)
     {
         other._size = 0;
+        assert_valid();
+        other.assert_valid();
     }
 
     prevector& operator=(const prevector<N, T, Size, Diff>& other) {
@@ -231,6 +254,7 @@ public:
             return *this;
         }
         assign(other.begin(), other.end());
+        assert_valid();
         return *this;
     }
 
@@ -241,6 +265,8 @@ public:
         _union = std::move(other._union);
         _size = other._size;
         other._size = 0;
+        assert_valid();
+        other.assert_valid();
         return *this;
     }
 
@@ -258,6 +284,7 @@ public:
     const_iterator end() const { return const_iterator(item_ptr(size())); }
 
     size_t capacity() const {
+        assert_valid();
         if (is_direct()) {
             return N;
         } else {
@@ -417,9 +444,12 @@ public:
     {
         std::swap(_union, other._union);
         std::swap(_size, other._size);
+        assert_valid();
+        other.assert_valid();
     }
 
     ~prevector() {
+        assert_valid();
         if (!is_direct()) {
             free(_union.indirect_contents.indirect);
             _union.indirect_contents.indirect = nullptr;
