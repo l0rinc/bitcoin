@@ -16,10 +16,14 @@
 #include <util/strencodings.h>
 #include <util/string.h>
 
+#include <algorithm>
+#include <array>
 #include <string>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
+
+int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned char* input, size_t inputlen);
 
 using namespace util::hex_literals;
 using util::ToString;
@@ -170,6 +174,38 @@ BOOST_AUTO_TEST_CASE(key_load_empty_private_key)
     const CPrivKey empty;
     BOOST_CHECK(!loaded.Load(empty, source.GetPubKey(), /*fSkipCheck=*/false));
     BOOST_CHECK(!loaded.IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(ecdsa_signature_parse_der_lax_contracts)
+{
+    std::array<unsigned char, 64> compact;
+    compact.fill(1);
+    secp256k1_ecdsa_signature parsed;
+    BOOST_REQUIRE_EQUAL(secp256k1_ecdsa_signature_parse_compact(secp256k1_context_static, &parsed, compact.data()), 1);
+    BOOST_CHECK_EQUAL(ecdsa_signature_parse_der_lax(&parsed, nullptr, 0), 0);
+
+    std::array<unsigned char, 64> parsed_compact;
+    secp256k1_ecdsa_signature_serialize_compact(secp256k1_context_static, parsed_compact.data(), &parsed);
+    BOOST_CHECK(std::all_of(parsed_compact.begin(), parsed_compact.end(), [](const unsigned char byte) { return byte == 0; }));
+
+    const std::array<unsigned char, 1> truncated{0x30};
+    BOOST_REQUIRE_EQUAL(secp256k1_ecdsa_signature_parse_compact(secp256k1_context_static, &parsed, compact.data()), 1);
+    BOOST_CHECK_EQUAL(ecdsa_signature_parse_der_lax(&parsed, truncated.data(), truncated.size()), 0);
+    secp256k1_ecdsa_signature_serialize_compact(secp256k1_context_static, parsed_compact.data(), &parsed);
+    BOOST_CHECK(std::all_of(parsed_compact.begin(), parsed_compact.end(), [](const unsigned char byte) { return byte == 0; }));
+
+    CKey source = DecodeSecret(strSecret1);
+    std::vector<unsigned char> der;
+    BOOST_REQUIRE(source.Sign(uint256{}, der, /*grind=*/false));
+    secp256k1_ecdsa_signature lax;
+    secp256k1_ecdsa_signature strict;
+    BOOST_REQUIRE_EQUAL(ecdsa_signature_parse_der_lax(&lax, der.data(), der.size()), 1);
+    BOOST_REQUIRE_EQUAL(secp256k1_ecdsa_signature_parse_der(secp256k1_context_static, &strict, der.data(), der.size()), 1);
+    std::array<unsigned char, 64> lax_compact;
+    std::array<unsigned char, 64> strict_compact;
+    secp256k1_ecdsa_signature_serialize_compact(secp256k1_context_static, lax_compact.data(), &lax);
+    secp256k1_ecdsa_signature_serialize_compact(secp256k1_context_static, strict_compact.data(), &strict);
+    BOOST_CHECK(lax_compact == strict_compact);
 }
 
 BOOST_AUTO_TEST_CASE(key_signature_tests)

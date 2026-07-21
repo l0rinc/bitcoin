@@ -13,6 +13,7 @@
 #include <secp256k1_schnorrsig.h>
 #include <span.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/strencodings.h>
 
 #include <algorithm>
@@ -50,7 +51,7 @@ int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned
     int overflow = 0;
 
     /* Hack to initialize sig with a correctly-parsed but invalid signature. */
-    secp256k1_ecdsa_signature_parse_compact(secp256k1_context_static, sig, tmpsig);
+    Assert(secp256k1_ecdsa_signature_parse_compact(secp256k1_context_static, sig, tmpsig) == 1);
 
     /* Sequence tag byte */
     if (pos == inputlen || input[pos] != 0x30) {
@@ -179,7 +180,7 @@ int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned
         /* Overwrite the result again with a correctly-parsed but invalid
            signature if parsing failed. */
         memset(tmpsig, 0, 64);
-        secp256k1_ecdsa_signature_parse_compact(secp256k1_context_static, sig, tmpsig);
+        Assert(secp256k1_ecdsa_signature_parse_compact(secp256k1_context_static, sig, tmpsig) == 1);
     }
     return 1;
 }
