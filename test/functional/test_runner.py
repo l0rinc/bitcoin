@@ -140,6 +140,7 @@ BASE_SCRIPTS = [
     'wallet_taproot.py',
     'feature_bip68_sequence.py',
     'rpc_packages.py',
+    'rpc_batch_large_reply.py',
     'rpc_bind.py --ipv4',
     'rpc_bind.py --ipv6',
     'rpc_bind.py --nonloopback',

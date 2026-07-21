@@ -47,6 +47,8 @@
 //! the sleep time needs to be small to avoid new sockets stalling.
 static constexpr auto SELECT_TIMEOUT{50ms};
 
+static constexpr size_t LARGE_HTTP_REPLY_BYTES{16_MiB};
+
 //! Explicit alias for setting socket option methods.
 static constexpr int SOCKET_OPTION_TRUE{1};
 
@@ -512,7 +514,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
     }
 }
 
-void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> reply_body)
+void HTTPRequest::WriteReplyImpl(HTTPStatusCode status, std::span<const std::byte> reply_body, std::string* moved_body)
 {
     HTTPResponse res;
 
@@ -560,9 +562,9 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
         }
     }
 
-    if (needs_content_length) {
-        res.m_headers.Write("Content-Length", util::ToString(reply_body.size()));
-    }
+    const bool moving_body{moved_body != nullptr};
+    const size_t body_size{moving_body ? moved_body->size() : reply_body.size()};
+    if (needs_content_length) res.m_headers.Write("Content-Length", util::ToString(body_size));
 
     if (needs_body && !res.m_headers.FindFirst("Content-Type")) {
         // Default type from libevent evhttp_new_object()
@@ -581,20 +583,27 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     m_client->m_keep_alive = keep_alive;
 
     // Serialize the response headers
-    const std::string headers{res.StringifyHeaders()};
-    const auto headers_bytes{std::as_bytes(std::span{headers})};
+    std::string response{res.StringifyHeaders()};
+    const size_t response_size{response.size() + body_size};
 
-    bool send_buffer_was_empty{false};
-    // Fill the send buffer with the complete serialized response headers + body
-    {
-        LOCK(m_client->m_send_mutex);
-        send_buffer_was_empty = m_client->m_send_buffer.empty();
-        m_client->m_send_buffer.insert(m_client->m_send_buffer.end(), headers_bytes.begin(), headers_bytes.end());
+    if (body_size >= LARGE_HTTP_REPLY_BYTES) {
+        LogDebug(BCLog::HTTP, "Large HTTP reply body %s: status=%d bytes=%d", moving_body ? "moved" : "copied", status, body_size);
+    }
 
+    if (!moving_body) {
         // We've been using std::span up until now but it is finally time to copy
         // data. The original data will go out of scope when WriteReply() returns.
         // This is analogous to the memcpy() in libevent's evbuffer_add()
-        m_client->m_send_buffer.insert(m_client->m_send_buffer.end(), reply_body.begin(), reply_body.end());
+        if (!reply_body.empty()) response.append(reinterpret_cast<const char*>(reply_body.data()), reply_body.size());
+    }
+
+    bool send_buffer_was_empty{false};
+    // Queue the serialized response headers and body.
+    {
+        LOCK(m_client->m_send_mutex);
+        send_buffer_was_empty = m_client->m_send_buffer.empty();
+        m_client->m_send_buffer.emplace_back(std::move(response));
+        if (moving_body && !moved_body->empty()) m_client->m_send_buffer.emplace_back(std::move(*moved_body));
 
         // If the buffer already held data, the I/O thread is (or soon will be)
         // draining it, so flag that there is more data to send. This must happen
@@ -611,7 +620,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
         BCLog::HTTP,
         "HTTPResponse (status code: %d size: %lld) added to send buffer for client %s (id=%llu)",
         status,
-        headers_bytes.size() + reply_body.size(),
+        response_size,
         m_client->m_origin,
         m_client->m_id);
 
@@ -625,6 +634,22 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
 
     // Signal to the I/O loop that we are ready to handle the next request.
     m_client->m_req_busy = false;
+}
+
+void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> reply_body)
+{
+    WriteReplyImpl(status, reply_body);
+}
+
+void HTTPRequest::WriteReply(HTTPStatusCode status, std::string&& reply_body)
+{
+    // Keep small replies coalesced in one send chunk.
+    if (reply_body.size() < LARGE_HTTP_REPLY_BYTES) {
+        WriteReply(status, std::string_view{reply_body});
+        return;
+    }
+
+    WriteReplyImpl(status, {}, &reply_body);
 }
 
 CService HTTPRequest::GetPeer() const
@@ -1129,6 +1154,9 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
     // Send as much data from this client's buffer as we can
     LOCK(m_send_mutex);
     if (!m_send_buffer.empty()) {
+        auto& front{m_send_buffer.front()};
+        Assume(m_send_offset < front.size());
+
         // Socket flags (See kernel docs for send(2) and tcp(7) for more details).
         // MSG_NOSIGNAL: If the remote end of the connection is closed,
         //               fail with EPIPE (an error) as opposed to triggering
@@ -1143,9 +1171,7 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
         ssize_t bytes_sent;
         {
             LOCK(m_sock_mutex);
-            bytes_sent = m_sock->Send(m_send_buffer.data(),
-                                      m_send_buffer.size(),
-                                      flags);
+            bytes_sent = m_sock->Send(front.data() + m_send_offset, front.size() - m_send_offset, flags);
         }
 
         if (bytes_sent < 0) {
@@ -1172,15 +1198,19 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
             }
         }
 
-        // Successful send, remove sent bytes from our local buffer.
-        Assume(static_cast<size_t>(bytes_sent) <= m_send_buffer.size());
-        m_send_buffer.erase(m_send_buffer.begin(),
-                            m_send_buffer.begin() + bytes_sent);
+        // Successful send, skip sent bytes in our local buffer.
+        const size_t sent{static_cast<size_t>(bytes_sent)};
+        Assume(sent <= front.size() - m_send_offset);
+        m_send_offset += sent;
+        if (m_send_offset == front.size()) {
+            m_send_buffer.pop_front();
+            m_send_offset = 0;
+        }
 
         LogDebug(
             BCLog::HTTP,
             "Sent %d bytes to client %s (id=%llu)",
-            bytes_sent,
+            sent,
             m_origin,
             m_id);
 

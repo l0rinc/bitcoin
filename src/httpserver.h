@@ -181,10 +181,16 @@ public:
     /// @}
 
     void WriteReply(HTTPStatusCode status, std::span<const std::byte> reply_body = {});
+    //! Keeps string literals from becoming ambiguous after adding the std::string&& overload
+    void WriteReply(HTTPStatusCode status, const char* reply_body)
+    {
+        WriteReply(status, std::string_view{reply_body});
+    }
     void WriteReply(HTTPStatusCode status, std::string_view reply_body_view)
     {
         WriteReply(status, std::as_bytes(std::span{reply_body_view}));
     }
+    void WriteReply(HTTPStatusCode status, std::string&& reply_body);
 
     // These methods reimplement the API from http_libevent::HTTPRequest
     // for downstream JSONRPC and REST modules.
@@ -195,6 +201,9 @@ public:
     std::pair<bool, std::string> GetHeader(std::string_view hdr) const;
     std::string ReadBody() const { return m_body; }
     void WriteHeader(std::string&& hdr, std::string&& value);
+
+private:
+    void WriteReplyImpl(HTTPStatusCode status, std::span<const std::byte> reply_body, std::string* moved_body = nullptr);
 };
 
 class HTTPServer
@@ -475,11 +484,13 @@ public:
 
     /**
      * Response data destined for this client.
-     * Written to by http worker threads, read and erased by HTTPServer I/O thread
+     * Written to by http worker threads, read by HTTPServer I/O thread
      */
     /// @{
     Mutex m_send_mutex;
-    std::vector<std::byte> m_send_buffer GUARDED_BY(m_send_mutex);
+    std::deque<std::string> m_send_buffer GUARDED_BY(m_send_mutex);
+    //! Bytes of m_send_buffer.front() already sent
+    size_t m_send_offset GUARDED_BY(m_send_mutex){0};
     /// @}
 
     /**
