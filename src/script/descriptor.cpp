@@ -1144,7 +1144,11 @@ public:
         return OutputTypeFromDestination(m_destination);
     }
     bool IsSingleType() const final { return true; }
-    bool ToPrivateString(const SigningProvider& arg, std::string& out) const final { return false; }
+    bool ToPrivateString(const SigningProvider& arg, std::string& out) const final
+    {
+        out = DescriptorImpl::ToString(/*compat_format=*/false);
+        return false;
+    }
 
     std::optional<int64_t> ScriptSize() const override { return GetScriptForDestination(m_destination).size(); }
     std::unique_ptr<DescriptorImpl> Clone() const override
@@ -1171,7 +1175,11 @@ public:
         return OutputTypeFromDestination(dest);
     }
     bool IsSingleType() const final { return true; }
-    bool ToPrivateString(const SigningProvider& arg, std::string& out) const final { return false; }
+    bool ToPrivateString(const SigningProvider& arg, std::string& out) const final
+    {
+        out = DescriptorImpl::ToString(/*compat_format=*/false);
+        return false;
+    }
 
     std::optional<int64_t> ScriptSize() const override { return m_script.size(); }
 
@@ -2251,13 +2259,15 @@ struct KeyParser {
     const miniscript::MiniscriptContext m_script_ctx;
     //! The current key expression index
     uint32_t& m_expr_index;
+    //! Multipath alternative used for duplicate-key comparison and serialization.
+    size_t m_path_index{0};
 
     KeyParser(FlatSigningProvider* out LIFETIMEBOUND, const SigningProvider* in LIFETIMEBOUND,
               miniscript::MiniscriptContext ctx, uint32_t& key_exp_index LIFETIMEBOUND)
         : m_out(out), m_in(in), m_script_ctx(ctx), m_expr_index(key_exp_index) {}
 
     bool KeyCompare(const Key& a, const Key& b) const {
-        return *m_keys.at(a).at(0) < *m_keys.at(b).at(0);
+        return *m_keys.at(a).at(m_path_index) < *m_keys.at(b).at(m_path_index);
     }
 
     ParseScriptContext ParseContext() const {
@@ -2280,7 +2290,7 @@ struct KeyParser {
 
     std::optional<std::string> ToString(const Key& key, bool&) const
     {
-        return m_keys.at(key).at(0)->ToString();
+        return m_keys.at(key).at(m_path_index)->ToString();
     }
 
     template<typename I> std::optional<Key> FromPKBytes(I begin, I end) const
@@ -2731,6 +2741,21 @@ std::vector<std::unique_ptr<DescriptorImpl>> ParseScript(uint32_t& key_exp_index
                 }
             }
 
+            // Duplicate-key sanity depends on the selected multipath path.
+            // The initial parse checks path zero; check every other expanded
+            // descriptor before exposing it to callers.
+            for (size_t i = 1; i < num_multipath; ++i) {
+                parser.m_path_index = i;
+                node->DuplicateKeyCheck(parser);
+                if (!node->CheckDuplicateKey()) {
+                    error = *node->ToString(parser);
+                    error += " is not sane: contains duplicate public keys";
+                    parser.m_path_index = 0;
+                    return {};
+                }
+            }
+            parser.m_path_index = 0;
+
             // Build the final descriptors vector
             for (size_t i = 0; i < num_multipath; ++i) {
                 // Build final pubkeys vectors by retrieving the i'th subscript for each vector in subscripts
@@ -2979,7 +3004,10 @@ std::string GetDescriptorChecksum(const std::string& descriptor)
 
 std::unique_ptr<Descriptor> InferDescriptor(const CScript& script, const SigningProvider& provider)
 {
-    return InferScript(script, ParseScriptContext::TOP, provider);
+    auto descriptor{InferScript(script, ParseScriptContext::TOP, provider)};
+    Assert(descriptor);
+    Assert(!descriptor->IsRange());
+    return descriptor;
 }
 
 uint256 DescriptorID(const Descriptor& desc)
