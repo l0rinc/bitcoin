@@ -134,6 +134,33 @@ void DeserializeAndAssertCanonicalPrefix(FuzzBufferType buffer, T&& obj)
     assert(std::memcmp(serialized.data(), buffer.data(), serialized.size()) == 0);
 }
 
+void DeserializeAndAssertPrefilledTransaction(FuzzBufferType buffer)
+{
+    PrefilledTransaction prefilled_transaction;
+    SpanReader reader{buffer};
+    try {
+        reader >> prefilled_transaction;
+    } catch (const std::ios_base::failure&) {
+        throw invalid_fuzzing_input_exception();
+    }
+
+    // PartiallyDownloadedBlock::InitData dereferences this reference before
+    // applying compact-block validity checks.
+    assert(prefilled_transaction.tx);
+
+    auto serialized{Serialize(prefilled_transaction)};
+    assert(serialized.size() <= buffer.size());
+    assert(reader.size() == buffer.size() - serialized.size());
+    assert(std::memcmp(serialized.data(), buffer.data(), serialized.size()) == 0);
+
+    PrefilledTransaction reparsed;
+    serialized >> reparsed;
+    assert(serialized.empty());
+    assert(reparsed.index == prefilled_transaction.index);
+    assert(reparsed.tx);
+    assert(*reparsed.tx == *prefilled_transaction.tx);
+}
+
 void AssertSnapshotMetadataRoundTrip(const SnapshotMetadata& metadata)
 {
     auto serialized{Serialize(metadata)};
@@ -243,8 +270,7 @@ FUZZ_TARGET_DESERIALIZE(partially_signed_transaction_deserialize, {
     PartiallySignedTransaction partially_signed_transaction = DeserializeConstructFromFuzzingInput<PartiallySignedTransaction>(buffer);
 })
 FUZZ_TARGET_DESERIALIZE(prefilled_transaction_deserialize, {
-    PrefilledTransaction prefilled_transaction;
-    DeserializeFromFuzzingInput(buffer, prefilled_transaction);
+    DeserializeAndAssertPrefilledTransaction(buffer);
 })
 FUZZ_TARGET_DESERIALIZE(psbt_input_deserialize, {
     PSBTInput psbt_input(0, Txid{}, 0);
