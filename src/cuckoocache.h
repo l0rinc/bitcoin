@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -318,6 +319,17 @@ private:
                         epoch_size - epoch_unused_count));
     }
 
+    /** Check the storage and generation metadata established by setup(). */
+    void AssertInvariants() const
+    {
+        assert(size >= 2);
+        assert(table.size() == size);
+        assert(epoch_flags.size() == size);
+        assert(epoch_size >= 1);
+        assert(depth_limit >= 1);
+        assert(epoch_heuristic_counter <= epoch_size);
+    }
+
 public:
     /** You must always construct a cache with some elements via a subsequent
      * call to setup or setup_bytes, otherwise operations may segfault.
@@ -336,6 +348,9 @@ public:
      */
     uint32_t setup(uint32_t new_size)
     {
+        assert(size == 0);
+        assert(table.empty());
+        assert(epoch_flags.empty());
         // depth_limit must be at least one otherwise errors can occur.
         size = std::max<uint32_t>(2, new_size);
         depth_limit = static_cast<uint8_t>(std::log2(static_cast<float>(size)));
@@ -346,6 +361,7 @@ public:
         epoch_size = std::max(uint32_t{1}, (45 * size) / 100);
         // Initially set to wait for a whole epoch
         epoch_heuristic_counter = epoch_size;
+        AssertInvariants();
         return size;
     }
 
@@ -397,6 +413,7 @@ public:
      */
     inline void insert(Element e)
     {
+        AssertInvariants();
         epoch_check();
         uint32_t last_loc = invalid();
         bool last_epoch = true;
@@ -474,6 +491,7 @@ public:
      */
     inline bool contains(const Element& e, const bool erase) const
     {
+        AssertInvariants();
         std::array<uint32_t, 8> locs = compute_hashes(e);
         for (const uint32_t loc : locs)
             if (table[loc] == e) {
