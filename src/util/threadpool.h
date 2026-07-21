@@ -114,6 +114,7 @@ public:
         for (int i = 0; i < num_workers; i++) {
             m_workers.emplace_back(&util::TraceThread, strprintf("%s.%02d", m_name, i), [this] { WorkerThread(); });
         }
+        assert(m_workers.size() == static_cast<size_t>(num_workers));
     }
 
     /**
@@ -134,22 +135,27 @@ public:
             // Ensure Stop() is not called from a worker thread while workers are still registered,
             // otherwise a self-join deadlock would occur.
             auto id = std::this_thread::get_id();
-            for (const auto& worker : m_workers) assert(worker.get_id() != id);
+            for (const auto& worker : m_workers)
+                assert(worker.get_id() != id);
             // Early shutdown to return right away on any concurrent Submit() call
             m_interrupt = true;
             threads_to_join.swap(m_workers);
         }
         m_cv.notify_all();
         // Help draining queue
-        while (ProcessTask()) {}
+        while (ProcessTask()) {
+        }
         // Free resources
-        for (auto& worker : threads_to_join) worker.join();
+        for (auto& worker : threads_to_join)
+            worker.join();
 
         // Since we currently wait for tasks completion, sanity-check empty queue
         LOCK(m_mutex);
         Assume(m_work_queue.empty());
+        assert(m_workers.empty());
         // Re-allow Start() now that all workers have exited
         m_interrupt = false;
+        assert(!m_interrupt);
     }
 
     enum class SubmitError {
@@ -267,7 +273,11 @@ public:
      */
     void Interrupt() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
-        WITH_LOCK(m_mutex, m_interrupt = true);
+        {
+            LOCK(m_mutex);
+            m_interrupt = true;
+            assert(m_interrupt);
+        }
         m_cv.notify_all();
     }
 
@@ -282,12 +292,13 @@ public:
     }
 };
 
-constexpr std::string_view SubmitErrorString(const ThreadPool::SubmitError err) noexcept {
+constexpr std::string_view SubmitErrorString(const ThreadPool::SubmitError err) noexcept
+{
     switch (err) {
-        case ThreadPool::SubmitError::Inactive:
-            return "No active workers";
-        case ThreadPool::SubmitError::Interrupted:
-            return "Interrupted";
+    case ThreadPool::SubmitError::Inactive:
+        return "No active workers";
+    case ThreadPool::SubmitError::Interrupted:
+        return "Interrupted";
     }
     Assume(false); // Unreachable
     return "Unknown error";
