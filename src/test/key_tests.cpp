@@ -391,6 +391,11 @@ BOOST_AUTO_TEST_CASE(key_ellswift)
         const EllSwiftPubKey ellswift_copy{std::span<const std::byte>{ellswift.data(), EllSwiftPubKey::size()}};
         BOOST_CHECK(ellswift_copy == ellswift);
 
+        std::array<std::byte, EllSwiftPubKey::size()> zero_ellswift_data{};
+        const EllSwiftPubKey zero_ellswift{std::span<const std::byte>{zero_ellswift_data}};
+        const auto ecdh_secret = key.ComputeBIP324ECDHSecret(zero_ellswift, ellswift, true);
+        BOOST_CHECK(ecdh_secret == key.ComputeBIP324ECDHSecret(zero_ellswift, ellswift, true));
+
         CPubKey decoded_pubkey = ellswift.Decode();
         if (!key.IsCompressed()) {
             // The decoding constructor returns a compressed pubkey. If the

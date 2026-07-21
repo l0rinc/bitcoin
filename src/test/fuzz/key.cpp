@@ -357,6 +357,13 @@ FUZZ_TARGET(bip324_ecdh, .init = initialize_key)
     // Determine who is who.
     bool initiating = fdp.ConsumeBool();
 
+    // Model an arbitrary 64-byte peer value at the BIP324 boundary.
+    auto peer_ellswift_data = fdp.ConsumeBytes<std::byte>(EllSwiftPubKey::size());
+    peer_ellswift_data.resize(EllSwiftPubKey::size());
+    const EllSwiftPubKey peer_ellswift{std::span<const std::byte>{peer_ellswift_data.data(), peer_ellswift_data.size()}};
+    const auto ecdh_secret_peer = k1.ComputeBIP324ECDHSecret(peer_ellswift, k1_ellswift, initiating);
+    assert(ecdh_secret_peer == k1.ComputeBIP324ECDHSecret(peer_ellswift, k1_ellswift, initiating));
+
     // We compute our shared secret using our key and their public key.
     auto ecdh_secret_1 = k1.ComputeBIP324ECDHSecret(k2_ellswift, k1_ellswift, initiating);
     // They compute their shared secret using their key and our public key.
