@@ -100,6 +100,22 @@ public:
     }
 };
 
+//! Serialized coin data needed for un-hashed UTXO statistics.
+struct CoinStatsValue
+{
+    CAmount nValue{0};
+    uint64_t scriptPubKeySize{0};
+
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        uint32_t code{0};
+        s >> VARINT(code);
+        s >> Using<AmountCompression>(nValue);
+        ScriptCompression{}.UnserSize(s, scriptPubKeySize);
+    }
+};
+
 struct CCoinsCacheEntry;
 using CoinsCachePair = std::pair<const COutPoint, CCoinsCacheEntry>;
 
@@ -243,8 +259,17 @@ public:
     CCoinsViewCursor(const uint256& in_block_hash) : block_hash(in_block_hash) {}
     virtual ~CCoinsViewCursor() = default;
 
-    virtual bool GetKey(COutPoint &key) const = 0;
+    //! Returned key is valid until Next().
+    virtual const COutPoint* GetKey() const = 0;
+    bool GetKey(COutPoint& key) const
+    {
+        const auto* key_ref{GetKey()};
+        if (!key_ref) return false;
+        key = *key_ref;
+        return true;
+    }
     virtual bool GetValue(Coin &coin) const = 0;
+    virtual bool GetValue(CoinStatsValue& coin) const = 0;
 
     virtual bool Valid() const = 0;
     virtual void Next() = 0;
