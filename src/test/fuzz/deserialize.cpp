@@ -119,7 +119,7 @@ void AssertEqualAfterSerializeDeserialize(const T& obj)
 }
 
 template <typename T>
-void DeserializeAndAssertCanonicalPrefix(FuzzBufferType buffer, T& obj)
+void DeserializeAndAssertCanonicalPrefix(FuzzBufferType buffer, T&& obj)
 {
     SpanReader reader{buffer};
     try {
@@ -186,7 +186,7 @@ FUZZ_TARGET_DESERIALIZE(block_file_info_deserialize, {
 })
 FUZZ_TARGET_DESERIALIZE(block_header_and_short_txids_deserialize, {
     CBlockHeaderAndShortTxIDs block_header_and_short_txids;
-    DeserializeFromFuzzingInput(buffer, block_header_and_short_txids);
+    DeserializeAndAssertCanonicalPrefix(buffer, block_header_and_short_txids);
 })
 FUZZ_TARGET_DESERIALIZE(fee_rate_deserialize, {
     CFeeRate fee_rate;
@@ -249,7 +249,7 @@ FUZZ_TARGET_DESERIALIZE(psbt_output_deserialize, {
 })
 FUZZ_TARGET_DESERIALIZE(block_deserialize, {
     CBlock block;
-    DeserializeFromFuzzingInput(buffer, TX_WITH_WITNESS(block));
+    DeserializeAndAssertCanonicalPrefix(buffer, TX_WITH_WITNESS(block));
 })
 FUZZ_TARGET_DESERIALIZE(blocklocator_deserialize, {
     CBlockLocator bl;
@@ -263,7 +263,7 @@ FUZZ_TARGET_DESERIALIZE(blockmerkleroot, {
 })
 FUZZ_TARGET_DESERIALIZE(blockheader_deserialize, {
     CBlockHeader bh;
-    DeserializeFromFuzzingInput(buffer, bh);
+    DeserializeAndAssertCanonicalPrefix(buffer, bh);
 })
 FUZZ_TARGET_DESERIALIZE(txundo_deserialize, {
     CTxUndo tu;
