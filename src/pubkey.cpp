@@ -372,12 +372,12 @@ EllSwiftPubKey::EllSwiftPubKey(std::span<const std::byte> ellswift) noexcept
 CPubKey EllSwiftPubKey::Decode() const
 {
     secp256k1_pubkey pubkey;
-    secp256k1_ellswift_decode(secp256k1_context_static, &pubkey, UCharCast(m_pubkey.data()));
+    Assert(secp256k1_ellswift_decode(secp256k1_context_static, &pubkey, UCharCast(m_pubkey.data())) == 1);
 
     size_t sz = CPubKey::COMPRESSED_SIZE;
     std::array<uint8_t, CPubKey::COMPRESSED_SIZE> vch_bytes;
 
-    secp256k1_ec_pubkey_serialize(secp256k1_context_static, vch_bytes.data(), &sz, &pubkey, SECP256K1_EC_COMPRESSED);
+    Assert(secp256k1_ec_pubkey_serialize(secp256k1_context_static, vch_bytes.data(), &sz, &pubkey, SECP256K1_EC_COMPRESSED) == 1);
     assert(sz == vch_bytes.size());
 
     return CPubKey{vch_bytes.begin(), vch_bytes.end()};
