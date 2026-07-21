@@ -1220,6 +1220,27 @@ public:
      *  called. */
     void LoadLinearization(std::span<const DepGraphIndex> old_linearization) noexcept
     {
+        // The existing order must be a complete permutation of this graph. Callers may provide a
+        // non-topological order, but a partial order would silently leave transactions behind.
+        Assume(old_linearization.size() == m_transaction_idxs.Count());
+        SetType seen;
+        for (DepGraphIndex tx_idx : old_linearization) {
+            if (tx_idx >= m_tx_data.size()) {
+                Assume(false);
+                return;
+            }
+            Assume(m_transaction_idxs[tx_idx]);
+            bool already_seen{false};
+            for (DepGraphIndex seen_idx : seen) {
+                if (seen_idx == tx_idx) {
+                    already_seen = true;
+                    break;
+                }
+            }
+            Assume(!already_seen);
+            seen.Set(tx_idx);
+        }
+        Assume(seen == m_transaction_idxs);
         // Add transactions one by one, in order of existing linearization.
         for (DepGraphIndex tx_idx : old_linearization) {
             auto chunk_idx = m_tx_data[tx_idx].chunk_idx;
@@ -1849,7 +1870,10 @@ std::tuple<std::vector<DepGraphIndex>, bool, uint64_t> Linearize(
             }
         } while (forest.GetCost() < max_cost);
     }
-    return {forest.GetLinearization(fallback_order), optimal, forest.GetCost()};
+    auto linearization = forest.GetLinearization(fallback_order);
+    // The public result must remain a complete order even when the work budget stops optimization.
+    Assume(linearization.size() == depgraph.TxCount());
+    return {std::move(linearization), optimal, forest.GetCost()};
 }
 
 /** Improve a given linearization.
@@ -1871,6 +1895,8 @@ std::tuple<std::vector<DepGraphIndex>, bool, uint64_t> Linearize(
 template<typename SetType>
 void PostLinearize(const DepGraph<SetType>& depgraph, std::span<DepGraphIndex> linearization)
 {
+    // PostLinearize rearranges an order in place; it never constructs or drops transactions.
+    Assume(linearization.size() == depgraph.TxCount());
     // This algorithm performs a number of passes (currently 2); the even ones operate from back to
     // front, the odd ones from front to back. Each results in an equal-or-better linearization
     // than the one started from.
