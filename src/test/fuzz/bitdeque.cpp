@@ -7,7 +7,9 @@
 #include <test/fuzz/util.h>
 #include <util/bitdeque.h>
 
+#include <algorithm>
 #include <deque>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -31,10 +33,66 @@ void InitRandData()
 
 } // namespace
 
+namespace {
+
+void CheckState(const std::deque<bool>& deq, const bitdeque_type& bitdeq)
+{
+    assert(deq.size() == bitdeq.size());
+    assert(deq.empty() == bitdeq.empty());
+    assert(bitdeq.size() <= bitdeq.max_size());
+    assert(bitdeq.end() - bitdeq.begin() == static_cast<std::ptrdiff_t>(deq.size()));
+    assert(bitdeq.cend() - bitdeq.cbegin() == static_cast<std::ptrdiff_t>(deq.size()));
+    assert(bitdeq.rend() - bitdeq.rbegin() == static_cast<std::ptrdiff_t>(deq.size()));
+    assert(bitdeq.crend() - bitdeq.crbegin() == static_cast<std::ptrdiff_t>(deq.size()));
+    if (deq.empty()) return;
+
+    assert(deq.front() == bitdeq.front());
+    assert(deq.back() == bitdeq.back());
+    const size_t step{std::max<size_t>(1, deq.size() / 7)};
+    for (size_t pos{0}; pos < deq.size(); pos += step) {
+        assert(deq[pos] == bitdeq[pos]);
+    }
+    assert(deq.back() == bitdeq[deq.size() - 1]);
+}
+
+void CheckMovedFromState()
+{
+    std::deque<bool> expected(129, true);
+    bitdeque_type source(129, true);
+    bitdeque_type moved{std::move(source)};
+
+    assert(source.empty());
+    assert(source.size() == 0);
+    source.push_back(false);
+    expected.clear();
+    expected.push_back(false);
+    CheckState(expected, source);
+
+    bitdeque_type assigned(3, false);
+    assigned = std::move(moved);
+    assert(moved.empty());
+    assert(moved.size() == 0);
+    moved.push_back(true);
+    expected.assign(129, true);
+    CheckState(expected, assigned);
+    expected.clear();
+    expected.push_back(true);
+    CheckState(expected, moved);
+
+    assigned = std::move(assigned);
+    expected.assign(129, true);
+    CheckState(expected, assigned);
+}
+
+} // namespace
+
 FUZZ_TARGET(bitdeque, .init = InitRandData)
 {
     FuzzedDataProvider provider(buffer.data(), buffer.size());
+    FuzzedDataProvider contract_provider(buffer.data(), buffer.size());
     FastRandomContext ctx(true);
+
+    if (contract_provider.ConsumeBool()) CheckMovedFromState();
 
     size_t maxlen = (1U << provider.ConsumeIntegralInRange<size_t>(0, LEN_BITS)) - 1;
     size_t limitlen = 4 * maxlen;
@@ -52,6 +110,7 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
         bitdeq.push_back(val);
         --initlen;
     }
+    CheckState(deq, bitdeq);
 
     const auto iter_limit{maxlen > 6000 ? 90U : 900U};
     LIMITED_WHILE (provider.remaining_bytes() > 0, iter_limit) {
@@ -525,6 +584,7 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     assert(bitit == bitdeq.begin() + before);
                 }
             });
+        CheckState(deq, bitdeq);
     }
     {
         assert(deq.size() == bitdeq.size());
@@ -536,5 +596,6 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
             ++it;
             ++bitit;
         }
+        CheckState(deq, bitdeq);
     }
 }
