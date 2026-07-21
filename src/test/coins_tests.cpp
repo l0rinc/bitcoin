@@ -17,6 +17,8 @@
 #include <util/check.h>
 #include <util/strencodings.h>
 
+#include <array>
+#include <limits>
 #include <map>
 #include <string>
 #include <variant>
@@ -300,6 +302,35 @@ BOOST_FIXTURE_TEST_CASE(coins_cache_dbbase_simulation_test, CacheTest)
 {
     CCoinsViewDB db_base{{.path = "test", .cache_bytes = 8_MiB, .memory_only = true}, {}};
     SimulationTest(&db_base, true);
+}
+
+BOOST_FIXTURE_TEST_CASE(coins_db_cursor_order, BasicTestingSetup)
+{
+    CCoinsViewDB db_base{{.path = "test", .cache_bytes = 8_MiB, .memory_only = true}, {}};
+    CCoinsViewCache cache{&db_base};
+    const Txid txid{Txid::FromUint256(m_rng.rand256())};
+    constexpr std::array<uint32_t, 7> output_indices{
+        0, 1, 127, 128, 255, 256, std::numeric_limits<uint32_t>::max()};
+    for (const uint32_t output_index : output_indices) {
+        cache.EmplaceCoinInternalDANGER(
+            COutPoint{txid, output_index},
+            Coin{CTxOut{1, CScript{}}, /*nHeight=*/1, /*fCoinBase=*/false});
+    }
+    cache.SetBestBlock(m_rng.rand256());
+    cache.Sync();
+
+    const auto cursor{db_base.Cursor()};
+    BOOST_REQUIRE(cursor);
+    std::vector<uint32_t> cursor_indices;
+    while (cursor->Valid()) {
+        COutPoint outpoint;
+        BOOST_REQUIRE(cursor->GetKey(outpoint));
+        BOOST_CHECK_EQUAL(outpoint.hash, txid);
+        cursor_indices.push_back(outpoint.n);
+        cursor->Next();
+    }
+    BOOST_CHECK_EQUAL_COLLECTIONS(
+        cursor_indices.begin(), cursor_indices.end(), output_indices.begin(), output_indices.end());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
