@@ -207,6 +207,22 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   `coinselection_bnb`'s 483 inputs with two jobs and two workers for 1,000 runs per
   worker. Every job exited 0; no TSan report or artifact was produced. These are
   race-signal gates only, not evidence that wallet code is generally thread-safe.
+* The same TSan build replayed `coinscache_sim`'s 1,515 inputs with two jobs and two
+  workers. Both jobs exited 0 with no TSan report or artifact; this exercised the
+  cache overlay fetches and their persistent thread pool, but the workers still use
+  independent cache instances.
+* The transaction-state TSan gates replayed `txdownloadman_impl`'s 1,560 inputs,
+  `txorphan_protected`'s 646 inputs, and `txorphanage_sim`'s 1,346 inputs with two
+  jobs and two workers. Every job exited 0; no TSan report or artifact was produced.
+* An ASan/UBSan `txorphan` run over 686 inputs was stopped after both workers reached
+  the same expensive region. One worker reported a libFuzzer timeout at 39 seconds
+  while `TxOrphanageImpl::EraseTx()` computed transaction weight for a large
+  synthetic transaction; no ASan or UBSan diagnostic was present. The
+  resulting 68,345-byte slow input and 105,144-byte timeout input replayed in the
+  non-sanitized fuzzer in 3,977 ms and 7,398 ms respectively, both with exit code 0.
+  This is sanitizer overhead on an artificial construction, not a production bug.
+  The parallel ASan/UBSan `txdownloadman` run was also stopped at 512 executions per
+  worker without a sanitizer report or artifact and is not counted as complete.
 * An ASan/UBSan `scriptpubkeyman` run was started with two jobs and two workers over
   10,025 existing inputs, but both workers remained CPU-bound in a single expensive
   case past the five-minute wall-clock budget. It produced no sanitizer marker or
@@ -220,6 +236,6 @@ The additional `package_rbf` and `clusterlin_linearize` ASan workers were stoppe
 after more than five minutes on expensive corpus cases; they emitted no sanitizer
 marker or target artifact, but are not counted as completed corpus gates.
 
-The wallet scratch data from this gate was removed after the artifact and sanitizer
-scans; the shared QA corpora and ccache were preserved. This file should be amended
-if a later master rebase changes the status of any item above.
+Scratch data from this round was removed after the artifact and sanitizer scans; the
+shared QA corpora and ccache were preserved. This file should be amended if a later
+master rebase changes the status of any item above.
