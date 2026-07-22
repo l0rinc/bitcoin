@@ -366,6 +366,18 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   contain only the runtime's signal-unsafe warning from libFuzzer's interrupt
   handler after the deliberate stop, so these are incomplete gates rather than
   production findings.
+* A follow-up `ephemeral_package_eval` replay used the 2,057 corpus inputs below
+  16 KiB to reduce input-size confounding. With two workers per sanitizer, the
+  ASan/UBSan workers reached `#512` each and the TSan workers reached `#1024`
+  each before the deliberately bounded run was interrupted; no sanitizer
+  diagnostic, race report, timeout artifact, or crash artifact was produced.
+  The workers were CPU-bound in libFuzzer's seed-corpus replay, not deadlocked:
+  a perf sample was in `ReadAndExecuteSeedCorpora`, and the target's bounded
+  package-building loop was the hot path. A separate 32-seed ASan/UBSan probe
+  completed normally (`#33 DONE`, 67 seconds) with no diagnostic. This is still
+  an incomplete corpus gate, not evidence of a production defect; the TSan
+  signal-unsafe warning from the deliberate interrupt is a sanitizer-runtime
+  artifact caused by stopping while the target was unwinding.
 * `p2p_transport_serialization` completed 1,000 inputs in each ASan/UBSan worker
   (136 and 143 seconds, peak RSS about 770 MB) and each TSan worker (11 seconds,
   peak RSS about 157 MB). `p2p_transport_bidirectional_v1v2` likewise completed
