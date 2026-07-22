@@ -182,6 +182,19 @@ serialized by the message-processing mutex.
 Before this requested rebase, the compact-block unit suite passed 27 cases in the
 Assume-aborting Debug build. Current-master compact and coins corpus controls were
 run with multiple workers and existing QA corpora under Clang ASan/UBSan without
-reports. The latest post-rebase verification is intentionally repeated after the
-new upstream base is fetched; this file should be amended if that base changes the
-status of any item above.
+reports. After the explicit rebase onto the fetched `32eb521002` tip:
+
+* `blockencodings_tests` passed all 27 cases; the selected hash, Base58, cache,
+  mempool, RBF, HTTP, network, and index suites passed 81 cases.
+* `cmpctblock` and `partially_downloaded_block` each ran with two sanitizer workers
+  over the existing QA corpus and completed with exit code 0 and no target artifacts.
+* `coins_view` replayed all 21,873 QA inputs in each of two sanitizer workers with
+  exit code 0 and no artifacts.
+* `coinscache_sim` reached 1,416 inputs before the optional run was stopped because
+  both workers remained on a 10-second slow corpus unit. That unit replayed once in
+  18.6 seconds with exit code 0 and no sanitizer report. This is a fuzzing throughput
+  observation, not a confirmed production defect.
+
+All scratch data from this gate was removed; the shared QA corpora and ccache were
+preserved. This file should be amended if a later master rebase changes the status
+of any item above.
