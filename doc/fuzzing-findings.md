@@ -1135,6 +1135,37 @@ the exercised callbacks and state transitions but does not prove arbitrary live
 peer interleavings are race-free. No production inconsistency or clean-master
 failure was found, so no source fix was warranted.
 
+## Post-rebase message-processing lifecycle gate (2026-07-23)
+
+The complementary `process_message` and `process_messages` targets were replayed
+from their full bounded QA corpora. The single-message target resets chainman and
+peer-manager state around one fuzzed message; the multi-message target keeps one to
+three peers alive while processing repeated messages and checking send-queue memory
+and peer relay state.
+
+`process_message` normal workers completed 3,299 executions each in four seconds,
+reaching coverage 8121 and 8127. `process_messages` normal workers completed 4,178
+each in 14 seconds, reaching coverage 8725 in both. ASan/UBSan completed 4,037 and
+4,025 executions for `process_message` in 19 seconds, reaching coverage 17123 and
+17124 at 643 and 640 MB peak RSS. It completed 5,493 and 5,488 executions for
+`process_messages` in 66 and 67 seconds, reaching coverage 18029 and 18035 at 558
+MB peak RSS. TSan completed 3,299 `process_message` executions per worker in 18
+seconds at coverage 8144 and 558 MB peak RSS, and 4,178 `process_messages` executions
+per worker in 67 and 68 seconds at coverage 8750 and 558 MB peak RSS.
+
+All twelve target workers exited zero without an assertion, sanitizer report,
+race/deadlock report, timeout, or artifact. The gate covered malformed and valid
+message types, peer feature combinations, message queues, repeated processing,
+chainman reset and dirty-chain cleanup, AddrMan/PeerManager replacement, validation
+callbacks, special-peer address relay, and send-queue accounting. One initial TSan
+launcher used a misspelled scratch path and exited before target execution; it is
+excluded from these counts and was replaced by the corrected worker.
+
+No message-processing production defect or race was found, and no clean-master
+comparison or source fix was warranted. Each fuzzer invocation owns its node and
+peer state, so TSan covers the exercised lifecycle operations but does not prove all
+live connection interleavings are race-free.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
