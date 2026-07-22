@@ -112,6 +112,70 @@ FUZZ_TARGET(key, .init = initialize_key)
     }
 
     const CPubKey pubkey = key.GetPubKey();
+
+    {
+        // Exercise the BIP340/BIP341 boundary for all three CKey merkle-root
+        // modes: no tweak, the special no-script tweak, and a script-tree
+        // tweak. The expected x-only output is independently constructed
+        // through the public-key API and then used to verify the signature.
+        const XOnlyPubKey internal_key{pubkey};
+        const uint256 no_script_merkle_root{};
+        const uint256 merkle_root{random_uint256.IsNull() ? uint256::ONE : random_uint256};
+        const uint256 aux{Hash(buffer)};
+        const std::array<const uint256*, 3> merkle_roots{{nullptr, &no_script_merkle_root, &merkle_root}};
+
+        for (const uint256* root : merkle_roots) {
+            std::optional<std::pair<XOnlyPubKey, bool>> expected_output;
+            if (root == nullptr) {
+                expected_output = std::pair<XOnlyPubKey, bool>{internal_key, false};
+            } else {
+                // CKey treats a null root as the no-script form of BIP341.
+                expected_output = internal_key.CreateTapTweak(root->IsNull() ? nullptr : root);
+            }
+
+            std::array<unsigned char, 64> signature;
+            signature.fill(0xa5);
+            const bool signed_by_key{key.SignSchnorr(
+                random_uint256, std::span<unsigned char>{signature.data(), signature.size()}, root, aux)};
+            assert(signed_by_key == expected_output.has_value());
+
+            const KeyPair key_pair{key.ComputeKeyPair(root)};
+            assert(key_pair.IsValid() == expected_output.has_value());
+            if (!expected_output) continue;
+
+            assert(signed_by_key);
+            assert(key_pair.IsValid());
+            std::array<unsigned char, 64> direct_signature;
+            direct_signature.fill(0xa5);
+            assert(key_pair.SignSchnorr(
+                random_uint256, std::span<unsigned char>{direct_signature.data(), direct_signature.size()}, aux));
+            assert(direct_signature == signature);
+
+            const XOnlyPubKey& output_key{expected_output->first};
+            assert(output_key.IsFullyValid());
+            assert(output_key.VerifySchnorr(
+                random_uint256, std::span<const unsigned char>{signature.data(), signature.size()}));
+            assert(XOnlyPubKey{output_key.GetEvenCorrespondingCPubKey()} == output_key);
+            for (const CPubKey& full_key : output_key.GetCPubKeys()) {
+                assert(full_key.IsFullyValid());
+                assert(XOnlyPubKey{full_key} == output_key);
+            }
+            if (root != nullptr && !root->IsNull()) {
+                assert(output_key.CheckTapTweak(internal_key, *root, expected_output->second));
+            }
+        }
+    }
+
+    {
+        const XOnlyPubKey arbitrary_key{std::span<const unsigned char>{random_uint256.begin(), 32}};
+        if (!arbitrary_key.IsFullyValid()) {
+            std::array<unsigned char, 64> invalid_signature{};
+            assert(!arbitrary_key.VerifySchnorr(
+                random_uint256, std::span<const unsigned char>{invalid_signature.data(), invalid_signature.size()}));
+            assert(!arbitrary_key.CreateTapTweak(nullptr));
+        }
+    }
+
     const ChainCode parent_chaincode{random_uint256};
 
     {
