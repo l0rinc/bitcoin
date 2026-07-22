@@ -706,6 +706,23 @@ baseline `32eb521002`; the branch is now rebased onto
   reached pulse 16,384 in the expensive corpus region without a report or artifact;
   a second run over 21,388 inputs below 64 KiB reached the same pulse and was stopped.
   These are incomplete ASan gates, not evidence of a stacked-cache defect.
+* The current post-rebase `coins_view_stacked` mutation gate seeded two independent
+  normal workers from 21,388 `coins_view` inputs below 64 KiB and ran 25,000
+  executions per worker. They completed in 60 and 61 seconds, added 80 and 90
+  units, reached coverage 10,491 and 10,493, and used 83 and 81 MB peak RSS,
+  without an assertion or artifact. The original 163 fresh units were replayed
+  under branch ASan/UBSan (256 executions per worker, 11 and 12 seconds, 419 MB
+  peak RSS) and TSan/libFuzzer (256 per worker, 2 seconds, 150 MB peak RSS), with
+  no diagnostic, race report, or artifact.
+* The same fresh-unit slice was then replayed against unmodified clean master
+  `bc49bd154a31` in an isolated Clang 19 build. The ASan/UBSan workers completed
+  256 executions each over an expanded 238-seed slice in 4 seconds at 394 and
+  395 MB peak RSS, without a report or artifact. A frozen 249-seed superset was
+  replayed by two clean-master TSan/libFuzzer workers for 256 executions each in
+  2 seconds at 141 and 142 MB peak RSS, also without a report, race diagnostic, or
+  artifact. This closes the former stacked ASan gap and proves no clean-master
+  overlay production defect or race in the exercised reset, out-of-order lookup,
+  concurrent-read, and cache-publication combinations.
 * The UTXO snapshot follow-up used filtered existing corpora below 64 KiB. Valid
   `utxo_snapshot` ran 1,092 and 1,095 executions under ASan/UBSan and 1,027 per worker
   under TSan, with all jobs exiting 0 and no report or artifact. Invalid
