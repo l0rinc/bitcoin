@@ -1331,6 +1331,46 @@ interleavings, but do not prove arbitrary live multiprocess IPC schedules are
 race-free. No production inconsistency or clean-master failure was found, so
 no source fix or deterministic unit-test addition was warranted.
 
+## Post-rebase SOCKS5 transcript gate (2026-07-24)
+
+The branch-only `socks5` harness was expanded to exercise the complete scripted
+SOCKS5 client transcript: no-auth and username/password method selection,
+method-selection failures, authentication failures with unread sentinel bytes,
+connection failures for bad versions/reply codes/reserved bytes/address types,
+successful connections, overlong destinations, and overlong credentials. The
+optional `FUZZED_SOCKET_FAKE_LATENCY=1` mode also drives the receive-timeout
+path. Assertions compare every request byte, require the expected boolean result,
+and verify that failure replies leave the sentinel unread. The target does not
+catch arbitrary exceptions; unexpected assertions or exceptions remain fatal.
+
+On the branch, two normal workers ran 5,000 executions each from all 1,268 QA
+inputs (5.1 MB total, maximum input 3,608 bytes), reaching coverage 1,481.
+ASan/UBSan then ran two workers for 5,000 executions each over the expanded
+corpora, reaching coverage 3,841. TSan ran two workers for 5,000 executions
+each, reaching coverage 577. The branch fake-latency mode ran two workers for
+2,000 executions each and reached coverage 1,501. All eight workers exited zero
+without an assertion, sanitizer report, race/deadlock report, timeout, or
+artifact.
+
+Because the branch changes `netbase.cpp` as well as the fuzzer, those results
+were not treated as production evidence. A disposable worktree at the exact
+clean-master baseline `a2e074d66ac17ca7907909bbbb563e77185a45e5` received only
+the branch `src/test/fuzz/socks5.cpp`; the sole adjustment removed the
+branch-only `ResetFuzzedSockMockedFds()` helper call, which does not exist on
+that baseline. The clean production sources and tests were otherwise untouched.
+The unmodified master fuzzer first passed two 5,000-run workers. The
+transplanted branch fuzzer then passed two normal 5,000-run workers (coverage
+549/550), two ASan/UBSan 5,000-run workers (coverage 1,078/1,078), two TSan
+5,000-run workers (coverage 552/552), and two fake-latency 2,000-run workers
+(coverage 553/554). The clean controls used the branch-expanded 1,299/1,305
+input corpora and produced no artifact or diagnostic.
+
+This is strong evidence that the new transcript mutations do not expose a
+current-master SOCKS5 production failure or race. It is not evidence that all
+live socket schedules are race-free: each fuzzer process owns an independent
+scripted socket. No production fix, deterministic unit-test change, or severity
+change was warranted.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
