@@ -12,9 +12,57 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace {
+
+void AssertPacketRoundTrip(BIP324Cipher& sender, BIP324Cipher& receiver,
+                           std::span<const std::byte> contents,
+                           std::span<const std::byte> aad, bool ignore)
+{
+    assert(sender);
+    assert(receiver);
+    std::vector<std::byte> ciphertext(contents.size() + BIP324Cipher::EXPANSION);
+    sender.Encrypt(contents, aad, ignore, ciphertext);
+    assert(ciphertext.size() == contents.size() + BIP324Cipher::EXPANSION);
+
+    const uint32_t decrypted_length{
+        receiver.DecryptLength(std::span{ciphertext}.first(BIP324Cipher::LENGTH_LEN))};
+    assert(decrypted_length == contents.size());
+    std::vector<std::byte> decrypted(decrypted_length);
+    bool decrypted_ignore{false};
+    assert(receiver.Decrypt(std::span{ciphertext}.subspan(BIP324Cipher::LENGTH_LEN), aad,
+                            decrypted_ignore, decrypted));
+    assert(decrypted_ignore == ignore);
+    assert(std::ranges::equal(decrypted, contents));
+}
+
+void AssertRekeyBoundary(const CKey& init_key, std::span<const std::byte> init_ent,
+                         const CKey& resp_key, std::span<const std::byte> resp_ent)
+{
+    BIP324Cipher initiator(init_key, init_ent);
+    BIP324Cipher responder(resp_key, resp_ent);
+    assert(!initiator);
+    assert(!responder);
+    initiator.Initialize(responder.GetOurPubKey(), true);
+    responder.Initialize(initiator.GetOurPubKey(), false);
+    assert(initiator);
+    assert(responder);
+
+    for (const auto [sender, receiver] : {
+             std::pair{&initiator, &responder},
+             std::pair{&responder, &initiator},
+         }) {
+        for (unsigned packet{0}; packet <= BIP324Cipher::REKEY_INTERVAL; ++packet) {
+            std::vector<std::byte> contents(
+                packet % 7, std::byte{static_cast<unsigned char>(packet)});
+            std::vector<std::byte> aad(
+                packet % 5, std::byte{static_cast<unsigned char>(packet ^ 0xA5)});
+            AssertPacketRoundTrip(*sender, *receiver, contents, aad, packet & 1);
+        }
+    }
+}
 
 void Initialize()
 {
@@ -63,6 +111,9 @@ FUZZ_TARGET(bip324_cipher_roundtrip, .init=Initialize)
     assert(std::ranges::equal(initiator.GetSessionID(), responder.GetSessionID()));
     assert(std::ranges::equal(initiator.GetSendGarbageTerminator(), responder.GetReceiveGarbageTerminator()));
     assert(std::ranges::equal(initiator.GetReceiveGarbageTerminator(), responder.GetSendGarbageTerminator()));
+    assert(initiator.GetSessionID().size() == BIP324Cipher::SESSION_ID_LEN);
+    assert(initiator.GetSendGarbageTerminator().size() == BIP324Cipher::GARBAGE_TERMINATOR_LEN);
+    assert(initiator.GetReceiveGarbageTerminator().size() == BIP324Cipher::GARBAGE_TERMINATOR_LEN);
 
     LIMITED_WHILE (provider.remaining_bytes(), 1000) {
         // Mode:
@@ -126,4 +177,8 @@ FUZZ_TARGET(bip324_cipher_roundtrip, .init=Initialize)
         assert(ignore == dec_ignore);
         assert(decrypt == contents);
     }
+
+    // Force both directions through the exact rekey boundary. Random input may stop before 224
+    // packets, while a sender/receiver rekey mismatch only becomes observable on the next packet.
+    AssertRekeyBoundary(init_key, init_ent, resp_key, resp_ent);
 }

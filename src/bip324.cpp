@@ -33,6 +33,8 @@ BIP324Cipher::BIP324Cipher(const CKey& key, const EllSwiftPubKey& pubkey) noexce
 
 void BIP324Cipher::Initialize(const EllSwiftPubKey& their_pubkey, bool initiator, bool self_decrypt) noexcept
 {
+    assert(!operator bool());
+
     // Determine salt (fixed string + network magic bytes)
     const auto& message_header = Params().MessageStart();
     std::string salt = std::string{"bitcoin_v2_shared_secret"} + std::string(std::begin(message_header), std::end(message_header));
@@ -68,10 +70,16 @@ void BIP324Cipher::Initialize(const EllSwiftPubKey& their_pubkey, bool initiator
     memory_cleanse(hkdf_32_okm.data(), sizeof(hkdf_32_okm));
     memory_cleanse(&hkdf, sizeof(hkdf));
     m_key = CKey();
+    assert(!m_key.IsValid());
+    assert(m_send_l_cipher.has_value());
+    assert(m_recv_l_cipher.has_value());
+    assert(m_send_p_cipher.has_value());
+    assert(m_recv_p_cipher.has_value());
 }
 
 void BIP324Cipher::Encrypt(std::span<const std::byte> contents, std::span<const std::byte> aad, bool ignore, std::span<std::byte> output) noexcept
 {
+    assert(operator bool());
     assert(output.size() == contents.size() + EXPANSION);
 
     // Encrypt length.
@@ -88,6 +96,7 @@ void BIP324Cipher::Encrypt(std::span<const std::byte> contents, std::span<const 
 
 uint32_t BIP324Cipher::DecryptLength(std::span<const std::byte> input) noexcept
 {
+    assert(operator bool());
     assert(input.size() == LENGTH_LEN);
 
     std::byte buf[LENGTH_LEN];
@@ -99,6 +108,7 @@ uint32_t BIP324Cipher::DecryptLength(std::span<const std::byte> input) noexcept
 
 bool BIP324Cipher::Decrypt(std::span<const std::byte> input, std::span<const std::byte> aad, bool& ignore, std::span<std::byte> contents) noexcept
 {
+    assert(operator bool());
     assert(input.size() + LENGTH_LEN == contents.size() + EXPANSION);
 
     std::byte header[HEADER_LEN];
