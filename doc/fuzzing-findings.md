@@ -7,12 +7,12 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`a2e074d66ac17ca7907909bbbb563e77185a45e5`. The reorg campaign below ran before the
-master fetches against `559d042ba2567a05e8d540c7d9d9a94c7d2973d2`; the eight commits
-between those tips update Qt, ZeroMQ dependencies, include-lint tooling, and the
-assumed BIP324 service flag for seed addresses. They do not change the validation,
-compact-block, mempool, TxGraph, coins, or fuzz code exercised here. Controls that
-explicitly name
+`5311b15727f2f282274472184185423e441abd85`. The reorg campaign below ran before the
+master fetches against `559d042ba2567a05e8d540c7d9d9a94c7d2973d2`; the fifteen commits
+between those tips update Qt, ZeroMQ dependencies, include-lint tooling, the assumed
+BIP324 service flag for seed addresses, and descriptorprocesspsbt's invalid-signature
+handling. They do not change the validation, compact-block, mempool, TxGraph, coins,
+or descriptor-cache production code exercised here. Controls that explicitly name
 `32eb52100296718f7c0469e3210ce1db73694793` are historical clean-master runs from an
 earlier baseline; they remain valid evidence for the mutations they tested, but are
 not claims about commits added since then.
@@ -169,11 +169,11 @@ ASan/UBSan fuzz coverage.
 ### 8. Descriptor-cache merge leaves partial state after a conflict
 
 * Current branch fix: `4da71c90d7` (`descriptor: keep cache conflict merges atomic`).
-* Severity on current clean master `a2e074d66ac17ca7907909bbbb563e77185a45e5`:
+* Severity on current clean master `5311b15727f2f282274472184185423e441abd85`:
   medium local wallet consistency/availability issue. The exact control ran at
-  `b8844d3df759bfa070681327583427461d39105c`; the later master delta changes only
-  `src/addrman.h` and `src/qt/test/test_main.cpp`, not descriptor-cache production
-  code or its tests. The trigger requires a conflicting descriptor cache, so no
+  `b8844d3df759bfa070681327583427461d39105c`; the later master deltas change
+  `src/rpc/rawtransaction.cpp` and functional PSBT tests, not descriptor-cache
+  production code or its tests. The trigger requires a conflicting descriptor cache, so no
   network or unauthenticated RPC attack was demonstrated; wallet-key loss and
   persisted database corruption were not demonstrated.
 
@@ -199,24 +199,60 @@ preflight now validates all conflict maps before mutating the destination. The
 commit message records the intentional preflight-removal mutation used to prove the
 unit test catches the old behavior.
 
+### Additional conflict-ordering coverage (2026-07-24)
+
+The fuzzer and deterministic tests now cover the three orderings that the original
+derived-conflict construction did not reach:
+
+* A destination parent at position 1, followed by an incoming new parent at position
+  0 and a conflicting parent at position 1. This catches partial insertion within
+  the parent map.
+* A destination derived xpub at `(1, 1)`, followed by incoming derived index 0 and a
+  conflicting index 1. This catches partial insertion within one derived-index map.
+* A destination last-hardened xpub at position 1, followed by an incoming parent at
+  position 0 and a conflicting last-hardened xpub at position 1. This catches partial
+  insertion across the parent and last-hardened maps.
+
+The helper catches only the expected `std::runtime_error` text and then requires all
+three destination maps to equal their pre-call snapshots; other exceptions and
+assertions remain fatal. From 440 of 506 QA inputs below 64 KiB (maximum 64,311
+bytes), the edited branch fuzzer completed two normal 5,000-run workers at coverage
+875, two ASan/UBSan workers at coverage 3,118, and two TSan workers at coverage 441.
+All six workers exited zero without an assertion, sanitizer report, race/deadlock
+report, timeout, or artifact. The deterministic descriptor suite passed all ten
+cases, including the three new tests.
+
+For the clean-master control, an exact `5311b15727f2f282274472184185423e441abd85`
+worktree received only the edited fuzzer; `src/script/descriptor.cpp` and the unit
+tests remained clean-master versions. Replaying the 506 preserved QA seeds aborted
+after 12 inputs when the last-hardened construction observed that clean master had
+inserted the unrelated parent before throwing the conflict. The assertion was at
+the oracle's parent-map postcondition, and the artifact SHA256 is
+`0bf90c4d2f1eb93bf54dbf3a9605d229dec719f041d3385387c723857757c422`. Replaying that
+exact artifact exited zero under the current normal, ASan/UBSan, and TSan branch
+binaries. This confirms the three new mutations are additional reproductions of the
+existing partial-merge defect, not a branch-introduced failure. No new production
+fix or severity change is warranted because `4da71c90d7` preflights all three maps;
+the new unit tests make each ordering deterministic.
+
 ## Compact-block short-ID investigation
 
 ### Rebase assessment (2026-07-22)
 
 The branch was fetched and rebased onto clean `origin/master`
-`a2e074d66ac17ca7907909bbbb563e77185a45e5`. Since the earlier compact-block
-comparison at `bc49bd154a31`, master added only Qt, ZeroMQ, include-lint, and seed
-address BIP324-service-flag changes; none alter compact-block construction,
-reconstruction, validation, or the fuzzer code covered below. The historical short-ID
-accounting defect remains fixed by master commit `6aa5d8d948` (PR #35727), and the
-normal production path still has the #35670 optimization (`6f1c56f03a`) that avoids
-null tail entries. Rechecking after this rebase changed commit identifiers and the
-baseline, but produced no new clean-master compact-block defect or race and justified
-no additional production fix.
+`5311b15727f2f282274472184185423e441abd85`. Since the earlier compact-block
+comparison at `bc49bd154a31`, master added Qt, ZeroMQ, include-lint, seed address
+BIP324-service-flag, and descriptorprocesspsbt invalid-signature changes; none alter
+compact-block construction, reconstruction, validation, or the fuzzer code covered
+below. The historical short-ID accounting defect remains fixed by master commit
+`6aa5d8d948` (PR #35727), and the normal production path still has the #35670
+optimization (`6f1c56f03a`) that avoids null tail entries. Rechecking after this
+rebase changed commit identifiers and the baseline, but produced no new clean-master
+compact-block defect or race and justified no additional production fix.
 
-The final `b8844d3df7..a2e074d66a` master delta was also checked and touches only
-`src/addrman.h` and `src/qt/test/test_main.cpp`, so it does not invalidate the
-compact-block control results.
+The final `b8844d3df7..5311b157` master delta was also checked. Its only relevant
+new runtime change is in `src/rpc/rawtransaction.cpp` for invalid PSBT signatures;
+it does not invalidate the compact-block control results.
 
 ### Historical real defect, fixed on current master
 
