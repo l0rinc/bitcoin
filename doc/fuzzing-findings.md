@@ -146,6 +146,13 @@ The following cases were reproduced against clean master by constructing
   `e5ae33f338` reset or preserve state at the reusable-object boundary. The production
   caller discards failed requests, so no remotely reachable state corruption was
   shown.
+* Constructing `CBlockHeaderAndShortTxIDs` from an empty or sparse in-memory `CBlock`
+  could underflow the short-ID vector size or dereference a null transaction while
+  deriving the IDs. `dcf154b370` adds the production preconditions and deterministic
+  `blockencodings_tests/HeaderAndShortIDsRejectsInvalidBlockTxRefs` coverage. This is
+  direct-API contract hardening: no clean-master P2P caller was found that constructs a
+  compact block from an empty or sparse source block, so its severity on the baseline is
+  none confirmed rather than a remotely reachable crash.
 
 The collision fuzzer now constructs valid `<wtxid, transaction>` pairs, exercises
 mempool-first, extra-first, duplicate, null, prefilled, early-exit, and terminal
@@ -155,6 +162,14 @@ recheck. A source review also checked the exact `uint16_t` position boundary: 65
 transactions is representable, while 65,536 is rejected before allocation or index
 mapping. No additional wraparound candidate was found. No compact-block race in the
 extra vector was found; its access remains serialized by the message-processing mutex.
+
+For an independent clean-master check, an ASan/UBSan build at
+`32eb52100296718f7c0469e3210ce1db73694793` replayed all 2,015 existing
+`partially_downloaded_block` inputs with two jobs and two workers: both workers ran
+2,016 executions and exited 0 without a report or artifact. The clean-master
+`cmpctblock` replay reached 256 executions per worker before being interrupted in a
+high-cost generated case; it produced no report or artifact and is explicitly an
+incomplete gate, not a pass.
 
 ## Findings that were not production bugs
 
@@ -444,6 +459,14 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   reached pulse 16,384 in the expensive corpus region without a report or artifact;
   a second run over 21,388 inputs below 64 KiB reached the same pulse and was stopped.
   These are incomplete ASan gates, not evidence of a stacked-cache defect.
+* The UTXO snapshot follow-up used filtered existing corpora below 64 KiB. Valid
+  `utxo_snapshot` ran 1,092 and 1,095 executions under ASan/UBSan and 1,027 per worker
+  under TSan, with all jobs exiting 0 and no report or artifact. Invalid
+  `utxo_snapshot_invalid` ran 1,359 ASan/UBSan and 1,287 TSan executions per worker,
+  also clean. `utxo_total_supply` reached 256 executions per worker under each
+  sanitizer without a report or artifact before the intentionally bounded stop; its
+  TSan logs contain only the runtime's signal-unsafe warning from that SIGTERM, so this
+  is an incomplete gate.
 * No production code mistake, race report, or deterministic assertion failure was
   found in this coins-cache round. The resize/cursor target is now covered by a
   multi-threaded sanitizer gate, while the overlay and stacked targets have explicit
