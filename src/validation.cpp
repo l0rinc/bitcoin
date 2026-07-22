@@ -4651,6 +4651,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
     nCheckLevel = std::max(0, std::min(4, nCheckLevel));
     LogInfo("Verifying last %i blocks at level %i", nCheckDepth, nCheckLevel);
     CCoinsViewCache coins(&coinsview);
+    CoinsViewOverlay view{&coins, chainstate.PrevoutFetchPool()};
     CBlockIndex* pindex;
     CBlockIndex* pindexFailure = nullptr;
     int nGoodTransactions = 0;
@@ -4703,16 +4704,18 @@ VerifyDBResult CVerifyDB::VerifyDB(
             }
         }
         // check level 3: check for inconsistencies during memory-only disconnect of tip blocks
-        size_t curr_coins_usage = coins.DynamicMemoryUsage() + chainstate.CoinsTip().DynamicMemoryUsage();
+        size_t curr_coins_usage = coins.DynamicMemoryUsage() + view.DynamicMemoryUsage() + chainstate.CoinsTip().DynamicMemoryUsage();
 
         if (nCheckLevel >= 3) {
             if (curr_coins_usage <= chainstate.m_coinstip_cache_size_bytes) {
                 assert(coins.GetBestBlock() == pindex->GetBlockHash());
-                DisconnectResult res = chainstate.DisconnectBlock(block, pindex, coins);
+                const auto reset_guard{view.StartFetchingForDisconnect(block)};
+                DisconnectResult res = chainstate.DisconnectBlock(block, pindex, view);
                 if (res == DISCONNECT_FAILED) {
                     LogError("Verification error: irrecoverable inconsistency in block data at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
                     return VerifyDBResult::CORRUPTED_BLOCK_DB;
                 }
+                view.Flush(/*reallocate_cache=*/false);
                 if (res == DISCONNECT_UNCLEAN) {
                     nGoodTransactions = 0;
                     pindexFailure = pindex;
