@@ -813,6 +813,64 @@ called out separately below.
   multi-threaded sanitizer gate, while the overlay and stacked targets have explicit
   corpus-backed TSan evidence and their ASan limitations are recorded above.
 
+## Post-rebase AddrMan and wallet gates (2026-07-22)
+
+The latest fetch still points `origin/master` at
+`a2e074d66ac17ca7907909bbbb563e77185a45e5`. The only delta since the exact
+descriptor-cache control is the AddrMan equality simplification and Qt test changes;
+neither changes descriptor-cache, compact-block, or wallet transaction production
+logic. The following gates therefore ran on the current rebased branch and are
+additional evidence for the existing findings, not new fixes.
+
+### AddrMan serialization and equality
+
+`addrman_serdeser` was seeded from 1,295 of the 1,437 existing QA inputs (the
+remaining inputs exceeded the bounded seed-size limit). Two independent normal
+workers completed 1,296 executions each, with 1891 coverage and 558 MB peak RSS.
+Two ASan/UBSan workers completed 1,296 executions each in about 692 seconds, with
+641 and 645 MB peak RSS. Two independent TSan/libFuzzer workers completed 1,296
+executions each in 559 and 580 seconds, with 559 MB peak RSS. Every worker exited
+zero, and all six artifact directories were empty. The fuzzer's serialize/deserialize
+equality contract, including the current master's defaulted `AddressPosition`
+comparison, exposed no assertion, memory error, or race.
+
+This is still a per-process gate: the two workers do not share an AddrMan instance.
+It is evidence against races or state corruption in the exercised serialization and
+mutation setup, not a proof that all live AddrMan callers are thread-safe.
+
+### Wallet transaction construction
+
+`wallet_create_transaction` started from two independent copies of its 1,357-input
+QA corpus. Normal workers completed 2,000 executions each in 125 and 129 seconds,
+adding 16 and 25 corpus units, respectively, without an assertion or artifact.
+Those expanded corpora were replayed under two ASan/UBSan workers (1,577 and 1,586
+executions; 590 and 592 MB peak RSS; 357 and 364 seconds) and two TSan/libFuzzer
+workers (1,373 and 1,382 executions; 558 MB peak RSS; 294 and 299 seconds). All
+four sanitizer workers exited zero with no sanitizer report, race report, timeout,
+or artifact.
+
+The target exercised synthetic confirmed and unconfirmed ancestry, shared-wallet
+outputs, `AvailableCoins`, coin control, change, locktime, fee-rate, recipient, and
+mempool combinations. The normal corpus mutations also learned serialized values
+for zero/one/three transaction counts and `timesmart`; none exposed a production
+inconsistency. The fuzzer constructs independent wallet state in each process, so
+these results do not rule out races between a live wallet, validation callbacks, and
+the mempool. They do strengthen the conclusion that no new wallet transaction
+defect was found in this campaign.
+
+### Re-evaluation after the compact-block collision work
+
+No severity changes are warranted on the clean baseline. The compact-block
+short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
+normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
+remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
+are direct-API contracts covered by branch assertions/tests; no clean-master P2P
+caller or new collision race was found. The eight confirmed production defects
+listed above remain the only confirmed runtime defects in this ledger, ordered by
+the severity assigned against current master. The AddrMan and wallet sanitizer
+gates above found no additional production mistake, race, consensus issue, or
+remotely reachable memory-safety defect.
+
 The additional `package_rbf` and `clusterlin_linearize` ASan workers were stopped
 after more than five minutes on expensive corpus cases; they emitted no sanitizer
 marker or target artifact, but are not counted as completed corpus gates.
