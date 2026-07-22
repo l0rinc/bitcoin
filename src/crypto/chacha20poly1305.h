@@ -5,12 +5,13 @@
 #ifndef BITCOIN_CRYPTO_CHACHA20POLY1305_H
 #define BITCOIN_CRYPTO_CHACHA20POLY1305_H
 
+#include <crypto/chacha20.h>
+#include <crypto/poly1305.h>
+
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <span>
-
-#include <crypto/chacha20.h>
-#include <crypto/poly1305.h>
 
 /** The AEAD_CHACHA20_POLY1305 authenticated encryption algorithm from RFC8439 section 2.8. */
 class AEADChaCha20Poly1305
@@ -111,8 +112,10 @@ public:
     FSChaCha20Poly1305& operator=(FSChaCha20Poly1305&&) = delete;
 
     /** Construct an FSChaCha20Poly1305 cipher that rekeys every rekey_interval operations. */
-    FSChaCha20Poly1305(std::span<const std::byte> key, uint32_t rekey_interval) noexcept :
-        m_aead(key), m_rekey_interval(rekey_interval) {}
+    FSChaCha20Poly1305(std::span<const std::byte> key, uint32_t rekey_interval) noexcept : m_aead(key), m_rekey_interval(rekey_interval)
+    {
+        assert(rekey_interval != 0);
+    }
 
     /** Encrypt a message with a specified aad.
      *
