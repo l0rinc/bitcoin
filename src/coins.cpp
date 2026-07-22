@@ -416,6 +416,24 @@ CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetching(const CBlock& block 
     return CreateResetGuard();
 }
 
+CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetchingForDisconnect(const CBlock& block LIFETIMEBOUND) noexcept
+{
+    Assert(m_futures.empty());
+    Assert(m_inputs.empty());
+    Assert(m_input_head.load(std::memory_order_relaxed) == 0);
+    Assert(m_input_tail == 0);
+    if (const auto workers_count{m_thread_pool->WorkersCount()}; workers_count > 0) {
+        // DisconnectBlock restores transactions and their inputs in reverse order.
+        for (const auto& tx : block.vtx | std::views::drop(1) | std::views::reverse) {
+            for (const auto& input : tx->vin | std::views::reverse) {
+                m_inputs.emplace_back(input.prevout);
+            }
+        }
+        StartWorkers(workers_count);
+    }
+    return CreateResetGuard();
+}
+
 static const uint64_t MIN_TRANSACTION_OUTPUT_WEIGHT{WITNESS_SCALE_FACTOR * ::GetSerializeSize(CTxOut())};
 static const uint64_t MAX_OUTPUTS_PER_BLOCK{MAX_BLOCK_WEIGHT / MIN_TRANSACTION_OUTPUT_WEIGHT};
 

@@ -593,16 +593,16 @@ private:
 };
 
 /**
- * CCoinsViewCache subclass that asynchronously fetches most block input prevouts in parallel during ConnectBlock without
- * mutating the base cache.
+ * CCoinsViewCache subclass that asynchronously fetches most block input prevouts in parallel during block connection or
+ * disconnection without mutating the base cache.
  *
- * Only used in ConnectBlock to pass as an ephemeral view that can be reset if the block is invalid.
+ * Used as an ephemeral view that can be reset if validation fails.
  * It provides the same interface as CCoinsViewCache.
- * It adds an additional StartFetching method to provide the block.
+ * It adds StartFetching methods to provide the block and expected input access order.
  *
- * When a block is passed to StartFetching, the inputs of the block are flattened into a vector of InputToFetch
- * objects. StartFetching then submits worker tasks to a ThreadPool and keeps the returned futures alive until fetching
- * is stopped.
+ * When a block is passed to a StartFetching method, the inputs of the block are flattened into a vector of
+ * InputToFetch objects in the order the caller will access them. Worker tasks are then submitted to a ThreadPool
+ * and the returned futures are kept alive until fetching is stopped.
  *
  * ProcessInput() atomically fetches and increments m_input_head, so each thread can only access a single element of the
  * m_inputs vector at a time. Workers race to claim inputs, so they may fetch elements in any order. If the fetched
@@ -722,8 +722,8 @@ private:
 
     std::optional<Coin> FetchCoinFromBase(const COutPoint& outpoint) const override
     {
-        // This assumes ConnectBlock accesses all inputs in the same order as
-        // they are added to m_inputs in StartFetching.
+        // This assumes the caller accesses all inputs in the same order as
+        // they were added to m_inputs by the StartFetching method used.
         if (m_input_tail < m_inputs.size() && m_inputs[m_input_tail].outpoint == outpoint) {
             // We advance the tail since the input is cached and not accessed through this method again.
             auto& input{m_inputs[m_input_tail++]};
@@ -733,7 +733,8 @@ private:
             return std::move(input.coin);
         }
 
-        // We will only get here for BIP30 checks, an invalid block, or if the threadpool has not been started.
+        // We will only get here for outpoints missing from the queue: BIP30 checks, DisconnectBlock's reads
+        // of each transaction's own outputs, an invalid block, or if the threadpool has not been started.
         return base->PeekCoin(outpoint);
     }
 
@@ -760,8 +761,11 @@ public:
 
     ~CoinsViewOverlay() noexcept override { StopFetching(); }
 
-    //! Start fetching inputs from block.
+    //! Start fetching inputs in ConnectBlock access order.
     [[nodiscard]] ResetGuard StartFetching(const CBlock& block LIFETIMEBOUND) noexcept;
+
+    //! Start fetching inputs in DisconnectBlock access order.
+    [[nodiscard]] ResetGuard StartFetchingForDisconnect(const CBlock& block LIFETIMEBOUND) noexcept;
 
     void Flush(bool reallocate_cache = true) override
     {
