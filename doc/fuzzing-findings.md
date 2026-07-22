@@ -236,6 +236,12 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   same two-job/two-worker ASan/UBSan and TSan setup. Every job exited 0 without a
   sanitizer report or artifact; ASan workers completed in about 163 seconds with
   peak RSS around 711 MB, and TSan workers completed in about 22 seconds.
+* `banman` replayed its 1,825-input QA corpus under both Clang ASan/UBSan and Clang
+  TSan with two jobs and two workers. Every job exited 0 without a sanitizer report
+  or artifact; the ASan workers completed in about 171 seconds with peak RSS around
+  771 MB, while the TSan workers completed in about 44 seconds. The corpus included
+  corrupted persistence, clear/reload transitions, and extreme signed ban-time
+  offsets.
 * An ASan/UBSan `txorphan` run over 686 inputs was stopped after both workers reached
   the same expensive region. One worker reported a libFuzzer timeout at 39 seconds
   while `TxOrphanageImpl::EraseTx()` computed transaction weight for a large
