@@ -778,6 +778,9 @@ public:
 
     //! Verify that all parallel fetched input prevouts have been consumed.
     bool AllInputsConsumed() const noexcept { return m_input_tail == m_inputs.size(); }
+
+    //! @returns the thread pool used for fetching, so another view can share its workers.
+    std::shared_ptr<ThreadPool> GetThreadPool() const noexcept { return m_thread_pool; }
 };
 
 //! Utility function to add all of a transaction's outputs to a cache.
