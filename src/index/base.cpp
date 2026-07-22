@@ -79,12 +79,9 @@ BaseIndex::DB::DB(const fs::path& path, size_t n_cache_size, bool f_memory, bool
 CBlockLocator BaseIndex::DB::ReadBestBlock() const
 {
     CBlockLocator locator;
-
-    bool success = Read(DB_BEST_BLOCK, locator);
-    if (!success) {
+    if (!Read(DB_BEST_BLOCK_V2, locator) && !Read(DB_BEST_BLOCK, locator)) {
         locator.SetNull();
     }
-
     return locator;
 }
 

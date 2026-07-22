@@ -279,6 +279,9 @@ public:
      */
     bool IsEmpty();
 
+    //! Probe an unopened database for a key prefix; missing or empty databases return false.
+    static bool HasKeyStartingWith(const fs::path& path, uint8_t prefix);
+
     template<typename K>
     size_t EstimateSize(const K& key_begin, const K& key_end) const
     {

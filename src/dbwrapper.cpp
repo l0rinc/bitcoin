@@ -153,6 +153,26 @@ static leveldb::Options GetOptions(size_t nCacheSize, bool bloom_filter)
     return options;
 }
 
+bool CDBWrapper::HasKeyStartingWith(const fs::path& path, uint8_t prefix)
+{
+    if (!fs::exists(path / "CURRENT")) return false; // LevelDB's database-existence marker
+
+    leveldb::Options options;
+    options.paranoid_checks = true;
+    leveldb::DB* raw_db;
+    HandleError(leveldb::DB::Open(options, fs::PathToString(path), &raw_db));
+    const std::unique_ptr<leveldb::DB> db{raw_db};
+
+    leveldb::ReadOptions read_options;
+    read_options.verify_checksums = true;
+    read_options.fill_cache = false;
+    const std::unique_ptr<leveldb::Iterator> it{db->NewIterator(read_options)};
+    const leveldb::Slice prefix_slice{reinterpret_cast<const char*>(&prefix), sizeof(prefix)};
+    it->Seek(prefix_slice);
+    HandleError(it->status());
+    return it->Valid() && it->key().starts_with(prefix_slice);
+}
+
 struct CDBBatch::WriteBatchImpl {
     leveldb::WriteBatch batch;
 };

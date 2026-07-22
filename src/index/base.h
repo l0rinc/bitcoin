@@ -63,16 +63,20 @@ protected:
     */
     class DB : public CDBWrapper
     {
+    protected:
+        inline static constexpr std::string DB_BEST_BLOCK_V2{"best_block_v2"};
+
     public:
         DB(const fs::path& path, size_t n_cache_size,
            bool f_memory = false, bool f_wipe = false, bool f_obfuscate = false, bool f_bloom = true);
+        virtual ~DB() = default;
 
         /// Read block locator of the chain that the index is in sync with.
         /// Note, the returned locator will be empty if no record exists.
         CBlockLocator ReadBestBlock() const;
 
         /// Write block locator of the chain that the index is in sync with.
-        void WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator);
+        virtual void WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator);
     };
 
 private:
