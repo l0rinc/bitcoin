@@ -10,6 +10,7 @@
 #include <wallet/migrate.h>
 
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <optional>
 #include <stdexcept>
@@ -798,10 +799,12 @@ std::unique_ptr<BerkeleyRODatabase> MakeBerkeleyRODatabase(const fs::path& path,
     try {
         std::unique_ptr<BerkeleyRODatabase> db = std::make_unique<BerkeleyRODatabase>(data_file);
         status = DatabaseStatus::SUCCESS;
+        assert(db);
         return db;
     } catch (const std::runtime_error& e) {
         error.original = e.what();
         status = DatabaseStatus::FAILED_LOAD;
+        assert(status == DatabaseStatus::FAILED_LOAD);
         return nullptr;
     }
 }
