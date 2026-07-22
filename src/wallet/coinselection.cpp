@@ -266,6 +266,9 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
         return max_tx_weight_exceeded ? ErrorMaxWeightExceeded() : util::Error();
     }
 
+    Assert(result.GetSelectionsEvaluated() <= TOTAL_TRIES);
+    Assert(result.GetAlgoCompleted() || result.GetSelectionsEvaluated() == TOTAL_TRIES);
+
     for (const size_t& i : best_selection) {
         result.AddInput(utxo_pool.at(i));
     }

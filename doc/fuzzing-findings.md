@@ -7,15 +7,18 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`5311b15727f2f282274472184185423e441abd85`. The reorg campaign below ran before the
+`7b6f9ba7bad13b0c4169259000f7802854cdda0d`. The reorg campaign below ran before the
 master fetches against `559d042ba2567a05e8d540c7d9d9a94c7d2973d2`; the fifteen commits
 between those tips update Qt, ZeroMQ dependencies, include-lint tooling, the assumed
 BIP324 service flag for seed addresses, and descriptorprocesspsbt's invalid-signature
 handling. They do not change the validation, compact-block, mempool, TxGraph, coins,
-or descriptor-cache production code exercised here. Controls that explicitly name
-`32eb52100296718f7c0469e3210ce1db73694793` are historical clean-master runs from an
-earlier baseline; they remain valid evidence for the mutations they tested, but are
-not claims about commits added since then.
+or descriptor-cache production code exercised here. The subsequent `5311b15727` to
+`7b6f9ba7ba` range merges PR #34672, which changes mining IPC submit-result plumbing
+only and likewise does not change the production paths covered by this ledger.
+Controls that explicitly name an older baseline, including
+`32eb52100296718f7c0469e3210ce1db73694793` and `5311b15727f2f282274472184185423e441abd85`,
+are historical clean-master runs; they remain valid evidence for the mutations they
+tested, but are not claims that those exact controls include later master commits.
 
 ## Ledger summary (2026-07-23)
 
@@ -58,6 +61,10 @@ created worker threads.
   defect. Its fuzzer construction was temporarily copied into an exact-master
   control, while `src/script/descriptor.cpp` remained unchanged; the fixed branch
   and deterministic unit test both pass the same input.
+* The BnB attempt-limit investigation found a fuzzer construction omission, not a
+  new production defect: the existing `bnb_exhaustion_with_solution_test` already
+  catches the exact `GetAlgoCompleted()` mutant on current master, but no wallet
+  fuzzer deliberately generated its 19 near-equal-UTXO, 100,000-attempt case.
 * Sanitizer workers in this ledger are independent processes unless explicitly stated
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
@@ -169,13 +176,13 @@ ASan/UBSan fuzz coverage.
 ### 8. Descriptor-cache merge leaves partial state after a conflict
 
 * Current branch fix: `4da71c90d7` (`descriptor: keep cache conflict merges atomic`).
-* Severity on current clean master `5311b15727f2f282274472184185423e441abd85`:
-  medium local wallet consistency/availability issue. The exact control ran at
-  `b8844d3df759bfa070681327583427461d39105c`; the later master deltas change
-  `src/rpc/rawtransaction.cpp` and functional PSBT tests, not descriptor-cache
-  production code or its tests. The trigger requires a conflicting descriptor cache, so no
-  network or unauthenticated RPC attack was demonstrated; wallet-key loss and
-  persisted database corruption were not demonstrated.
+* Severity on current clean master `7b6f9ba7bad13b0c4169259000f7802854cdda0d`:
+  medium local wallet consistency/availability issue. The exact production control ran
+  at `b8844d3df759bfa070681327583427461d39105c`; subsequent master deltas, including
+  PR #34672, do not change descriptor-cache production code or its tests. The trigger
+  requires a conflicting descriptor cache, so no network or unauthenticated RPC attack
+  was demonstrated; wallet-key loss and persisted database corruption were not
+  demonstrated.
 
 `DescriptorCache::MergeAndDiff()` on clean master merged the incoming parent-xpub
 map before checking the incoming derived-xpub map. If the destination already held a
@@ -222,9 +229,10 @@ All six workers exited zero without an assertion, sanitizer report, race/deadloc
 report, timeout, or artifact. The deterministic descriptor suite passed all ten
 cases, including the three new tests.
 
-For the clean-master control, an exact `5311b15727f2f282274472184185423e441abd85`
-worktree received only the edited fuzzer; `src/script/descriptor.cpp` and the unit
-tests remained clean-master versions. Replaying the 506 preserved QA seeds aborted
+For the historical clean-master control, an exact
+`5311b15727f2f282274472184185423e441abd85` worktree received only the edited fuzzer;
+`src/script/descriptor.cpp` and the unit tests remained clean-master versions.
+Replaying the 506 preserved QA seeds aborted
 after 12 inputs when the last-hardened construction observed that clean master had
 inserted the unrelated parent before throwing the conflict. The assertion was at
 the oracle's parent-map postcondition, and the artifact SHA256 is
@@ -240,19 +248,26 @@ the new unit tests make each ordering deterministic.
 ### Rebase assessment (2026-07-22)
 
 The branch was fetched and rebased onto clean `origin/master`
-`5311b15727f2f282274472184185423e441abd85`. Since the earlier compact-block
+`7b6f9ba7bad13b0c4169259000f7802854cdda0d`. Since the earlier compact-block
 comparison at `bc49bd154a31`, master added Qt, ZeroMQ, include-lint, seed address
-BIP324-service-flag, and descriptorprocesspsbt invalid-signature changes; none alter
-compact-block construction, reconstruction, validation, or the fuzzer code covered
-below. The historical short-ID accounting defect remains fixed by master commit
-`6aa5d8d948` (PR #35727), and the normal production path still has the #35670
-optimization (`6f1c56f03a`) that avoids null tail entries. Rechecking after this
-rebase changed commit identifiers and the baseline, but produced no new clean-master
-compact-block defect or race and justified no additional production fix.
+BIP324-service-flag, descriptorprocesspsbt invalid-signature handling, and the
+PR #34672 mining IPC changes; none alter compact-block construction, reconstruction,
+validation, or the fuzzer code covered below. The historical short-ID accounting
+defect remains fixed by master commit `6aa5d8d948` (PR #35727), and the normal
+production path still has the #35670 optimization (`6f1c56f03a`) that avoids null tail
+entries. Rechecking after this rebase changed commit identifiers and the baseline, but
+produced no new clean-master compact-block defect or race and justified no additional
+production fix.
 
-The final `b8844d3df7..5311b157` master delta was also checked. Its only relevant
-new runtime change is in `src/rpc/rawtransaction.cpp` for invalid PSBT signatures;
-it does not invalidate the compact-block control results.
+After the latest rebase onto `7b6f9ba7ba`, the rebuilt normal wallet fuzzer replayed
+1,971 inputs from the preserved `cmpctblock` corpus and 2,016 inputs from the
+preserved `partially_downloaded_block` corpus. Both collision-heavy targets completed
+without an assertion, sanitizer report, race/deadlock report, timeout, or artifact.
+
+The historical `b8844d3df7..5311b157` master delta was also checked; its only relevant
+new runtime change is in `src/rpc/rawtransaction.cpp` for invalid PSBT signatures.
+The subsequent `5311b15727..7b6f9ba7ba` delta is PR #34672's mining IPC work and does
+not invalidate the compact-block control results.
 
 ### Historical real defect, fixed on current master
 
@@ -374,6 +389,49 @@ For an independent clean-master check, an ASan/UBSan build at
 `cmpctblock` replay reached 256 executions per worker before being interrupted in a
 high-cost generated case; it produced no report or artifact and is explicitly an
 incomplete gate, not a pass.
+
+### BnB attempt-limit contract (2026-07-22)
+
+The existing wallet fuzzer's `bnb_finds_min_waste` target intentionally limits its
+pool to 16 groups so it can brute-force every subset. That means it cannot reach the
+`TOTAL_TRIES` boundary. The current master unit test
+`bnb_exhaustion_with_solution_test` uses 19 effective values `100000..100018`, a
+target of `800000`, and the default `cost_of_change` of 359 sats to reach exactly
+100,000 evaluated selections while still returning a valid, explicitly incomplete
+result. Before this change, no fuzzer target constructed that boundary or checked the
+corresponding result contract.
+
+The new `bnb_attempt_limit` target uses that fixture for empty input and lets fuzz
+bytes perturb the target, change cost, effective values, and input weights while
+keeping all amounts positive and bounded. For every returned result it checks the
+target window, maximum weight, the 100,000-attempt ceiling, and the rule that an
+incomplete result reports exactly 100,000 attempts. Production `SelectCoinsBnB()` now
+has matching `Assert()` postconditions for the same two attempt invariants. The
+existing deterministic unit test remains the fixed canonical regression test; no new
+production bug was inferred from the added mutation.
+
+The branch's canonical empty-input run passed in the normal, ASan/UBSan, and TSan
+drivers. The normal target then completed 1,000 corpus executions; ASan/UBSan
+completed 1,000; and the TSan single-input driver replayed 484 files including the
+483 preserved `coinselection_bnb` seeds. No assertion, sanitizer, race/deadlock
+report, timeout, or artifact was produced.
+
+After rebasing onto current master `7b6f9ba7ba`, the wallet fuzzer was rebuilt and the
+canonical input plus a private copy of the 483-seed corpus completed successfully
+again; the Debug `bnb_exhaustion_with_solution_test` also passed with
+`ABORT_ON_FAILED_ASSUME` enabled.
+
+For the historical clean-master control, exact
+`5311b15727f2f282274472184185423e441abd85` received only the new fuzzer target. Its
+canonical run and a 1,000-execution replay of the same 483 preserved seeds passed with
+the production source unchanged. The later `5311b15727..7b6f9ba7ba` master range does
+not touch wallet coin selection. To prove
+the oracle is mutation-sensitive, a temporary clean-master source mutation changed
+only BnB's `result.SetAlgoCompleted(false)` to `true`; after rebuilding, the one-byte
+zero seed failed deterministically at the new `!GetAlgoCompleted()` assertion (exit
+77). The mutation was removed, the clean-master binary rebuilt, and the canonical plus
+1,000-run control passed again. This is a coverage and production-contract hardening
+commit with severity `n/a`; it does not increase the confirmed-defect count.
 
 ## Findings that were not production bugs
 
