@@ -1192,6 +1192,34 @@ thread schedules are race-free. No production inconsistency or clean-master
 failure was found, so no source fix or deterministic unit-test addition was
 warranted.
 
+## Post-rebase bounded orphanage gate (2026-07-23)
+
+The main `txorphan` state-machine target was replayed from 404 of its 686 QA
+inputs after filtering out inputs at or above 64 KiB. The filter was deliberate:
+the earlier full-corpus ASan attempt reached an artificial transaction-weight
+workload whose megabyte-scale synthetic transaction caused sanitizer timeouts,
+without producing a sanitizer diagnostic. This gate therefore adds sanitizer
+coverage for the bounded state combinations but does not claim the full
+unfiltered corpus is complete.
+
+Two normal workers completed 3,000 executions each in 101 and 110 seconds,
+reached coverage 3736 and 3737, added 151 and 150 units, and used 561 MB peak
+RSS. Their expanded corpora were replayed by ASan/UBSan workers for 1,000
+executions each, reaching coverage 3951 and 3946 at 560 MB peak RSS and adding
+9 and 11 units. TSan then replayed the sanitizer-expanded corpora for 1,000
+executions each, reaching coverage 1518 and 1519 at 560 MB peak RSS and adding
+9 and 7 units. All six workers exited zero without an assertion, sanitizer
+report, race/deadlock report, timeout, or artifact.
+
+The target exercised orphan insertion and duplicate announcements, peer usage
+and eviction, protected/reconsiderable children, parent work sets, peer and
+block erasure, transaction-weight limits, and final `SanityCheck()` state
+validation. Each fuzzer process owns an independent orphanage and executes its
+state machine sequentially; the TSan result is not proof that arbitrary live
+peer interleavings are race-free. No production inconsistency or clean-master
+failure was found, so no source fix or deterministic unit-test addition was
+warranted.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
