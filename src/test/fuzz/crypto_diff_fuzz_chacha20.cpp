@@ -7,7 +7,13 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cstddef>
 #include <cstdint>
+#include <span>
+#include <tuple>
 #include <vector>
 
 /*
@@ -23,8 +29,8 @@ typedef unsigned char u8;
 #define U8C(v) (v##U)
 #define U32C(v) (v##U)
 
-#define U8V(v) ((u8)(v)&U8C(0xFF))
-#define U32V(v) ((u32)(v)&U32C(0xFFFFFFFF))
+#define U8V(v) ((u8)(v) & U8C(0xFF))
+#define U32V(v) ((u32)(v) & U32C(0xFFFFFFFF))
 
 #define ROTL32(v, n) (U32V((v) << (n)) | ((v) >> (32 - (n))))
 
@@ -84,10 +90,14 @@ void ECRYPT_keystream_bytes(
 #define PLUSONE(v) (PLUS((v), 1))
 
 #define QUARTERROUND(a, b, c, d) \
-    a = PLUS(a, b); d = ROTATE(XOR(d, a), 16);   \
-    c = PLUS(c, d); b = ROTATE(XOR(b, c), 12);   \
-    a = PLUS(a, b); d = ROTATE(XOR(d, a), 8);    \
-    c = PLUS(c, d); b = ROTATE(XOR(b, c), 7);
+    a = PLUS(a, b);              \
+    d = ROTATE(XOR(d, a), 16);   \
+    c = PLUS(c, d);              \
+    b = ROTATE(XOR(b, c), 12);   \
+    a = PLUS(a, b);              \
+    d = ROTATE(XOR(d, a), 8);    \
+    c = PLUS(c, d);              \
+    b = ROTATE(XOR(b, c), 7);
 
 static const char sigma[] = "expand 32-byte k";
 static const char tau[] = "expand 16-byte k";
@@ -265,9 +275,186 @@ void ECRYPT_keystream_bytes(ECRYPT_ctx* x, u8* stream, u32 bytes)
     ECRYPT_encrypt_bytes(x, stream, stream, bytes);
 }
 
+void InitializeReference(ECRYPT_ctx& ctx, const std::vector<unsigned char>& key,
+                         ChaCha20::Nonce96 nonce, uint32_t counter)
+{
+    ECRYPT_keysetup(&ctx, key.data(), key.size() * 8, 0);
+    ctx.input[12] = counter;
+    ctx.input[13] = nonce.first;
+    ctx.input[14] = nonce.second;
+    ctx.input[15] = nonce.second >> 32;
+}
+
+void AssertReferenceState(const ECRYPT_ctx& ctx, ChaCha20::Nonce96 nonce, uint32_t counter,
+                          size_t blocks)
+{
+    for (size_t i = 0; i < blocks; ++i) {
+        if (++counter == 0) ++nonce.first;
+    }
+    assert(ctx.input[12] == counter);
+    assert(ctx.input[13] == nonce.first);
+    assert(ctx.input[14] == static_cast<uint32_t>(nonce.second));
+    assert(ctx.input[15] == nonce.second >> 32);
+}
+
+void AssertChaCha20Reference(const std::vector<unsigned char>& key, ChaCha20::Nonce96 nonce,
+                             uint32_t counter, size_t length)
+{
+    std::vector<unsigned char> input(length);
+    for (size_t i = 0; i < input.size(); ++i) {
+        input[i] = static_cast<unsigned char>(i * 29 + length);
+    }
+
+    std::vector<unsigned char> expected(length);
+    ECRYPT_ctx reference;
+    InitializeReference(reference, key, nonce, counter);
+    ECRYPT_encrypt_bytes(&reference, input.data(), expected.data(), expected.size());
+    AssertReferenceState(reference, nonce, counter, (length + 63) / 64);
+
+    ChaCha20 actual{MakeByteSpan(key)};
+    actual.Seek(nonce, counter);
+    std::vector<unsigned char> actual_output(length);
+    actual.Crypt(MakeByteSpan(input), MakeWritableByteSpan(actual_output));
+    assert(actual_output == expected);
+
+    std::vector<size_t> boundaries{0, std::min<size_t>(1, length), length / 3, length / 2, length};
+    std::sort(boundaries.begin(), boundaries.end());
+    boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
+
+    ChaCha20 split{MakeByteSpan(key)};
+    split.Seek(nonce, counter);
+    std::vector<unsigned char> split_output(length);
+    size_t consumed{0};
+    for (const size_t boundary : boundaries) {
+        split.Crypt(MakeByteSpan(input).subspan(consumed, boundary - consumed),
+                    MakeWritableByteSpan(split_output).subspan(consumed, boundary - consumed));
+        consumed = boundary;
+    }
+    split.Crypt(MakeByteSpan(input).subspan(consumed), MakeWritableByteSpan(split_output).subspan(consumed));
+    assert(split_output == expected);
+
+    std::array<unsigned char, ChaCha20Aligned::BLOCKLEN> followup_input{};
+    for (size_t i = 0; i < followup_input.size(); ++i) {
+        followup_input[i] = static_cast<unsigned char>(0xA5 ^ i);
+    }
+
+    std::vector<unsigned char> combined_input(length + followup_input.size());
+    std::copy(input.begin(), input.end(), combined_input.begin());
+    std::copy(followup_input.begin(), followup_input.end(), combined_input.begin() + length);
+    std::vector<unsigned char> combined_expected(combined_input.size());
+    ECRYPT_ctx continuous_reference;
+    InitializeReference(continuous_reference, key, nonce, counter);
+    ECRYPT_encrypt_bytes(&continuous_reference, combined_input.data(), combined_expected.data(), combined_expected.size());
+
+    std::array<unsigned char, ChaCha20Aligned::BLOCKLEN> actual_followup{};
+    std::array<unsigned char, ChaCha20Aligned::BLOCKLEN> expected_followup{};
+    std::copy(combined_expected.begin() + length, combined_expected.end(), expected_followup.begin());
+    actual.Crypt(MakeByteSpan(followup_input), MakeWritableByteSpan(actual_followup));
+    assert(actual_followup == expected_followup);
+    std::array<unsigned char, ChaCha20Aligned::BLOCKLEN> split_followup{};
+    split.Crypt(MakeByteSpan(followup_input), MakeWritableByteSpan(split_followup));
+    assert(split_followup == expected_followup);
+    AssertReferenceState(continuous_reference, nonce, counter, (combined_input.size() + 63) / 64);
+
+    std::vector<unsigned char> expected_keystream(length);
+    ECRYPT_ctx keystream_reference;
+    InitializeReference(keystream_reference, key, nonce, counter);
+    ECRYPT_keystream_bytes(&keystream_reference, expected_keystream.data(), expected_keystream.size());
+    AssertReferenceState(keystream_reference, nonce, counter, (length + 63) / 64);
+
+    ChaCha20 keystream{MakeByteSpan(key)};
+    keystream.Seek(nonce, counter);
+    std::vector<unsigned char> actual_keystream(length);
+    keystream.Keystream(MakeWritableByteSpan(actual_keystream));
+    assert(actual_keystream == expected_keystream);
+
+    ChaCha20 split_keystream{MakeByteSpan(key)};
+    split_keystream.Seek(nonce, counter);
+    std::vector<unsigned char> split_keystream_output(length);
+    consumed = 0;
+    for (const size_t boundary : boundaries) {
+        split_keystream.Keystream(MakeWritableByteSpan(split_keystream_output).subspan(consumed, boundary - consumed));
+        consumed = boundary;
+    }
+    split_keystream.Keystream(MakeWritableByteSpan(split_keystream_output).subspan(consumed));
+    assert(split_keystream_output == expected_keystream);
+
+    std::array<unsigned char, ChaCha20Aligned::BLOCKLEN> actual_keystream_followup{};
+    std::array<unsigned char, ChaCha20Aligned::BLOCKLEN> expected_keystream_followup{};
+    std::vector<unsigned char> combined_keystream(combined_input.size());
+    ECRYPT_ctx continuous_keystream_reference;
+    InitializeReference(continuous_keystream_reference, key, nonce, counter);
+    ECRYPT_keystream_bytes(&continuous_keystream_reference, combined_keystream.data(), combined_keystream.size());
+    std::copy(combined_keystream.begin() + length, combined_keystream.end(), expected_keystream_followup.begin());
+    keystream.Keystream(MakeWritableByteSpan(actual_keystream_followup));
+    assert(actual_keystream_followup == expected_keystream_followup);
+    std::array<unsigned char, ChaCha20Aligned::BLOCKLEN> split_keystream_followup{};
+    split_keystream.Keystream(MakeWritableByteSpan(split_keystream_followup));
+    assert(split_keystream_followup == expected_keystream_followup);
+    AssertReferenceState(continuous_keystream_reference, nonce, counter, (combined_input.size() + 63) / 64);
+}
+
+void AssertChaCha20Boundaries()
+{
+    const std::array<std::array<unsigned char, ChaCha20::KEYLEN>, 4> keys{{
+        std::array<unsigned char, ChaCha20::KEYLEN>{},
+        [] {
+            std::array<unsigned char, ChaCha20::KEYLEN> key{};
+            key.fill(0xFF);
+            return key;
+        }(),
+        [] {
+            std::array<unsigned char, ChaCha20::KEYLEN> key{};
+            for (size_t i = 0; i < key.size(); ++i)
+                key[i] = static_cast<unsigned char>(i);
+            return key;
+        }(),
+        [] {
+            std::array<unsigned char, ChaCha20::KEYLEN> key{};
+            for (size_t i = 0; i < key.size(); ++i)
+                key[i] = static_cast<unsigned char>(0xA5 ^ i);
+            return key;
+        }(),
+    }};
+    const std::array<std::tuple<ChaCha20::Nonce96, uint32_t, size_t>, 15> cases{{
+        {{0, 0}, 0, 0},
+        {{0, 0}, 0, 1},
+        {{0, 0}, 0, 63},
+        {{0, 0}, 0, 64},
+        {{0, 0}, 0, 65},
+        {{0, 0}, 0, 127},
+        {{0, 0}, 0, 128},
+        {{0, 0}, 0, 129},
+        {{0, 0}, 0, 4096},
+        {{1, 1}, 1, 65},
+        {{0, 0xFFFFFFFFFFFFFFFFULL}, 0xFFFFFFFE, 128},
+        {{0, 0xFFFFFFFFFFFFFFFFULL}, 0xFFFFFFFF, 64},
+        {{0xFFFFFFFF, 0}, 0xFFFFFFFF, 65},
+        {{0xFFFFFFFF, 0xFFFFFFFFFFFFFFFFULL}, 0xFFFFFFFF, 128},
+        {{0xDEADBEEF, 0x0123456789ABCDEFULL}, 0xFFFFFFFF, 129},
+    }};
+
+    for (const auto& key_array : keys) {
+        const std::vector<unsigned char> key{key_array.begin(), key_array.end()};
+        for (const auto& [nonce, counter, length] : cases) {
+            AssertChaCha20Reference(key, nonce, counter, length);
+        }
+    }
+}
+
+void AssertReferencePosition(const ECRYPT_ctx& ctx, ChaCha20::Nonce96 nonce, uint32_t counter)
+{
+    assert(ctx.input[12] == counter);
+    assert(ctx.input[13] == nonce.first);
+    assert(ctx.input[14] == static_cast<uint32_t>(nonce.second));
+    assert(ctx.input[15] == nonce.second >> 32);
+}
+
 FUZZ_TARGET(crypto_diff_fuzz_chacha20)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
+
+    AssertChaCha20Boundaries();
 
     ECRYPT_ctx ctx;
 
@@ -319,7 +506,7 @@ FUZZ_TARGET(crypto_diff_fuzz_chacha20)
                 if (integralInRange & 63) {
                     chacha20.Seek(nonce, counter);
                 }
-                assert(counter == ctx.input[12]);
+                AssertReferencePosition(ctx, nonce, counter);
             },
             [&] {
                 uint32_t integralInRange = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 4096);
@@ -336,7 +523,7 @@ FUZZ_TARGET(crypto_diff_fuzz_chacha20)
                 if (integralInRange & 63) {
                     chacha20.Seek(nonce, counter);
                 }
-                assert(counter == ctx.input[12]);
+                AssertReferencePosition(ctx, nonce, counter);
             });
     }
 }
