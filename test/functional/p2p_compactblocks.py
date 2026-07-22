@@ -644,6 +644,69 @@ class CompactBlocksTest(BitcoinTestFramework):
             test_node.send_without_ping(msg)
             test_node.wait_for_disconnect()
 
+    # A duplicate short ID in the compact-block announcement is a reconstruction
+    # failure, so the first in-flight request must fall back to a full block.
+    def test_duplicate_short_id_compact_block(self, test_node):
+        node = self.nodes[0]
+        utxo = self.utxos.pop(0)
+        block = self.build_block_with_transactions(node, utxo, 2)
+        self.utxos.append([block.vtx[-1].txid_int, 0, block.vtx[-1].vout[0].nValue])
+
+        # Request the block first, making the compact-block request first in flight.
+        test_node.send_without_ping(msg_headers([block]))
+        test_node.wait_for_getdata([block.hash_int], timeout=30)
+
+        comp_block = HeaderAndShortIDs()
+        comp_block.initialize_from_block(block, prefill_list=[0], use_witness=True)
+        assert_equal(len(comp_block.shortids), 2)
+        # Mutation under test: two distinct transaction positions carry one short ID.
+        comp_block.shortids[1] = comp_block.shortids[0]
+
+        test_node.send_and_ping(msg_cmpctblock(comp_block.to_p2p()))
+        assert_equal(int(node.getbestblockhash(), 16), block.hashPrevBlock)
+        test_node.wait_for_getdata([block.hash_int], timeout=10)
+        assert test_node.last_message["getdata"].inv[0].type in (MSG_BLOCK, MSG_BLOCK | MSG_WITNESS_FLAG)
+
+        # The failed partial request remains usable for the full-block fallback.
+        test_node.send_and_ping(msg_block(block))
+        assert_equal(node.getbestblockhash(), block.hash_hex)
+
+    # A later parallel peer's duplicate short ID must not displace the first request.
+    def test_duplicate_short_id_parallel_peer(self, first_peer, collision_peer):
+        node = self.nodes[0]
+        self.make_peer_hb_to_candidate(node, collision_peer)
+        utxo = self.utxos.pop(0)
+        block = self.build_block_with_transactions(node, utxo, 2)
+        self.utxos.append([block.vtx[-1].txid_int, 0, block.vtx[-1].vout[0].nValue])
+
+        first_peer.send_without_ping(msg_headers([block]))
+        first_peer.wait_for_getdata([block.hash_int], timeout=30)
+
+        comp_block = HeaderAndShortIDs()
+        comp_block.initialize_from_block(block, prefill_list=[0], use_witness=True)
+        assert_equal(len(comp_block.shortids), 2)
+        comp_block.shortids[1] = comp_block.shortids[0]
+
+        collision_peer.clear_getblocktxn()
+        with p2p_lock:
+            collision_peer.last_message.pop("getdata", None)
+        collision_peer.send_and_ping(msg_cmpctblock(comp_block.to_p2p()))
+        assert collision_peer.is_connected
+        with p2p_lock:
+            assert "getdata" not in collision_peer.last_message
+            assert "getblocktxn" not in collision_peer.last_message
+
+        # The first request survives the later peer's failed reconstruction.
+        first_peer.clear_getblocktxn()
+        valid_comp_block = HeaderAndShortIDs()
+        valid_comp_block.initialize_from_block(block, prefill_list=[0], use_witness=True)
+        first_peer.send_and_ping(msg_cmpctblock(valid_comp_block.to_p2p()))
+        self.getblocktxn_expected(first_peer, block.hash_int, [1, 2])
+        msg = msg_blocktxn()
+        msg.block_transactions = BlockTransactions(block.hash_int, block.vtx[1:])
+        first_peer.send_and_ping(msg)
+        assert_equal(node.getbestblockhash(), block.hash_hex)
+
     def test_getblocktxn_handler(self, test_node):
         node = self.nodes[0]
         # bitcoind will not send blocktxn responses for blocks whose height is
@@ -1079,6 +1142,12 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         self.log.info("Testing handling of incorrect blocktxn responses...")
         self.test_incorrect_blocktxn_response(self.segwit_node)
+
+        self.log.info("Testing duplicate short-ID compact-block fallback...")
+        self.test_duplicate_short_id_compact_block(self.segwit_node)
+
+        self.log.info("Testing duplicate short-ID fallback from a later parallel peer...")
+        self.test_duplicate_short_id_parallel_peer(self.segwit_node, self.additional_segwit_node)
 
         self.log.info("Testing reconstructing compact blocks with a stalling peer...")
         self.test_compactblock_reconstruction_stalling_peer(self.segwit_node, self.additional_segwit_node)
