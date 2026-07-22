@@ -1220,6 +1220,32 @@ peer interleavings are race-free. No production inconsistency or clean-master
 failure was found, so no source fix or deterministic unit-test addition was
 warranted.
 
+## Post-rebase cluster post-linearization gates (2026-07-23)
+
+The `clusterlin_postlinearize` target replayed all 1,720 bounded QA inputs
+(maximum input size 447 bytes). Its normal workers completed 3,000 executions
+each in about one second at coverage 1021 and 560 MB peak RSS. ASan/UBSan
+workers replayed 1,721 executions each in five seconds at coverage 3195 and
+561 MB peak RSS. TSan workers replayed 1,721 executions each at coverage 428
+and 561 MB peak RSS. The target checked topology, diagram monotonicity across
+repeated `PostLinearize()` calls, and connectedness of representable chunks.
+
+The distinct `clusterlin_postlinearize_moved_leaf` target replayed all 1,082
+bounded QA inputs (maximum input size 478 bytes). Its normal workers completed
+3,000 executions each in about one second at coverage 1021 and 558 MB peak
+RSS. ASan/UBSan workers replayed 1,083 executions each in three seconds at
+coverage 3164 and 558 MB peak RSS. TSan workers replayed 1,083 executions
+each at coverage 424 and 558 MB peak RSS. This target checked the RBF-style
+operation of moving a leaf to the back, increasing its fee, post-linearizing,
+and preserving or improving the prior chunk diagram.
+
+All twelve workers across both targets exited zero without an assertion,
+sanitizer report, race/deadlock report, timeout, or artifact. Each process
+owns an independent dependency graph and executes sequentially, so TSan does
+not prove arbitrary shared cluster-mempool interleavings are race-free. No
+production inconsistency or clean-master failure was found, so no source fix
+or deterministic unit-test addition was warranted.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
