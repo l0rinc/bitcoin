@@ -321,6 +321,35 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   artifact; these exercised handshake state transitions, late-feature disconnects,
   key agreement, session/garbage-terminator matching, damaged ciphertext, and
   decrypt-output preservation.
+* `p2p_headers_presync` completed its 1,031-input QA corpus with two jobs and two
+  workers under both sanitizers. The ASan/UBSan workers completed 1,422 and 1,427
+  executions in 313 and 312 seconds, with peak RSS of about 733 MB; the TSan
+  workers completed 1,034 executions each in 52 and 53 seconds, with peak RSS of
+  about 319 and 323 MB. Every job exited 0 without a sanitizer report or artifact.
+  The target exercised max-header replies, presync header/compact-block/block
+  messages, stale-height and inflight tracking, insufficient-work headers, and
+  invariants that the best header and active tip remain unchanged.
+* `node_eviction` completed its 609-input QA corpus with two jobs and two workers
+  under ASan/UBSan and TSan. ASan/UBSan completed 1,000 executions per worker in
+  103 and 104 seconds, with peak RSS of about 505 and 514 MB; TSan completed 1,000
+  executions per worker in 26 and 27 seconds, with peak RSS of about 165 and 160
+  MB. Every job exited 0 without a sanitizer report or artifact. The corpus
+  exercised protected peers, noisy candidates, eligibility changes, and selection
+  invariants after peer movement.
+* `net` completed its 2,083-input QA corpus with two jobs and two workers under
+  both sanitizers. ASan/UBSan completed 2,086 executions per worker in 102 and 103
+  seconds, with peak RSS of about 644 and 647 MB; TSan completed 2,086 executions
+  per worker in 30 seconds, with peak RSS of about 180 and 182 MB. Every job exited
+  0 without a sanitizer report or artifact. This exercised node-reference
+  accounting, connection statistics, local-address bookkeeping, and routability
+  transitions.
+* `local_address` completed its 1,419-input QA corpus with two jobs and two workers
+  under both sanitizers. ASan/UBSan completed 1,701 and 1,692 executions in 18
+  seconds, with peak RSS of about 311 and 313 MB; TSan completed 1,422 executions
+  per worker in 4 seconds, with peak RSS of about 127 and 131 MB. Every job exited
+  0 without a sanitizer report or artifact. The `p2p_private_broadcast` target was
+  inventoried but had no existing QA corpus, so it is not represented as a completed
+  gate here.
 * An ASan/UBSan `txorphan` run over 686 inputs was stopped after both workers reached
   the same expensive region. One worker reported a libFuzzer timeout at 39 seconds
   while `TxOrphanageImpl::EraseTx()` computed transaction weight for a large
