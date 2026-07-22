@@ -424,12 +424,19 @@ baseline `32eb521002`; the branch is now rebased onto
   found no new production defect or race.
 * `validation_load_mempool` completed its 1,799-input corpus under TSan with two
   jobs and two workers: both workers executed 1,802 inputs in 274 seconds, with
-  peak RSS of 397 and 398 MB, and no report or artifact. The ASan/UBSan workers
-  were stopped after 1,740 executions each in a large round-trip region, at peak
-  RSS of 835 and 837 MB; they produced no diagnostic or artifact and are not
-  counted as complete ASan gates. The completed TSan corpus exercised current and
-  legacy dump formats, metadata option combinations, unbroadcast state, and
-  atomic dump failure paths.
+  peak RSS of 397 and 398 MB, and no report or artifact. A follow-up ASan/UBSan
+  campaign from two fresh copies completed 5,000 executions per worker in 949 and
+  927 seconds, at peak RSS of 827 and 829 MB, also without a diagnostic or
+  artifact. The corpus exercised current and legacy dump formats, metadata option
+  combinations, unbroadcast state, repeated pool replacement, and atomic dump
+  failure paths, including the previously expensive round-trip region.
+* `tx_pool` was replayed from two fresh copies of its 8,000-input QA corpus under
+  ASan/UBSan. Two independently captured workers completed 10,000 executions in
+  982 and 884 seconds, with peak RSS of 667 and 672 MB; neither produced a
+  sanitizer report or artifact. This covered cluster topology and fee diagrams,
+  ancestor/descendant repair, randomized and witness indexes, RBF/TRUC policy,
+  block-builder chunk iteration, prioritisation, and mempool information views.
+  No new production defect or race was found.
 * `process_messages` completed its 4,431-input corpus under TSan with two jobs and
   two workers: 4,433 and 4,434 executions in 157 seconds, peak RSS about 341 MB,
   no report or artifact. `process_message` likewise completed 3,699 and 3,698
