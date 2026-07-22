@@ -7,6 +7,7 @@
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 
+#include <cassert>
 #include <limits>
 
 FUZZ_TARGET(eval_script)
@@ -26,6 +27,17 @@ FUZZ_TARGET(eval_script)
     const CScript script(script_bytes.begin(), script_bytes.end());
     for (const auto sig_version : {SigVersion::BASE, SigVersion::WITNESS_V0}) {
         std::vector<std::vector<unsigned char>> stack;
-        (void)EvalScript(stack, script, flags, BaseSignatureChecker(), sig_version, nullptr);
+        ScriptError serror{SCRIPT_ERR_UNKNOWN_ERROR};
+        const bool result{EvalScript(stack, script, flags, BaseSignatureChecker(), sig_version, &serror)};
+        assert(result == (serror == SCRIPT_ERR_OK));
+
+        // BaseSignatureChecker is stateless, so executing the same script from
+        // the same initial stack must produce the same observable result.
+        std::vector<std::vector<unsigned char>> replay_stack;
+        ScriptError replay_error{SCRIPT_ERR_UNKNOWN_ERROR};
+        const bool replay_result{EvalScript(replay_stack, script, flags, BaseSignatureChecker(), sig_version, &replay_error)};
+        assert(replay_result == result);
+        assert(replay_error == serror);
+        assert(replay_stack == stack);
     }
 }
