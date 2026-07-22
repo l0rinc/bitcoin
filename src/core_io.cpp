@@ -32,6 +32,7 @@
 #include <util/translation.h>
 
 #include <algorithm>
+#include <cassert>
 #include <compare>
 #include <cstdint>
 #include <exception>
@@ -127,6 +128,8 @@ CScript ParseScript(const std::string& s)
         }
     }
 
+    const bool has_nonempty_word{std::any_of(words.begin(), words.end(), [](const std::string& word) { return !word.empty(); })};
+    assert(result.empty() == !has_nonempty_word);
     return result;
 }
 
