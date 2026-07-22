@@ -1041,6 +1041,55 @@ proof; no live estimator instance is shared between these workers. No policy
 estimator production defect, persistence inconsistency, or race was found, so this
 gate added coverage and evidence only and did not change the severity ledger.
 
+## Post-rebase package and mempool completion gates (2026-07-22)
+
+The earlier `tx_pool_standard`, `tx_package_eval`, and `ephemeral_package_eval`
+sanitizer runs were limited by large or expensive corpus cases. A follow-up used
+two independent normal workers to generate fresh units, then replayed each expanded
+corpus in separate ASan/UBSan and TSan workers. The standard and ordinary package
+targets used inputs below 64 KiB; the ephemeral target's 2,098-input corpus was
+already below 36 KiB. These are completed bounded gates and supersede neither the
+earlier incomplete high-size observations nor the distinction between current-branch
+fuzzer contracts and clean-master production behavior.
+
+`tx_pool_standard` started from 2,826 filtered inputs. Its normal workers completed
+3,000 executions each in 20 seconds, reached coverage 8931, and added 14 and 13
+units. ASan/UBSan completed 3,000 each in 85 seconds at coverage 19830 and 19823,
+adding 6 and 5 units. TSan completed 3,000 each in 84 seconds at coverage 8944 and
+8942, adding 4 and 10 units. All six workers used 557 MB peak RSS and exited zero
+without an assertion, sanitizer report, race/deadlock report, timeout, or artifact.
+The target exercised standard and non-standard acceptance, RBF prioritisation,
+TRUC limits, randomized and witness indexes, ancestry/cluster invariants, fee and
+size accounting, block-template removal, and validation-signal callbacks.
+
+`tx_package_eval` started from 2,440 filtered inputs. Its normal workers completed
+3,000 executions each in 38 and 37 seconds, reached coverage 8544 and 8543, and
+added 20 and 23 units. ASan/UBSan completed 3,000 each in 178 and 175 seconds at
+coverage 19208 and 19203, adding 26 and 21 units. TSan completed 3,000 each in 178
+and 176 seconds at coverage 8553 in both workers, adding 21 and 24 units. All six
+workers used 557 MB peak RSS and exited zero without an assertion, sanitizer report,
+race/deadlock report, timeout, or artifact. The package test-accept versus submit
+paths, duplicate-package rejection, partial result maps, client feerate limits,
+TRUC/package policy, outpoint indexes, and unchanged-state snapshots remained
+consistent.
+
+`ephemeral_package_eval` replayed all 2,098 inputs. Normal workers completed 3,000
+executions each in 141 and 145 seconds, reached coverage 7802 and 7822, and added
+48 and 45 units. ASan/UBSan completed 3,000 each in 728 and 726 seconds at coverage
+17813 and 17805, adding 23 and 29 units. TSan completed 3,000 each in 680 and 682
+seconds at coverage 7813 and 7830, adding 38 and 32 units. All six workers used
+557 MB peak RSS and exited zero without an assertion, sanitizer report,
+race/deadlock report, timeout, or artifact. This specifically exercised dust-child
+eviction, child double-spends that leave parents childless, ephemeral policy, and
+package state cleanup.
+
+These completed gates found no new production defect or race and require no source
+fix. The workers use independent mempool and validation state, so the TSan results
+cover the fuzzer-created callback and thread interactions but do not prove that
+arbitrary live node instances are race-free. No clean-master comparison was
+warranted because no production assertion, sanitizer failure, or behavioral
+inconsistency was found.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
