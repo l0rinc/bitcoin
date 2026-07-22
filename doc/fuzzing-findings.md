@@ -163,6 +163,16 @@ transactions is representable, while 65,536 is rejected before allocation or ind
 mapping. No additional wraparound candidate was found. No compact-block race in the
 extra vector was found; its access remains serialized by the message-processing mutex.
 
+The focused mutation comparison used the same 3,646-byte seed directory on both
+implementations. The branch collision harness completed 1,000 mutations in each of
+two ASan/UBSan workers and each of two TSan workers, with no report or artifact. A
+fresh ASan/UBSan build of exact master `32eb52100296718f7c0469e3210ce1db73694793`,
+using the unmodified upstream `partially_downloaded_block` harness, completed 1,000
+mutations in each of two workers in 10 and 11 seconds, also without a report or
+artifact. The master comparison rules out a sanitizer-visible defect in the
+production path under natural mutations; it does not claim that upstream's original
+harness reaches every branch-specific forced collision mode added on this branch.
+
 For an independent clean-master check, an ASan/UBSan build at
 `32eb52100296718f7c0469e3210ce1db73694793` replayed all 2,015 existing
 `partially_downloaded_block` inputs with two jobs and two workers: both workers ran
