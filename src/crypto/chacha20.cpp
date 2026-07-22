@@ -344,11 +344,14 @@ FSChaCha20::FSChaCha20(std::span<const std::byte> key, uint32_t rekey_interval) 
     m_chacha20(key), m_rekey_interval(rekey_interval)
 {
     assert(key.size() == KEYLEN);
+    assert(m_rekey_interval != 0);
 }
 
 void FSChaCha20::Crypt(std::span<const std::byte> input, std::span<std::byte> output) noexcept
 {
     assert(input.size() == output.size());
+    assert(m_rekey_interval != 0);
+    assert(m_chunk_counter < m_rekey_interval);
 
     // Invoke internal stream cipher for actual encryption/decryption.
     m_chacha20.Crypt(input, output);

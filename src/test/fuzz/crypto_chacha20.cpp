@@ -4,14 +4,86 @@
 
 #include <crypto/chacha20.h>
 #include <random.h>
+#include <support/cleanse.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
+
+namespace {
+
+/** Independent state model for the public FSChaCha20 transition contract. */
+class FSChaCha20Model
+{
+private:
+    ChaCha20 m_chacha20;
+    const uint32_t m_rekey_interval;
+    uint32_t m_chunk_counter{0};
+    uint64_t m_rekey_counter{0};
+
+public:
+    FSChaCha20Model(std::span<const std::byte> key, uint32_t rekey_interval) :
+        m_chacha20(key), m_rekey_interval(rekey_interval)
+    {
+        assert(m_rekey_interval != 0);
+    }
+
+    void Crypt(std::span<const std::byte> input, std::span<std::byte> output)
+    {
+        assert(input.size() == output.size());
+        assert(m_chunk_counter < m_rekey_interval);
+        m_chacha20.Crypt(input, output);
+        if (++m_chunk_counter == m_rekey_interval) {
+            std::array<std::byte, FSChaCha20::KEYLEN> new_key;
+            m_chacha20.Keystream(new_key);
+            m_chacha20.SetKey(new_key);
+            memory_cleanse(new_key.data(), new_key.size());
+            m_chacha20.Seek({0, ++m_rekey_counter}, 0);
+            m_chunk_counter = 0;
+        }
+    }
+};
+
+void AssertFSChaCha20Operation(FSChaCha20& actual, FSChaCha20Model& model, FSChaCha20& receiver, std::span<const std::byte> plain)
+{
+    std::vector<std::byte> actual_cipher(plain.size());
+    std::vector<std::byte> model_cipher(plain.size());
+    actual.Crypt(plain, actual_cipher);
+    model.Crypt(plain, model_cipher);
+    assert(actual_cipher == model_cipher);
+
+    std::vector<std::byte> decrypted(plain.size());
+    receiver.Crypt(actual_cipher, decrypted);
+    assert(std::equal(decrypted.begin(), decrypted.end(), plain.begin(), plain.end()));
+}
+
+void AssertFSChaCha20RekeyBoundaries(std::span<const std::byte> key, uint32_t rekey_interval, uint64_t seed)
+{
+    FSChaCha20 actual{key, rekey_interval};
+    FSChaCha20Model model{key, rekey_interval};
+    FSChaCha20 receiver{key, rekey_interval};
+    InsecureRandomContext rng{seed};
+
+    // Keep the first and second rekey transitions in one continuous session. The packet sizes
+    // deliberately straddle ChaCha20's partial-block buffer boundaries as well.
+    const std::array<size_t, 9> lengths{{0, 1, 63, 64, 65, 127, 128, 129, 4096}};
+    for (uint32_t packet{0}; packet < rekey_interval * 2 + 2; ++packet) {
+        const bool at_rekey_boundary{packet == rekey_interval - 1 || packet == rekey_interval ||
+                                     packet == rekey_interval * 2 - 1 || packet == rekey_interval * 2};
+        const size_t length{at_rekey_boundary ? lengths[packet % lengths.size()] : lengths[(packet + 3) % lengths.size()]};
+        std::vector<std::byte> plain(length);
+        rng.fillrand(plain);
+        AssertFSChaCha20Operation(actual, model, receiver, plain);
+    }
+}
+
+} // namespace
 
 FUZZ_TARGET(crypto_chacha20)
 {
@@ -142,12 +214,15 @@ FUZZ_TARGET(crypto_fschacha20)
     auto key = fuzzed_data_provider.ConsumeBytes<std::byte>(FSChaCha20::KEYLEN);
     key.resize(FSChaCha20::KEYLEN);
 
-    auto fsc20 = FSChaCha20{key, fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(1, 1024)};
+    const uint32_t rekey_interval{fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(1, 1024)};
+    auto fsc20 = FSChaCha20{key, rekey_interval};
+    auto model = FSChaCha20Model{key, rekey_interval};
+    auto receiver = FSChaCha20{key, rekey_interval};
 
     LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 10000) {
         auto input = fuzzed_data_provider.ConsumeBytes<std::byte>(fuzzed_data_provider.ConsumeIntegralInRange(0, 4096));
-        std::vector<std::byte> output;
-        output.resize(input.size());
-        fsc20.Crypt(input, output);
+        AssertFSChaCha20Operation(fsc20, model, receiver, input);
     }
+
+    AssertFSChaCha20RekeyBoundaries(key, rekey_interval, fuzzed_data_provider.ConsumeIntegral<uint64_t>());
 }
