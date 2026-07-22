@@ -1113,6 +1113,28 @@ so the result checks request-state consistency and sanitizer-visible lifecycle
 behavior but is not proof that every live peer interleaving is race-free. No
 production defect or clean-master failure was found, so no source fix was warranted.
 
+## Post-rebase transaction-download manager gate (2026-07-22)
+
+`txdownloadman_impl` started from 1,553 bounded QA inputs. Its normal workers
+completed 3,000 executions each in 86 and 84 seconds, reached coverage 3441 in both
+workers, and added 13 and 10 units at 560 MB peak RSS. The expanded corpora were
+replayed under ASan/UBSan: the workers completed 1,567 and 1,564 seed-plus-mutation
+executions in 227 seconds, reached coverage 7739 and 7738, and used 619 and 629 MB
+peak RSS. TSan completed the same 1,567 and 1,564 executions in 209 seconds per
+worker, reached coverage 3445 in both, and used 560 MB peak RSS. All six jobs exited
+zero without an assertion, sanitizer report, race/deadlock report, timeout, or
+artifact.
+
+The sequence covered peer connect/disconnect and feature changes, active-tip and
+block connect/disconnect notifications, mempool acceptance/rejection, txid and
+wtxid announcements, request selection and completion, `NOTFOUND`, orphanage
+ownership and usage, rejection/reconsideration filters, package validation work,
+and final empty-state checks across all peers. The fuzzer is sequential within each
+process and the workers use independent manager instances, so TSan evidence covers
+the exercised callbacks and state transitions but does not prove arbitrary live
+peer interleavings are race-free. No production inconsistency or clean-master
+failure was found, so no source fix was warranted.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
