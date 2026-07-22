@@ -5,12 +5,19 @@
 #include <addresstype.h>
 #include <chainparams.h>
 #include <common/args.h>
+#include <crypto/hex_base.h>
 #include <dbwrapper.h>
 #include <index/txindex.h>
+#include <index/txindex_key.h>
 #include <interfaces/chain.h>
+#include <streams.h>
 #include <test/util/setup_common.h>
 #include <util/byte_units.h>
+#include <util/strencodings.h>
 #include <validation.h>
+
+#include <cstddef>
+#include <string_view>
 
 #include <boost/test/unit_test.hpp>
 
@@ -29,6 +36,36 @@ public:
         db.WriteBatch(batch);
     }
 };
+
+BOOST_AUTO_TEST_CASE(txindex_position_encoding)
+{
+    constexpr struct { txindex::BlockTxPosition position; std::string_view encoded; } test_vectors[]{
+        {{0, 0}, "ffffff000000"},
+        {{1, 2}, "fffffe000002"},
+        {{10'000'000, 123}, "67697f00007b"},
+        {{456, 3'999'999}, "fffe373d08ff"},
+    };
+
+    for (const auto& [position, encoded] : test_vectors) {
+        BOOST_CHECK_EQUAL(HexStr(DataStream{} << position), encoded);
+
+        txindex::BlockTxPosition decoded;
+        BOOST_CHECK((DataStream{ParseHex(encoded)} >> decoded).empty());
+        BOOST_CHECK(decoded == position);
+    }
+
+    BOOST_CHECK_EQUAL(HexStr(DataStream{} << txindex::BlockSeqKey{1}), "73000001");
+    BOOST_CHECK_EQUAL(HexStr(DataStream{} << txindex::DBKey{{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}, std::byte{5}}, {1, 2}}), "780102030405fffffe000002");
+}
+
+BOOST_AUTO_TEST_CASE(txindex_hash_prefix)
+{
+    BOOST_CHECK_EQUAL(
+        HexStr(txindex::CreateKeyPrefix(
+            SipHasher13UJ{0x0706050403020100ULL, 0x0F0E0D0C0B0A0908ULL},
+            Txid{"1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"})),
+        "c67d87b08c");
+}
 
 BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
 {
