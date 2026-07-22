@@ -56,10 +56,11 @@ FUZZ_TARGET(script_flags)
 
         for (unsigned i = 0; i < tx.vin.size(); ++i) {
             const CTxOut& prevout = txdata.m_spent_outputs.at(i);
+            const script_verify_flags original_flags{verify_flags};
             const TransactionSignatureChecker checker{&tx, i, prevout.nValue, txdata, MissingDataBehavior::ASSERT_FAIL};
 
-            ScriptError serror;
-            const bool ret = VerifyScript(tx.vin.at(i).scriptSig, prevout.scriptPubKey, &tx.vin.at(i).scriptWitness, verify_flags, checker, &serror);
+            ScriptError serror{SCRIPT_ERR_UNKNOWN_ERROR};
+            const bool ret = VerifyScript(tx.vin.at(i).scriptSig, prevout.scriptPubKey, &tx.vin.at(i).scriptWitness, original_flags, checker, &serror);
             assert(ret == (serror == SCRIPT_ERR_OK));
 
             // Verify that removing flags from a passing test or adding flags to a failing test does not change the result
@@ -70,11 +71,24 @@ FUZZ_TARGET(script_flags)
             }
             if (!IsValidFlagCombination(verify_flags)) return;
 
-            ScriptError serror_fuzzed;
+            ScriptError serror_fuzzed{SCRIPT_ERR_UNKNOWN_ERROR};
             const bool ret_fuzzed = VerifyScript(tx.vin.at(i).scriptSig, prevout.scriptPubKey, &tx.vin.at(i).scriptWitness, verify_flags, checker, &serror_fuzzed);
             assert(ret_fuzzed == (serror_fuzzed == SCRIPT_ERR_OK));
 
             assert(ret_fuzzed == ret);
+
+            // VerifyScript must not depend on mutable checker state from a prior call.
+            const TransactionSignatureChecker original_replay_checker{&tx, i, prevout.nValue, txdata, MissingDataBehavior::ASSERT_FAIL};
+            ScriptError original_replay_error{SCRIPT_ERR_UNKNOWN_ERROR};
+            const bool original_replay_result = VerifyScript(tx.vin.at(i).scriptSig, prevout.scriptPubKey, &tx.vin.at(i).scriptWitness, original_flags, original_replay_checker, &original_replay_error);
+            assert(original_replay_result == ret);
+            assert(original_replay_error == serror);
+
+            const TransactionSignatureChecker fuzzed_replay_checker{&tx, i, prevout.nValue, txdata, MissingDataBehavior::ASSERT_FAIL};
+            ScriptError fuzzed_replay_error{SCRIPT_ERR_UNKNOWN_ERROR};
+            const bool fuzzed_replay_result = VerifyScript(tx.vin.at(i).scriptSig, prevout.scriptPubKey, &tx.vin.at(i).scriptWitness, verify_flags, fuzzed_replay_checker, &fuzzed_replay_error);
+            assert(fuzzed_replay_result == ret_fuzzed);
+            assert(fuzzed_replay_error == serror_fuzzed);
         }
     } catch (const std::ios_base::failure&) {
         return;
