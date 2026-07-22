@@ -6,12 +6,13 @@ that was added by this branch. A finding is called a production defect only when
 clean-master reproducer or an independent race/sanitizer result demonstrated a source
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
-The current baseline after the final fetch and rebase is
-`bc49bd154a31b285c0f89be51767a424ac380924`. The reorg campaign below ran immediately
-before that fetch against `559d042ba2567a05e8d540c7d9d9a94c7d2973d2`; the six commits
-between those tips touch only Qt, ZeroMQ dependencies, and include-lint tooling, so
-they do not change the validation, compact-block, mempool, TxGraph, coins, or fuzz
-code exercised here. Controls that explicitly name
+The current baseline after the latest fetch and rebase is
+`b8844d3df759bfa070681327583427461d39105c`. The reorg campaign below ran before the
+master fetches against `559d042ba2567a05e8d540c7d9d9a94c7d2973d2`; the eight commits
+between those tips update Qt, ZeroMQ dependencies, include-lint tooling, and the
+assumed BIP324 service flag for seed addresses. They do not change the validation,
+compact-block, mempool, TxGraph, coins, or fuzz code exercised here. Controls that
+explicitly name
 `32eb52100296718f7c0469e3210ce1db73694793` are historical clean-master runs from an
 earlier baseline; they remain valid evidence for the mutations they tested, but are
 not claims about commits added since then.
@@ -125,14 +126,15 @@ ASan/UBSan fuzz coverage.
 ### Rebase assessment (2026-07-22)
 
 The branch was fetched and rebased onto clean `origin/master`
-`bc49bd154a31b285c0f89be51767a424ac380924`. The new master commits are Qt,
-ZeroMQ, and include-lint changes; they do not alter the compact-block, validation,
-mempool, TxGraph, coins, or fuzzer code covered by the controls below. The historical
-short-ID accounting defect remains fixed by master commit `6aa5d8d948` (PR #35727),
-and the normal production path still has the #35670 optimization (`6f1c56f03a`) that
-avoids null tail entries. Rechecking the branch state therefore changed commit
-identifiers and the evidence baseline, but produced no new clean-master compact-block
-defect or race and justified no additional production fix.
+`b8844d3df759bfa070681327583427461d39105c`. Since the earlier compact-block
+comparison at `bc49bd154a31`, master added only Qt, ZeroMQ, include-lint, and seed
+address BIP324-service-flag changes; none alter compact-block construction,
+reconstruction, validation, or the fuzzer code covered below. The historical short-ID
+accounting defect remains fixed by master commit `6aa5d8d948` (PR #35727), and the
+normal production path still has the #35670 optimization (`6f1c56f03a`) that avoids
+null tail entries. Rechecking after this rebase changed commit identifiers and the
+baseline, but produced no new clean-master compact-block defect or race and justified
+no additional production fix.
 
 ### Historical real defect, fixed on current master
 
