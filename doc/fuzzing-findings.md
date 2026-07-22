@@ -1246,6 +1246,33 @@ not prove arbitrary shared cluster-mempool interleavings are race-free. No
 production inconsistency or clean-master failure was found, so no source fix
 or deterministic unit-test addition was warranted.
 
+## Current-master bounded cluster linearization gate (2026-07-23)
+
+The `clusterlin_linearize` target was rerun against the current rebased source,
+including master's trained-cost-model implementation, from all 672 QA inputs
+(maximum input size 521 bytes). A `-max_len=64` bound was used to keep mutation
+work in the finite-cost region; this is a current-master coverage gate and not
+a replacement for the separate unbounded TSan result or a full unbounded ASan
+exhaustive-model proof recorded earlier.
+
+Two normal workers completed 1,000 executions each in about one second, reached
+coverage 1949, and added 11 and 12 units at 558 MB peak RSS. The expanded
+corpora were replayed by ASan/UBSan workers for 1,000 executions each in four
+and five seconds, reaching coverage 6190 and 6190 at 558 MB peak RSS and adding
+5 and 7 units. TSan replayed the sanitizer-expanded corpora for 1,000
+executions each, reaching coverage 1112 at 558 MB peak RSS and adding 9 and 8
+units. All six workers exited zero without an assertion, sanitizer report,
+race/deadlock report, timeout, or artifact.
+
+The target exercised connected and disconnected dependency graphs, supplied
+and absent old linearizations, topological and non-topological input claims,
+bounded and optimal work budgets, fallback ordering, deterministic reruns, and
+the trained cost model's optimality and chunk-order contracts. Each process
+owns an independent graph and runs sequentially, so TSan does not prove
+arbitrary live cluster-mempool interleavings are race-free. No production
+inconsistency or clean-master failure was found, so no source fix or
+deterministic unit-test addition was warranted.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
