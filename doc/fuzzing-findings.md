@@ -554,6 +554,19 @@ baseline `32eb521002`; the branch is now rebased onto
   an incomplete corpus gate, not evidence of a production defect; the TSan
   signal-unsafe warning from the deliberate interrupt is a sanitizer-runtime
   artifact caused by stopping while the target was unwinding.
+* After the master rebase, the full 2,098-input `ephemeral_package_eval` corpus was
+  rerun with two fresh ASan/UBSan workers. Both reached 788 executions in about
+  five and a half minutes, at peak RSS of 481 and 476 MB, before the same
+  CPU-bound package-building region was deliberately interrupted. The corrected
+  TSan/libFuzzer binary reached 1,520 executions per worker at about 317 MB RSS
+  before the corresponding bounded interruption. Neither sanitizer produced a
+  diagnostic, race report, timeout artifact, or crash artifact. A completed
+  32-seed smoke slice then ran 33 executions per worker: ASan/UBSan finished in
+  74 seconds at 477 and 475 MB RSS, and TSan finished in 8 seconds at 315 and
+  317 MB RSS, all clean. An earlier invocation of the standalone non-libFuzzer
+  TSan driver failed in its file-reading assertion before target execution and
+  is excluded from the gate and findings. This remains a performance-limited
+  ephemeral-package gate, not a production defect.
 * `p2p_transport_serialization` completed 1,000 inputs in each ASan/UBSan worker
   (136 and 143 seconds, peak RSS about 770 MB) and each TSan worker (11 seconds,
   peak RSS about 157 MB). `p2p_transport_bidirectional_v1v2` likewise completed
