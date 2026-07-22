@@ -6,6 +6,8 @@
 #include <hash.h>
 #include <util/check.h>
 
+#include <cassert>
+
 /*     WARNING! If you're reading this because you're learning about crypto
        and/or designing a new system that will use merkle trees, keep in mind
        that the following merkle tree algorithm has a serious flaw related to
@@ -44,6 +46,8 @@
 
 
 uint256 ComputeMerkleRoot(std::vector<uint256> hashes, bool* mutated) {
+    const size_t original_size = hashes.size();
+    const uint256 single_hash = original_size == 1 ? hashes.front() : uint256{};
     bool mutation = false;
     while (hashes.size() > 1) {
         if (mutated) {
@@ -58,8 +62,11 @@ uint256 ComputeMerkleRoot(std::vector<uint256> hashes, bool* mutated) {
         hashes.resize(hashes.size() / 2);
     }
     if (mutated) *mutated = mutation;
-    if (hashes.size() == 0) return uint256();
-    return hashes[0];
+    const uint256 result = hashes.empty() ? uint256{} : hashes[0];
+    assert(original_size != 0 || result.IsNull());
+    assert(original_size != 1 || result == single_hash);
+    assert(!mutated || original_size > 1 || !*mutated);
+    return result;
 }
 
 
@@ -171,10 +178,14 @@ static std::vector<uint256> ComputeMerklePath(const std::vector<uint256>& leaves
 
 std::vector<uint256> TransactionMerklePath(const CBlock& block, uint32_t position)
 {
+    assert(block.vtx.empty() || position < block.vtx.size());
     std::vector<uint256> leaves;
     leaves.resize(block.vtx.size());
     for (size_t s = 0; s < block.vtx.size(); s++) {
         leaves[s] = block.vtx[s]->GetHash().ToUint256();
     }
-    return ComputeMerklePath(leaves, position);
+    const std::vector<uint256> path = ComputeMerklePath(leaves, position);
+    assert(path.size() <= 32);
+    assert(block.vtx.size() > 1 || path.empty());
+    return path;
 }
