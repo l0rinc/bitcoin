@@ -219,6 +219,12 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   selected zero through two internal queue workers; no sanitizer report or artifact
   was produced. The ASan workers completed 3,008 executions each with peak RSS of
   about 694 MB, while the TSan workers completed in 3 seconds.
+* `dbwrapper_concurrent_reads` replayed its 1,116-input QA corpus under Clang TSan
+  with two jobs and two workers; each worker also created eight concurrent readers,
+  and every job exited 0 without a TSan report or artifact. The parallel ASan run
+  reached 512 mutations per worker before remaining in one expensive read workload
+  until the five-minute cutoff; it produced no sanitizer report or artifact and is
+  not counted as a completed ASan gate.
 * An ASan/UBSan `txorphan` run over 686 inputs was stopped after both workers reached
   the same expensive region. One worker reported a libFuzzer timeout at 39 seconds
   while `TxOrphanageImpl::EraseTx()` computed transaction weight for a large
