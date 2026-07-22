@@ -1273,6 +1273,34 @@ arbitrary live cluster-mempool interleavings are race-free. No production
 inconsistency or clean-master failure was found, so no source fix or
 deterministic unit-test addition was warranted.
 
+## Post-rebase bounded coins-cache simulation gate (2026-07-23)
+
+`coinscache_sim` was rerun from 1,501 of its 1,515 QA inputs below 64 KiB. The
+only excluded input was the previously identified slow workload
+`8bdf52da47cc919025ba1b2a544f001f69780649` (13,298 bytes, SHA256
+`b9d7bbc50d256d14256cb38cec34bd25d2501d91a6b466bda2c0b3a0033e2871`), whose
+individual ASan/UBSan and TSan replays were already clean. Excluding that seed
+allowed the remaining cache state space to complete without conflating
+sanitizer overhead with a production timeout.
+
+Normal workers completed 3,000 executions each in 427 and 437 seconds, reached
+coverage 4149 and 4150, added 73 and 70 units, and used 558 MB peak RSS. The
+expanded corpora were replayed by ASan/UBSan workers for 1,573 and 1,576
+executions, reaching coverage 4228 and 4226 at 561 MB peak RSS. TSan replayed
+the same expanded corpora for 1,572 and 1,575 executions, reaching coverage
+1808 and 1809 at 558 MB peak RSS. All six workers exited zero without an
+assertion, sanitizer report, race/deadlock report, timeout, or artifact.
+
+The simulation exercised cache-stack creation and destruction, coin addition
+and spending, overwrite rules, unspendable outputs, flush and reset guards,
+best-block inheritance, `CoinsViewOverlay::StartFetching`, asynchronous
+prevout fetching through the persistent thread pool, and final cache/memory
+sanity checks. Each process owns an independent cache hierarchy; TSan covers
+the target's asynchronous fetch work but does not prove arbitrary shared live
+node cache interleavings are race-free. No production inconsistency or
+clean-master failure was found, so no source fix or deterministic unit-test
+addition was warranted.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
