@@ -17,6 +17,33 @@ explicitly name
 earlier baseline; they remain valid evidence for the mutations they tested, but are
 not claims about commits added since then.
 
+## Ledger summary (2026-07-22)
+
+The findings are classified by what failed on an unmodified master baseline. The
+branch's assertions, fuzzer-only checks, and deterministic tests are not counted as
+new vulnerabilities unless the corresponding clean-master control reproduced a
+production failure.
+
+| Classification | Count or status | Current assessment |
+| --- | --- | --- |
+| Confirmed runtime defects | 8 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
+| Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
+| Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
+| Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
+| CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
+| Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
+
+The eight confirmed runtime defects are: the index publication and restart race;
+the persistent coins cursor versus database resize race; the V2 transport direct
+boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
+overflow; cache-allocation percentage overflow; stale Base58 output on decode
+failure; and the descriptor-cache partial merge. Their exact reproducer,
+clean-master evidence, branch fix, and residual reachability are recorded in the
+corresponding sections below. The two race findings are correctness/availability
+problems in local or startup workflows, not remotely reachable data races: the
+sanitizer campaigns exercised independent fuzzer processes unless a test explicitly
+created worker threads.
+
 ## Current conclusions
 
 * The confirmed runtime defects below are local or authenticated workflow bugs. No
@@ -980,6 +1007,39 @@ inconsistency. The fuzzer constructs independent wallet state in each process, s
 these results do not rule out races between a live wallet, validation callbacks, and
 the mempool. They do strengthen the conclusion that no new wallet transaction
 defect was found in this campaign.
+
+## Post-rebase fee-estimator state and persistence gates (2026-07-22)
+
+The `policy_estimator` target was seeded from 1,055 of 1,254 QA inputs below 64 KiB;
+`policy_estimator_io` was seeded from 1,809 of 1,916. The first target mutates
+transaction arrival/removal, block processing, fee estimates, thresholds, horizons,
+and `FlushUnconfirmed`, then checks fee-estimate contracts and a final write/read
+round trip. The I/O target reuses a static estimator across inputs and checks that a
+failed read leaves every captured estimator field unchanged, while a successful read
+keeps targets and fee values in range before writing it back.
+
+`policy_estimator` normal workers completed 3,000 executions each in about two
+seconds, reached coverage 1270 and 1271, and added 42 and 48 units at 560 MB peak
+RSS. Their expanded corpora were replayed by ASan/UBSan workers for 3,000 executions
+each: coverage was 2331 and 2335, runtime about 11 seconds, peak RSS 627 and 632 MB,
+and 33 and 32 units were added. TSan workers likewise completed 3,000 executions
+each in 14 and 15 seconds, reached coverage 1276 and 1280, and added 30 and 39 units
+at 559 MB peak RSS.
+
+`policy_estimator_io` normal workers completed 3,000 executions each in about six
+seconds, reached coverage 511, and added 3 and 4 units at 560 MB peak RSS. Its
+ASan/UBSan workers completed 3,000 each in about 69 seconds, reached coverage 1072,
+and added 3 and 1 units at 558 MB peak RSS. Its TSan workers completed 3,000 each in
+36 and 37 seconds, reached coverage 511, and added 2 units each at 559 MB peak RSS.
+All twelve jobs exited zero without an assertion, sanitizer report, TSan race or
+deadlock report, timeout, or target artifact.
+
+The persistence target's static estimator state is intentionally exercised across
+sequential libFuzzer inputs within each process. That tests reset, failed-read, and
+round-trip contamination contracts, but it is not a concurrent production race
+proof; no live estimator instance is shared between these workers. No policy
+estimator production defect, persistence inconsistency, or race was found, so this
+gate added coverage and evidence only and did not change the severity ledger.
 
 ### Re-evaluation after the compact-block collision work
 
