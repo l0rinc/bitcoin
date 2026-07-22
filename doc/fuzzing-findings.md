@@ -249,6 +249,18 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   one 235 KB slow-unit input at 21 seconds; the non-sanitized fuzzer replayed it in
   3,401 ms with exit code 0, so it is sanitizer/mock-socket overhead rather than a
   production performance defect.
+* `addrman` replayed its 2,191-input QA corpus with two jobs and two workers under
+  Clang TSan. Both jobs completed all 2,194 seed and generated inputs, taking 352
+  and 354 seconds with peak RSS of about 325 MB, and neither produced a TSan report
+  or artifact. The corresponding ASan/UBSan jobs reached 1,115 and 1,077 executions
+  before the bounded run was stopped at the expensive state-building region; neither
+  produced a sanitizer report or target artifact. `addrman_serdeser` was similarly
+  exercised with two jobs and two workers under both sanitizers. The ASan workers
+  reached 191 executions each and the TSan workers 817 and 823 executions before
+  the same bounded cutoff, without diagnostics. Its three slow-unit artifacts
+  replayed in the normal fuzzer in 4,984, 5,954, and 6,242 ms with exit code 0.
+  These are incomplete sanitizer gates and performance observations, not evidence
+  of an addrman production defect.
 * An ASan/UBSan `txorphan` run over 686 inputs was stopped after both workers reached
   the same expensive region. One worker reported a libFuzzer timeout at 39 seconds
   while `TxOrphanageImpl::EraseTx()` computed transaction weight for a large
