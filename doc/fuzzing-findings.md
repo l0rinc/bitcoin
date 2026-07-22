@@ -7,7 +7,7 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`b8844d3df759bfa070681327583427461d39105c`. The reorg campaign below ran before the
+`a2e074d66ac17ca7907909bbbb563e77185a45e5`. The reorg campaign below ran before the
 master fetches against `559d042ba2567a05e8d540c7d9d9a94c7d2973d2`; the eight commits
 between those tips update Qt, ZeroMQ dependencies, include-lint tooling, and the
 assumed BIP324 service flag for seed addresses. They do not change the validation,
@@ -141,11 +141,14 @@ ASan/UBSan fuzz coverage.
 
 ### 8. Descriptor-cache merge leaves partial state after a conflict
 
-* Current branch fix: `a2aac3fc97` (`descriptor: keep cache conflict merges atomic`).
-* Severity on exact clean master `b8844d3df759bfa070681327583427461d39105c`: medium
-  local wallet consistency/availability issue. The trigger requires a conflicting
-  descriptor cache, so no network or unauthenticated RPC attack was demonstrated;
-  wallet-key loss and persisted database corruption were not demonstrated.
+* Current branch fix: `4da71c90d7` (`descriptor: keep cache conflict merges atomic`).
+* Severity on current clean master `a2e074d66ac17ca7907909bbbb563e77185a45e5`:
+  medium local wallet consistency/availability issue. The exact control ran at
+  `b8844d3df759bfa070681327583427461d39105c`; the later master delta changes only
+  `src/addrman.h` and `src/qt/test/test_main.cpp`, not descriptor-cache production
+  code or its tests. The trigger requires a conflicting descriptor cache, so no
+  network or unauthenticated RPC attack was demonstrated; wallet-key loss and
+  persisted database corruption were not demonstrated.
 
 `DescriptorCache::MergeAndDiff()` on clean master merged the incoming parent-xpub
 map before checking the incoming derived-xpub map. If the destination already held a
@@ -174,7 +177,7 @@ unit test catches the old behavior.
 ### Rebase assessment (2026-07-22)
 
 The branch was fetched and rebased onto clean `origin/master`
-`b8844d3df759bfa070681327583427461d39105c`. Since the earlier compact-block
+`a2e074d66ac17ca7907909bbbb563e77185a45e5`. Since the earlier compact-block
 comparison at `bc49bd154a31`, master added only Qt, ZeroMQ, include-lint, and seed
 address BIP324-service-flag changes; none alter compact-block construction,
 reconstruction, validation, or the fuzzer code covered below. The historical short-ID
@@ -183,6 +186,10 @@ normal production path still has the #35670 optimization (`6f1c56f03a`) that avo
 null tail entries. Rechecking after this rebase changed commit identifiers and the
 baseline, but produced no new clean-master compact-block defect or race and justified
 no additional production fix.
+
+The final `b8844d3df7..a2e074d66a` master delta was also checked and touches only
+`src/addrman.h` and `src/qt/test/test_main.cpp`, so it does not invalidate the
+compact-block control results.
 
 ### Historical real defect, fixed on current master
 
@@ -383,7 +390,7 @@ Assume-aborting Debug build. Current-master compact and coins corpus controls we
 run with multiple workers and existing QA corpora under Clang ASan/UBSan without
 reports. Most of the following detailed gates were run on the preceding clean
 baseline `32eb521002`; later controls explicitly name the intermediate
-`bc49bd154a` baseline or the current `b8844d3df7` baseline. The later
+`bc49bd154a` baseline or the current `a2e074d66a` baseline. The later
 `validation_block_reorg` gate ran on the intermediate `559d042ba2` baseline and is
 called out separately below.
 
