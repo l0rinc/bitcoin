@@ -339,6 +339,50 @@ FUZZ_TARGET(bnb_finds_min_waste)
     }
 }
 
+FUZZ_TARGET(bnb_attempt_limit)
+{
+    FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
+
+    FastRandomContext fast_random_context{ConsumeUInt256(fuzzed_data_provider)};
+    CoinSelectionParams coin_params{fast_random_context};
+    coin_params.m_subtract_fee_outputs = false;
+    coin_params.m_effective_feerate = CFeeRate{5'000};
+    coin_params.m_long_term_feerate = CFeeRate{10'000};
+    coin_params.m_discard_feerate = CFeeRate{3'000};
+    coin_params.change_output_size = 31;
+    coin_params.change_spend_size = 68;
+    coin_params.m_change_fee = coin_params.m_effective_feerate.GetFee(coin_params.change_output_size);
+    coin_params.m_cost_of_change = fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(359, 2'000);
+
+    // Empty input is the 19-coin exhaustion fixture from bnb_exhaustion_with_solution_test. The lower bounds make
+    // the default mutation retain that fixture while fuzzed bytes explore nearby values and weights.
+    const CAmount target{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(800'000, 801'000)};
+    const int max_selection_weight{fuzzed_data_provider.ConsumeIntegralInRange<int>(2'176, MAX_STANDARD_TX_WEIGHT)};
+    std::vector<OutputGroup> group_pos;
+    group_pos.reserve(19);
+    for (int i = 0; i < 19; ++i) {
+        const CAmount effective_value{100'000 + fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(i, i + 1'000)};
+        const int input_bytes{fuzzed_data_provider.ConsumeIntegralInRange<int>(68, 1'000)};
+        std::vector<COutput> temp_utxo_pool;
+        const CFeeRate effective_feerate{coin_params.m_effective_feerate};
+        AddCoin(effective_value + effective_feerate.GetFee(input_bytes), /*n_input=*/0, input_bytes, i, temp_utxo_pool, effective_feerate);
+
+        auto output_group = OutputGroup(coin_params);
+        output_group.Insert(std::make_shared<COutput>(temp_utxo_pool.at(0)), /*ancestors=*/0, /*cluster_count=*/0);
+        group_pos.push_back(output_group);
+    }
+
+    const auto result{SelectCoinsBnB(group_pos, target, coin_params.m_cost_of_change, max_selection_weight)};
+    if (!result) return;
+
+    assert(result->GetSelectedEffectiveValue() >= target);
+    assert(result->GetSelectedEffectiveValue() <= target + coin_params.m_cost_of_change);
+    assert(result->GetWeight() <= max_selection_weight);
+    // This mirrors SelectCoinsBnB's TOTAL_TRIES postcondition without exposing its implementation constant.
+    assert(result->GetSelectionsEvaluated() <= 100'000);
+    assert(result->GetAlgoCompleted() || result->GetSelectionsEvaluated() == 100'000);
+}
+
 enum class CoinSelectionAlgorithm {
     BNB,
     SRD,
