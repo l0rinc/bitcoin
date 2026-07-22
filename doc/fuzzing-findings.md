@@ -261,6 +261,46 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   replayed in the normal fuzzer in 4,984, 5,954, and 6,242 ms with exit code 0.
   These are incomplete sanitizer gates and performance observations, not evidence
   of an addrman production defect.
+* `headers_sync_state` ran 1,000 inputs in each of two ASan/UBSan jobs and two TSan
+  jobs over its 887-input corpus. All jobs exited 0 without a sanitizer report or
+  artifact. ASan workers completed in 8 seconds with peak RSS of 460 and 462 MB;
+  TSan workers completed in 1 and 2 seconds with peak RSS of 138 and 140 MB. This
+  exercised continuous-header construction, commitment transitions, redownload,
+  proof-of-work output ordering, and locator invariants.
+* `validation_block_reorg` ran its existing 2,257-input corpus with two jobs and
+  two workers under both sanitizers. TSan completed 2,260 and 2,259 executions in
+  357 and 358 seconds with peak RSS of 318 and 317 MB. ASan/UBSan completed 3,243
+  and 3,246 executions in 574 and 576 seconds with peak RSS of 658 and 664 MB.
+  Every job exited 0 without a report or artifact. The corpus includes genesis
+  reprocessing, empty competing branches, same-height forks, invalid descendants,
+  invalidation, failure-flag reset, and chainstate notification assertions.
+* `validation_load_mempool` completed its 1,799-input corpus under TSan with two
+  jobs and two workers: both workers executed 1,802 inputs in 274 seconds, with
+  peak RSS of 397 and 398 MB, and no report or artifact. The ASan/UBSan workers
+  were stopped after 1,740 executions each in a large round-trip region, at peak
+  RSS of 835 and 837 MB; they produced no diagnostic or artifact and are not
+  counted as complete ASan gates. The completed TSan corpus exercised current and
+  legacy dump formats, metadata option combinations, unbroadcast state, and
+  atomic dump failure paths.
+* `process_messages` completed its 4,431-input corpus under TSan with two jobs and
+  two workers: 4,433 and 4,434 executions in 157 seconds, peak RSS about 341 MB,
+  no report or artifact. `process_message` likewise completed 3,699 and 3,698
+  inputs under TSan in 86 and 89 seconds, with peak RSS of 361 and 364 MB and no
+  report or artifact. The ASan/UBSan `process_messages` jobs reached 5,179 and
+  5,187 executions before the bounded run was stopped at the expensive region;
+  peak RSS was 724 and 725 MB, with no diagnostic or artifact. These network
+  gates are evidence against a race in the exercised message/peer lifecycle, not
+  a proof that all live connection interleavings are race-free.
+* `txrequest` completed 1,000 inputs per TSan worker with two jobs and two workers,
+  reaching peak RSS of 148 MB and producing no report or artifact. Its ASan/UBSan
+  workers reached the 512 pulse in the same high-cost mutation region at about
+  717 and 718 MB RSS before being stopped; no diagnostic or artifact was produced,
+  so this is an incomplete ASan gate. `txgraph` completed all 5,123 inputs in each
+  TSan worker in 96 and 97 seconds at about 139 MB RSS, with no report or artifact.
+  Its ASan workers reached the 4,096 pulse at about 681 and 682 MB RSS before the
+  bounded cutoff, again without a diagnostic or artifact. The TSan graph corpus
+  directly exercised cluster-mempool topology mutations and transaction request
+  bookkeeping without revealing a race.
 * An ASan/UBSan `txorphan` run over 686 inputs was stopped after both workers reached
   the same expensive region. One worker reported a libFuzzer timeout at 39 seconds
   while `TxOrphanageImpl::EraseTx()` computed transaction weight for a large
