@@ -548,7 +548,7 @@ void CCoinsViewCache::ReallocateCache()
     cacheCoins.~CCoinsMap();
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
-    ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+    ::new (&cacheCoins) CCoinsMap{0, SaltedCoinsCacheHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
     Assume(cacheCoins.empty());
     Assume(cachedCoinsUsage == 0);
     Assume(m_dirty_count == 0);
