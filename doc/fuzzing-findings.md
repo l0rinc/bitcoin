@@ -6,19 +6,22 @@ that was added by this branch. A finding is called a production defect only when
 clean-master reproducer or an independent race/sanitizer result demonstrated a source
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
-The current baseline after the latest rebase is
-`559d042ba2567a05e8d540c7d9d9a94c7d2973d2`. The branch was rebased onto this tip after
-the findings below were verified. Controls that explicitly name
-`32eb52100296718f7c0469e3210ce1db73694793` are historical clean-master runs from the
-previous baseline; they remain valid evidence for the mutations they tested, but are
-not claims about the eight commits added since then.
+The current baseline after the final fetch and rebase is
+`efa1800a885c1ae605e18605ef73957ea13e575c`. The reorg campaign below ran immediately
+before that fetch against `559d042ba2567a05e8d540c7d9d9a94c7d2973d2`; the four commits
+between those tips touch only Qt, ZeroMQ dependencies, and include-lint tooling, so
+they do not change the validation, compact-block, mempool, TxGraph, coins, or fuzz
+code exercised here. Controls that explicitly name
+`32eb52100296718f7c0469e3210ce1db73694793` are historical clean-master runs from an
+earlier baseline; they remain valid evidence for the mutations they tested, but are
+not claims about commits added since then.
 
 ## Confirmed production defects
 
 ### 1. Index publication race and restart state
 
-* Current branch fix: `2e88f807c8` (`index: synchronize chainstate publication during restart`).
-* Related startup fix: `fd40472deff` (`index: handle synced index before genesis activation`).
+* Current branch fix: `0bd90a32dc` (`index: synchronize chainstate publication during restart`).
+* Related startup fix: `9ade168c8f` (`index: handle synced index before genesis activation`).
 * Severity on the clean baseline: medium availability/correctness issue for an index
   restart or snapshot-completion workflow; no unauthenticated P2P trigger, consensus
   divergence, wallet loss, or persisted-state corruption was demonstrated.
@@ -34,7 +37,7 @@ test reproduced the old dereference and now covers the queued genesis transition
 
 ### 2. Persistent coins cursor versus database resize
 
-* Current branch fix: `3a298d4117` (`coins: serialize DB cursor lifetime with cache resize`).
+* Current branch fix: `5de77fca62` (`coins: serialize DB cursor lifetime with cache resize`).
 * Severity on the clean baseline: medium local/authorized-workflow availability bug.
 
 `CCoinsViewDB::ResizeCache()` could destroy and reopen the LevelDB database while a
@@ -48,7 +51,7 @@ verify the complete UTXO set before and after resize.
 
 ### 3. V2 transport message-type buffer overflow at a direct boundary
 
-* Current branch fix: `5675fb4a05` (`p2p: bound outbound transport message types`).
+* Current branch fix: `4e1f1a0f05` (`p2p: bound outbound transport message types`).
 * Severity on the clean baseline: low to medium memory-safety hardening. No
   unauthenticated remote path to construct the overlong internal message was proven.
 
@@ -61,7 +64,7 @@ preserves it for the caller.
 
 ### 4. RBF fee-diagram total overflow
 
-* Current branch fix: `cf744ba8fc` (`rbf: reject overflowing fee diagrams`).
+* Current branch fix: `ce3fd38431` (`rbf: reject overflowing fee diagrams`).
 * Severity on the clean baseline: medium policy robustness issue, conditional on
   extreme local transaction prioritisation; not consensus or wallet loss.
 
@@ -73,13 +76,16 @@ fix returns `UNCALCULABLE` before `CompareChunks()`, so the replacement fails cl
 The deterministic `rbf_tests/improves_feerate_diagram_rejects_overflowing_totals`
 case catches the mutation while the pre-existing RBF tests did not.
 
-The later `228c637014` fail-closed policy change is a separate behavior decision: it
-can make replacements involving extreme local priority deltas temporarily
-non-replaceable. It is a policy trade-off, not a consensus vulnerability.
+The pre-rebase hashes `cf744ba8fc` and `228c637014` were duplicate local copies of
+the same fail-closed production patch (identical patch IDs); the rebase retained one
+current copy as `ce3fd38431`. The behavior trade-off is therefore part of that one
+fix, not a separate later vulnerability or fix: replacements involving extreme local
+priority deltas can be temporarily non-replaceable. It is a policy trade-off, not a
+consensus vulnerability.
 
 ### 5. Mempool info fee-delta signed overflow
 
-* Current branch fix: `2e017e848a` (`mempool: saturate TxMempoolInfo fee delta`).
+* Current branch fix: `dd3385cf0d` (`mempool: saturate TxMempoolInfo fee delta`).
 * Severity on the clean baseline: medium for authenticated/local RPC robustness; no
   unauthenticated network trigger was demonstrated.
 
@@ -92,7 +98,7 @@ two-step mutation, and the tx-pool sanitizer replay passed afterward.
 
 ### 6. Cache allocation percentage overflow
 
-* Current branch fix: `0d01df4fcc` (`node: avoid cache allocation percentage overflow`).
+* Current branch fix: `7971db2096` (`node: avoid cache allocation percentage overflow`).
 * Severity on the clean baseline: low local-configuration correctness issue.
 
 On a 64-bit host, `-dbcache=8796093022208` makes the byte total `2^63`. The old
@@ -103,8 +109,8 @@ affect consensus or persisted chain data.
 
 ### 7. Base58 decoder stale output on failure
 
-* Base58Check fix: `f95539c3b0`.
-* Raw Base58 fix: `390bde6d88`.
+* Base58Check fix: `c8808363c4`.
+* Raw Base58 fix: `4796db0ef3`.
 * Severity on the clean baseline: low parser API correctness issue.
 
 The public wrappers could return `false` while leaving caller-owned bytes from a
@@ -118,7 +124,7 @@ ASan/UBSan fuzz coverage.
 
 ### Historical real defect, fixed on current master
 
-* Branch accounting work: `f50dfe996b` and the collision-focused fuzz commits.
+* Branch accounting work: `31026b969f` and the collision-focused fuzz commits.
 * Upstream fix already in current master: `6aa5d8d948` (PR #35727).
 * Severity on the pre-PR master: low to medium internal reconstruction accounting;
   no consensus failure or uninstrumented release crash was demonstrated.
@@ -136,22 +142,22 @@ The following cases were reproduced against clean master by constructing
 `PartiallyDownloadedBlock` inputs directly, then fixed or covered on this branch:
 
 * A valid extra transaction followed by a null extra entry with the same short ID
-  reached a null dereference. The guard is in `4b6e6fd35d`; current production extra
+  reached a null dereference. The guard is in `b99ada5789`; current production extra
   cache construction was changed by #35670 (`1a3cbf1bd2`) to avoid null tail entries.
-  `c7258b01d8` adds the distinct extra-source/null ordering to both the unit oracle and
+  `e7408f4f5f` adds the distinct extra-source/null ordering to both the unit oracle and
   fuzzer. This remains direct-API hardening on current master.
 * More than `uint16_t` short-ID positions wrapped the internal position map and could
-  overwrite the wrong slot. `7c6cc2387d` rejects the oversized direct input. Wire
+  overwrite the wrong slot. `c2bff602b0` rejects the oversized direct input. Wire
   deserialization already rejects a transaction count above `uint16_t::max`, so no
   remote compact-block path was demonstrated.
 * `FillBlock()` left partial header/counter state after too-short input and left
-  derived counters after a successful fill. `078238ed7d`, `d34751cfa5`, and
-  `e5ae33f338` reset or preserve state at the reusable-object boundary. The production
+  derived counters after a successful fill. `bc7d8eef54`, `b9468a012e`, and
+  `2236cbd59c` reset or preserve state at the reusable-object boundary. The production
   caller discards failed requests, so no remotely reachable state corruption was
   shown.
 * Constructing `CBlockHeaderAndShortTxIDs` from an empty or sparse in-memory `CBlock`
   could underflow the short-ID vector size or dereference a null transaction while
-  deriving the IDs. `dcf154b370` adds the production preconditions and deterministic
+  deriving the IDs. `46cb5a5f64` adds the production preconditions and deterministic
   `blockencodings_tests/HeaderAndShortIDsRejectsInvalidBlockTxRefs` coverage. This is
   direct-API contract hardening: no clean-master P2P caller was found that constructs a
   compact block from an empty or sparse source block, so its severity on the baseline is
@@ -265,7 +271,7 @@ both workers and replayed cleanly after correction:
 * A 661-byte input (SHA256
   `bcc22d7da7483cd13df351d47ff4fa4a51d6d7bea594a3734963475469ef5d59`) exposed a
   stale fuzzer oracle in `GetWorstMainChunk`: it modeled raw `ChunkLinearizationInfo`
-  while branch production commit `50da7746cf` intentionally uses `GetChunking()` to
+  while branch production commit `9ceae5b32f` intentionally uses `GetChunking()` to
   collapse a connected cluster when `FeeFrac` saturation makes raw chunks appear
   disconnected. The oracle now uses the same `chunk_linearization_info_fn` fallback.
   This was a branch-local fuzzer omission, not a new production defect.
@@ -291,7 +297,7 @@ crash, race, consensus issue, or remotely reachable vulnerability was found.
   payloads, block-filter equivalence, parser atomicity, and many cache/index oracles
   caught mutations in newly added assertions or invalid fuzzer inputs. They did not
   reproduce an unmodified clean-master defect unless listed above.
-* The coins money-range work (`576f3519dd`) caught fuzz-generated invalid coins being
+* The coins money-range work (`6f88cd9668`) caught fuzz-generated invalid coins being
   sent directly to amount compression. Consensus-valid transaction and snapshot
   callers already satisfy `MoneyRange()`; the fix documents that precondition and
   makes the fuzzer reject invalid construction.
@@ -313,8 +319,10 @@ crash, race, consensus issue, or remotely reachable vulnerability was found.
 Before the latest rebase, the compact-block unit suite passed 27 cases in the
 Assume-aborting Debug build. Current-master compact and coins corpus controls were
 run with multiple workers and existing QA corpora under Clang ASan/UBSan without
-reports. The following detailed gates were run on the preceding clean baseline
-`32eb521002`; the branch is now rebased onto `559d042ba2`.
+reports. Most of the following detailed gates were run on the preceding clean
+baseline `32eb521002`; the branch is now rebased onto
+`efa1800a88`. The later `validation_block_reorg` gate ran on the intermediate
+`559d042ba2` baseline and is called out separately below.
 
 * `blockencodings_tests` passed all 27 cases; the selected hash, Base58, cache,
   mempool, RBF, HTTP, network, and index suites passed 81 cases.
@@ -401,13 +409,19 @@ reports. The following detailed gates were run on the preceding clean baseline
   TSan workers completed in 1 and 2 seconds with peak RSS of 138 and 140 MB. This
   exercised continuous-header construction, commitment transitions, redownload,
   proof-of-work output ordering, and locator invariants.
-* `validation_block_reorg` ran its existing 2,257-input corpus with two jobs and
-  two workers under both sanitizers. TSan completed 2,260 and 2,259 executions in
-  357 and 358 seconds with peak RSS of 318 and 317 MB. ASan/UBSan completed 3,243
-  and 3,246 executions in 574 and 576 seconds with peak RSS of 658 and 664 MB.
-  Every job exited 0 without a report or artifact. The corpus includes genesis
-  reprocessing, empty competing branches, same-height forks, invalid descendants,
-  invalidation, failure-flag reset, and chainstate notification assertions.
+* `validation_block_reorg` was run against the then-current
+  `origin/master` tip `559d042ba2`, immediately before the final fetch and rebase.
+  Two independent normal workers each completed 5,000
+  executions; two independent TSan workers each completed 5,000 executions in
+  about 584--585 seconds with peak RSS of 310--311 MB; and two independent
+  ASan/UBSan workers each completed 5,000 executions in 693 and 696 seconds with
+  peak RSS of 644--646 MB. Every job exited 0 without a sanitizer report or
+  artifact. The corpus and mutations exercise genesis reprocessing, empty
+  competing branches, same-height forks, longer competing forks and reorgs,
+  invalid blocks with descendants, invalidation, failure-flag reset, precious
+  block no-ops, flush-before/after transitions, and chainstate notification
+  assertions. The later master delta is unrelated to this target. This follow-up
+  found no new production defect or race.
 * `validation_load_mempool` completed its 1,799-input corpus under TSan with two
   jobs and two workers: both workers executed 1,802 inputs in 274 seconds, with
   peak RSS of 397 and 398 MB, and no report or artifact. The ASan/UBSan workers
