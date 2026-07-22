@@ -7,20 +7,69 @@
 #include <test/fuzz/util.h>
 #include <test/util/setup_common.h>
 #include <util/fs.h>
+#include <util/strencodings.h>
 #include <util/time.h>
 #include <util/translation.h>
 #include <wallet/db.h>
 #include <wallet/dump.h>
 #include <wallet/migrate.h>
 
+#include <cstddef>
 #include <fstream>
 #include <iostream>
+#include <string_view>
 
 using wallet::DatabaseOptions;
 using wallet::DatabaseStatus;
 
 namespace {
 TestingSetup* g_setup;
+
+void AssertDumpContracts(wallet::WalletDatabase& db, const fs::path& dump_path)
+{
+    auto batch{db.MakeBatch()};
+    assert(batch);
+    auto cursor{batch->GetNewCursor()};
+    assert(cursor);
+
+    size_t database_records{0};
+    while (true) {
+        DataStream key;
+        DataStream value;
+        switch (cursor->Next(key, value)) {
+        case wallet::DatabaseCursor::Status::DONE:
+            goto records_counted;
+        case wallet::DatabaseCursor::Status::MORE:
+            ++database_records;
+            break;
+        case wallet::DatabaseCursor::Status::FAIL:
+            assert(false);
+            return;
+        }
+    }
+
+records_counted:
+    std::ifstream dump_file{dump_path.std_path()};
+    assert(dump_file.is_open());
+    std::string line;
+    assert(std::getline(dump_file, line));
+    assert(line == "BITCOIN_CORE_WALLET_DUMP,1");
+    assert(std::getline(dump_file, line));
+    assert(line == "format,bdb");
+
+    size_t dump_records{0};
+    constexpr std::string_view checksum_prefix{"checksum,"};
+    assert(std::getline(dump_file, line));
+    while (!line.starts_with(checksum_prefix)) {
+        assert(line.find(',') != std::string::npos);
+        ++dump_records;
+        assert(std::getline(dump_file, line));
+    }
+    assert(line.size() == checksum_prefix.size() + 64);
+    assert(IsHex(std::string_view{line}.substr(checksum_prefix.size())));
+    assert(!std::getline(dump_file, line));
+    assert(dump_records == database_records);
+}
 } // namespace
 
 void initialize_wallet_bdb_parser()
@@ -40,7 +89,7 @@ FUZZ_TARGET(wallet_bdb_parser, .init = initialize_wallet_bdb_parser)
     }
 
     const DatabaseOptions options{};
-    DatabaseStatus status;
+    DatabaseStatus status{DatabaseStatus::FAILED_LOAD};
     bilingual_str error;
 
     fs::path bdb_ro_dumpfile{g_setup->m_args.GetDataDirNet() / "fuzzed_dumpfile_bdb_ro.dump"};
@@ -51,8 +100,15 @@ FUZZ_TARGET(wallet_bdb_parser, .init = initialize_wallet_bdb_parser)
 
     auto db{MakeBerkeleyRODatabase(wallet_path, options, status, error)};
     if (db) {
+        assert(status == DatabaseStatus::SUCCESS);
         assert(DumpWallet(g_setup->m_args, *db, error));
+        assert(error.original.empty());
+        assert(fs::exists(bdb_ro_dumpfile));
+        AssertDumpContracts(*db, bdb_ro_dumpfile);
     } else {
+        assert(status == DatabaseStatus::FAILED_LOAD);
+        assert(!error.original.empty());
+        assert(!fs::exists(bdb_ro_dumpfile));
         if (error.original.starts_with("AutoFile::ignore: end of file") ||
             error.original.starts_with("AutoFile::read: end of file") ||
             error.original.starts_with("AutoFile::seek: ") ||
