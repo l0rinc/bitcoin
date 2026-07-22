@@ -151,8 +151,10 @@ The collision fuzzer now constructs valid `<wtxid, transaction>` pairs, exercise
 mempool-first, extra-first, duplicate, null, prefilled, early-exit, and terminal
 collision orderings, and checks source/counter/slot invariants. Two-worker normal and
 ASan/UBSan corpus replays completed without new artifacts after the current-master
-recheck. No compact-block race in the extra vector was found; its access remains
-serialized by the message-processing mutex.
+recheck. A source review also checked the exact `uint16_t` position boundary: 65,535
+transactions is representable, while 65,536 is rejected before allocation or index
+mapping. No additional wraparound candidate was found. No compact-block race in the
+extra vector was found; its access remains serialized by the message-processing mutex.
 
 ## Findings that were not production bugs
 
@@ -190,10 +192,19 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   over the existing QA corpus and completed with exit code 0 and no target artifacts.
 * `coins_view` replayed all 21,873 QA inputs in each of two sanitizer workers with
   exit code 0 and no artifacts.
+* A current Clang TSan/libFuzzer build (distinct from the single-input TSan driver)
+  replayed `tx_pool`'s 8,000 inputs, `cmpctblock`'s 1,970 inputs, and
+  `partially_downloaded_block`'s 2,015 inputs with two jobs and two workers. Every
+  job exited 0; no TSan report or artifact was produced. The two compact targets
+  therefore have both ASan/UBSan and TSan corpus evidence on the current stack.
 * `coinscache_sim` reached 1,416 inputs before the optional run was stopped because
   both workers remained on a 10-second slow corpus unit. That unit replayed once in
   18.6 seconds with exit code 0 and no sanitizer report. This is a fuzzing throughput
   observation, not a confirmed production defect.
+
+The additional `package_rbf` and `clusterlin_linearize` ASan workers were stopped
+after more than five minutes on expensive corpus cases; they emitted no sanitizer
+marker or target artifact, but are not counted as completed corpus gates.
 
 All scratch data from this gate was removed; the shared QA corpora and ccache were
 preserved. This file should be amended if a later master rebase changes the status
