@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <script/script.h>
+
 #include <chainparams.h>
 #include <compressor.h>
 #include <core_io.h>
@@ -12,7 +14,6 @@
 #include <rpc/util.h>
 #include <script/descriptor.h>
 #include <script/interpreter.h>
-#include <script/script.h>
 #include <script/script_error.h>
 #include <script/sign.h>
 #include <script/signingprovider.h>
@@ -30,6 +31,110 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace {
+
+void AssertSolverContracts(const TxoutType type, const std::vector<std::vector<unsigned char>>& solutions)
+{
+    switch (type) {
+    case TxoutType::NONSTANDARD:
+    case TxoutType::NULL_DATA:
+    case TxoutType::ANCHOR:
+        assert(solutions.empty());
+        break;
+    case TxoutType::PUBKEY:
+        assert(solutions.size() == 1);
+        assert(CPubKey::ValidSize(solutions[0]));
+        break;
+    case TxoutType::PUBKEYHASH:
+    case TxoutType::SCRIPTHASH:
+    case TxoutType::WITNESS_V0_KEYHASH:
+        assert(solutions.size() == 1);
+        assert(solutions[0].size() == 20);
+        break;
+    case TxoutType::WITNESS_V0_SCRIPTHASH:
+    case TxoutType::WITNESS_V1_TAPROOT:
+        assert(solutions.size() == 1);
+        assert(solutions[0].size() == 32);
+        break;
+    case TxoutType::WITNESS_UNKNOWN:
+        assert(solutions.size() == 2);
+        assert(solutions[0].size() == 1);
+        assert(solutions[0][0] >= 1 && solutions[0][0] <= 16);
+        assert(solutions[1].size() >= 2 && solutions[1].size() <= 40);
+        break;
+    case TxoutType::MULTISIG:
+        assert(solutions.size() >= 3);
+        assert(solutions.front().size() == 1);
+        assert(solutions.back().size() == 1);
+        assert(solutions.front()[0] >= 1);
+        assert(solutions.front()[0] <= solutions.back()[0]);
+        assert(solutions.back()[0] <= MAX_PUBKEYS_PER_MULTISIG);
+        assert(solutions.size() == static_cast<size_t>(solutions.back()[0]) + 2);
+        for (size_t i{1}; i + 1 < solutions.size(); ++i) {
+            assert(CPubKey::ValidSize(solutions[i]));
+        }
+        break;
+    }
+}
+
+bool HasExtractableDestination(const TxoutType type)
+{
+    switch (type) {
+    case TxoutType::PUBKEYHASH:
+    case TxoutType::SCRIPTHASH:
+    case TxoutType::WITNESS_V0_KEYHASH:
+    case TxoutType::WITNESS_V0_SCRIPTHASH:
+    case TxoutType::WITNESS_V1_TAPROOT:
+    case TxoutType::ANCHOR:
+    case TxoutType::WITNESS_UNKNOWN:
+        return true;
+    case TxoutType::NONSTANDARD:
+    case TxoutType::PUBKEY:
+    case TxoutType::MULTISIG:
+    case TxoutType::NULL_DATA:
+        return false;
+    }
+    assert(false);
+    return false;
+}
+
+// Keep the witness count model separate from CountWitnessSigOps so branch regressions are visible.
+size_t WitnessSigOpsModel(const CScript& script_sig, const CScript& script_pub_key, const CScriptWitness& witness, const script_verify_flags flags)
+{
+    if ((flags & SCRIPT_VERIFY_WITNESS) == 0) return 0;
+
+    const auto count_witness_program = [&witness](const int version, const std::vector<unsigned char>& program) {
+        if (version == 0 && program.size() == WITNESS_V0_KEYHASH_SIZE) return size_t{1};
+        if (version == 0 && program.size() == WITNESS_V0_SCRIPTHASH_SIZE && !witness.stack.empty()) {
+            const CScript witness_script{witness.stack.back().begin(), witness.stack.back().end()};
+            return static_cast<size_t>(witness_script.GetSigOpCount(true));
+        }
+        return size_t{0};
+    };
+
+    int witness_version;
+    std::vector<unsigned char> witness_program;
+    if (script_pub_key.IsWitnessProgram(witness_version, witness_program)) {
+        return count_witness_program(witness_version, witness_program);
+    }
+
+    if (!script_pub_key.IsPayToScriptHash() || !script_sig.IsPushOnly()) return 0;
+
+    CScript::const_iterator pc{script_sig.begin()};
+    std::vector<unsigned char> data;
+    while (pc < script_sig.end()) {
+        opcodetype opcode;
+        if (!script_sig.GetOp(pc, opcode, data)) return 0;
+    }
+    const CScript redeem_script{data.begin(), data.end()};
+    if (redeem_script.IsWitnessProgram(witness_version, witness_program)) {
+        return count_witness_program(witness_version, witness_program);
+    }
+    return 0;
+}
+
+} // namespace
 
 void initialize_script()
 {
@@ -70,8 +175,22 @@ FUZZ_TARGET(script, .init = initialize_script)
                which_type == TxoutType::NONSTANDARD);
     }
 
+    std::vector<std::vector<unsigned char>> solutions;
+    const TxoutType solved_type{Solver(script, solutions)};
+    assert(solved_type == which_type);
+    AssertSolverContracts(solved_type, solutions);
+
+    const bool expected_standard{solved_type != TxoutType::NONSTANDARD &&
+                                 (solved_type != TxoutType::MULTISIG ||
+                                  (solutions.back()[0] <= 3 && solutions.front()[0] >= 1 && solutions.front()[0] <= solutions.back()[0]))};
+    assert(is_standard_ret == expected_standard);
+
     CTxDestination address;
     bool extract_destination_ret = ExtractDestination(script, address);
+    const bool has_destination{HasExtractableDestination(solved_type)};
+    assert(extract_destination_ret == has_destination);
+    assert(IsValidDestination(address) == has_destination);
+    assert(GetScriptForDestination(address) == script);
     if (!extract_destination_ret) {
         assert(which_type == TxoutType::PUBKEY ||
                which_type == TxoutType::NONSTANDARD ||
@@ -86,12 +205,12 @@ FUZZ_TARGET(script, .init = initialize_script)
 
     const FlatSigningProvider signing_provider;
     (void)InferDescriptor(script, signing_provider);
-    (void)IsSegWitOutput(signing_provider, script);
+    int witness_version;
+    std::vector<unsigned char> witness_program;
+    const bool is_native_witness{script.IsWitnessProgram(witness_version, witness_program)};
+    assert(IsSegWitOutput(signing_provider, script) == is_native_witness);
 
     (void)RecursiveDynamicUsage(script);
-
-    std::vector<std::vector<unsigned char>> solutions;
-    (void)Solver(script, solutions);
 
     {
         const std::vector<uint8_t> bytes = ConsumeRandomLengthByteVector(fuzzed_data_provider);
@@ -118,7 +237,8 @@ FUZZ_TARGET(script, .init = initialize_script)
             for (const auto& s : random_string_vector) {
                 wit.stack.emplace_back(s.begin(), s.end());
             }
-            (void)CountWitnessSigOps(script, *other_script, wit, flags);
+            const size_t expected_sigops{WitnessSigOpsModel(script, *other_script, wit, flags)};
+            assert(CountWitnessSigOps(script, *other_script, wit, flags) == expected_sigops);
             wit.SetNull();
         }
     }
