@@ -470,6 +470,17 @@ baseline `32eb521002`; the branch is now rebased onto
   exact counts are recorded above; together these runs directly exercised
   cluster-mempool topology mutations and transaction request bookkeeping without
   revealing a race.
+* A current normal `txrequest` run replayed the original 727-input corpus with two
+  independent workers for 5,000 mutations each. They completed in 500 and 504
+  seconds, at peak RSS of 66 and 67 MB, with no assertion, sanitizer, or crash
+  artifact. The workers added 82 unique units to the shared QA corpus without
+  increasing the 2,415-coverage plateau. Replaying that fresh 82-unit slice under
+  two ASan/UBSan workers completed 103 and 104 executions in 101 and 105 seconds
+  at about 732 MB RSS; two TSan/libFuzzer workers completed 110 and 114 executions
+  in 11 seconds at 129 and 130 MB RSS. All four replays were clean. This is
+  additional state-space and sanitizer evidence for duplicate announcements,
+  expiry, time reversal, re-selection, and disconnect cleanup, not a new
+  production defect or race.
 * The standard mempool target was replayed from 2,826 existing inputs below 64 KiB
   with two jobs and two workers. TSan completed 2,827 executions per worker in 102 and
   103 seconds at about 345 MB RSS, with no report or artifact. ASan/UBSan reached 512
