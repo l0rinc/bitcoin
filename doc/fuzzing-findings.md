@@ -197,6 +197,20 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   `partially_downloaded_block`'s 2,015 inputs with two jobs and two workers. Every
   job exited 0; no TSan report or artifact was produced. The two compact targets
   therefore have both ASan/UBSan and TSan corpus evidence on the current stack.
+* The current Clang ASan/UBSan wallet build replayed `coincontrol`'s 497 inputs with
+  two jobs and two workers for 1,000 runs per worker. All jobs exited 0; no sanitizer
+  report or artifact was produced. The same build replayed `coinselection_bnb`'s 575
+  inputs and `coinselection_srd`'s 393 inputs with two jobs and two workers for 2,000
+  runs per worker. All four jobs exited 0; no sanitizer report or artifact was
+  produced.
+* The current Clang TSan/libFuzzer build also replayed `coincontrol`'s 497 inputs and
+  `coinselection_bnb`'s 483 inputs with two jobs and two workers for 1,000 runs per
+  worker. Every job exited 0; no TSan report or artifact was produced. These are
+  race-signal gates only, not evidence that wallet code is generally thread-safe.
+* An ASan/UBSan `scriptpubkeyman` run was started with two jobs and two workers over
+  10,025 existing inputs, but both workers remained CPU-bound in a single expensive
+  case past the five-minute wall-clock budget. It produced no sanitizer marker or
+  artifact before being stopped and is not counted as a completed gate.
 * `coinscache_sim` reached 1,416 inputs before the optional run was stopped because
   both workers remained on a 10-second slow corpus unit. That unit replayed once in
   18.6 seconds with exit code 0 and no sanitizer report. This is a fuzzing throughput
@@ -206,6 +220,6 @@ The additional `package_rbf` and `clusterlin_linearize` ASan workers were stoppe
 after more than five minutes on expensive corpus cases; they emitted no sanitizer
 marker or target artifact, but are not counted as completed corpus gates.
 
-All scratch data from this gate was removed; the shared QA corpora and ccache were
-preserved. This file should be amended if a later master rebase changes the status
-of any item above.
+The wallet scratch data from this gate was removed after the artifact and sanitizer
+scans; the shared QA corpora and ccache were preserved. This file should be amended
+if a later master rebase changes the status of any item above.
