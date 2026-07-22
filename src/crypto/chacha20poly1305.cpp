@@ -105,6 +105,8 @@ void AEADChaCha20Poly1305::Keystream(Nonce96 nonce, std::span<std::byte> keystre
 
 void FSChaCha20Poly1305::NextPacket() noexcept
 {
+    assert(m_rekey_interval != 0);
+    assert(m_packet_counter < m_rekey_interval);
     if (++m_packet_counter == m_rekey_interval) {
         // Generate a full block of keystream, to avoid needing the ChaCha20 buffer, even though
         // we only need KEYLEN (32) bytes.
@@ -123,12 +125,16 @@ void FSChaCha20Poly1305::NextPacket() noexcept
 
 void FSChaCha20Poly1305::Encrypt(std::span<const std::byte> plain1, std::span<const std::byte> plain2, std::span<const std::byte> aad, std::span<std::byte> cipher) noexcept
 {
+    assert(m_rekey_interval != 0);
+    assert(m_packet_counter < m_rekey_interval);
     m_aead.Encrypt(plain1, plain2, aad, {m_packet_counter, m_rekey_counter}, cipher);
     NextPacket();
 }
 
 bool FSChaCha20Poly1305::Decrypt(std::span<const std::byte> cipher, std::span<const std::byte> aad, std::span<std::byte> plain1, std::span<std::byte> plain2) noexcept
 {
+    assert(m_rekey_interval != 0);
+    assert(m_packet_counter < m_rekey_interval);
     bool ret = m_aead.Decrypt(cipher, aad, {m_packet_counter, m_rekey_counter}, plain1, plain2);
     NextPacket();
     return ret;
