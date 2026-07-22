@@ -42,6 +42,7 @@
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
+#include <versionbits.h>
 
 #include <boost/multi_index/detail/hash_index_iterator.hpp>
 
@@ -179,6 +180,8 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
     auto& chainman = static_cast<TestChainstateManager&>(*setup->m_node.chainman);
     chainman.ResetIbd();
     chainman.DisableNextWrite();
+    const NodeSeconds tip_time{WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip()->Time())};
+    clock.set(tip_time + 1s);
     const size_t initial_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
 
     AddrMan addrman{*setup->m_node.netgroupman, /*deterministic=*/true, /*consistency_check_ratio=*/0};
@@ -332,6 +335,42 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         return block_info;
     };
 
+    uint32_t oracle_block_counter{0};
+    auto create_oracle_block = [&]() {
+        BlockInfo block_info{create_block()};
+
+        // The network oracle needs a valid block independent of the random block
+        // mutations used by the rest of the target.
+        block_info.block->nTime += oracle_block_counter;
+        block_info.block->nNonce = oracle_block_counter++;
+        block_info.block->nVersion = VERSIONBITS_LAST_OLD_BLOCK_VERSION;
+        CMutableTransaction coinbase_tx;
+        coinbase_tx.vin.resize(1);
+        coinbase_tx.vin[0].prevout.SetNull();
+        coinbase_tx.vin[0].scriptSig = CScript() << block_info.height << OP_0;
+        coinbase_tx.vout.resize(1);
+        coinbase_tx.vout[0].scriptPubKey = P2WSH_OP_TRUE;
+        coinbase_tx.vout[0].nValue = COIN;
+        block_info.block->vtx = {MakeTransactionRef(coinbase_tx)};
+        for (const auto& [outpoint, amount] : {mature_coinbase[0], mature_coinbase[1]}) {
+            CMutableTransaction tx;
+            tx.vin.resize(1);
+            tx.vin[0].prevout = outpoint;
+            tx.vin[0].scriptWitness.stack = {WITNESS_STACK_ELEM_OP_TRUE};
+            tx.vout.emplace_back(amount - AMOUNT_FEE, P2WSH_OP_TRUE);
+            block_info.block->vtx.push_back(MakeTransactionRef(tx));
+        }
+
+        const CBlockIndex* pindexPrev{WITH_LOCK(::cs_main, return chainman.m_blockman.LookupBlockIndex(block_info.block->hashPrevBlock))};
+        chainman.GenerateCoinbaseCommitment(*block_info.block, pindexPrev);
+        bool mutated;
+        block_info.block->hashMerkleRoot = BlockMerkleRoot(*block_info.block, &mutated);
+        FinalizeHeader(*block_info.block, chainman);
+        block_info.hash = block_info.block->GetHash();
+
+        return block_info;
+    };
+
     auto check_high_bandwidth_to_count = [&]() {
         std::vector<CNodeStats> stats;
         connman.GetNodeStats(stats);
@@ -349,6 +388,15 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         assert(num_hb <= 3);
 
         return stats;
+    };
+
+    auto can_serve_oracle_block = [&](CNode& peer) {
+        // A one-header announcement is below the dynamic anti-DoS work threshold. Use a
+        // trusted test peer so the deterministic compact-block oracle reaches block fetch.
+        if (peer.IsPrivateBroadcastConn() || !peer.HasPermission(NetPermissionFlags::NoBan)) return false;
+        CNodeStateStats stats;
+        if (!peerman->GetNodeStateStats(peer.GetId(), stats)) return false;
+        return (stats.their_services & (NODE_NETWORK | NODE_NETWORK_LIMITED)) && (stats.their_services & NODE_WITNESS);
     };
 
     auto block_index_size = [&]() {
@@ -400,6 +448,65 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
     check_sendcmpct_state(*peers[0], /*hb=*/1, /*version=*/CMPCTBLOCKS_VERSION);
     check_sendcmpct_state(*peers[0], /*hb=*/0, /*version=*/CMPCTBLOCKS_VERSION + 1);
     check_sendcmpct_state(*peers[1], /*hb=*/2, /*version=*/CMPCTBLOCKS_VERSION);
+
+    // Exercise the requested first-in-flight path with a deterministic malformed
+    // announcement. InitData must reject the duplicate and the network handler
+    // must fall back to a full block request without asking for blocktxn data.
+    if (!peers[0]->fDisconnect && peers[0]->fSuccessfullyConnected && can_serve_oracle_block(*peers[0])) {
+        BlockInfo block_info{create_oracle_block()};
+        FuzzedCBlockHeaderAndShortTxIDs cmpctblock{*block_info.block, /*nonce=*/0};
+        if (cmpctblock.ShortTxIDCount() >= 2) {
+            CBlock block_header{*block_info.block};
+            block_header.vtx.clear();
+            std::vector<CBlock> headers{block_header};
+            const size_t index_size_before{block_index_size()};
+            (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::HEADERS, TX_WITH_WITNESS(headers)));
+            assert(has_queued_message(*peers[0], NetMsgType::GETDATA));
+            assert(block_index_size() > index_size_before);
+
+            cmpctblock.ForceShortTxIDCollision();
+            CBlockHeaderAndShortTxIDs base_cmpctblock{cmpctblock};
+            (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::CMPCTBLOCK, base_cmpctblock));
+            assert(!peers[0]->fDisconnect);
+            assert(has_queued_message(*peers[0], NetMsgType::GETDATA));
+            assert(!has_queued_message(*peers[0], NetMsgType::GETBLOCKTXN));
+        }
+    }
+
+    // Exercise the parallel-request path with the same malformed announcement.
+    // A later peer must lose only its request; the first peer's request must remain
+    // usable for the full-block fallback.
+    if (!peers[0]->fDisconnect && !peers[1]->fDisconnect && peers[0]->fSuccessfullyConnected && peers[1]->fSuccessfullyConnected &&
+        can_serve_oracle_block(*peers[0]) && can_serve_oracle_block(*peers[1])) {
+        BlockInfo block_info{create_oracle_block()};
+        FuzzedCBlockHeaderAndShortTxIDs cmpctblock{*block_info.block, /*nonce=*/0};
+        if (cmpctblock.ShortTxIDCount() >= 2) {
+            peers[1]->m_bip152_highbandwidth_to = true;
+            CBlock block_header{*block_info.block};
+            block_header.vtx.clear();
+            std::vector<CBlock> headers{block_header};
+            (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::HEADERS, TX_WITH_WITNESS(headers)));
+            assert(has_queued_message(*peers[0], NetMsgType::GETDATA));
+
+            connman.FlushSendBuffer(*peers[1]);
+            cmpctblock.ForceShortTxIDCollision();
+            CBlockHeaderAndShortTxIDs malformed_cmpctblock{cmpctblock};
+            (void)process_net_msg(*peers[1], NetMsg::Make(NetMsgType::CMPCTBLOCK, malformed_cmpctblock));
+            assert(!peers[1]->fDisconnect);
+            assert(!has_queued_message(*peers[1], NetMsgType::GETDATA));
+            assert(!has_queued_message(*peers[1], NetMsgType::GETBLOCKTXN));
+
+            connman.FlushSendBuffer(*peers[0]);
+            CBlockHeaderAndShortTxIDs valid_cmpctblock{*block_info.block, /*nonce=*/0};
+            (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::CMPCTBLOCK, valid_cmpctblock));
+            assert(has_queued_message(*peers[0], NetMsgType::GETBLOCKTXN));
+            BlockTransactions block_txn;
+            block_txn.blockhash = block_info.hash;
+            block_txn.txn = {block_info.block->vtx[1], block_info.block->vtx[2]};
+            (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::BLOCKTXN, block_txn));
+            assert(WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip()->GetBlockHash()) == block_info.hash);
+        }
+    }
 
     if (ignore_incoming_txs && !peers[0]->fDisconnect) {
         BlockInfo block_info{create_block()};
