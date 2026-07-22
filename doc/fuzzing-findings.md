@@ -478,7 +478,10 @@ baseline `32eb521002`; the branch is now rebased onto
   seconds at peak RSS of 154 and 157 MB, with no report or artifact. ASan/UBSan
   reached 674 and 675 executions at peak RSS of 665 and 667 MB before the same
   high-cost region was stopped; no diagnostic or artifact was produced, so that
-  ASan run is incomplete and is not a full-corpus gate.
+  earlier ASan run was incomplete. A current follow-up from two fresh copies of
+  the same 761-file filtered corpus completed 1,000 executions per worker in 261
+  and 262 seconds at peak RSS of 688 and 690 MB, with no sanitizer report or
+  artifact. No package-RBF production defect or race was found.
 * `p2p_private_broadcast` had no saved QA corpus, so it was run from an empty seed
   directory. Its ASan/UBSan workers completed 1,000 executions each in 59 and 52
   seconds at peak RSS of 684 and 686 MB; its TSan workers completed 1,000 and 1,001
