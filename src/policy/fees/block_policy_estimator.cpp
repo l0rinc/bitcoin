@@ -1116,5 +1116,7 @@ CAmount FeeFilterRounder::round(CAmount currentMinFee)
          WITH_LOCK(m_insecure_rand_mutex, return insecure_rand.rand32()) % 3 != 0)) {
         --it;
     }
-    return static_cast<CAmount>(*it);
+    const CAmount rounded_fee{static_cast<CAmount>(*it)};
+    assert(MoneyRange(rounded_fee));
+    return rounded_fee;
 }
