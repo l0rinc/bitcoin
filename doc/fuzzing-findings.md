@@ -316,6 +316,12 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   bounded cutoff, again without a diagnostic or artifact. The TSan graph corpus
   directly exercised cluster-mempool topology mutations and transaction request
   bookkeeping without revealing a race.
+* The standard mempool target was replayed from 2,826 existing inputs below 64 KiB
+  with two jobs and two workers. TSan completed 2,827 executions per worker in 102 and
+  103 seconds at about 345 MB RSS, with no report or artifact. ASan/UBSan reached 512
+  executions per worker in the bounded window at about 545 and 550 MB RSS, then was
+  stopped in an expensive mutation region without a diagnostic or artifact; it is an
+  incomplete ASan gate, not evidence of a mempool defect.
 * `clusterlin_linearize` completed the 672-input QA corpus under TSan with two jobs
   and two workers: 1,000 executions per worker in 31 and 33 seconds at peak RSS of
   126 MB, with no report or artifact. The full ASan/UBSan run reached 436 and 437
