@@ -373,6 +373,26 @@ void CCoinsViewCache::SanityCheck() const
     assert(recomputed_usage == cachedCoinsUsage);
 }
 
+void CoinsViewOverlay::StartWorkers(size_t workers_count) noexcept
+{
+    // Only submit tasks if we have something to fetch.
+    if (m_inputs.empty()) return;
+
+    std::vector<std::function<void()>> tasks(workers_count, [this] {
+        while (ProcessInput()) {}
+    });
+    if (auto futures{m_thread_pool->Submit(std::move(tasks))}) {
+        m_futures = std::move(*futures);
+    } else {
+        // Submit can fail if a shared owner of the thread pool outside of this class calls Stop() or
+        // Interrupt() on a different thread after the caller observed a positive WorkersCount(). In that case
+        // parallel fetching will not make progress, so we clear the inputs to fall back to single threaded fetching.
+        LogWarning("Failed to submit prevout fetch tasks; falling back to single-threaded fetching for this block.");
+        m_inputs.clear();
+        StopFetching(); // Assert nothing changed if we failed to start tasks.
+    }
+}
+
 CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetching(const CBlock& block LIFETIMEBOUND) noexcept
 {
     Assert(m_futures.empty());
@@ -391,22 +411,7 @@ CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetching(const CBlock& block 
             }
             earlier_txids.emplace(tx->GetHash());
         }
-        // Only submit tasks if we have something to fetch.
-        if (m_inputs.size()) {
-            std::vector<std::function<void()>> tasks(workers_count, [this] {
-                while (ProcessInput()) {}
-            });
-            if (auto futures{m_thread_pool->Submit(std::move(tasks))}) {
-                m_futures = std::move(*futures);
-            } else {
-                // Submit can fail if a shared owner of the thread pool outside of this class calls Stop() or
-                // Interrupt() on a different thread after we call WorkersCount() above. In that case parallel
-                // fetching will not make progress, so we clear the inputs to fall back to single threaded fetching.
-                LogWarning("Failed to submit prevout fetch tasks; falling back to single-threaded fetching for this block.");
-                m_inputs.clear();
-                StopFetching(); // Assert nothing changed if we failed to start tasks.
-            }
-        }
+        StartWorkers(workers_count);
     }
     return CreateResetGuard();
 }

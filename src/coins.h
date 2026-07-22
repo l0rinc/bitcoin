@@ -741,6 +741,8 @@ private:
     std::shared_ptr<ThreadPool> m_thread_pool;
     std::vector<std::future<void>> m_futures{};
 
+    void StartWorkers(size_t workers_count) noexcept;
+
 protected:
     void Reset() noexcept override
     {
