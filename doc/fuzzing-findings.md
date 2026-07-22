@@ -156,12 +156,11 @@ The following cases were reproduced against clean master by constructing
 
 The collision fuzzer now constructs valid `<wtxid, transaction>` pairs, exercises
 mempool-first, extra-first, duplicate, null, prefilled, early-exit, and terminal
-collision orderings, and checks source/counter/slot invariants. Two-worker normal and
-ASan/UBSan corpus replays completed without new artifacts after the current-master
-recheck. A source review also checked the exact `uint16_t` position boundary: 65,535
-transactions is representable, while 65,536 is rejected before allocation or index
-mapping. No additional wraparound candidate was found. No compact-block race in the
-extra vector was found; its access remains serialized by the message-processing mutex.
+collision orderings, and checks source/counter/slot invariants. A source review also
+checked the exact `uint16_t` position boundary: 65,535 transactions is representable,
+while 65,536 is rejected before allocation or index mapping. No additional wraparound
+candidate was found. No compact-block race in the extra vector was found; its access
+remains serialized by the message-processing mutex.
 
 The focused mutation comparison used the same 3,646-byte seed directory on both
 implementations. The branch collision harness completed 1,000 mutations in each of
@@ -172,6 +171,60 @@ mutations in each of two workers in 10 and 11 seconds, also without a report or
 artifact. The master comparison rules out a sanitizer-visible defect in the
 production path under natural mutations; it does not claim that upstream's original
 harness reaches every branch-specific forced collision mode added on this branch.
+
+### Network fallback oracle gap closed
+
+The wire `cmpctblock` fuzzer already had a mutation that made two distinct
+transaction positions carry the same short ID, but it did not establish that the
+network handler took the required fallback. The new deterministic sequence first
+announces the valid header so the block is the first in-flight request, then sends
+the duplicate-short-ID compact block. `PartiallyDownloadedBlock::InitData()` must
+return `READ_STATUS_FAILED`; the peer must remain connected, receive a full-block
+`GETDATA` rather than `GETBLOCKTXN`, and successfully complete when the full block
+is delivered. The functional test records this exact mutation and also restores the
+consumed UTXO so it does not perturb later compact-block cases.
+
+This was a coverage omission, not a new master defect. The first version of the
+network oracle deliberately asserted `GETDATA` after sending a random block header,
+but sanitizer replay found four fuzzer-fixture assumptions before collision handling:
+the peer could be pre-`VERACK`, the random header version could be rejected, a
+coinbase-only block could have zero short IDs, or the header could be ignored by
+`CanDirectFetch`/low-work anti-DoS policy. None produced a production report. The
+corrected fixture requires a connected, non-private peer with block and witness
+service plus `NoBan` permission for the one-header trusted-peer setup, sets mock node
+time relative to the active tip, forces a valid version-4 header with unique nonce/time,
+and builds a coinbase plus two valid witness spends before recomputing the commitment,
+merkle root, and header hash. The minimized sanitizer artifact from the false oracle
+now passes in both sanitizer builds.
+
+The final corrected branch replay used the existing 1,970-input `cmpctblock` corpus
+with two independent workers per sanitizer. TSan completed 1,971 executions per
+worker in 84 seconds; ASan/UBSan completed 1,976 executions per worker in 544 seconds.
+Every job exited 0 with no sanitizer report or artifact. An isolated exact-master
+`32eb52100296718f7c0469e3210ce1db73694793` build was previously given the same
+temporary test-only collision hook and deterministic first-in-flight network oracle
+while leaving production code at the master revision; its two ASan/UBSan workers
+completed 1,000 mutations each without a report or artifact. The direct unit
+duplicate-ID case therefore has a network-level regression test and a matching fuzzer
+postcondition, with no production fix warranted on current master.
+
+### Later parallel peer collision
+
+The second wire mutation creates a valid first request from peer A, then sends the
+same duplicate-short-ID compact block from a later high-bandwidth peer B. The required
+postconditions are that peer B stays connected without `GETDATA` or `GETBLOCKTXN`, the
+peer-A request remains in flight, and a valid compact block from peer A still produces
+`GETBLOCKTXN`, accepts the two returned transactions in `BLOCKTXN`, and advances the
+tip. The deterministic functional test `test_duplicate_short_id_parallel_peer`
+exercises this exact sequence and passed as part of the complete
+`p2p_compactblocks.py` run.
+
+This is also a coverage omission, not a production bug: the relevant peer-ordering
+logic is already present on master, and no clean-master crash, disconnect, request
+loss, or sanitizer report was found. The branch changes involved here are fuzzer
+construction, production `PartiallyDownloadedBlock` contract hardening from the
+earlier compact investigation, and deterministic test coverage; no new production
+behavioral fix was required for the parallel case.
 
 For an independent clean-master check, an ASan/UBSan build at
 `32eb52100296718f7c0469e3210ce1db73694793` replayed all 2,015 existing
@@ -213,8 +266,12 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
 
 * `blockencodings_tests` passed all 27 cases; the selected hash, Base58, cache,
   mempool, RBF, HTTP, network, and index suites passed 81 cases.
-* `cmpctblock` and `partially_downloaded_block` each ran with two sanitizer workers
-  over the existing QA corpus and completed with exit code 0 and no target artifacts.
+* The corrected `cmpctblock` fixture replayed its 1,970 existing QA inputs with two
+  independent workers under both Clang ASan/UBSan and Clang TSan. ASan/UBSan completed
+  1,976 executions per worker in 544 seconds; TSan completed 1,971 per worker in 84
+  seconds. Every job exited 0 with no report or target artifact. The separate
+  `partially_downloaded_block` replay also completed with two workers and no report or
+  artifact.
 * `coins_view` replayed all 21,873 QA inputs in each of two sanitizer workers with
   exit code 0 and no artifacts.
 * A current Clang TSan/libFuzzer build (distinct from the single-input TSan driver)
