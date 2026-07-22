@@ -700,6 +700,84 @@ BOOST_AUTO_TEST_CASE(descriptor_cache_merge_conflict_is_atomic)
     BOOST_CHECK(cache.GetCachedLastHardenedExtPubKeys() == last_hardened_xpubs_before);
 }
 
+BOOST_AUTO_TEST_CASE(descriptor_cache_parent_conflict_is_atomic)
+{
+    const CExtPubKey existing{TestExtPubKey(1, 0x01)};
+    const CExtPubKey new_parent{TestExtPubKey(2, 0x02)};
+    const CExtPubKey conflicting{TestExtPubKey(3, 0x03)};
+
+    DescriptorCache cache;
+    cache.CacheParentExtPubKey(1, existing);
+
+    DescriptorCache other;
+    other.CacheParentExtPubKey(0, new_parent);
+    other.CacheParentExtPubKey(1, conflicting);
+
+    const auto parent_xpubs_before{cache.GetCachedParentExtPubKeys()};
+    const auto derived_xpubs_before{cache.GetCachedDerivedExtPubKeys()};
+    const auto last_hardened_xpubs_before{cache.GetCachedLastHardenedExtPubKeys()};
+
+    BOOST_CHECK_EXCEPTION(
+        (void)cache.MergeAndDiff(other),
+        std::runtime_error,
+        HasReason{"New cached parent xpub does not match already cached parent xpub"});
+    BOOST_CHECK(cache.GetCachedParentExtPubKeys() == parent_xpubs_before);
+    BOOST_CHECK(cache.GetCachedDerivedExtPubKeys() == derived_xpubs_before);
+    BOOST_CHECK(cache.GetCachedLastHardenedExtPubKeys() == last_hardened_xpubs_before);
+}
+
+BOOST_AUTO_TEST_CASE(descriptor_cache_derived_index_conflict_is_atomic)
+{
+    const CExtPubKey existing{TestExtPubKey(1, 0x01)};
+    const CExtPubKey new_derived{TestExtPubKey(2, 0x02)};
+    const CExtPubKey conflicting{TestExtPubKey(3, 0x03)};
+
+    DescriptorCache cache;
+    cache.CacheDerivedExtPubKey(1, 1, existing);
+
+    DescriptorCache other;
+    other.CacheDerivedExtPubKey(1, 0, new_derived);
+    other.CacheDerivedExtPubKey(1, 1, conflicting);
+
+    const auto parent_xpubs_before{cache.GetCachedParentExtPubKeys()};
+    const auto derived_xpubs_before{cache.GetCachedDerivedExtPubKeys()};
+    const auto last_hardened_xpubs_before{cache.GetCachedLastHardenedExtPubKeys()};
+
+    BOOST_CHECK_EXCEPTION(
+        (void)cache.MergeAndDiff(other),
+        std::runtime_error,
+        HasReason{"New cached derived xpub does not match already cached derived xpub"});
+    BOOST_CHECK(cache.GetCachedParentExtPubKeys() == parent_xpubs_before);
+    BOOST_CHECK(cache.GetCachedDerivedExtPubKeys() == derived_xpubs_before);
+    BOOST_CHECK(cache.GetCachedLastHardenedExtPubKeys() == last_hardened_xpubs_before);
+}
+
+BOOST_AUTO_TEST_CASE(descriptor_cache_last_hardened_conflict_is_atomic)
+{
+    const CExtPubKey existing{TestExtPubKey(1, 0x01)};
+    const CExtPubKey new_parent{TestExtPubKey(2, 0x02)};
+    const CExtPubKey conflicting{TestExtPubKey(3, 0x03)};
+
+    DescriptorCache cache;
+    cache.CacheLastHardenedExtPubKey(1, existing);
+
+    DescriptorCache other;
+    other.CacheParentExtPubKey(0, new_parent);
+    other.CacheLastHardenedExtPubKey(1, conflicting);
+
+    const auto parent_xpubs_before{cache.GetCachedParentExtPubKeys()};
+    const auto derived_xpubs_before{cache.GetCachedDerivedExtPubKeys()};
+    const auto last_hardened_xpubs_before{cache.GetCachedLastHardenedExtPubKeys()};
+
+    BOOST_CHECK_EXCEPTION(
+        (void)cache.MergeAndDiff(other),
+        std::runtime_error,
+        HasReason{"New cached last hardened xpub does not match already cached last hardened xpub"});
+    BOOST_CHECK(cache.GetCachedParentExtPubKeys() == parent_xpubs_before);
+    BOOST_CHECK(cache.GetCachedDerivedExtPubKeys() == derived_xpubs_before);
+    BOOST_CHECK(cache.GetCachedLastHardenedExtPubKeys() == last_hardened_xpubs_before);
+}
+
 BOOST_AUTO_TEST_CASE(descriptor_test)
 {
     // Basic single-key compressed
