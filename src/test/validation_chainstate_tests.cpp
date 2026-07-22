@@ -33,6 +33,24 @@ class CTxMemPool;
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstate_tests, ChainTestingSetup)
 
+class CoinsViewAccessTracker : public CCoinsViewBacked
+{
+public:
+    CoinsViewAccessTracker(CCoinsView& view, std::vector<COutPoint>& accesses)
+        : CCoinsViewBacked{&view}, m_accesses{accesses}
+    {
+    }
+
+    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override
+    {
+        m_accesses.push_back(outpoint);
+        return CCoinsViewBacked::GetCoin(outpoint);
+    }
+
+private:
+    std::vector<COutPoint>& m_accesses;
+};
+
 //! Test resizing coins-related Chainstate caches during runtime.
 //!
 BOOST_AUTO_TEST_CASE(validation_chainstate_resize_caches)
@@ -96,6 +114,49 @@ BOOST_FIXTURE_TEST_CASE(connect_tip_does_not_cache_inputs_on_failed_connect, Tes
     LOCK(cs_main);
     BOOST_CHECK_EQUAL(tip, chainstate.m_chain.Tip()->GetBlockHash()); // block rejected
     BOOST_CHECK(!chainstate.CoinsTip().HaveCoinInCache(outpoint));    // input not cached
+}
+
+BOOST_FIXTURE_TEST_CASE(disconnect_block_coin_access_order, TestChain100Setup)
+{
+    mineBlocks(3);
+    const CScript script_pub_key{CScript{} << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG};
+    const std::vector<COutPoint> parent_inputs{
+        COutPoint{m_coinbase_txns[0]->GetHash(), 0},
+        COutPoint{m_coinbase_txns[1]->GetHash(), 0},
+    };
+    const CMutableTransaction parent{CreateValidMempoolTransaction(
+        {m_coinbase_txns[0], m_coinbase_txns[1]}, parent_inputs, /*input_height=*/1,
+        {coinbaseKey}, {CTxOut{99 * COIN, script_pub_key}}, /*submit=*/false)};
+    const CTransactionRef parent_ref{MakeTransactionRef(parent)};
+    const std::vector<COutPoint> child_inputs{
+        COutPoint{parent_ref->GetHash(), 0},
+        COutPoint{m_coinbase_txns[2]->GetHash(), 0},
+    };
+    const CMutableTransaction child{CreateValidMempoolTransaction(
+        {parent_ref, m_coinbase_txns[2]}, child_inputs, /*input_height=*/1,
+        {coinbaseKey}, {CTxOut{148 * COIN, script_pub_key}}, /*submit=*/false)};
+    const CBlock block{CreateAndProcessBlock({parent, child}, script_pub_key)};
+
+    LOCK(cs_main);
+    Chainstate& chainstate{Assert(m_node.chainman)->ActiveChainstate()};
+    const CBlockIndex* tip{chainstate.m_chain.Tip()};
+    BOOST_REQUIRE_EQUAL(tip->GetBlockHash(), block.GetHash());
+
+    std::vector<COutPoint> accesses;
+    CoinsViewAccessTracker tracker{chainstate.CoinsTip(), accesses};
+    CCoinsViewCache view{&tracker};
+    BOOST_REQUIRE_EQUAL(chainstate.DisconnectBlock(block, tip, view), DISCONNECT_OK);
+
+    // Restoring the child's first input caches the parent output before the parent is disconnected.
+    const std::vector<COutPoint> expected{
+        COutPoint{block.vtx[2]->GetHash(), 0},
+        child_inputs[1],
+        child_inputs[0],
+        parent_inputs[1],
+        parent_inputs[0],
+        COutPoint{block.vtx[0]->GetHash(), 0},
+    };
+    BOOST_CHECK_EQUAL_COLLECTIONS(accesses.begin(), accesses.end(), expected.begin(), expected.end());
 }
 
 //! Test UpdateTip behavior for both active and background chainstates.
