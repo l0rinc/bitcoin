@@ -8,6 +8,7 @@
 
 #include <consensus/amount.h>
 #include <serialize.h>
+#include <util/check.h>
 #include <util/feefrac.h>
 #include <util/fees.h>
 
@@ -70,6 +71,7 @@ public:
     }
     CFeeRate& operator+=(const CFeeRate& a) {
         m_feerate = FeePerVSize(GetFeePerK() + a.GetFeePerK(), 1000);
+        Assert(m_feerate.size == 1000);
         return *this;
     }
     std::string ToString(FeeRateFormat fee_rate_format = FeeRateFormat::BTC_KVB) const;
