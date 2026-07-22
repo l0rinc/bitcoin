@@ -1283,7 +1283,7 @@ BITCOINKERNEL_API btck_BlockValidationState* BITCOINKERNEL_WARN_UNUSED_RESULT bt
  *
  * @param[in] chainstate_manager        Non-null.
  * @param[in] block_file_paths_data     Nullable, array of block files described by their full filesystem paths.
- * @param[in] block_file_paths_lens     Nullable, array containing the lengths of each of the paths.
+ * @param[in] block_file_paths_lens     Nullable, array containing the lengths of each path. If null, paths are NUL-terminated.
  * @param[in] block_file_paths_data_len Length of the block_file_paths_data and block_file_paths_len arrays.
  * @return                              0 if the import blocks call was completed successfully, non-zero otherwise.
  */
