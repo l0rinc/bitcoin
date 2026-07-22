@@ -8,12 +8,39 @@
 #include <test/fuzz/fuzz.h>
 #include <util/chaintype.h>
 
+#include <cassert>
 #include <limits>
 #include <string>
 
 void initialize_parse_univalue()
 {
     SelectParams(ChainType::REGTEST);
+}
+
+// Keep the parser/writer round trip independent of UniValue's implementation.
+static void AssertEquivalent(const UniValue& expected, const UniValue& actual)
+{
+    assert(expected.getType() == actual.getType());
+    if (expected.isObject()) {
+        assert(expected.getKeys() == actual.getKeys());
+        assert(expected.size() == actual.size());
+        const auto& expected_values{expected.getValues()};
+        const auto& actual_values{actual.getValues()};
+        for (size_t i{0}; i < expected_values.size(); ++i) {
+            AssertEquivalent(expected_values[i], actual_values[i]);
+        }
+        return;
+    }
+    if (expected.isArray()) {
+        assert(expected.size() == actual.size());
+        const auto& expected_values{expected.getValues()};
+        const auto& actual_values{actual.getValues()};
+        for (size_t i{0}; i < expected_values.size(); ++i) {
+            AssertEquivalent(expected_values[i], actual_values[i]);
+        }
+        return;
+    }
+    assert(expected.getValStr() == actual.getValStr());
 }
 
 FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
@@ -28,6 +55,14 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
     if (!valid) {
         return;
     }
+
+    const std::string canonical{univalue.write()};
+    UniValue reparsed;
+    assert(reparsed.read(canonical));
+    assert(reparsed.getType() == univalue.getType());
+    AssertEquivalent(univalue, reparsed);
+    assert(reparsed.write() == canonical);
+
     try {
         (void)ParseHashO(univalue, "A");
     } catch (const UniValue&) {
