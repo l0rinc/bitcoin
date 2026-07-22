@@ -232,6 +232,10 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   in about 257 seconds (peak RSS about 744 MB); the TSan workers completed in about
   20 seconds. The ASan `threadpool` workers completed 1,000 and 1,003 executions
   respectively, and its TSan workers completed in about 9 seconds.
+* The deterministic `dbwrapper` target replayed its 1,835-input QA corpus under the
+  same two-job/two-worker ASan/UBSan and TSan setup. Every job exited 0 without a
+  sanitizer report or artifact; ASan workers completed in about 163 seconds with
+  peak RSS around 711 MB, and TSan workers completed in about 22 seconds.
 * An ASan/UBSan `txorphan` run over 686 inputs was stopped after both workers reached
   the same expensive region. One worker reported a libFuzzer timeout at 39 seconds
   while `TxOrphanageImpl::EraseTx()` computed transaction weight for a large
