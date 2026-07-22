@@ -964,6 +964,14 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         }
         // Alternate calls between submitBlock and submitSolution via the
         // Mining interface.
+        {
+            std::string null_coinbase_reason{"stale reason"};
+            std::string null_coinbase_debug{"stale debug"};
+            BOOST_REQUIRE(!block_template->submitSolution(block.nVersion, block.nTime, block.nNonce,
+                                                           CTransactionRef{}, null_coinbase_reason, null_coinbase_debug));
+            BOOST_REQUIRE_EQUAL(null_coinbase_reason, "");
+            BOOST_REQUIRE_EQUAL(null_coinbase_debug, "");
+        }
         std::string reason{"stale reason"};
         std::string debug{"stale debug"};
         if (current_height % 2 == 0) {
