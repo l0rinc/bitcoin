@@ -1166,6 +1166,32 @@ comparison or source fix was warranted. Each fuzzer invocation owns its node and
 peer state, so TSan covers the exercised lifecycle operations but does not prove all
 live connection interleavings are race-free.
 
+## Post-rebase concurrent DB wrapper gate (2026-07-23)
+
+`dbwrapper_concurrent_reads` was replayed from 1,116 bounded QA inputs (maximum
+input size 738 bytes) with two independent workers in each build mode. The target
+uses a deterministic environment that defers compaction, seeds 100--5,000
+entries, schedules up to eight persistent `dbfuzz` reader workers, and overlaps
+read, existence, iterator-seek/range, erase/write, and reopen checks with the
+main thread draining deferred compaction work. Each input also verifies the
+final database state after all futures join.
+
+Normal workers completed 1,117 executions each in about six seconds, reached
+coverage 2457, and used 558 MB peak RSS. ASan/UBSan workers completed 1,133 and
+1,127 executions in 60 seconds each, reached coverage 5930 and 5939, and used
+832 and 890 MB peak RSS. TSan workers completed 1,117 executions each in 39
+seconds, reached coverage 2454, and used 558 MB peak RSS. All six workers exited
+zero without an assertion, sanitizer report, race/deadlock report, timeout, or
+artifact; no generated corpus unit was needed to reproduce a failure.
+
+The TSan result is meaningful for the target's persistent reader pool and the
+deferred-compaction overlap, but each fuzzer process owns an independent
+`DBWrapper` and its deterministic environment. It therefore does not prove
+that arbitrary live node instances, external database users, or all LevelDB
+thread schedules are race-free. No production inconsistency or clean-master
+failure was found, so no source fix or deterministic unit-test addition was
+warranted.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
