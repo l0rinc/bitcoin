@@ -813,6 +813,35 @@ called out separately below.
   multi-threaded sanitizer gate, while the overlay and stacked targets have explicit
   corpus-backed TSan evidence and their ASan limitations are recorded above.
 
+## Post-rebase fee and knapsack gates (2026-07-22)
+
+Two additional wallet targets were exercised on the rebased branch. These runs
+produced no production finding and did not change the severity of any item above.
+
+* `wallet_fees` started from all 134 QA inputs. Two independent normal workers
+  completed 3,000 executions each in about two seconds, reaching coverage 1383 and
+  adding 11 and 9 units. The resulting corpora were run under two ASan/UBSan
+  workers for 5,000 executions each (15 seconds, peak RSS 565 and 567 MB) and two
+  TSan workers for 5,000 executions each (19 seconds, peak RSS 557 MB). All six
+  jobs exited zero without an assertion, sanitizer report, race report, timeout, or
+  artifact. This exercised the existing `GetMinimumFeeRate` floor contracts across
+  fallback, discard, minimum, mempool minimum, coin-control feerate, confirmation
+  target, and conservative/economical fee-estimation combinations.
+* `coinselection_knapsack` started from 517 of 575 QA inputs below 64 KiB. Two
+  normal workers completed 3,000 executions each in 9 and 8 seconds, reaching
+  coverage 1078 and adding 2 and 10 units. Two ASan/UBSan workers then completed
+  5,000 executions each in 116 and 123 seconds, with 558 MB peak RSS. Two TSan
+  workers completed 5,000 executions each in 46 and 52 seconds, with 557 MB peak
+  RSS. Every job exited zero without an assertion, sanitizer report, race report,
+  timeout, or artifact. The mutations covered extreme fee rates, subtract-fee
+  outputs, empty and non-positive output groups, eligibility filters, selection
+  weight limits, change targets, bump-fee discounts, and post-selection input
+  merging. No coin-selection inconsistency or race was found.
+
+The sanitizer workers used separate wallet/coin-selection instances, so these runs
+are evidence for the exercised target state and race instrumentation, not proof of
+thread safety for shared live wallet objects.
+
 ## Post-rebase AddrMan and wallet gates (2026-07-22)
 
 The latest fetch still points `origin/master` at
