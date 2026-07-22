@@ -17,6 +17,7 @@
 #include <util/log.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -118,6 +119,16 @@ std::optional<SignetTxs> SignetTxs::Create(const CBlock& block, const CScript& c
     writer << block.nTime;
     tx_to_spend.vin[0].scriptSig << block_data;
     tx_spending.vin[0].prevout = COutPoint(tx_to_spend.GetHash(), 0);
+
+    assert(tx_to_spend.version == 0 && tx_to_spend.nLockTime == 0);
+    assert(tx_to_spend.vin.size() == 1 && tx_to_spend.vout.size() == 1);
+    assert(tx_to_spend.vin[0].prevout.IsNull() && tx_to_spend.vin[0].nSequence == 0);
+    assert(tx_to_spend.vout[0].nValue == 0 && tx_to_spend.vout[0].scriptPubKey == challenge);
+    assert(tx_spending.version == 0 && tx_spending.nLockTime == 0);
+    assert(tx_spending.vin.size() == 1 && tx_spending.vout.size() == 1);
+    assert(tx_spending.vin[0].prevout == COutPoint(tx_to_spend.GetHash(), 0));
+    assert(tx_spending.vin[0].nSequence == 0);
+    assert(tx_spending.vout[0].nValue == 0 && tx_spending.vout[0].scriptPubKey == CScript(OP_RETURN));
 
     return SignetTxs{tx_to_spend, tx_spending};
 }
