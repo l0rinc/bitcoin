@@ -242,6 +242,13 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   771 MB, while the TSan workers completed in about 44 seconds. The corpus included
   corrupted persistence, clear/reload transitions, and extreme signed ban-time
   offsets.
+* `connman` replayed its 3,405-input QA corpus under both sanitizers with two jobs
+  and two workers. Every job exited 0 without a sanitizer report; ASan workers
+  completed 3,440 and 3,441 executions in about 179 seconds with peak RSS around
+  1,001 MB, while TSan workers completed in about 32 seconds. The ASan run emitted
+  one 235 KB slow-unit input at 21 seconds; the non-sanitized fuzzer replayed it in
+  3,401 ms with exit code 0, so it is sanitizer/mock-socket overhead rather than a
+  production performance defect.
 * An ASan/UBSan `txorphan` run over 686 inputs was stopped after both workers reached
   the same expensive region. One worker reported a libFuzzer timeout at 39 seconds
   while `TxOrphanageImpl::EraseTx()` computed transaction weight for a large
