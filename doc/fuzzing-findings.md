@@ -415,6 +415,26 @@ baseline `32eb521002`; the branch is now rebased onto
   replayed in the normal fuzzer in 4,984, 5,954, and 6,242 ms with exit code 0.
   These are incomplete sanitizer gates and performance observations, not evidence
   of an addrman production defect.
+* The post-rebase AddrMan mutation gate replayed the same 2,191-input corpus with
+  two independent normal workers for 3,000 mutations each. They completed in 448
+  and 458 seconds, reached the same coverage plateau of 5,536, added 3 and 7 fresh
+  units, and used 163 and 165 MB peak RSS without an assertion or artifact. The
+  ten fresh units were replayed with two ASan/UBSan workers (27 and 28 executions
+  in 12 and 13 seconds, 292 and 295 MB peak RSS) and two TSan/libFuzzer workers
+  (20 executions each, 137 and 138 MB peak RSS); all four replays were clean.
+  This is independent multi-worker evidence for the `GetEntries`, `GetAddr`,
+  `Select`, collision-resolution, and service-update mutations, not a new
+  production defect or race. The current master tip remains an ancestor and its
+  later changes do not touch AddrMan.
+* `addrman_serdeser` was also started from its 1,437-input corpus with two normal
+  workers. Both reached 443 executions at about one execution per second before
+  the bounded run was stopped after roughly 5.5 minutes (77 and 79 MB peak RSS),
+  without a diagnostic or artifact. That full gate is incomplete because the
+  serializer's generated address state becomes expensive, rather than because of
+  a failure. A completed smoke gate over the 32 smallest seeds (152 bytes total)
+  ran 33 executions in each of two ASan/UBSan workers (3 seconds, 311 and 312 MB)
+  and two TSan/libFuzzer workers (under 1 second, 129 and 126 MB); all exited 0
+  without an artifact. No clean-master AddrMan production bug or race was proved.
 * `headers_sync_state` ran 1,000 inputs in each of two ASan/UBSan jobs and two TSan
   jobs over its 887-input corpus. All jobs exited 0 without a sanitizer report or
   artifact. ASan workers completed in 8 seconds with peak RSS of 460 and 462 MB;
