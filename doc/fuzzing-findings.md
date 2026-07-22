@@ -858,6 +858,29 @@ exception-narrowing coverage for malformed wallet files, but it does not establi
 that every BDB error string is classified correctly or that live wallet migration
 callers are race-free. No production parser defect was found in this campaign.
 
+## Post-rebase CoinGrinder gates (2026-07-22)
+
+The `coin_grinder` target was seeded from 668 of its 698 QA inputs below 64 KiB.
+Two independent normal workers completed 2,000 executions each in 13 and 11
+seconds, reaching coverage 1038 and adding 1 and 2 units. Two ASan/UBSan workers
+completed 3,000 executions each in 56 and 61 seconds at 559 MB peak RSS. Two TSan
+workers completed 3,000 executions each in 45 and 47 seconds at 559 MB peak RSS.
+All six jobs exited zero without an assertion, sanitizer report, race/deadlock
+report, timeout, or artifact.
+
+`coin_grinder_is_optimal` used all 265 QA inputs. Its normal workers completed
+2,000 executions each in about two seconds, reaching coverage 362; its ASan/UBSan
+workers completed 3,000 each in eight seconds at 559 MB peak RSS; and its TSan
+workers completed 3,000 each in seven and eight seconds at the same RSS. Those six
+jobs also exited zero without diagnostics or artifacts. The targets exercised
+fee-rate and long-term-fee extremes, change-cost thresholds, maximum selection
+weights, empty/small output-group sets, cross-algorithm comparisons, and exhaustive
+subset optimality. No selection inconsistency or race was found.
+
+The brute-force assertions are valuable evidence for the tested small-group model,
+but each worker owns independent selection state; they do not prove that shared
+wallet coin-selection callers are race-free.
+
 ## Post-rebase AddrMan and wallet gates (2026-07-22)
 
 The latest fetch still points `origin/master` at
