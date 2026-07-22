@@ -917,6 +917,25 @@ FeeFilterRounder bounds, ratio ordering, and fee-reason serialization. No arithm
 inconsistency, memory error, or race was found, and no production change or
 clean-master comparison was warranted.
 
+## Post-rebase MiniMiner cluster gate (2026-07-22)
+
+`mini_miner` was seeded from 1,641 of its 1,650 QA inputs below 64 KiB. Two normal
+workers completed 3,000 executions each in 78 and 76 seconds, reaching coverage
+3791 and 3790 and adding 77 and 76 units. The expanded corpora were replayed by
+two ASan/UBSan workers for 3,000 executions each in 264 and 265 seconds, reaching
+coverage 8929 and 8927 with 711 and 716 MB peak RSS. Two TSan workers completed
+3,000 executions each in 205 and 203 seconds, reaching coverage 3793 and 3792
+with 560 MB peak RSS. Every worker exited zero without an assertion, sanitizer
+report, race/deadlock report, timeout, or artifact.
+
+This gate exercised clustered parent/child transactions, `GatherClusters` query
+deduplication, manual-versus-pool MiniMiner linearization, duplicate and unknown
+outpoints, topological order, per-outpoint bump-fee monotonicity, saturated total
+bump fees, target-feerate ordering, and mock-template membership. The comments in
+the fuzzer intentionally avoid asserting aggregate monotonicity when signed fee
+prioritisation saturates; no additional production inconsistency or race was found
+and no clean-master comparison or production change was warranted.
+
 ## Post-rebase AddrMan and wallet gates (2026-07-22)
 
 The latest fetch still points `origin/master` at
