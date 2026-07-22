@@ -17,7 +17,7 @@ explicitly name
 earlier baseline; they remain valid evidence for the mutations they tested, but are
 not claims about commits added since then.
 
-## Ledger summary (2026-07-22)
+## Ledger summary (2026-07-23)
 
 The findings are classified by what failed on an unmodified master baseline. The
 branch's assertions, fuzzer-only checks, and deterministic tests are not counted as
@@ -1300,6 +1300,36 @@ the target's asynchronous fetch work but does not prove arbitrary shared live
 node cache interleavings are race-free. No production inconsistency or
 clean-master failure was found, so no source fix or deterministic unit-test
 addition was warranted.
+
+## Post-rebase IPC round-trip gate (2026-07-23)
+
+The new `ipc` fuzzer was built with Clang 19, `BUILD_FOR_FUZZING=ON`, and
+`ENABLE_IPC=ON` using the repository-pinned Cap'n Proto 1.5.0 package. It starts
+a real multiprocess-proxy event-loop thread and exercises integer addition,
+`COutPoint`, byte-vector reversal, script transport, typed and raw `UniValue`
+JSON transport, and transaction round trips. Invalid raw JSON is required to
+return the expected `Invalid UniValue JSON received over IPC` error. The
+harness catches only its local `RawIpcError` for that expected failure; event
+loop errors and all other exceptions remain fatal, so this gate does not turn
+unexpected IPC failures into passing fuzz cases.
+
+With empty initial seeds, two normal workers completed 5,000 executions each
+in about three seconds, reached coverage 2299 and 1792, added 146 and 153
+units, and used 558 MB peak RSS. Their corpora were replayed and mutated by
+two ASan/UBSan workers for 2,000 executions each; those workers reached
+coverage 6107 and 4919, added 75 and 37 units, and used 556 MB peak RSS. The
+ASan-expanded corpora were then replayed and mutated by two TSan workers for
+2,000 executions each; those workers reached coverage 2392 and 1815, added
+29 and 23 units, and used 559 MB peak RSS. All 18,000 fuzzer executions
+completed without an assertion, sanitizer report, race/deadlock report,
+timeout, or artifact.
+
+The event-loop thread is joined during teardown, and each fuzzer process owns
+an independent IPC graph and proxy pair. The normal, ASan/UBSan, and TSan
+results therefore cover the exercised request/response lifecycle and teardown
+interleavings, but do not prove arbitrary live multiprocess IPC schedules are
+race-free. No production inconsistency or clean-master failure was found, so
+no source fix or deterministic unit-test addition was warranted.
 
 ### Re-evaluation after the compact-block collision work
 
