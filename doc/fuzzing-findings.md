@@ -417,6 +417,37 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   both workers remained on a 10-second slow corpus unit. That unit replayed once in
   18.6 seconds with exit code 0 and no sanitizer report. This is a fuzzing throughput
   observation, not a confirmed production defect.
+* The coins-cache follow-up used the current master baseline
+  `32eb52100296718f7c0469e3210ce1db73694793` and two jobs with two workers per
+  sanitizer. `coins_view_overlay` completed its 12,723-input corpus after filtering
+  inputs above 64 KiB: ASan/UBSan workers completed 12,724 executions each in about
+  112 and 113 seconds at peak RSS of 379 and 380 MB; TSan workers completed 12,724
+  executions each in 47 and 48 seconds at about 150 MB. No report or artifact was
+  produced. This exercised `StartFetching`, asynchronous overlay lookups, cache
+  mutation guards, flush/restore transitions, and the backend equivalence checks.
+* `coinscache_sim`'s filtered 1,502-input corpus completed under TSan with 1,503
+  executions per worker in 188 and 189 seconds at peak RSS of 143 and 144 MB, with
+  no TSan report or artifact. Its ASan/UBSan workers reached 1,024 executions each
+  and then remained in the same expensive corpus region for more than four minutes;
+  no ASan/UBSan diagnostic or artifact was produced, so that run is incomplete. The
+  previously recorded full-corpus TSan gate remains the stronger corpus result.
+* `coins_view_db_resize_cursor` was seeded with 256 existing `coins_view_db` inputs
+  and completed 1,000 mutated executions per worker under both ASan/UBSan (19
+  seconds) and TSan (9 seconds), without a report or artifact. This directly ran the
+  concurrent cursor `GetKey`/`GetValue`/`Next` loop across `ResizeCache`, joined the
+  resize thread, and checked both pre- and post-resize snapshots for exact equality.
+* `coins_view_stacked` had no native QA corpus. A fixed empty-input smoke run repeated
+  the stacked setup 1,000 times per worker under both sanitizers, but libFuzzer
+  correctly reported that it performed no mutation. A mutation run seeded from
+  21,408 existing `coins_view` inputs completed under TSan with 21,874 executions per
+  worker in 87 seconds and no report or artifact. The corresponding ASan/UBSan run
+  reached pulse 16,384 in the expensive corpus region without a report or artifact;
+  a second run over 21,388 inputs below 64 KiB reached the same pulse and was stopped.
+  These are incomplete ASan gates, not evidence of a stacked-cache defect.
+* No production code mistake, race report, or deterministic assertion failure was
+  found in this coins-cache round. The resize/cursor target is now covered by a
+  multi-threaded sanitizer gate, while the overlay and stacked targets have explicit
+  corpus-backed TSan evidence and their ASan limitations are recorded above.
 
 The additional `package_rbf` and `clusterlin_linearize` ASan workers were stopped
 after more than five minutes on expensive corpus cases; they emitted no sanitizer
