@@ -11,6 +11,8 @@
 #include <uint256.h>
 #include <util/check.h>
 
+#include <cassert>
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
@@ -155,6 +157,8 @@ std::optional<arith_uint256> DeriveTarget(unsigned int nBits, const uint256 pow_
     if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(pow_limit))
         return {};
 
+    assert(bnTarget > 0);
+    assert(bnTarget <= UintToArith256(pow_limit));
     return bnTarget;
 }
 
