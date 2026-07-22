@@ -606,6 +606,15 @@ baseline `32eb521002`; the branch is now rebased onto
   and then remained in the same expensive corpus region for more than four minutes;
   no ASan/UBSan diagnostic or artifact was produced, so that run is incomplete. The
   previously recorded full-corpus TSan gate remains the stronger corpus result.
+* On the current rebased stack, the same filtered `coinscache_sim` corpus was run
+  under ASan/UBSan with two workers. The workers were deliberately interrupted at
+  1,401 and 1,400 executions after both repeatedly reached the same 10-second slow
+  unit (`8bdf52da47cc919025ba1b2a544f001f69780649`, SHA256
+  `b9d7bbc50d256d14256cb38cec34bd25d2501d91a6b466bda2c0b3a0033e2871`); neither
+  produced a sanitizer report or artifact. Replaying that exact input once took
+  18.6 seconds under ASan/UBSan and 819 ms under TSan, both with exit code 0 and no
+  report. This confirms model complexity and sanitizer overhead, not a cache race
+  or memory defect; it is not counted as a complete corpus gate.
 * `coins_view_db_resize_cursor` was seeded with 256 existing `coins_view_db` inputs
   and completed 1,000 mutated executions per worker under both ASan/UBSan (19
   seconds) and TSan (9 seconds), without a report or artifact. This directly ran the
