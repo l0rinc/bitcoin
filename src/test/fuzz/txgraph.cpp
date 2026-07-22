@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <memory>
 #include <ranges>
@@ -152,16 +153,6 @@ struct SimTxGraph
 
     /** Determine the number of (non-removed) transactions in the graph. */
     DepGraphIndex GetTransactionCount() const { return graph.TxCount(); }
-
-    /** Get the sum of all fees/sizes in the graph. */
-    FeePerWeight SumAll() const
-    {
-        FeePerWeight ret;
-        for (auto i : graph.Positions()) {
-            ret += graph.FeeRate(i);
-        }
-        return ret;
-    }
 
     /** Get the position where ref occurs in this simulated graph, or -1 if it does not. */
     Pos Find(const TxGraph::Ref* ref) const
@@ -550,6 +541,45 @@ FUZZ_TARGET(txgraph)
             assert(!(ByRatioNegSize{diagram[pos - 1]} < ByRatioNegSize{diagram[pos]}));
         }
     };
+    auto assert_comparable_diagrams_equal = [](std::span<const FeeFrac> lhs, std::span<const FeeFrac> rhs) noexcept {
+        // CompareChunks() requires non-overflowing cumulative sums. Full-range fee mutations are
+        // still useful for exercising TxGraph, but their saturated diagrams cannot satisfy this
+        // particular ordering oracle.
+        if (CanCompareChunks(lhs) && CanCompareChunks(rhs)) {
+            assert(CompareChunks(lhs, rhs) == 0);
+        }
+    };
+    auto checked_sum_fn = [](std::span<const FeeFrac> chunks) noexcept -> std::optional<FeePerWeight> {
+        CheckedFeePerWeightSum sum;
+        for (const auto& chunk : chunks) sum.Add(FeePerWeight::FromFeeFrac(chunk));
+        if (sum.fee_overflow || sum.size_overflow) return std::nullopt;
+        return sum.sum;
+    };
+    auto checked_sim_sum_fn = [](const SimTxGraph& sim) noexcept -> std::optional<FeePerWeight> {
+        CheckedFeePerWeightSum sum;
+        for (auto i : sim.graph.Positions()) sum.Add(FeePerWeight::FromFeeFrac(sim.graph.FeeRate(i)));
+        if (sum.fee_overflow || sum.size_overflow) return std::nullopt;
+        return sum.sum;
+    };
+    auto checked_difference_fn = [](const FeePerWeight& lhs, const FeePerWeight& rhs) noexcept -> std::optional<FeePerWeight> {
+        if ((rhs.fee > 0 && lhs.fee < std::numeric_limits<int64_t>::min() + rhs.fee) ||
+            (rhs.fee < 0 && lhs.fee > std::numeric_limits<int64_t>::max() + rhs.fee) ||
+            (rhs.size > 0 && lhs.size < std::numeric_limits<int32_t>::min() + rhs.size) ||
+            (rhs.size < 0 && lhs.size > std::numeric_limits<int32_t>::max() + rhs.size)) {
+            return std::nullopt;
+        }
+        return FeePerWeight{lhs.fee - rhs.fee, lhs.size - rhs.size};
+    };
+    auto assert_staging_gain = [&](std::span<const FeeFrac> main_diagram, std::span<const FeeFrac> staged_diagram) noexcept {
+        const auto real_sum_main{checked_sum_fn(main_diagram)};
+        const auto real_sum_staged{checked_sum_fn(staged_diagram)};
+        const auto sim_sum_main{checked_sim_sum_fn(sims[0])};
+        const auto sim_sum_staged{checked_sim_sum_fn(sims[1])};
+        if (!real_sum_main || !real_sum_staged || !sim_sum_main || !sim_sum_staged) return;
+        const auto real_gain{checked_difference_fn(*real_sum_staged, *real_sum_main)};
+        const auto sim_gain{checked_difference_fn(*sim_sum_staged, *sim_sum_main)};
+        if (real_gain && sim_gain) assert(*real_gain == *sim_gain);
+    };
     auto assert_unique_refs = [](std::span<TxGraph::Ref* const> refs) noexcept {
         std::set<TxGraph::Ref*> unique_refs;
         for (TxGraph::Ref* ref : refs) {
@@ -591,7 +621,8 @@ FUZZ_TARGET(txgraph)
                 int32_t size;
                 if (alt) {
                     // If alt is true, pick fee and size from the entire range.
-                    fee = provider.ConsumeIntegralInRange<int64_t>(-0x8000000000000, 0x7ffffffffffff);
+                    fee = provider.ConsumeIntegralInRange<int64_t>(
+                        std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max());
                     size = provider.ConsumeIntegralInRange<int32_t>(1, 0x3fffff);
                 } else {
                     // Otherwise, use smaller range which consume fewer fuzz input bytes, as just
@@ -686,7 +717,8 @@ FUZZ_TARGET(txgraph)
                 // SetTransactionFee.
                 int64_t fee;
                 if (alt) {
-                    fee = provider.ConsumeIntegralInRange<int64_t>(-0x8000000000000, 0x7ffffffffffff);
+                    fee = provider.ConsumeIntegralInRange<int64_t>(
+                        std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max());
                 } else {
                     fee = provider.ConsumeIntegral<uint8_t>();
                 }
@@ -713,9 +745,7 @@ FUZZ_TARGET(txgraph)
                 }
                 if (sims.size() == 2 && !sims[0].IsOversized() && !sims[1].IsOversized()) {
                     const auto [real_main_diagram, real_staged_diagram] = real->GetMainStagingDiagrams();
-                    const auto real_sum_main = std::accumulate(real_main_diagram.begin(), real_main_diagram.end(), FeeFrac{});
-                    const auto real_sum_staged = std::accumulate(real_staged_diagram.begin(), real_staged_diagram.end(), FeeFrac{});
-                    assert(real_sum_staged - real_sum_main == sims[1].SumAll() - sims[0].SumAll());
+                    assert_staging_gain(real_main_diagram, real_staged_diagram);
                     assert_diagram_sorted(real_main_diagram);
                     assert_diagram_sorted(real_staged_diagram);
                 }
@@ -1007,14 +1037,10 @@ FUZZ_TARGET(txgraph)
             } else if (sims.size() == 2 && !sims[0].IsOversized() && !sims[1].IsOversized() && command-- == 0) {
                 // GetMainStagingDiagrams()
                 auto [real_main_diagram, real_staged_diagram] = real->GetMainStagingDiagrams();
-                auto real_sum_main = std::accumulate(real_main_diagram.begin(), real_main_diagram.end(), FeeFrac{});
-                auto real_sum_staged = std::accumulate(real_staged_diagram.begin(), real_staged_diagram.end(), FeeFrac{});
-                auto real_gain = real_sum_staged - real_sum_main;
-                auto sim_gain = sims[1].SumAll() - sims[0].SumAll();
                 // Just check that the total fee gained/lost and size gained/lost according to the
                 // diagram matches the difference in these values in the simulated graph. A more
                 // complete check of the GetMainStagingDiagrams result is performed at the end.
-                assert(sim_gain == real_gain);
+                assert_staging_gain(real_main_diagram, real_staged_diagram);
                 // Check that each diagram follows the production ordering contract.
                 assert_diagram_sorted(real_main_diagram);
                 assert_diagram_sorted(real_staged_diagram);
@@ -1098,7 +1124,7 @@ FUZZ_TARGET(txgraph)
                     return real->CompareMainOrder(*main_sim.GetRef(a), *main_sim.GetRef(b)) < 0;
                 };
                 std::ranges::sort(main_order, cmp);
-                auto chunking = ChunkLinearizationInfo(main_sim.graph, main_order);
+                auto chunking = chunk_linearization_info_fn(main_sim, main_order);
                 if (main_sim.GetTransactionCount() == 0) {
                     assert(worst_chunk.empty());
                     assert(worst_chunk_feerate.IsEmpty());
@@ -1106,7 +1132,12 @@ FUZZ_TARGET(txgraph)
                 } else {
                     assert(!worst_chunk.empty());
                     const auto& expected_worst_chunk = chunking.back();
-                    assert(FeePerWeight::FromFeeFrac(expected_worst_chunk.feerate) == worst_chunk_feerate);
+                    CheckedFeePerWeightSum expected_sum;
+                    for (auto simpos : expected_worst_chunk.transactions) {
+                        expected_sum.Add(FeePerWeight::FromFeeFrac(main_sim.graph.FeeRate(simpos)));
+                    }
+                    expected_sum.AssertMatches(FeePerWeight::FromFeeFrac(expected_worst_chunk.feerate));
+                    expected_sum.AssertMatches(worst_chunk_feerate);
                     SimTxGraph::SetType done;
                     CheckedFeePerWeightSum sum;
                     for (TxGraph::Ref* ref : worst_chunk) {
@@ -1340,8 +1371,7 @@ FUZZ_TARGET(txgraph)
             auto [sim_lin, sim_optimal, _cost] = Linearize(sims[0].graph, 300000, rng.rand64(), fallback_order_sim, vec1);
             PostLinearize(sims[0].graph, sim_lin);
             auto sim_diagram = ChunkLinearization(sims[0].graph, sim_lin);
-            auto cmp = CompareChunks(real_diagram, sim_diagram);
-            assert(cmp == 0);
+            assert_comparable_diagrams_equal(real_diagram, sim_diagram);
 
             // Verify consistency of cross-cluster chunk ordering with tie-break (equal-feerate
             // prefix size).
@@ -1497,7 +1527,7 @@ FUZZ_TARGET(txgraph)
         // diagram constructed from the individual cluster linearization chunkings.
         auto main_real_diagram = get_diagram_fn(TxGraph::Level::MAIN);
         auto main_implied_diagram = ChunkLinearization(sims[0].graph, vec1);
-        assert(CompareChunks(main_real_diagram, main_implied_diagram) == 0);
+        assert_comparable_diagrams_equal(main_real_diagram, main_implied_diagram);
 
         if (sims.size() >= 2 && !sims[1].IsOversized()) {
             // When the staging graph is not oversized as well, call GetMainStagingDiagrams, and
