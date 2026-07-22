@@ -519,8 +519,10 @@ class IPCMiningTest(BitcoinTestFramework):
                 self.disconnect_nodes(1, 2)
 
                 self.log.debug("submitSolution should reject an empty coinbase")
-                submitted = (await template.submitSolution(ctx, 0, 0, 0, b"")).result
-                assert_equal(submitted, False)
+                result = await template.submitSolution(ctx, 0, 0, 0, b"")
+                assert_equal(result.result, False)
+                assert_equal(result.reason, "")
+                assert_equal(result.debug, "")
 
                 self.log.debug("Submit solution that can't be deserialized")
                 try:
