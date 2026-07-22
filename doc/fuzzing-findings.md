@@ -1090,6 +1090,29 @@ arbitrary live node instances are race-free. No clean-master comparison was
 warranted because no production assertion, sanitizer failure, or behavioral
 inconsistency was found.
 
+## Post-rebase transaction-request gate (2026-07-22)
+
+`txrequest` was replayed from 762 bounded QA inputs with two independent normal
+workers. The target compares `TxRequestTracker` with a reference state machine while
+mutating txid and wtxid announcements, preferred-peer ordering, request expiry,
+duplicate announcements, responses, forgotten hashes, peer disconnects, and
+single-peer and all-peer request queries.
+
+The normal workers completed 3,000 executions each in 42 and 40 seconds, reached
+coverage 1389 and 1388, and added 66 and 71 units at 559 MB peak RSS. Their expanded
+corpora were replayed by ASan/UBSan workers for 1,000 executions each in 62 and 59
+seconds, reaching coverage 2879 in both workers at 616 and 624 MB peak RSS and
+adding 7 and 10 units. TSan workers completed 1,000 executions each in 49 and 50
+seconds, reaching coverage 1389 and 1388 at 558 MB peak RSS and adding 2 and 5
+units. All six jobs exited zero without an assertion, sanitizer report, race or
+deadlock report, timeout, or artifact.
+
+This closes the earlier full-seed ASan gap for the bounded corpus. The fuzzer's
+reference model and the sanitizer workers operate sequentially inside each process,
+so the result checks request-state consistency and sanitizer-visible lifecycle
+behavior but is not proof that every live peer interleaving is race-free. No
+production defect or clean-master failure was found, so no source fix was warranted.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
