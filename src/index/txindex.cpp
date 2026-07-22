@@ -9,6 +9,7 @@
 #include <flatfile.h>
 #include <index/base.h>
 #include <index/disktxpos.h>
+#include <index/txindex_key.h>
 #include <interfaces/chain.h>
 #include <node/blockstorage.h>
 #include <primitives/block.h>
@@ -26,8 +27,6 @@
 #include <exception>
 #include <string>
 #include <utility>
-
-constexpr uint8_t DB_TXINDEX{'t'};
 
 std::unique_ptr<TxIndex> g_txindex;
 
@@ -54,7 +53,7 @@ TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe) :
 
 bool TxIndex::DB::ReadTxPos(const Txid& txid, CDiskTxPos& pos) const
 {
-    return Read(std::make_pair(DB_TXINDEX, txid.ToUint256()), pos);
+    return Read(txindex::LegacyTxKey(txid), pos);
 }
 
 void TxIndex::DB::WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator)
@@ -64,10 +63,18 @@ void TxIndex::DB::WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator)
 
 void TxIndex::DB::WriteTxs(const interfaces::BlockInfo& block)
 {
+    if (Exists(txindex::BlockHashKey{block.hash})) return; // Keep its sequence when a block reconnects
+
+    uint32_t block_seq{0};
+    Read(txindex::DB_NEXT_BLOCK_SEQ, block_seq);
+
     CDiskTxPos pos({block.file_number, block.data_pos}, GetSizeOfCompactSize(block.data->vtx.size()));
     CDBBatch batch(*this);
+    batch.Write(txindex::BlockHashKey{block.hash}, block_seq);
+    batch.Write(txindex::BlockSeqKey{block_seq}, block.hash);
+    batch.Write(txindex::DB_NEXT_BLOCK_SEQ, block_seq + 1);
     for (const auto& tx : block.data->vtx) {
-        batch.Write(std::make_pair(DB_TXINDEX, tx->GetHash().ToUint256()), pos);
+        batch.Write(txindex::LegacyTxKey(tx->GetHash()), pos);
         if (&tx != &block.data->vtx.back()) pos.nTxOffset += tx->ComputeTotalSize();
     }
     WriteBatch(batch);
