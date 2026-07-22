@@ -4,8 +4,10 @@
 
 #include <chainparams.h>
 #include <key.h>
+#include <musig.h>
 #include <psbt.h>
 #include <pubkey.h>
+#include <script/interpreter.h>
 #include <script/keyorigin.h>
 #include <script/sign.h>
 #include <script/signingprovider.h>
@@ -17,6 +19,7 @@
 #include <util/chaintype.h>
 #include <util/translation.h>
 
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <iostream>
@@ -141,5 +144,86 @@ FUZZ_TARGET(script_sign, .init = initialize_script_sign)
         (void)ProduceSignature(provider, DUMMY_SIGNATURE_CREATOR, ConsumeScript(fuzzed_data_provider), signature_data_1);
         SignatureData signature_data_2;
         (void)ProduceSignature(provider, DUMMY_MAXIMUM_SIGNATURE_CREATOR, ConsumeScript(fuzzed_data_provider), signature_data_2);
+    }
+
+    // Exercise the cryptographic-secret lifecycle that random SignatureData
+    // rarely reaches: create, consume, and remove both MuSig2 secret nonces.
+    {
+        std::array<unsigned char, 32> fallback_secret{};
+        fallback_secret.back() = 1;
+        CKey participant_one = k;
+        if (!participant_one.IsValid()) {
+            participant_one.Set(fallback_secret.begin(), fallback_secret.end(), /*fCompressedIn=*/true);
+        }
+        fallback_secret.back() = 2;
+        CKey participant_two;
+        participant_two.Set(fallback_secret.begin(), fallback_secret.end(), /*fCompressedIn=*/true);
+        if (participant_one.GetPubKey() == participant_two.GetPubKey()) {
+            fallback_secret.back() = 3;
+            participant_two.Set(fallback_secret.begin(), fallback_secret.end(), /*fCompressedIn=*/true);
+        }
+
+        const std::vector<CPubKey> participants{participant_one.GetPubKey(), participant_two.GetPubKey()};
+        const std::optional<CPubKey> aggregate_pubkey{MuSig2AggregatePubkeys(participants)};
+        assert(aggregate_pubkey.has_value());
+
+        CMutableTransaction musig_transaction;
+        musig_transaction.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+        musig_transaction.vout.emplace_back(1, CScript{});
+        const CTransaction musig_tx_const{musig_transaction};
+        std::vector<CTxOut> spent_outputs;
+        spent_outputs.emplace_back(1, CScript{});
+        PrecomputedTransactionData musig_txdata;
+        musig_txdata.Init(musig_tx_const, std::move(spent_outputs), true);
+        MutableTransactionSignatureCreator musig_creator{musig_transaction, 0, 1, &musig_txdata, {.sighash_type = SIGHASH_DEFAULT}};
+
+        FlatSigningProvider musig_provider;
+        musig_provider.keys.emplace(participants[0].GetID(), participant_one);
+        musig_provider.keys.emplace(participants[1].GetID(), participant_two);
+        musig_provider.aggregate_pubkeys.emplace(*aggregate_pubkey, participants);
+        std::map<uint256, MuSig2SecNonce> secnonces;
+        musig_provider.musig2_secnonces = &secnonces;
+
+        SignatureData musig_data;
+        musig_data.musig2_pubkeys.emplace(*aggregate_pubkey, participants);
+        const auto pubnonce_one{musig_creator.CreateMuSig2Nonce(musig_provider, *aggregate_pubkey, *aggregate_pubkey, participants[0], nullptr, nullptr, SigVersion::TAPROOT, musig_data)};
+        const auto pubnonce_two{musig_creator.CreateMuSig2Nonce(musig_provider, *aggregate_pubkey, *aggregate_pubkey, participants[1], nullptr, nullptr, SigVersion::TAPROOT, musig_data)};
+        assert(pubnonce_one.size() == MUSIG2_PUBNONCE_SIZE);
+        assert(pubnonce_two.size() == MUSIG2_PUBNONCE_SIZE);
+        assert(secnonces.size() == participants.size());
+
+        const auto leaf_aggregate_key{std::make_pair(*aggregate_pubkey, uint256{})};
+        auto& pubnonces{musig_data.musig2_pubnonces[leaf_aggregate_key]};
+        pubnonces.emplace(participants[0], pubnonce_one);
+        pubnonces.emplace(participants[1], pubnonce_two);
+
+        const std::vector<std::pair<uint256, bool>> no_tweaks;
+        uint256 partial_sig_one;
+        assert(musig_creator.CreateMuSig2PartialSig(musig_provider, partial_sig_one, *aggregate_pubkey, *aggregate_pubkey, participants[0], nullptr, no_tweaks, SigVersion::TAPROOT, musig_data));
+        assert(!partial_sig_one.IsNull());
+        assert(secnonces.size() == 1);
+        uint256 partial_sig_two;
+        assert(musig_creator.CreateMuSig2PartialSig(musig_provider, partial_sig_two, *aggregate_pubkey, *aggregate_pubkey, participants[1], nullptr, no_tweaks, SigVersion::TAPROOT, musig_data));
+        assert(!partial_sig_two.IsNull());
+        assert(secnonces.empty());
+
+        auto& partial_sigs{musig_data.musig2_partial_sigs[leaf_aggregate_key]};
+        partial_sigs.emplace(participants[0], partial_sig_one);
+        partial_sigs.emplace(participants[1], partial_sig_two);
+        std::vector<uint8_t> aggregate_sig;
+        assert(musig_creator.CreateMuSig2AggregateSig(participants, aggregate_sig, *aggregate_pubkey, *aggregate_pubkey, nullptr, no_tweaks, SigVersion::TAPROOT, musig_data));
+        assert(aggregate_sig.size() == 64);
+
+        ScriptExecutionData execdata;
+        execdata.m_annex_init = true;
+        execdata.m_annex_present = false;
+        uint256 sighash;
+        assert(SignatureHashSchnorr(sighash, execdata, musig_tx_const, 0, SIGHASH_DEFAULT, SigVersion::TAPROOT, musig_txdata, MissingDataBehavior::ASSERT_FAIL));
+        assert(XOnlyPubKey(*aggregate_pubkey).VerifySchnorr(sighash, aggregate_sig));
+
+        uint256 retry_partial_sig{uint256::ONE};
+        assert(!musig_creator.CreateMuSig2PartialSig(musig_provider, retry_partial_sig, *aggregate_pubkey, *aggregate_pubkey, participants[0], nullptr, no_tweaks, SigVersion::TAPROOT, musig_data));
+        assert(retry_partial_sig == uint256::ONE);
+        assert(secnonces.empty());
     }
 }
