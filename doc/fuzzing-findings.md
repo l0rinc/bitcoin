@@ -842,6 +842,22 @@ The sanitizer workers used separate wallet/coin-selection instances, so these ru
 are evidence for the exercised target state and race instrumentation, not proof of
 thread safety for shared live wallet objects.
 
+## Post-rebase BDB parser gate (2026-07-22)
+
+`wallet_bdb_parser` was replayed from its 125-input QA corpus with two independent
+normal workers. Each completed 5,000 executions, reached coverage 320, and added
+two reduced units without rethrowing an exception outside the fuzzer's explicit
+Berkeley DB parse-error allowlist. The expanded corpora were replayed with two
+ASan/UBSan workers and two TSan/libFuzzer workers, 5,000 executions per worker.
+All four sanitizer jobs exited zero in about two seconds at 558 MB peak RSS; none
+produced a sanitizer report, race/deadlock report, timeout, or artifact.
+
+This target writes each input to a wallet file, opens it through the read-only BDB
+adapter, and dumps successfully parsed databases. The result strengthens the
+exception-narrowing coverage for malformed wallet files, but it does not establish
+that every BDB error string is classified correctly or that live wallet migration
+callers are race-free. No production parser defect was found in this campaign.
+
 ## Post-rebase AddrMan and wallet gates (2026-07-22)
 
 The latest fetch still points `origin/master` at
