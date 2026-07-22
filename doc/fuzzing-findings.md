@@ -17,6 +17,24 @@ explicitly name
 earlier baseline; they remain valid evidence for the mutations they tested, but are
 not claims about commits added since then.
 
+## Current conclusions
+
+* The confirmed runtime defects below are local or authenticated workflow bugs. No
+  clean-master run in this ledger demonstrated a consensus failure, wallet-key loss,
+  unauthenticated remote memory-safety issue, or remotely exploitable race.
+* The compact-block short-ID null, underflow, and direct-construction cases are
+  explicitly separated by baseline: the underflow is fixed by current master
+  `6aa5d8d948`, the normal P2P null-tail construction is avoided by current master
+  `6f1c56f03a`, and the remaining branch fixes are direct-API contracts or test
+  coverage. No additional compact-block collision defect was found after the rebase.
+* The descriptor-cache partial-merge defect below is a real clean-master production
+  defect. Its fuzzer construction was temporarily copied into an exact-master
+  control, while `src/script/descriptor.cpp` remained unchanged; the fixed branch
+  and deterministic unit test both pass the same input.
+* Sanitizer workers in this ledger are independent processes unless explicitly stated
+  otherwise. TSan results are evidence for the exercised interleavings and setup,
+  not a proof that all wallet or node state is generally thread-safe.
+
 ## Confirmed production defects
 
 ### 1. Index publication race and restart state
@@ -120,6 +138,36 @@ failure paths. No current caller was shown to treat stale bytes as a successful
 decode, but the boundary was ambiguous. Both wrappers now clear output on failure,
 have production postconditions, deterministic tests, and corpus-backed normal and
 ASan/UBSan fuzz coverage.
+
+### 8. Descriptor-cache merge leaves partial state after a conflict
+
+* Current branch fix: `a2aac3fc97` (`descriptor: keep cache conflict merges atomic`).
+* Severity on exact clean master `b8844d3df759bfa070681327583427461d39105c`: medium
+  local wallet consistency/availability issue. The trigger requires a conflicting
+  descriptor cache, so no network or unauthenticated RPC attack was demonstrated;
+  wallet-key loss and persisted database corruption were not demonstrated.
+
+`DescriptorCache::MergeAndDiff()` on clean master merged the incoming parent-xpub
+map before checking the incoming derived-xpub map. If the destination already held a
+derived xpub at `(key expansion position, derivation index)` and the incoming cache
+contained a new parent followed by a different derived xpub at that existing key,
+the method inserted the parent and then threw the derived-conflict exception. The
+wallet caller writes the returned diff only after `MergeAndDiff()` succeeds, so the
+exception can leave the in-memory descriptor cache ahead of the database. A retry or
+later wallet operation can then observe a cache/database mismatch until restart.
+
+The branch fuzzer mutation and `descriptor_cache_merge_conflict_is_atomic` unit test
+capture all three cache maps before the call and require the expected
+`std::runtime_error` plus exact map equality afterward. For a clean-master proof, an
+isolated worktree at the exact baseline kept the production implementation unchanged
+and received only the branch fuzzer oracle as a temporary test fixture. Its
+deterministic 88-byte input (SHA256
+`92dd2f1c6e3c00eb0bb93f156802a1da4155db57476bf4459e4cc1fede715f65`) failed after
+one execution with the parent-map assertion. The same input exited zero under the
+branch ASan/UBSan fuzzer, and the rebuilt Debug unit test passed. The production
+preflight now validates all conflict maps before mutating the destination. The
+commit message records the intentional preflight-removal mutation used to prove the
+unit test catches the old behavior.
 
 ## Compact-block short-ID investigation
 
@@ -334,9 +382,10 @@ Before the latest rebase, the compact-block unit suite passed 27 cases in the
 Assume-aborting Debug build. Current-master compact and coins corpus controls were
 run with multiple workers and existing QA corpora under Clang ASan/UBSan without
 reports. Most of the following detailed gates were run on the preceding clean
-baseline `32eb521002`; the branch is now rebased onto
-`bc49bd154a`. The later `validation_block_reorg` gate ran on the intermediate
-`559d042ba2` baseline and is called out separately below.
+baseline `32eb521002`; later controls explicitly name the intermediate
+`bc49bd154a` baseline or the current `b8844d3df7` baseline. The later
+`validation_block_reorg` gate ran on the intermediate `559d042ba2` baseline and is
+called out separately below.
 
 * `blockencodings_tests` passed all 27 cases; the selected hash, Base58, cache,
   mempool, RBF, HTTP, network, and index suites passed 81 cases.
@@ -668,6 +717,25 @@ baseline `32eb521002`; the branch is now rebased onto
   without a sanitizer report or artifact, then were stopped. The size filter changed
   throughput but did not complete the corpus gate; no wallet-manager defect was
   proven.
+* A completed current-branch wallet campaign then used the same 9,817 filtered
+  `scriptpubkeyman` inputs. Two independent normal workers ran 13,000 executions
+  each; two ASan/UBSan workers and two TSan/libFuzzer workers ran 1,024 each. All
+  six jobs exited 0 without an assertion, sanitizer report, race report, timeout,
+  or target artifact. The coverage plateau and resident memory remained bounded;
+  this is evidence for the exercised descriptor-manager action sequences, not a
+  general wallet thread-safety proof.
+* `spkm_migration` used all 778 existing inputs. Two normal workers ran 10,000
+  executions each, followed by two ASan/UBSan and two TSan/libFuzzer workers at
+  1,024 executions each. Every job exited 0 without a diagnostic or artifact. The
+  migration fuzzer's legacy/descriptor key-chain, watch-only, multisig, and script
+  invariants therefore have current sanitizer coverage; no additional migration
+  defect was found.
+* `script_descriptor_cache` used 440 existing inputs below 64 KiB. Two normal
+  workers ran 20,000 executions each, then two ASan/UBSan and two TSan/libFuzzer
+  workers ran 1,024 each. All jobs exited 0 without an exception outside the
+  fuzzer's expected `std::runtime_error`, sanitizer report, race report, or
+  artifact. This current-branch gate is separate from the exact-master control
+  that reproduced the partial-merge defect above.
 * `coinscache_sim` reached 1,416 inputs before the optional run was stopped because
   both workers remained on a 10-second slow corpus unit. That unit replayed once in
   18.6 seconds with exit code 0 and no sanitizer report. This is a fuzzing throughput
