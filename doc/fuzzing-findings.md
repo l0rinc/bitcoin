@@ -324,6 +324,14 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   private-broadcast handshake/relay combinations, duplicate and pending
   transactions, GETDATA/PONG confirmation, mixed peer types, and malformed inbound
   messages. It is discovery evidence, not a corpus-backed regression gate.
+* `http_request` completed its 11,681-input corpus with two jobs and two workers
+  under ASan/UBSan and TSan. ASan/UBSan completed 11,684 executions per worker in
+  53 and 54 seconds, with peak RSS of 710 and 712 MB; TSan completed 11,684 per
+  worker in 16 seconds, with peak RSS of 135 and 136 MB. Every job exited 0 without
+  a sanitizer report or artifact. This covered the libevent-replacement
+  `HTTPRequest`, `HTTPHeaders`, `HTTPRemoteClient` parser, response, receive-buffer,
+  send-buffer, connection-state, query, and body-size contracts. It does not by
+  itself cover a live `HTTPServer` accept-loop and shutdown integration.
 * The package-acceptance targets were also exercised from filtered corpora. The
   `tx_package_eval` subset contained 2,440 of 2,871 inputs below 64 KiB; ASan/UBSan
   reached 729 and 731 executions, and TSan reached 1,976 and 1,977 executions,
