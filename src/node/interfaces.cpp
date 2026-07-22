@@ -921,7 +921,13 @@ public:
 
     bool submitSolution(uint32_t version, uint32_t timestamp, uint32_t nonce, CTransactionRef coinbase, std::string& reason, std::string& debug) override
     {
-        if (!coinbase) return false;
+        if (!coinbase) {
+            reason.clear();
+            debug.clear();
+            Assert(reason.empty());
+            Assert(debug.empty());
+            return false;
+        }
         AddMerkleRootAndCoinbase(m_block_template->block, std::move(coinbase), version, timestamp, nonce);
         return SubmitBlock(chainman(), std::make_shared<const CBlock>(m_block_template->block), reason, debug);
     }
