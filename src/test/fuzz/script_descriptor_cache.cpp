@@ -38,6 +38,24 @@ void AssertLastHardenedCacheEntry(const DescriptorCache& cache, uint32_t key_exp
     assert(actual == expected);
 }
 
+void AssertAtomicMergeConflict(DescriptorCache& cache, const DescriptorCache& other, const std::string& expected_reason)
+{
+    const auto parent_xpubs_before{cache.GetCachedParentExtPubKeys()};
+    const auto derived_xpubs_before{cache.GetCachedDerivedExtPubKeys()};
+    const auto last_hardened_xpubs_before{cache.GetCachedLastHardenedExtPubKeys()};
+
+    bool threw_expected{false};
+    try {
+        (void)cache.MergeAndDiff(other);
+    } catch (const std::runtime_error& e) {
+        threw_expected = std::string{e.what()}.find(expected_reason) != std::string::npos;
+    }
+    assert(threw_expected);
+    assert(cache.GetCachedParentExtPubKeys() == parent_xpubs_before);
+    assert(cache.GetCachedDerivedExtPubKeys() == derived_xpubs_before);
+    assert(cache.GetCachedLastHardenedExtPubKeys() == last_hardened_xpubs_before);
+}
+
 } // namespace
 
 FUZZ_TARGET(script_descriptor_cache)
@@ -117,20 +135,50 @@ FUZZ_TARGET(script_descriptor_cache)
                     other_cache.CacheParentExtPubKey(key_exp_pos, xpub);
                     other_cache.CacheDerivedExtPubKey(key_exp_pos, der_index, conflicting_xpub);
 
-                    const auto parent_xpubs_before{conflict_cache.GetCachedParentExtPubKeys()};
-                    const auto derived_xpubs_before{conflict_cache.GetCachedDerivedExtPubKeys()};
-                    const auto last_hardened_xpubs_before{conflict_cache.GetCachedLastHardenedExtPubKeys()};
+                    AssertAtomicMergeConflict(conflict_cache, other_cache, "New cached derived xpub");
+                },
+                [&] {
+                    constexpr uint32_t conflict_pos{1};
+                    DescriptorCache conflict_cache;
+                    conflict_cache.CacheParentExtPubKey(conflict_pos, xpub);
 
-                    bool threw_expected{false};
-                    try {
-                        (void)conflict_cache.MergeAndDiff(other_cache);
-                    } catch (const std::runtime_error& e) {
-                        threw_expected = std::string{e.what()}.find("New cached derived xpub") != std::string::npos;
-                    }
-                    assert(threw_expected);
-                    assert(conflict_cache.GetCachedParentExtPubKeys() == parent_xpubs_before);
-                    assert(conflict_cache.GetCachedDerivedExtPubKeys() == derived_xpubs_before);
-                    assert(conflict_cache.GetCachedLastHardenedExtPubKeys() == last_hardened_xpubs_before);
+                    CExtPubKey conflicting_xpub{xpub};
+                    conflicting_xpub.nChild ^= 1;
+
+                    DescriptorCache other_cache;
+                    other_cache.CacheParentExtPubKey(0, xpub);
+                    other_cache.CacheParentExtPubKey(conflict_pos, conflicting_xpub);
+
+                    AssertAtomicMergeConflict(conflict_cache, other_cache, "New cached parent xpub");
+                },
+                [&] {
+                    constexpr uint32_t conflict_pos{1};
+                    constexpr uint32_t conflict_index{1};
+                    DescriptorCache conflict_cache;
+                    conflict_cache.CacheDerivedExtPubKey(conflict_pos, conflict_index, xpub);
+
+                    CExtPubKey conflicting_xpub{xpub};
+                    conflicting_xpub.nChild ^= 1;
+
+                    DescriptorCache other_cache;
+                    other_cache.CacheDerivedExtPubKey(conflict_pos, 0, xpub);
+                    other_cache.CacheDerivedExtPubKey(conflict_pos, conflict_index, conflicting_xpub);
+
+                    AssertAtomicMergeConflict(conflict_cache, other_cache, "New cached derived xpub");
+                },
+                [&] {
+                    constexpr uint32_t conflict_pos{1};
+                    DescriptorCache conflict_cache;
+                    conflict_cache.CacheLastHardenedExtPubKey(conflict_pos, xpub);
+
+                    CExtPubKey conflicting_xpub{xpub};
+                    conflicting_xpub.nChild ^= 1;
+
+                    DescriptorCache other_cache;
+                    other_cache.CacheParentExtPubKey(0, xpub);
+                    other_cache.CacheLastHardenedExtPubKey(conflict_pos, conflicting_xpub);
+
+                    AssertAtomicMergeConflict(conflict_cache, other_cache, "New cached last hardened xpub");
                 });
         }
         (void)descriptor_cache.GetCachedParentExtPubKeys();
