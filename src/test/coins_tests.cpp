@@ -403,7 +403,7 @@ BOOST_AUTO_TEST_CASE(ccoins_cursor_dirty_count_contracts)
     CoinsCachePair sentinel{};
     sentinel.second.SelfRef(sentinel);
     CCoinsMapMemoryResource resource;
-    CCoinsMap map{0, SaltedOutpointHasher{/*deterministic=*/true}, CCoinsMap::key_equal{}, &resource};
+    CCoinsMap map{0, SaltedCoinsCacheHasher{/*deterministic=*/true}, CCoinsMap::key_equal{}, &resource};
     size_t dirty_count{0};
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
@@ -443,7 +443,7 @@ BOOST_AUTO_TEST_CASE(ccoins_cursor_non_erasing_postconditions)
     CoinsCachePair sentinel{};
     sentinel.second.SelfRef(sentinel);
     CCoinsMapMemoryResource resource;
-    CCoinsMap map{0, SaltedOutpointHasher{/*deterministic=*/true}, CCoinsMap::key_equal{}, &resource};
+    CCoinsMap map{0, SaltedCoinsCacheHasher{/*deterministic=*/true}, CCoinsMap::key_equal{}, &resource};
     size_t dirty_count{0};
 
     auto make_outpoint = [&](uint32_t n) {
