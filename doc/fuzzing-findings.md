@@ -511,6 +511,15 @@ baseline `32eb521002`; the branch is now rebased onto
   contain only the runtime's signal-unsafe warning from libFuzzer's interrupt
   handler after the deliberate stop, so these are incomplete gates rather than
   production findings.
+* A current `tx_package_eval` ASan/UBSan campaign from two fresh copies of the
+  2,440-input filtered corpus reached 2,001 and 2,000 executions before deliberate
+  interruption at the same 12-second slow unit
+  (`e383bdbfe9aaf3d4104e7441e29eeb05596de952`, SHA256
+  `b05e7e360c48be5c11dc76f870763957c17810c6c7da9e89ff597c7ee9f62b8d`). Neither
+  worker produced a sanitizer or crash artifact. Replaying that exact input once
+  took 10.675 seconds under ASan/UBSan and 857 ms under TSan, both with exit code
+  0 and no report. This is sanitizer/model complexity, not a package-evaluation
+  defect; the corpus gate remains incomplete.
 * A follow-up `ephemeral_package_eval` replay used the 2,057 corpus inputs below
   16 KiB to reduce input-size confounding. With two workers per sanitizer, the
   ASan/UBSan workers reached `#512` each and the TSan workers reached `#1024`
