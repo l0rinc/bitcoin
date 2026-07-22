@@ -881,6 +881,19 @@ The brute-force assertions are valuable evidence for the tested small-group mode
 but each worker owns independent selection state; they do not prove that shared
 wallet coin-selection callers are race-free.
 
+### Cross-seeded `bnb_finds_min_waste`
+
+This related target had no native QA corpus, so it was cross-seeded from the 668
+bounded `coin_grinder` inputs. Two normal workers completed 3,000 executions each
+in five and six seconds, reaching coverage 488 and 491 and adding 36 and 37 units.
+Two ASan/UBSan workers completed 3,000 executions each in 26 and 25 seconds, with
+coverage 1042 and 1041 and 559 MB peak RSS. Two TSan workers completed 3,000 each
+in 18 and 15 seconds, with coverage 495 and 559 MB peak RSS. Every worker exited
+zero without an assertion, sanitizer report, race/deadlock report, timeout, or
+artifact. The cross-seed added useful BnB waste, dust, change-cost, and subset
+boundary states, but it did not expose a production inconsistency or race; no
+clean-master source comparison or production change was warranted.
+
 ## Post-rebase AddrMan and wallet gates (2026-07-22)
 
 The latest fetch still points `origin/master` at
