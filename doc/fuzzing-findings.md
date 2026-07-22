@@ -301,6 +301,39 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   bounded cutoff, again without a diagnostic or artifact. The TSan graph corpus
   directly exercised cluster-mempool topology mutations and transaction request
   bookkeeping without revealing a race.
+* `clusterlin_linearize` completed the 672-input QA corpus under TSan with two jobs
+  and two workers: 1,000 executions per worker in 31 and 33 seconds at peak RSS of
+  126 MB, with no report or artifact. The full ASan/UBSan run reached 436 and 437
+  executions before two 15-18 second exhaustive-model inputs held both workers;
+  it produced only slow-unit artifacts, no sanitizer diagnostic. A supplemental
+  run over the same 672 inputs with `-max_len=64` completed 1,000 executions per
+  worker in 9 and 10 seconds at 279 and 281 MB, also clean. The slow-unit input
+  replayed with the normal fuzzer in 3,184 ms and exited 0, so this is model
+  complexity and sanitizer overhead, not a production performance finding.
+* `package_rbf` was replayed from a 761-file subset of its 1,111-input corpus with
+  inputs below 64 KiB. TSan completed 1,000 executions per worker in 26 and 27
+  seconds at peak RSS of 154 and 157 MB, with no report or artifact. ASan/UBSan
+  reached 674 and 675 executions at peak RSS of 665 and 667 MB before the same
+  high-cost region was stopped; no diagnostic or artifact was produced, so that
+  ASan run is incomplete and is not a full-corpus gate.
+* `p2p_private_broadcast` had no saved QA corpus, so it was run from an empty seed
+  directory. Its ASan/UBSan workers completed 1,000 executions each in 59 and 52
+  seconds at peak RSS of 684 and 686 MB; its TSan workers completed 1,000 and 1,001
+  executions in 11 and 10 seconds at 320 and 316 MB. Every job exited 0 without a
+  sanitizer report or artifact. The run covered IBD and post-IBD broadcast aborts,
+  private-broadcast handshake/relay combinations, duplicate and pending
+  transactions, GETDATA/PONG confirmation, mixed peer types, and malformed inbound
+  messages. It is discovery evidence, not a corpus-backed regression gate.
+* The package-acceptance targets were also exercised from filtered corpora. The
+  `tx_package_eval` subset contained 2,440 of 2,871 inputs below 64 KiB; ASan/UBSan
+  reached 729 and 731 executions, and TSan reached 1,976 and 1,977 executions,
+  before the workers were stopped in the expensive package-building region. The
+  `ephemeral_package_eval` corpus had 2,098 inputs, all below 64 KiB; ASan/UBSan
+  reached 578 and 579 executions and TSan reached 1,011 per worker. No ASan/UBSan
+  diagnostic or actual TSan data-race report occurred. The interrupted TSan logs
+  contain only the runtime's signal-unsafe warning from libFuzzer's interrupt
+  handler after the deliberate stop, so these are incomplete gates rather than
+  production findings.
 * `p2p_transport_serialization` completed 1,000 inputs in each ASan/UBSan worker
   (136 and 143 seconds, peak RSS about 770 MB) and each TSan worker (11 seconds,
   peak RSS about 157 MB). `p2p_transport_bidirectional_v1v2` likewise completed
