@@ -301,6 +301,26 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   bounded cutoff, again without a diagnostic or artifact. The TSan graph corpus
   directly exercised cluster-mempool topology mutations and transaction request
   bookkeeping without revealing a race.
+* `p2p_transport_serialization` completed 1,000 inputs in each ASan/UBSan worker
+  (136 and 143 seconds, peak RSS about 770 MB) and each TSan worker (11 seconds,
+  peak RSS about 157 MB). `p2p_transport_bidirectional_v1v2` likewise completed
+  1,000 inputs per worker under ASan/UBSan in 176 seconds at 747 and 749 MB RSS,
+  and under TSan in 54 and 55 seconds at 148 and 152 MB RSS. All jobs exited 0
+  without a sanitizer report or artifact. The V2 bidirectional TSan jobs completed
+  1,629 inputs each in 96 and 97 seconds at 153 and 154 MB RSS, also clean. Its
+  ASan/UBSan jobs reached pulse 1,024 at roughly 724–729 MB RSS before the bounded
+  cutoff, with no diagnostic or artifact; that ASan gate is incomplete.
+* `p2p_handshake` completed its 2,858-input corpus under TSan with two jobs and
+  two workers (2,860 and 2,861 executions in 23 and 25 seconds, peak RSS 318 and
+  322 MB) and under ASan/UBSan (3,351 and 3,335 executions in 91 seconds, peak
+  RSS about 698 MB). `bip324_cipher_roundtrip` completed 1,524/1,523 inputs under
+  ASan/UBSan in 186/187 seconds at 669/673 MB RSS and 1,524 inputs per TSan worker
+  in 50/52 seconds at 129/126 MB RSS. `bip324_ecdh` completed 1,543/1,542 ASan
+  inputs in 14/15 seconds at 262/263 MB RSS and 1,543 inputs per TSan worker in
+  7 seconds at 136/129 MB RSS. Every completed job exited 0 without a report or
+  artifact; these exercised handshake state transitions, late-feature disconnects,
+  key agreement, session/garbage-terminator matching, damaged ciphertext, and
+  decrypt-output preservation.
 * An ASan/UBSan `txorphan` run over 686 inputs was stopped after both workers reached
   the same expensive region. One worker reported a libFuzzer timeout at 39 seconds
   while `TxOrphanageImpl::EraseTx()` computed transaction weight for a large
