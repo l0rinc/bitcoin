@@ -6,9 +6,12 @@ that was added by this branch. A finding is called a production defect only when
 clean-master reproducer or an independent race/sanitizer result demonstrated a source
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
-The baseline when this file was written was `32eb52100296718f7c0469e3210ce1db73694793`.
-The branch was rebased onto that baseline before this file was added. The baseline must
-be refreshed after every later rebase.
+The current baseline after the latest rebase is
+`559d042ba2567a05e8d540c7d9d9a94c7d2973d2`. The branch was rebased onto this tip after
+the findings below were verified. Controls that explicitly name
+`32eb52100296718f7c0469e3210ce1db73694793` are historical clean-master runs from the
+previous baseline; they remain valid evidence for the mutations they tested, but are
+not claims about the eight commits added since then.
 
 ## Confirmed production defects
 
@@ -236,6 +239,54 @@ incomplete gate, not a pass.
 
 ## Findings that were not production bugs
 
+### Full-range TxGraph fee mutation (2026-07-22)
+
+The `txgraph` fuzzer previously selected the alternate `AddTransaction` and
+`SetTransactionFee` fees from `[-0x8000000000000, 0x7ffffffffffff]`, approximately
+`+/-2^47`. The mutation was widened to the complete signed `int64_t` range while
+leaving transaction sizes, cluster limits, and graph topology limits unchanged. The
+existing 5,120-input TxGraph corpus, run by two independent normal workers, exposed
+three fuzzer-contract omissions. All three were reproducible with the same artifact in
+both workers and replayed cleanly after correction:
+
+* A 66-byte input (minimized to 28 bytes, SHA256
+  `01381d33ed4df56d7b4a87b998c566cb623e0739c115dbbd8007ec5e639bab49`) reached
+  `CompareChunks()` with cumulative `FeeFrac` coordinates that overflowed. The
+  production function documents that callers must establish this precondition; the
+  fuzzer now checks `CanCompareChunks()` before applying that ordering oracle at both
+  call sites. The corresponding unminimized input has SHA256
+  `10983e359fba7ea9872b1713b8f7efd1e16f2f4138524807af3ee8469b57a5ca`.
+* A 177-byte input (SHA256
+  `955f0a272b3138c794179c470cdccc85c8f02c74c0535e0178f69d950dcffbbb`) made the
+  staging-gain oracle compare saturated diagram sums and a saturated difference. The
+  fuzzer now uses `CheckedFeePerWeightSum` and checked signed subtraction, asserting
+  equality only when both sides are representable. This preserves useful full-range
+  graph execution without treating saturation as exact arithmetic.
+* A 661-byte input (SHA256
+  `bcc22d7da7483cd13df351d47ff4fa4a51d6d7bea594a3734963475469ef5d59`) exposed a
+  stale fuzzer oracle in `GetWorstMainChunk`: it modeled raw `ChunkLinearizationInfo`
+  while branch production commit `50da7746cf` intentionally uses `GetChunking()` to
+  collapse a connected cluster when `FeeFrac` saturation makes raw chunks appear
+  disconnected. The oracle now uses the same `chunk_linearization_info_fn` fallback.
+  This was a branch-local fuzzer omission, not a new production defect.
+
+For a clean-master control, an isolated worktree at
+`32eb52100296718f7c0469e3210ce1db73694793` received only the two fee-range widenings.
+Its ASan/UBSan build reached the first `CompareChunks` assertion in the fuzzer
+(`src/test/fuzz/txgraph.cpp:1264`) and emitted no production stack frame or sanitizer
+diagnostic. This proves the first failure is an invalid fuzzer oracle on master, not a
+master production failure. No production patch or new deterministic production test was
+added for these three cases: the production saturation fallback is already covered by
+`txgraph_saturated_chunking_keeps_block_builder_connected`, and the corrected fuzzer
+oracles now avoid asserting non-representable arithmetic.
+
+The corrected branch fuzzer completed two normal workers at 10,000 executions each,
+two ASan/UBSan workers at 6,123 executions each, and two TSan workers at 6,120
+executions each. All jobs exited zero without a report or artifact. The sanitizer
+replays of the 28-, 177-, and 661-byte inputs also exited zero. This is coverage and
+oracle hardening, with severity `n/a` for production security: no new clean-master
+crash, race, consensus issue, or remotely reachable vulnerability was found.
+
 * Coins-cache contracts, cluster-mempool topology/fee diagrams, validation signal
   payloads, block-filter equivalence, parser atomicity, and many cache/index oracles
   caught mutations in newly added assertions or invalid fuzzer inputs. They did not
@@ -259,10 +310,11 @@ incomplete gate, not a pass.
 
 ## Verification status
 
-Before this requested rebase, the compact-block unit suite passed 27 cases in the
+Before the latest rebase, the compact-block unit suite passed 27 cases in the
 Assume-aborting Debug build. Current-master compact and coins corpus controls were
 run with multiple workers and existing QA corpora under Clang ASan/UBSan without
-reports. After the explicit rebase onto the fetched `32eb521002` tip:
+reports. The following detailed gates were run on the preceding clean baseline
+`32eb521002`; the branch is now rebased onto `559d042ba2`.
 
 * `blockencodings_tests` passed all 27 cases; the selected hash, Base58, cache,
   mempool, RBF, HTTP, network, and index suites passed 81 cases.
@@ -377,12 +429,14 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   reaching peak RSS of 148 MB and producing no report or artifact. Its ASan/UBSan
   workers reached the 512 pulse in the same high-cost mutation region at about
   717 and 718 MB RSS before being stopped; no diagnostic or artifact was produced,
-  so this is an incomplete ASan gate. `txgraph` completed all 5,123 inputs in each
-  TSan worker in 96 and 97 seconds at about 139 MB RSS, with no report or artifact.
-  Its ASan workers reached the 4,096 pulse at about 681 and 682 MB RSS before the
-  bounded cutoff, again without a diagnostic or artifact. The TSan graph corpus
-  directly exercised cluster-mempool topology mutations and transaction request
-  bookkeeping without revealing a race.
+  so this is an incomplete ASan gate. Before the full-range fee mutation was
+  corrected, `txgraph` completed all 5,123 inputs in each TSan worker in 96 and 97
+  seconds at about 139 MB RSS, with no report or artifact. Its then-current ASan
+  workers reached the 4,096 pulse at about 681 and 682 MB RSS before the bounded
+  cutoff, again without a diagnostic or artifact. The final full-range gate and its
+  exact counts are recorded above; together these runs directly exercised
+  cluster-mempool topology mutations and transaction request bookkeeping without
+  revealing a race.
 * The standard mempool target was replayed from 2,826 existing inputs below 64 KiB
   with two jobs and two workers. TSan completed 2,827 executions per worker in 102 and
   103 seconds at about 345 MB RSS, with no report or artifact. ASan/UBSan reached 512
