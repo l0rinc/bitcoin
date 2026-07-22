@@ -13,8 +13,9 @@ between those tips update Qt, ZeroMQ dependencies, include-lint tooling, the ass
 BIP324 service flag for seed addresses, and descriptorprocesspsbt's invalid-signature
 handling. They do not change the validation, compact-block, mempool, TxGraph, coins,
 or descriptor-cache production code exercised here. The subsequent `5311b15727` to
-`7b6f9ba7ba` range merges PR #34672, which changes mining IPC submit-result plumbing
-only and likewise does not change the production paths covered by this ledger.
+`7b6f9ba7ba` range merges PR #34672, which changes mining IPC submit-result plumbing.
+The stale-output defect introduced by that change is recorded below; it does not
+change the earlier compact-block, mempool, coins, or descriptor-cache control results.
 Controls that explicitly name an older baseline, including
 `32eb52100296718f7c0469e3210ce1db73694793` and `5311b15727f2f282274472184185423e441abd85`,
 are historical clean-master runs; they remain valid evidence for the mutations they
@@ -29,18 +30,19 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 8 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
+| Confirmed runtime defects | 9 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The eight confirmed runtime defects are: the index publication and restart race;
+The nine confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; stale Base58 output on decode
-failure; and the descriptor-cache partial merge. Their exact reproducer,
+failure; the descriptor-cache partial merge; and stale mining `submitSolution`
+failure outputs. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -65,6 +67,11 @@ created worker threads.
   new production defect: the existing `bnb_exhaustion_with_solution_test` already
   catches the exact `GetAlgoCompleted()` mutant on current master, but no wallet
   fuzzer deliberately generated its 19 near-equal-UTXO, 100,000-attempt case.
+* Current master PR #34672 added `reason` and `debug` output fields to the mining
+  `submitSolution` interface. Its null-coinbase early return left caller-provided
+  failure strings untouched instead of returning the empty outputs promised by the
+  shared submission path. The clean-master C++ control failed with stale strings;
+  the branch now clears and asserts both fields, and adds an IPC regression check.
 * Sanitizer workers in this ledger are independent processes unless explicitly stated
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
@@ -242,6 +249,33 @@ binaries. This confirms the three new mutations are additional reproductions of 
 existing partial-merge defect, not a branch-introduced failure. No new production
 fix or severity change is warranted because `4da71c90d7` preflights all three maps;
 the new unit tests make each ordering deterministic.
+
+### 9. Mining `submitSolution` leaves stale failure outputs
+
+* Current branch fix: this feature commit titled `mining: clear submitSolution failure outputs`.
+* Severity on clean master: low API correctness issue for direct mining-interface
+  callers and IPC clients; no consensus, node crash, or remote attack was
+  demonstrated.
+
+PR #34672 added `reason` and `debug` output parameters to `BlockTemplate::submitSolution`
+and unified successful submissions with `SubmitBlock()`. The null-coinbase guard in
+`BlockTemplateImpl::submitSolution()` returned `false` before reaching `SubmitBlock()`,
+whose first operation clears both output strings. A caller that reused those strings
+could therefore receive a failed submission result with stale text from an earlier
+call. The interface documentation describes both parameters as output fields, and
+the other `submitSolution` paths already clear them through `SubmitBlock()`.
+
+An exact clean-master `7b6f9ba7bad13b0c4169259000f7802854cdda0d` worktree received
+only a temporary `miner_tests/CreateNewBlock_validity` assertion. It initialized both
+outputs to `"stale reason"` and `"stale debug"`, passed a null `CTransactionRef`, and
+failed at the reason postcondition (`stale reason != `). The production implementation
+and existing tests were otherwise unchanged. The branch fix clears both outputs on
+that early return and asserts the empty postcondition; the same Debug test passes.
+The IPC functional test now checks the serialized `result`, `reason`, and `debug`
+fields for an empty coinbase. The local functional runner discovered that Python
+`capnp` is unavailable and skipped that test, so the C++ clean-master failure and
+fixed-branch pass are the executed proof; IPC serialization remains an environment
+coverage gap rather than a claimed pass.
 
 ## Compact-block short-ID investigation
 
