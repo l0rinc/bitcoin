@@ -464,6 +464,16 @@ baseline `32eb521002`; the branch is now rebased onto
   executions per worker in the bounded window at about 545 and 550 MB RSS, then was
   stopped in an expensive mutation region without a diagnostic or artifact; it is an
   incomplete ASan gate, not evidence of a mempool defect.
+* A current `tx_pool_standard` ASan/UBSan run from two fresh copies of its 2,857-input
+  corpus reached 2,851 executions per worker before the 1,200-second outer cap, at
+  peak RSS of 744 and 755 MB, without a sanitizer or crash artifact. Two slow units
+  were identified (`962e3f76102eff4245e9a42eb4197ffc8978a7a9`, SHA256
+  `22710aabce82d919a26683b30133b6257649a208ab1f20d4839ee2177aa49485`, and
+  `f5e2f1eada3a748963a1cb4cadaa2bf224eac617`, SHA256
+  `7a307c1df10352957d291594b758fbe8d8f3ba98f7ce5f9c0aa083286c8d8a26`). Their exact
+  replays exited 0 under ASan/UBSan in 10.838 and 16.991 seconds and under TSan in
+  1.176 and 2.142 seconds, with no report. This is an incomplete performance-limited
+  gate, not a standard-mempool defect.
 * `clusterlin_linearize` completed the 672-input QA corpus under TSan with two jobs
   and two workers: 1,000 executions per worker in 31 and 33 seconds at peak RSS of
   126 MB, with no report or artifact. The full ASan/UBSan run reached 436 and 437
