@@ -227,6 +227,12 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   10,025 existing inputs, but both workers remained CPU-bound in a single expensive
   case past the five-minute wall-clock budget. It produced no sanitizer marker or
   artifact before being stopped and is not counted as a completed gate.
+* A follow-up ASan/UBSan and TSan attempt used hardlinks to the 9,817 existing
+  `scriptpubkeyman` inputs below 64 KiB (36 MB total), again with two jobs and two
+  workers per sanitizer. Both reached the 4,096 pulse before the five-minute budget
+  without a sanitizer report or artifact, then were stopped. The size filter changed
+  throughput but did not complete the corpus gate; no wallet-manager defect was
+  proven.
 * `coinscache_sim` reached 1,416 inputs before the optional run was stopped because
   both workers remained on a 10-second slow corpus unit. That unit replayed once in
   18.6 seconds with exit code 0 and no sanitizer report. This is a fuzzing throughput
