@@ -332,6 +332,9 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
   `HTTPRequest`, `HTTPHeaders`, `HTTPRemoteClient` parser, response, receive-buffer,
   send-buffer, connection-state, query, and body-size contracts. It does not by
   itself cover a live `HTTPServer` accept-loop and shutdown integration.
+  The existing eight-case `httpserver_tests` suite then passed under the Clang TSan
+  unit build in 1.74 seconds, including the live socket loop, malformed-request
+  disconnect, send errors, and shutdown/join paths, with no TSan report.
 * The package-acceptance targets were also exercised from filtered corpora. The
   `tx_package_eval` subset contained 2,440 of 2,871 inputs below 64 KiB; ASan/UBSan
   reached 729 and 731 executions, and TSan reached 1,976 and 1,977 executions,
