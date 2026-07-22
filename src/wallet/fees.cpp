@@ -8,17 +8,22 @@
 #include <wallet/coincontrol.h>
 #include <wallet/wallet.h>
 
+#include <cassert>
 
 namespace wallet {
 CAmount GetRequiredFee(const CWallet& wallet, unsigned int nTxBytes)
 {
-    return GetRequiredFeeRate(wallet).GetFee(static_cast<int32_t>(nTxBytes));
+    const CAmount required_fee{GetRequiredFeeRate(wallet).GetFee(static_cast<int32_t>(nTxBytes))};
+    assert(required_fee >= 0);
+    return required_fee;
 }
 
 
 CAmount GetMinimumFee(const CWallet& wallet, unsigned int nTxBytes, const CCoinControl& coin_control, FeeCalculation* feeCalc)
 {
-    return GetMinimumFeeRate(wallet, coin_control, feeCalc).GetFee(static_cast<int32_t>(nTxBytes));
+    const CAmount minimum_fee{GetMinimumFeeRate(wallet, coin_control, feeCalc).GetFee(static_cast<int32_t>(nTxBytes))};
+    assert(minimum_fee >= 0);
+    return minimum_fee;
 }
 
 CFeeRate GetRequiredFeeRate(const CWallet& wallet)
