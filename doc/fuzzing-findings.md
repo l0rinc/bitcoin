@@ -894,6 +894,29 @@ artifact. The cross-seed added useful BnB waste, dust, change-cost, and subset
 boundary states, but it did not expose a production inconsistency or race; no
 clean-master source comparison or production change was warranted.
 
+## Post-rebase fee arithmetic gates (2026-07-22)
+
+Three lower-level fee targets were run with two independent workers in each build
+configuration. `fees` replayed all 420 QA inputs: normal workers completed 5,000
+executions each and reached coverage 98, ASan/UBSan workers completed 5,000 each
+with coverage 211, and TSan workers completed 5,000 each with coverage 98. The
+normal workers added 6 and 8 units; all sanitizer workers exited zero in two or
+three seconds at 559 MB peak RSS, without an assertion, sanitizer report, race or
+deadlock report, timeout, or artifact.
+
+`fee_rate` replayed all 32 inputs. Its normal workers reached coverage 266 and
+added 40 and 39 units; ASan/UBSan reached coverage 468 and 467; and TSan reached
+coverage 266 in both workers. Each build ran 5,000 executions per worker and
+exited zero without diagnostics or artifacts. `feefrac` likewise replayed all 70
+inputs, with normal coverage 123, ASan/UBSan coverage 217, and TSan coverage 123;
+each of its six workers completed 5,000 executions cleanly.
+
+Together these runs exercised signed and saturating fee addition/multiplication,
+round-up and round-down division, zero and negative rates, maximum-size inputs,
+FeeFilterRounder bounds, ratio ordering, and fee-reason serialization. No arithmetic
+inconsistency, memory error, or race was found, and no production change or
+clean-master comparison was warranted.
+
 ## Post-rebase AddrMan and wallet gates (2026-07-22)
 
 The latest fetch still points `origin/master` at
