@@ -6,6 +6,8 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <common/args.h>
+#include <consensus/amount.h>
+#include <consensus/validation.h>
 #include <crypto/hex_base.h>
 #include <dbwrapper.h>
 #include <flatfile.h>
@@ -13,8 +15,10 @@
 #include <index/txindex.h>
 #include <index/txindex_key.h>
 #include <interfaces/chain.h>
+#include <key.h>
 #include <node/blockstorage.h>
 #include <primitives/block.h>
+#include <script/script.h>
 #include <streams.h>
 #include <sync.h>
 #include <test/util/setup_common.h>
@@ -84,6 +88,14 @@ uint256 LookupTx(const TxIndex& txindex, const Txid& txid)
     BOOST_REQUIRE_MESSAGE(txindex.FindTx(txid, block_hash, tx), "FindTx failed for " + txid.ToString());
     BOOST_CHECK(Assert(tx)->GetHash() == txid);
     return block_hash;
+}
+
+void InvalidateBlock(ChainstateManager& chainman, const uint256& block_hash)
+{
+    CBlockIndex* block_index{WITH_LOCK(cs_main, return chainman.m_blockman.LookupBlockIndex(block_hash))};
+    BOOST_REQUIRE(block_index);
+    BlockValidationState state;
+    BOOST_REQUIRE(chainman.ActiveChainstate().InvalidateBlock(state, block_index));
 }
 
 } // namespace
@@ -299,6 +311,120 @@ BOOST_FIXTURE_TEST_CASE(txindex_missing_sequence_mapping, TestChain100Setup)
     CTransactionRef tx;
     uint256 block_hash;
     BOOST_CHECK(!txindex.FindTx(legacy_txid, block_hash, tx));
+
+    txindex.Stop();
+}
+
+BOOST_FIXTURE_TEST_CASE(txindex_legacy_reconnect, TestChain100Setup)
+{
+    ChainstateManager& chainman{*m_node.chainman};
+    const uint256 block_hash{WITH_LOCK(cs_main, return chainman.ActiveChain().Tip()->GetBlockHash())};
+    const Txid legacy_txid{m_coinbase_txns.back()->GetHash()};
+    const CDiskTxPos legacy_pos{BlockFilePos(chainman, 100), 1};
+    {
+        CDBWrapper db{DBParams{.path = gArgs.GetDataDirNet() / "indexes" / "txindex", .cache_bytes = 1_MiB}};
+        db.Write(txindex::LegacyTxKey(legacy_txid), legacy_pos);
+        db.Write(uint8_t{'B'}, CBlockLocator{{block_hash}});
+    }
+
+    TxIndex txindex(interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/false);
+    BOOST_REQUIRE(txindex.Init());
+    txindex.Sync();
+
+    CDBWrapper& db{TxIndexTest::GetDB(txindex)};
+    const auto prefix{txindex::CreateKeyPrefix(ReadHasher(db), legacy_txid)};
+    BOOST_CHECK(BucketPositions(db, prefix).empty());
+    BOOST_CHECK(LookupTx(txindex, legacy_txid) == block_hash);
+
+    InvalidateBlock(chainman, block_hash);
+    BOOST_REQUIRE(txindex.BlockUntilSyncedToCurrentChain());
+    {
+        LOCK(cs_main);
+        chainman.ActiveChainstate().ResetBlockFailureFlags(chainman.m_blockman.LookupBlockIndex(block_hash));
+        chainman.RecalculateBestHeader();
+    }
+    BlockValidationState state;
+    BOOST_REQUIRE(chainman.ActiveChainstate().ActivateBestChain(state));
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    BOOST_REQUIRE(txindex.BlockUntilSyncedToCurrentChain());
+
+    BOOST_CHECK(WITH_LOCK(cs_main, return chainman.ActiveChain().Tip()->GetBlockHash()) == block_hash);
+    BOOST_CHECK_EQUAL(BucketPositions(db, prefix).size(), 1U);
+    BOOST_CHECK(db.Exists(txindex::LegacyTxKey(legacy_txid)));
+    BOOST_CHECK(LookupTx(txindex, legacy_txid) == block_hash);
+
+    txindex.Stop();
+}
+
+BOOST_FIXTURE_TEST_CASE(txindex_reorg_keeps_stale_entries, TestChain100Setup)
+{
+    TxIndex txindex(interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/true);
+    BOOST_REQUIRE(txindex.Init());
+    txindex.Sync();
+
+    const CScript coinbase_script{CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG};
+
+    // Mine a unique (non-coinbase) transaction into a new block at height 101.
+    CMutableTransaction unique_mtx{CreateValidMempoolTransaction(
+        /*input_transaction=*/m_coinbase_txns[0],
+        /*input_vout=*/0,
+        /*input_height=*/1,
+        /*input_signing_key=*/coinbaseKey,
+        /*output_destination=*/CScript() << OP_TRUE,
+        /*output_amount=*/CAmount{1 * COIN},
+        /*submit=*/false)};
+    const Txid unique_txid{MakeTransactionRef(unique_mtx)->GetHash()};
+    const uint256 stale_block_hash{CreateAndProcessBlock({unique_mtx}, coinbase_script).GetHash()};
+    BOOST_REQUIRE(txindex.BlockUntilSyncedToCurrentChain());
+
+    BOOST_CHECK(LookupTx(txindex, unique_txid) == stale_block_hash);
+
+    CDBWrapper& db{TxIndexTest::GetDB(txindex)};
+    const auto prefix{txindex::CreateKeyPrefix(ReadHasher(db), unique_txid)};
+    const auto original_bucket{BucketPositions(db, prefix)};
+    BOOST_REQUIRE_EQUAL(original_bucket.size(), 1U);
+
+    ChainstateManager& chainman{*m_node.chainman};
+
+    // Invalidate the block holding the unique transaction.
+    InvalidateBlock(chainman, stale_block_hash);
+    BOOST_REQUIRE(txindex.BlockUntilSyncedToCurrentChain());
+
+    // The disconnected transaction is still found, in the now-stale block.
+    BOOST_CHECK(LookupTx(txindex, unique_txid) == stale_block_hash);
+    {
+        LOCK(cs_main);
+        const CBlockIndex* stale_index{chainman.m_blockman.LookupBlockIndex(stale_block_hash)};
+        BOOST_REQUIRE(stale_index);
+        BOOST_CHECK(!chainman.ActiveChain().Contains(*stale_index));
+    }
+
+    // Mine the same transaction in a later-sequenced replacement branch.
+    const uint256 branch_block_hash{CreateAndProcessBlock({unique_mtx}, CScript() << OP_TRUE).GetHash()};
+    CreateAndProcessBlock({}, coinbase_script);
+    BOOST_REQUIRE(txindex.BlockUntilSyncedToCurrentChain());
+    BOOST_CHECK(LookupTx(txindex, unique_txid) == branch_block_hash);
+
+    // Reorg back to the original branch by reconsidering the stale block and
+    // invalidating the replacement branch. The active block must be preferred
+    // even though the replacement has a later sequence.
+    {
+        LOCK(cs_main);
+        chainman.ActiveChainstate().ResetBlockFailureFlags(chainman.m_blockman.LookupBlockIndex(stale_block_hash));
+    }
+    InvalidateBlock(chainman, branch_block_hash);
+    BlockValidationState state;
+    BOOST_REQUIRE(chainman.ActiveChainstate().ActivateBestChain(state));
+    BOOST_REQUIRE(txindex.BlockUntilSyncedToCurrentChain());
+    BOOST_CHECK(WITH_LOCK(cs_main, return chainman.ActiveChain().Tip()->GetBlockHash()) == stale_block_hash);
+
+    // The transaction is found in the reconnected (again active) block, and its
+    // bucket keeps the original position.
+    BOOST_CHECK(LookupTx(txindex, unique_txid) == stale_block_hash);
+
+    const auto reorg_bucket{BucketPositions(db, prefix)};
+    BOOST_REQUIRE_EQUAL(reorg_bucket.size(), 2U);
+    BOOST_CHECK(reorg_bucket.back() == original_bucket.front());
 
     txindex.Stop();
 }
