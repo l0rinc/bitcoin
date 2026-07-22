@@ -107,6 +107,15 @@ public:
     }
 };
 
+class FuzzedPartiallyDownloadedBlock : public PartiallyDownloadedBlock
+{
+public:
+    using PartiallyDownloadedBlock::PartiallyDownloadedBlock;
+
+    size_t MempoolCount() const { return mempool_count; }
+    size_t ExtraCount() const { return extra_count; }
+};
+
 void ResetChainmanAndMempool(TestingSetup& setup)
 {
     SetMockTime(Params().GenesisBlock().Time());
@@ -143,6 +152,65 @@ void AssertPostCompactBlockContracts(ChainstateManager& chainman, CTxMemPool& me
     chainman.CheckBlockIndex();
     auto& chainstate{chainman.ActiveChainstate()};
     mempool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1);
+}
+
+void AssertExtraTransactionCounterContract(const TestingSetup& setup)
+{
+    bilingual_str error{};
+    CTxMemPool pool{MemPoolOptionsForTest(setup.m_node), error};
+    Assert(error.empty());
+
+    const auto make_tx = [](uint32_t id) {
+        CMutableTransaction tx;
+        tx.nLockTime = id;
+        tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), id});
+        tx.vout.emplace_back(COIN - AMOUNT_FEE, P2WSH_OP_TRUE);
+        return MakeTransactionRef(tx);
+    };
+
+    const auto tx_extra{make_tx(1)};
+    const auto tx_mempool{make_tx(2)};
+    const auto tx_missing{make_tx(3)};
+    TestMemPoolEntryHelper entry;
+    TryAddToMempool(pool, entry.Fee(AMOUNT_FEE).FromTx(tx_mempool));
+
+    CMutableTransaction coinbase;
+    coinbase.vin.emplace_back();
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vout.emplace_back(COIN, P2WSH_OP_TRUE);
+
+    CBlock block;
+    block.nVersion = 1;
+    block.hashPrevBlock = uint256::ONE;
+    block.nTime = 1;
+    block.nBits = 1;
+    block.vtx = {MakeTransactionRef(coinbase), tx_extra, tx_mempool, tx_missing};
+    const CBlockHeaderAndShortTxIDs cmpctblock{block, /*nonce=*/0};
+
+    CTransactionRef unrelated;
+    for (uint32_t id = 4; !unrelated; ++id) {
+        auto candidate{make_tx(id)};
+        const auto candidate_shortid{cmpctblock.GetShortID(candidate->GetWitnessHash())};
+        if (candidate_shortid != cmpctblock.GetShortID(tx_extra->GetWitnessHash()) &&
+            candidate_shortid != cmpctblock.GetShortID(tx_mempool->GetWitnessHash()) &&
+            candidate_shortid != cmpctblock.GetShortID(tx_missing->GetWitnessHash())) {
+            unrelated = std::move(candidate);
+        }
+    }
+
+    std::vector<std::pair<Wtxid, CTransactionRef>> extra_txn{
+        {unrelated->GetWitnessHash(), unrelated},
+        {tx_extra->GetWitnessHash(), tx_extra},
+        {tx_mempool->GetWitnessHash(), unrelated},
+    };
+
+    FuzzedPartiallyDownloadedBlock partial_block{&pool};
+    Assert(partial_block.InitData(cmpctblock, extra_txn) == READ_STATUS_OK);
+    Assert(partial_block.MempoolCount() == 1);
+    Assert(partial_block.ExtraCount() == 1);
+    Assert(partial_block.IsTxAvailable(1));
+    Assert(!partial_block.IsTxAvailable(2));
+    Assert(!partial_block.IsTxAvailable(3));
 }
 
 //! Used to run tasks in a std::thread to avoid DEBUG_LOCKORDER false positives.
@@ -307,6 +375,11 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         auto tx = MakeTransactionRef(tx_mut);
         return tx;
     };
+
+    // Exercise the short-ID collision counter contract independently of the
+    // peer state machine so a future production regression fails at the
+    // exact bookkeeping boundary.
+    AssertExtraTransactionCounterContract(*setup);
 
     // Guarantee one real rejected P2P transaction reaches the extra-transaction ring.
     {
