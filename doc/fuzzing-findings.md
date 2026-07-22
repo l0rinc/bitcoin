@@ -214,6 +214,11 @@ reports. After the explicit rebase onto the fetched `32eb521002` tip:
 * The transaction-state TSan gates replayed `txdownloadman_impl`'s 1,560 inputs,
   `txorphan_protected`'s 646 inputs, and `txorphanage_sim`'s 1,346 inputs with two
   jobs and two workers. Every job exited 0; no TSan report or artifact was produced.
+* `checkqueue` replayed its 2,003-input QA corpus with two jobs and two workers under
+  both Clang ASan/UBSan and Clang TSan. Every job exited 0, including inputs that
+  selected zero through two internal queue workers; no sanitizer report or artifact
+  was produced. The ASan workers completed 3,008 executions each with peak RSS of
+  about 694 MB, while the TSan workers completed in 3 seconds.
 * An ASan/UBSan `txorphan` run over 686 inputs was stopped after both workers reached
   the same expensive region. One worker reported a libFuzzer timeout at 39 seconds
   while `TxOrphanageImpl::EraseTx()` computed transaction weight for a large
