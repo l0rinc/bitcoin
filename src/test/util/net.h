@@ -67,6 +67,14 @@ struct ConnmanTestMsg : public CConnman {
         if (node.IsManualOrFullOutboundConn()) ++m_network_conn_counts[node.addr.GetNetwork()];
     }
 
+    void RemoveTestPrivateBroadcastNode(CNode& node)
+    {
+        assert(node.IsPrivateBroadcastConn());
+        LOCK(m_nodes_mutex);
+        const auto it{std::find(m_nodes.begin(), m_nodes.end(), &node)};
+        if (it != m_nodes.end()) m_nodes.erase(it);
+    }
+
     void ClearTestNodes()
     {
         LOCK(m_nodes_mutex);

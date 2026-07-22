@@ -65,6 +65,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <compare>
 #include <cstddef>
 #include <deque>
@@ -1770,6 +1771,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     if (node.IsPrivateBroadcastConn() &&
         !m_tx_for_private_broadcast.DidNodeConfirmReception(nodeid)) {
         m_tx_for_private_broadcast.RemoveUnconfirmedNode(nodeid);
+        Assert(!m_tx_for_private_broadcast.GetTxForNode(nodeid).has_value());
         if (m_tx_for_private_broadcast.HavePendingTransactions()) {
             m_connman.m_private_broadcast.NumToOpenAdd(1);
         }
@@ -3670,6 +3672,9 @@ void PeerManagerImpl::PushPrivateBroadcastTx(CNode& node)
         return;
     }
     const CTransactionRef& tx{*opt_tx};
+    const auto remembered_tx{m_tx_for_private_broadcast.GetTxForNode(node.GetId())};
+    Assert(remembered_tx.has_value());
+    Assert(remembered_tx->get()->GetWitnessHash() == tx->GetWitnessHash());
 
     LogDebug(BCLog::PRIVBROADCAST, "P2P handshake completed, sending INV for txid=%s%s, %s",
              tx->GetHash().ToString(), tx->HasWitness() ? strprintf(", wtxid=%s", tx->GetWitnessHash().ToString()) : "",
