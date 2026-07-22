@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 
 class uint256;
 namespace interfaces {
@@ -23,8 +24,8 @@ static constexpr bool DEFAULT_TXINDEX{false};
 
 /**
  * TxIndex is used to look up transactions included in the blockchain by hash.
- * The index is written to a LevelDB database and records the filesystem
- * location of each transaction by transaction hash.
+ * The index is written to a LevelDB database and records the block sequence
+ * number and serialized block offset of each transaction by transaction hash.
  */
 class TxIndex final : public BaseIndex
 {
@@ -34,6 +35,9 @@ protected:
 private:
     friend class txindex_tests::TxIndexTest;
     const std::unique_ptr<DB> m_db;
+
+    std::optional<bool> FindHashedTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx) const;
+    bool FindLegacyTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx) const;
 
     bool AllowPrune() const override { return false; }
 
