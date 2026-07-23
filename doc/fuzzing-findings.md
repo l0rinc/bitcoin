@@ -960,6 +960,20 @@ called out separately below.
   seconds) and TSan (9 seconds), without a report or artifact. This directly ran the
   concurrent cursor `GetKey`/`GetValue`/`Next` loop across `ResizeCache`, joined the
   resize thread, and checked both pre- and post-resize snapshots for exact equality.
+* A post-rebase `coins_view_db_resize_cursor` campaign used 512 private inputs from
+  the existing `coins_view_db` corpus. Two normal workers completed 3,000 mutations
+  each, reaching coverage 6,044 and 6,042 without an assertion or artifact. The
+  resulting expanded slice was replayed by two ASan/UBSan workers for 3,000
+  executions each (coverage 19,456 and 19,458) and by two TSan/libFuzzer workers for
+  3,000 executions each (coverage 2,555 and 2,557); all four sanitizer workers
+  exited 0 without a diagnostic or artifact. Each sanitizer worker used its own
+  frozen input copy, so corpus-file replacement could not be mistaken for a target
+  race. The campaign exercised the `m_db_mutex` handoff while a cursor performed
+  `GetKey`/`GetValue`/`Next`, the resize-thread join, and exact pre/post-resize
+  snapshots. No coins-cache inconsistency, memory defect, or race was found. Two
+  earlier TSan attempts using the direct multi-file driver were excluded because
+  that binary interpreted libFuzzer flags as input paths; they did not execute the
+  target.
 * `coins_view_stacked` had no native QA corpus. A fixed empty-input smoke run repeated
   the stacked setup 1,000 times per worker under both sanitizers, but libFuzzer
   correctly reported that it performed no mutation. A mutation run seeded from
