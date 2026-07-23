@@ -53,6 +53,20 @@ const bool g_maybe_run_mock_dispatcher_before_main{[]() {
         std::cout << s << std::endl;
         std::_Exit(EXIT_SUCCESS);
     }
+    if (n == "external_signer") {
+        std::string s;
+        if (std::getline(std::cin, s) && s.starts_with("signtx ")) {
+            const char* psbt = std::getenv("BITCOIN_TEST_MOCK_PSBT");
+            if (!psbt) {
+                std::cerr << "BITCOIN_TEST_MOCK_PSBT is not set" << std::endl;
+                std::_Exit(EXIT_FAILURE);
+            }
+            std::cout << R"({"psbt":")" << psbt << R"("})" << std::endl;
+        } else {
+            std::cout << R"([{"fingerprint":"00000001"}])" << std::endl;
+        }
+        std::_Exit(EXIT_SUCCESS);
+    }
     std::cerr << "Unknown mock process: " << n << std::endl;
     std::_Exit(EXIT_FAILURE);
 }()};

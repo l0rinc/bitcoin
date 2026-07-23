@@ -30,21 +30,22 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 13 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
+| Confirmed runtime defects | 14 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The thirteen confirmed runtime defects are: the index publication and restart race;
+The fourteen confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; stale Base58 output on decode
 failure; the descriptor-cache partial merge; stale mining `submitSolution` failure
 outputs; stale `TxIndex::FindTx` failure outputs; stale wallet transaction detail
-outputs; the descriptor next-index persistence failure; and stale `ProcessNewBlock`
-`new_block` output after a block-file write failure. Their exact reproducer,
+outputs; the descriptor next-index persistence failure; stale `ProcessNewBlock`
+`new_block` output after a block-file write failure; and the external-signer
+`n_signed` reporting omission. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -87,6 +88,12 @@ created worker threads.
   persisted wallet state. The exact clean-master SQLite control returned a
   destination and advanced `next_index`; the branch now commits the descriptor
   index to the database before publishing it in memory.
+* `ExternalSignerScriptPubKeyMan::FillPSBT()` replaced a PSBT with the signer’s
+  result without updating its `n_signed` output. The Qt PSBT operations dialog
+  uses this count to report signing progress, so a partial PSBT with one newly
+  finalized input was reported as `Could not sign any more inputs.` The exact
+  clean-master control below reproduced the stale zero; the branch now counts
+  unsigned-to-finalized input transitions after optional finalization.
 * Sanitizer workers in this ledger are independent processes unless explicitly stated
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
@@ -424,6 +431,43 @@ The fix assigns `fNewBlock` only after both block storage and
 branch; the existing `ProcessNewBlock` success/failure output assertions continue
 to cover the ordinary paths. No fuzzer-only exception or race was involved, so no
 additional fuzzer mutation was needed beyond the deterministic filesystem fault.
+
+### 14. External signer omits signed-input count
+
+* Current branch fix: `wallet: report inputs signed by external signer`.
+* Severity on clean master: low direct-API and GUI correctness issue. The trigger
+  requires a local external signer and a partial PSBT; it does not prevent signing,
+  alter the transaction, expose keys, or provide a remote attack path.
+
+`CWallet::FillPSBT()` documents `n_signed` as the number of inputs signed by the
+wallet, and `PSBTOperationsDialog::signTransaction()` uses it to distinguish a
+successful partial signing from the case where no more inputs could be signed.
+`ExternalSignerScriptPubKeyMan::FillPSBT()` delegated the non-signing path to the
+normal descriptor manager, but the signing path replaced the PSBT with the external
+signer's response and never initialized or updated `n_signed`. A signer that
+finalized one input in a still-incomplete PSBT therefore returned `n_signed == 0`.
+
+The deterministic mutation uses a two-input PSBT with valid `witness_utxo` entries
+whose scriptPubKeys are `OP_TRUE`. Input 0 carries master fingerprint `00000001`; the test-binary mock
+external signer returns the same PSBT with a non-empty `final_script_sig` on input 0
+and input 1 still unsigned. On clean master, `FillPSBT(..., &n_signed)` leaves the
+count at zero even though `PSBTInputSigned(input 0)` is true. The focused test also
+checks that the returned PSBT remains partial, so the stale count is not being hidden
+by an already-complete transaction.
+
+The exact `origin/master` `7b6f9ba7ba` Debug/Clang 19 control received only the
+temporary mock subprocess branch in `src/test/system_tests.cpp` and the deterministic
+unit test; `src/wallet/external_signer_scriptpubkeyman.cpp` remained unmodified. It
+failed at `psbt_wallet_tests.cpp:101` with `0 != 1` and exited 201. The fixed branch
+passes the same focused test, the full three-case `psbt_wallet_tests` suite, and the
+existing `system_tests` suite. The production change initializes the output, records
+which inputs were already finalized, and counts only unsigned-to-finalized
+transitions after the signer and optional `FinalizePSBT()` call.
+
+The existing `scriptpubkeyman` fuzzer did not discover this because it creates normal
+descriptor managers and never invokes an external signer subprocess. Adding a child
+process to every fuzz iteration would not improve the contract signal; the
+deterministic subprocess mock is the stronger regression test for this boundary.
 
 ## Compact-block short-ID investigation
 
@@ -1754,7 +1798,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The thirteen confirmed production defects
+caller or new collision race was found. The fourteen confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The AddrMan and wallet sanitizer
 gates above found no additional production mistake, race, consensus issue, or
