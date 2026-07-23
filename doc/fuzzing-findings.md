@@ -3272,6 +3272,28 @@ No clean-master candidate, production inconsistency, vulnerability, race, or
 deterministic test gap was demonstrated; no source or test change was
 warranted.
 
+## Resumed cluster backend-equivalence gate (2026-07-23)
+
+The `clusterlin_backend_equivalence` target had no native QA corpus, so it was
+seeded from the existing cluster-linearization, dependency-graph
+serialization, chunking, simple-linearization, and post-linearization corpora.
+After deduplicating identical content, each worker used 9,174 inputs totaling
+3,103,373 bytes with a maximum size of 8,472 bytes. The target parses an
+arbitrary dependency graph and optional linearization, then compares
+linearization, chunking, optimality, cost, and input handling across the four
+bitset backends used for 64-position clusters.
+
+Two normal workers replayed the full corpus in 23 seconds, reaching coverage
+4,883 with peak RSS of 58 and 56 MB. The ASan/UBSan workers replayed the same
+corpus in 114 seconds, reaching coverage 15,671 with peak RSS of 636 MB per
+worker. The direct-file TSan driver replayed 9,174 files in seven seconds per
+worker. All six jobs exited zero without an assertion, sanitizer report, race
+report, timeout, unexpected exception, or target artifact.
+
+No clean-master candidate, production inconsistency, vulnerability, race, or
+deterministic test gap was demonstrated; no source or test change was
+warranted.
+
 ## Resumed pool-resource invariant gate (2026-07-23)
 
 The `pool_resource` target was replayed from two independent private copies of
