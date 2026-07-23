@@ -2992,6 +2992,50 @@ arbitrary shared live-node scheduling. No clean-master candidate, new
 production inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
 
+## Resumed script-parsing span gate (2026-07-23)
+
+The `script_parsing` target was replayed from two independent private copies
+of its 83-input QA corpus (407,692 bytes, maximum input size 137,885 bytes).
+It checks `Const`, `Func`, and `Expr` span advancement, non-consuming failure
+behavior, balanced-expression boundaries, and delimiter handling against
+independent reference calculations.
+
+Two normal workers completed 10,000 executions each, reaching coverage 384
+with peak RSS of 57 MB and adding 34 and 49 units; their corpora expanded to
+76 and 75 files. Two ASan/UBSan workers completed 5,000 each in 17 and 16
+seconds, reaching coverage 936 with peak RSS of 516 and 512 MB and adding 10
+and 9 units. The direct-file TSan driver replayed the resulting 121 and 131
+files in under one second per worker. All six jobs exited zero without an
+assertion, sanitizer report, race report, timeout, unexpected exception, or
+target artifact.
+
+The TSan workers own independent spans and strings, so this covers parser
+state transitions rather than shared concurrent callers. No clean-master
+candidate, production inconsistency, vulnerability, race, or deterministic
+test gap was demonstrated; no source or test change was warranted.
+
+## Resumed script text round-trip gate (2026-07-23)
+
+The `parse_script` target was replayed from two independent private copies of
+its 314-input QA corpus (12,174,139 bytes, maximum input size 723,013 bytes).
+It parses textual scripts, formats the parsed bytecode, reparses the
+formatted result, and checks bytecode and formatted-string idempotence while
+catching only `ScriptParseError` for invalid source text.
+
+Two normal workers completed 8,000 executions each in 58 seconds, reaching
+coverage 1,256 with peak RSS of 80 and 78 MB and adding 113 and 98 units; their
+corpora expanded to 414 and 400 files. Two ASan/UBSan workers completed 5,000
+each in 173 and 195 seconds, reaching coverage 3,333 with peak RSS of 571 and
+582 MB and adding 26 and 39 units. The direct-file TSan driver replayed the
+resulting 439 and 437 files in three seconds per worker. All six jobs exited
+zero without an assertion, sanitizer report, race report, timeout, unexpected
+exception, or target artifact.
+
+The TSan workers own independent parser state, so this covers textual
+round-trip calls rather than shared concurrent callers. No clean-master
+candidate, production inconsistency, vulnerability, race, or deterministic
+test gap was demonstrated; no source or test change was warranted.
+
 ## Resumed Base58 contract gates (2026-07-23)
 
 The `base58_encode_decode` and `base58check_encode_decode` targets were
