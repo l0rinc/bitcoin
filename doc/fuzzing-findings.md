@@ -2960,3 +2960,29 @@ Each process owns independent decoder state, so TSan covers the exercised
 encoding operations rather than arbitrary concurrent callers. No clean-master
 candidate, production inconsistency, vulnerability, race, or deterministic
 test gap was demonstrated; no source or test change was warranted.
+
+## Resumed signature-cache contract gate (2026-07-23)
+
+The `script_sigcache` target was replayed from two independent private copies
+of a bounded 627-input slice of its 669-input QA corpus. The selected inputs
+totaled 1,226,125 bytes with a maximum size of 56,663 bytes. The target varies
+zero through the default signature-cache size, transaction and witness data,
+ECDSA and Schnorr key material, cache-entry hashes, input indexes, amounts,
+and store flags. It checks deterministic key construction and the
+set/get-without-erase, get-with-erase, and post-erase miss sequence through
+the caching signature checker.
+
+Two normal workers completed 8,000 executions each in 35 and 39 seconds,
+reaching coverage 2,360 with peak RSS of 107 and 108 MB; their corpora
+expanded to 687 and 686 files. Two ASan/UBSan workers completed 5,000 each in
+91 and 94 seconds, reaching coverage 10,368 with peak RSS of 598 and 597 MB
+and adding 32 and 24 units. The direct-file TSan driver replayed the expanded
+719 and 710 files in 20 seconds per worker. All six jobs exited zero without
+an assertion, sanitizer report, race report, timeout, unexpected exception,
+or target artifact.
+
+Each fuzzer process owns an independent `SignatureCache`; the TSan result
+therefore covers cache operations and target setup rather than shared live
+node cache schedules. No clean-master candidate, production inconsistency,
+vulnerability, race, or deterministic test gap was demonstrated; no source
+or test change was warranted.
