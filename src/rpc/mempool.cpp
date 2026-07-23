@@ -973,6 +973,7 @@ static RPCMethod gettxspendingprevout()
             struct Entry {
                 COutPoint outpoint;
                 const UniValue* raw;
+                size_t result_index;
             };
             std::vector<Entry> prevouts_to_process;
             prevouts_to_process.reserve(output_params.size());
@@ -990,7 +991,7 @@ static RPCMethod gettxspendingprevout()
                 if (nOutput < 0) {
                     throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, vout cannot be negative");
                 }
-                prevouts_to_process.emplace_back(COutPoint{txid, static_cast<uint32_t>(nOutput)}, &o);
+                prevouts_to_process.emplace_back(COutPoint{txid, static_cast<uint32_t>(nOutput)}, &o, idx);
             }
 
             auto make_output = [return_spending_tx](const Entry& prevout, const CTransaction* spending_tx = nullptr) {
@@ -1004,7 +1005,7 @@ static RPCMethod gettxspendingprevout()
                 return o;
             };
 
-            UniValue result{UniValue::VARR};
+            std::vector<UniValue> results(output_params.size());
 
             // Search the mempool first
             {
@@ -1019,19 +1020,13 @@ static RPCMethod gettxspendingprevout()
                     // request, we cannot answer it yet.
                     if (!spending_tx && !mempool_only) return false;
 
-                    result.push_back(make_output(prevout, spending_tx));
+                    results[prevout.result_index] = make_output(prevout, spending_tx);
                     return true;
                 });
             }
 
-            // Return early if all requests have been handled by the mempool search
-            if (prevouts_to_process.empty()) {
-                return result;
-            }
-
-            // At this point the request was not limited to the mempool and some outpoints remain
-            // unresolved. We now rely on the index to determine whether they were spent or not.
-            if (!g_txospenderindex || !g_txospenderindex->BlockUntilSyncedToCurrentChain()) {
+            // mempool_only requests resolve every outpoint above, so only other requests reach the index.
+            if (!prevouts_to_process.empty() && (!g_txospenderindex || !g_txospenderindex->BlockUntilSyncedToCurrentChain())) {
                 throw JSONRPCError(RPC_MISC_ERROR, "Mempool lacks a relevant spend, and txospenderindex is unavailable.");
             }
 
@@ -1044,13 +1039,15 @@ static RPCMethod gettxspendingprevout()
                 if (const auto& spender_opt{spender.value()}) {
                     UniValue o{make_output(prevout, spender_opt->tx.get())};
                     o.pushKV("blockhash", spender_opt->block_hash.GetHex());
-                    result.push_back(std::move(o));
+                    results[prevout.result_index] = std::move(o);
                 } else {
                     // Only return the input outpoint itself, which indicates it is unspent.
-                    result.push_back(make_output(prevout));
+                    results[prevout.result_index] = make_output(prevout);
                 }
             }
 
+            UniValue result{UniValue::VARR};
+            for (auto& output : results) result.push_back(std::move(output));
             return result;
         },
     };
