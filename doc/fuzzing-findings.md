@@ -2700,3 +2700,32 @@ independent graph, so TSan covers the target's local serialization and cycle
 checks rather than arbitrary shared cluster-mempool schedules. No clean-master
 production inconsistency, parser classification failure, or race was
 demonstrated; no source or deterministic test change was warranted.
+
+## Resumed cluster component and graph-repair sanitizer gates (2026-07-23)
+
+The `clusterlin_components` and `clusterlin_make_connected` targets were
+replayed from two independent private copies of their existing QA corpora.
+Components started from 326 inputs and checks connected-component discovery,
+subset containment, ancestor/descendant closure, and reachability. MakeConnected
+started from 360 inputs and checks that graph repair produces a sane connected
+dependency graph.
+
+Normal workers completed 3,000 mutations per target and worker in about one
+second. Components reached coverage 829 with peak RSS of 56/55 MB and expanded
+to 330/331 files; MakeConnected reached coverage 835 with peak RSS of 56/58 MB
+and expanded to 362/360 files. ASan/UBSan workers completed 3,000 mutations
+per target and worker: components reached coverage 2,443 in 9 seconds at
+286/284 MB RSS and expanded to 337/341 files; MakeConnected reached coverage
+2,418 in 8 seconds at 287 MB RSS and expanded to 364/363 files.
+
+The direct-file TSan driver replayed all four expanded corpora successfully:
+components completed 337/341 inputs in one second per worker, and MakeConnected
+completed 364/363 inputs in one second or less. All twelve normal and sanitizer
+jobs exited zero without an assertion, sanitizer report, race report, timeout,
+or target artifact.
+
+These are completed corpus-backed graph-structure gates. Each process owns an
+independent graph, so TSan covers the exercised component and repair operations
+rather than arbitrary shared cluster-mempool schedules. No clean-master
+production inconsistency, connectivity failure, or race was demonstrated; no
+source or deterministic test change was warranted.
