@@ -353,6 +353,12 @@ public:
         bool& in_mempool,
         int& num_blocks) override
     {
+        tx_status = {};
+        messages.clear();
+        payment_requests.clear();
+        in_mempool = false;
+        num_blocks = 0;
+
         LOCK(m_wallet->cs_wallet);
         auto mi = m_wallet->mapWallet.find(txid);
         if (mi != m_wallet->mapWallet.end()) {
@@ -363,6 +369,19 @@ public:
             tx_status = MakeWalletTxStatus(*m_wallet, mi->second);
             return MakeWalletTx(*m_wallet, mi->second);
         }
+        Assert(tx_status.block_height == 0);
+        Assert(tx_status.blocks_to_maturity == 0);
+        Assert(tx_status.depth_in_main_chain == 0);
+        Assert(tx_status.time_received == 0);
+        Assert(tx_status.lock_time == 0);
+        Assert(!tx_status.is_trusted);
+        Assert(!tx_status.is_abandoned);
+        Assert(!tx_status.is_coinbase);
+        Assert(!tx_status.is_in_main_chain);
+        Assert(messages.empty());
+        Assert(payment_requests.empty());
+        Assert(!in_mempool);
+        Assert(num_blocks == 0);
         return {};
     }
     std::optional<PSBTError> fillPSBT(const common::PSBTFillOptions& options,
