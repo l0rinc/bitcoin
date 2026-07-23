@@ -13,6 +13,7 @@
 
 #include <boost/test/unit_test.hpp>
 #include <sqlite3.h>
+#include <streams.h>
 
 namespace wallet {
 BOOST_FIXTURE_TEST_SUITE(scriptpubkeyman_tests, BasicTestingSetup)
@@ -61,6 +62,7 @@ BOOST_AUTO_TEST_CASE(get_new_destination_write_failure)
     BOOST_REQUIRE(spkm != nullptr);
 
     auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    // The serialized SQLite keys are 49 bytes for descriptor metadata and 62 bytes for cache entries.
     BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db,
                                      "CREATE TRIGGER fail_wallet_writes BEFORE INSERT ON main BEGIN SELECT RAISE(ABORT, 'injected'); END;",
                                      nullptr, nullptr, nullptr),
@@ -89,6 +91,49 @@ BOOST_AUTO_TEST_CASE(get_new_destination_topup_write_failure)
 
     BOOST_CHECK_EXCEPTION(spkm->GetNewDestination(OutputType::BECH32),
                           std::runtime_error, HasReason("TopUpWithDB: writing cache items failed"));
+}
+
+BOOST_AUTO_TEST_CASE(topup_descriptor_write_failure)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    keystore.m_keypool_size = 1;
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtKey(extkey) + "/*h)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db,
+                                     "CREATE TRIGGER fail_descriptor_writes BEFORE INSERT ON main WHEN length(NEW.key) = 49 BEGIN SELECT RAISE(ABORT, 'injected'); END;",
+                                     nullptr, nullptr, nullptr),
+                        SQLITE_OK);
+
+    sqlite3_stmt* statement{nullptr};
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().range_end, 1);
+        BOOST_CHECK_EQUAL(spkm->GetKeyPoolSize(), 1);
+    }
+    BOOST_CHECK_EXCEPTION(spkm->TopUp(2), std::runtime_error,
+                          HasReason("TopUpWithDB: writing descriptor failed"));
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().range_end, 1);
+        BOOST_CHECK_EQUAL(spkm->GetKeyPoolSize(), 1);
+    }
+
+    BOOST_REQUIRE_EQUAL(sqlite3_prepare_v2(database.m_db, "SELECT value FROM main WHERE length(key) = 49", -1, &statement, nullptr), SQLITE_OK);
+    BOOST_REQUIRE_EQUAL(sqlite3_step(statement), SQLITE_ROW);
+    SpanReader descriptor_reader{std::span<const std::byte>{static_cast<const std::byte*>(sqlite3_column_blob(statement, 0)), static_cast<size_t>(sqlite3_column_bytes(statement, 0))}};
+    WalletDescriptor persisted_descriptor;
+    descriptor_reader >> persisted_descriptor;
+    BOOST_CHECK_EQUAL(persisted_descriptor.range_end, 1);
+    sqlite3_finalize(statement);
+
+    BOOST_REQUIRE_EQUAL(sqlite3_prepare_v2(database.m_db, "SELECT count(*) FROM main WHERE length(key) = 62", -1, &statement, nullptr), SQLITE_OK);
+    BOOST_REQUIRE_EQUAL(sqlite3_step(statement), SQLITE_ROW);
+    BOOST_CHECK_EQUAL(sqlite3_column_int(statement, 0), 1);
+    sqlite3_finalize(statement);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
