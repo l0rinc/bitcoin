@@ -30,21 +30,21 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 12 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
+| Confirmed runtime defects | 13 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The twelve confirmed runtime defects are: the index publication and restart race;
+The thirteen confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; stale Base58 output on decode
 failure; the descriptor-cache partial merge; stale mining `submitSolution` failure
 outputs; stale `TxIndex::FindTx` failure outputs; stale wallet transaction detail
-outputs; and stale `ProcessNewBlock` `new_block` output after a block-file write
-failure. Their exact reproducer,
+outputs; the descriptor next-index persistence failure; and stale `ProcessNewBlock`
+`new_block` output after a block-file write failure. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -82,6 +82,11 @@ created worker threads.
   could therefore read indeterminate status values. The clean-master control
   failed all 13 non-`WalletTx` output postconditions; the branch now clears and
   asserts the outputs and documents the contract.
+* `DescriptorScriptPubKeyMan::GetNewDestination()` returned a newly derived
+  address after its descriptor-index write failed, leaving memory ahead of the
+  persisted wallet state. The exact clean-master SQLite control returned a
+  destination and advanced `next_index`; the branch now commits the descriptor
+  index to the database before publishing it in memory.
 * Sanitizer workers in this ledger are independent processes unless explicitly stated
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
@@ -260,7 +265,48 @@ existing partial-merge defect, not a branch-introduced failure. No new productio
 fix or severity change is warranted because `4da71c90d7` preflights all three maps;
 the new unit tests make each ordering deterministic.
 
-### 9. Mining `submitSolution` leaves stale failure outputs
+### 9. Descriptor address index published after persistence failure
+
+* Current branch fix: `e9d748a0c1` (`wallet: persist descriptor index before returning address`).
+* Severity on clean master: low-to-medium local wallet consistency/availability issue;
+  it requires a wallet database write failure and is not a consensus, key-loss, or
+  unauthenticated remote vulnerability.
+
+`DescriptorScriptPubKeyMan::GetNewDestination()` derived a valid destination, then
+incremented `m_wallet_descriptor.next_index`, ignored the `false` result from
+`WalletBatch::WriteDescriptor()`, and returned the destination. A database or
+filesystem failure could therefore leave the caller with an address that was not
+durable while the live descriptor manager had already advanced. After a restart the
+old persisted index could be loaded and the same address generated again. The
+failure is local and storage-dependent; it does not expose keys or alter consensus,
+but it violates the wallet's persistence contract and can make address allocation
+non-deterministic across restart.
+
+The deterministic mutation set `m_keypool_size` to 1 and installed a SQLite
+`BEFORE INSERT` trigger on the mock wallet database that raised `ABORT`. The exact
+unmodified `origin/master` checkout at `7b6f9ba7ba` failed the focused test with
+both postconditions: it returned a destination and reported `next_index == 1`
+instead of `0` (`CONTROL_EXIT=201`). The pre-fix branch function was byte-for-byte
+identical to this clean-master implementation, ruling out a regression introduced
+by the local stack. The fixed implementation writes a copy of the descriptor with
+the incremented index, returns `Error: Failed to write descriptor` when the write
+fails, and updates the in-memory index only after a successful write.
+
+The unit suite also covers the separate hardened-cache path: after one successful
+address, the same SQLite mutation makes `TopUpWithDB` throw the expected
+`std::runtime_error` with reason `TopUpWithDB: writing cache items failed`. The
+scriptpubkeyman fuzzer can inject this mutation once per input and stops before
+later actions that correctly encounter the failed database. It accepts only that
+exact `std::runtime_error`; all other exception types and messages are rethrown.
+Two independent normal workers completed 10,026 executions each, reaching coverage
+12,943 with peak RSS of 575 MB. Two ASan/UBSan workers completed 10,028 executions
+each, reaching coverage 27,481 and 27,487 with peak RSS of 996 and 1,014 MB. Two
+TSan workers completed 10,026 executions each, reaching coverage 12,952 and 12,955
+with peak RSS of 578 MB. All six workers exited without an assertion, sanitizer
+report, unexpected exception, race/deadlock report, timeout, or artifact. The
+focused four-case descriptor suite passed after the fix.
+
+### 10. Mining `submitSolution` leaves stale failure outputs
 
 * Current branch fix: this feature commit titled `mining: clear submitSolution failure outputs`.
 * Severity on clean master: low API correctness issue for direct mining-interface
@@ -287,7 +333,7 @@ temporary storage area, `interface_ipc_mining.py` passed end to end in 24 second
 The clean-master C++ failure, fixed-branch unit pass, and IPC functional pass
 therefore all cover this mutation.
 
-### 10. `TxIndex::FindTx` leaves stale failure outputs
+### 11. `TxIndex::FindTx` leaves stale failure outputs
 
 * Current branch fix: `txindex: clear failed FindTx outputs`.
 * Severity on clean master: low direct-API correctness issue; current callers pass
@@ -311,7 +357,7 @@ the full three-case `txindex_tests` suite passes with 129/129 assertions. No cal
 currently relies on stale values after a failed lookup; the fix makes the documented
 failure contract explicit for direct and future callers.
 
-### 11. `Wallet::getWalletTxDetails` leaves missing-transaction outputs stale
+### 12. `Wallet::getWalletTxDetails` leaves missing-transaction outputs stale
 
 * Current branch fix: `wallet: clear missing getWalletTxDetails outputs`.
 * Severity on clean master: low local GUI/API correctness issue with undefined
@@ -342,7 +388,7 @@ and 145/145 assertions in the Debug wallet build. This is a direct interface
 contract fix, not evidence of a remotely reachable race: the wallet lock
 serializes the lookup, while the stale model entry is the normal local trigger.
 
-### 12. `ProcessNewBlock` reports a new block after a block-file write failure
+### 13. `ProcessNewBlock` reports a new block after a block-file write failure
 
 * Current branch fix: `validation: clear new-block output on block write failure`.
 * Severity on clean master: low local availability/bookkeeping issue. The trigger
@@ -1698,8 +1744,8 @@ normal-binary replay exited zero in about four seconds, so it is sanitizer/model
 overhead rather than a demonstrated production performance issue.
 
 This matrix found no new production inconsistency, race, memory-safety failure, or
-policy defect. The confirmed-runtime-defect count remains twelve; no source or
-deterministic functional-test change was warranted by these replays.
+policy defect. At the time of this matrix the confirmed-runtime-defect count was
+twelve; the later descriptor-index persistence defect is recorded above.
 
 ### Re-evaluation after the compact-block collision work
 
@@ -1708,7 +1754,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The twelve confirmed production defects
+caller or new collision race was found. The thirteen confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The AddrMan and wallet sanitizer
 gates above found no additional production mistake, race, consensus issue, or
@@ -1764,8 +1810,9 @@ race report, timeout, or target artifact.
 This is post-fix evidence for the stale `new_block` output contract described
 above, not an independent discovery of a new reorg defect. The workers used
 independent fuzzer processes and therefore do not establish that arbitrary live
-node reorg schedules are race-free. The confirmed-runtime-defect count remains
-twelve, and no further source or deterministic test change was warranted.
+node reorg schedules are race-free. At the time of this gate the confirmed-runtime-
+defect count was twelve; the later descriptor-index persistence defect is recorded
+above, and no further change was warranted by this gate.
 
 ## Current-master block-index/reorg state gate (2026-07-23)
 
