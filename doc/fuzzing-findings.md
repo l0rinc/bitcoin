@@ -490,6 +490,18 @@ After the latest rebase onto `7b6f9ba7ba`, the rebuilt normal wallet fuzzer repl
 preserved `partially_downloaded_block` corpus. Both collision-heavy targets completed
 without an assertion, sanitizer report, race/deadlock report, timeout, or artifact.
 
+A final targeted collision replay on 2026-07-23 used a private 512-input slice of
+the existing `coins_view_db` corpus for `coins_view_db_resize_cursor` and private
+copies of the compact-block corpora. The normal resize target completed 5,000
+mutations; its resulting 735-file input set was replayed under ASan/UBSan (736
+executions) and the direct-file TSan driver (735 files), with no diagnostic or
+artifact. The collision-heavy `cmpctblock` target completed 5,000 normal
+mutations, and the generated additions were replayed under ASan/UBSan (184
+executions) and direct-file TSan (179 files), also clean. These are additional
+current-branch gates, not new production fixes; the exact-master comparison
+recorded below remains the clean-baseline control, and compact-block production
+sources did not change between that control and `7b6f9ba7ba`.
+
 The historical `b8844d3df7..5311b157` master delta was also checked; its only relevant
 new runtime change is in `src/rpc/rawtransaction.cpp` for invalid PSBT signatures.
 The subsequent `5311b15727..7b6f9ba7ba` delta is PR #34672's mining IPC work and does
@@ -1178,6 +1190,11 @@ called out separately below.
   earlier TSan attempts using the direct multi-file driver were excluded because
   that binary interpreted libFuzzer flags as input paths; they did not execute the
   target.
+* A final single-worker resize replay then completed 5,000 normal mutations from
+  the same private seed slice. The resulting 735 files completed ASan/UBSan replay
+  (736 executions) and direct-file TSan replay (735 files) without a report or
+  artifact. This adds current-branch stress evidence but does not change the
+  clean-master severity assessment or identify a new coins-cache defect.
 * `coins_view_stacked` had no native QA corpus. A fixed empty-input smoke run repeated
   the stacked setup 1,000 times per worker under both sanitizers, but libFuzzer
   correctly reported that it performed no mutation. A mutation run seeded from
