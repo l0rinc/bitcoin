@@ -30,14 +30,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 18 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
+| Confirmed runtime defects | 23 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, direct-API, or client-directed RPC-endpoint conditions. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The eighteen confirmed runtime defects are: the index publication and restart race;
+The twenty-three confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
@@ -47,7 +47,10 @@ failure outputs; stale `TxIndex::FindTx` failure outputs; stale wallet transacti
 detail outputs; the descriptor next-index persistence failure; stale
 `ProcessNewBlock` `new_block` output after a block-file write failure; the
 external-signer `n_signed` reporting omission; private-broadcast removal counter
-drift; and private-broadcast late-confirmation state drift. Their exact reproducer,
+drift; private-broadcast late-confirmation state drift; the nullable wallet
+coin-control dereference; and four malformed `bitcoin-cli` HTTP response acceptance
+bugs (overlong status codes, status codes below 100, differing duplicate
+`Content-Length` values, and invalid chunk terminators). Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -111,6 +114,17 @@ created worker threads.
   scheduled its replacement. Exact-master temporary tests reproduced both cases
   with production sources unchanged; the branch fixes are `800a2aad69` and
   `449636bbe3`, and the fixed nine-case unit suite passes.
+* `AvailableCoins()` explicitly accepts a null `CCoinControl`. The clean-master
+  wallet path dereferenced it while evaluating unconfirmed TRUC outputs; the
+  branch guard and the new unconfirmed-parent test close that API contract. The
+  exact control segfaulted with exit 139, while the fixed wallet spend suite
+  passes all four cases.
+* The libevent-removal `bitcoin-cli` HTTP client had four independent malformed
+  response acceptance paths. Exact clean-master fake-server controls accepted
+  each malformed response; the fixed branch rejects them while retaining valid
+  response behavior. These are low-severity client parser issues because the
+  endpoint already controls the RPC body and no node or consensus state is
+  affected.
 * Sanitizer workers in this ledger are independent processes unless explicitly stated
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
@@ -609,6 +623,72 @@ This is a state-ordering control, not a claim that every live peer teardown sche
 has been reproduced by TSan. The clean-master result proves that the production
 state object accepts the invalid late transition; the residual reachability depends
 on the asynchronous message and connection-finalization ordering.
+
+### 19. Nullable coin control dereference for unconfirmed wallet outputs
+
+* Current branch fix: `dfe7f9348f` (`wallet: handle unconfirmed coins without coin control`).
+* Severity on clean master: low to medium local wallet availability/API correctness
+  issue. A normal wallet caller can request unconfirmed coin selection without a
+  `CCoinControl`; no key loss, consensus, funds, or remote-node attack was
+  demonstrated.
+
+`AvailableCoins()` explicitly accepts a null `CCoinControl`. On clean master, an
+  unconfirmed wallet-owned output entered the `nDepth == 0` and
+  `check_version_trucness` path in `src/wallet/spend.cpp`, which unconditionally
+  read `coinControl->m_version`. The result was a null-pointer dereference before
+  ordinary coin selection could return the output. Existing spend tests used only
+  confirmed outputs and therefore never entered this branch.
+
+The deterministic mutation creates a wallet-owned unconfirmed parent with two
+outputs and calls `AvailableCoins(..., nullptr, ...)`. The exact
+`origin/master` `7b6f9ba7ba` control received only that test; the production source
+remained unchanged and the focused test terminated with SIGSEGV (exit 139) at the
+null `coinControl` read. The fixed branch guards the TRUC version read with the
+nullable pointer check and passes all four `wallet::spend_tests` cases, including
+the unconfirmed-parent regression. The same commit extends `wallet_create_transaction`
+to exercise shared ancestry and both outputs; its mempool reset and BTC-formatted
+dust-fee setup are fuzzer-harness corrections, not additional production findings.
+
+### 20-23. Malformed `bitcoin-cli` HTTP response acceptance
+
+* Current branch fixes: `e516ea1d3d` (overlong status codes), `b500870cd3`
+  (status codes below 100), `cb37575c97` (ambiguous duplicate content lengths),
+  and `2e03ca53b1` (malformed chunked replies).
+* Severity on clean master: low client-side parser robustness. A malicious or
+  malformed RPC HTTP endpoint can choose these response fields, but the endpoint
+  already controls the JSON-RPC body; no consensus, P2P, node, wallet-loss,
+  persisted-state, or authority-escalation impact was demonstrated.
+
+The simple Sock HTTP client introduced by the libevent-removal work had four
+independent response-validation omissions:
+
+* **20, overlong status code:** `HTTP/1.1 2000 Invalid` was parsed as status 200
+  because the parser consumed only the first three digits and did not require a
+  space afterward. The fixed parser rejects it as an invalid status-line format.
+* **21, status below 100:** `HTTP/1.1 099 Invalid` was accepted as a successful
+  response because the old parser checked only that the three characters were
+  numeric and later treated every status below 400 as non-error. The fixed parser
+  rejects status codes below 100.
+* **22, differing duplicate `Content-Length`:** the old parser used only the first
+  header, so `Content-Length: N` followed by `Content-Length: N+1` was accepted
+  when the body had N bytes. The fixed parser requires all duplicate values to be
+  identical while retaining the valid identical-duplicate case.
+* **23, invalid chunk terminator:** after a nonzero chunk payload, the old parser
+  discarded the next two bytes without checking for CRLF. It therefore accepted
+  `XX` as a chunk terminator; the fixed parser rejects any terminator other than
+  CRLF.
+
+For clean-master proof, a temporary worktree at exact `origin/master` received
+only the functional test additions; `src/bitcoin-cli.cpp` remained unchanged.
+The exact Debug/Clang 19 `bitcoin-cli` and `bitcoind` accepted all four malformed
+responses: the focused functional methods failed with `AssertionError: No
+exception raised`, and a direct fake-server probe returned exit 0 and `ok` for
+both `099` and `2000`. On the fixed branch, the chunked, duplicate-length, and
+status focused methods each exited 0, covering both valid controls and all four
+rejections. These tests remain functional rather than fuzzer tests because the
+affected parser is private to the `bitcoin-cli` executable and is not linked into
+an existing fuzz target; the fake-server mutation is the stronger deterministic
+regression for this boundary.
 
 ## Compact-block short-ID investigation
 
@@ -1956,7 +2036,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The eighteen confirmed production defects
+caller or new collision race was found. The twenty-three confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The AddrMan and wallet sanitizer
 gates above found no additional production mistake, race, consensus issue, or
