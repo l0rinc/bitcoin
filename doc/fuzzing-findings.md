@@ -30,14 +30,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 23 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, direct-API, or client-directed RPC-endpoint conditions. |
+| Confirmed runtime defects | 29 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The twenty-three confirmed runtime defects are: the index publication and restart race;
+The twenty-nine confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
@@ -48,9 +48,12 @@ detail outputs; the descriptor next-index persistence failure; stale
 `ProcessNewBlock` `new_block` output after a block-file write failure; the
 external-signer `n_signed` reporting omission; private-broadcast removal counter
 drift; private-broadcast late-confirmation state drift; the nullable wallet
-coin-control dereference; and four malformed `bitcoin-cli` HTTP response acceptance
+coin-control dereference; four malformed `bitcoin-cli` HTTP response acceptance
 bugs (overlong status codes, status codes below 100, differing duplicate
-`Content-Length` values, and invalid chunk terminators). Their exact reproducer,
+`Content-Length` values, and invalid chunk terminators); reusable `ArgsManager`
+command state; out-of-range compressed amounts; invalid Schnorr-key handling;
+exhausted coins-DB cursor reads; and two HTTP request-parser atomicity defects
+(partial chunked bodies and partial request fields). Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -59,9 +62,10 @@ created worker threads.
 
 ## Current conclusions
 
-* The confirmed runtime defects below are local or authenticated workflow bugs. No
-  clean-master run in this ledger demonstrated a consensus failure, wallet-key loss,
-  unauthenticated remote memory-safety issue, or remotely exploitable race.
+* The confirmed runtime defects below are bounded local, authenticated, startup,
+  direct-API, client-parser, or malformed-HTTP workflow bugs. No clean-master run
+  in this ledger demonstrated a consensus failure, wallet-key loss, unauthenticated
+  remote memory-safety issue, or remotely exploitable race.
 * The compact-block short-ID null, underflow, and direct-construction cases are
   explicitly separated by baseline: the underflow is fixed by current master
   `6aa5d8d948`, the normal P2P null-tail construction is avoided by current master
@@ -125,6 +129,18 @@ created worker threads.
   response behavior. These are low-severity client parser issues because the
   endpoint already controls the RPC body and no node or consensus state is
   affected.
+* Five additional clean-master controls found reusable-parser and local-data
+  boundary defects: stale `ArgsManager` command state, out-of-range compressed
+  coin amounts, invalid Schnorr keys reaching libsecp, exhausted coins-DB cursor
+  reads, and HTTP request parser state being committed before a complete parse.
+  The HTTP parser work contains two distinct contracts: incomplete chunked bodies
+  must not be committed or duplicated on retry, and control/header/body fields
+  must remain unchanged on failed or incomplete parsing.
+* The HTTP stale-`m_send_ready` candidate was explicitly excluded from the defect
+  count: current `origin/master` already contains the cleanup in `73da2a8a52`
+  (`http: prevent race condition between worker thread and I/O thread`). Replaying
+  that branch mutation would therefore test an already-fixed master path rather
+  than reveal a current-master bug.
 * Sanitizer workers in this ledger are independent processes unless explicitly stated
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
@@ -689,6 +705,119 @@ rejections. These tests remain functional rather than fuzzer tests because the
 affected parser is private to the `bitcoin-cli` executable and is not linked into
 an existing fuzz target; the fake-server mutation is the stronger deterministic
 regression for this boundary.
+
+### 24. Reusable `ArgsManager` retains command and error state
+
+* Current branch fix: `6115b874ef` (`args: reset command parse state`).
+* Severity on clean master: low reusable-API correctness. Normal `bitcoind` and
+  `bitcoin-cli` startup parse arguments once on a fresh process-global object, so
+  no normal startup, RPC, P2P, wallet, consensus, or persisted-state attack was
+  demonstrated.
+
+`ArgsManager::ParseParameters()` cleared command-line options but retained the
+previous command, command arguments, and caller-provided error text. A successful
+parse after a failed parse could therefore report stale failure state. `ClearArgs()`
+also left the old command and command-mode latch active after registered commands
+were removed, so a reused parser rejected free commands unexpectedly.
+
+The exact `origin/master` control registered two commands, performed successful and
+failed parses in sequence, then called `ClearArgs()` and parsed again. With
+`src/common/args.cpp` unchanged, `argsman_tests/util_ParseParameters_replaces_command_state`
+exited 201: 10 of 27 postconditions failed. The fixed branch passes the same case
+with 29 assertions. The production fix clears parsed command/error state at parse
+entry and resets command mode in `ClearArgs()`; the added system-fuzzer oracle
+checks the same replacement sequence.
+
+### 25. Compressed coin amounts accepted outside `MoneyRange()`
+
+* Current branch fix: `970e8c997d` (`compressor: reject out-of-range compressed amounts`).
+* Severity on clean master: medium local/persistent-data robustness. The affected
+  decoder feeds coins, undo data, and assumeutxo-style serialized data; malformed
+  local data or a malicious snapshot can otherwise produce an out-of-range
+  `CAmount` before downstream validation. No P2P transaction or consensus wire
+  path was demonstrated.
+
+`AmountCompression::Unser()` decompressed arbitrary varints and assigned the result
+  to a `CAmount` without enforcing the range precondition used by
+  `CompressAmount()`. The exact clean-master control accepted both
+  `CompressAmount(MAX_MONEY + 1)` and `uint64_t::max()` encodings: the focused
+  `compress_tests/compress_amount_deserialize_range` case passed only its one valid
+  assertion and failed its two expected exceptions (exit 201). The fixed branch
+  passes all three assertions and rejects the invalid values at the shared
+  deserialization boundary.
+
+### 26. Invalid Schnorr key reaches libsecp256k1
+
+* Current branch fix: `4639b59839` (`key: reject invalid Schnorr signing keys`).
+* Severity on clean master: low to medium local wallet/key API robustness. The
+  input requires a caller to construct an invalid `CKey`; no untrusted network path
+  to create that key was demonstrated.
+
+Schnorr signing did not apply the invalid-key guard used by the ECDSA path. A
+  default-invalid `CKey` reached secp256k1 keypair creation, which invoked its
+  illegal-argument callback instead of returning false and preserving the output
+  buffer. The exact clean-master `key_tests/bip340_test_vectors` control aborted
+  with `seckey32 != NULL` (exit 134). The fixed branch passes the same case with
+  246 assertions and keeps the signature buffer unchanged on failure.
+
+### 27. Coins DB cursor value read after exhaustion
+
+* Current branch fix: `255555316f` (`coins: guard exhausted DB cursor values`).
+* Severity on clean master: low to medium local coins-database API robustness. The
+  direct cursor boundary is used by coins/snapshot inspection code; no remote,
+  consensus, or ordinary P2P trigger was demonstrated.
+
+`CCoinsViewDBCursor::GetKey()` treated an exhausted cursor as a miss, but
+`GetValue()` unconditionally called LevelDB's iterator value accessor. The exact
+  clean-master control walked a persistent cursor to exhaustion and then queried
+  both outputs; `coins_tests/coins_db_cursor_exhaustion_outputs` aborted in
+  LevelDB's `DBIter::value()` assertion (exit 134). The fixed branch's
+  `coins_db_leveldb_layout` regression passes 28 assertions and leaves both
+  caller-provided outputs unchanged on the exhausted path.
+
+### 28. Incomplete chunked HTTP body is committed and duplicated
+
+* Current branch fix: `d136d1bc34` (`http: commit chunked request bodies atomically`).
+* Severity on clean master: low to medium malformed HTTP/RPC request robustness.
+  An unauthenticated peer can choose chunk boundaries and connection timing, but
+  the demonstrated effect is request-state corruption/connection handling, not
+  memory safety, authentication bypass, consensus, wallet, or persisted-state
+  corruption.
+
+`HTTPRequest::LoadBody()` appended each decoded chunk directly to `m_body` before
+the terminating chunk and trailers had arrived. On a retry with more bytes, the
+same request body was appended again. The exact clean-master
+`httpserver_tests/http_request_tests` control failed exactly two new assertions:
+the body was visible after the incomplete parse and duplicated after the retry
+(exit 201). The fixed implementation builds a local body and publishes it only
+after the complete chunked message is valid; the fixed HTTP request suite passes
+115 assertions.
+
+### 29. HTTP request fields are published before parsing succeeds
+
+* Current branch fix: `ee190cc079` (`http: parse request fields atomically`).
+* Severity on clean master: low to medium malformed HTTP/RPC parser robustness.
+  The parser is reachable from unauthenticated HTTP input, but the clean-master
+  control demonstrated stale/partial request state rather than a remote memory
+  safety or authentication failure.
+
+On clean master, a bad request version left the parsed method and target visible, a
+bad or incomplete header section published partial headers, and a no-body or short
+body parse retained or appended stale body data. The exact control initialized
+sentinel fields and ran `http_request_parse_failure_preserves_fields` with
+`src/httpserver.cpp` unchanged; six of 37 postconditions failed (exit 201). The
+fixed parser parses control fields, headers, and bodies in temporaries and commits
+them only after success; the fixed branch passes all 37 assertions.
+
+The fixed-branch fuzzer gates for these contracts were clean on 2026-07-23. Two
+normal workers completed 14,475/14,623 `system`, 543,224/552,240
+`txoutcompressor_deserialize`, 48,424/49,299 `key`, 4,897/4,897
+`coins_view_db`, and 62,399/61,305 `http_request` executions. ASan/UBSan
+replayed 1,598, 218, 2,161, 4,899, and 11,788 inputs respectively, with no
+diagnostic or artifact. Two TSan workers completed 4,897 coins-DB inputs each
+and 53,363/52,218 HTTP inputs, also without a report or artifact. These sanitizer
+and TSan results validate the fixed branch's exercised paths; they do not upgrade
+the local/API findings above into claims of general thread safety.
 
 ## Compact-block short-ID investigation
 
@@ -2036,7 +2165,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The twenty-three confirmed production defects
+caller or new collision race was found. The twenty-nine confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The AddrMan and wallet sanitizer
 gates above found no additional production mistake, race, consensus issue, or
