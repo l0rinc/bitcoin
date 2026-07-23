@@ -1820,8 +1820,10 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTra
         // number of invalid transactions that attempt to overrun the in-memory coins cache
         // (`CCoinsViewCache::cacheCoins`).
 
-        for (const COutPoint& hashTx : coins_to_uncache)
+        for (const COutPoint& hashTx : coins_to_uncache) {
             active_chainstate.CoinsTip().Uncache(hashTx);
+            Assume(!active_chainstate.CoinsTip().HaveCoinInCache(hashTx));
+        }
         TRACEPOINT(mempool, rejected,
                 tx->GetHash().data(),
                 result.m_state.GetRejectReason().c_str()
@@ -1857,6 +1859,7 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
     if (test_accept || result.m_state.IsInvalid()) {
         for (const COutPoint& hashTx : coins_to_uncache) {
             active_chainstate.CoinsTip().Uncache(hashTx);
+            Assume(!active_chainstate.CoinsTip().HaveCoinInCache(hashTx));
         }
     }
     // Ensure the coins cache is still within limits.
