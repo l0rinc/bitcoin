@@ -667,6 +667,18 @@ called out separately below.
   block no-ops, flush-before/after transitions, and chainstate notification
   assertions. The later master delta is unrelated to this target. This follow-up
   found no new production defect or race.
+* A post-rebase `validation_block_reorg` gate ran from the preserved 2,257-input
+  corpus on the current branch. Two independent normal workers completed 5,000
+  executions each, reaching coverage 13,864 and 13,865; the expanded private
+  corpora were then replayed by two ASan/UBSan workers and two TSan workers for
+  5,000 executions each. ASan/UBSan reached coverage 42,907 and 42,915 in 691
+  and 683 seconds; TSan reached coverage 5,279 in 584 and 581 seconds. All six
+  jobs exited zero without an assertion, sanitizer report, race/deadlock report,
+  timeout, or artifact. The inputs exercised genesis reprocessing, empty and
+  same-height competing branches, longer reorgs, invalid descendants,
+  invalidation/failure-flag reset, precious-block no-ops, flush transitions, and
+  validation notifications. This extends the prior older-baseline gate; no new
+  production defect or race was found, so no clean-master control was needed.
 * `validation_load_mempool` completed its 1,799-input corpus under TSan with two
   jobs and two workers: both workers executed 1,802 inputs in 274 seconds, with
   peak RSS of 397 and 398 MB, and no report or artifact. A follow-up ASan/UBSan
