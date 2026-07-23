@@ -2571,3 +2571,27 @@ mempool, and peer state, so TSan covers the target's exercised lifecycle
 transitions rather than arbitrary shared live-node schedules. No clean-master
 production inconsistency, request-state failure, or race was demonstrated; no
 source or deterministic test change was warranted.
+
+## Resumed public orphanage sanitizer gate (2026-07-23)
+
+The `txorphan` target was replayed from two independent private copies of 64
+existing inputs below 16 KiB. The selected seeds totaled 98,155 bytes with a
+maximum input size of 12,231 bytes. This bounded slice preserves the target's
+transaction construction, duplicate txid/wtxid, peer-announcement, protected
+orphan, eviction, and reconsideration paths while excluding the oversized
+synthetic inputs that previously limited the full ASan run.
+
+Two normal workers completed 512 mutations each in 5 and 4 seconds, expanding
+their private corpora to 174 and 161 files. Two ASan/UBSan workers then
+completed 512 mutations each in 33 and 26 seconds, reaching coverage 11,400
+and 11,402 with peak RSS of 313 and 310 MB; their corpora expanded to 230 and
+210 files. The direct-file TSan driver replayed all 230 and 210 expanded inputs
+in one second per worker. All six workers exited zero without an assertion,
+sanitizer report, race report, timeout, or target artifact.
+
+This is a completed bounded public-orphanage gate, not a full replay of the
+686-input `txorphan` corpus. Each process owns an independent orphanage and
+peer state, so TSan covers the target's exercised transitions rather than
+arbitrary shared live-node schedules. No clean-master production
+inconsistency, eviction failure, or race was demonstrated; no source or
+deterministic test change was warranted.
