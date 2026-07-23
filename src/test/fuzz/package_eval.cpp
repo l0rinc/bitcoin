@@ -273,6 +273,33 @@ struct MempoolSnapshot {
     unsigned int transactions_updated;
 };
 
+struct PackageInputCacheSnapshot {
+    COutPoint outpoint;
+    bool in_cache;
+};
+
+std::vector<PackageInputCacheSnapshot> SnapshotPackageInputCache(const CCoinsViewCache& coins_cache, const Package& package)
+{
+    std::set<COutPoint> outpoints;
+    for (const auto& tx : package) {
+        for (const auto& txin : tx->vin) outpoints.insert(txin.prevout);
+    }
+
+    std::vector<PackageInputCacheSnapshot> snapshot;
+    snapshot.reserve(outpoints.size());
+    for (const auto& outpoint : outpoints) {
+        snapshot.push_back({outpoint, coins_cache.HaveCoinInCache(outpoint)});
+    }
+    return snapshot;
+}
+
+void AssertPackageInputCacheUnchanged(const CCoinsViewCache& coins_cache, const std::vector<PackageInputCacheSnapshot>& expected)
+{
+    for (const auto& [outpoint, in_cache] : expected) {
+        Assert(coins_cache.HaveCoinInCache(outpoint) == in_cache);
+    }
+}
+
 MempoolSnapshot SnapshotMempool(const CTxMemPool& pool)
 {
     std::vector<MempoolEntrySnapshot> entries;
@@ -579,9 +606,11 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
 
         std::optional<MempoolSnapshot> test_accept_mempool_snapshot;
         std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
+        std::optional<std::vector<PackageInputCacheSnapshot>> test_accept_coins_cache_snapshot;
         if (package_test_accept) {
             test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
             test_accept_outpoints_snapshot = mempool_outpoints;
+            test_accept_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
         }
 
         const auto result_package = WITH_LOCK(::cs_main,
@@ -591,6 +620,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
             node.validation_signals->SyncWithValidationInterfaceQueue();
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
+            WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *test_accept_coins_cache_snapshot));
         }
 
         if (package_test_accept) {
@@ -612,6 +642,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
             node.validation_signals->SyncWithValidationInterfaceQueue();
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
+            WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *test_accept_coins_cache_snapshot));
         }
 
         if (!single_submit && result_package.m_state.GetResult() == PackageValidationResult::PCKG_POLICY) {
@@ -791,9 +822,11 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
 
         std::optional<MempoolSnapshot> test_accept_mempool_snapshot;
         std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
+        std::optional<std::vector<PackageInputCacheSnapshot>> test_accept_coins_cache_snapshot;
         if (package_test_accept) {
             test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
             test_accept_outpoints_snapshot = mempool_outpoints;
+            test_accept_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
         }
 
         const auto result_package = WITH_LOCK(::cs_main,
@@ -804,6 +837,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
             Assert(added.empty());
+            WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *test_accept_coins_cache_snapshot));
         }
 
         if (package_test_accept) {
@@ -830,6 +864,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
             Assert(added.empty());
+            WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *test_accept_coins_cache_snapshot));
         }
 
         // There is only 1 transaction in the package. We did a test-package-accept and a ATMP

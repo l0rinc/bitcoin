@@ -414,6 +414,34 @@ BOOST_AUTO_TEST_CASE(package_test_accept_single_low_fee)
     BOOST_CHECK_EQUAL(m_node.mempool->size(), initial_pool_size);
 }
 
+BOOST_AUTO_TEST_CASE(package_test_accept_preserves_coins_cache)
+{
+    mineBlocks(1);
+    LOCK(cs_main);
+    auto& chainstate = m_node.chainman->ActiveChainstate();
+    const COutPoint cached_input{m_coinbase_txns[0]->GetHash(), 0};
+    const COutPoint uncached_input{m_coinbase_txns[1]->GetHash(), 0};
+
+    // Connected test-chain outputs are dirty cache entries. Flush them so Uncache can establish
+    // the clean, uncached state used by this test.
+    chainstate.CoinsTip().Flush(/*reallocate_cache=*/false);
+    chainstate.CoinsTip().AccessCoin(cached_input);
+    BOOST_REQUIRE(chainstate.CoinsTip().HaveCoinInCache(cached_input));
+    BOOST_REQUIRE(!chainstate.CoinsTip().HaveCoinInCache(uncached_input));
+
+    CKey output_key = GenerateRandomKey();
+    const CScript output_script = GetScriptForDestination(PKHash(output_key.GetPubKey()));
+    const auto tx = MakeTransactionRef(CreateValidMempoolTransaction(
+        {m_coinbase_txns[0], m_coinbase_txns[1]}, {cached_input, uncached_input}, /*input_height=*/0,
+        {coinbaseKey, coinbaseKey}, {{CAmount(99 * COIN), output_script}}, /*submit=*/false));
+
+    const auto result = ProcessNewPackage(chainstate, *m_node.mempool, {tx},
+                                          /*test_accept=*/true, /*client_maxfeerate=*/{});
+    BOOST_REQUIRE_MESSAGE(result.m_state.IsValid(), result.m_state.GetRejectReason());
+    BOOST_CHECK(chainstate.CoinsTip().HaveCoinInCache(cached_input));
+    BOOST_CHECK(!chainstate.CoinsTip().HaveCoinInCache(uncached_input));
+}
+
 BOOST_AUTO_TEST_CASE(noncontextual_package_tests)
 {
     // The signatures won't be verified so we can just use a placeholder
