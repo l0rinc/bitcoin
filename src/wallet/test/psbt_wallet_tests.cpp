@@ -2,20 +2,106 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <external_signer.h>
 #include <key_io.h>
 #include <node/types.h>
+#include <primitives/transaction.h>
+#include <script/script.h>
 #include <util/bip32.h>
 #include <util/strencodings.h>
+#include <wallet/external_signer_scriptpubkeyman.h>
 #include <wallet/wallet.h>
+#include <wallet/walletutil.h>
 
 #include <boost/test/unit_test.hpp>
 #include <test/util/setup_common.h>
 #include <wallet/test/wallet_test_fixture.h>
 
+#include <array>
+#include <cstdlib>
+#include <vector>
+
 using namespace util::hex_literals;
 
 namespace wallet {
 BOOST_FIXTURE_TEST_SUITE(psbt_wallet_tests, WalletTestingSetup)
+
+static void SetExternalSignerTestEnvironment(const std::string& psbt)
+{
+#if defined(WIN32)
+    _putenv_s("BITCOIN_TEST_MOCK_PROCESS", "external_signer");
+    _putenv_s("BITCOIN_TEST_MOCK_PSBT", psbt.c_str());
+#else
+    setenv("BITCOIN_TEST_MOCK_PROCESS", "external_signer", /*overwrite=*/1);
+    setenv("BITCOIN_TEST_MOCK_PSBT", psbt.c_str(), /*overwrite=*/1);
+#endif
+}
+
+static void ClearExternalSignerTestEnvironment()
+{
+#if defined(WIN32)
+    _putenv_s("BITCOIN_TEST_MOCK_PROCESS", "");
+    _putenv_s("BITCOIN_TEST_MOCK_PSBT", "");
+#else
+    unsetenv("BITCOIN_TEST_MOCK_PROCESS");
+    unsetenv("BITCOIN_TEST_MOCK_PSBT");
+#endif
+}
+
+BOOST_AUTO_TEST_CASE(external_signer_reports_signed_inputs)
+{
+    // Use two inputs so the signer can return a valid but still incomplete PSBT.
+    CMutableTransaction tx;
+    tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), /*nIn=*/0});
+    tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), /*nIn=*/1});
+    tx.vout.emplace_back(1, CScript{} << OP_TRUE);
+
+    PartiallySignedTransaction psbt{tx};
+    const CTxOut witness_utxo{1, CScript{} << OP_TRUE};
+    for (auto& input : psbt.inputs) input.witness_utxo = witness_utxo;
+
+    CKey key;
+    key.MakeNewKey(/*fCompressed=*/true);
+    KeyOriginInfo origin{};
+    origin.fingerprint[0] = 0;
+    origin.fingerprint[1] = 0;
+    origin.fingerprint[2] = 0;
+    origin.fingerprint[3] = 1;
+    psbt.inputs.at(0).hd_keypaths.emplace(key.GetPubKey(), origin);
+
+    PartiallySignedTransaction signed_psbt{psbt};
+    signed_psbt.inputs.at(0).final_script_sig = CScript{} << OP_TRUE;
+    std::vector<unsigned char> serialized;
+    VectorWriter{serialized, 0, signed_psbt};
+    const std::string signed_psbt_base64{EncodeBase64(serialized)};
+
+    FlatSigningProvider provider;
+    std::string error;
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    const std::string descriptor_string{"wpkh([00000001/84h/1h/0']" + EncodeExtPubKey(extkey.Neuter()) + "/0/*)"};
+    auto descriptors{Parse(descriptor_string, provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_EQUAL(descriptors.size(), 1);
+    WalletDescriptor wallet_descriptor{std::move(descriptors.at(0)), 0, 0, 0, 0};
+    auto spkm{ExternalSignerScriptPubKeyMan::LoadFromStorage(m_wallet, wallet_descriptor, 0, {}, {})};
+
+    std::optional<PrecomputedTransactionData> txdata{PrecomputePSBTData(psbt)};
+    BOOST_REQUIRE(txdata);
+
+    m_node.args->ForceSetArg("-signer", boost::unit_test::framework::master_test_suite().argv[0]);
+    SetExternalSignerTestEnvironment(signed_psbt_base64);
+
+    int n_signed{0};
+    const auto error_result{spkm->FillPSBT(psbt, *txdata, {.sign = true}, &n_signed)};
+
+    m_node.args->ForceSetArg("-signer", "");
+    ClearExternalSignerTestEnvironment();
+
+    BOOST_CHECK(!error_result);
+    BOOST_CHECK(PSBTInputSigned(psbt.inputs.at(0)));
+    BOOST_CHECK(!PSBTInputSigned(psbt.inputs.at(1)));
+    BOOST_CHECK_EQUAL(n_signed, 1);
+}
 
 static void import_descriptor(CWallet& wallet, const std::string& descriptor)
     EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
