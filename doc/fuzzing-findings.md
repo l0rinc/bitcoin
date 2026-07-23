@@ -679,6 +679,14 @@ called out separately below.
   invalidation/failure-flag reset, precious-block no-ops, flush transitions, and
   validation notifications. This extends the prior older-baseline gate; no new
   production defect or race was found, so no clean-master control was needed.
+* The RPC fuzzer was replayed with `LIMIT_TO_RPC_COMMAND=descriptorprocesspsbt`
+  against all 13,390 preserved inputs in two independent normal workers. Each
+  completed 13,391 executions at coverage 15,825. The two ASan/UBSan workers
+  completed 13,393 executions at coverage 53,070 and 53,076; the two TSan workers
+  completed 13,391 executions at coverage 6,791. Every job exited zero without an
+  assertion, sanitizer report, race/deadlock report, timeout, or artifact. This
+  exercised the current-master invalid-signature handling and malformed PSBT
+  combinations in PR #33014; no production defect or race was found.
 * `validation_load_mempool` completed its 1,799-input corpus under TSan with two
   jobs and two workers: both workers executed 1,802 inputs in 274 seconds, with
   peak RSS of 397 and 398 MB, and no report or artifact. A follow-up ASan/UBSan
