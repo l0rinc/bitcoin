@@ -3275,6 +3275,29 @@ No clean-master candidate, production inconsistency, vulnerability, race, or
 deterministic test gap was demonstrated; no source or test change was
 warranted.
 
+## Resumed valid UTXO-snapshot activation gate (2026-07-23)
+
+The `utxo_snapshot` target was replayed from two independent private copies of
+its 1,013-input QA corpus. The inputs totaled 11,525,417 bytes with a maximum
+size of 1,027,881 bytes. This target constructs valid and malformed metadata,
+activates snapshots, checks UTXO statistics and chain-index invariants, rejects
+second activation, and resets the chainstate manager after successful
+activation so later inputs do not inherit dirty state.
+
+Two normal workers completed 3,000 executions each in 89 and 86 seconds,
+reaching coverage 13,127 with peak RSS of 87 MB and adding 49 and 55 units;
+their corpora expanded to 1,060 and 1,067 files. Two ASan/UBSan workers
+completed the planned 2,000 executions each in 262 and 266 seconds, reaching
+coverage 41,839 and 41,834 with peak RSS of 529 and 533 MB and adding 10 and
+9 units. The direct-file TSan driver replayed the resulting 1,070 and 1,075
+files in 21 seconds per worker. All six jobs exited zero without an assertion,
+sanitizer report, race report, timeout, unexpected exception, or target
+artifact.
+
+No clean-master candidate, production inconsistency, vulnerability, race, or
+deterministic test gap was demonstrated; no source or test change was
+warranted.
+
 ## Resumed invalid UTXO-snapshot activation gate (2026-07-23)
 
 The `utxo_snapshot_invalid` target was replayed from two independent private
