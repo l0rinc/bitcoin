@@ -2903,6 +2903,29 @@ concurrent callers sharing a PSBT. No clean-master candidate, production
 inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
 
+## Resumed eval-script contract gate (2026-07-23)
+
+The `eval_script` target was replayed from two independent private copies of
+its 1,876-input QA corpus (1,098,895 bytes in total, maximum input size
+10,010 bytes). The target checks the `EvalScript` result and error contract
+with and without an error pointer, compares the resulting stacks, and runs
+the check for both `SigVersion::BASE` and `SigVersion::WITNESS_V0`.
+
+Two normal workers completed 10,000 executions each in 10 and 11 seconds,
+adding 72 and 80 units with peak RSS of 59 and 57 MB; their corpora expanded
+to 1,944 and 1,956 files. Two ASan/UBSan workers completed 6,000 executions
+each in 28 and 25 seconds, reaching coverage 3,761 with peak RSS of 640 and
+619 MB and adding 42 and 27 units. The direct-file TSan driver replayed the
+resulting 1,986 and 1,983 files in one second per worker. All six jobs exited
+zero without an assertion, sanitizer report, race report, timeout,
+unexpected exception, or target artifact.
+
+Each process owns its script and execution-data state, so the TSan replay
+covers the target's exercised interpreter calls rather than shared concurrent
+validation schedules. No clean-master candidate, production inconsistency,
+vulnerability, race, or deterministic test gap was demonstrated; no source
+or test change was warranted.
+
 ## Resumed private-broadcast model gate (2026-07-23)
 
 The model-level `private_broadcast` target has no native QA corpus. It was
