@@ -3275,6 +3275,31 @@ No clean-master candidate, production inconsistency, vulnerability, race, or
 deterministic test gap was demonstrated; no source or test change was
 warranted.
 
+## Resumed invalid UTXO-snapshot activation gate (2026-07-23)
+
+The `utxo_snapshot_invalid` target was replayed from two independent private
+copies of its 1,562-input QA corpus. The inputs totaled 83,147,971 bytes with
+a maximum size of 983,050 bytes. It constructs structured and randomized
+snapshot metadata, optionally duplicates coin records, appends a deliberately
+invalid late coin record, and asserts that failed activation preserves the
+current chainstate, snapshot metadata, cache sizes, and active chainstate
+identity.
+
+Two normal workers completed 8,000 executions each in 217 and 222 seconds,
+reaching coverage 8,029 and 8,404 with peak RSS of 108 and 177 MB and adding
+55 and 51 units; their corpora expanded to 1,614 and 1,612 files. Two
+ASan/UBSan workers completed 5,000 each in 252 and 238 seconds, reaching
+coverage 25,886 and 25,890 with peak RSS of 711 and 701 MB and adding 14 and
+12 units. The direct-file TSan driver replayed the resulting 1,626 and 1,623
+files in 36 seconds per worker. All six jobs exited zero without an assertion,
+sanitizer report, race report, timeout, unexpected exception, or target
+artifact.
+
+This completes the sanitizer follow-up that was previously bounded before
+the full invalid-snapshot corpus. No clean-master candidate, production
+inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
+
 ## Resumed general proof-of-work gate (2026-07-23)
 
 The `pow` target was replayed from two independent private copies of its
