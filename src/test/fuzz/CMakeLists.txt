@@ -23,6 +23,7 @@ add_executable(fuzz
   blockfilter.cpp
   bloom_filter.cpp
   buffered_file.cpp
+  coins_cache_size_state.cpp
   cache_sizes.cpp
   chain.cpp
   checkqueue.cpp
