@@ -3246,3 +3246,28 @@ covers the exercised smart construction and semantic operations rather than
 shared concurrent Miniscript callers. No clean-master candidate, production
 inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
+
+## Resumed script-sign gate (2026-07-23)
+
+The `script_sign` target was replayed from two independent private copies of
+its 6,177-input QA corpus. The inputs totaled 70,174,825 bytes with a maximum
+size of 938,133 bytes. The target exercises HD key-path serialization and
+deserialization, signature-data merging, legacy and witness signing, script
+signature creation, transaction signing, and the resulting per-input error
+map contracts. Its malformed stream paths catch only `std::ios_base::failure`;
+other exceptions are allowed to escape.
+
+Two normal workers reached coverage 7,991 and 7,990 with peak RSS of 120 and
+178 MB. Because libFuzzer reloaded and retained the expanding corpus during
+the run, it reported 8,067 and 10,459 total executed units rather than the
+requested 8,000; the resulting corpora contained 6,201 and 6,226 files. The
+full boundary-inclusive ASan/UBSan replays completed 6,203 and 6,228 total
+units, reaching coverage 27,822 and 27,819 with peak RSS of 681 and 676 MB.
+The direct-file TSan driver replayed the same 6,201 and 6,226 files in 10
+seconds per worker. All completed jobs exited zero without an assertion,
+sanitizer report, race report, timeout, unexpected exception, or target
+artifact.
+
+No clean-master candidate, production inconsistency, vulnerability, race, or
+deterministic test gap was demonstrated; no source or test change was
+warranted.
