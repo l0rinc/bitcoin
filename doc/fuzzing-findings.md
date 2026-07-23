@@ -3507,3 +3507,41 @@ mempool and validation state, so TSan covers the exercised package operations
 rather than arbitrary live-node schedules. No clean-master candidate,
 production inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
+
+## Resumed package test-accept cache-contract gate (2026-07-23)
+
+Commit `d4fe20c8e8` adds a cache-membership oracle to both `tx_package_eval`
+and `ephemeral_package_eval`. For every package input, the fuzzer records
+`CCoinsViewCache::HaveCoinInCache` before `ProcessNewPackage` test-accept and
+requires the complete membership map to be unchanged afterward, including
+the second test-accept path. The production cleanup loops in both
+`AcceptToMemoryPool` and `ProcessNewPackage` now assert that every outpoint
+listed in `coins_to_uncache` is absent after `Uncache`.
+
+The deterministic `txpackage_tests` case flushes the fixture cache, warms one
+clean input, leaves a second clean input uncached, and submits one valid
+transaction spending both. It verifies that test-accept preserves the first
+entry and removes the second. Existing package tests covered result fields,
+mempool state, and callbacks, but did not inspect chainstate cache membership.
+
+Two normal `tx_package_eval` workers started with 387 and 362 corpus files,
+completed 388 and 363 executions, reached coverage 18,824 and 18,839, and
+used 619 MB peak RSS. Two normal `ephemeral_package_eval` workers started
+with independent 32-input slices below 16 KiB, completed 128 executions each,
+reached coverage 18,032 and 18,079, and used 617 MB peak RSS. The ephemeral
+slices expanded to 113 and 114 files.
+
+The ASan/UBSan package replays completed 389 and 364 executions, reached
+coverage 61,295 and 61,316, and used 617 MB peak RSS. ASan/UBSan ephemeral
+replays covered the expanded 113- and 114-file corpora and completed 114 and
+116 executions, reaching coverage 58,958 and 58,900 at 618 MB peak RSS. The
+Debug and TSan deterministic test both passed, with 5/5 assertions. Direct
+file TSan replay covered the 387-, 362-, 113-, and 114-file corpora in
+parallel batches. Every gate exited zero without an assertion, sanitizer or
+race report, timeout, unexpected exception, or artifact.
+
+Severity: n/a. This is a coverage and assertion-hardening change, not a
+confirmed master-branch bug. The cleanup behavior is unchanged in release
+builds because the new production checks use `Assume`; no clean-master
+production inconsistency, vulnerability, race, or additional deterministic
+test gap was demonstrated.
