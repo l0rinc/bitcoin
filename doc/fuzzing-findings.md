@@ -35,14 +35,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 34 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 35 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, malformed fee-estimator inputs, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The thirty-four confirmed runtime defects are: the index publication and restart race;
+The thirty-five confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
@@ -62,7 +62,7 @@ exhausted coins-DB cursor reads; and two HTTP request-parser atomicity defects
 checkqueue completion; stale reusable sighash precomputation; duplicate serialized
 assumeutxo coin records; failed block candidates retained across invalidation and
 unlinked recovery; and pruned unlinked blocks no longer linked when their parent
-arrives. Their exact reproducer,
+arrives; and invalid raw fee-estimator success thresholds. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -152,6 +152,10 @@ created worker threads.
   stale reusable `PrecomputedTransactionData` witness hashes. The first three
   are medium validation/snapshot consistency issues; the latter two are low to
   medium direct-API contracts. The fixed branch passes each adapted regression.
+* The fee-estimator control is a separate direct-API boundary: populated estimator
+  data made NaN and negative success thresholds return a nonzero estimate and
+  overwrite the caller's result object on clean master. The fixed branch rejects
+  every non-finite or out-of-range threshold and preserves the output sentinel.
 * The HTTP stale-`m_send_ready` candidate was explicitly excluded from the defect
   count: current `origin/master` already contains the cleanup in `73da2a8a52`
   (`http: prevent race condition between worker thread and I/O thread`). Replaying
@@ -932,6 +936,29 @@ the exact Debug ASan/UBSan control without a memory-safety report. The fixed bra
 keeps pruned entries that still need ancestor chain counts in `m_blocks_unlinked`
 and passes the deterministic regression, `blockmanager_tests`, and the block-index
 fuzzer gate.
+
+### 35. Invalid raw fee-estimator thresholds fail open
+
+* Current branch fix: `f7f0ba94a24d` (`fees: reject invalid raw fee thresholds`).
+* Severity on clean master: low to medium direct fee-estimator API robustness.
+  RPC validation already rejects these values, but direct estimator callers can
+  pass NaN, infinities, or values outside `[0, 1]`. No wallet-loss, consensus, P2P,
+  or persisted-state attack was demonstrated.
+
+`CBlockPolicyEstimator::estimateRawFee()` rejected only thresholds greater than
+one. With populated estimator buckets, a NaN or negative threshold made the
+success comparisons fail open and produced a nonzero estimate while also replacing
+the caller's `EstimationResult` sentinel. The exact current-master control at
+`22a03ca694` wrote a sane estimator file, then exercised `-inf`, NaN, `-1`,
+`1 + epsilon`, and `+inf`; 15 postconditions failed, including the estimate and
+the four sentinel fields for the three fail-open values.
+
+The fixed branch passes the deterministic unit regression. Its `policy_estimator`
+fuzzer now injects the same invalid values and checks both the zero-fee result and
+output preservation. Two normal workers completed 2,000 executions each from a
+private copy of the 1,254-input QA corpus; two ASan/UBSan workers completed 1,290
+replays each after corpus growth. All exited successfully without a diagnostic or
+artifact.
 
 ## Compact-block short-ID investigation
 
@@ -2279,7 +2306,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The thirty-four confirmed production defects
+caller or new collision race was found. The thirty-five confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The post-collision exact-master
 controls subsequently added five confirmed defects: duplicate snapshot records,
