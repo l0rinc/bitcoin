@@ -3033,3 +3033,32 @@ replay covers the target's exercised interpreter calls rather than shared
 concurrent script-validation schedules. No clean-master candidate,
 production inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
+
+## Resumed script-operations gate (2026-07-23)
+
+The `script_ops` target was replayed from two independent private copies of
+its 320-input QA corpus. The normal workers were allowed to retain the
+one-megabyte boundary input; the expanded corpora contained 407 and 406
+files. The target mutates scripts and checks legacy and accurate sigop
+counts, P2SH sigop extraction, valid-op and push-only classification,
+P2A/P2W/P2TR recognition, witness-program output clearing, unspendability,
+and failed `GetOp` output/iterator contracts.
+
+Two normal workers completed 8,000 executions each in 81 and 63 seconds,
+reaching coverage 814 and 815 with peak RSS of 132 and 128 MB and adding 96
+and 91 units. A full expanded ASan/UBSan replay was deliberately stopped
+after both workers spent about 90 seconds on the one-megabyte mutation loop
+without producing a diagnostic; this was a harness-cost limit, not a target
+failure. Two bounded ASan/UBSan workers then replayed the complete normal
+corpora restricted to the 319 inputs below 64 KiB, completing 5,000
+executions each in 50 and 26 seconds. They reached coverage 2,089 and 2,095,
+peaked at 577 and 579 MB RSS, and added 31 and 33 units. The direct-file TSan
+driver replayed the resulting 349 and 352 files in under one second per
+worker. No assertion, sanitizer report, race report, timeout, unexpected
+exception, or target artifact was produced by any completed gate.
+
+The TSan workers own independent scripts and have no shared mutable node
+state, so this is evidence for the exercised script operations rather than
+arbitrary concurrent validation schedules. No clean-master candidate,
+production inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
