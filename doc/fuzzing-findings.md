@@ -2620,3 +2620,26 @@ TSan covers the target's exercised state transitions rather than arbitrary
 shared live-node schedules. No clean-master production inconsistency, request
 selection failure, or race was demonstrated; no source or deterministic test
 change was warranted.
+
+## Resumed DepGraph simulation sanitizer gate (2026-07-23)
+
+The `clusterlin_depgraph_sim` target was replayed from two independent private
+copies of all 1,666 existing inputs. Its reference model exercises dependency
+insertion, arbitrary dependency subsets, transaction removal, topological
+append, compaction, ancestor propagation, dependency counts, and the final
+serialized graph sanity check beneath cluster linearization.
+
+Two normal workers completed 3,000 and 3,375 total executions in 14 and 20
+seconds, reaching coverage 1,166 with peak RSS of 58 MB in both runs. Their
+private corpora expanded to 1,671 and 1,668 files. Two ASan/UBSan workers then
+completed 3,000 mutations each in 65 and 68 seconds, reaching coverage 3,249
+with peak RSS of 510 and 523 MB; their corpora expanded to 1,674 and 1,672
+files. The direct-file TSan driver replayed all 1,674 and 1,672 inputs in one
+second per worker. All six workers exited zero without an assertion, sanitizer
+report, race report, timeout, or target artifact.
+
+This is a completed full-seed graph simulation gate. Each process owns an
+independent `DepGraph`, so TSan covers the target's exercised operations rather
+than arbitrary shared cluster-mempool schedules. No clean-master production
+inconsistency, graph-model failure, or race was demonstrated; no source or
+deterministic test change was warranted.
