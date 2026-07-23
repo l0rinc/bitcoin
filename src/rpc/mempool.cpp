@@ -972,12 +972,11 @@ static RPCMethod gettxspendingprevout()
             // Worklist of outpoints to resolve
             struct Entry {
                 COutPoint outpoint;
-                const UniValue* raw;
                 size_t result_index;
             };
             std::vector<Entry> prevouts_to_process;
             prevouts_to_process.reserve(output_params.size());
-            for (unsigned int idx = 0; idx < output_params.size(); idx++) {
+            for (size_t idx{0}; idx < output_params.size(); ++idx) {
                 const UniValue& o = output_params[idx].get_obj();
 
                 RPCTypeCheckObj(o,
@@ -991,11 +990,11 @@ static RPCMethod gettxspendingprevout()
                 if (nOutput < 0) {
                     throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, vout cannot be negative");
                 }
-                prevouts_to_process.emplace_back(COutPoint{txid, static_cast<uint32_t>(nOutput)}, &o, idx);
+                prevouts_to_process.emplace_back(COutPoint{txid, static_cast<uint32_t>(nOutput)}, idx);
             }
 
-            auto make_output = [return_spending_tx](const Entry& prevout, const CTransaction* spending_tx = nullptr) {
-                UniValue o{*prevout.raw};
+            auto make_output = [&output_params, return_spending_tx](const Entry& prevout, const CTransaction* spending_tx = nullptr) {
+                UniValue o{output_params[prevout.result_index]};
                 if (spending_tx) {
                     o.pushKV("spendingtxid", spending_tx->GetHash().ToString());
                     if (return_spending_tx) {
