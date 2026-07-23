@@ -272,10 +272,10 @@ failed at the reason postcondition (`stale reason != `). The production implemen
 and existing tests were otherwise unchanged. The branch fix clears both outputs on
 that early return and asserts the empty postcondition; the same Debug test passes.
 The IPC functional test now checks the serialized `result`, `reason`, and `debug`
-fields for an empty coinbase. The local functional runner discovered that Python
-`capnp` is unavailable and skipped that test, so the C++ clean-master failure and
-fixed-branch pass are the executed proof; IPC serialization remains an environment
-coverage gap rather than a claimed pass.
+fields for an empty coinbase. After installing Python `pycapnp` 2.2.4 under the
+temporary storage area, `interface_ipc_mining.py` passed end to end in 24 seconds.
+The clean-master C++ failure, fixed-branch unit pass, and IPC functional pass
+therefore all cover this mutation.
 
 ## Compact-block short-ID investigation
 
