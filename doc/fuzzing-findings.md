@@ -3163,3 +3163,28 @@ the exercised string parser and round-trip operations rather than shared
 concurrent Miniscript callers. No clean-master candidate, production
 inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
+
+## Resumed miniscript-script gate (2026-07-23)
+
+The `miniscript_script` target was replayed from two independent private
+copies of its 1,042-input QA corpus. The inputs totaled 14,046,535 bytes with
+a maximum size of 331,252 bytes. The target deserializes arbitrary scripts,
+selects the P2WSH or Tapscript parser context, and checks successful
+`FromScript` context preservation and exact `ToScript` round-tripping.
+
+Two normal workers completed 8,000 executions each in 58 and 75 seconds,
+reaching coverage 3,157 with peak RSS of 217 and 222 MB and adding 23 and 22
+units; their corpora expanded to 1,065 and 1,064 files. Two ASan/UBSan
+workers completed 5,000 executions each in 321 and 301 seconds, reaching
+coverage 10,124 with peak RSS of 710 and 717 MB and adding 9 and 8 units. The
+direct-file TSan driver replayed the resulting 1,074 and 1,072 files in 21
+and 20 seconds. All six completed jobs exited zero without an assertion,
+sanitizer report, race report, timeout, unexpected exception, or target
+artifact. A preliminary one-run ASan smoke command was stopped because a
+maximum-size seed was still executing; it was not counted as a gate result.
+
+Each fuzzer process owns independent script and parser state, so the TSan
+replay covers the exercised script parser and round-trip operations rather
+than shared concurrent Miniscript callers. No clean-master candidate,
+production inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
