@@ -1789,3 +1789,38 @@ the exercised block-index invariants only, not proof that arbitrary deep pruned
 reorgs are recoverable or that live-node reorg schedules are race-free. No new
 clean-master production inconsistency was demonstrated, so no source or
 deterministic test change was warranted.
+
+## Current-master block-filter/index gate (2026-07-23)
+
+The current `blockfilter` target and the stateful `blockfilter_index_tests` suite
+were checked after the rebase onto `7b6f9ba7bad13b0c4169259000f7802854cdda0d`.
+The parser corpus contained 734 inputs totaling 46,256,258 bytes, with a maximum
+input size of 1,007,040 bytes. Fuzzer workers used independent private copies of
+the corpus so libFuzzer corpus updates could not race another worker or alter the
+preserved QA corpus.
+
+Two normal libFuzzer workers completed 5,000 executions each, reaching coverage
+3,199 with peak RSS of 577 MB; the workers took 184 and 155 seconds. Two TSan
+file-driver workers replayed all 734 inputs each and completed in 60 seconds,
+with no TSan report. Two ASan/UBSan libFuzzer workers completed 5,000 executions
+each, reaching coverage 9,369 and 9,375, with peak RSS of 819 and 795 MB; they
+took 667 and 886 seconds. All six valid workers exited zero without an assertion,
+sanitizer report, race report, timeout, or production artifact. The ASan/UBSan
+run wrote only the existing slow-unit timing artifacts for large filter inputs;
+they were removed after the replay and did not identify a correctness failure.
+
+The normal and TSan `blockfilter_index_tests/*` runs each passed all five cases:
+initial sync, initialization/destruction, null block-transaction-reference
+rejection, index reinitialization concurrent with a reader, and the deliberately
+blocked reorg schedule. The normal suite took 1.35 seconds and the TSan suite
+4.52 seconds. This covers the index worker's tested persistence and reorg
+interleavings in addition to the parser fuzzer, but the parser target itself is
+single-process and the index tests exercise only their explicit schedules; this
+does not prove arbitrary live-node index or reorg concurrency race-free.
+
+The first attempted TSan commands were excluded from the gate because the TSan
+build uses Bitcoin Core's file-list driver: unlike the libFuzzer build, it treats
+`-runs=5000` as an input path and correctly failed its harness assertion at
+`src/test/fuzz/fuzz.cpp:268`. The corrected TSan replay passed with corpus
+directories only. No clean-master production inconsistency or new block-filter
+bug was demonstrated, so no source or deterministic test change was warranted.
