@@ -2803,3 +2803,50 @@ internal operations and sanitizer-instrumented setup, not arbitrary shared
 live-node peer schedules. No clean-master candidate, production inconsistency,
 or race was demonstrated; no source or deterministic test change was
 warranted.
+
+## Resumed sighash and script-interpreter oracle gates (2026-07-23)
+
+The `sighash_cache` target was replayed from two independent private copies of
+all 585 existing inputs, with a maximum input size of 621,249 bytes. The
+additional mutations exercise cache aliases, script-code mismatches, witness
+mode mismatches, transaction reuse, and all 100 hash-type combinations. The
+target also checks the witness-v0 hash after reusing precomputed transaction
+data across transactions.
+
+Two normal workers completed 5,000 mutations each in 86 and 126 seconds,
+reaching coverage 1,377 with peak RSS of 112 and 110 MB; their live reduced
+corpora ended at 416 and 400 inputs. Two ASan/UBSan workers completed 3,000
+mutations each in 254 and 451 seconds, reaching coverage 3,832 in both runs
+with peak RSS of 651 and 681 MB; their live reduced corpora ended at 408 and
+417 inputs. The direct-file TSan driver replayed the expanded private corpora
+of 733 and 755 files in 15 and 17 seconds. The only log records were two
+slow-unit timing markers (13 and 21 seconds); there was no assertion,
+sanitizer report, race report, timeout, exception, or target artifact.
+
+The stale-precomputation defect already recorded in finding 31 remains the
+known production issue covered by this target; it was fixed separately and no
+additional stale-state or cache-alias inconsistency was found. Because this
+round produced no candidate failure, an exact clean-master replay was not
+needed to classify a new defect. The independent-process TSan replay covers
+the target's exercised cache operations, not arbitrary concurrent live-node
+schedules. No source or deterministic test change was warranted.
+
+The sibling `script_interpreter` target was replayed from two independent
+private copies of a bounded 473-input slice of its 622-input corpus. The
+slice contains inputs below 64 KiB (maximum 59,962 bytes) to avoid spending
+the gate on oversized synthetic inputs while retaining the script, signature,
+transaction, and `CastToBool` oracle paths. Two normal workers completed 5,000
+mutations each in three seconds, reaching coverage 1,481 with peak RSS of 66
+MB and live reduced corpora of 380 and 376 inputs. Two ASan/UBSan workers
+completed 5,000 mutations each in 17 and 16 seconds, reaching coverage 4,277
+with peak RSS of 507 and 520 MB and live reduced corpora of 375 and 382
+inputs. The direct-file TSan driver replayed the expanded corpora of 534 and
+523 files in one second per worker. All eight runs exited zero without a
+`CastToBool` mismatch, assertion, sanitizer report, race report, timeout,
+exception, or target artifact. No production or deterministic test change
+was warranted.
+
+Both targets use independent fuzzer processes, so these results establish
+local oracle and sanitizer coverage rather than a proof about shared-node
+concurrency. No new clean-master production inconsistency, vulnerability, or
+race was demonstrated.
