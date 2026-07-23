@@ -3271,3 +3271,27 @@ artifact.
 No clean-master candidate, production inconsistency, vulnerability, race, or
 deterministic test gap was demonstrated; no source or test change was
 warranted.
+
+## Resumed CuckooCache collision gate (2026-07-23)
+
+The `cuckoocache` target was replayed from two independent private copies of
+its 674-input QA corpus. The inputs totaled 8,276,114 bytes with a maximum
+size of 352,499 bytes. The target mutates packed atomic flag arrays across
+resizes, randomized and deterministic CuckooCache insert/contains/erase
+operations, and explicitly checks that inserting an erased colliding entry
+refreshes it without losing a second colliding entry.
+
+Two normal workers completed 8,000 executions each in 40 and 41 seconds,
+reaching coverage 760 with peak RSS of 95 and 97 MB and adding 58 and 53
+units; their corpora expanded to 731 and 727 files. Two ASan/UBSan workers
+completed 5,000 each in 128 and 138 seconds, reaching coverage 2,147 and
+2,146 with peak RSS of 582 and 583 MB and adding 37 and 28 units. The
+direct-file TSan driver replayed the resulting 768 and 755 files in 24 and
+23 seconds. All six jobs exited zero without an assertion, sanitizer report,
+race report, timeout, unexpected exception, or target artifact.
+
+Each fuzzer process owns its cache and provider state, so the TSan replay
+covers the exercised resize and collision operations rather than shared
+concurrent cache callers. No clean-master candidate, production
+inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
