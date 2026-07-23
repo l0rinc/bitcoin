@@ -190,7 +190,8 @@ public:
         int& num_blocks,
         int64_t& block_time) = 0;
 
-    //! Get transaction details.
+    //! Get transaction details. If the transaction is not found, return an empty
+    //! WalletTx and clear all output parameters.
     virtual WalletTx getWalletTxDetails(const Txid& txid,
         WalletTxStatus& tx_status,
         std::vector<std::string>& messages,

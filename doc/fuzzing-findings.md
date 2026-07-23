@@ -30,19 +30,20 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 10 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
+| Confirmed runtime defects | 11 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The ten confirmed runtime defects are: the index publication and restart race;
+The eleven confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; stale Base58 output on decode
 failure; the descriptor-cache partial merge; stale mining `submitSolution` failure
-outputs; and stale `TxIndex::FindTx` failure outputs. Their exact reproducer,
+outputs; stale `TxIndex::FindTx` failure outputs; and stale wallet transaction
+detail outputs. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -72,6 +73,14 @@ created worker threads.
   failure strings untouched instead of returning the empty outputs promised by the
   shared submission path. The clean-master C++ control failed with stale strings;
   the branch now clears and asserts both fields, and adds an IPC regression check.
+* `Wallet::getWalletTxDetails()` returned an empty `WalletTx` for a missing
+  transaction while leaving all caller-owned output parameters unchanged. The Qt
+  transaction-description caller default-initializes `WalletTxStatus`,
+  `inMempool`, and `numBlocks`, then formats them without a success return value;
+  a wallet transaction disappearing between the model snapshot and this lookup
+  could therefore read indeterminate status values. The clean-master control
+  failed all 13 non-`WalletTx` output postconditions; the branch now clears and
+  asserts the outputs and documents the contract.
 * Sanitizer workers in this ledger are independent processes unless explicitly stated
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
@@ -300,6 +309,37 @@ remain empty. The same deterministic unit test passes with 116/116 assertions, a
 the full three-case `txindex_tests` suite passes with 129/129 assertions. No caller
 currently relies on stale values after a failed lookup; the fix makes the documented
 failure contract explicit for direct and future callers.
+
+### 11. `Wallet::getWalletTxDetails` leaves missing-transaction outputs stale
+
+* Current branch fix: `wallet: clear missing getWalletTxDetails outputs`.
+* Severity on clean master: low local GUI/API correctness issue with undefined
+  status reads in the Qt caller; no remote, consensus, key-loss, or wallet-file
+  corruption path was demonstrated.
+
+`Wallet::getWalletTxDetails()` returns an empty `WalletTx` when the requested
+transaction is absent, but clean master left `tx_status`, `messages`,
+`payment_requests`, `in_mempool`, and `num_blocks` untouched. Unlike an API that
+returns a boolean, the Qt transaction-description caller uses the returned
+values immediately. Its `WalletTxStatus status`, `bool inMempool`, and `int
+numBlocks` locals are default-initialized and therefore indeterminate when a
+model transaction disappears before the details lookup; reused vector or scalar
+outputs can also display stale data.
+
+The deterministic control initialized every output to a non-default value,
+looked up absent `Txid::FromUint256(uint256::ONE)`, and required an empty result
+plus cleared outputs. In an exact clean-master `7b6f9ba7bad13b0c4169259000f7802854cdda0d`
+Debug worktree, `wallet_tests/wallet_interface_missing_tx_outputs` failed 13 of
+15 postconditions at `src/wallet/test/wallet_tests.cpp:74-86`; only the empty
+`WalletTx` checks passed. Existing wallet tests used default-initialized outputs,
+so they did not catch the contract omission.
+
+The fix resets every output before the lookup and adds production `Assert`
+postconditions on the missing-transaction path. The deterministic regression
+test passes 15/15 assertions, and the full `wallet_tests` suite passes 15 cases
+and 145/145 assertions in the Debug wallet build. This is a direct interface
+contract fix, not evidence of a remotely reachable race: the wallet lock
+serializes the lookup, while the stale model entry is the normal local trigger.
 
 ## Compact-block short-ID investigation
 
@@ -1620,7 +1660,7 @@ normal-binary replay exited zero in about four seconds, so it is sanitizer/model
 overhead rather than a demonstrated production performance issue.
 
 This matrix found no new production inconsistency, race, memory-safety failure, or
-policy defect. The confirmed-runtime-defect count remains ten; no source or
+policy defect. The confirmed-runtime-defect count remains eleven; no source or
 deterministic functional-test change was warranted by these replays.
 
 ### Re-evaluation after the compact-block collision work
@@ -1630,7 +1670,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The ten confirmed production defects
+caller or new collision race was found. The eleven confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The AddrMan and wallet sanitizer
 gates above found no additional production mistake, race, consensus issue, or
