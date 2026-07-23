@@ -3272,6 +3272,27 @@ No clean-master candidate, production inconsistency, vulnerability, race, or
 deterministic test gap was demonstrated; no source or test change was
 warranted.
 
+## Resumed proof-of-work transition gate (2026-07-23)
+
+The `pow_transition` target was replayed from two independent private copies
+of its 235-input QA corpus. The inputs totaled 3,477 bytes with a maximum
+size of 41 bytes. The target constructs a full difficulty-adjustment period
+with mutated old/new timestamps, versions, and compact targets, then checks
+that `GetNextWorkRequired` satisfies `PermittedDifficultyTransition`.
+
+Two normal workers completed 8,000 executions each in 23 seconds, reaching
+coverage 386 with peak RSS of 56 and 54 MB and adding 8 and 7 units; their
+corpora expanded to 241 and 240 files. Two ASan/UBSan workers completed 5,000
+each in 66 and 64 seconds, reaching coverage 1,039 with peak RSS of 656 and
+654 MB and adding 0 and 2 units. The direct-file TSan driver replayed the
+resulting 241 and 242 files in one second per worker. All six jobs exited zero
+without an assertion, sanitizer report, race report, timeout, unexpected
+exception, or target artifact.
+
+No clean-master candidate, production inconsistency, vulnerability, race, or
+deterministic test gap was demonstrated; no source or test change was
+warranted.
+
 ## Resumed cluster backend-equivalence gate (2026-07-23)
 
 The `clusterlin_backend_equivalence` target had no native QA corpus, so it was
