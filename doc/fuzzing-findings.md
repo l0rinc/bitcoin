@@ -2986,3 +2986,27 @@ therefore covers cache operations and target setup rather than shared live
 node cache schedules. No clean-master candidate, production inconsistency,
 vulnerability, race, or deterministic test gap was demonstrated; no source
 or test change was warranted.
+
+## Resumed signature-checker replay gate (2026-07-23)
+
+The `signature_checker` target was replayed from two independent private
+copies of a bounded 1,785-input slice of its 1,796-input QA corpus. The
+selected inputs totaled 1,088,685 bytes with a maximum input size of 49,349
+bytes. It compares `EvalScript` with explicit and implicit
+`ScriptExecutionData`, repeats the explicit path, and checks deterministic
+ECDSA/Schnorr, locktime, sequence, and code-separator callback behavior under
+valid and invalid script-flag combinations.
+
+Two normal workers completed 8,000 executions each in four seconds, adding
+235 and 218 units with peak RSS of 61 and 62 MB; their corpora expanded to
+2,009 and 1,998 files. Two ASan/UBSan workers completed 5,000 each, adding
+99 and 93 units at peak RSS of 604 and 565 MB. The direct-file TSan driver
+replayed the resulting 2,106 and 2,090 files in one second per worker. All
+six jobs exited zero without an assertion, sanitizer report, race report,
+timeout, unexpected exception, or target artifact.
+
+Each process owns its deterministic checker and script state, so the TSan
+replay covers the target's exercised interpreter calls rather than shared
+concurrent script-validation schedules. No clean-master candidate,
+production inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
