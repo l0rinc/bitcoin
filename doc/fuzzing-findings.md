@@ -2903,6 +2903,39 @@ concurrent callers sharing a PSBT. No clean-master candidate, production
 inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
 
+## Resumed script-flag matrix gate (2026-07-23)
+
+The `script_flags` target was replayed from two independent private copies of
+its 2,579-input QA corpus (46,641,664 bytes, maximum input size 100,001
+bytes). It deserializes transactions and spent outputs, exercises valid
+script-flag combinations, compares `VerifyScript` with and without a
+`ScriptError` output, and checks that removing flags from a passing execution
+or adding flags to a failing execution preserves the result. Its only
+exception catch remains the deserialization-specific `std::ios_base::failure`.
+
+Two normal workers completed 10,000 executions each in 92 seconds, reaching
+coverage 3,123 with peak RSS of 105 MB and adding 13 and 20 units; their
+corpora expanded to 2,592 and 2,598 files. A full expanded ASan/UBSan replay
+and a second replay restricted to inputs below 64 KiB were deliberately
+stopped at the first 1,024-execution pulse after both workers encountered a
+high-cost seed transition. Neither attempt emitted a sanitizer report,
+assertion, timeout, or artifact; these are incomplete gates, not sanitizer
+passes or failures.
+
+For a completed bounded sanitizer gate, two workers replayed the complete
+normal corpora restricted to 1,336 and 1,340 inputs below 4 KiB. ASan/UBSan
+completed 5,000 executions each in 14 seconds, reaching coverage 11,740 and
+11,744 with peak RSS of 426 and 418 MB and adding 51 and 42 units. The
+direct-file TSan driver replayed the resulting 1,387 and 1,381 files in one
+second per worker. All completed jobs exited zero without an assertion,
+sanitizer report, race report, timeout, unexpected exception, or artifact.
+
+The TSan workers own independent transactions, spent outputs, and checkers,
+so the result covers the exercised verification paths rather than shared
+concurrent node validation. No clean-master candidate, production
+inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
+
 ## Resumed eval-script contract gate (2026-07-23)
 
 The `eval_script` target was replayed from two independent private copies of
