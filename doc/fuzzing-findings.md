@@ -7,7 +7,7 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`22a03ca69443deb66b98deb37d8e84a33968ac10`. The five new exact-master controls
+`51143291a6c502a63f252d5e6b9cf9ef146de17c`. The five new exact-master controls
 below were run against the then-current `7b6f9ba7ba` baseline before this final
 rebase; the intervening master range contains only cluster-linearization
 optimizations and does not touch these production paths. The reorg campaign below ran before the
@@ -21,6 +21,8 @@ The stale-output defect introduced by that change is recorded below; it does not
 change the earlier compact-block, mempool, coins, or descriptor-cache control results.
 The final `7b6f9ba7ba..22a03ca694` range contains only the four `clusterlin`
 optimization commits; no finding below needs a severity or reproducer change.
+The subsequent `22a03ca694..51143291a6` range contains only I2P URL comment
+updates and does not alter any production path or fuzzer control recorded here.
 Controls that explicitly name an older baseline, including
 `32eb52100296718f7c0469e3210ce1db73694793` and `5311b15727f2f282274472184185423e441abd85`,
 are historical clean-master runs; they remain valid evidence for the mutations they
@@ -2643,3 +2645,35 @@ independent `DepGraph`, so TSan covers the target's exercised operations rather
 than arbitrary shared cluster-mempool schedules. No clean-master production
 inconsistency, graph-model failure, or race was demonstrated; no source or
 deterministic test change was warranted.
+
+## Post-rebase cluster chunking and SFL sanitizer gates (2026-07-23)
+
+The `clusterlin_chunking` and `clusterlin_sfl` targets were replayed from two
+independent private copies of their existing QA corpora. `clusterlin_chunking`
+started from 572 inputs and checks fee-diagram partition consistency,
+monotonic chunk ordering, contiguous coverage, equal-rate boundaries, and the
+checked comparable-chunk overflow paths. `clusterlin_sfl` started from 895
+inputs and exercises spanning-forest state transitions, connected and
+disconnected graphs, loaded linearizations, optimal/minimal steps, and
+deterministic reruns.
+
+Normal workers completed 2,000 mutations per target and worker. Chunking
+finished in under one second per worker at coverage 935; SFL finished in 34
+and 37 seconds at coverage 2,058. The normal corpora expanded to 575/572 and
+897/898 files. ASan/UBSan workers completed 2,000 mutations per target and
+worker: chunking finished in 3 seconds at coverage 2,885 with peak RSS of
+276/275 MB, while SFL finished in 144/160 seconds at coverage 6,114 with peak
+RSS of 606/604 MB. The sanitizer corpora expanded to chunking 578/574 and SFL
+902/900 files.
+
+Direct-file TSan replay succeeded for all four expanded corpora: chunking
+completed 578/574 inputs in one second per worker and SFL completed 902/900 in
+four seconds per worker. All twelve normal and sanitizer jobs exited zero
+without an assertion, sanitizer report, race report, timeout, or target
+artifact.
+
+These are completed corpus-backed gates for the two algorithm targets. Each
+process owns an independent graph and runs sequentially, so TSan covers the
+target's exercised operations rather than arbitrary shared cluster-mempool
+schedules. No clean-master production inconsistency, fee-diagram failure, or
+race was demonstrated; no source or deterministic test change was warranted.
