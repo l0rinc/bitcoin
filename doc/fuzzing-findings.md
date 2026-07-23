@@ -1683,3 +1683,27 @@ marker or target artifact, but are not counted as completed corpus gates.
 Scratch data from this round was removed after the artifact and sanitizer scans; the
 shared QA corpora and ccache were preserved. This file should be amended if a later
 master rebase changes the status of any item above.
+
+## Current-master validation-load-mempool replay (2026-07-23)
+
+The rebased `validation_load_mempool` target was replayed from a private copy of
+all 1,799 QA inputs (132,748,569 bytes total; maximum input 1,048,229 bytes).
+The corpus covers current and v1 dump formats, malformed records, metadata option
+combinations, disabled metadata import, trailing parse failures, and atomic dump
+failure paths. The fuzzer treats only the target's expected `std::ios_base::failure`
+as a load error; unexpected exceptions, assertions, and state-contract failures
+remain fatal.
+
+Two normal workers completed 5,000 executions each, reaching coverage 8,346 with
+peak RSS of 211 and 209 MB. TSan workers replayed all 1,799 seeds and completed
+1,800 executions each, reaching coverage 2,983 and 2,996 with peak RSS of 389 MB.
+For memory instrumentation, two ASan/UBSan workers replayed an evenly selected
+449-input slice and completed 512 executions each, reaching coverage 24,551 and
+24,554 with peak RSS of 827 and 796 MB. All six workers exited zero without an
+assertion, sanitizer report, race/deadlock report, timeout, or artifact.
+
+Each fuzzer process owns its own mempool and dump files. TSan therefore covers the
+target's exercised thread interactions, but does not prove arbitrary concurrent
+live-node persistence or mempool schedules race-free. This gate found no new
+production inconsistency, exception-classification error, race, or clean-master
+failure; no source or deterministic test change was warranted.
