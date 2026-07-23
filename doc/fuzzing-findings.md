@@ -2574,6 +2574,54 @@ transitions rather than arbitrary shared live-node schedules. No clean-master
 production inconsistency, request-state failure, or race was demonstrated; no
 source or deterministic test change was warranted.
 
+## Resumed simple cluster-linearization and tree sanitizer gates (2026-07-23)
+
+The `clusterlin_simple_finder`, `clusterlin_simple_linearize`, and
+`clusterlin_postlinearize_tree` targets were replayed from private copies of
+their existing QA corpora. The simple finder compares the candidate search
+against exhaustive results on small graphs and checks topological validity,
+connectedness, iteration bounds, and fee-rate ordering. The simple linearizer
+checks its claimed optimality against exhaustive linearizations and arbitrary
+valid linearizations. The tree target checks that post-linearization improves
+or preserves the fee diagram, is idempotent, and agrees with a high-budget
+`Linearize` call on upright and reverse trees.
+
+The simple finder normal worker completed 3,000 mutations in 241 seconds at
+coverage 723 and 56 MB peak RSS. Its libFuzzer live reduced corpus ended at
+201 inputs; the on-disk private corpus contained 263 inputs after newly found
+cases were retained. The simple linearizer normal worker completed 3,000
+mutations in 44 seconds at coverage 1,047 and 57 MB peak RSS. Its live reduced
+corpus ended at 301 inputs. The ASan/UBSan linearizer worker completed 3,000
+mutations in 221 seconds at coverage 3,121 and 671 MB peak RSS, with a live
+corpus of 305 inputs.
+
+The initial simple-finder ASan/UBSan run used the usual 30-second per-input
+bound and stopped on a timeout, not a sanitizer finding. The 110-byte seed
+`db14ffffe86f4bf4ca4a60b8432653e31aa61263` took 47.884 seconds in the branch
+ASan build and its stack was in `DepGraph::FeeRate` called by the fuzzer's
+`SimpleCandidateFinder` oracle. The same seed took 12.362 seconds in the
+normal branch build and 16.411 seconds in an independently built ASan/UBSan
+fuzzer at clean current master `51143291a6`; neither run reported an error.
+The branch-only slowdown comes from the additional assertion and oracle work
+on this branch, so this is not a production-master performance or memory bug.
+An extended 120-second-bound replay was stopped with SIGUSR1 after 264
+executions because the retained finder seeds made corpus startup excessively
+slow. It produced only three `slow-unit-*` timing files and no sanitizer
+report. This means the finder has a completed normal and direct-file TSan
+gate, but not a claimed full 3,000-input ASan gate; the timeout is recorded as
+an instrumentation limitation rather than silently treated as a pass.
+
+Direct-file TSan replay succeeded for the exercised private corpora: the
+finder replayed 263 files in 9 seconds and the simple linearizer replayed 439
+files in 2 seconds. The tree target's normal worker completed 3,000 mutations
+in one second at coverage 1,809 and 58 MB peak RSS. Its ASan/UBSan worker
+completed 3,000 mutations in 9 seconds at coverage 5,522 and 363 MB peak RSS;
+the direct-file TSan driver replayed 885 files in one second. All completed
+jobs exited without an assertion, sanitizer report, race report, or target
+artifact. No clean-master production inconsistency, optimality failure,
+linearization failure, or race was demonstrated; no source or deterministic
+test change was warranted.
+
 ## Resumed public orphanage sanitizer gate (2026-07-23)
 
 The `txorphan` target was replayed from two independent private copies of 64
