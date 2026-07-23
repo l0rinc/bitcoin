@@ -3272,6 +3272,35 @@ No clean-master candidate, production inconsistency, vulnerability, race, or
 deterministic test gap was demonstrated; no source or test change was
 warranted.
 
+## Resumed general proof-of-work gate (2026-07-23)
+
+The `pow` target was replayed from two independent private copies of its
+443-input QA corpus. The inputs totaled 32,588,237 bytes with a maximum size
+of 1,038,232 bytes. The target mutates compact-target validity, proof-work
+calculation, difficulty transitions, block-index relationships, and
+proof-equivalent-time overflow and sign contracts.
+
+Two normal workers completed 8,000 executions each in 352 and 395 seconds,
+reaching coverage 829 with peak RSS of 103 and 104 MB and adding 14 and 21
+units; their corpora expanded to 457 and 464 files. A full boundary-inclusive
+ASan/UBSan attempt was deliberately stopped after 512 executions per worker,
+when maximum-size inputs reduced throughput to about two executions per
+second at 537 and 540 MB RSS. It produced no diagnostic or artifact, but it
+is incomplete evidence and is not counted as a sanitizer pass.
+
+The completed bounded ASan/UBSan replay used all normal-corpus inputs below
+64 KiB: 353 and 362 files, totaling 6,936,035 bytes combined, with a maximum
+size of 60,840 bytes. The two workers completed 5,000 executions each in 550
+and 491 seconds, reaching coverage 2,072 with peak RSS of 547 and 539 MB and
+adding 51 and 49 units. The direct-file TSan driver replayed the resulting
+401 and 410 files in one second per worker. All completed jobs exited zero
+without an assertion, sanitizer report, race report, timeout, unexpected
+exception, or target artifact.
+
+No clean-master candidate, production inconsistency, vulnerability, race, or
+deterministic test gap was demonstrated; no source or test change was
+warranted.
+
 ## Resumed proof-of-work transition gate (2026-07-23)
 
 The `pow_transition` target was replayed from two independent private copies
