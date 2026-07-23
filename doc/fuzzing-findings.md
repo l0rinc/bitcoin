@@ -2544,3 +2544,30 @@ database, so TSan covers the target's local cache/database transitions rather
 than arbitrary shared live-node schedules. No clean-master production
 inconsistency, supply-calculation failure, or race was demonstrated; no source
 or deterministic test change was warranted.
+
+## Resumed transaction-download manager wrapper gate (2026-07-23)
+
+The `txdownloadman` wrapper target was replayed from two independent private
+copies of 92 existing inputs below 16 KiB. This complements the existing
+`txdownloadman_impl` reference-model gate by exercising the public wrapper over
+precomputed conflicting transactions and parent/child chains. The mutations
+cover peer connect/disconnect, active-tip and block connect/disconnect events,
+mempool acceptance/rejection, tx announcements and requests, received and
+missing transactions, package validation, reconsideration work, backward and
+forward time jumps, and final per-peer/global emptiness checks.
+
+Two normal workers completed 512 mutations each in 59 and 60 seconds, expanding
+their private corpora to 281 and 264 files without an assertion or artifact.
+Two ASan/UBSan workers then completed 512 mutations each in 264 and 311
+seconds. Both reached coverage 23,033; peak RSS was 696 and 715 MB, and their
+corpora grew to 354 and 339 files. The direct-file TSan driver replayed all 354
+and 339 expanded inputs in 18 and 19 seconds. All six workers exited zero
+without an assertion, sanitizer report, race report, timeout, or target
+artifact.
+
+This is a completed bounded wrapper gate, not a full replay of the 1,500-input
+`txdownloadman` corpus. Each process owns an independent download manager,
+mempool, and peer state, so TSan covers the target's exercised lifecycle
+transitions rather than arbitrary shared live-node schedules. No clean-master
+production inconsistency, request-state failure, or race was demonstrated; no
+source or deterministic test change was warranted.
