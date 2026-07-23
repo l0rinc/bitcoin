@@ -261,6 +261,13 @@ BOOST_AUTO_TEST_CASE(rpc_remove_command_cleans_up_empty_entry)
     BOOST_CHECK(doc.isObject());
 }
 
+BOOST_AUTO_TEST_CASE(rpc_openrpc_alias_matches)
+{
+    const UniValue openrpc{CallRPC("getopenrpcinfo false")};
+    const UniValue discovered{CallRPC("rpc.discover")};
+    BOOST_CHECK_EQUAL(openrpc.write(), discovered.write());
+}
+
 BOOST_AUTO_TEST_CASE(rpc_rawparams)
 {
     // Test raw transaction API argument handling
