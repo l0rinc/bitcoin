@@ -30,22 +30,23 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 14 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
+| Confirmed runtime defects | 16 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The fourteen confirmed runtime defects are: the index publication and restart race;
+The sixteen confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
-overflow; cache-allocation percentage overflow; stale Base58 output on decode
-failure; the descriptor-cache partial merge; stale mining `submitSolution` failure
-outputs; stale `TxIndex::FindTx` failure outputs; stale wallet transaction detail
-outputs; the descriptor next-index persistence failure; stale `ProcessNewBlock`
-`new_block` output after a block-file write failure; and the external-signer
-`n_signed` reporting omission. Their exact reproducer,
+overflow; cache-allocation percentage overflow; coins-cache state capacity
+arithmetic; `-maxmempool` byte-size multiplication overflow; stale Base58 output on
+decode failure; the descriptor-cache partial merge; stale mining `submitSolution`
+failure outputs; stale `TxIndex::FindTx` failure outputs; stale wallet transaction
+detail outputs; the descriptor next-index persistence failure; stale
+`ProcessNewBlock` `new_block` output after a block-file write failure; and the
+external-signer `n_signed` reporting omission. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -75,6 +76,13 @@ created worker threads.
   failure strings untouched instead of returning the empty outputs promised by the
   shared submission path. The clean-master C++ control failed with stale strings;
   the branch now clears and asserts both fields, and adds an IPC regression check.
+* The coins-cache headroom calculation mixed unsigned cache capacities with signed
+  intermediate values. A direct `SIZE_MAX` capacity on a 64-bit clean master made
+  an empty cache report `CRITICAL`; this is a local direct-API/configuration
+  correctness issue, not a network or consensus path. The same audit found that an
+  extreme `-maxmempool` value could overflow the MB-to-byte multiplication: Debug
+  with `-ftrapv` trapped and Release accepted the invalid result. Both paths now use
+  width-appropriate checked or saturating arithmetic and deterministic tests.
 * `Wallet::getWalletTxDetails()` returned an empty `WalletTx` for a missing
   transaction while leaving all caller-owned output parameters unchanged. The Qt
   transaction-description caller default-initializes `WalletTxStatus`,
@@ -189,7 +197,59 @@ zero txindex allocation instead of the one-GiB cap. The boundary unit and
 `cache_sizes` fuzzer catch the old arithmetic; this is not P2P/RPC input and does not
 affect consensus or persisted chain data.
 
-### 7. Base58 decoder stale output on failure
+### 7. Coins-cache state capacity arithmetic overflow
+
+* Current branch fix: `cache: harden cache size arithmetic`.
+* Severity on the clean master: low local configuration/direct-API correctness issue;
+  no remote, consensus, wallet-loss, or memory-safety path was demonstrated.
+
+The recent master coins-cache headroom test (`b36c2d78a3`) made the unused-mempool
+space path worth auditing. The clean-master `Chainstate::GetCoinsCacheSizeState()`
+implementation mixed `size_t` cache capacities with signed `int64_t` intermediates.
+The deterministic mutation passed `max_coins_cache_size_bytes = SIZE_MAX` and
+`max_mempool_size_bytes = 0` to an empty cache on a 64-bit host. Exact master
+`7b6f9ba7ba` returned `CRITICAL` instead of `OK` in both Debug and Release builds:
+the unsigned sum became `SIZE_MAX` and was then converted to a negative signed
+total. This is a direct API boundary and is not a remotely supplied cache size.
+
+The fix keeps cache capacities and usage in `size_t`, computes unused mempool space
+with a checked subtraction, combines budgets with `SaturatingAdd`, and rewrites the
+90-percent threshold without multiplying the total by nine.
+The deterministic `validation_flush_tests/extreme_cache_capacity_is_not_critical`
+case reproduces the clean-master result in both Debug and Release. The exact master
+controls changed only the temporary test and left production code untouched, so
+this is not a regression introduced by this branch or by `b36c2d78a3`.
+
+The new `coins_cache_size_state` fuzzer contains an independent size-typed oracle
+and always exercises `SIZE_MAX`/zero, zero/`SIZE_MAX`, and `SIZE_MAX`/`SIZE_MAX`
+capacity combinations before consuming arbitrary values. Four normal workers
+executed 862,306 mutations, four ASan/UBSan workers executed 140,240, and four
+TSan workers executed 154,643; all exited zero without an assertion, sanitizer, or
+race report. The focused validation suite passed all three cases after the fix.
+
+### 8. `-maxmempool` byte-size multiplication overflow
+
+* Current branch fix: `cache: harden cache size arithmetic`.
+* Severity on the clean master: low startup/configuration correctness issue; no
+  remote, consensus, wallet-loss, or memory-safety path was demonstrated.
+
+The clean-master mutation set `-maxmempool=9223372036855` MB, which is
+`INT64_MAX / 1'000'000 + 1`. The raw MB-to-byte multiplication overflowed: the
+Debug exact-master control built with `-ftrapv` trapped with an illegal operand,
+while the Release control accepted the option and produced the invalid wrapped
+result. Accepting this value leaves the mempool budget outside its representable
+range and should instead return a configuration error before constructing the
+mempool.
+
+The fix uses `CheckedMul` for the MB-to-byte conversion and rejects the option on
+overflow. The deterministic
+`validation_flush_tests/maxmempool_byte_size_overflow_is_rejected` case reproduces
+the failure against exact master and passes after the fix. The fuzzer target above
+is intentionally focused on cache-state arithmetic; the option parser has a direct
+deterministic boundary test because invoking startup argument parsing per fuzz
+iteration would add setup cost without improving this contract's signal.
+
+### 9. Base58 decoder stale output on failure
 
 * Base58Check fix: `0d191905b4`.
 * Raw Base58 fix: `6bb8b66b34`.
@@ -202,7 +262,7 @@ decode, but the boundary was ambiguous. Both wrappers now clear output on failur
 have production postconditions, deterministic tests, and corpus-backed normal and
 ASan/UBSan fuzz coverage.
 
-### 8. Descriptor-cache merge leaves partial state after a conflict
+### 10. Descriptor-cache merge leaves partial state after a conflict
 
 * Current branch fix: `4da71c90d7` (`descriptor: keep cache conflict merges atomic`).
 * Severity on current clean master `7b6f9ba7bad13b0c4169259000f7802854cdda0d`:
@@ -272,7 +332,7 @@ existing partial-merge defect, not a branch-introduced failure. No new productio
 fix or severity change is warranted because `4da71c90d7` preflights all three maps;
 the new unit tests make each ordering deterministic.
 
-### 9. Descriptor address index published after persistence failure
+### 11. Descriptor address index published after persistence failure
 
 * Current branch fix: `e9d748a0c1` (`wallet: persist descriptor index before returning address`).
 * Severity on clean master: low-to-medium local wallet consistency/availability issue;
@@ -313,7 +373,7 @@ with peak RSS of 578 MB. All six workers exited without an assertion, sanitizer
 report, unexpected exception, race/deadlock report, timeout, or artifact. The
 focused four-case descriptor suite passed after the fix.
 
-### 10. Mining `submitSolution` leaves stale failure outputs
+### 12. Mining `submitSolution` leaves stale failure outputs
 
 * Current branch fix: this feature commit titled `mining: clear submitSolution failure outputs`.
 * Severity on clean master: low API correctness issue for direct mining-interface
@@ -340,7 +400,7 @@ temporary storage area, `interface_ipc_mining.py` passed end to end in 24 second
 The clean-master C++ failure, fixed-branch unit pass, and IPC functional pass
 therefore all cover this mutation.
 
-### 11. `TxIndex::FindTx` leaves stale failure outputs
+### 13. `TxIndex::FindTx` leaves stale failure outputs
 
 * Current branch fix: `txindex: clear failed FindTx outputs`.
 * Severity on clean master: low direct-API correctness issue; current callers pass
@@ -364,7 +424,7 @@ the full three-case `txindex_tests` suite passes with 129/129 assertions. No cal
 currently relies on stale values after a failed lookup; the fix makes the documented
 failure contract explicit for direct and future callers.
 
-### 12. `Wallet::getWalletTxDetails` leaves missing-transaction outputs stale
+### 14. `Wallet::getWalletTxDetails` leaves missing-transaction outputs stale
 
 * Current branch fix: `wallet: clear missing getWalletTxDetails outputs`.
 * Severity on clean master: low local GUI/API correctness issue with undefined
@@ -395,7 +455,7 @@ and 145/145 assertions in the Debug wallet build. This is a direct interface
 contract fix, not evidence of a remotely reachable race: the wallet lock
 serializes the lookup, while the stale model entry is the normal local trigger.
 
-### 13. `ProcessNewBlock` reports a new block after a block-file write failure
+### 15. `ProcessNewBlock` reports a new block after a block-file write failure
 
 * Current branch fix: `validation: clear new-block output on block write failure`.
 * Severity on clean master: low local availability/bookkeeping issue. The trigger
@@ -432,7 +492,7 @@ branch; the existing `ProcessNewBlock` success/failure output assertions continu
 to cover the ordinary paths. No fuzzer-only exception or race was involved, so no
 additional fuzzer mutation was needed beyond the deterministic filesystem fault.
 
-### 14. External signer omits signed-input count
+### 16. External signer omits signed-input count
 
 * Current branch fix: `wallet: report inputs signed by external signer`.
 * Severity on clean master: low direct-API and GUI correctness issue. The trigger
@@ -1815,7 +1875,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The fourteen confirmed production defects
+caller or new collision race was found. The sixteen confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The AddrMan and wallet sanitizer
 gates above found no additional production mistake, race, consensus issue, or
