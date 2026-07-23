@@ -1745,3 +1745,24 @@ target's exercised thread interactions, but does not prove arbitrary concurrent
 live-node persistence or mempool schedules race-free. This gate found no new
 production inconsistency, exception-classification error, race, or clean-master
 failure; no source or deterministic test change was warranted.
+
+## Post-fix validation-block-reorg sanitizer gate (2026-07-23)
+
+After the `ProcessNewBlock` `new_block` output fix in `0b1bbf527c`, the
+`validation_block_reorg` target was replayed from a private copy of all 2,257 QA
+inputs (62,359 bytes total; input sizes from 1 to 74 bytes). The replay was run
+again against the rebased branch so that the new postcondition did not merely
+exist in a deterministic test.
+
+Two normal workers completed 5,000 executions each, both reaching coverage
+13,866, with peak RSS of 110 and 112 MB. Two TSan workers completed 5,000 each,
+reaching coverage 5,279, with peak RSS of 310 and 315 MB. Two ASan/UBSan workers
+also completed 5,000 each, reaching coverage 42,908 and 42,927, with peak RSS of
+661 and 654 MB. All six workers exited zero without an assertion, sanitizer or
+race report, timeout, or target artifact.
+
+This is post-fix evidence for the stale `new_block` output contract described
+above, not an independent discovery of a new reorg defect. The workers used
+independent fuzzer processes and therefore do not establish that arbitrary live
+node reorg schedules are race-free. The confirmed-runtime-defect count remains
+twelve, and no further source or deterministic test change was warranted.
