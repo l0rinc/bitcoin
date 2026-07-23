@@ -3597,3 +3597,51 @@ catch-all or `std::exception` handler. The private-broadcast loop catches only
 `std::ios_base::failure`, the expected malformed-message parser exception;
 assertions and all other exception types remain fatal. No production bug,
 deterministic test gap, or source change was warranted by this campaign.
+
+## OpenRPC alias and document-shape gate (2026-07-23)
+
+The current master OpenRPC feature is represented by `672dd42d14`
+(`getopenrpcinfo`) and `ca9ffb8e12` (`rpc.discover`), merged in
+`526673487ceef18d1df41d77b4783b9b3908ced5`. The RPC fuzzer already listed both
+commands as safe, but it only checked the shape of exceptions after executing
+one command. It did not compare the two public entry points or inspect the
+generated document beyond whatever path the selected command happened to take.
+
+The fuzzer now checks, after either command executes, that
+`getopenrpcinfo(false)` and `rpc.discover` serialize identically. It also checks
+the generated document's OpenRPC version, object/array types, strictly sorted
+unique method names, parameter arrays, and result name/schema objects. The
+`rpc_openrpc_alias_matches` unit test provides deterministic coverage of the
+same cross-entrypoint contract. No production assertion was added: both
+production handlers already call the same `CRPCTable::buildOpenRPCDoc(false)`
+implementation, so a production-side duplicate call would add RPC work without
+checking an independent invariant. The existing functional
+`rpc_openrpc.py` test also compares the aliases.
+
+Seed construction was verified against `FuzzedDataProvider`: `ConsumeTime`
+consumes integral bytes from the end of the input. Therefore valid reachability
+seeds place `getopenrpcinfo\\X` or `rpc.discover\\X` first and append eight time
+bytes. The hidden-path seed additionally encodes one positional `true`
+argument before the time suffix. Earlier files that put the time bytes first
+were discarded because they did not reliably reach the selected method.
+
+With the corrected seeds, two independent normal workers per path completed
+1,500 executions each for public `getopenrpcinfo`, hidden-argument
+`getopenrpcinfo`, and `rpc.discover` (9,000 total). Two independent
+ASan/UBSan workers per path completed 1,000 executions each (6,000 total).
+The expanded ASan corpora contained 30, 27, 44, 33, 26, and 19 files; the
+direct-file TSan driver replayed all 179 files. Every completed job exited zero
+without an assertion, sanitizer report, race report, unexpected exception,
+timeout, or artifact. The two initial discovery attempts that hit the full
+root filesystem were rerun with `TMPDIR=/mnt/my_storage/tmp` after removing
+stale generated test datadirs; they are not counted as fuzz executions.
+
+Mutation proof: `src/rpc/server.cpp` was temporarily changed so the
+`rpc.discover` actor called `buildOpenRPCDoc(/*include_hidden=*/true)` instead
+of `false`, with no other production change. The deterministic unit test
+failed (exit 201), and correctly laid-out public, hidden, and discovery seeds
+each aborted at the fuzzer alias assertion (libFuzzer exit 77). The production
+mutation was restored before the clean gates. This is a coverage and oracle
+change, not a confirmed master-branch bug; no clean-master production
+inconsistency, vulnerability, race, or additional deterministic test gap was
+found.
