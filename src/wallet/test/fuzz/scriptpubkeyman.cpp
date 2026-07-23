@@ -31,6 +31,7 @@
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -100,6 +101,15 @@ static bool BlockDescriptorWrites(CWallet& wallet)
                                     nullptr, nullptr, nullptr) == SQLITE_OK;
 }
 
+static bool BlockDescriptorMetadataWrites(CWallet& wallet)
+{
+    auto* database{dynamic_cast<MockableSQLiteDatabase*>(&wallet.GetDatabase())};
+    // The serialized SQLite keys are 49 bytes for descriptor metadata and 62 bytes for cache entries.
+    return database && sqlite3_exec(database->m_db,
+                                    "CREATE TRIGGER fail_descriptor_metadata_writes BEFORE INSERT ON main WHEN length(NEW.key) = 49 BEGIN SELECT RAISE(ABORT, 'injected'); END;",
+                                    nullptr, nullptr, nullptr) == SQLITE_OK;
+}
+
 FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -135,6 +145,7 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
 
     bool good_data{true};
     bool descriptor_writes_blocked{false};
+    bool descriptor_metadata_writes_blocked{false};
     LIMITED_WHILE (good_data && fuzzed_data_provider.ConsumeBool(), 20) {
         CallOneOf(
             fuzzed_data_provider,
@@ -183,7 +194,7 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                 }
             },
             [&] {
-                if (descriptor_writes_blocked) return;
+                if (descriptor_writes_blocked || descriptor_metadata_writes_blocked) return;
                 if (!BlockDescriptorWrites(wallet)) {
                     good_data = false;
                     return;
@@ -199,11 +210,40 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                 try {
                     assert(!spk_manager->GetNewDestination(*output_type));
                 } catch (const std::runtime_error& error) {
-                    if (std::string_view{error.what()} != "TopUpWithDB: writing cache items failed") {
+                    const std::string_view message{error.what()};
+                    if (message != "TopUpWithDB: writing cache items failed" &&
+                        message != "TopUpWithDB: writing descriptor failed") {
                         throw;
                     }
                 }
                 assert(spk_manager->GetWalletDescriptor().next_index == next_index);
+            },
+            [&] {
+                if (descriptor_writes_blocked || descriptor_metadata_writes_blocked) return;
+                LOCK(spk_manager->cs_desc_man);
+                const auto descriptor_before{spk_manager->GetWalletDescriptor()};
+                if (!descriptor_before.descriptor->IsRange()) return;
+                const size_t scripts_before{spk_manager->GetScriptPubKeys().size()};
+                const unsigned int keypool_size_before{spk_manager->GetKeyPoolSize()};
+                if (keypool_size_before == std::numeric_limits<unsigned int>::max()) return;
+                if (!BlockDescriptorMetadataWrites(wallet)) {
+                    good_data = false;
+                    return;
+                }
+                descriptor_metadata_writes_blocked = true;
+
+                bool topup_succeeded{false};
+                try {
+                    topup_succeeded = spk_manager->TopUp(keypool_size_before + 1);
+                } catch (const std::runtime_error& error) {
+                    if (std::string_view{error.what()} != "TopUpWithDB: writing descriptor failed") {
+                        throw;
+                    }
+                }
+                assert(!topup_succeeded);
+                assert(spk_manager->GetWalletDescriptor().range_end == descriptor_before.range_end);
+                assert(spk_manager->GetKeyPoolSize() == keypool_size_before);
+                assert(spk_manager->GetScriptPubKeys().size() == scripts_before);
             },
             [&] {
                 CMutableTransaction tx_to;
@@ -241,7 +281,7 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                 (void)spk_manager->FillPSBT(psbt, txdata, options);
             }
         );
-        if (descriptor_writes_blocked) break;
+        if (descriptor_writes_blocked || descriptor_metadata_writes_blocked) break;
     }
 
     std::string descriptor;
