@@ -30,14 +30,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 16 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
+| Confirmed runtime defects | 18 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The sixteen confirmed runtime defects are: the index publication and restart race;
+The eighteen confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
@@ -45,8 +45,9 @@ arithmetic; `-maxmempool` byte-size multiplication overflow; stale Base58 output
 decode failure; the descriptor-cache partial merge; stale mining `submitSolution`
 failure outputs; stale `TxIndex::FindTx` failure outputs; stale wallet transaction
 detail outputs; the descriptor next-index persistence failure; stale
-`ProcessNewBlock` `new_block` output after a block-file write failure; and the
-external-signer `n_signed` reporting omission. Their exact reproducer,
+`ProcessNewBlock` `new_block` output after a block-file write failure; the
+external-signer `n_signed` reporting omission; private-broadcast removal counter
+drift; and private-broadcast late-confirmation state drift. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -102,6 +103,14 @@ created worker threads.
   finalized input was reported as `Could not sign any more inputs.` The exact
   clean-master control below reproduced the stale zero; the branch now counts
   unsigned-to-finalized input transitions after optional finalization.
+* The private-broadcast state model had two clean-master accounting defects that
+  were absent from the earlier network-fuzzer summary. Removing a transaction
+  after multiple picked sends used the number of confirmations to cancel pending
+  connections, even though unconfirmed picked sends had already consumed slots.
+  Separately, a late PONG could confirm a send after `FinalizeNode()` had already
+  scheduled its replacement. Exact-master temporary tests reproduced both cases
+  with production sources unchanged; the branch fixes are `800a2aad69` and
+  `449636bbe3`, and the fixed nine-case unit suite passes.
 * Sanitizer workers in this ledger are independent processes unless explicitly stated
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
@@ -528,6 +537,78 @@ The existing `scriptpubkeyman` fuzzer did not discover this because it creates n
 descriptor managers and never invokes an external signer subprocess. Adding a child
 process to every fuzz iteration would not improve the contract signal; the
 deterministic subprocess mock is the stronger regression test for this boundary.
+
+### 17. Private-broadcast removal counter drift
+
+* Current branch fix: `800a2aad69` (`privatebroadcast: track disconnects for removal accounting`).
+* Severity on clean master: medium within the optional private-broadcast feature;
+  an availability/privacy degradation requiring a local private-broadcast request,
+  selected peer timing, and an unconfirmed connection. No consensus, funds, wallet
+  persistence, or unauthenticated memory-safety impact was demonstrated.
+
+Clean master increments the global private-broadcast connection budget by three for
+each new transaction. `PickTxForSend()` records a picked send, which means that
+connection slot has already been consumed. The removal paths in
+`PeerManagerImpl::AbortPrivateBroadcast()` and inbound transaction handling then
+computed `3 - num_confirmed` and subtracted that many slots. With two picked sends,
+one confirmed send, and one still-open unconfirmed send, the old code cancelled two
+slots even though only one attempt was still unstarted. If the selected peer holds
+the unconfirmed connection open, removal of that transaction can make the global
+counter disagree with the actual open/unstarted work and delay fanout for another
+private transaction. This is a feature-scoped liveness and privacy degradation,
+not a remote crash: the attacker must be selected for a private-broadcast
+connection and coordinate the transaction-removal timing.
+
+The exact `origin/master` `7b6f9ba7ba` control added only
+`clean_master_remove_cancellation_overcounts_unstarted_slots` to the temporary
+`private_broadcast_tests.cpp`; all production sources remained unchanged. It added
+one transaction, picked it for nodes 1 and 2, confirmed node 1, and compared the
+clean-master `net_processing.cpp` formula with the number of unstarted attempts.
+The unmodified master failed deterministically with `[2 != 1]` (exit 201). The
+fixed branch's `disconnected_send_statuses_are_counted_for_removal` test checks the
+same state using `RemoveResult::NumUnstarted(3)`, and all nine private-broadcast
+unit tests pass after the fix.
+
+The production fix returns picked, confirmed, and unconfirmed-disconnected counts,
+uses `NumUnstarted()` in both removal paths, and keeps active node IDs as tombstones
+until finalization so a late disconnect cannot allocate capacity to another
+transaction. The clean-master control did not rely on an assertion introduced by
+this branch; it compared the existing production cancellation calculation with the
+state established by the existing `PrivateBroadcast` API.
+
+### 18. Private-broadcast late confirmation after disconnect
+
+* Current branch fix: `449636bbe3` (`privatebroadcast: ignore confirmations after disconnect`).
+* Severity on clean master: low, conditional retry/staleness accounting issue in
+  the private-broadcast state machine. It requires a queued PONG to be processed
+  after the disconnect finalization check; no consensus, funds, wallet persistence,
+  remote crash, or standalone TSan race was demonstrated.
+
+On clean master, `FinalizeNode()` checks
+`!DidNodeConfirmReception(nodeid) && HavePendingTransactions()` and schedules a
+replacement for an unconfirmed private connection, but it does not mark that send
+as disconnected. A matching PONG processed after that check is still accepted by
+the unconditional `NodeConfirmedReception()`. The send then appears confirmed even
+though the replacement decision has already been made; subsequent removal can
+report the wrong confirmation count, and `GetStale()` can use the confirmed clock
+instead of the original unconfirmed-send clock. The practical effect is a retry
+budget or rebroadcast timing inconsistency, not a consensus or memory-safety bug.
+
+The exact `origin/master` `7b6f9ba7ba` control added only
+`clean_master_late_confirmation_changes_disconnected_send` to the temporary unit
+file. It modeled the existing `FinalizeNode()` condition after one unconfirmed
+send, advanced the fake clock, and then delivered the late confirmation through
+the existing production API. With production code untouched, master failed
+deterministically because `DidNodeConfirmReception()` became true. The fixed branch
+marks the send disconnected in `MarkNodeDisconnected()` and ignores later
+confirmations; `confirmation_after_disconnect_is_ignored` checks that the send
+remains unconfirmed, remains disconnected for removal accounting, and retains the
+full unstarted retry count. The fixed nine-case private-broadcast suite passes.
+
+This is a state-ordering control, not a claim that every live peer teardown schedule
+has been reproduced by TSan. The clean-master result proves that the production
+state object accepts the invalid late transition; the residual reachability depends
+on the asynchronous message and connection-finalization ordering.
 
 ## Compact-block short-ID investigation
 
@@ -1875,7 +1956,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The sixteen confirmed production defects
+caller or new collision race was found. The eighteen confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The AddrMan and wallet sanitizer
 gates above found no additional production mistake, race, consensus issue, or
