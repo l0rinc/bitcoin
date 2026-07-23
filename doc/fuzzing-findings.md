@@ -1766,3 +1766,26 @@ above, not an independent discovery of a new reorg defect. The workers used
 independent fuzzer processes and therefore do not establish that arbitrary live
 node reorg schedules are race-free. The confirmed-runtime-defect count remains
 twelve, and no further source or deterministic test change was warranted.
+
+## Current-master block-index/reorg state gate (2026-07-23)
+
+The `block_index_tree` target was replayed from two independent copies of all
+2,381 QA inputs (2,019,276 bytes total; maximum input 26,372 bytes). Its model
+deliberately covers invalidation and reconsideration of genesis and same-height
+forks, invalid descendants, candidate-set maintenance, arbitrary pruning and
+redownload bookkeeping, and partial reorg progress.
+
+Two normal workers completed 5,000 executions each, reaching coverage 2,900,
+with peak RSS of 101 and 105 MB. Two TSan workers completed 5,000 each,
+reaching coverage 1,111 and 1,112, with peak RSS of 315 and 311 MB. Two
+ASan/UBSan workers completed 5,000 each, reaching coverage 8,983 and 8,984,
+with peak RSS of 746 and 748 MB. All six workers exited zero without an
+assertion, sanitizer or race report, timeout, or target artifact.
+
+The model explicitly stops a run when a simulated reorg would need missing undo
+data; this mirrors the production `ActivateBestChain` failure path rather than
+exercising it through a real pruned node. Consequently this gate is evidence for
+the exercised block-index invariants only, not proof that arbitrary deep pruned
+reorgs are recoverable or that live-node reorg schedules are race-free. No new
+clean-master production inconsistency was demonstrated, so no source or
+deterministic test change was warranted.
