@@ -563,12 +563,13 @@ enum class CoinsCacheSizeState
     OK = 0
 };
 
-constexpr int64_t LargeCoinsCacheThreshold(int64_t total_space) noexcept
+constexpr size_t LargeCoinsCacheThreshold(size_t total_space) noexcept
 {
     // No periodic flush needed if at least this much space is free
-    constexpr int64_t MAX_BLOCK_COINSDB_USAGE_BYTES{int64_t(10_MiB)};
-    return std::max((total_space * 9) / 10,
-                    total_space - MAX_BLOCK_COINSDB_USAGE_BYTES);
+    constexpr size_t MAX_BLOCK_COINSDB_USAGE_BYTES{10_MiB};
+    const size_t ten_percent{total_space / 10 + (total_space % 10 != 0)};
+    const size_t minimum_free_space{total_space < MAX_BLOCK_COINSDB_USAGE_BYTES ? 0 : total_space - MAX_BLOCK_COINSDB_USAGE_BYTES};
+    return std::max(total_space - ten_percent, minimum_free_space);
 }
 
 //! Chainstate assumeutxo validity.
