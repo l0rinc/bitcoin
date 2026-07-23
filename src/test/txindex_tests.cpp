@@ -69,6 +69,13 @@ BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
     CTransactionRef tx_disk;
     uint256 block_hash;
 
+    // A failed lookup must not leave caller-owned output values from a previous query.
+    tx_disk = m_coinbase_txns.front();
+    block_hash = uint256::ONE;
+    BOOST_CHECK(!txindex.FindTx(Txid::FromUint256(uint256::ZERO), block_hash, tx_disk));
+    BOOST_CHECK(!tx_disk);
+    BOOST_CHECK(block_hash.IsNull());
+
     // Transaction should not be found in the index before it is started.
     for (const auto& txn : m_coinbase_txns) {
         BOOST_CHECK(!txindex.FindTx(txn->GetHash(), block_hash, tx_disk));

@@ -92,15 +92,25 @@ BaseIndex::DB& TxIndex::GetDB() const { return *m_db; }
 
 bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx) const
 {
+    block_hash.SetNull();
+    tx.reset();
+    const auto failed = [&] {
+        block_hash.SetNull();
+        tx.reset();
+        Assert(block_hash.IsNull());
+        Assert(!tx);
+        return false;
+    };
+
     CDiskTxPos postx;
     if (!m_db->ReadTxPos(tx_hash, postx)) {
-        return false;
+        return failed();
     }
 
     AutoFile file{WITH_LOCK(::cs_main, return m_chainstate->m_blockman.OpenBlockFile(postx, true))};
     if (file.IsNull()) {
         LogError("OpenBlockFile failed");
-        return false;
+        return failed();
     }
     CBlockHeader header;
     try {
@@ -109,11 +119,11 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
         file >> TX_WITH_WITNESS(tx);
     } catch (const std::exception& e) {
         LogError("Deserialize or I/O error - %s", e.what());
-        return false;
+        return failed();
     }
     if (tx->GetHash() != tx_hash) {
         LogError("txid mismatch");
-        return false;
+        return failed();
     }
     block_hash = header.GetHash();
     return true;
