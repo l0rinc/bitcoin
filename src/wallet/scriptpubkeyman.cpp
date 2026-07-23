@@ -1626,13 +1626,44 @@ util::Result<void> DescriptorScriptPubKeyMan::UpdateWalletDescriptor(WalletDescr
         return util::Error{Untranslated(std::move(error))};
     }
 
+    WalletBatch batch(m_storage.GetDatabase());
+    if (!batch.TxnBegin()) {
+        return util::Error{strprintf(
+            _("Error: database transaction cannot be executed for wallet %s"), m_storage.LogName())};
+    }
+
+    // Keep the published state unchanged until all database writes have committed.
+    const auto old_map_pubkeys{m_map_pubkeys};
+    const auto old_map_script_pub_keys{m_map_script_pub_keys};
+    const auto old_max_cached_index{m_max_cached_index};
+    const auto old_map_keys{m_map_keys};
+    const auto old_map_crypted_keys{m_map_crypted_keys};
+    const auto old_wallet_descriptor{m_wallet_descriptor};
+
     m_map_pubkeys.clear();
     m_map_script_pub_keys.clear();
     m_max_cached_index = -1;
     m_wallet_descriptor = descriptor;
 
-    WalletBatch batch(m_storage.GetDatabase());
-    UpdateWithSigningProvider(batch, provider);
+    try {
+        UpdateWithSigningProvider(batch, provider);
+        if (!batch.TxnCommit()) {
+            throw std::runtime_error(strprintf(
+                "Error during descriptor update. Cannot commit changes for wallet [%s]", m_storage.LogName()));
+        }
+    } catch (...) {
+        if (batch.HasActiveTxn()) {
+            batch.TxnAbort();
+        }
+        m_map_pubkeys = old_map_pubkeys;
+        m_map_script_pub_keys = old_map_script_pub_keys;
+        m_max_cached_index = old_max_cached_index;
+        m_map_keys = old_map_keys;
+        m_map_crypted_keys = old_map_crypted_keys;
+        m_wallet_descriptor = old_wallet_descriptor;
+        throw;
+    }
+
     NotifyFirstKeyTimeChanged(this, m_wallet_descriptor.creation_time);
     return {};
 }
