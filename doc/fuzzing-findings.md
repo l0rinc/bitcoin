@@ -7,7 +7,7 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`26b730cdbf2c77c12f684fd50bd376212b725394`. The historical exact-master controls
+`afa5e46bbc6dd750bd71920b659162a945abf0ae`. The historical exact-master controls
 below retain their named baselines; they are evidence for the mutations they
 tested, not claims about an earlier branch tip. The range from the previous
 ledger baseline through the current master tip was inspected: the relevant
@@ -31,14 +31,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 36 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 37 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The thirty-six confirmed runtime defects are: the index publication and restart race;
+The thirty-seven confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
@@ -58,8 +58,9 @@ exhausted coins-DB cursor reads; and two HTTP request-parser atomicity defects
 checkqueue completion; stale reusable sighash precomputation; duplicate serialized
 assumeutxo coin records; failed block candidates retained across invalidation and
 unlinked recovery; and pruned unlinked blocks no longer linked when their parent
-arrives; invalid raw fee-estimator success thresholds; and descriptor top-up cache
-metadata inconsistency after a descriptor-row write failure. Their exact reproducer,
+arrives; invalid raw fee-estimator success thresholds; descriptor top-up cache
+metadata inconsistency after a descriptor-row write failure; and descriptor updates
+that publish replacement state before a cache write failure can be rolled back. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -89,6 +90,12 @@ created worker threads.
   consistency bug. The exact fuzzer seed fails on master and passes on this branch;
   the deterministic unit test verifies rollback of cache rows and preservation of
   the in-memory descriptor range.
+* The descriptor-update write-failure defect below is a separate clean-master
+  storage consistency bug. Updating an existing descriptor cleared and replaced
+  live maps before `TopUpWithDB()` completed; a rejected cache write left the
+  descriptor, script maps, and cached-index boundary disagreeing with one another
+  and with the persisted descriptor. The branch now wraps the update in a database
+  transaction and restores every affected in-memory map on failure.
 * Current master PR #34672 added `reason` and `debug` output fields to the mining
   `submitSolution` interface. Its null-coinbase early return left caller-provided
   failure strings untouched instead of returning the empty outputs promised by the
@@ -173,8 +180,8 @@ created worker threads.
 ## Post-rebase compact, cluster, and cache controls (2026-07-23)
 
 The branch is rebased onto the current `origin/master`
-`26b730cdbf2c77c12f684fd50bd376212b725394`; `git merge-base HEAD origin/master`
-matches that tip. The current-master range after the earlier compact and
+`afa5e46bbc6dd750bd71920b659162a945abf0ae`; `git merge-base HEAD origin/master` matches that tip. The
+current-master range after the earlier compact and
 cluster/coins controls was checked directly. The relevant production and fuzzer
 paths (`blockencodings`, `net_processing`, `txgraph`, `txmempool`, `coins`,
 `validation`, `partially_downloaded_block`, `tx_pool`, and `coinscache_sim`) are
@@ -207,9 +214,9 @@ assertion, sanitizer, race, timeout, or target artifact.
 
 The existing post-rebase `clusterlin_*` and `coinscache_sim` gates recorded below
 remain applicable because the inspected master range does not touch those paths.
-Together with the compact-block controls and the deterministic tests, this
-round found no new clean-master production defect, vulnerability, race, or
-deterministic test omission. No source fix was warranted.
+The descriptor-update control below is the one additional clean-master production
+defect found in this round; the compact-block controls found no new collision
+defect, vulnerability, race, or deterministic test omission.
 
 ## Confirmed production defects
 
@@ -1045,6 +1052,43 @@ This proof covers the public `TopUp()` path and its explicit transaction. The
 internal `TopUpWithDB()` helper is also used by callers that supply their own
 batch context; this commit does not claim to make every larger import/update
 workflow atomic, and no clean-master failure was demonstrated for those callers.
+
+### 37. Descriptor update publishes state before a cache write failure
+
+* Current branch fix: the grouped wallet descriptor-update rollback commit.
+* Severity on clean master: medium local wallet-storage consistency and availability
+  issue. The trigger requires a descriptor update to encounter a database write
+  failure; no remote, consensus, key-loss, or unauthenticated memory-safety path was
+  demonstrated.
+
+`DescriptorScriptPubKeyMan::UpdateWalletDescriptor()` cleared the live script and
+pubkey maps, reset `m_max_cached_index`, and assigned the replacement descriptor
+before calling `UpdateWithSigningProvider()`. On a valid `wpkh(xpub/*)` update with
+an expanded range, a SQLite trigger rejecting descriptor writes made clean master
+throw `TopUpWithDB: writing cache items failed` after rebuilding part of the live
+map. The object then reported a replacement `range_end` with a zero cached-index
+boundary, while the database still contained the old descriptor range. A caller
+continuing after the import error could therefore miss or mis-handle wallet
+scripts until restart.
+
+The exact clean-master control was run against `origin/master`
+`26b730cdbf2c77c12f684fd50bd376212b725394` in a separate worktree. It passed only
+when asserting the bad state: one live script, `GetEndRange() == 0`, an in-memory
+replacement range of 2, and a persisted range of 1. The production source was
+unchanged in that control. The fixed deterministic unit test uses the same
+descriptor, replacement range, and all-write SQLite trigger; it requires the
+exception, preserves the original live map and range, and verifies that both the
+persisted descriptor and the pre-existing cache-row count are unchanged.
+
+The production fix begins a wallet database transaction before publishing the
+replacement, snapshots the descriptor, key maps, script maps, and cached-index
+boundary, and restores them if any update write or commit fails. The new
+`scriptpubkeyman` fuzzer mutation performs the same valid range extension with an
+empty replacement cache while all descriptor writes are rejected, catches only the
+two expected `TopUpWithDB` write errors, and asserts the original live postconditions.
+The normal wallet fuzzer completed 2,000 bounded corpus/mutation executions
+(`11,572` to `11,711` coverage); the ASan/UBSan wallet fuzzer completed 705
+executions over the 702-file slice with no diagnostic or artifact.
 
 ## Compact-block short-ID investigation
 
