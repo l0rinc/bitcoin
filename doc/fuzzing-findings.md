@@ -760,6 +760,18 @@ called out separately below.
   in 152 and 153 seconds at coverage 8,537 and 8,553, without a race report or
   artifact. This remains an incomplete ASan gate, not a production finding; no
   package-state inconsistency or race was found in the completed runs.
+* A post-rebase `ephemeral_package_eval` campaign used two independent copies of
+  the 2,098-input QA corpus. The normal workers reached 1,240 and 1,241 total
+  executions before being interrupted in the known slow package-construction
+  region (exit 72); neither added a unit or produced an artifact. Two ASan/UBSan
+  workers replayed a frozen 256-input slice and were stopped at 137 total
+  executions after the 128 pulse, at about 1 execution/sec, with coverage 58,820
+  and 58,833 and no diagnostic or artifact. Two TSan/libFuzzer workers completed
+  the same-sized independent slices, 257 total executions each in 70 and 71
+  seconds, at coverage 7,681, without a race report or artifact. The fuzzer's
+  package-result, duplicate-rejection, mempool-index, and unchanged-state
+  assertions therefore remained clean in the completed paths; this is an
+  incomplete ASan/normal corpus gate, not evidence of a package defect.
 * `clusterlin_linearize` completed the 672-input QA corpus under TSan with two jobs
   and two workers: 1,000 executions per worker in 31 and 33 seconds at peak RSS of
   126 MB, with no report or artifact. The full ASan/UBSan run reached 436 and 437
