@@ -2595,3 +2595,28 @@ peer state, so TSan covers the target's exercised transitions rather than
 arbitrary shared live-node schedules. No clean-master production
 inconsistency, eviction failure, or race was demonstrated; no source or
 deterministic test change was warranted.
+
+## Resumed transaction-request sanitizer gate (2026-07-23)
+
+The `txrequest` target was replayed from two independent private copies of 62
+existing inputs below 16 KiB. The selected seeds totaled 158,365 bytes with a
+maximum input size of 15,165 bytes. Its reference model and implementation
+were exercised across txid/wtxid announcements, preferred-peer ordering,
+request expiry, duplicate announcements, responses, forgotten hashes, peer
+disconnects, and single-peer/all-peer request queries, including forward and
+backward time jumps.
+
+Two normal workers completed 512 mutations each in 41 and 45 seconds,
+expanding their private corpora to 312 and 316 files. Two ASan/UBSan workers
+then completed 512 mutations each in 189 and 205 seconds, reaching coverage
+8,056 in both runs with peak RSS of 721 and 723 MB; their corpora expanded to
+374 and 396 files. The direct-file TSan driver replayed all 374 and 396 inputs
+in 10 and 11 seconds. All six workers exited zero without an assertion,
+sanitizer report, race report, timeout, or target artifact.
+
+This is a completed bounded request-state gate, not a full replay of the
+809-input `txrequest` corpus. Each process owns an independent tracker, so
+TSan covers the target's exercised state transitions rather than arbitrary
+shared live-node schedules. No clean-master production inconsistency, request
+selection failure, or race was demonstrated; no source or deterministic test
+change was warranted.
