@@ -3645,3 +3645,53 @@ mutation was restored before the clean gates. This is a coverage and oracle
 change, not a confirmed master-branch bug; no clean-master production
 inconsistency, vulnerability, race, or additional deterministic test gap was
 found.
+
+## Script failure-error oracle after master rebase (2026-07-23)
+
+The investigation initially ran against `origin/master`
+`774d11c58f221294950f05ac4d249e19583e4b7b`, which merged three
+script-vector commits: `a86a96d17b` for
+`CHECKSIGVERIFY`/`CHECKMULTISIGVERIFY`, `37edf0e233` for CLTV, and
+`c4068cf37b` for negative-zero CSV. The vectors already gave deterministic
+coverage for their expected `ScriptError` values, but `eval_script` only
+checked that the result, error-pointer result, and final stack agreed. A
+production path returning the wrong non-OK error consistently would therefore
+pass the fuzzer contract.
+
+The fuzzer now checks the exact failure errors for the new empty-stack,
+negative, negative-zero, non-minimal, zero, and five-byte CLTV/CSV cases, plus
+the failing CHECKSIGVERIFY and CHECKMULTISIGVERIFY cases, under both BASE and
+WITNESS_V0. The existing master JSON vectors remain the deterministic unit
+coverage; no separate unit case or production assertion was needed.
+
+Mutation proof: `src/script/interpreter.cpp` was temporarily changed only at
+the CHECKSIGVERIFY failure return, replacing `SCRIPT_ERR_CHECKSIGVERIFY` with
+`SCRIPT_ERR_EVAL_FALSE`. After rebuilding the mutated production library, the
+pre-change `eval_script` contract replayed 37 boundary/corpus inputs and
+exited zero, while the deterministic `script_json_test` failed with exit 201.
+With the new oracle and the mutation still present, the first replayed input
+aborted at the exact-error assertion with libFuzzer exit 77. The production
+line was restored before every clean build and replay.
+
+Controls: the rebased branch's `script_tests` suite passed all 27 cases. A
+normal campaign completed 5,000 executions and an ASan/UBSan campaign
+completed 5,000 executions, all without assertions, sanitizer reports, or
+artifacts. The direct-file TSan driver replayed 37
+independent inputs without a race report. An isolated build from the exact
+`774d11c58f221294950f05ac4d249e19583e4b7b` control tree passed all 21
+script-suite cases; the relevant interpreter paths differ from this branch only
+by unrelated earlier assertion/reset work.
+During finalization, `origin/master` advanced to
+`26b730cdbf2c77c12f684fd50bd376212b725394`; the branch was rebased onto it
+before this commit. Those five intervening commits add BIP32 seed-length
+validation and a secp256k1 subtree update, but do not touch the script
+interpreter, script vectors, or this oracle. The rebased branch's refreshed
+script/fuzzer gates were rerun after the rebase: the branch `script_tests`
+suite passed 27 cases, normal and ASan/UBSan fuzzers each completed 1,000
+executions, and direct-file TSan replay covered all eight intended boundary
+inputs without a report.
+
+Severity: n/a. This is an error-code oracle and fuzzer-coverage improvement,
+not a confirmed master-branch production bug, vulnerability, race, or
+behavior change. The temporary mutation was deliberately non-consensus and was
+never committed.
