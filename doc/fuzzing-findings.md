@@ -7,7 +7,10 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`7b6f9ba7bad13b0c4169259000f7802854cdda0d`. The reorg campaign below ran before the
+`22a03ca69443deb66b98deb37d8e84a33968ac10`. The five new exact-master controls
+below were run against the then-current `7b6f9ba7ba` baseline before this final
+rebase; the intervening master range contains only cluster-linearization
+optimizations and does not touch these production paths. The reorg campaign below ran before the
 master fetches against `559d042ba2567a05e8d540c7d9d9a94c7d2973d2`; the fifteen commits
 between those tips update Qt, ZeroMQ dependencies, include-lint tooling, the assumed
 BIP324 service flag for seed addresses, and descriptorprocesspsbt's invalid-signature
@@ -16,6 +19,8 @@ or descriptor-cache production code exercised here. The subsequent `5311b15727` 
 `7b6f9ba7ba` range merges PR #34672, which changes mining IPC submit-result plumbing.
 The stale-output defect introduced by that change is recorded below; it does not
 change the earlier compact-block, mempool, coins, or descriptor-cache control results.
+The final `7b6f9ba7ba..22a03ca694` range contains only the four `clusterlin`
+optimization commits; no finding below needs a severity or reproducer change.
 Controls that explicitly name an older baseline, including
 `32eb52100296718f7c0469e3210ce1db73694793` and `5311b15727f2f282274472184185423e441abd85`,
 are historical clean-master runs; they remain valid evidence for the mutations they
@@ -30,14 +35,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 29 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 34 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The twenty-nine confirmed runtime defects are: the index publication and restart race;
+The thirty-four confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
@@ -53,7 +58,11 @@ bugs (overlong status codes, status codes below 100, differing duplicate
 `Content-Length` values, and invalid chunk terminators); reusable `ArgsManager`
 command state; out-of-range compressed amounts; invalid Schnorr-key handling;
 exhausted coins-DB cursor reads; and two HTTP request-parser atomicity defects
-(partial chunked bodies and partial request fields). Their exact reproducer,
+(partial chunked bodies and partial request fields); work added after an explicit
+checkqueue completion; stale reusable sighash precomputation; duplicate serialized
+assumeutxo coin records; failed block candidates retained across invalidation and
+unlinked recovery; and pruned unlinked blocks no longer linked when their parent
+arrives. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -136,11 +145,22 @@ created worker threads.
   The HTTP parser work contains two distinct contracts: incomplete chunked bodies
   must not be committed or duplicated on retry, and control/header/body fields
   must remain unchanged on failed or incomplete parsing.
+* Five more exact-master controls reproduced production defects already fixed in
+  this stack: duplicate serialized assumeutxo records, three failed-block
+  candidate transitions, pruned unlinked children that lose their chain
+  transaction count, sequential checkqueue work added after `Complete()`, and
+  stale reusable `PrecomputedTransactionData` witness hashes. The first three
+  are medium validation/snapshot consistency issues; the latter two are low to
+  medium direct-API contracts. The fixed branch passes each adapted regression.
 * The HTTP stale-`m_send_ready` candidate was explicitly excluded from the defect
   count: current `origin/master` already contains the cleanup in `73da2a8a52`
   (`http: prevent race condition between worker thread and I/O thread`). Replaying
   that branch mutation would therefore test an already-fixed master path rather
   than reveal a current-master bug.
+* The pruned-candidate redownload claim from `78dc30bc4d40` is explicitly excluded:
+  transplanting its deterministic test onto exact current master passed without
+  the branch fix. That failure was introduced by the local validation stack, so
+  it is not evidence of a current-master defect.
 * Sanitizer workers in this ledger are independent processes unless explicitly stated
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
@@ -818,6 +838,100 @@ diagnostic or artifact. Two TSan workers completed 4,897 coins-DB inputs each
 and 53,363/52,218 HTTP inputs, also without a report or artifact. These sanitizer
 and TSan results validate the fixed branch's exercised paths; they do not upgrade
 the local/API findings above into claims of general thread safety.
+
+### 30. Checkqueue work added after explicit completion
+
+* Current branch fix: `7e06037e8239` (`checkqueue: complete work added after control completion`).
+* Severity on clean master: low to medium internal validation-work scheduling
+  correctness. The demonstrated transition is sequential and requires a caller to
+  reuse one `CCheckQueueControl` after calling `Complete()`; no remote trigger or
+  consensus bypass was demonstrated.
+
+`CCheckQueueControl::Complete()` marked the controller done, but a later non-empty
+`Add()` left that flag set. The controller destructor then skipped its final
+completion, so work added after the explicit completion could remain queued after
+the controller scope ended. The deterministic mutation adds one check, completes
+the control, adds two more checks, and observes the callback count after scope exit.
+
+The exact `origin/master` control changed only the current-context unit test and
+left `src/checkqueue.h` unchanged. It failed with `n_calls == 1` instead of `3`.
+The fixed branch passes the same test and the full `checkqueue_tests` suite. The
+fix clears the completed flag before accepting a non-empty post-complete batch;
+empty batches and concurrent method calls retain their existing semantics.
+
+### 31. Reused sighash precomputation retains stale witness hashes
+
+* Current branch fix: `949c3916cc35` (`script: reset precomputed txdata before init`).
+* Severity on clean master: low to medium direct script-signing API correctness.
+  A caller must reuse one `PrecomputedTransactionData` object across incompatible
+  transactions and precompute modes; no ordinary validation path or remote trigger
+  was demonstrated. The stale cache can produce an incorrect witness-v0 signature
+  hash for the second transaction.
+
+The old `Init()` path left `m_bip143_segwit_ready` set when the first transaction
+was force-initialized with empty spent outputs and the second transaction did not
+request BIP143 precomputation. `SignatureHash()` then consumed hashes belonging to
+the first transaction. The exact clean-master test first initialized `stale_tx`,
+reinitialized the same object for `tx`, and compared four witness-v0 hash modes
+with and without the cache. Master failed the readiness postcondition and all four
+hash comparisons. The fixed branch passes the deterministic test and the sighash
+suite; `Init()` now resets optional readiness before recomputation.
+
+### 32. Duplicate serialized assumeutxo coin records are accepted
+
+* Current branch fix: `e2b773c53d3f` (`validation: reject duplicate snapshot coin records`).
+* Severity on clean master: medium local snapshot-integrity issue. A corrupt or
+  malicious snapshot file can append a duplicate serialized UTXO record, inflate
+  the metadata coin count, and still produce the same unique UTXO set and serialized
+  UTXO hash because the cache ignores the duplicate. This is a local snapshot
+  loading boundary, not a P2P or consensus-validation bypass.
+
+The exact-master regression generated a valid snapshot, copied its first serialized
+txid group to the end, incremented `m_coins_count`, and loaded it through
+`ActivateSnapshot()`. With production `src/validation.cpp` unchanged, master
+accepted the malformed snapshot, so the test's `!CreateAndActivate...` check
+failed. The fixed branch rejects it by comparing recomputed unique coin statistics
+with the metadata count and passes `chainstatemanager_activate_snapshot`. The same
+mutation is now present in the snapshot fuzzers and the assumeutxo functional
+coverage.
+
+### 33. Failed blocks remain in validation candidate sets
+
+* Current branch fix: `ee0db855a418` (`validation: keep failed blocks out of candidates`).
+* Severity on clean master: medium validation block-index consistency and
+  availability issue. The transitions are reachable through invalid block
+  reception, reorg/invalidation, and candidate recovery; no consensus bypass,
+  wallet impact, or persisted-format corruption was demonstrated.
+
+Three deterministic clean-master controls exposed the same invariant through
+different state transitions. Receiving an unlinked child, invalidating it, and
+then receiving its parent left the failed child in `setBlockIndexCandidates`.
+Invalidating an out-of-chain candidate parent left its failed child there as well.
+Finally, invalidating an active-chain block while a higher-work side descendant was
+cached left that descendant as a failed candidate during disconnect. Each exact
+master control failed with candidate membership `1` where `0` was required. The
+fixed branch passes all three tests, removes failed blocks from every chainstate
+candidate set, skips failed recovery entries, and avoids reinserting invalidated
+unlinked descendants while preserving their chain transaction counts.
+
+### 34. Pruning an unlinked child loses its chain transaction count
+
+* Current branch fix: `43f0581be847` (`validation: keep pruned unlinked blocks linkable`).
+* Severity on clean master: medium pruned-node validation/index consistency issue.
+  A node can receive a child before its parent, prune the child's block data, and
+  later receive the parent. No consensus bypass or persisted-format corruption was
+  demonstrated, but the resulting block-index state aborts the assertion-enabled
+  consistency check and can strand the child from chain-transaction accounting.
+
+The exact-master regression received an off-chain child, pruned its block file,
+verified that the child remained processed but lacked chain transaction counts, and
+then received the parent. Master had already erased the child from
+`m_blocks_unlinked`; the child stayed at `m_chain_tx_count == 0`, and
+`CheckBlockIndex()` aborted after the parent arrived. The same result occurred in
+the exact Debug ASan/UBSan control without a memory-safety report. The fixed branch
+keeps pruned entries that still need ancestor chain counts in `m_blocks_unlinked`
+and passes the deterministic regression, `blockmanager_tests`, and the block-index
+fuzzer gate.
 
 ## Compact-block short-ID investigation
 
@@ -2165,9 +2279,12 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The twenty-nine confirmed production defects
+caller or new collision race was found. The thirty-four confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
-the severity assigned against current master. The AddrMan and wallet sanitizer
+the severity assigned against current master. The post-collision exact-master
+controls subsequently added five confirmed defects: duplicate snapshot records,
+failed candidate-set transitions, pruned unlinked-chain accounting, post-complete
+checkqueue work, and stale reusable sighash state. The AddrMan and wallet sanitizer
 gates above found no additional production mistake, race, consensus issue, or
 remotely reachable memory-safety defect.
 
