@@ -904,8 +904,12 @@ util::Result<CTxDestination> DescriptorScriptPubKeyMan::GetNewDestination(const 
         if (!ExtractDestination(scripts_temp[0], dest)) {
             return util::Error{_("Error: Cannot extract destination from the generated scriptpubkey")}; // shouldn't happen
         }
-        m_wallet_descriptor.next_index++;
-        WalletBatch(m_storage.GetDatabase()).WriteDescriptor(GetID(), m_wallet_descriptor);
+        WalletDescriptor descriptor{m_wallet_descriptor};
+        descriptor.next_index++;
+        if (!WalletBatch(m_storage.GetDatabase()).WriteDescriptor(GetID(), descriptor)) {
+            return util::Error{_("Error: Failed to write descriptor")};
+        }
+        m_wallet_descriptor.next_index = descriptor.next_index;
         return dest;
     }
 }
