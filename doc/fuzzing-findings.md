@@ -2879,3 +2879,26 @@ independent PSBT state, so TSan covers the target's exercised operations and
 setup rather than arbitrary concurrent RPC or wallet callers. No clean-master
 candidate, production inconsistency, vulnerability, race, or deterministic
 test gap was demonstrated; no source or test change was warranted.
+
+## Resumed PSBT base64 decoder gate (2026-07-23)
+
+The `psbt_base64_decode` target was replayed from two independent private
+copies of all 2,102 existing QA inputs (46,847,634 bytes; maximum input
+970,624 bytes). It accepts only valid base64 PSBTs, checks that decoding and
+re-encoding preserve the trimmed input, serializes the decoded PSBT, and
+checks that a second base64 decode round-trips the serialized PSBT exactly.
+
+Two normal workers completed 8,000 executions each in 22 and 23 seconds,
+reaching coverage 5,873 with peak RSS of 162 MB in both runs. They added 14
+and 15 units and ended with 2,116-file private corpora. Two ASan/UBSan workers
+completed 6,000 executions each in 74 and 76 seconds, reaching coverage
+19,217 with peak RSS of 630 and 627 MB and adding 9 and 10 units. The
+direct-file TSan driver replayed the resulting 2,125 and 2,126 files in 7
+and 8 seconds. All six jobs exited zero without an assertion, sanitizer
+report, race report, timeout, unexpected exception, or target artifact.
+
+Each process owns independent decoded PSBT state, so the TSan replay covers
+the decoder and round-trip operations exercised by the target rather than
+concurrent callers sharing a PSBT. No clean-master candidate, production
+inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
