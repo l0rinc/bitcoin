@@ -7,24 +7,16 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`290cb2f17ef6ba9198934bbaec53fa962a1dfa18`. The five new exact-master controls
-below were run against the then-current `7b6f9ba7ba` baseline before this final
-rebase; the intervening master range contains only cluster-linearization
-optimizations and does not touch these production paths. The reorg campaign below ran before the
-master fetches against `559d042ba2567a05e8d540c7d9d9a94c7d2973d2`; the fifteen commits
-between those tips update Qt, ZeroMQ dependencies, include-lint tooling, the assumed
-BIP324 service flag for seed addresses, and descriptorprocesspsbt's invalid-signature
-handling. They do not change the validation, compact-block, mempool, TxGraph, coins,
-or descriptor-cache production code exercised here. The subsequent `5311b15727` to
-`7b6f9ba7ba` range merges PR #34672, which changes mining IPC submit-result plumbing.
-The stale-output defect introduced by that change is recorded below; it does not
-change the earlier compact-block, mempool, coins, or descriptor-cache control results.
-The final `7b6f9ba7ba..22a03ca694` range contains only the four `clusterlin`
-optimization commits; no finding below needs a severity or reproducer change.
-The subsequent `22a03ca694..51143291a6` range contains only I2P URL comment
-updates, and `51143291a6..290cb2f17e` contains only the scripted-diff locale
-change from PR #35775; neither range alters any production path or fuzzer
-control recorded here.
+`26b730cdbf2c77c12f684fd50bd376212b725394`. The historical exact-master controls
+below retain their named baselines; they are evidence for the mutations they
+tested, not claims about an earlier branch tip. The range from the previous
+ledger baseline through the current master tip was inspected: the relevant
+changes are RPC/OpenRPC work, secp256k1 subtree updates, script failure vectors,
+and BIP32 seed-length validation. None changes the compact-block, cluster-
+mempool, coins-cache, validation-index, or descriptor-cache production paths
+covered by the controls below. The reorg campaign and the older compact-block
+controls therefore remain valid historical controls, while the current-master
+status is recorded in the post-rebase section below.
 Controls that explicitly name an older baseline, including
 `32eb52100296718f7c0469e3210ce1db73694793` and `5311b15727f2f282274472184185423e441abd85`,
 are historical clean-master runs; they remain valid evidence for the mutations they
@@ -177,6 +169,47 @@ created worker threads.
 * Sanitizer workers in this ledger are independent processes unless explicitly stated
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
+
+## Post-rebase compact, cluster, and cache controls (2026-07-23)
+
+The branch is rebased onto the current `origin/master`
+`26b730cdbf2c77c12f684fd50bd376212b725394`; `git merge-base HEAD origin/master`
+matches that tip. The current-master range after the earlier compact and
+cluster/coins controls was checked directly. The relevant production and fuzzer
+paths (`blockencodings`, `net_processing`, `txgraph`, `txmempool`, `coins`,
+`validation`, `partially_downloaded_block`, `tx_pool`, and `coinscache_sim`) are
+unchanged between the earlier control baseline and this master tip.
+
+The compact-block collision result is unchanged: the short-ID accounting
+underflow is fixed by master `6aa5d8d948`, the normal null-tail construction is
+avoided by master `6f1c56f03a`, and the remaining null, duplicate, position-bound,
+and reusable-`FillBlock()` cases are direct-API contracts or network fallback
+coverage. No additional clean-master collision crash, state corruption, or race
+was found.
+
+For a fresh current-branch cluster-mempool load, two independent normal
+`tx_pool` workers replayed the complete 8,000-file corpus and completed 8,001
+executions each. They reached coverage `20232` and `20232`; no assertion,
+timeout, sanitizer report, race/deadlock report, or target artifact was written.
+Two independent TSan workers then replayed disjoint 512-file spread slices in
+the direct-file driver. Both exited zero (`5s` and `4s`) without a race report or
+artifact. These workers own separate mempools, so this is evidence for the
+exercised callback/index/cluster interleavings, not arbitrary shared live-node
+schedules.
+
+Two full ASan/UBSan corpus attempts reached the 4,096-input pulse without a
+diagnostic, but stalled in the known high-cost tail and were stopped after more
+than seven minutes. They are explicitly incomplete and are not counted as
+passes. A bounded spread slice provided the completed sanitizer control instead:
+two independent ASan/UBSan workers ran 514 executions each, reaching coverage
+`62742` and `66519` with peak RSS of about 500 MB and 479 MB. Neither emitted an
+assertion, sanitizer, race, timeout, or target artifact.
+
+The existing post-rebase `clusterlin_*` and `coinscache_sim` gates recorded below
+remain applicable because the inspected master range does not touch those paths.
+Together with the compact-block controls and the deterministic tests, this
+round found no new clean-master production defect, vulnerability, race, or
+deterministic test omission. No source fix was warranted.
 
 ## Confirmed production defects
 
