@@ -30,20 +30,21 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 11 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
+| Confirmed runtime defects | 12 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The eleven confirmed runtime defects are: the index publication and restart race;
+The twelve confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; stale Base58 output on decode
 failure; the descriptor-cache partial merge; stale mining `submitSolution` failure
-outputs; stale `TxIndex::FindTx` failure outputs; and stale wallet transaction
-detail outputs. Their exact reproducer,
+outputs; stale `TxIndex::FindTx` failure outputs; stale wallet transaction detail
+outputs; and stale `ProcessNewBlock` `new_block` output after a block-file write
+failure. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -340,6 +341,43 @@ test passes 15/15 assertions, and the full `wallet_tests` suite passes 15 cases
 and 145/145 assertions in the Debug wallet build. This is a direct interface
 contract fix, not evidence of a remotely reachable race: the wallet lock
 serializes the lookup, while the stale model entry is the normal local trigger.
+
+### 12. `ProcessNewBlock` reports a new block after a block-file write failure
+
+* Current branch fix: `validation: clear new-block output on block write failure`.
+* Severity on clean master: low local availability/bookkeeping issue. The trigger
+  requires a block-file I/O failure, which is normally a local disk or filesystem
+  problem; no consensus, memory-safety, wallet-loss, or remote-only attack was
+  demonstrated.
+
+`ChainstateManager::AcceptBlock()` set `*fNewBlock = true` before calling
+`BlockManager::WriteBlock()` and `ReceivedBlockTransactions()`. If the block-file
+write failed, `AcceptBlock()` returned `false` through its fatal I/O path, but the
+caller-owned flag remained true even though the block index did not have
+`BLOCK_HAVE_DATA`. `PeerManagerImpl::ProcessBlock()` ignores the boolean return
+from `ProcessNewBlock()` and uses this flag to erase the in-flight request and
+update the peer's last-block timestamp, so a failed write was reported as if the
+block had been stored. A node with a failing filesystem is already degraded and
+the fatal notification requests shutdown; this is therefore a consistency and
+recovery issue, not a remotely exploitable block-validation bug.
+
+The deterministic mutation renames the configured blocks directory after setup,
+replaces it with a regular file, and submits a valid regtest block. The next
+`FlatFileSeq` directory creation fails with `Not a directory`; the test keeps fatal
+shutdown disabled long enough to require `ProcessNewBlock() == false`,
+`new_block == false`, and cleanup of the original directory. The exact clean-master
+`7b6f9ba7bad13b0c4169259000f7802854cdda0d` control received only this test and
+failed at the `!new_block` postcondition (exit 201). The branch failed the same
+way before the production edit and passes afterward. Existing block/reorg tests
+covered invalid, duplicate, and successful storage paths, but
+`TestChainstateManager::DisableNextWrite()` controls chainstate flushing rather
+than `BlockManager::WriteBlock()`, so they did not reach this disk-failure branch.
+
+The fix assigns `fNewBlock` only after both block storage and
+`ReceivedBlockTransactions()` succeed. The focused Debug test passes on the fixed
+branch; the existing `ProcessNewBlock` success/failure output assertions continue
+to cover the ordinary paths. No fuzzer-only exception or race was involved, so no
+additional fuzzer mutation was needed beyond the deterministic filesystem fault.
 
 ## Compact-block short-ID investigation
 
@@ -1660,7 +1698,7 @@ normal-binary replay exited zero in about four seconds, so it is sanitizer/model
 overhead rather than a demonstrated production performance issue.
 
 This matrix found no new production inconsistency, race, memory-safety failure, or
-policy defect. The confirmed-runtime-defect count remains eleven; no source or
+policy defect. The confirmed-runtime-defect count remains twelve; no source or
 deterministic functional-test change was warranted by these replays.
 
 ### Re-evaluation after the compact-block collision work
@@ -1670,7 +1708,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The eleven confirmed production defects
+caller or new collision race was found. The twelve confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The AddrMan and wallet sanitizer
 gates above found no additional production mistake, race, consensus issue, or
