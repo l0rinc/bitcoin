@@ -3545,3 +3545,55 @@ confirmed master-branch bug. The cleanup behavior is unchanged in release
 builds because the new production checks use `Assume`; no clean-master
 production inconsistency, vulnerability, race, or additional deterministic
 test gap was demonstrated.
+
+## Post-rebase cache and private-broadcast controls (2026-07-23)
+
+After rebasing on exact `origin/master` `526673487ceef18d1df41d77b4783b9b3908ced5`,
+the new cache-boundary targets were seeded explicitly because neither had a
+native QA corpus. The seeds included empty input, one-byte `00`, `01`, `7f`,
+`80`, and `ff` values, and a 64-byte zero input. `cache_sizes` completed two
+independent 10,000-execution normal workers, reaching coverage 1,128, followed
+by two ASan/UBSan workers with 5,000 executions each, reaching coverage 3,046.
+`coins_cache_size_state` completed the same normal and sanitizer budgets,
+reaching normal coverage 868/869 and sanitizer coverage 2,526 in both workers.
+Direct-file TSan replay covered the resulting 43/45 `cache_sizes` files and
+20/20 `coins_cache_size_state` files. No assertion, sanitizer, race, timeout,
+or artifact occurred.
+
+The cache-size target checks the `uint64_t` allocation arithmetic at negative,
+minimum, percentage, index-count, and saturated `-dbcache` boundaries. The
+cache-state target checks the mixed signed/unsigned headroom calculation at
+`SIZE_MAX` and random capacities. These are arithmetic contracts; they do not
+populate a live cache. The stateful `coinscache_sim`, `coins_view_stacked`, and
+DB-resize controls above remain the evidence for cache mutation and asynchronous
+prevout-fetch transitions. Each fuzzer process owns independent state, so TSan
+does not prove arbitrary shared live-node cache schedules race-free.
+
+The `p2p_private_broadcast` harness was then seeded from 256 existing
+`txrequest` inputs below 64 KiB. Two normal workers completed 2,000 mutations
+each, expanding to 425 and 434 files and reaching coverage 8,038/8,053. Two
+ASan/UBSan workers completed 1,500 mutations each, reaching coverage
+24,374/24,372 at 662/657 MB peak RSS. Direct-file TSan replay covered 490 and
+497 files. The run includes IBD and post-IBD paths, zero-to-three pending
+transactions, relay-true and relay-false private handshakes, extra peer types,
+GETDATA/PONG confirmation, repeated broadcasts, and malformed inbound message
+types. Every job exited zero without an assertion, sanitizer, race/deadlock
+report, timeout, unexpected exception, or target artifact.
+
+The private-broadcast production state machine differs from clean master on
+this branch because earlier commits fixed two confirmed accounting defects.
+Therefore the same expanded inputs were replayed against an exact-master
+ASan/UBSan build. The unmodified master fuzzer completed 1,000 mutations in
+each of two workers. The branch's 12-line relay-false fuzzer delta was then
+grafted into the disposable checkout while all production sources remained at
+`526673487c`; two workers, each with an explicit zero-byte relay-false seed,
+completed 1,023 and 1,075 executions. Neither control produced an assertion,
+sanitizer report, or artifact. This rules out a current-master production
+failure for the new handshake mutation, while not claiming that arbitrary
+live peer teardown schedules are race-free.
+
+A typed-catch audit of the reviewed cache and private-broadcast paths found no
+catch-all or `std::exception` handler. The private-broadcast loop catches only
+`std::ios_base::failure`, the expected malformed-message parser exception;
+assertions and all other exception types remain fatal. No production bug,
+deterministic test gap, or source change was warranted by this campaign.
