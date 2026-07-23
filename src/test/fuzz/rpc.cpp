@@ -64,6 +64,51 @@ struct RPCFuzzTestingSetup : public TestingSetup {
             return;
         }
         tableRPC.execute(request);
+        if (rpc_method == "getopenrpcinfo" || rpc_method == "rpc.discover") {
+            CheckOpenRPCContract();
+        }
+    }
+
+    static void AssertOpenRPCDocument(const UniValue& document)
+    {
+        assert(document.isObject());
+        assert(document["openrpc"].isStr());
+        assert(document["openrpc"].get_str() == "1.4.1");
+        assert(document["info"].isObject());
+        assert(document["methods"].isArray());
+
+        std::string previous_method;
+        for (const UniValue& method : document["methods"].getValues()) {
+            assert(method.isObject());
+            assert(method["name"].isStr());
+            const std::string& method_name{method["name"].get_str()};
+            assert(previous_method.empty() || previous_method < method_name);
+            previous_method = method_name;
+            assert(method["params"].isArray());
+            assert(method["result"].isObject());
+            assert(method["result"]["name"].isStr());
+            assert(method["result"]["schema"].isObject());
+        }
+    }
+
+    UniValue CallOpenRPC(const std::string& rpc_method, UniValue params)
+    {
+        JSONRPCRequest request;
+        request.context = &m_node;
+        request.strMethod = rpc_method;
+        request.params = std::move(params);
+        return tableRPC.execute(request);
+    }
+
+    void CheckOpenRPCContract()
+    {
+        UniValue getopenrpcinfo_params{UniValue::VARR};
+        getopenrpcinfo_params.push_back(false);
+        const UniValue public_document{CallOpenRPC("getopenrpcinfo", std::move(getopenrpcinfo_params))};
+        const UniValue discovered_document{CallOpenRPC("rpc.discover", UniValue{UniValue::VARR})};
+        AssertOpenRPCDocument(public_document);
+        AssertOpenRPCDocument(discovered_document);
+        assert(public_document.write() == discovered_document.write());
     }
 
     std::vector<std::string> GetRPCCommands() const
