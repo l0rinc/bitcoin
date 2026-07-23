@@ -3442,3 +3442,42 @@ covers the exercised resize and collision operations rather than shared
 concurrent cache callers. No clean-master candidate, production
 inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
+
+## Resumed transaction-download manager lifecycle gate (2026-07-23)
+
+The `txdownloadman_impl` target was replayed from a private bounded copy of
+1,536 of its 1,560 QA inputs. The selected inputs totaled 5,453,608 bytes and
+had a maximum size of 14,335 bytes. The target exercises peer connect and
+disconnect, wtxid-relay accounting, transaction announcements and requests,
+not-found responses, orphan resolution, 1-parent-1-child package formation,
+mempool acceptance and rejection callbacks, block connect/disconnect filters,
+reconsideration work, time reversal, and final empty-state checks.
+
+The full bounded seed corpus was too expensive for useful mutation: two normal
+workers were interrupted after 1,373 executions each while replaying the same
+slow state, without an assertion, diagnostic, or artifact. A deterministic
+spread slice of 128 inputs (447,806 bytes, maximum 12,157 bytes) was therefore
+used for discovery. Its two normal workers were stopped after 591 and 650
+executions, adding 211 and 224 units and expanding their independent corpora to
+336 and 343 files. Neither worker produced an assertion, crash, or target
+artifact.
+
+Two ASan/UBSan workers completed a separate 64-input seed slice (69,805 bytes,
+maximum 2,755 bytes) for 128 executions each in 91 and 85 seconds. They reached
+coverage 26,003 and 26,004, added 41 and 39 units, and used peak RSS of 669 and
+670 MB. The direct-file TSan driver replayed the resulting 336- and 343-file
+corpora in three batches per worker, with every invocation exiting zero and no
+race report. All completed gates were free of assertions, sanitizer reports,
+race reports, unexpected exceptions, and target artifacts.
+
+The interrupted larger ASan replay timed out only on the known 7,449-byte
+input `e36b72c63cbf8f8f2a6704866be08d6bbda26062`; its stack was in
+`TxOrphanageImpl::SanityCheck()` repeatedly computing transaction weight. The
+same input exited zero in 8.2 seconds with the normal binary and 33.2 seconds
+under ASan/UBSan, with no memory or undefined-behavior report. This is a
+sanitizer/model performance observation, not a production defect or a completed
+full-corpus gate. Each fuzzer process owns an independent manager, so TSan
+covers the exercised lifecycle operations rather than arbitrary live-node
+peer scheduling. No clean-master candidate, production inconsistency,
+vulnerability, race, or deterministic test gap was demonstrated; no source or
+test change was warranted.
