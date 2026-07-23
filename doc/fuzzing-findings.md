@@ -35,14 +35,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 35 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, malformed fee-estimator inputs, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 36 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The thirty-five confirmed runtime defects are: the index publication and restart race;
+The thirty-six confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
@@ -62,7 +62,8 @@ exhausted coins-DB cursor reads; and two HTTP request-parser atomicity defects
 checkqueue completion; stale reusable sighash precomputation; duplicate serialized
 assumeutxo coin records; failed block candidates retained across invalidation and
 unlinked recovery; and pruned unlinked blocks no longer linked when their parent
-arrives; and invalid raw fee-estimator success thresholds. Their exact reproducer,
+arrives; invalid raw fee-estimator success thresholds; and descriptor top-up cache
+metadata inconsistency after a descriptor-row write failure. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -88,6 +89,10 @@ created worker threads.
   new production defect: the existing `bnb_exhaustion_with_solution_test` already
   catches the exact `GetAlgoCompleted()` mutant on current master, but no wallet
   fuzzer deliberately generated its 19 near-equal-UTXO, 100,000-attempt case.
+* The descriptor top-up write-failure defect below is a clean-master storage
+  consistency bug. The exact fuzzer seed fails on master and passes on this branch;
+  the deterministic unit test verifies rollback of cache rows and preservation of
+  the in-memory descriptor range.
 * Current master PR #34672 added `reason` and `debug` output fields to the mining
   `submitSolution` interface. Its null-coinbase early return left caller-provided
   failure strings untouched instead of returning the empty outputs promised by the
@@ -959,6 +964,49 @@ output preservation. Two normal workers completed 2,000 executions each from a
 private copy of the 1,254-input QA corpus; two ASan/UBSan workers completed 1,290
 replays each after corpus growth. All exited successfully without a diagnostic or
 artifact.
+
+### 36. Descriptor top-up leaves cache state inconsistent after metadata write failure
+
+* Current branch fix: `e8f820f41d` (`wallet: make descriptor topups consistent on write failure`).
+* Severity on clean master: low to medium local wallet-storage consistency and
+  recovery issue. The trigger requires a descriptor metadata row write to fail
+  after cache-row writes succeed; no remote, consensus, key-loss, or normal
+  storage-failure exploit was demonstrated.
+
+`DescriptorScriptPubKeyMan::TopUpWithDB()` wrote new descriptor cache rows and
+mutated the in-memory descriptor, script maps, and maximum cached index before
+ignoring the result of `WriteDescriptor()`. The exact `origin/master`
+`22a03ca69443deb66b98deb37d8e84a33968ac10` control installed a SQLite trigger that
+rejected only the 49-byte descriptor metadata key while allowing the 62-byte
+descriptor-cache keys, then called `TopUp(2)` on a valid ranged `wpkh` descriptor.
+Clean master returned success, advanced the in-memory range to 2, persisted range
+end 1, and left two cache rows where one existed before. The deterministic unit
+test reproduces the mutation and fails on the old code.
+
+The same metadata-write mutation was transplanted into a fresh exact-master
+fuzzer control. Seed
+`00a76e59d7b467c470ddf35b051073c01900f0ad` failed master at the new
+`assert(!topup_succeeded)`; the same seed passed on the fixed branch. The fix
+stages the descriptor, cache index, script map, and pubkey map locally, checks the
+descriptor write, and publishes them only after all writes succeed. The public
+`TopUp()` transaction then rolls back cache rows when the descriptor write fails.
+The new `topup_descriptor_write_failure` unit test checks the exception, memory
+state, persisted descriptor range, and cache-row count.
+
+The direct scriptpubkeyman harness replayed all 10,025 QA inputs using two
+independent workers without a failure. A full sanitized corpus attempt reached
+7,637 executions per worker before a controlled stop in the large-input slow
+region; it produced no Bitcoin diagnostic or target artifact. A completed capped
+sanitized gate used two ASan/UBSan workers, 256 seeds, and 1,000 mutations per
+worker, adding 85 and 89 coverage units with no diagnostic or artifact. The
+metadata fuzzer catches only the exact expected `TopUpWithDB` runtime error; the
+existing all-write mutation was also extended to accept its separately expected
+descriptor-row failure when no cache row needs writing.
+
+This proof covers the public `TopUp()` path and its explicit transaction. The
+internal `TopUpWithDB()` helper is also used by callers that supply their own
+batch context; this commit does not claim to make every larger import/update
+workflow atomic, and no clean-master failure was demonstrated for those callers.
 
 ## Compact-block short-ID investigation
 
@@ -2306,7 +2354,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The thirty-five confirmed production defects
+caller or new collision race was found. The thirty-six confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The post-collision exact-master
 controls subsequently added five confirmed defects: duplicate snapshot records,
