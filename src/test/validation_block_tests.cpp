@@ -10,6 +10,7 @@
 #include <interfaces/mining.h>
 #include <kernel/coinstats.h>
 #include <node/blockstorage.h>
+#include <node/kernel_notifications.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
@@ -29,6 +30,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <fstream>
 #include <memory>
 #include <span>
 #include <thread>
@@ -235,6 +237,46 @@ BOOST_AUTO_TEST_CASE(processnewblock_new_block_flag)
         ++malformed_block->nNonce;
     }
     BOOST_CHECK(!process_block(malformed_block, new_block));
+    BOOST_CHECK(!new_block);
+}
+
+BOOST_AUTO_TEST_CASE(processnewblock_new_block_flag_write_failure)
+{
+    const auto block{GoodBlock(Params().GenesisBlock().GetHash())};
+
+    // Replace the blocks directory after setup. FlatFileSeq retains the path,
+    // so the next block write deterministically fails without changing the
+    // production code or relying on host disk capacity.
+    const fs::path blocks_dir{m_args.GetBlocksDirPath()};
+    fs::path backup_dir{blocks_dir};
+    backup_dir += ".write-failure-backup";
+    BOOST_REQUIRE(fs::exists(blocks_dir));
+    BOOST_REQUIRE(!fs::exists(backup_dir));
+    struct RestoreBlocksDir {
+        const fs::path& path;
+        const fs::path& backup;
+        ~RestoreBlocksDir()
+        {
+            std::error_code ec;
+            fs::remove(path, ec);
+            fs::rename(backup, path, ec);
+        }
+    };
+    fs::rename(blocks_dir, backup_dir);
+    RestoreBlocksDir restore{blocks_dir, backup_dir};
+    std::ofstream replacement{blocks_dir.std_path()};
+    BOOST_REQUIRE(replacement.good());
+    replacement.close();
+
+    // A block-file failure is reported as fatal, but tests must continue far
+    // enough to verify the output contract.
+    m_node.notifications->m_shutdown_on_fatal_error = false;
+    bool new_block{true};
+    BOOST_CHECK(!Assert(m_node.chainman)->ProcessNewBlock(
+        block,
+        /*force_processing=*/true,
+        /*min_pow_checked=*/true,
+        &new_block));
     BOOST_CHECK(!new_block);
 }
 
