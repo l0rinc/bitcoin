@@ -34,7 +34,10 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <sqlite3.h>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -89,6 +92,14 @@ static DescriptorScriptPubKeyMan* CreateDescriptor(WalletDescriptor& wallet_desc
     return &spk_manager_res.value().get();
 };
 
+static bool BlockDescriptorWrites(CWallet& wallet)
+{
+    auto* database{dynamic_cast<MockableSQLiteDatabase*>(&wallet.GetDatabase())};
+    return database && sqlite3_exec(database->m_db,
+                                    "CREATE TRIGGER fail_wallet_writes BEFORE INSERT ON main BEGIN SELECT RAISE(ABORT, 'injected'); END;",
+                                    nullptr, nullptr, nullptr) == SQLITE_OK;
+}
+
 FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -123,6 +134,7 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
     }
 
     bool good_data{true};
+    bool descriptor_writes_blocked{false};
     LIMITED_WHILE (good_data && fuzzed_data_provider.ConsumeBool(), 20) {
         CallOneOf(
             fuzzed_data_provider,
@@ -171,6 +183,29 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                 }
             },
             [&] {
+                if (descriptor_writes_blocked) return;
+                if (!BlockDescriptorWrites(wallet)) {
+                    good_data = false;
+                    return;
+                }
+                descriptor_writes_blocked = true;
+
+                LOCK(spk_manager->cs_desc_man);
+                auto wallet_desc{spk_manager->GetWalletDescriptor()};
+                if (!wallet_desc.descriptor->IsSingleType()) return;
+                const auto output_type{wallet_desc.descriptor->GetOutputType()};
+                if (!output_type.has_value()) return;
+                const int32_t next_index{wallet_desc.next_index};
+                try {
+                    assert(!spk_manager->GetNewDestination(*output_type));
+                } catch (const std::runtime_error& error) {
+                    if (std::string_view{error.what()} != "TopUpWithDB: writing cache items failed") {
+                        throw;
+                    }
+                }
+                assert(spk_manager->GetWalletDescriptor().next_index == next_index);
+            },
+            [&] {
                 CMutableTransaction tx_to;
                 const std::optional<CMutableTransaction> opt_tx_to{ConsumeDeserializable<CMutableTransaction>(fuzzed_data_provider, TX_WITH_WITNESS)};
                 if (!opt_tx_to) {
@@ -206,6 +241,7 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                 (void)spk_manager->FillPSBT(psbt, txdata, options);
             }
         );
+        if (descriptor_writes_blocked) break;
     }
 
     std::string descriptor;
