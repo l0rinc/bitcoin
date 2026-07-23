@@ -45,6 +45,47 @@ static_assert(WALLET_INCREMENTAL_RELAY_FEE >= DEFAULT_INCREMENTAL_RELAY_FEE, "wa
 
 BOOST_FIXTURE_TEST_SUITE(wallet_tests, WalletTestingSetup)
 
+BOOST_FIXTURE_TEST_CASE(wallet_interface_missing_tx_outputs, WalletTestingSetup)
+{
+    auto wallet = interfaces::MakeWallet(
+        *Assert(m_wallet_loader->context()),
+        std::shared_ptr<CWallet>(&m_wallet, [](CWallet*) {}));
+    BOOST_REQUIRE(wallet);
+
+    interfaces::WalletTxStatus status{
+        .block_height = 1,
+        .blocks_to_maturity = 2,
+        .depth_in_main_chain = 3,
+        .time_received = 4,
+        .lock_time = 5,
+        .is_trusted = true,
+        .is_abandoned = true,
+        .is_coinbase = true,
+        .is_in_main_chain = true,
+    };
+    std::vector<std::string> messages{"stale message"};
+    std::vector<std::string> payment_requests{"stale payment request"};
+    bool in_mempool{true};
+    int num_blocks{42};
+
+    const auto result{wallet->getWalletTxDetails(
+        Txid::FromUint256(uint256::ONE), status, messages, payment_requests, in_mempool, num_blocks)};
+    BOOST_CHECK(!result.tx);
+    BOOST_CHECK_EQUAL(status.block_height, 0);
+    BOOST_CHECK_EQUAL(status.blocks_to_maturity, 0);
+    BOOST_CHECK_EQUAL(status.depth_in_main_chain, 0);
+    BOOST_CHECK_EQUAL(status.time_received, 0);
+    BOOST_CHECK_EQUAL(status.lock_time, 0);
+    BOOST_CHECK(!status.is_trusted);
+    BOOST_CHECK(!status.is_abandoned);
+    BOOST_CHECK(!status.is_coinbase);
+    BOOST_CHECK(!status.is_in_main_chain);
+    BOOST_CHECK(messages.empty());
+    BOOST_CHECK(payment_requests.empty());
+    BOOST_CHECK(!in_mempool);
+    BOOST_CHECK_EQUAL(num_blocks, 0);
+}
+
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {
     CMutableTransaction mtx;
