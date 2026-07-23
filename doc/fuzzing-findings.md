@@ -37,7 +37,7 @@ production failure.
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The nine confirmed runtime defects are: the index publication and restart race;
+The ten confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; stale Base58 output on decode
@@ -1579,6 +1579,50 @@ live socket schedules are race-free: each fuzzer process owns an independent
 scripted socket. No production fix, deterministic unit-test change, or severity
 change was warranted.
 
+## Post-rebase cluster-mempool corpus matrix (2026-07-23)
+
+The current `tx_pool` and `tx_pool_standard` harnesses were replayed from fresh
+copies of the existing QA corpora with two independent workers per flavor. These
+targets exercise cluster topology and fee diagrams, ancestor/descendant repair,
+RBF/TRUC policy, block-builder chunk iteration, prioritisation, mempool views,
+standardness gating, validation callbacks, and randomized/witness indexes. The
+fuzzer processes own independent mempools; TSan therefore covers the target's
+exercised internal worker/callback interleavings, not arbitrary live-node sharing.
+
+The unrestricted `tx_pool` corpus contained 8,000 inputs. Normal workers completed
+8,001 executions each (coverage 20,284 and 20,285); TSan workers completed 8,001
+each (coverage 10,039 in both runs). All four completed jobs exited zero without
+an assertion, sanitizer report, race/deadlock report, timeout, or target artifact.
+
+The `tx_pool_standard` corpus contained 2,857 inputs. Normal workers completed
+2,858 executions each (coverage 19,748 and 19,750); TSan workers completed 2,858
+each (coverage 8,943 and 8,942). Both standard-policy TSan jobs and both normal
+jobs exited zero without a report or artifact.
+
+Full ASan/UBSan replays were attempted from two independent copies of each corpus.
+The unrestricted workers reached the 4,096-input pulse before a controlled stop;
+the standard-policy workers reached 1,024 before the same large-input region held
+both workers. Neither attempt emitted a target sanitizer diagnostic or crash
+artifact, but both are explicitly incomplete gates. A manually interrupted
+multi-worker libFuzzer run also printed a stack in libFuzzer's own
+`InterruptExitCode()`; it had no Bitcoin frame and is excluded from production
+evidence.
+
+To obtain completed sanitizer evidence, a deterministic spread slice of 512 QA
+inputs was replayed under two independent ASan/UBSan workers for each target. The
+unrestricted slice completed 515 executions per worker, with coverage 66,760 and
+66,754. The standard-policy slice completed 514 executions per worker, with
+coverage 64,419 and 64,427. No assertion, sanitizer report, race report, or target
+artifact occurred. The standard slice's only slow-unit marker was a 207,014-byte
+input (SHA256
+`e4cb432a1c9a8edad4159b07ec746bc34737821d911a42bb8ffa07335e4d1ad1`); its exact
+normal-binary replay exited zero in about four seconds, so it is sanitizer/model
+overhead rather than a demonstrated production performance issue.
+
+This matrix found no new production inconsistency, race, memory-safety failure, or
+policy defect. The confirmed-runtime-defect count remains ten; no source or
+deterministic functional-test change was warranted by these replays.
+
 ### Re-evaluation after the compact-block collision work
 
 No severity changes are warranted on the clean baseline. The compact-block
@@ -1586,7 +1630,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The eight confirmed production defects
+caller or new collision race was found. The ten confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The AddrMan and wallet sanitizer
 gates above found no additional production mistake, race, consensus issue, or
