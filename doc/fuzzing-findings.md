@@ -3481,3 +3481,29 @@ covers the exercised lifecycle operations rather than arbitrary live-node
 peer scheduling. No clean-master candidate, production inconsistency,
 vulnerability, race, or deterministic test gap was demonstrated; no source or
 test change was warranted.
+
+## Resumed ephemeral-package evaluation gate (2026-07-23)
+
+The `ephemeral_package_eval` target was replayed from a deterministic spread
+slice of 64 existing inputs below 16 KiB. The selected inputs totaled 356,177
+bytes with a maximum size of 13,472 bytes. This target exercises ephemeral-dust
+and TRUC package construction, duplicate-package rejection, package test-accept
+atomicity, package versus single-transaction submission, replacement and
+standardness combinations, validation callbacks, mempool input indexes, and
+the ephemeral-package invariants.
+
+Two normal workers completed 256 executions each without an assertion, crash,
+or target artifact. Their independent corpora expanded to 217 and 220 files;
+the higher-coverage worker reached coverage 18,028, added 159 units, and used
+614 MB peak RSS. Two ASan/UBSan workers completed 66 total executions each in
+127 seconds, reaching coverage 58,672 and 58,684 at 614 MB peak RSS, without
+adding a unit or producing a sanitizer report. The direct-file TSan driver
+replayed the 217- and 220-file expanded corpora in two batches per worker; all
+invocations exited zero without a race report or artifact.
+
+This is a bounded sanitizer completion slice; the previously recorded full
+corpus attempts remain performance-limited. Each process owns an independent
+mempool and validation state, so TSan covers the exercised package operations
+rather than arbitrary live-node schedules. No clean-master candidate,
+production inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
