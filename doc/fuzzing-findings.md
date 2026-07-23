@@ -3139,3 +3139,27 @@ state, so this is evidence for the exercised script operations rather than
 arbitrary concurrent validation schedules. No clean-master candidate,
 production inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
+
+## Resumed miniscript-string gate (2026-07-23)
+
+The `miniscript_string` target was replayed from two independent private
+copies of its 1,169-input QA corpus. The inputs totaled 4,627,825 bytes with
+a maximum size of 307,120 bytes. The target mutates textual Miniscript,
+selects the parser context, and checks successful parse context preservation,
+canonical `ToString` output, and a second parse/equality round trip. Inputs
+rejected by the target's existing expense guard are intentionally skipped.
+
+Two normal workers completed 8,000 executions each in 41 and 42 seconds,
+reaching coverage 2,992 with peak RSS of 93 and 91 MB; their corpora expanded
+to 1,203 and 1,202 files. Two ASan/UBSan workers completed 5,000 executions
+each in 176 seconds, reaching coverage 9,633 with peak RSS of 736 and 738 MB
+and adding 14 and 12 units. The direct-file TSan driver replayed the
+resulting 1,217 and 1,214 files in 10 seconds per worker. All six jobs exited
+zero without an assertion, sanitizer report, race report, timeout,
+unexpected exception, or target artifact.
+
+Each fuzzer process owns independent parser objects, so the TSan replay covers
+the exercised string parser and round-trip operations rather than shared
+concurrent Miniscript callers. No clean-master candidate, production
+inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
