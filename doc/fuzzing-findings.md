@@ -30,7 +30,7 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 9 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
+| Confirmed runtime defects | 10 | Fixed on this branch; the highest severity is medium and all require local, authenticated, startup, or direct-API conditions. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
@@ -41,8 +41,8 @@ The nine confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; stale Base58 output on decode
-failure; the descriptor-cache partial merge; and stale mining `submitSolution`
-failure outputs. Their exact reproducer,
+failure; the descriptor-cache partial merge; stale mining `submitSolution` failure
+outputs; and stale `TxIndex::FindTx` failure outputs. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -276,6 +276,30 @@ fields for an empty coinbase. After installing Python `pycapnp` 2.2.4 under the
 temporary storage area, `interface_ipc_mining.py` passed end to end in 24 seconds.
 The clean-master C++ failure, fixed-branch unit pass, and IPC functional pass
 therefore all cover this mutation.
+
+### 10. `TxIndex::FindTx` leaves stale failure outputs
+
+* Current branch fix: `txindex: clear failed FindTx outputs`.
+* Severity on clean master: low direct-API correctness issue; current callers pass
+  fresh locals, so no existing user-visible stale-data path or remote trigger was
+  demonstrated.
+
+`TxIndex::FindTx()` documents `block_hash` and `tx` as output parameters, but every
+false return on clean master left caller-provided values unchanged. A deterministic
+`txindex_tests/txindex_initial_sync` mutation initialized `tx` to a known coinbase
+transaction and `block_hash` to `uint256::ONE`, then looked up the absent txid
+`Txid::FromUint256(uint256::ZERO)`. The exact clean-master `7b6f9ba7ba` control
+failed at `src/test/txindex_tests.cpp:29-30`: both `!tx_disk` and
+`block_hash.IsNull()` were false. This is an API contract defect found during the
+output-parameter audit prompted by the fuzzer stale-output findings, not a
+sanitizer crash or a new fuzzer-only oracle.
+
+The branch clears both outputs on entry and routes the database-miss, file-open,
+deserialization, and txid-mismatch exits through a helper that asserts both outputs
+remain empty. The same deterministic unit test passes with 116/116 assertions, and
+the full three-case `txindex_tests` suite passes with 129/129 assertions. No caller
+currently relies on stale values after a failed lookup; the fix makes the documented
+failure contract explicit for direct and future callers.
 
 ## Compact-block short-ID investigation
 
