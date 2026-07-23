@@ -3221,3 +3221,28 @@ exercised operations rather than shared concurrent Miniscript callers. No
 clean-master candidate, production inconsistency, vulnerability, race, or
 deterministic test gap was demonstrated; no source or test change was
 warranted.
+
+## Resumed miniscript-smart gate (2026-07-23)
+
+The `miniscript_smart` target was replayed from two independent private copies
+of its 2,259-input QA corpus. The inputs totaled 263,019 bytes with a maximum
+size of 4,181 bytes. The target constructs nodes for the four base types under
+the selected P2WSH or Tapscript context and runs the same textual and script
+round-trips, resource estimates, satisfaction, verification, and
+satisfiability invariants used by the semantic checks.
+
+Two normal workers completed 8,000 executions each in 51 and 52 seconds,
+reaching coverage 7,320 with peak RSS of 71 and 73 MB and adding 48 and 43
+units; their corpora expanded to 2,307 and 2,302 files. Two ASan/UBSan
+workers completed 5,000 executions each in 292 and 296 seconds, reaching
+coverage 26,507 and 26,508 with peak RSS of 927 and 917 MB and adding 6 and
+13 units. The direct-file TSan driver replayed the resulting 2,313 and 2,315
+files in 15 seconds per worker. All six jobs exited zero without an
+assertion, sanitizer report, race report, timeout, unexpected exception, or
+target artifact.
+
+Each fuzzer process owns independent node and script state, so the TSan replay
+covers the exercised smart construction and semantic operations rather than
+shared concurrent Miniscript callers. No clean-master candidate, production
+inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
