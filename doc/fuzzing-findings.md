@@ -3188,3 +3188,36 @@ replay covers the exercised script parser and round-trip operations rather
 than shared concurrent Miniscript callers. No clean-master candidate,
 production inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
+
+## Resumed miniscript-stable gate (2026-07-23)
+
+The `miniscript_stable` target was replayed from two independent private
+copies of its 2,234-input QA corpus. The inputs totaled 316,311 bytes with a
+maximum size of 110,592 bytes. The target generates stable Miniscript nodes
+under both P2WSH and Tapscript contexts and checks textual and script
+round-trips, resource estimates, malleable and non-malleable satisfactions,
+script verification, and satisfiability invariants.
+
+Two normal workers completed 8,000 executions each in 32 and 36 seconds,
+reaching coverage 7,359 with peak RSS of 68 MB and adding 23 and 18 units;
+their corpora expanded to 2,257 and 2,252 files. Two ASan/UBSan workers
+completed 5,000 executions each in 232 and 234 seconds, reaching coverage
+26,503 with peak RSS of 1,111 and 1,047 MB and adding 8 and 9 units. Both
+sanitizer workers independently emitted the same libFuzzer `slow-unit`
+artifact (SHA-256
+`4038d83879f4cd69a55428c632893603b5eeb8d099000dc55ea3d7155eca6686`),
+whose deterministic single-input replay took about 2.4 seconds in the normal
+build and 12.1 seconds under ASan/UBSan. It produced no assertion,
+sanitizer, or crash report. The direct-file TSan driver replayed the expanded
+corpora including that slow input, 2,266 and 2,262 files, in 17 seconds per
+worker without a race report.
+
+The slow input is a performance observation about the fuzz target's generated
+node and satisfaction checks, not a demonstrated production vulnerability:
+the input is provider data rather than a serialized network or descriptor
+script, and the normal non-sanitized fuzzer replay did not fail. Each fuzzer
+process owns independent node and script state, so the TSan result covers the
+exercised operations rather than shared concurrent Miniscript callers. No
+clean-master candidate, production inconsistency, vulnerability, race, or
+deterministic test gap was demonstrated; no source or test change was
+warranted.
