@@ -2902,3 +2902,36 @@ the decoder and round-trip operations exercised by the target rather than
 concurrent callers sharing a PSBT. No clean-master candidate, production
 inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
+
+## Resumed private-broadcast model gate (2026-07-23)
+
+The model-level `private_broadcast` target has no native QA corpus. It was
+seeded from 760 existing `txrequest` inputs below 64 KiB (3,701,794 bytes;
+maximum 61,906 bytes), so the seed bytes are a useful mutation source but do
+not represent a corpus collected from this target. The model covers queue
+capacity, duplicate txids with distinct wtxids, best-peer selection, node
+confirmation, disconnect and retry behavior, removal accounting,
+unconfirmed-disconnected slots, stale expiry, and forward clock jumps.
+
+Two normal workers completed 10,000 executions each in 634 and 644 seconds,
+reaching coverage 3,009 with peak RSS of 65 MB in both runs. They added 177
+and 174 units and ended with 929 and 923 private corpus files. A full
+ASan/UBSan replay of those expanded corpora was deliberately stopped at the
+512-input pulse after both workers became CPU-bound near 719 MB RSS; neither
+produced a sanitizer report or artifact. A second ASan/UBSan attempt over
+fresh units was likewise stopped in the same model-cost region. These are
+incomplete full-corpus sanitizer attempts, not sanitizer failures.
+
+For a bounded sanitizer gate, the fresh units were restricted to 138 and 147
+inputs below 4 KiB. Two ASan/UBSan workers completed 512 executions each in
+189 and 211 seconds, reaching coverage 9,180 with peak RSS of 733 and 735 MB;
+they added 148 and 139 units and produced no assertion, sanitizer report,
+timeout, or artifact. The direct-file TSan driver replayed the full 929 and
+923 expanded normal corpora in 20 seconds per worker, also without a race
+report or artifact.
+
+The TSan workers use independent `PrivateBroadcast` instances, so this is
+evidence for the model's exercised transitions and target setup rather than
+arbitrary shared live-node scheduling. No clean-master candidate, new
+production inconsistency, vulnerability, race, or deterministic test gap was
+demonstrated; no source or test change was warranted.
