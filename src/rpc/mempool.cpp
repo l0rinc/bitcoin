@@ -31,6 +31,7 @@
 #include <util/time.h>
 #include <util/vector.h>
 
+#include <iterator>
 #include <map>
 #include <string_view>
 #include <utility>
@@ -993,14 +994,15 @@ static RPCMethod gettxspendingprevout()
                 prevouts_to_process.emplace_back(COutPoint{txid, static_cast<uint32_t>(nOutput)}, idx);
             }
 
-            auto make_output = [&output_params, return_spending_tx](const Entry& prevout, const CTransaction* spending_tx = nullptr) {
-                UniValue o{output_params[prevout.result_index]};
+            auto make_output = [&](const Entry& prevout, const CTransaction* spending_tx = nullptr, const uint256* block_hash = nullptr) {
+                UniValue o{output_params[prevout.result_index]}; // No spender fields indicate an unspent outpoint
                 if (spending_tx) {
                     o.pushKV("spendingtxid", spending_tx->GetHash().ToString());
                     if (return_spending_tx) {
                         o.pushKV("spendingtx", EncodeHexTx(*spending_tx));
                     }
                 }
+                if (block_hash) o.pushKV("blockhash", block_hash->GetHex());
                 return o;
             };
 
@@ -1035,18 +1037,12 @@ static RPCMethod gettxspendingprevout()
                     throw JSONRPCError(RPC_MISC_ERROR, spender.error());
                 }
 
-                if (const auto& spender_opt{spender.value()}) {
-                    UniValue o{make_output(prevout, spender_opt->tx.get())};
-                    o.pushKV("blockhash", spender_opt->block_hash.GetHex());
-                    results[prevout.result_index] = std::move(o);
-                } else {
-                    // Only return the input outpoint itself, which indicates it is unspent.
-                    results[prevout.result_index] = make_output(prevout);
-                }
+                const auto& spender_opt{spender.value()};
+                results[prevout.result_index] = spender_opt ? make_output(prevout, spender_opt->tx.get(), &spender_opt->block_hash) : make_output(prevout);
             }
 
             UniValue result{UniValue::VARR};
-            for (auto& output : results) result.push_back(std::move(output));
+            result.push_backV(std::make_move_iterator(results.begin()), std::make_move_iterator(results.end()));
             return result;
         },
     };
