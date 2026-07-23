@@ -17,6 +17,7 @@
 #include <txgraph.h>
 #include <util/log.h>
 #include <util/moneystr.h>
+#include <util/overflow.h>
 #include <util/translation.h>
 
 #include <chrono>
@@ -51,7 +52,11 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& argsman, const CChainP
         if (is_32bit && *mb > MAX_32BIT_MEMPOOL_MB) {
             return util::Error{Untranslated(strprintf("-maxmempool is set to %i but can't be over %i MB on 32-bit systems", *mb, MAX_32BIT_MEMPOOL_MB))};
         }
-        mempool_opts.max_size_bytes = *mb * 1'000'000;
+        const auto max_size_bytes{CheckedMul(*mb, int64_t{1'000'000})};
+        if (!max_size_bytes) {
+            return util::Error{Untranslated(strprintf("-maxmempool is set to %i MB but its byte size overflows", *mb))};
+        }
+        mempool_opts.max_size_bytes = *max_size_bytes;
     }
 
     if (auto hours = argsman.GetIntArg("-mempoolexpiry")) mempool_opts.expiry = std::chrono::hours{*hours};

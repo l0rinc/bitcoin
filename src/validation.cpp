@@ -72,6 +72,7 @@
 #include <chrono>
 #include <deque>
 #include <ios>
+#include <limits>
 #include <numeric>
 #include <optional>
 #include <ranges>
@@ -2710,9 +2711,10 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState()
 {
     AssertLockHeld(::cs_main);
+    const int64_t max_mempool_size_bytes{m_mempool ? m_mempool->m_opts.max_size_bytes : 0};
     return this->GetCoinsCacheSizeState(
         m_coinstip_cache_size_bytes,
-        m_mempool ? m_mempool->m_opts.max_size_bytes : 0);
+        max_mempool_size_bytes > 0 ? static_cast<size_t>(std::min<uint64_t>(max_mempool_size_bytes, std::numeric_limits<size_t>::max())) : 0);
 }
 
 CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
@@ -2720,10 +2722,13 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     size_t max_mempool_size_bytes)
 {
     AssertLockHeld(::cs_main);
-    const int64_t nMempoolUsage = m_mempool ? m_mempool->DynamicMemoryUsage() : 0;
-    int64_t cacheSize = CoinsTip().DynamicMemoryUsage();
-    int64_t nTotalSpace =
-        max_coins_cache_size_bytes + std::max<int64_t>(int64_t(max_mempool_size_bytes) - nMempoolUsage, 0);
+    const size_t nMempoolUsage{m_mempool ? m_mempool->DynamicMemoryUsage() : 0};
+    const size_t cacheSize{CoinsTip().DynamicMemoryUsage()};
+    const size_t unused_mempool_space{max_mempool_size_bytes > nMempoolUsage ? max_mempool_size_bytes - nMempoolUsage : 0};
+    const size_t nTotalSpace{SaturatingAdd(max_coins_cache_size_bytes, unused_mempool_space)};
+
+    Assume(nTotalSpace >= max_coins_cache_size_bytes);
+    Assume(unused_mempool_space <= max_mempool_size_bytes);
 
     if (cacheSize > nTotalSpace) {
         LogInfo("Cache size (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
