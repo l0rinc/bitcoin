@@ -2935,3 +2935,28 @@ evidence for the model's exercised transitions and target setup rather than
 arbitrary shared live-node scheduling. No clean-master candidate, new
 production inconsistency, vulnerability, race, or deterministic test gap was
 demonstrated; no source or test change was warranted.
+
+## Resumed Base58 contract gates (2026-07-23)
+
+The `base58_encode_decode` and `base58check_encode_decode` targets were
+replayed from two independent private copies of their existing QA corpora:
+151 inputs for Base58 and 196 for Base58Check. The guided mutations exercise
+encode/decode round trips, surrounding and internal whitespace, invalid
+characters, maximum-length boundaries, failure-output clearing, Base58Check
+checksum rejection, and the corresponding round-trip contracts.
+
+Two normal workers per target completed 5,000 executions. Base58 added 126
+and 113 units in five seconds with peak RSS of 58 and 56 MB; Base58Check
+added 119 and 114 units in six seconds with peak RSS of 54 MB in both runs.
+Two ASan/UBSan workers per target completed 3,000 executions: Base58 took 18
+seconds at 251 and 252 MB RSS and added 26 and 31 units; Base58Check took 27
+and 26 seconds at 259 and 258 MB RSS and added 13 and 25 units. The direct-
+file TSan workers replayed expanded corpora of 273/275 Base58 files and
+316/318 Base58Check files in under one second per worker. All twelve jobs
+exited zero without an assertion, sanitizer report, race report, timeout,
+unexpected exception, or artifact.
+
+Each process owns independent decoder state, so TSan covers the exercised
+encoding operations rather than arbitrary concurrent callers. No clean-master
+candidate, production inconsistency, vulnerability, race, or deterministic
+test gap was demonstrated; no source or test change was warranted.
