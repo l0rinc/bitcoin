@@ -9,6 +9,7 @@
 #include <node/types.h>
 #include <wallet/external_signer_scriptpubkeyman.h>
 
+#include <algorithm>
 #include <iostream>
 #include <key_io.h>
 #include <memory>
@@ -92,6 +93,19 @@ std::optional<PSBTError> ExternalSignerScriptPubKeyMan::FillPSBT(PartiallySigned
         return DescriptorScriptPubKeyMan::FillPSBT(psbt, txdata, options, n_signed);
     }
 
+    if (n_signed) {
+        *n_signed = 0;
+    }
+
+    // Report only inputs that transition from unsigned to finalized.
+    std::vector<bool> inputs_signed;
+    if (n_signed) {
+        inputs_signed.reserve(psbt.inputs.size());
+        for (const auto& input : psbt.inputs) {
+            inputs_signed.push_back(PSBTInputSigned(input));
+        }
+    }
+
     // Already complete if every input is now signed
     bool complete = true;
     for (const auto& input : psbt.inputs) {
@@ -111,6 +125,16 @@ std::optional<PSBTError> ExternalSignerScriptPubKeyMan::FillPSBT(PartiallySigned
         return PSBTError::EXTERNAL_SIGNER_FAILED;
     }
     if (options.finalize) FinalizePSBT(psbt); // This won't work in a multisig setup
+
+    if (n_signed) {
+        const size_t common_input_count{std::min(inputs_signed.size(), psbt.inputs.size())};
+        for (size_t i{0}; i < common_input_count; ++i) {
+            if (!inputs_signed[i] && PSBTInputSigned(psbt.inputs[i])) {
+                ++*n_signed;
+            }
+        }
+    }
+
     return {};
 }
 } // namespace wallet
