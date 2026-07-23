@@ -246,6 +246,39 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                 assert(spk_manager->GetScriptPubKeys().size() == scripts_before);
             },
             [&] {
+                if (descriptor_writes_blocked || descriptor_metadata_writes_blocked) return;
+                LOCK(spk_manager->cs_desc_man);
+                const auto descriptor_before{spk_manager->GetWalletDescriptor()};
+                if (!descriptor_before.descriptor->IsRange() ||
+                    descriptor_before.range_end == std::numeric_limits<int32_t>::max()) return;
+                const size_t scripts_before{spk_manager->GetScriptPubKeys().size()};
+                const int32_t end_range_before{spk_manager->GetEndRange()};
+                if (!BlockDescriptorWrites(wallet)) {
+                    good_data = false;
+                    return;
+                }
+                descriptor_writes_blocked = true;
+
+                WalletDescriptor replacement{descriptor_before};
+                replacement.range_end++;
+                replacement.cache = {};
+                bool update_succeeded{false};
+                try {
+                    update_succeeded = static_cast<bool>(
+                        spk_manager->UpdateWalletDescriptor(replacement, FlatSigningProvider{}));
+                } catch (const std::runtime_error& error) {
+                    const std::string_view message{error.what()};
+                    if (message != "TopUpWithDB: writing cache items failed" &&
+                        message != "TopUpWithDB: writing descriptor failed") {
+                        throw;
+                    }
+                }
+                assert(!update_succeeded);
+                assert(spk_manager->GetScriptPubKeys().size() == scripts_before);
+                assert(spk_manager->GetEndRange() == end_range_before);
+                assert(spk_manager->GetWalletDescriptor().range_end == descriptor_before.range_end);
+            },
+            [&] {
                 CMutableTransaction tx_to;
                 const std::optional<CMutableTransaction> opt_tx_to{ConsumeDeserializable<CMutableTransaction>(fuzzed_data_provider, TX_WITH_WITNESS)};
                 if (!opt_tx_to) {
