@@ -7,7 +7,7 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`51143291a6c502a63f252d5e6b9cf9ef146de17c`. The five new exact-master controls
+`290cb2f17ef6ba9198934bbaec53fa962a1dfa18`. The five new exact-master controls
 below were run against the then-current `7b6f9ba7ba` baseline before this final
 rebase; the intervening master range contains only cluster-linearization
 optimizations and does not touch these production paths. The reorg campaign below ran before the
@@ -22,7 +22,9 @@ change the earlier compact-block, mempool, coins, or descriptor-cache control re
 The final `7b6f9ba7ba..22a03ca694` range contains only the four `clusterlin`
 optimization commits; no finding below needs a severity or reproducer change.
 The subsequent `22a03ca694..51143291a6` range contains only I2P URL comment
-updates and does not alter any production path or fuzzer control recorded here.
+updates, and `51143291a6..290cb2f17e` contains only the scripted-diff locale
+change from PR #35775; neither range alters any production path or fuzzer
+control recorded here.
 Controls that explicitly name an older baseline, including
 `32eb52100296718f7c0469e3210ce1db73694793` and `5311b15727f2f282274472184185423e441abd85`,
 are historical clean-master runs; they remain valid evidence for the mutations they
@@ -335,7 +337,8 @@ ASan/UBSan fuzz coverage.
 ### 10. Descriptor-cache merge leaves partial state after a conflict
 
 * Current branch fix: `4da71c90d7` (`descriptor: keep cache conflict merges atomic`).
-* Severity on current clean master `7b6f9ba7bad13b0c4169259000f7802854cdda0d`:
+* Severity on the exact clean-master control baseline
+  `7b6f9ba7bad13b0c4169259000f7802854cdda0d` (the then-current master):
   medium local wallet consistency/availability issue. The exact production control ran
   at `b8844d3df759bfa070681327583427461d39105c`; subsequent master deltas, including
   PR #34672, do not change descriptor-cache production code or its tests. The trigger
@@ -2601,7 +2604,7 @@ bound and stopped on a timeout, not a sanitizer finding. The 110-byte seed
 ASan build and its stack was in `DepGraph::FeeRate` called by the fuzzer's
 `SimpleCandidateFinder` oracle. The same seed took 12.362 seconds in the
 normal branch build and 16.411 seconds in an independently built ASan/UBSan
-fuzzer at clean current master `51143291a6`; neither run reported an error.
+fuzzer at the then-current master `51143291a6`; neither run reported an error.
 The branch-only slowdown comes from the additional assertion and oracle work
 on this branch, so this is not a production-master performance or memory bug.
 An extended 120-second-bound replay was stopped with SIGUSR1 after 264
