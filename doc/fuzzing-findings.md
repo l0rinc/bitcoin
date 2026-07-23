@@ -3272,6 +3272,30 @@ No clean-master candidate, production inconsistency, vulnerability, race, or
 deterministic test gap was demonstrated; no source or test change was
 warranted.
 
+## Resumed pool-resource invariant gate (2026-07-23)
+
+The `pool_resource` target was replayed from two independent private copies of
+its 1,708-input QA corpus. The inputs totaled 8,144,838 bytes with a maximum
+size of 520,066 bytes. The target exercises pool-resource block sizes and
+alignment configurations, allocation and deallocation orderings, free-list
+and chunk accounting, alignment guarantees, live-span disjointness, and
+preservation of randomized contents until deallocation.
+
+Two normal workers completed 8,000 executions each in 9 and 8 seconds,
+reaching coverage 2,277 with peak RSS of 64 and 65 MB and adding 45 and 37
+units; their corpora expanded to 1,753 and 1,745 files. Two ASan/UBSan
+workers completed 5,000 each in 31 and 27 seconds, reaching coverage 7,431
+with peak RSS of 618 and 619 MB and adding 15 and 13 units. The direct-file
+TSan driver replayed the resulting 1,768 and 1,758 files in one second per
+worker. All six jobs exited zero without an assertion, sanitizer report, race
+report, timeout, unexpected exception, or target artifact.
+
+Each fuzzer process owns an independent pool resource, so the TSan replay
+covers allocator operations and invariants rather than shared concurrent
+allocator callers. No clean-master candidate, production inconsistency,
+vulnerability, race, or deterministic test gap was demonstrated; no source
+or test change was warranted.
+
 ## Resumed CuckooCache collision gate (2026-07-23)
 
 The `cuckoocache` target was replayed from two independent private copies of
