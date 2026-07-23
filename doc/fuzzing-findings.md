@@ -2518,3 +2518,29 @@ covers the target's callback and worker interactions rather than arbitrary
 shared live-node schedules. No clean-master production inconsistency, policy
 failure, or race was demonstrated; no source or deterministic test change was
 warranted.
+
+## Resumed UTXO total-supply sanitizer gate (2026-07-23)
+
+The `utxo_total_supply` target was replayed from two independent private copies
+of 64 existing inputs below 64 KiB. The target constructs a regtest chainstate
+with an early BIP34 activation, mutates block/transaction encodings including
+duplicate-coinbase candidates, and checks circulation, total supply, output
+counts, invalid-block non-mutation, and cache wipe/reload invariants. The
+initial seed corpus was 64 files, 16,779 bytes total, with a maximum input size
+of 665 bytes.
+
+Two ASan/UBSan libFuzzer workers completed 256 mutations each in 821 and 880
+seconds, reaching coverage 72,315 and 70,428 with peak RSS of 686 and 650 MB.
+Their private corpora expanded to 209 and 219 files. The first worker wrote
+only a `slow-unit-*` file, which is libFuzzer timing metadata for a slow input,
+not a crash or correctness artifact; neither worker produced an error report.
+The rebuilt direct-file TSan driver replayed all 209 and 219 expanded inputs in
+512 and 526 seconds. All four workers exited zero without an assertion,
+sanitizer report, race report, timeout, or production artifact.
+
+This is a completed bounded sanitizer gate, not a replay of the full
+`utxo_total_supply` corpus. Each process owns an independent chainstate and
+database, so TSan covers the target's local cache/database transitions rather
+than arbitrary shared live-node schedules. No clean-master production
+inconsistency, supply-calculation failure, or race was demonstrated; no source
+or deterministic test change was warranted.
