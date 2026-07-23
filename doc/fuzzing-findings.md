@@ -2777,3 +2777,29 @@ independent graph, so TSan covers the exercised component and repair operations
 rather than arbitrary shared cluster-mempool schedules. No clean-master
 production inconsistency, connectivity failure, or race was demonstrated; no
 source or deterministic test change was warranted.
+
+## Resumed orphanage simulation sanitizer gate (2026-07-23)
+
+The `txorphanage_sim` target was replayed from two independent private copies
+of all 1,346 existing QA inputs. It constructs up to 16 transactions with
+topologies, duplicate txids and distinct wtxids, and up to 16 peers. The real
+`TxOrphanage` is compared with a naive announcement model across transaction
+and peer erasure, block erasure, child-workset reconsideration, peer eviction,
+announcement ordering, and final usage/count/latency inspectors.
+
+Two normal workers completed 3,000 mutations each in 50 seconds, reaching
+coverage 4,893 with peak RSS of 67 and 63 MB; their live reduced corpora ended
+at 983 and 982 inputs. Two ASan/UBSan workers completed 3,000 mutations each in
+331 and 327 seconds, reaching coverage 15,560 and 15,567 with peak RSS of 671
+and 674 MB; their live reduced corpora ended at 999 and 1,006 inputs. The
+direct-file TSan driver replayed the expanded private corpora of 1,352 and
+1,359 files in four seconds per worker. All six jobs exited zero without an
+assertion, sanitizer report, race/deadlock report, timeout, exception, or
+target artifact.
+
+Each fuzzer process owns an independent orphanage and executes its state model
+sequentially. The TSan result therefore covers the target's exercised
+internal operations and sanitizer-instrumented setup, not arbitrary shared
+live-node peer schedules. No clean-master candidate, production inconsistency,
+or race was demonstrated; no source or deterministic test change was
+warranted.
