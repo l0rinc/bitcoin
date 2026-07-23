@@ -1056,6 +1056,10 @@ bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int siz
 {
     LOCK(cs_desc_man);
     std::set<CScript> new_spks;
+    std::map<CScript, int32_t> new_script_pub_keys;
+    std::map<CPubKey, int32_t> new_pubkeys;
+    WalletDescriptor descriptor{m_wallet_descriptor};
+    int32_t max_cached_index{m_max_cached_index};
     unsigned int target_size;
     if (size > 0) {
         target_size = size;
@@ -1064,53 +1068,67 @@ bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int siz
     }
 
     // Calculate the new range_end
-    int32_t new_range_end = std::max(m_wallet_descriptor.next_index + (int32_t)target_size, m_wallet_descriptor.range_end);
+    int32_t new_range_end = std::max(descriptor.next_index + (int32_t)target_size, descriptor.range_end);
 
     // If the descriptor is not ranged, we actually just want to fill the first cache item
-    if (!m_wallet_descriptor.descriptor->IsRange()) {
+    if (!descriptor.descriptor->IsRange()) {
         new_range_end = 1;
-        m_wallet_descriptor.range_end = 1;
-        m_wallet_descriptor.range_start = 0;
+        descriptor.range_end = 1;
+        descriptor.range_start = 0;
     }
 
     FlatSigningProvider provider;
     provider.keys = GetKeys();
 
     uint256 id = GetID();
-    for (int32_t i = m_max_cached_index + 1; i < new_range_end; ++i) {
+    for (int32_t i = max_cached_index + 1; i < new_range_end; ++i) {
         FlatSigningProvider out_keys;
         std::vector<CScript> scripts_temp;
         DescriptorCache temp_cache;
         // Maybe we have a cached xpub and we can expand from the cache first
-        if (!m_wallet_descriptor.descriptor->ExpandFromCache(i, m_wallet_descriptor.cache, scripts_temp, out_keys)) {
-            if (!m_wallet_descriptor.descriptor->Expand(i, provider, scripts_temp, out_keys, &temp_cache)) return false;
+        if (!descriptor.descriptor->ExpandFromCache(i, descriptor.cache, scripts_temp, out_keys)) {
+            if (!descriptor.descriptor->Expand(i, provider, scripts_temp, out_keys, &temp_cache)) return false;
         }
         // Add all of the scriptPubKeys to the scriptPubKey set
         new_spks.insert(scripts_temp.begin(), scripts_temp.end());
         for (const CScript& script : scripts_temp) {
-            m_map_script_pub_keys[script] = i;
+            new_script_pub_keys[script] = i;
         }
         for (const auto& pk_pair : out_keys.pubkeys) {
             const CPubKey& pubkey = pk_pair.second;
-            if (m_map_pubkeys.contains(pubkey)) {
+            if (m_map_pubkeys.contains(pubkey) || new_pubkeys.contains(pubkey)) {
                 // We don't need to give an error here.
                 // It doesn't matter which of many valid indexes the pubkey has, we just need an index where we can derive it and its private key
                 continue;
             }
-            m_map_pubkeys[pubkey] = i;
+            new_pubkeys[pubkey] = i;
         }
         // Merge and write the cache
-        DescriptorCache new_items = m_wallet_descriptor.cache.MergeAndDiff(temp_cache);
+        DescriptorCache new_items = descriptor.cache.MergeAndDiff(temp_cache);
         if (!batch.WriteDescriptorCacheItems(id, new_items)) {
             throw std::runtime_error(std::string(__func__) + ": writing cache items failed");
         }
-        m_max_cached_index++;
+        max_cached_index++;
     }
-    m_wallet_descriptor.range_end = new_range_end;
-    batch.WriteDescriptor(GetID(), m_wallet_descriptor);
+    descriptor.range_end = new_range_end;
+    const bool descriptor_changed{descriptor.range_start != m_wallet_descriptor.range_start ||
+                                  descriptor.range_end != m_wallet_descriptor.range_end ||
+                                  max_cached_index != m_max_cached_index};
+    if (descriptor_changed && !batch.WriteDescriptor(GetID(), descriptor)) {
+        throw std::runtime_error(std::string(__func__) + ": writing descriptor failed");
+    }
 
     // By this point, the cache size should be the size of the entire range
-    assert(m_wallet_descriptor.range_end - 1 == m_max_cached_index);
+    assert(descriptor.range_end - 1 == max_cached_index);
+
+    m_wallet_descriptor = std::move(descriptor);
+    m_max_cached_index = max_cached_index;
+    for (const auto& [script, index] : new_script_pub_keys) {
+        m_map_script_pub_keys[script] = index;
+    }
+    for (const auto& [pubkey, index] : new_pubkeys) {
+        m_map_pubkeys[pubkey] = index;
+    }
 
     m_storage.TopUpCallback(new_spks, this);
     NotifyCanGetAddressesChanged();
