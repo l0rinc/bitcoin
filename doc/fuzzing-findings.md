@@ -2496,3 +2496,25 @@ own independent cache/database instances, so TSan covers the target's worker
 interleavings rather than arbitrary shared live-node schedules. No clean-master
 production inconsistency or race was demonstrated; no source or deterministic
 test change was warranted.
+
+## Resumed ephemeral package-evaluation sanitizer gate (2026-07-23)
+
+The `ephemeral_package_eval` target was replayed from two private copies of 128
+existing inputs below 16 KiB. The target builds ephemeral parent/child packages,
+exercises package test-accept and single-transaction submission, double-spend
+eviction, prioritisation, validation callbacks, and the mempool input/index
+invariants.
+
+Two independent ASan/UBSan workers completed 256 mutations each in 580 and 625
+seconds, reaching coverage 58,823 and 58,849 with peak RSS of 521 and 525 MB.
+Their private corpora expanded to 238 and 227 files. The rebuilt direct-file
+TSan driver replayed those expanded corpora in 55 seconds per worker. All four
+workers exited zero without an assertion, sanitizer report, race report,
+timeout, or target artifact.
+
+This is a completed bounded sanitizer gate, not a full replay of the 2,098-input
+corpus. Each process owns an independent mempool and validation state, so TSan
+covers the target's callback and worker interactions rather than arbitrary
+shared live-node schedules. No clean-master production inconsistency, policy
+failure, or race was demonstrated; no source or deterministic test change was
+warranted.
