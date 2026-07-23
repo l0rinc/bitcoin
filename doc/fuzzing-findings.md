@@ -2474,3 +2474,25 @@ build uses Bitcoin Core's file-list driver: unlike the libFuzzer build, it treat
 `src/test/fuzz/fuzz.cpp:268`. The corrected TSan replay passed with corpus
 directories only. No clean-master production inconsistency or new block-filter
 bug was demonstrated, so no source or deterministic test change was warranted.
+
+## Resumed stacked coins-cache sanitizer gate (2026-07-23)
+
+The `coins_view_stacked` target was replayed from two private copies of 256
+existing `coins_view` inputs below 64 KiB. This specifically exercises a
+`CCoinsViewDB` backend beneath a cache and a parallel `CoinsViewOverlay`,
+including reset, flush, backend changes, dirty/fresh transitions, and the
+thread-pool prevout fetch path.
+
+Two independent ASan/UBSan workers completed 1,000 mutations each in 21 and 18
+seconds, reaching coverage 30,495 and 30,395 with peak RSS of 428 and 432 MB.
+The private corpora grew to 397 and 387 files. Replaying those expanded copies
+with the direct-file TSan driver completed all 397 and 387 inputs in one second
+per worker. Every worker exited zero without an assertion, sanitizer report,
+race report, timeout, or target artifact.
+
+This is a completed bounded sanitizer gate for the stacked cache and overlay
+worker transitions, not a replay of the full `coins_view` corpus. The workers
+own independent cache/database instances, so TSan covers the target's worker
+interleavings rather than arbitrary shared live-node schedules. No clean-master
+production inconsistency or race was demonstrated; no source or deterministic
+test change was warranted.
