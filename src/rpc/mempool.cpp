@@ -1012,19 +1012,16 @@ static RPCMethod gettxspendingprevout()
                 LOCK(mempool.cs);
 
                 // Make the result if the spending tx appears in the mempool or this is a mempool_only request
-                for (auto it = prevouts_to_process.begin(); it != prevouts_to_process.end(); ) {
-                    const CTransaction* spending_tx{mempool.GetConflictTx(it->outpoint)};
+                std::erase_if(prevouts_to_process, [&](const Entry& prevout) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs) {
+                    const CTransaction* spending_tx{mempool.GetConflictTx(prevout.outpoint)};
 
                     // If the outpoint is not spent in the mempool and this is not a mempool-only
                     // request, we cannot answer it yet.
-                    if (!spending_tx && !mempool_only) {
-                        ++it;
-                        continue;
-                    }
+                    if (!spending_tx && !mempool_only) return false;
 
-                    result.push_back(make_output(*it, spending_tx));
-                    it = prevouts_to_process.erase(it);
-                }
+                    result.push_back(make_output(prevout, spending_tx));
+                    return true;
+                });
             }
 
             // Return early if all requests have been handled by the mempool search
