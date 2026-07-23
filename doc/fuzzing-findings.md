@@ -750,6 +750,16 @@ called out separately below.
   replays exited 0 under ASan/UBSan in 10.838 and 16.991 seconds and under TSan in
   1.176 and 2.142 seconds, with no report. This is an incomplete performance-limited
   gate, not a standard-mempool defect.
+* A post-rebase `tx_package_eval` replay used two private copies of 2,440 corpus
+  inputs below 64 KiB. Two normal workers completed 3,000 executions each in 344
+  seconds, reaching coverage 19,068 and 19,069 and expanding their corpora to
+  1,595 and 1,594 units. The two ASan/UBSan workers reached the 1,024 pulse and
+  were deliberately interrupted in the known slow package-building input
+  `e383bdbfe9aaf3d4104e7441e29eeb05596de952`; neither produced a sanitizer or
+  crash artifact. The two TSan workers completed 2,452 and 2,461 total executions
+  in 152 and 153 seconds at coverage 8,537 and 8,553, without a race report or
+  artifact. This remains an incomplete ASan gate, not a production finding; no
+  package-state inconsistency or race was found in the completed runs.
 * `clusterlin_linearize` completed the 672-input QA corpus under TSan with two jobs
   and two workers: 1,000 executions per worker in 31 and 33 seconds at peak RSS of
   126 MB, with no report or artifact. The full ASan/UBSan run reached 436 and 437
