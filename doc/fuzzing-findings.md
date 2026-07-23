@@ -2850,3 +2850,32 @@ Both targets use independent fuzzer processes, so these results establish
 local oracle and sanitizer coverage rather than a proof about shared-node
 concurrency. No new clean-master production inconsistency, vulnerability, or
 race was demonstrated.
+
+## Resumed standalone PSBT oracle gate (2026-07-23)
+
+The standalone `psbt` target was replayed from two independent private copies
+of all 7,773 existing QA inputs (37,114,823 bytes; maximum input 835,312
+bytes). Its existing and branch-added contracts cover PSBT decoding and
+serialization round trips, version handling, analysis-result consistency,
+signature-data conversion, finalization and extraction, merge versus combine
+equivalence, self-merge stability, unsigned-input accounting, and removal of
+unnecessary transactions.
+
+Two normal workers each completed 15,000 executions in 26 seconds, including
+the full seed corpus followed by thousands of mutations. They reached
+coverage 14,700 and 14,701 with peak RSS of 123 and 125 MB, added 23 and 28
+units, and ended with private corpora of 7,795 and 7,801 files. Two
+ASan/UBSan workers completed 11,000 executions each in 178 and 179 seconds
+from those expanded corpora, reaching coverage 50,909 and 50,912 with peak
+RSS of 790 and 778 MB and adding 5 and 7 units. The direct-file TSan driver
+then replayed 7,795 and 7,801 files in 12 seconds per worker. All six runs
+exited zero without an assertion, sanitizer report, race report, timeout,
+unexpected exception, or target artifact.
+
+The first seed-only launch was discarded because the 7,773-file corpus
+consumed the nominal 5,000-run budget before mutation; the corrected 15,000
+execution campaign is the gate recorded here. Each process owns an
+independent PSBT state, so TSan covers the target's exercised operations and
+setup rather than arbitrary concurrent RPC or wallet callers. No clean-master
+candidate, production inconsistency, vulnerability, race, or deterministic
+test gap was demonstrated; no source or test change was warranted.
