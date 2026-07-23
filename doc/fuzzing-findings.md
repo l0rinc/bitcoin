@@ -2677,3 +2677,26 @@ process owns an independent graph and runs sequentially, so TSan covers the
 target's exercised operations rather than arbitrary shared cluster-mempool
 schedules. No clean-master production inconsistency, fee-diagram failure, or
 race was demonstrated; no source or deterministic test change was warranted.
+
+## Resumed DepGraph serialization sanitizer gate (2026-07-23)
+
+The `clusterlin_depgraph_serialization` target was replayed from two
+independent private copies of all 387 existing inputs. It deserializes
+dependency graphs with the target's expected parse-failure classification,
+checks graph sanity and acyclicity, round-trips the graph representation, and
+then deliberately introduces a cycle to verify rejection.
+
+Two normal workers completed 3,000 mutations each in one second, reaching
+coverage 843 with peak RSS of 56 and 57 MB; their private corpora expanded to
+389 files each. Two ASan/UBSan workers completed 3,000 mutations each in five
+seconds, reaching coverage 2,432 with peak RSS of 286 MB in both runs; their
+corpora expanded to 392 and 391 files. The direct-file TSan driver replayed all
+392 and 391 inputs in under one second per worker. All six workers exited zero
+without an assertion, sanitizer report, race report, timeout, or target
+artifact.
+
+This is a completed full-seed serialization-boundary gate. Each process owns an
+independent graph, so TSan covers the target's local serialization and cycle
+checks rather than arbitrary shared cluster-mempool schedules. No clean-master
+production inconsistency, parser classification failure, or race was
+demonstrated; no source or deterministic test change was warranted.
