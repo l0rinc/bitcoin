@@ -690,6 +690,16 @@ bool CNode::ReceiveMsgBytes(std::span<const uint8_t> msg_bytes, bool& complete)
                 continue;
             }
 
+            if (msg.m_type.empty()) {
+                // A transport must not hand a nameless message to message processing.
+                mapRecvBytesPerMsgType.at(NET_MESSAGE_TYPE_OTHER) += msg.m_raw_message_size;
+                continue;
+            }
+
+            assert(!msg.m_type.empty());
+            assert(msg.m_message_size == msg.m_recv.size());
+            assert(msg.m_raw_message_size >= msg.m_message_size);
+
             // Store received bytes per message type.
             // To prevent a memory DOS, only allow known message types.
             auto i = mapRecvBytesPerMsgType.find(msg.m_type);
@@ -853,7 +863,7 @@ bool V1Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
     if (m_sending_header || m_bytes_sent < m_message_to_send.data.size()) return false;
     // The wire header has a fixed-width message type field. Reject invalid caller input before
     // CMessageHeader would assert in debug builds or silently truncate it in a release build.
-    if (msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return false;
+    if (msg.m_type.empty() || msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return false;
 
     // create dbl-sha256 checksum
     uint256 hash = Hash(msg.data);
@@ -1449,6 +1459,7 @@ std::optional<std::string> V2Transport::GetMessageType(std::span<const uint8_t>&
         }
         ++msg_type_len;
     }
+    if (msg_type_len == 0) return std::nullopt;
     std::string ret{reinterpret_cast<const char*>(contents.data()), msg_type_len};
     while (msg_type_len < CMessageHeader::MESSAGE_TYPE_SIZE) {
         // Verify that message type bytes after the first 0x00 are also 0x00.
@@ -1500,7 +1511,7 @@ bool V2Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
     if (!(m_send_state == SendState::READY && m_send_buffer.empty())) return false;
     // Long V2 message types use the same fixed-width field as V1. Check the caller's input before
     // copying it into the fixed-size contents buffer.
-    if (msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return false;
+    if (msg.m_type.empty() || msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return false;
     // Construct contents (encoding message type + payload).
     std::vector<uint8_t> contents;
     auto short_message_id = V2_MESSAGE_MAP(msg.m_type);
@@ -4134,18 +4145,36 @@ void CNode::MarkReceivedMsgsForProcessing()
     m_msg_process_queue.splice(m_msg_process_queue.end(), vRecvMsg);
     m_msg_process_queue_size += nSizeAdded;
     fPauseRecv = m_msg_process_queue_size > m_recv_flood_size;
+    AssertMessageQueueConsistency();
+}
+
+void CNode::AssertMessageQueueConsistency()
+{
+    AssertLockHeld(m_msg_process_queue_mutex);
+#ifndef NDEBUG
+    size_t expected_size{0};
+    for (const CNetMessage& message : m_msg_process_queue) {
+        expected_size += message.GetMemoryUsage();
+    }
+    assert(expected_size == m_msg_process_queue_size);
+    assert(fPauseRecv == (m_msg_process_queue_size > m_recv_flood_size));
+#endif
 }
 
 std::optional<std::pair<CNetMessage, bool>> CNode::PollMessage()
 {
     LOCK(m_msg_process_queue_mutex);
+    AssertMessageQueueConsistency();
     if (m_msg_process_queue.empty()) return std::nullopt;
 
     std::list<CNetMessage> msgs;
     // Just take one message
     msgs.splice(msgs.begin(), m_msg_process_queue, m_msg_process_queue.begin());
-    m_msg_process_queue_size -= msgs.front().GetMemoryUsage();
+    const size_t message_size{msgs.front().GetMemoryUsage()};
+    assert(message_size <= m_msg_process_queue_size);
+    m_msg_process_queue_size -= message_size;
     fPauseRecv = m_msg_process_queue_size > m_recv_flood_size;
+    AssertMessageQueueConsistency();
 
     return std::make_pair(std::move(msgs.front()), !m_msg_process_queue.empty());
 }

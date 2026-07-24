@@ -9,6 +9,7 @@
 #include <clientversion.h>
 #include <common/args.h>
 #include <compat/compat.h>
+#include <hash.h>
 #include <net.h>
 #include <net_processing.h>
 #include <netaddress.h>
@@ -36,12 +37,36 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 using namespace std::literals;
 using namespace util::hex_literals;
 using util::ToString;
 
 BOOST_FIXTURE_TEST_SUITE(net_tests, RegTestingSetup)
+
+BOOST_AUTO_TEST_CASE(v1transport_rejects_empty_message_type)
+{
+    CMessageHeader header{Params().MessageStart(), "", 0};
+    const uint256 payload_hash{Hash(std::vector<uint8_t>{})};
+    std::copy_n(payload_hash.begin(), CMessageHeader::CHECKSUM_SIZE, header.pchChecksum);
+
+    DataStream serialized;
+    serialized << header;
+    std::span<const uint8_t> bytes{UCharCast(serialized.data()), serialized.size()};
+
+    V1Transport transport{NodeId{0}};
+    BOOST_REQUIRE(transport.ReceivedBytes(bytes));
+    BOOST_REQUIRE(bytes.empty());
+    BOOST_REQUIRE(transport.ReceivedMessageComplete());
+    bool reject{false};
+    const CNetMessage message{transport.GetReceivedMessage({}, reject)};
+    BOOST_CHECK(reject);
+    BOOST_CHECK(message.m_type.empty());
+
+    CSerializedNetMsg outbound;
+    BOOST_CHECK(!transport.SetMessageToSend(outbound));
+}
 
 BOOST_AUTO_TEST_CASE(cnode_listen_port)
 {
@@ -1407,12 +1432,14 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         auto msg_data_2 = m_rng.randbytes<uint8_t>(m_rng.randrange(1000));
         tester.SendMessage(uint8_t(4), msg_data_1); // cmpctblock short id
         tester.SendMessage(0, {}); // Invalidly encoded message
+        tester.SendMessage(std::string(CMessageHeader::MESSAGE_TYPE_SIZE, '\0'), {}); // Empty long message type
         tester.SendMessage("tx", msg_data_2); // 12-character encoded message type
         ret = tester.Interact();
-        BOOST_REQUIRE(ret && ret->size() == 3);
+        BOOST_REQUIRE(ret && ret->size() == 4);
         BOOST_CHECK((*ret)[0] && (*ret)[0]->m_type == "cmpctblock" && std::ranges::equal((*ret)[0]->m_recv, MakeByteSpan(msg_data_1)));
         BOOST_CHECK(!(*ret)[1]);
-        BOOST_CHECK((*ret)[2] && (*ret)[2]->m_type == "tx" && std::ranges::equal((*ret)[2]->m_recv, MakeByteSpan(msg_data_2)));
+        BOOST_CHECK(!(*ret)[2]);
+        BOOST_CHECK((*ret)[3] && (*ret)[3]->m_type == "tx" && std::ranges::equal((*ret)[3]->m_recv, MakeByteSpan(msg_data_2)));
 
         // Then send a message with a bit error, expecting failure. It's possible this failure does
         // not occur immediately (when the length descriptor was modified), but it should come
@@ -1521,6 +1548,7 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         BOOST_CHECK(!(*ret)[2]);
         BOOST_CHECK((*ret)[3] && (*ret)[3]->m_type == "foobar" && (*ret)[3]->m_recv.empty());
         tester.ReceiveMessage("barfoo", {});
+        BOOST_CHECK(!tester.TrySetMessageToSend(""));
         BOOST_CHECK(!tester.TrySetMessageToSend(std::string(CMessageHeader::MESSAGE_TYPE_SIZE + 1, 'x')));
     }
 

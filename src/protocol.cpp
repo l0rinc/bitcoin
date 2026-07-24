@@ -25,6 +25,8 @@ std::string CMessageHeader::GetMessageType() const
 
 bool CMessageHeader::IsMessageTypeValid() const
 {
+    if (m_msg_type[0] == 0) return false;
+
     // Check the message type string for errors
     for (const char* p1 = m_msg_type; p1 < m_msg_type + MESSAGE_TYPE_SIZE; ++p1) {
         if (*p1 == 0) {

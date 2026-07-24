@@ -756,6 +756,10 @@ public:
 
     const ConnectionType m_conn_type;
 
+    /** Assert that the processing queue size and receive-pause state match its contents. */
+    void AssertMessageQueueConsistency()
+        EXCLUSIVE_LOCKS_REQUIRED(m_msg_process_queue_mutex);
+
     /** Move all messages from the received queue to the processing queue. */
     void MarkReceivedMsgsForProcessing()
         EXCLUSIVE_LOCKS_REQUIRED(!m_msg_process_queue_mutex);
@@ -972,6 +976,7 @@ public:
 
     void Release()
     {
+        assert(nRefCount > 0);
         nRefCount--;
     }
 
