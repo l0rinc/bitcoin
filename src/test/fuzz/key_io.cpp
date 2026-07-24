@@ -7,6 +7,7 @@
 #include <test/fuzz/fuzz.h>
 #include <util/chaintype.h>
 
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <string>
@@ -26,6 +27,21 @@ FUZZ_TARGET(key_io, .init = initialize_key_io)
     if (key.IsValid()) {
         assert(key == DecodeSecret(EncodeSecret(key)));
     }
+
+    std::array<unsigned char, 32> generated_secret{};
+    for (size_t i = 0; i < generated_secret.size() && i < buffer.size(); ++i) {
+        generated_secret[i] = buffer[i];
+    }
+    const bool compressed = buffer.size() > generated_secret.size() && (buffer[generated_secret.size()] & 1) != 0;
+    CKey generated_key;
+    generated_key.Set(generated_secret.data(), generated_secret.data() + generated_secret.size(), compressed);
+    if (!generated_key.IsValid()) {
+        generated_secret.fill(0);
+        generated_secret.back() = 1;
+        generated_key.Set(generated_secret.data(), generated_secret.data() + generated_secret.size(), compressed);
+    }
+    assert(generated_key.IsValid());
+    assert(generated_key == DecodeSecret(EncodeSecret(generated_key)));
 
     const CExtKey ext_key = DecodeExtKey(random_string);
     if (ext_key.key.size() == 32) {
