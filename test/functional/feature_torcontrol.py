@@ -276,8 +276,7 @@ class TorControlTest(BitcoinTestFramework):
         self.wait_until(lambda: len(mock_tor.connection_times) >= 2, timeout=10)
         reconnect_delay = mock_tor.connection_times[1] - disconnected_at
 
-        # TODO: Reconnection should wait to avoid a busy loop after a disconnect.
-        assert reconnect_delay < 0.5, f"reconnected after {reconnect_delay:.3f}s"
+        assert reconnect_delay >= 0.5, f"reconnected after {reconnect_delay:.3f}s"
 
         mock_tor.stop()
 
