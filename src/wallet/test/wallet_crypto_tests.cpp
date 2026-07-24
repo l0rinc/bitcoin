@@ -130,5 +130,19 @@ BOOST_AUTO_TEST_CASE(decrypt) {
     }
 }
 
+BOOST_AUTO_TEST_CASE(failed_rekey_clears_key_state) {
+    CCrypter crypt;
+    const CKeyingMaterial key(WALLET_CRYPTO_KEY_SIZE, 0x42);
+    constexpr std::array<unsigned char, WALLET_CRYPTO_IV_SIZE> iv{};
+    constexpr std::array<unsigned char, WALLET_CRYPTO_SALT_SIZE> salt{};
+    const CKeyingMaterial plaintext(WALLET_CRYPTO_KEY_SIZE, 0x24);
+
+    BOOST_CHECK(crypt.SetKey(key, iv));
+    BOOST_CHECK(!crypt.SetKeyFromPassphrase("test", salt, 1, /*unsupported=*/1));
+
+    std::vector<unsigned char> ciphertext;
+    BOOST_CHECK(!crypt.Encrypt(plaintext, ciphertext));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 } // namespace wallet

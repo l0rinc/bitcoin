@@ -8,6 +8,7 @@
 #include <crypto/aes.h>
 #include <crypto/sha512.h>
 
+#include <cassert>
 #include <type_traits>
 #include <vector>
 
@@ -53,6 +54,8 @@ bool CCrypter::SetKeyFromPassphrase(const SecureString& key_data, const std::spa
     {
         memory_cleanse(vchKey.data(), vchKey.size());
         memory_cleanse(vchIV.data(), vchIV.size());
+        fKeySet = false;
+        assert(!fKeySet);
         return false;
     }
 

@@ -57,6 +57,15 @@ void AssertCrypterContracts()
     assert(!invalid.SetKeyFromPassphrase("test", short_salt, 1, 0));
     assert(!invalid.Encrypt(plaintext, ciphertext));
 
+    // An unsupported derivation method must invalidate a previously usable key. The production
+    // method cleanses the key bytes on this path, so retaining fKeySet would make Encrypt report
+    // success with a zeroized key and IV.
+    CCrypter failed_rekey;
+    assert(failed_rekey.SetKey(master_key, zero_iv));
+    const std::array<unsigned char, WALLET_CRYPTO_SALT_SIZE> valid_salt{};
+    assert(!failed_rekey.SetKeyFromPassphrase("test", valid_salt, 1, /*unsupported=*/1));
+    assert(!failed_rekey.Encrypt(plaintext, ciphertext));
+
     std::array<unsigned char, WALLET_CRYPTO_KEY_SIZE> secret_bytes{};
     secret_bytes.fill(1);
     CKey source_key;
