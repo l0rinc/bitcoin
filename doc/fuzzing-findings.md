@@ -7,22 +7,20 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`afa5e46bbc6dd750bd71920b659162a945abf0ae`. The historical exact-master controls
+`610dd320d1a80838fdf30ed1cb2e6ae1ec717f74`. The historical exact-master controls
 below retain their named baselines; they are evidence for the mutations they
-tested, not claims about an earlier branch tip. The range from the previous
-ledger baseline through the current master tip was inspected: the relevant
-changes are RPC/OpenRPC work, secp256k1 subtree updates, script failure vectors,
-and BIP32 seed-length validation. None changes the compact-block, cluster-
-mempool, coins-cache, validation-index, or descriptor-cache production paths
-covered by the controls below. The reorg campaign and the older compact-block
-controls therefore remain valid historical controls, while the current-master
-status is recorded in the post-rebase section below.
+tested, not claims about an earlier branch tip. The latest rebase range from
+`afa5e46bbc6dd750bd71920b659162a945abf0ae` to this tip only removes a testnet3
+seed (`7295b8be70` and its merge), so it does not change the compact-block,
+cluster-mempool, coins-cache, validation-index, descriptor-cache, or TxGraph
+production paths covered by the controls below. Earlier master ranges recorded
+in this file retain their own path-by-path qualifications.
 Controls that explicitly name an older baseline, including
 `32eb52100296718f7c0469e3210ce1db73694793` and `5311b15727f2f282274472184185423e441abd85`,
 are historical clean-master runs; they remain valid evidence for the mutations they
 tested, but are not claims that those exact controls include later master commits.
 
-## Ledger summary (2026-07-23)
+## Ledger summary (2026-07-24)
 
 The findings are classified by what failed on an unmodified master baseline. The
 branch's assertions, fuzzer-only checks, and deterministic tests are not counted as
@@ -31,16 +29,17 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 37 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 38 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
-| Fuzzer/oracle and coverage omissions | Several | TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving a clean-master production bug. |
+| Fuzzer/oracle and coverage omissions | Several | Remaining TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving another clean-master production bug. The full-range TxGraph mutation also exposed the production defect recorded below. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The thirty-seven confirmed runtime defects are: the index publication and restart race;
+The thirty-eight confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
-boundary overflow; the RBF fee-diagram overflow; the mempool info fee-delta
+boundary overflow; the RBF fee-diagram overflow; the equal-feerate TxGraph prefix
+fee overflow; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
 arithmetic; `-maxmempool` byte-size multiplication overflow; stale Base58 output on
 decode failure; the descriptor-cache partial merge; stale mining `submitSolution`
@@ -96,6 +95,13 @@ created worker threads.
   descriptor, script maps, and cached-index boundary disagreeing with one another
   and with the persisted descriptor. The branch now wraps the update in a database
   transaction and restores every affected in-memory map on failure.
+* The full-range TxGraph fee mutation was initially classified as fuzzer-only
+  because three early failures were invalid arithmetic oracles. A later 384-byte
+  input reached a different production path on clean master: `Updated()` summed
+  equal-feerate chunk fees even though it only stored their cumulative size. The
+  exact-master normal and ASan/UBSan controls reproduced signed overflow before
+  the invariant failure; `32ed8c5596` fixes the source and adds a deterministic
+  four-transaction regression.
 * Current master PR #34672 added `reason` and `debug` output fields to the mining
   `submitSolution` interface. Its null-coinbase early return left caller-provided
   failure strings untouched instead of returning the empty outputs promised by the
@@ -177,15 +183,18 @@ created worker threads.
   otherwise. TSan results are evidence for the exercised interleavings and setup,
   not a proof that all wallet or node state is generally thread-safe.
 
-## Post-rebase compact, cluster, and cache controls (2026-07-23)
+## Post-rebase compact, cluster, and cache controls (2026-07-24)
 
 The branch is rebased onto the current `origin/master`
-`afa5e46bbc6dd750bd71920b659162a945abf0ae`; `git merge-base HEAD origin/master` matches that tip. The
+`610dd320d1a80838fdf30ed1cb2e6ae1ec717f74`; `git merge-base HEAD origin/master` matches that tip. The
 current-master range after the earlier compact and
 cluster/coins controls was checked directly. The relevant production and fuzzer
 paths (`blockencodings`, `net_processing`, `txgraph`, `txmempool`, `coins`,
 `validation`, `partially_downloaded_block`, `tx_pool`, and `coinscache_sim`) are
 unchanged between the earlier control baseline and this master tip.
+
+The latest two-commit range only removes a testnet3 seed, so the exact-master
+compact and cluster controls below remain applicable to the current master source.
 
 The compact-block collision result is unchanged: the short-ID accounting
 underflow is fixed by master `6aa5d8d948`, the normal null-tail construction is
@@ -214,9 +223,9 @@ assertion, sanitizer, race, timeout, or target artifact.
 
 The existing post-rebase `clusterlin_*` and `coinscache_sim` gates recorded below
 remain applicable because the inspected master range does not touch those paths.
-The descriptor-update control below is the one additional clean-master production
-defect found in this round; the compact-block controls found no new collision
-defect, vulnerability, race, or deterministic test omission.
+The descriptor-update and equal-feerate TxGraph controls are the additional
+clean-master production defects found in this round; the compact-block controls
+found no new collision defect, vulnerability, race, or deterministic test omission.
 
 ## Confirmed production defects
 
@@ -1089,6 +1098,52 @@ two expected `TopUpWithDB` write errors, and asserts the original live postcondi
 The normal wallet fuzzer completed 2,000 bounded corpus/mutation executions
 (`11,572` to `11,711` coverage); the ASan/UBSan wallet fuzzer completed 705
 executions over the 702-file slice with no diagnostic or artifact.
+
+### 38. Equal-feerate TxGraph prefix accumulates overflowing fees
+
+* Current branch fix: `32ed8c5596` (`txgraph: avoid fee overflow in equal-feerate prefixes`).
+* Severity on clean master: medium local cluster-mempool/block-builder consistency
+  issue. The trigger uses the full signed fee-coordinate API or a local/direct fee
+  modification path; no consensus, wallet, unauthenticated remote, or persisted-state
+  impact was demonstrated.
+
+The full-range alternate `AddTransaction` and `SetTransactionFee` mutation from
+`2de843c875` exposed a production path that the earlier TxGraph oracle failures did
+not. `GenericClusterImpl::Updated()` needed only the cumulative size of the prefix
+of equal-feerate chunks for `m_main_equal_feerate_chunk_prefix_size`, but it also
+summed the chunks' `FeeFrac` fees. Two equal chunks with fee
+`4882961666570175427` overflowed the signed 64-bit fee coordinate. The same
+overflowed prefix then caused `SanityCheck()` to reject its ratio invariant.
+
+The clean-master control used baseline `afa5e46bbc6d`, with only the branch
+`src/test/fuzz/txgraph.cpp` mutation transplanted and all production sources left
+unchanged. The original 384-byte artifact has SHA256
+`8b6f9c911745a6db52fd35bb9b59c383d22a92ad91a1b6873047978b1575b83c`. A normal
+Debug replay trapped in `FeeFrac::operator+=`; an exact-master Clang 19
+ASan/UBSan replay reported signed integer overflow at `src/util/feefrac.h:109`
+before the production `SanityCheck()` assertion. The only later master range,
+`afa5e46bbc6d..610dd320d1`, removes a testnet3 seed and does not touch this path.
+
+The deterministic `txgraph_equal_feerate_prefix_does_not_overflow` regression
+creates three equal-feerate parents, each with fee `INT64_MAX / 2 + 1` and size 1,
+all depending on one zero-fee child. Before the fix, the existing saturating
+`FeeFrac` arithmetic made the stored prefix ratio disagree after the third equal
+chunk; after the fix, the shared helper tracks the reference ratio and cumulative
+size directly and asserts the equal-rate precondition in production code. The
+`txgraph_tests` suite (21 cases), `cluster_linearize_tests` suite (18 cases), and
+the same artifact under normal and ASan/UBSan branch fuzz binaries all pass.
+
+This is a follow-up source/test commit to the existing fuzzer mutation and the
+related saturated-chunking fix in `eb5a249ff2`; no duplicate fuzzer mutation was
+needed. It is counted as a confirmed clean-master defect, unlike the three earlier
+full-range TxGraph oracle omissions.
+
+The same round also replayed the separate 31-byte `INT64_MIN` reverse-fee control
+(SHA256 `67d5dc06605771d92342ee080a49e2950a42e15d8c3d829d0d1b12d368f323b`). Exact
+master still reports undefined negation at `cluster_linearize.h:1981`; the current
+branch passes it through existing fix `09ad70a0a4`. This is revalidation of that
+already counted and fixed clean-master defect, not an additional finding from this
+round.
 
 ## Compact-block short-ID investigation
 
@@ -2436,14 +2491,15 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The thirty-seven confirmed production defects
+caller or new collision race was found. The thirty-eight confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The post-collision exact-master
 controls subsequently added five confirmed defects: duplicate snapshot records,
 failed candidate-set transitions, pruned unlinked-chain accounting, post-complete
-checkqueue work, and stale reusable sighash state. The AddrMan and wallet sanitizer
-gates above found no additional production mistake, race, consensus issue, or
-remotely reachable memory-safety defect.
+checkqueue work, and stale reusable sighash state. The later TxGraph control added
+the equal-feerate prefix fee overflow described above. The AddrMan and wallet
+sanitizer gates above found no additional production mistake, race, consensus issue,
+or remotely reachable memory-safety defect.
 
 The additional `package_rbf` and `clusterlin_linearize` ASan workers were stopped
 after more than five minutes on expensive corpus cases; they emitted no sanitizer
@@ -2479,8 +2535,9 @@ transactions in one parent-child chain, filling the production bitset and
 driving the cached dependency counts through the full graph. The branch completed
 2,000 normal and 1,000 ASan/UBSan executions, plus a TSan replay; the final
 coverage values were 4,750, 15,392, and a clean one-file TSan result. A disposable
-worktree at exact current master `afa5e46bbc6d` received only the fuzzer oracle
-change `e7f651f1b5` so that the production source stayed at master. Its normal
+worktree at the prior exact master `afa5e46bbc6d` received only the fuzzer oracle
+change `e7f651f1b5` so that the production source stayed at master. The later
+`afa5e46bbc6d..610dd320d1` range only removes a testnet3 seed. Its normal
 control completed 2,000 executions (coverage 4,402), and a separately configured
 ASan/UBSan build completed 1,000 executions (coverage 14,333). No run produced
 an assertion failure, sanitizer report, race/deadlock report, backend mismatch,
