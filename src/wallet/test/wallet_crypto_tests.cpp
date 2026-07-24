@@ -130,5 +130,23 @@ BOOST_AUTO_TEST_CASE(decrypt) {
     }
 }
 
+BOOST_AUTO_TEST_CASE(scale_crypto_rounds)
+{
+    // A zero (or negative) measured duration must leave the round count
+    // unchanged: dividing by it would produce an infinite double, and
+    // converting that to unsigned int is undefined behavior (SIGFPE-class
+    // crash on some platforms, arbitrary values on others).
+    BOOST_CHECK_EQUAL(ScaleCryptoRounds(25000, MillisecondsDouble{100}, MillisecondsDouble{0}), 25000U);
+    BOOST_CHECK_EQUAL(ScaleCryptoRounds(12345, MillisecondsDouble{100}, MillisecondsDouble{-5}), 12345U);
+    // Positive durations scale by target / elapsed.
+    BOOST_CHECK_EQUAL(ScaleCryptoRounds(25000, MillisecondsDouble{100}, MillisecondsDouble{50}), 50000U);
+    BOOST_CHECK_EQUAL(ScaleCryptoRounds(25000, MillisecondsDouble{100}, MillisecondsDouble{200}), 12500U);
+    BOOST_CHECK_EQUAL(ScaleCryptoRounds(25000, MillisecondsDouble{100}, MillisecondsDouble{100}), 25000U);
+    // The averaging pattern used after the first estimate degenerates to the
+    // previous estimate when the new measurement has zero duration.
+    unsigned int prev = 40000;
+    BOOST_CHECK_EQUAL((prev + ScaleCryptoRounds(prev, MillisecondsDouble{100}, MillisecondsDouble{0})) / 2, prev);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 } // namespace wallet
