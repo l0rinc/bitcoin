@@ -26,7 +26,7 @@ import time
 
 NODE1_BLOCKS_REQUIRED = 15
 NODE2_BLOCKS_REQUIRED = 2047
-HEADERS_PRESYNC_PEERS = 10
+MAX_CONCURRENT_HEADERS_SYNCS = 8  # MAX_OUTBOUND_FULL_RELAY_CONNECTIONS in src/net.h
 
 
 class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
@@ -158,19 +158,19 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
         # getpeerinfo should show a sync in progress
         assert_equal(node.getpeerinfo()[0]['presynced_headers'], 2000)
 
-    def test_ibd_allows_concurrent_headers_presyncs(self):
-        self.log.info("Test that IBD allows concurrent headers presync state")
+    def test_ibd_limits_concurrent_headers_presyncs(self):
+        self.log.info("Test that IBD limits concurrent headers presync state")
 
         self.disconnect_all()
         node = self.nodes[2]
-        peers = [node.add_p2p_connection(P2PInterface()) for _ in range(HEADERS_PRESYNC_PEERS)]
+        peers = [node.add_p2p_connection(P2PInterface()) for _ in range(MAX_CONCURRENT_HEADERS_SYNCS + 2)]
 
         headers_message = self.create_low_work_headers_message(node)
         for p in peers:
             p.send_and_ping(headers_message)
 
         presync_heights = [peer['presynced_headers'] for peer in node.getpeerinfo()]
-        assert_equal(presync_heights.count(MAX_HEADERS_RESULTS), HEADERS_PRESYNC_PEERS)
+        assert_equal(presync_heights.count(MAX_HEADERS_RESULTS), MAX_CONCURRENT_HEADERS_SYNCS)
 
         node.disconnect_p2ps()
         self.reconnect_all()
@@ -200,7 +200,7 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
 
 
     def run_test(self):
-        self.test_ibd_allows_concurrent_headers_presyncs()
+        self.test_ibd_limits_concurrent_headers_presyncs()
 
         self.test_chains_sync_when_long_enough()
 
