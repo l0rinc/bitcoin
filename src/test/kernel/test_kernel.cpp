@@ -412,6 +412,8 @@ BOOST_AUTO_TEST_CASE(btck_transaction_tests)
     auto output{tx.GetOutput(tx.CountOutputs() - 1)};
     BOOST_CHECK_EQUAL(output.Amount(), 42130042);
     auto script_pubkey{output.GetScriptPubkey()};
+    BOOST_CHECK_EQUAL(btck_transaction_get_output_at(tx.get(), tx.CountOutputs()), nullptr);
+    BOOST_CHECK_EQUAL(btck_transaction_get_input_at(tx.get(), tx.CountInputs()), nullptr);
     {
         auto tx_new{Transaction{tx_data}};
         // This is safe, because we now use copy assignment
@@ -744,6 +746,7 @@ BOOST_AUTO_TEST_CASE(btck_block)
     CheckHandle(block, block_100);
     Block block_tx{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[205])};
     CheckRange(block_tx.Transactions(), block_tx.CountTransactions());
+    BOOST_CHECK_EQUAL(btck_block_get_transaction_at(block_tx.get(), block_tx.CountTransactions()), nullptr);
     auto invalid_data = hex_string_to_byte_vec("012300");
     BOOST_CHECK_THROW(Block{invalid_data}, std::runtime_error);
     auto empty_data = hex_string_to_byte_vec("");
@@ -1221,6 +1224,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     CheckHandle(block_spent_outputs, block_spent_outputs_prev);
     CheckRange(block_spent_outputs_prev.TxsSpentOutputs(), block_spent_outputs_prev.Count());
     BOOST_CHECK_EQUAL(block_spent_outputs.Count(), 1);
+    BOOST_CHECK_EQUAL(btck_block_spent_outputs_get_transaction_spent_outputs_at(block_spent_outputs.get(), block_spent_outputs.Count()), nullptr);
 
     // Get transaction spent outputs from the last transaction in the two blocks
     TransactionSpentOutputsView transaction_spent_outputs{block_spent_outputs.GetTxSpentOutputs(block_spent_outputs.Count() - 1)};
@@ -1228,6 +1232,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     TransactionSpentOutputs owned_transaction_spent_outputs_prev{block_spent_outputs_prev.GetTxSpentOutputs(block_spent_outputs_prev.Count() - 1)};
     CheckHandle(owned_transaction_spent_outputs, owned_transaction_spent_outputs_prev);
     CheckRange(transaction_spent_outputs.Coins(), transaction_spent_outputs.Count());
+    BOOST_CHECK_EQUAL(btck_transaction_spent_outputs_get_coin_at(transaction_spent_outputs.get(), transaction_spent_outputs.Count()), nullptr);
 
     // Get the last coin from the transaction spent outputs
     CoinView coin{transaction_spent_outputs.GetCoin(transaction_spent_outputs.Count() - 1)};

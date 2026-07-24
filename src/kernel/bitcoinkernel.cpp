@@ -526,7 +526,7 @@ size_t btck_transaction_count_outputs(const btck_Transaction* transaction)
 const btck_TransactionOutput* btck_transaction_get_output_at(const btck_Transaction* transaction, size_t output_index)
 {
     const CTransaction& tx = *btck_Transaction::get(transaction);
-    assert(output_index < tx.vout.size());
+    if (output_index >= tx.vout.size()) return nullptr;
     return btck_TransactionOutput::ref(&tx.vout[output_index]);
 }
 
@@ -537,8 +537,9 @@ size_t btck_transaction_count_inputs(const btck_Transaction* transaction)
 
 const btck_TransactionInput* btck_transaction_get_input_at(const btck_Transaction* transaction, size_t input_index)
 {
-    assert(input_index < btck_Transaction::get(transaction)->vin.size());
-    return btck_TransactionInput::ref(&btck_Transaction::get(transaction)->vin[input_index]);
+    const CTransaction& tx = *btck_Transaction::get(transaction);
+    if (input_index >= tx.vin.size()) return nullptr;
+    return btck_TransactionInput::ref(&tx.vin[input_index]);
 }
 
 uint32_t btck_transaction_get_locktime(const btck_Transaction* transaction)
@@ -1200,8 +1201,9 @@ size_t btck_block_count_transactions(const btck_Block* block)
 
 const btck_Transaction* btck_block_get_transaction_at(const btck_Block* block, size_t index)
 {
-    assert(index < btck_Block::get(block)->vtx.size());
-    return btck_Transaction::ref(&btck_Block::get(block)->vtx[index]);
+    const auto& block_ptr{btck_Block::get(block)};
+    if (index >= block_ptr->vtx.size()) return nullptr;
+    return btck_Transaction::ref(&block_ptr->vtx[index]);
 }
 
 btck_BlockHeader* btck_block_get_header(const btck_Block* block)
@@ -1312,8 +1314,9 @@ size_t btck_block_spent_outputs_count(const btck_BlockSpentOutputs* block_spent_
 
 const btck_TransactionSpentOutputs* btck_block_spent_outputs_get_transaction_spent_outputs_at(const btck_BlockSpentOutputs* block_spent_outputs, size_t transaction_index)
 {
-    assert(transaction_index < btck_BlockSpentOutputs::get(block_spent_outputs)->vtxundo.size());
-    const auto* tx_undo{&btck_BlockSpentOutputs::get(block_spent_outputs)->vtxundo.at(transaction_index)};
+    const auto& block_undo{*btck_BlockSpentOutputs::get(block_spent_outputs)};
+    if (transaction_index >= block_undo.vtxundo.size()) return nullptr;
+    const auto* tx_undo{&block_undo.vtxundo.at(transaction_index)};
     return btck_TransactionSpentOutputs::ref(tx_undo);
 }
 
@@ -1339,8 +1342,9 @@ void btck_transaction_spent_outputs_destroy(btck_TransactionSpentOutputs* transa
 
 const btck_Coin* btck_transaction_spent_outputs_get_coin_at(const btck_TransactionSpentOutputs* transaction_spent_outputs, size_t coin_index)
 {
-    assert(coin_index < btck_TransactionSpentOutputs::get(transaction_spent_outputs).vprevout.size());
-    const Coin* coin{&btck_TransactionSpentOutputs::get(transaction_spent_outputs).vprevout.at(coin_index)};
+    const auto& tx_undo{btck_TransactionSpentOutputs::get(transaction_spent_outputs)};
+    if (coin_index >= tx_undo.vprevout.size()) return nullptr;
+    const Coin* coin{&tx_undo.vprevout.at(coin_index)};
     return btck_Coin::ref(coin);
 }
 
