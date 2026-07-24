@@ -17,6 +17,7 @@
 #include <util/time.h>
 
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -409,6 +410,11 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
             vSocks5Init.push_back(0x01); // 1 method identifier follows...
             vSocks5Init.push_back(SOCKS5Method::NOAUTH);
         }
+        assert(vSocks5Init.size() == (auth ? 4 : 3));
+        assert(vSocks5Init[0] == SOCKSVersion::SOCKS5);
+        assert(vSocks5Init[1] == (auth ? 0x02 : 0x01));
+        assert(vSocks5Init[2] == SOCKS5Method::NOAUTH);
+        if (auth) assert(vSocks5Init[3] == SOCKS5Method::USER_PASS);
         sock.SendComplete(vSocks5Init, g_socks5_recv_timeout, g_socks5_interrupt);
         uint8_t pchRet1[2];
         if (InterruptibleRecv(pchRet1, 2, g_socks5_recv_timeout, sock) != IntrRecvError::OK) {
@@ -431,6 +437,10 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
             vAuth.insert(vAuth.end(), auth->username.begin(), auth->username.end());
             vAuth.push_back(auth->password.size());
             vAuth.insert(vAuth.end(), auth->password.begin(), auth->password.end());
+            assert(vAuth.size() == auth->username.size() + auth->password.size() + 3);
+            assert(vAuth[0] == 0x01);
+            assert(vAuth[1] == auth->username.size());
+            assert(vAuth[2 + auth->username.size()] == auth->password.size());
             LogDebug(BCLog::PROXY, "SOCKS5 sending username/password authentication\n");
             sock.SendComplete(vAuth, g_socks5_recv_timeout, g_socks5_interrupt);
             uint8_t pchRetA[2];
@@ -457,6 +467,12 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
         vSocks5.insert(vSocks5.end(), strDest.begin(), strDest.end());
         vSocks5.push_back((port >> 8) & 0xFF);
         vSocks5.push_back((port >> 0) & 0xFF);
+        assert(vSocks5.size() == strDest.size() + 7);
+        assert(vSocks5[0] == SOCKSVersion::SOCKS5);
+        assert(vSocks5[1] == SOCKS5Command::CONNECT);
+        assert(vSocks5[2] == 0x00);
+        assert(vSocks5[3] == SOCKS5Atyp::DOMAINNAME);
+        assert(vSocks5[4] == strDest.size());
         sock.SendComplete(vSocks5, g_socks5_recv_timeout, g_socks5_interrupt);
         uint8_t pchRet2[4];
         if ((recvr = InterruptibleRecv(pchRet2, 4, g_socks5_recv_timeout, sock)) != IntrRecvError::OK) {
