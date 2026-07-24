@@ -58,6 +58,7 @@ void CBloomFilter::insert(std::span<const unsigned char> vKey)
         // Sets bit nIndex of vData
         vData[nIndex >> 3] |= (1 << (7 & nIndex));
     }
+    assert(contains(vKey));
 }
 
 void CBloomFilter::insert(const COutPoint& outpoint)
