@@ -2436,7 +2436,7 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The thirty-six confirmed production defects
+caller or new collision race was found. The thirty-seven confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The post-collision exact-master
 controls subsequently added five confirmed defects: duplicate snapshot records,
@@ -2452,6 +2452,46 @@ marker or target artifact, but are not counted as completed corpus gates.
 Scratch data from this round was removed after the artifact and sanitizer scans; the
 shared QA corpora and ccache were preserved. This file should be amended if a later
 master rebase changes the status of any item above.
+
+## Current-master cluster linearization backend control (2026-07-24)
+
+The current master production delta includes merge `22a03ca694` (`clusterlin:
+minor SFL optimizations`). The audit checked its cached dependency-count arrays,
+reserved suboptimal-chunk storage, and fixed-size ready/dependency queues against
+the `DepGraph` size invariants. Production `TxGraph` uses `BitSet<64>` while the
+ordinary cluster fuzzer helpers use `TestBitSet = BitSet<32>`. The separate
+`clusterlin_backend_equivalence` oracle compares the production-sized graph
+against the other bitset backends, but had no preserved QA corpus; that absence
+was a coverage omission, not a production failure.
+
+The ordinary targets were replayed from private copies of the existing QA
+corpora. On the branch, `clusterlin_sfl` completed 3,000 normal executions and
+the direct-file TSan replay covered all 895 inputs; its ASan/UBSan run reached
+2,668 executions before the 180-second bound without a diagnostic and is
+explicitly incomplete. `clusterlin_postlinearize` completed 3,000 normal and
+2,000 ASan/UBSan executions, with a clean 1,720-file TSan replay. The expensive
+`clusterlin_linearize` target reached 2,497 normal and 508 ASan/UBSan executions
+before their 180-second bounds, with no diagnostic; its 672-file TSan replay
+completed. The incomplete runs are not counted as completed corpus gates.
+
+The backend oracle was exercised with a generated 273-byte seed containing 64
+transactions in one parent-child chain, filling the production bitset and
+driving the cached dependency counts through the full graph. The branch completed
+2,000 normal and 1,000 ASan/UBSan executions, plus a TSan replay; the final
+coverage values were 4,750, 15,392, and a clean one-file TSan result. A disposable
+worktree at exact current master `afa5e46bbc6d` received only the fuzzer oracle
+change `e7f651f1b5` so that the production source stayed at master. Its normal
+control completed 2,000 executions (coverage 4,402), and a separately configured
+ASan/UBSan build completed 1,000 executions (coverage 14,333). No run produced
+an assertion failure, sanitizer report, race/deadlock report, backend mismatch,
+timeout, or artifact.
+
+An earlier control invocation used a libFuzzer-only master build with ASan
+environment variables set; because that binary was not instrumented, it is not
+counted as sanitizer evidence. The real exact-master sanitizer run above closes
+that bookkeeping gap. No clean-master production inconsistency, vulnerability,
+race, or deterministic test omission was demonstrated, so no production fix or
+unit-test change was warranted.
 
 ## Current-master validation-load-mempool replay (2026-07-23)
 
