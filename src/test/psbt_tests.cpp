@@ -252,7 +252,7 @@ BOOST_AUTO_TEST_CASE(merge_proprietary_fields)
 BOOST_AUTO_TEST_CASE(update_psbt_output_keypaths)
 {
     PSBTOutputTest test;
-    for (bool has_input : {true}) { // TODO: zero-input updates abort during ECDSA sighash creation
+    for (bool has_input : {false, true}) {
         for (const auto& script : {GetScriptForDestination(PKHash{test.pubkey}), GetScriptForDestination(WitnessV0KeyHash{test.pubkey})}) {
             auto out{test.UpdateOutput(script, has_input)};
             BOOST_CHECK_EQUAL(out.hd_keypaths.count(test.pubkey), 1);
@@ -267,7 +267,7 @@ BOOST_AUTO_TEST_CASE(update_psbt_output_redeem_script)
     auto p2wpkh{GetScriptForDestination(WitnessV0KeyHash{test.pubkey})};
     test.AddScript(p2wpkh);
 
-    for (bool has_input : {true}) { // TODO: zero-input updates abort during ECDSA sighash creation
+    for (bool has_input : {false, true}) {
         auto out{test.UpdateOutput(GetScriptForDestination(ScriptHash{p2wpkh}), has_input)};
         BOOST_CHECK(out.redeem_script == p2wpkh);
         BOOST_CHECK_EQUAL(out.hd_keypaths.count(test.pubkey), 1);

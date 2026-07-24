@@ -1421,6 +1421,13 @@ class PSBTTest(BitcoinTestFramework):
 
         descriptor = descsum_create(f"wpkh({key})")
 
+        self.log.info("Test descriptorprocesspsbt updates a zero-input PSBT")
+        zero_input_psbt = self.nodes[2].createpsbt([], {address: 1})
+        processed = self.nodes[2].descriptorprocesspsbt(psbt=zero_input_psbt, descriptors=[descriptor], finalize=False)
+        decoded = self.nodes[2].decodepsbt(processed["psbt"])
+        assert_equal(len(decoded["inputs"]), 0)
+        assert_equal(len(decoded["outputs"][0]["bip32_derivs"]), 1)
+
         utxo = self.create_outpoints(self.nodes[0], outputs=[{address: 1}])[0]
         self.sync_all()
 

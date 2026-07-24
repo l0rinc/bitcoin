@@ -54,6 +54,9 @@ bool MutableTransactionSignatureCreator::CreateSig(const SigningProvider& provid
 {
     assert(sigversion == SigVersion::BASE || sigversion == SigVersion::WITNESS_V0);
 
+    // Signing requires a corresponding input.
+    if (nIn >= m_txto.vin.size()) return false;
+
     CKey key;
     if (!provider.GetKey(address, key))
         return false;
