@@ -315,4 +315,15 @@ BOOST_AUTO_TEST_CASE(update_psbt_output_timelock)
     }
 }
 
+BOOST_AUTO_TEST_CASE(update_psbt_output_taproot)
+{
+    PSBTOutputTest test;
+    XOnlyPubKey xonly{test.pubkey};
+    for (bool has_input : {false, true}) {
+        auto out{test.UpdateOutput(GetScriptForDestination(WitnessV1Taproot{xonly}), has_input)};
+        BOOST_CHECK_EQUAL(out.m_tap_bip32_paths.count(xonly), 1);
+        BOOST_CHECK(out.hd_keypaths.empty());
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
