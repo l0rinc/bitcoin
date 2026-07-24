@@ -21,6 +21,7 @@
 #include <util/strencodings.h>
 #include <util/threadinterrupt.h>
 
+#include <cassert>
 #include <chrono>
 #include <memory>
 #include <ranges>
@@ -147,6 +148,10 @@ bool Session::Listen(Connection& conn)
         CreateIfNotCreatedAlready();
         conn.me = m_my_addr;
         conn.sock = StreamAccept();
+        assert(conn.sock != nullptr);
+        assert(conn.me.IsValid());
+        assert(conn.me.IsI2P());
+        assert(conn.me.GetPort() == I2P_SAM31_PORT);
         return true;
     } catch (const std::runtime_error& e) {
         LogError("Couldn't listen: %s\n", e.what());
@@ -158,6 +163,7 @@ bool Session::Listen(Connection& conn)
 bool Session::Accept(Connection& conn)
 {
     AssertLockNotHeld(m_mutex);
+    assert(conn.sock != nullptr);
 
     std::string errmsg;
     bool disconnect{false};
@@ -201,6 +207,9 @@ bool Session::Accept(Connection& conn)
         }
 
         conn.peer = CService(peer_addr, I2P_SAM31_PORT);
+        assert(conn.peer.IsValid());
+        assert(conn.peer.IsI2P());
+        assert(conn.peer.GetPort() == I2P_SAM31_PORT);
 
         return true;
     }
@@ -257,6 +266,11 @@ bool Session::Connect(const CService& to, Connection& conn, bool& proxy_error)
 
         if (result == "OK") {
             conn.sock = std::move(sock);
+            assert(conn.sock != nullptr);
+            assert(conn.me.IsValid());
+            assert(conn.me.IsI2P());
+            assert(conn.me.GetPort() == I2P_SAM31_PORT);
+            assert(conn.peer == to);
             return true;
         }
 
