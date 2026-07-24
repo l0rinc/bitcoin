@@ -8,6 +8,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -428,6 +429,25 @@ BOOST_AUTO_TEST_CASE(txgraph_staging)
 
     BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 1);
 
+    graph->SanityCheck();
+}
+
+BOOST_AUTO_TEST_CASE(txgraph_equal_feerate_prefix_does_not_overflow)
+{
+    auto graph = MakeTxGraph(/*max_cluster_count=*/10, /*max_cluster_size=*/1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    constexpr int64_t fee{std::numeric_limits<int64_t>::max() / 3}; // TODO: Equal-feerate FeeFrac sums can overflow.
+    std::vector<TxGraph::Ref> refs;
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{fee, 1});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{0, 1});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{fee, 1});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{fee, 1});
+
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[2], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[3], /*child=*/refs[1]);
+
+    BOOST_CHECK_EQUAL(graph->GetCluster(refs[0], TxGraph::Level::MAIN).size(), refs.size());
     graph->SanityCheck();
 }
 
