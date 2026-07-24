@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
 #include <chainparams.h>
 #include <key.h>
 #include <musig.h>
@@ -27,6 +28,116 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace {
+
+void AssertTransactionEnvelope(const CMutableTransaction& before, const CMutableTransaction& after)
+{
+    assert(before.version == after.version);
+    assert(before.nLockTime == after.nLockTime);
+    assert(before.vout == after.vout);
+    assert(before.vin.size() == after.vin.size());
+    for (size_t i{0}; i < before.vin.size(); ++i) {
+        assert(before.vin[i].prevout == after.vin[i].prevout);
+        assert(before.vin[i].nSequence == after.vin[i].nSequence);
+    }
+}
+
+void AssertSignTransactionResult(const CMutableTransaction& before, const CMutableTransaction& after,
+                                 const std::map<COutPoint, Coin>& coins, const std::map<int, bilingual_str>& input_errors,
+                                 const bool complete)
+{
+    AssertTransactionEnvelope(before, after);
+    assert(complete == input_errors.empty());
+    for (const auto& [index, error] : input_errors) {
+        (void)error;
+        assert(index >= 0);
+        assert(static_cast<size_t>(index) < before.vin.size());
+    }
+    for (size_t i{0}; i < before.vin.size(); ++i) {
+        const auto coin = coins.find(before.vin[i].prevout);
+        if (coin == coins.end() || coin->second.IsSpent()) {
+            assert(input_errors.contains(static_cast<int>(i)));
+            assert(after.vin[i].scriptSig == before.vin[i].scriptSig);
+            assert(after.vin[i].scriptWitness == before.vin[i].scriptWitness);
+        }
+    }
+}
+
+void AssertHDKeypathRoundTrip(const std::map<CPubKey, KeyOriginInfo>& hd_keypaths)
+{
+    for (const auto& [pubkey, keypath] : hd_keypaths) {
+        if (!pubkey.IsFullyValid()) continue;
+
+        std::vector<unsigned char> psbt_key{static_cast<unsigned char>(PSBT_IN_BIP32_DERIVATION)};
+        psbt_key.insert(psbt_key.end(), pubkey.begin(), pubkey.end());
+        DataStream value;
+        SerializeHDKeypath(value, keypath);
+        std::map<CPubKey, KeyOriginInfo> decoded;
+        DeserializeHDKeypaths(value, psbt_key, decoded);
+        assert(decoded.size() == 1);
+        assert(decoded.find(pubkey) != decoded.end());
+        assert(decoded.at(pubkey) == keypath);
+    }
+}
+
+void ExerciseDeterministicSigningContracts(const CKey& key)
+{
+    FillableSigningProvider provider;
+    provider.AddKey(key);
+    const CScript prev_script{GetScriptForDestination(WitnessV0KeyHash{key.GetPubKey().GetID()})};
+    const COutPoint prevout{Txid::FromUint256(uint256::ONE), 0};
+
+    CMutableTransaction tx;
+    tx.vin.emplace_back(prevout);
+    tx.vout.emplace_back(1, CScript{});
+    CMutableTransaction extraction_tx{tx};
+    extraction_tx.vin[0].scriptSig = CScript{} << OP_0;
+    extraction_tx.vin[0].scriptWitness.stack = {{0x01}, {0x02}};
+    const CTxOut extraction_prevout{1000, prev_script};
+    const SignatureData extracted{DataFromTransaction(extraction_tx, 0, extraction_prevout)};
+    assert(extracted.scriptSig == extraction_tx.vin[0].scriptSig);
+    assert(extracted.scriptWitness == extraction_tx.vin[0].scriptWitness);
+    CTxIn extracted_input;
+    UpdateInput(extracted_input, extracted);
+    assert(extracted_input.scriptSig == extraction_tx.vin[0].scriptSig);
+    assert(extracted_input.scriptWitness == extraction_tx.vin[0].scriptWitness);
+
+    const CMutableTransaction before{tx};
+    const std::map<COutPoint, Coin> coins{{prevout, Coin{CTxOut{1000, prev_script}, 1, false}}};
+    std::map<int, bilingual_str> input_errors;
+    const bool complete{SignTransaction(tx, &provider, coins, {.sighash_type = SIGHASH_ALL}, input_errors)};
+    AssertSignTransactionResult(before, tx, coins, input_errors, complete);
+    assert(complete);
+    assert(tx.vin[0].scriptSig.empty());
+    assert(tx.vin[0].scriptWitness.stack.size() == 2);
+
+    const CTransaction tx_const{tx};
+    PrecomputedTransactionData txdata;
+    txdata.Init(tx_const, std::vector<CTxOut>{coins.at(prevout).out}, true);
+    ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
+    assert(VerifyScript(tx.vin[0].scriptSig, prev_script, &tx.vin[0].scriptWitness,
+                        STANDARD_SCRIPT_VERIFY_FLAGS,
+                        TransactionSignatureChecker(&tx_const, 0, coins.at(prevout).out.nValue, txdata, MissingDataBehavior::FAIL),
+                        &error));
+    assert(error == SCRIPT_ERR_OK);
+
+    CMutableTransaction missing_tx;
+    missing_tx.vin.emplace_back(prevout);
+    missing_tx.vin[0].scriptSig = CScript{} << OP_TRUE;
+    missing_tx.vin[0].scriptWitness.stack = {{0x01}};
+    missing_tx.vout.emplace_back(1, CScript{});
+    const CMutableTransaction missing_before{missing_tx};
+    std::map<int, bilingual_str> missing_errors;
+    const std::map<COutPoint, Coin> no_coins;
+    const bool missing_complete{SignTransaction(missing_tx, &provider, no_coins, {.sighash_type = SIGHASH_ALL}, missing_errors)};
+    AssertSignTransactionResult(missing_before, missing_tx, no_coins, missing_errors, missing_complete);
+    assert(!missing_complete);
+    assert(missing_errors.size() == 1);
+    assert(missing_errors.contains(0));
+}
+
+} // namespace
 
 void initialize_script_sign()
 {
@@ -74,6 +185,7 @@ FUZZ_TARGET(script_sign, .init = initialize_script_sign)
         } catch (const std::ios_base::failure&) {
         }
         assert(hd_keypaths.size() >= deserialized_hd_keypaths.size());
+        AssertHDKeypathRoundTrip(hd_keypaths);
     }
 
     {
@@ -96,6 +208,8 @@ FUZZ_TARGET(script_sign, .init = initialize_script_sign)
             SignatureData signature_data_1 = DataFromTransaction(*mutable_transaction, n_in, *tx_out);
             CTxIn input;
             UpdateInput(input, signature_data_1);
+            assert(input.scriptSig == mutable_transaction->vin[n_in].scriptSig);
+            assert(input.scriptWitness == mutable_transaction->vin[n_in].scriptWitness);
             const CScript script = ConsumeScript(fuzzed_data_provider);
             SignatureData signature_data_2{script};
             signature_data_1.MergeSignatureData(signature_data_2);
@@ -135,7 +249,9 @@ FUZZ_TARGET(script_sign, .init = initialize_script_sign)
             }
             std::map<COutPoint, Coin> coins{ConsumeCoins(fuzzed_data_provider)};
             std::map<int, bilingual_str> input_errors;
-            (void)SignTransaction(sign_transaction_tx_to, &provider, coins, {.sighash_type = fuzzed_data_provider.ConsumeIntegral<int>()}, input_errors);
+            const CMutableTransaction before_signing{sign_transaction_tx_to};
+            const bool complete{SignTransaction(sign_transaction_tx_to, &provider, coins, {.sighash_type = fuzzed_data_provider.ConsumeIntegral<int>()}, input_errors)};
+            AssertSignTransactionResult(before_signing, sign_transaction_tx_to, coins, input_errors, complete);
         }
     }
 
@@ -145,6 +261,14 @@ FUZZ_TARGET(script_sign, .init = initialize_script_sign)
         SignatureData signature_data_2;
         (void)ProduceSignature(provider, DUMMY_MAXIMUM_SIGNATURE_CREATOR, ConsumeScript(fuzzed_data_provider), signature_data_2);
     }
+
+    std::array<unsigned char, 32> fallback_secret{};
+    fallback_secret.back() = 1;
+    CKey signing_key = k;
+    if (!signing_key.IsValid() || !signing_key.IsCompressed()) {
+        signing_key.Set(fallback_secret.begin(), fallback_secret.end(), /*fCompressedIn=*/true);
+    }
+    ExerciseDeterministicSigningContracts(signing_key);
 
     // Exercise the cryptographic-secret lifecycle that random SignatureData
     // rarely reaches: create, consume, and remove both MuSig2 secret nonces.
