@@ -2,12 +2,16 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <torcontrol.h>
+
+#include <compat/compat.h>
+#include <netbase.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/util/setup_common.h>
-#include <torcontrol.h>
 
+#include <cassert>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -61,7 +65,16 @@ FUZZ_TARGET(torcontrol, .init = initialize_torcontrol)
                 tor_controller.protocolinfo_cb(conn, tor_control_reply);
             },
             [&] {
+                // Seed a distinct invalid post-state so a no-op or wrong-network
+                // production update cannot be hidden by a previous fuzz input.
+                const Proxy sentinel{CService{in6_addr(COMPAT_IN6ADDR_LOOPBACK_INIT), /*port=*/1}, /*tor_stream_isolation=*/false};
+                assert(SetProxy(NET_ONION, sentinel));
                 tor_controller.get_socks_cb(conn, tor_control_reply);
+                const auto configured_proxy{GetProxy(NET_ONION)};
+                assert(configured_proxy.has_value());
+                assert(configured_proxy->IsValid());
+                assert(configured_proxy->m_tor_stream_isolation);
+                assert(g_reachable_nets.Contains(NET_ONION));
             });
     }
 }

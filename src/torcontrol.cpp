@@ -484,7 +484,11 @@ void TorController::get_socks_cb(TorControlConnection& _conn, const TorControlRe
     // Enable stream isolation to prevent connection correlation and enhance privacy, by forcing a different Tor circuit for every connection.
     // For this to work, the IsolateSOCKSAuth flag must be enabled on SOCKSPort (which is the default, see the IsolateSOCKSAuth section of Tor's manual page).
     Proxy addrOnion = Proxy(resolved, /*tor_stream_isolation=*/ true);
-    SetProxy(NET_ONION, addrOnion);
+    assert(SetProxy(NET_ONION, addrOnion));
+    const auto configured_proxy{GetProxy(NET_ONION)};
+    assert(configured_proxy.has_value());
+    assert(configured_proxy->proxy == resolved);
+    assert(configured_proxy->m_tor_stream_isolation);
 
     const auto onlynets = gArgs.GetArgs("-onlynet");
 
@@ -500,6 +504,7 @@ void TorController::get_socks_cb(TorControlConnection& _conn, const TorControlRe
         // If NET_ONION is not reachable, then none of -proxy or -onion was given.
         // Since we are here, then -torcontrol and -torpassword were given.
         g_reachable_nets.Add(NET_ONION);
+        assert(g_reachable_nets.Contains(NET_ONION));
     }
 }
 
