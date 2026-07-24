@@ -230,4 +230,33 @@ BOOST_AUTO_TEST_CASE(GetTxSigOpCost)
     }
 }
 
+BOOST_AUTO_TEST_CASE(mixed_p2sh_witness_sigop_cost)
+{
+    CCoinsViewCache coins{&CoinsViewEmpty::Get()};
+    const script_verify_flags flags{SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS};
+
+    const CKey key{GenerateRandomKey()};
+    const CPubKey pubkey{key.GetPubKey()};
+    const CScript multisig{CScript() << 1 << ToByteVector(pubkey) << ToByteVector(pubkey) << 2 << OP_CHECKMULTISIGVERIFY};
+    const CScript p2sh_script_pub_key{GetScriptForDestination(ScriptHash(multisig))};
+    const CScript p2wsh_script_pub_key{GetScriptForDestination(WitnessV0ScriptHash(multisig))};
+
+    CMutableTransaction funding_tx;
+    funding_tx.vin = {CTxIn{}};
+    funding_tx.vout = {{1, p2sh_script_pub_key}, {1, p2wsh_script_pub_key}};
+    AddCoins(coins, CTransaction{funding_tx}, 0);
+
+    CMutableTransaction spending_tx;
+    spending_tx.vin = {
+        CTxIn{COutPoint{funding_tx.GetHash(), 0}, CScript{} << OP_0 << OP_0 << ToByteVector(multisig)},
+        CTxIn{COutPoint{funding_tx.GetHash(), 1}},
+    };
+    spending_tx.vin[1].scriptWitness.stack = {{0}, {0}, {multisig.begin(), multisig.end()}};
+    spending_tx.vout = {{2, CScript{}}};
+
+    // Both inputs spend the same 2-sigop multisig, but P2SH sigops are counted at
+    // WITNESS_SCALE_FACTOR while witness sigops are counted at 1x.
+    assert(GetTransactionSigOpCost(CTransaction{spending_tx}, coins, flags) == 2 * WITNESS_SCALE_FACTOR + 2);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

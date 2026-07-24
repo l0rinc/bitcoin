@@ -1873,7 +1873,10 @@ class SegWitTest(BitcoinTestFramework):
         # sig ops
         outputs = (MAX_SIGOP_COST // sigops_per_script) + 2
         extra_sigops_available = MAX_SIGOP_COST % sigops_per_script
+        # Unlike witness sigops, P2SH sigops are counted at WITNESS_SCALE_FACTOR,
+        # so fewer inputs are needed to go over the limit.
         p2sh_outputs = MAX_SIGOP_COST // (sigops_per_script * WITNESS_SCALE_FACTOR) + 1
+        mixed_witness_outputs = 2
 
         # We chose the number of checkmultisigs/checksigs to make this work:
         assert extra_sigops_available < 100  # steer clear of MAX_OPS_PER_SCRIPT
@@ -1895,9 +1898,10 @@ class SegWitTest(BitcoinTestFramework):
         tx.vin.append(CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b""))
         for _ in range(outputs):
             tx.vout.append(CTxOut(split_value, script_pubkey))
-        tx.vout[-2].scriptPubKey = script_pubkey_toomany
-        tx.vout[-1].scriptPubKey = script_pubkey_justright
+        tx.vout[outputs - 2].scriptPubKey = script_pubkey_toomany
+        tx.vout[outputs - 1].scriptPubKey = script_pubkey_justright
         tx.vout += [CTxOut(0, script_to_p2sh_script(witness_script)) for _ in range(p2sh_outputs)]
+        tx.vout += [CTxOut(0, script_pubkey)] * mixed_witness_outputs
 
         block_1 = self.build_next_block()
         self.update_witness_block_with_transactions(block_1, [tx])
@@ -1959,12 +1963,22 @@ class SegWitTest(BitcoinTestFramework):
         self.update_witness_block_with_transactions(block_6, [p2sh_tx])
         test_witness_block(self.nodes[0], self.test_node, block_6, accepted=False, reason='bad-blk-sigops')
 
-        p2sh_tx.vin.append(CTxIn(COutPoint(tx.txid_int, outputs - 2), b""))
-        p2sh_tx.wit.vtxinwit = [CTxInWitness() for _ in p2sh_tx.vin]
-        p2sh_tx.wit.vtxinwit[-1].scriptWitness.stack = [witness_script_toomany]
+        p2sh_tx.vin.pop()
         block_7 = self.build_next_block()
         self.update_witness_block_with_transactions(block_7, [p2sh_tx])
-        test_witness_block(self.nodes[0], self.test_node, block_7, accepted=False, reason='bad-blk-sigops')
+        test_witness_block(self.nodes[0], self.test_node, block_7, accepted=True)
+
+        self.sync_blocks()
+        for x in self.nodes:
+            x.invalidateblock(block_7.hash_hex)
+
+        p2sh_tx.vin += [CTxIn(COutPoint(tx.txid_int, outputs + p2sh_outputs + i), b"") for i in range(mixed_witness_outputs)]
+        p2sh_tx.wit.vtxinwit = [CTxInWitness() for _ in p2sh_tx.vin]
+        for txin_witness in p2sh_tx.wit.vtxinwit[-mixed_witness_outputs:]:
+            txin_witness.scriptWitness.stack = [witness_script]
+        block_8 = self.build_next_block()
+        self.update_witness_block_with_transactions(block_8, [p2sh_tx])
+        test_witness_block(self.nodes[0], self.test_node, block_8, accepted=False, reason='bad-blk-sigops')
 
         # Cleanup and prep for next test
         self.utxo.pop(0)
