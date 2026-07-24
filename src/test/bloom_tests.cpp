@@ -57,6 +57,19 @@ BOOST_AUTO_TEST_CASE(bloom_create_insert_serialize)
     BOOST_CHECK_MESSAGE( filter.contains("99108ad8ed9bb6274d3980bab5a85c048f0950c8"_hex_u8), "Bloom filter doesn't contain just-inserted object!");
 }
 
+BOOST_AUTO_TEST_CASE(bloom_zero_elements_no_divide_by_zero)
+{
+    /* Constructing a filter with zero elements must not divide by zero when
+     * computing the number of hash functions (the old code divided by
+     * nElements unconditionally). The result is an empty filter that behaves
+     * like a default-constructed one (see CVE-2013-5700). */
+    CBloomFilter filter(0, 0.000001, 0, BLOOM_UPDATE_ALL);
+    BOOST_CHECK(filter.IsWithinSizeConstraints());
+    /* insert() and contains() must handle the empty filter without crashing. */
+    filter.insert("99108ad8ed9bb6274d3980bab5a85c048f0950c8"_hex_u8);
+    BOOST_CHECK(filter.contains("99108ad8ed9bb6274d3980bab5a85c048f0950c8"_hex_u8));
+}
+
 BOOST_AUTO_TEST_CASE(bloom_create_insert_serialize_with_tweak)
 {
     // Same test as bloom_create_insert_serialize, but we add a nTweak of 100
