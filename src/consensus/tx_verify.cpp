@@ -151,7 +151,6 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
         nSigOps += GetP2SHSigOpCount(tx, inputs) * WITNESS_SCALE_FACTOR;
     }
 
-    if (GetP2SHSigOpCount(tx, inputs) == 0)
     for (unsigned int i = 0; i < tx.vin.size(); i++)
     {
         const Coin& coin = inputs.AccessCoin(tx.vin[i].prevout);
