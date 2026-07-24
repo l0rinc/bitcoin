@@ -46,6 +46,7 @@ MessageVerificationResult MessageVerify(
     if (!pubkey.RecoverCompact(MessageHash(message), *signature_bytes)) {
         return MessageVerificationResult::ERR_PUBKEY_NOT_RECOVERED;
     }
+    assert(pubkey.IsValid());
 
     if (!(PKHash(pubkey) == *std::get_if<PKHash>(&destination))) {
         return MessageVerificationResult::ERR_NOT_SIGNED;
@@ -64,6 +65,7 @@ bool MessageSign(
     if (!privkey.SignCompact(MessageHash(message), signature_bytes)) {
         return false;
     }
+    assert(signature_bytes.size() == CPubKey::COMPACT_SIGNATURE_SIZE);
 
     signature = EncodeBase64(signature_bytes);
 
