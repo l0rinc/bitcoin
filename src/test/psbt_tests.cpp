@@ -295,7 +295,7 @@ BOOST_AUTO_TEST_CASE(update_psbt_output_miniscript)
     auto script{CScript() << ToByteVector(test.pubkey) << OP_CHECKSIGVERIFY << CScriptNum{144} << OP_CHECKSEQUENCEVERIFY};
     test.AddScript(script);
 
-    for (bool has_input : {true}) { // TODO: zero-input updates read a missing input through the checker
+    for (bool has_input : {false, true}) {
         auto out{test.UpdateOutput(GetScriptForDestination(WitnessV0ScriptHash{script}), has_input)};
         BOOST_CHECK(out.witness_script == script);
         BOOST_CHECK_EQUAL(out.hd_keypaths.count(test.pubkey), 1);
@@ -309,7 +309,7 @@ BOOST_AUTO_TEST_CASE(update_psbt_output_timelock)
     auto script{CScript() << OP_1 << OP_VERIFY << CScriptNum{144} << OP_CHECKSEQUENCEVERIFY};
     test.AddScript(script);
 
-    for (bool has_input : {true}) { // TODO: zero-input updates read a missing input through the checker
+    for (bool has_input : {false, true}) {
         auto out{test.UpdateOutput(GetScriptForDestination(WitnessV0ScriptHash{script}), has_input)};
         BOOST_CHECK(out.witness_script == script);
     }

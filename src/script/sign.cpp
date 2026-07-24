@@ -50,6 +50,14 @@ MutableTransactionSignatureCreator::MutableTransactionSignatureCreator(const CMu
 {
 }
 
+const BaseSignatureChecker& MutableTransactionSignatureCreator::Checker() const
+{
+    if (nIn < m_txto.vin.size()) return checker;
+    // Without a corresponding input there is nothing to check against, so reject everything.
+    static const BaseSignatureChecker reject_all;
+    return reject_all;
+}
+
 bool MutableTransactionSignatureCreator::CreateSig(const SigningProvider& provider, std::vector<unsigned char>& vchSig, const CKeyID& address, const CScript& scriptCode, SigVersion sigversion) const
 {
     assert(sigversion == SigVersion::BASE || sigversion == SigVersion::WITNESS_V0);
