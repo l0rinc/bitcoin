@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
 #include <common/system.h>
 #include <compressor.h>
 #include <core_io.h>
@@ -1627,6 +1628,28 @@ BOOST_AUTO_TEST_CASE(script_HasValidOps)
     BOOST_CHECK(!script.HasValidOps());
     script = ToScript("88acc0"_hex); // Script with undefined opcode
     BOOST_CHECK(!script.HasValidOps());
+}
+
+BOOST_AUTO_TEST_CASE(schnorr_signature_creator_inputs)
+{
+    auto key{GenerateRandomKey()};
+    auto pubkey{key.GetPubKey()};
+    XOnlyPubKey xonly{pubkey};
+    FlatSigningProvider provider;
+    provider.keys.emplace(pubkey.GetID(), key);
+
+    CMutableTransaction tx;
+    tx.vin.emplace_back();
+    std::vector<CTxOut> spent_outputs;
+    spent_outputs.emplace_back(CAmount{0}, GetScriptForDestination(WitnessV1Taproot{xonly}));
+    PrecomputedTransactionData txdata;
+    txdata.Init(tx, std::move(spent_outputs), /*force=*/true);
+
+    for (unsigned int input_idx : {0, 1}) {
+        MutableTransactionSignatureCreator creator{tx, input_idx, CAmount{0}, &txdata, {.sighash_type = SIGHASH_DEFAULT}};
+        std::vector<unsigned char> sig;
+        BOOST_CHECK_EQUAL(creator.CreateSchnorrSig(provider, sig, xonly, nullptr, nullptr, SigVersion::TAPROOT), input_idx == 0);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
