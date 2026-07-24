@@ -647,6 +647,30 @@ BOOST_AUTO_TEST_CASE(btck_script_verify_tests)
         /*amount=*/135125,
         /*input_index=*/1,
         /*taproot=*/true);
+
+    btck_ScriptVerifyStatus status{btck_ScriptVerifyStatus_OK};
+    BOOST_CHECK_EQUAL(btck_script_pubkey_verify(
+                          legacy_spent_script_pubkey.get(),
+                          /*amount=*/0,
+                          legacy_spending_tx.get(),
+                          /*precomputed_txdata=*/nullptr,
+                          legacy_spending_tx.CountInputs(),
+                          static_cast<btck_ScriptVerificationFlags>(VERIFY_ALL_PRE_SEGWIT),
+                          &status),
+                      0);
+    BOOST_CHECK_EQUAL(status, btck_ScriptVerifyStatus_ERROR_TX_INPUT_INDEX);
+
+    status = btck_ScriptVerifyStatus_OK;
+    BOOST_CHECK_EQUAL(btck_script_pubkey_verify(
+                          legacy_spent_script_pubkey.get(),
+                          /*amount=*/0,
+                          legacy_spending_tx.get(),
+                          /*precomputed_txdata=*/nullptr,
+                          /*input_index=*/0,
+                          uint32_t{1U << 31},
+                          &status),
+                      0);
+    BOOST_CHECK_EQUAL(status, btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION);
 }
 
 BOOST_AUTO_TEST_CASE(logging_tests)

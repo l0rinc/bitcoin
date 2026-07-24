@@ -667,8 +667,11 @@ int btck_script_pubkey_verify(const btck_ScriptPubkey* script_pubkey,
                               const btck_ScriptVerificationFlags flags,
                               btck_ScriptVerifyStatus* status)
 {
-    // Assert that all specified flags are part of the interface before continuing
-    assert((flags & ~btck_ScriptVerificationFlags_ALL) == 0);
+    // Reject flags that are not part of the public interface before continuing.
+    if (flags & ~btck_ScriptVerificationFlags_ALL) {
+        if (status) *status = btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION;
+        return 0;
+    }
 
     if (!is_valid_flag_combination(script_verify_flags::from_int(flags))) {
         if (status) *status = btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION;
@@ -676,7 +679,10 @@ int btck_script_pubkey_verify(const btck_ScriptPubkey* script_pubkey,
     }
 
     const CTransaction& tx{*btck_Transaction::get(tx_to)};
-    assert(input_index < tx.vin.size());
+    if (input_index >= tx.vin.size()) {
+        if (status) *status = btck_ScriptVerifyStatus_ERROR_TX_INPUT_INDEX;
+        return 0;
+    }
 
     const PrecomputedTransactionData& txdata{precomputed_txdata ? btck_PrecomputedTransactionData::get(precomputed_txdata) : PrecomputedTransactionData(tx)};
 
