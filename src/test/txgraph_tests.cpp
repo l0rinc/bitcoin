@@ -543,6 +543,26 @@ BOOST_AUTO_TEST_CASE(txgraph_saturated_chunking_keeps_block_builder_connected)
     graph->SanityCheck();
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_equal_feerate_prefix_does_not_overflow)
+{
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    const int64_t fee{std::numeric_limits<int64_t>::max() / 2 + 1};
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(4);
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{fee, 1});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{0, 1});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{fee, 1});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{fee, 1});
+
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[2], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[3], /*child=*/refs[1]);
+
+    BOOST_CHECK_EQUAL(graph->GetCluster(refs[0], TxGraph::Level::MAIN).size(), refs.size());
+    graph->SanityCheck();
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_getcluster_membership_contracts)
 {
     auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
