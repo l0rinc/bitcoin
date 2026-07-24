@@ -17,10 +17,35 @@
 #include <validation.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <string>
 
 namespace {
+
+void AssertValidationStateMatchesResult(const BlockValidationState& state, bool result)
+{
+    assert(state.IsValid() == result);
+    assert(state.IsInvalid() == !result);
+    assert(!state.IsError());
+}
+
+int ExpectedWitnessCommitmentIndex(const CBlock& block)
+{
+    static constexpr std::array<unsigned char, 6> commitment_prefix{
+        OP_RETURN, 0x24, 0xaa, 0x21, 0xa9, 0xed};
+    int commitpos{NO_WITNESS_COMMITMENT};
+    if (!block.vtx.empty()) {
+        for (size_t output{0}; output < block.vtx[0]->vout.size(); ++output) {
+            const auto& script{block.vtx[0]->vout[output].scriptPubKey};
+            if (script.size() >= MINIMUM_WITNESS_COMMITMENT &&
+                std::equal(commitment_prefix.begin(), commitment_prefix.end(), script.begin())) {
+                commitpos = static_cast<int>(output);
+            }
+        }
+    }
+    return commitpos;
+}
 
 void AssertBlockFieldsEqual(const CBlock& block, const CBlock& round_tripped)
 {
@@ -54,17 +79,18 @@ FUZZ_TARGET(block, .init = initialize_block)
     const Consensus::Params& consensus_params = Params().GetConsensus();
     BlockValidationState validation_state_pow_and_merkle;
     const bool valid_incl_pow_and_merkle = CheckBlock(block, validation_state_pow_and_merkle, consensus_params, /* fCheckPOW= */ true, /* fCheckMerkleRoot= */ true);
-    assert(validation_state_pow_and_merkle.IsValid() || validation_state_pow_and_merkle.IsInvalid() || validation_state_pow_and_merkle.IsError());
-    (void)validation_state_pow_and_merkle.Error("");
+    AssertValidationStateMatchesResult(validation_state_pow_and_merkle, valid_incl_pow_and_merkle);
     BlockValidationState validation_state_pow;
     const bool valid_incl_pow = CheckBlock(block, validation_state_pow, consensus_params, /* fCheckPOW= */ true, /* fCheckMerkleRoot= */ false);
-    assert(validation_state_pow.IsValid() || validation_state_pow.IsInvalid() || validation_state_pow.IsError());
+    AssertValidationStateMatchesResult(validation_state_pow, valid_incl_pow);
     BlockValidationState validation_state_merkle;
     const bool valid_incl_merkle = CheckBlock(block, validation_state_merkle, consensus_params, /* fCheckPOW= */ false, /* fCheckMerkleRoot= */ true);
-    assert(validation_state_merkle.IsValid() || validation_state_merkle.IsInvalid() || validation_state_merkle.IsError());
+    AssertValidationStateMatchesResult(validation_state_merkle, valid_incl_merkle);
     BlockValidationState validation_state_none;
     const bool valid_incl_none = CheckBlock(block, validation_state_none, consensus_params, /* fCheckPOW= */ false, /* fCheckMerkleRoot= */ false);
-    assert(validation_state_none.IsValid() || validation_state_none.IsInvalid() || validation_state_none.IsError());
+    AssertValidationStateMatchesResult(validation_state_none, valid_incl_none);
+    assert(valid_incl_pow_and_merkle == (valid_incl_pow && valid_incl_merkle));
+    assert(block.fChecked == valid_incl_pow_and_merkle);
     const bool has_multiple_coinbases = std::count_if(block.vtx.begin(), block.vtx.end(), [](const auto& tx) {
                                             return tx->IsCoinBase();
                                         }) > 1;
@@ -115,6 +141,7 @@ FUZZ_TARGET(block, .init = initialize_block)
         (void)BlockWitnessMerkleRoot(block);
     }
     (void)GetWitnessCommitmentIndex(block);
+    assert(GetWitnessCommitmentIndex(block) == ExpectedWitnessCommitmentIndex(block));
     const size_t raw_memory_size = RecursiveDynamicUsage(block);
     const size_t raw_memory_size_as_shared_ptr = RecursiveDynamicUsage(std::make_shared<CBlock>(block));
     assert(raw_memory_size_as_shared_ptr > raw_memory_size);
