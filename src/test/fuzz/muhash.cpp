@@ -5,6 +5,7 @@
 #include <arith_uint256.h>
 #include <crypto/muhash.h>
 #include <span.h>
+#include <streams.h>
 #include <uint256.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
@@ -12,6 +13,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
+#include <cstdint>
 #include <vector>
 
 namespace {
@@ -165,50 +168,136 @@ FUZZ_TARGET(num3072_inv)
     assert(uint == ONE);
 }
 
+struct Update {
+    bool insert;
+    std::vector<uint8_t> data;
+};
+
+void ApplyUpdate(MuHash3072& muhash, const Update& update)
+{
+    if (update.insert) {
+        muhash.Insert(update.data);
+    } else {
+        muhash.Remove(update.data);
+    }
+}
+
+void AssertMuHashState(MuHash3072& actual, const std::vector<Update>& updates)
+{
+    // Serialize before Finalize so the raw numerator/denominator representation
+    // is checked as well as the canonical finalized value.
+    MuHash3072 decoded;
+    DataStream stream;
+    stream << actual;
+    stream >> decoded;
+    assert(stream.empty());
+
+    MuHash3072 expected;
+    for (const auto& update : updates) {
+        ApplyUpdate(expected, update);
+    }
+
+    uint256 actual_hash;
+    uint256 expected_hash;
+    uint256 decoded_hash;
+    actual.Finalize(actual_hash);
+    expected.Finalize(expected_hash);
+    decoded.Finalize(decoded_hash);
+    assert(actual_hash == expected_hash);
+    assert(decoded_hash == expected_hash);
+
+    // Finalize is value-preserving even though it canonicalizes the internal
+    // fraction by moving the denominator into the numerator.
+    uint256 repeated_hash;
+    actual.Finalize(repeated_hash);
+    assert(repeated_hash == actual_hash);
+}
+
 FUZZ_TARGET(muhash)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     std::vector<uint8_t> data{ConsumeRandomLengthByteVector(fuzzed_data_provider)};
     std::vector<uint8_t> data2{ConsumeRandomLengthByteVector(fuzzed_data_provider)};
 
-    MuHash3072 muhash;
+    constexpr uint256 initial_state_hash{"dd5ad2a105c2d29495f577245c357409002329b9f4d6182c0af3dc2f462555c8"};
+    MuHash3072 empty;
+    uint256 empty_hash;
+    empty.Finalize(empty_hash);
+    assert(empty_hash == initial_state_hash);
 
+    MuHash3072 muhash;
     muhash.Insert(data);
     muhash.Insert(data2);
+    std::vector<Update> updates{{true, data}, {true, data2}};
+    AssertMuHashState(muhash, updates);
 
-    constexpr uint256 initial_state_hash{"dd5ad2a105c2d29495f577245c357409002329b9f4d6182c0af3dc2f462555c8"};
-    uint256 out;
-    uint256 out2;
-    CallOneOf(
-        fuzzed_data_provider,
-        [&] {
-            // Test that MuHash result is consistent independent of order of operations
-            muhash.Finalize(out);
-
-            muhash = MuHash3072();
-            muhash.Insert(data2);
-            muhash.Insert(data);
-            muhash.Finalize(out2);
-        },
-        [&] {
-            // Test that multiplication with the initial state never changes the finalized result
-            muhash.Finalize(out);
-            MuHash3072 muhash3;
-            muhash3 *= muhash;
-            muhash3.Finalize(out2);
-        },
-        [&] {
-            // Test that dividing a MuHash by itself brings it back to its initial state
+    LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 8) {
+        const auto op_data{ConsumeRandomLengthByteVector(fuzzed_data_provider)};
+        switch (fuzzed_data_provider.ConsumeIntegralInRange<uint8_t>(0, 6)) {
+        case 0:
+            muhash.Insert(op_data);
+            updates.push_back({true, op_data});
+            break;
+        case 1:
+            muhash.Remove(op_data);
+            updates.push_back({false, op_data});
+            break;
+        case 2: {
+            MuHash3072 other{op_data};
+            std::vector<Update> other_updates{{true, op_data}};
+            if (fuzzed_data_provider.ConsumeBool()) {
+                other.Insert(data);
+                other_updates.push_back({true, data});
+            }
+            if (fuzzed_data_provider.ConsumeBool()) {
+                other.Remove(data2);
+                other_updates.push_back({false, data2});
+            }
+            if (fuzzed_data_provider.ConsumeBool()) {
+                uint256 ignored;
+                other.Finalize(ignored);
+            }
+            muhash *= other;
+            updates.insert(updates.end(), other_updates.begin(), other_updates.end());
+            break;
+        }
+        case 3: {
+            MuHash3072 other{op_data};
+            std::vector<Update> other_updates{{true, op_data}};
+            if (fuzzed_data_provider.ConsumeBool()) {
+                other.Insert(data);
+                other_updates.push_back({true, data});
+            }
+            if (fuzzed_data_provider.ConsumeBool()) {
+                other.Remove(data2);
+                other_updates.push_back({false, data2});
+            }
+            if (fuzzed_data_provider.ConsumeBool()) {
+                uint256 ignored;
+                other.Finalize(ignored);
+            }
+            muhash /= other;
+            for (const auto& update : other_updates) {
+                updates.push_back({!update.insert, update.data});
+            }
+            break;
+        }
+        case 4: {
+            const auto previous_updates{updates};
+            muhash *= muhash;
+            updates.insert(updates.end(), previous_updates.begin(), previous_updates.end());
+            break;
+        }
+        case 5:
             muhash /= muhash;
-            muhash.Finalize(out);
-            out2 = initial_state_hash;
-        },
-        [&] {
-            // Test that removing all added elements brings the object back to its initial state
-            muhash.Remove(data);
-            muhash.Remove(data2);
-            muhash.Finalize(out);
-            out2 = initial_state_hash;
-        });
-    assert(out == out2);
+            updates.clear();
+            break;
+        case 6: {
+            uint256 ignored;
+            muhash.Finalize(ignored);
+            break;
+        }
+        }
+        AssertMuHashState(muhash, updates);
+    }
 }

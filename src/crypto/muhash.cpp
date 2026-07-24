@@ -553,6 +553,10 @@ void MuHash3072::Finalize(uint256& out) noexcept
 {
     m_numerator.Divide(m_denominator);
     m_denominator.SetToOne();  // Needed to keep the MuHash object valid
+    assert(m_denominator.limbs[0] == 1);
+    for (int i = 1; i < Num3072::LIMBS; ++i) {
+        assert(m_denominator.limbs[i] == 0);
+    }
 
     unsigned char data[Num3072::BYTE_SIZE];
     m_numerator.ToBytes(data);
