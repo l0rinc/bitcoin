@@ -856,6 +856,8 @@ SignatureData DataFromTransaction(const CMutableTransaction& tx, unsigned int nI
     assert(tx.vin.size() > nIn);
     data.scriptSig = tx.vin[nIn].scriptSig;
     data.scriptWitness = tx.vin[nIn].scriptWitness;
+    assert(data.scriptSig == tx.vin[nIn].scriptSig);
+    assert(data.scriptWitness == tx.vin[nIn].scriptWitness);
     Stacks stack(data);
 
     // Get signatures
@@ -917,8 +919,12 @@ SignatureData DataFromTransaction(const CMutableTransaction& tx, unsigned int nI
 
 void UpdateInput(CTxIn& input, const SignatureData& data)
 {
+    const COutPoint prevout = input.prevout;
+    const uint32_t nSequence = input.nSequence;
     input.scriptSig = data.scriptSig;
     input.scriptWitness = data.scriptWitness;
+    assert(input.prevout == prevout);
+    assert(input.nSequence == nSequence);
 }
 
 void SignatureData::MergeSignatureData(SignatureData sigdata)
@@ -1048,6 +1054,7 @@ bool SignTransaction(CMutableTransaction& mtx, const SigningProvider* keystore, 
 
     // Sign what we can:
     for (unsigned int i = 0; i < mtx.vin.size(); ++i) {
+        assert(mtx.vin.size() == txConst.vin.size());
         CTxIn& txin = mtx.vin[i];
         auto coin = coins.find(txin.prevout);
         if (coin == coins.end() || coin->second.IsSpent()) {
@@ -1086,6 +1093,12 @@ bool SignTransaction(CMutableTransaction& mtx, const SigningProvider* keystore, 
             // If this input succeeds, make sure there is no error set for it
             input_errors.erase(i);
         }
+
+        assert(txin.prevout == txConst.vin[i].prevout);
+        assert(txin.nSequence == txConst.vin[i].nSequence);
     }
+    assert(mtx.version == txConst.version);
+    assert(mtx.nLockTime == txConst.nLockTime);
+    assert(mtx.vout == txConst.vout);
     return input_errors.empty();
 }
