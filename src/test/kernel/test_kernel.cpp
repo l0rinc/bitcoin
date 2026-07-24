@@ -688,6 +688,10 @@ BOOST_AUTO_TEST_CASE(logging_tests)
     logging_disable_category(LogCategory::BENCH);
     logging_enable_category(LogCategory::VALIDATION);
     logging_disable_category(LogCategory::VALIDATION);
+    btck_logging_set_level_category(/*category=*/255, btck_LogLevel_INFO);
+    btck_logging_set_level_category(btck_LogCategory_BENCH, /*level=*/255);
+    btck_logging_enable_category(/*category=*/255);
+    btck_logging_disable_category(/*category=*/255);
 
     // Check that connecting, connecting another, and then disconnecting and connecting a logger again works.
     {
