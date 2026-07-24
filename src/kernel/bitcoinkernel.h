@@ -718,8 +718,8 @@ BITCOINKERNEL_API void btck_transaction_destroy(btck_Transaction* transaction);
  * @brief Create precomputed transaction data for script verification.
  *
  * @param[in] tx_to             Non-null.
- * @param[in] spent_outputs     Nullable for non-taproot verification. Points to an array of
- *                              outputs spent by the transaction.
+ * @param[in] spent_outputs     Nullable only when spent_outputs_len is zero. Otherwise, points
+ *                              to an array containing one output per transaction input.
  * @param[in] spent_outputs_len Length of the spent_outputs array.
  * @return                      The precomputed data, or null on error.
  */
