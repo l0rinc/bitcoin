@@ -2,10 +2,14 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
+#include <key.h>
 #include <psbt.h>
+#include <script/script.h>
+#include <script/signingprovider.h>
+#include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
-#include <test/util/setup_common.h>
 
 BOOST_FIXTURE_TEST_SUITE(psbt_tests, BasicTestingSetup)
 
@@ -18,6 +22,35 @@ static PSBTProprietary MakeProprietary(uint64_t subtype, uint8_t key_data, uint8
         .value = {value},
     };
 }
+
+struct PSBTOutputTest {
+    CKey key{GenerateRandomKey()};
+    CPubKey pubkey{key.GetPubKey()};
+    FlatSigningProvider provider;
+
+    PSBTOutputTest()
+    {
+        auto keyid{pubkey.GetID()};
+        provider.keys.emplace(keyid, key); // The private key makes signing reach the sighash computation
+        provider.pubkeys.emplace(keyid, pubkey);
+        provider.origins.emplace(keyid, std::make_pair(pubkey, KeyOriginInfo{}));
+    }
+
+    void AddScript(const CScript& script)
+    {
+        provider.scripts.emplace(CScriptID(script), script);
+    }
+
+    PSBTOutput UpdateOutput(const CScript& script, bool has_input) const
+    {
+        CMutableTransaction tx;
+        if (has_input) tx.vin.emplace_back();
+        tx.vout.emplace_back(0, script);
+        PartiallySignedTransaction psbt{tx};
+        UpdatePSBTOutput(provider, psbt, 0);
+        return psbt.outputs[0];
+    }
+};
 
 void CheckTimeLock(const std::string& base64_psbt, std::optional<uint32_t> timelock)
 {
@@ -214,6 +247,31 @@ BOOST_AUTO_TEST_CASE(merge_proprietary_fields)
     const auto output_it = left.outputs[0].m_proprietary.find(right_prop);
     BOOST_REQUIRE(output_it != left.outputs[0].m_proprietary.end());
     BOOST_CHECK(output_it->value == right_prop.value);
+}
+
+BOOST_AUTO_TEST_CASE(update_psbt_output_keypaths)
+{
+    PSBTOutputTest test;
+    for (bool has_input : {true}) { // TODO: zero-input updates abort during ECDSA sighash creation
+        for (const auto& script : {GetScriptForDestination(PKHash{test.pubkey}), GetScriptForDestination(WitnessV0KeyHash{test.pubkey})}) {
+            auto out{test.UpdateOutput(script, has_input)};
+            BOOST_CHECK_EQUAL(out.hd_keypaths.count(test.pubkey), 1);
+            BOOST_CHECK(out.redeem_script.empty() && out.witness_script.empty());
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(update_psbt_output_redeem_script)
+{
+    PSBTOutputTest test;
+    auto p2wpkh{GetScriptForDestination(WitnessV0KeyHash{test.pubkey})};
+    test.AddScript(p2wpkh);
+
+    for (bool has_input : {true}) { // TODO: zero-input updates abort during ECDSA sighash creation
+        auto out{test.UpdateOutput(GetScriptForDestination(ScriptHash{p2wpkh}), has_input)};
+        BOOST_CHECK(out.redeem_script == p2wpkh);
+        BOOST_CHECK_EQUAL(out.hd_keypaths.count(test.pubkey), 1);
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
