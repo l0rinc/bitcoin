@@ -30,6 +30,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -97,17 +98,23 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
     }
 
     const CFeeRate target_feerate{CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY/1000)}};
+    const std::set<COutPoint> unique_outpoints{outpoints.begin(), outpoints.end()};
     std::optional<CAmount> total_bumpfee;
     CAmount sum_fees = 0;
     {
         node::MiniMiner mini_miner{pool, outpoints};
         assert(mini_miner.IsReadyToCalculate());
         const auto bump_fees = mini_miner.CalculateBumpFees(target_feerate);
+        assert(bump_fees.size() == unique_outpoints.size());
+        std::map<Txid, CAmount> fees_by_txid;
         for (const auto& outpoint : outpoints) {
             auto it = bump_fees.find(outpoint);
             assert(it != bump_fees.end());
             assert(it->second >= 0);
             sum_fees += it->second;
+            if (!pool.exists(outpoint.hash)) assert(it->second == 0);
+            const auto [txid_it, inserted] = fees_by_txid.emplace(outpoint.hash, it->second);
+            if (!inserted) assert(txid_it->second == it->second);
         }
         assert(!mini_miner.IsReadyToCalculate());
     }
@@ -116,7 +123,26 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         assert(mini_miner.IsReadyToCalculate());
         total_bumpfee = mini_miner.CalculateTotalBumpFees(target_feerate);
         assert(total_bumpfee.has_value());
+        assert(*total_bumpfee <= sum_fees);
         assert(!mini_miner.IsReadyToCalculate());
+    }
+    {
+        node::MiniMiner mini_miner{pool, outpoints};
+        assert(mini_miner.IsReadyToCalculate());
+        const auto inclusion_order = mini_miner.Linearize();
+        assert(!mini_miner.IsReadyToCalculate());
+        assert(inclusion_order.size() == mini_miner.GetMockTemplateTxids().size());
+        std::set<uint32_t> sequence_numbers;
+        for (const auto& [txid, sequence] : inclusion_order) {
+            assert(mini_miner.GetMockTemplateTxids().contains(txid));
+            sequence_numbers.insert(sequence);
+        }
+        if (!sequence_numbers.empty()) {
+            assert(*sequence_numbers.rbegin() + 1 == sequence_numbers.size());
+            for (uint32_t sequence = 0; sequence < sequence_numbers.size(); ++sequence) {
+                assert(sequence_numbers.contains(sequence));
+            }
+        }
     }
     // Overlapping ancestry across multiple outpoints can only reduce the total bump fee.
     assert (sum_fees >= *total_bumpfee);

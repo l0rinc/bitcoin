@@ -233,12 +233,33 @@ void MiniMiner::SanityCheck() const
     // m_entries, m_entries_by_txid, and m_descendant_set_by_txid all same size
     Assume(m_entries.size() == m_entries_by_txid.size());
     Assume(m_entries.size() == m_descendant_set_by_txid.size());
+    Assume(std::all_of(m_entries.begin(), m_entries.end(), [&](const auto& entry) {
+        const auto map_entry{m_entries_by_txid.find(entry->first)};
+        return map_entry != m_entries_by_txid.end() && map_entry == entry &&
+               m_descendant_set_by_txid.contains(entry->first);
+    }));
+    Assume(std::all_of(m_descendant_set_by_txid.begin(), m_descendant_set_by_txid.end(), [&](const auto& descendant_entry) {
+        const auto& [txid, descendants] = descendant_entry;
+        const auto entry{m_entries_by_txid.find(txid)};
+        if (entry == m_entries_by_txid.end() || descendants.empty()) return false;
+        std::set<Txid> unique_descendants;
+        bool includes_self{false};
+        for (const auto& descendant : descendants) {
+            if (descendant == m_entries_by_txid.end() || !unique_descendants.insert(descendant->first).second) return false;
+            includes_self |= descendant->first == txid;
+        }
+        return includes_self;
+    }));
     // Cached ancestor values should be at least as large as the transaction's own size
     Assume(std::all_of(m_entries.begin(), m_entries.end(), [](const auto& entry) {
         return entry->second.GetSizeWithAncestors() >= entry->second.GetTxSize();}));
     // None of the entries should be to-be-replaced transactions
     Assume(std::all_of(m_to_be_replaced.begin(), m_to_be_replaced.end(),
         [&](const auto& txid){ return !m_entries_by_txid.contains(txid); }));
+    Assume(m_inclusion_order.size() == m_in_block.size());
+    Assume(std::all_of(m_inclusion_order.begin(), m_inclusion_order.end(), [&](const auto& entry) {
+        return m_in_block.contains(entry.first);
+    }));
 }
 
 void MiniMiner::BuildMockTemplate(std::optional<CFeeRate> target_feerate)
@@ -288,6 +309,7 @@ void MiniMiner::BuildMockTemplate(std::optional<CFeeRate> target_feerate)
         SanityCheck();
         ++sequence_num;
     }
+    Assume(m_in_block.size() + m_entries_by_txid.size() == num_txns);
     if (!target_feerate.has_value()) {
         Assume(m_in_block.size() == num_txns);
     } else {
