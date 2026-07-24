@@ -15,6 +15,7 @@
 #include <util/overflow.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
@@ -184,6 +185,8 @@ CRollingBloomFilter::CRollingBloomFilter(const unsigned int nElements, const dou
      * These bits are stored in separate integers: position P corresponds to bit
      * (P & 63) of the integers data[(P >> 6) * 2] and data[(P >> 6) * 2 + 1]. */
     data.resize(CeilDiv(nFilterBits, 64u) << 1);
+    assert(nEntriesPerGeneration > 0);
+    assert(data.size() >= 2 && data.size() % 2 == 0);
     reset();
 }
 
@@ -195,6 +198,10 @@ static inline uint32_t RollingBloomHash(unsigned int nHashNum, uint32_t nTweak, 
 
 void CRollingBloomFilter::insert(std::span<const unsigned char> vKey)
 {
+    assert(nEntriesPerGeneration > 0);
+    assert(nEntriesThisGeneration >= 0 && nEntriesThisGeneration <= nEntriesPerGeneration);
+    assert(nGeneration >= 1 && nGeneration <= 3);
+    assert(data.size() >= 2 && data.size() % 2 == 0);
     if (nEntriesThisGeneration == nEntriesPerGeneration) {
         nEntriesThisGeneration = 0;
         nGeneration++;
@@ -222,6 +229,9 @@ void CRollingBloomFilter::insert(std::span<const unsigned char> vKey)
         data[pos & ~1U] = (data[pos & ~1U] & ~(uint64_t{1} << bit)) | (uint64_t(nGeneration & 1)) << bit;
         data[pos | 1] = (data[pos | 1] & ~(uint64_t{1} << bit)) | (uint64_t(nGeneration >> 1)) << bit;
     }
+    assert(nEntriesThisGeneration > 0 && nEntriesThisGeneration <= nEntriesPerGeneration);
+    assert(nGeneration >= 1 && nGeneration <= 3);
+    assert(contains(vKey));
 }
 
 bool CRollingBloomFilter::contains(std::span<const unsigned char> vKey) const
@@ -244,4 +254,7 @@ void CRollingBloomFilter::reset()
     nEntriesThisGeneration = 0;
     nGeneration = 1;
     std::fill(data.begin(), data.end(), 0);
+    assert(nEntriesThisGeneration == 0);
+    assert(nGeneration == 1);
+    assert(std::all_of(data.begin(), data.end(), [](const uint64_t word) { return word == 0; }));
 }
