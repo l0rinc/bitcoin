@@ -1674,7 +1674,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(net_processing_tests, TestChain100Setup)
 
-BOOST_FIXTURE_TEST_CASE(last_tx_time_ignores_orphan_acceptance, TestChain100Setup)
+BOOST_FIXTURE_TEST_CASE(last_tx_time_tracks_orphan_acceptance, TestChain100Setup)
 {
     m_clock.set(1700000000s);
     LOCK(NetEventsInterface::g_msgproc_mutex);
@@ -1726,7 +1726,7 @@ BOOST_FIXTURE_TEST_CASE(last_tx_time_ignores_orphan_acceptance, TestChain100Setu
     m_clock.set(1700000002s);
     BOOST_REQUIRE(connman.ProcessMessagesOnce(*peer));
     BOOST_CHECK(m_node.mempool->exists(orphan->GetHash()));
-    BOOST_CHECK_EQUAL(peer->m_last_tx_time.load(), 1700000001s);
+    BOOST_CHECK_EQUAL(peer->m_last_tx_time.load(), 1700000002s);
 
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
     m_node.validation_signals->UnregisterValidationInterface(m_node.peerman.get());
