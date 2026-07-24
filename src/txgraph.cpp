@@ -139,6 +139,26 @@ bool IsSortedFeeRateDiagram(std::span<const FeeFrac> diagram) noexcept
     return true;
 }
 
+/** Track the cumulative size of equal-feerate chunks without summing their fees. */
+struct EqualFeerateChunkPrefix
+{
+    FeeFrac m_reference;
+    int32_t m_size{0};
+    bool m_initialized{false};
+
+    void Add(const FeeFrac& chunk) noexcept
+    {
+        if (!m_initialized || ByRatio{chunk} < ByRatio{m_reference}) {
+            m_reference = chunk;
+            m_size = chunk.size;
+            m_initialized = true;
+        } else {
+            Assume(ByRatio{chunk} == ByRatio{m_reference});
+            m_size = SaturatingAdd(m_size, chunk.size);
+        }
+    }
+};
+
 void AssumeUniqueRefs(std::span<TxGraph::Ref* const> refs) noexcept
 {
     if constexpr (G_ABORT_ON_FAILED_ASSUME) {
@@ -1174,23 +1194,13 @@ void GenericClusterImpl::Updated(TxGraphImpl& graph, int level, bool rename) noe
     if (level == 0 && (rename || IsAcceptable())) {
         auto chunking = GetChunking();
         LinearizationIndex lin_idx{0};
-        /** The sum of all chunk feerate FeeFracs with the same feerate as the current chunk,
-         *  up to and including the current chunk. */
-        FeeFrac equal_feerate_chunk_feerate;
+        EqualFeerateChunkPrefix equal_feerate_chunk_prefix;
         // Iterate over the chunks.
         for (unsigned chunk_idx = 0; chunk_idx < chunking.size(); ++chunk_idx) {
             auto& chunk = chunking[chunk_idx];
             auto chunk_count = chunk.transactions.Count();
             Assume(chunk_count > 0);
-            // Update equal_feerate_chunk_feerate to include this chunk, starting over when the
-            // feerate changed.
-            if (ByRatio{chunk.feerate} < ByRatio{equal_feerate_chunk_feerate}) {
-                equal_feerate_chunk_feerate = chunk.feerate;
-            } else {
-                // Note that this is adding fees to fees, and sizes to sizes, so the overall
-                // ratio remains the same; it's just accounting for the size of the added chunk.
-                equal_feerate_chunk_feerate += chunk.feerate;
-            }
+            equal_feerate_chunk_prefix.Add(chunk.feerate);
             // Determine the m_fallback_order maximum transaction in the chunk.
             auto it = chunk.transactions.begin();
             GraphIndex max_element = m_mapping[*it];
@@ -1209,7 +1219,7 @@ void GenericClusterImpl::Updated(TxGraphImpl& graph, int level, bool rename) noe
                 auto& entry = graph.m_entries[graph_idx];
                 entry.m_main_lin_index = lin_idx++;
                 entry.m_main_chunk_feerate = FeePerWeight::FromFeeFrac(chunk.feerate);
-                entry.m_main_equal_feerate_chunk_prefix_size = equal_feerate_chunk_feerate.size;
+                entry.m_main_equal_feerate_chunk_prefix_size = equal_feerate_chunk_prefix.m_size;
                 entry.m_main_max_chunk_fallback = max_element;
                 Assume(chunk.transactions[idx]);
                 chunk.transactions.Reset(idx);
@@ -3013,7 +3023,8 @@ void GenericClusterImpl::SanityCheck(const TxGraphImpl& graph, int level) const
     DepGraphIndex chunk_pos{0}; //!< position within the current chunk
     assert(m_depgraph.IsAcyclic());
     if (m_linearization.empty()) return;
-    FeeFrac equal_feerate_prefix = linchunking[chunk_num].feerate;
+    EqualFeerateChunkPrefix equal_feerate_prefix;
+    equal_feerate_prefix.Add(linchunking[chunk_num].feerate);
     for (auto lin_pos : m_linearization) {
         assert(lin_pos < m_mapping.size());
         const auto& entry = graph.m_entries[m_mapping[lin_pos]];
@@ -3034,15 +3045,10 @@ void GenericClusterImpl::SanityCheck(const TxGraphImpl& graph, int level) const
                 ++chunk_num;
                 assert(chunk_num < linchunking.size());
                 chunk_pos = 0;
-                if (ByRatio{linchunking[chunk_num].feerate} < ByRatio{equal_feerate_prefix}) {
-                    equal_feerate_prefix = linchunking[chunk_num].feerate;
-                } else {
-                    assert(ByRatio{linchunking[chunk_num].feerate} == ByRatio{equal_feerate_prefix});
-                    equal_feerate_prefix += linchunking[chunk_num].feerate;
-                }
+                equal_feerate_prefix.Add(linchunking[chunk_num].feerate);
             }
             assert(entry.m_main_chunk_feerate == linchunking[chunk_num].feerate);
-            assert(entry.m_main_equal_feerate_chunk_prefix_size == equal_feerate_prefix.size);
+            assert(entry.m_main_equal_feerate_chunk_prefix_size == equal_feerate_prefix.m_size);
             // Verify that an entry in the chunk index exists for every chunk-ending transaction.
             ++chunk_pos;
             if (graph.m_main_clusterset.m_to_remove.empty()) {
