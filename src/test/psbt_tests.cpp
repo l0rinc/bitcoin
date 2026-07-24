@@ -7,6 +7,7 @@
 #include <psbt.h>
 #include <script/script.h>
 #include <script/signingprovider.h>
+#include <script/solver.h>
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
@@ -271,6 +272,46 @@ BOOST_AUTO_TEST_CASE(update_psbt_output_redeem_script)
         auto out{test.UpdateOutput(GetScriptForDestination(ScriptHash{p2wpkh}), has_input)};
         BOOST_CHECK(out.redeem_script == p2wpkh);
         BOOST_CHECK_EQUAL(out.hd_keypaths.count(test.pubkey), 1);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(update_psbt_output_witness_script)
+{
+    PSBTOutputTest test;
+    auto p2pk{GetScriptForRawPubKey(test.pubkey)};
+    test.AddScript(p2pk);
+
+    for (bool has_input : {false, true}) {
+        auto out{test.UpdateOutput(GetScriptForDestination(WitnessV0ScriptHash{p2pk}), has_input)};
+        BOOST_CHECK(out.witness_script == p2pk);
+        BOOST_CHECK_EQUAL(out.hd_keypaths.count(test.pubkey), 1);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(update_psbt_output_miniscript)
+{
+    PSBTOutputTest test;
+    // Miniscript and_v(v:pk(key),older(144)) queries the transaction-bound checker.
+    auto script{CScript() << ToByteVector(test.pubkey) << OP_CHECKSIGVERIFY << CScriptNum{144} << OP_CHECKSEQUENCEVERIFY};
+    test.AddScript(script);
+
+    for (bool has_input : {true}) { // TODO: zero-input updates read a missing input through the checker
+        auto out{test.UpdateOutput(GetScriptForDestination(WitnessV0ScriptHash{script}), has_input)};
+        BOOST_CHECK(out.witness_script == script);
+        BOOST_CHECK_EQUAL(out.hd_keypaths.count(test.pubkey), 1);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(update_psbt_output_timelock)
+{
+    PSBTOutputTest test;
+    // Miniscript and_v(v:1,older(144)) only queries the transaction-bound checker.
+    auto script{CScript() << OP_1 << OP_VERIFY << CScriptNum{144} << OP_CHECKSEQUENCEVERIFY};
+    test.AddScript(script);
+
+    for (bool has_input : {true}) { // TODO: zero-input updates read a missing input through the checker
+        auto out{test.UpdateOutput(GetScriptForDestination(WitnessV0ScriptHash{script}), has_input)};
+        BOOST_CHECK(out.witness_script == script);
     }
 }
 
