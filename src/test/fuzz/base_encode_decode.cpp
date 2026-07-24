@@ -7,6 +7,7 @@
 #include <base58.h>
 #include <psbt.h>
 #include <span.h>
+#include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <util/strencodings.h>
 #include <util/string.h>
@@ -103,5 +104,29 @@ FUZZ_TARGET(psbt_base64_decode)
 {
     const std::string random_string{buffer.begin(), buffer.end()};
 
-    util::Result<PartiallySignedTransaction> psbt = DecodeBase64PSBT(random_string);
+    const auto decoded_base64{DecodeBase64(random_string)};
+    const auto psbt{DecodeBase64PSBT(random_string)};
+    if (!decoded_base64) {
+        assert(!psbt);
+        return;
+    }
+
+    const auto raw_psbt{DecodeRawPSBT(MakeByteSpan(*decoded_base64))};
+    assert(psbt.has_value() == raw_psbt.has_value());
+    if (!raw_psbt) {
+        return;
+    }
+
+    DataStream serialized_psbt;
+    serialized_psbt << *psbt;
+    DataStream serialized_raw_psbt;
+    serialized_raw_psbt << *raw_psbt;
+    assert(serialized_psbt.str() == serialized_raw_psbt.str());
+
+    const auto canonical_base64{EncodeBase64(serialized_psbt.str())};
+    const auto round_tripped{DecodeBase64PSBT(canonical_base64)};
+    assert(round_tripped.has_value());
+    DataStream serialized_round_trip;
+    serialized_round_trip << *round_tripped;
+    assert(serialized_round_trip.str() == serialized_psbt.str());
 }
