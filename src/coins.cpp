@@ -196,6 +196,7 @@ uint256 CCoinsViewCache::GetBestBlock() const {
 void CCoinsViewCache::SetBestBlock(const uint256& in_block_hash)
 {
     m_block_hash = in_block_hash;
+    assert(m_block_hash == in_block_hash);
 }
 
 void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in_block_hash)
