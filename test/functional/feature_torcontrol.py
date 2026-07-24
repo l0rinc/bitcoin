@@ -6,6 +6,7 @@
 from contextlib import contextmanager
 import socket
 import threading
+import time
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
@@ -22,6 +23,7 @@ class MockTorControlServer:
         self.running = False
         self.thread = None
         self.received_commands = []
+        self.connection_times = []
         self.manual_mode = manual_mode
         self.conn_ready = threading.Event()
 
@@ -49,6 +51,7 @@ class MockTorControlServer:
         while self.running:
             try:
                 self.conn, _ = self.sock.accept()
+                self.connection_times.append(time.monotonic())
                 self.conn.settimeout(1.0)
                 self.conn_ready.set()
                 self._handle_connection(self.conn)
@@ -82,6 +85,12 @@ class MockTorControlServer:
     def send_raw(self, data):
         if self.conn:
             self.conn.sendall(data.encode('utf-8'))
+
+    def disconnect(self):
+        assert self.conn
+        disconnected_at = time.monotonic()
+        self.conn.shutdown(socket.SHUT_RDWR)
+        return disconnected_at
 
     def _get_response(self, command):
         if command == "PROTOCOLINFO 1":
@@ -256,12 +265,29 @@ class TorControlTest(BitcoinTestFramework):
 
         mock_tor.stop()
 
+    def test_reconnect_delay(self):
+        self.log.info("Test Tor control reconnect delay after disconnect")
+
+        mock_tor = MockTorControlServer(self.next_port())
+        self.restart_with_mock(mock_tor)
+        self.wait_until(lambda: len(mock_tor.received_commands) >= 4, timeout=10)
+
+        disconnected_at = mock_tor.disconnect()
+        self.wait_until(lambda: len(mock_tor.connection_times) >= 2, timeout=10)
+        reconnect_delay = mock_tor.connection_times[1] - disconnected_at
+
+        # TODO: Reconnection should wait to avoid a busy loop after a disconnect.
+        assert reconnect_delay < 0.5, f"reconnected after {reconnect_delay:.3f}s"
+
+        mock_tor.stop()
+
     def run_test(self):
         self.test_basic()
         self.test_partial_data()
         self.test_pow_fallback()
         self.test_oversized_line()
         self.test_overmany_lines()
+        self.test_reconnect_delay()
 
 
 if __name__ == '__main__':
