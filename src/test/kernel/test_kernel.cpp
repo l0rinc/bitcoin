@@ -728,6 +728,7 @@ BOOST_AUTO_TEST_CASE(btck_context_tests)
         ChainParams params{ChainType::MAINNET};
         ChainParams regtest_params{ChainType::REGTEST};
         CheckHandle(params, regtest_params);
+        BOOST_CHECK_EQUAL(btck_chain_parameters_create(/*chain_type=*/255), nullptr);
         options.SetChainParams(params);
         options.SetNotifications(std::make_shared<TestKernelNotifications>());
         Context context{options};

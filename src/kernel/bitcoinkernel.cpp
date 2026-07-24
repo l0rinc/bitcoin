@@ -871,7 +871,7 @@ btck_ChainParameters* btck_chain_parameters_create(const btck_ChainType chain_ty
         return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::RegTest().release()));
     }
     }
-    assert(false);
+    return nullptr;
 }
 
 btck_ChainParameters* btck_chain_parameters_create_signet(const void* challenge, size_t challenge_len)
