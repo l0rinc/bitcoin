@@ -98,6 +98,8 @@ static constexpr auto HEADERS_DOWNLOAD_TIMEOUT_BASE = 15min;
 static constexpr auto HEADERS_DOWNLOAD_TIMEOUT_PER_HEADER = 1ms;
 /** How long to wait for a peer to respond to a getheaders request */
 static constexpr auto HEADERS_RESPONSE_TIME{2min};
+/** Keep room for the normal number of outbound full-relay peers during IBD. */
+static constexpr size_t MAX_CONCURRENT_HEADERS_SYNCS{MAX_OUTBOUND_FULL_RELAY_CONNECTIONS};
 /** Protect at least this many outbound peers from disconnection due to slow/
  * behind headers chain.
  */
@@ -2827,6 +2829,13 @@ bool PeerManagerImpl::TryLowWorkHeadersSync(Peer& peer, CNode& pfrom, const CBlo
             // this logic in that case. So even if the first header in this set
             // of headers is known, some header in this set must be new, so
             // advancing to the first unknown header would be a small effect.
+            if (!pfrom.IsFullOutboundConn() && m_chainman.IsInitialBlockDownload() && WITH_LOCK(m_headers_presync_mutex, return m_headers_presync_stats.size() >= MAX_CONCURRENT_HEADERS_SYNCS)) {
+                LogDebug(BCLog::NET, "Ignoring low-work chain (height=%u) from peer=%d: too many headers syncs in progress\n",
+                         chain_start_header.nHeight + headers.size(), pfrom.GetId());
+                headers = {};
+                return true;
+            }
+
             LOCK(peer.m_headers_sync_mutex);
             peer.m_headers_sync.reset(new HeadersSyncState(peer.m_id, m_chainparams.GetConsensus(),
                 m_chainparams.HeadersSync(), chain_start_header, minimum_chain_work));
