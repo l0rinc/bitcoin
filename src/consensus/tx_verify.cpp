@@ -147,7 +147,7 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     if (tx.IsCoinBase())
         return nSigOps;
 
-    if ((flags & SCRIPT_VERIFY_P2SH) && !tx.HasWitness()) {
+    if (flags & SCRIPT_VERIFY_P2SH) {
         nSigOps += GetP2SHSigOpCount(tx, inputs) * WITNESS_SCALE_FACTOR;
     }
 
