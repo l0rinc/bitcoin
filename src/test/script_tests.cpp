@@ -1645,7 +1645,7 @@ BOOST_AUTO_TEST_CASE(schnorr_signature_creator_inputs)
     PrecomputedTransactionData txdata;
     txdata.Init(tx, std::move(spent_outputs), /*force=*/true);
 
-    for (unsigned int input_idx : {0}) { // TODO: missing inputs abort during Schnorr sighash creation
+    for (unsigned int input_idx : {0, 1}) {
         MutableTransactionSignatureCreator creator{tx, input_idx, CAmount{0}, &txdata, {.sighash_type = SIGHASH_DEFAULT}};
         std::vector<unsigned char> sig;
         BOOST_CHECK_EQUAL(creator.CreateSchnorrSig(provider, sig, xonly, nullptr, nullptr, SigVersion::TAPROOT), input_idx == 0);
