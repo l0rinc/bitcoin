@@ -19,12 +19,12 @@ const unsigned int WALLET_CRYPTO_IV_SIZE = 16;
 /** Scale passphrase derivation rounds by a measured duration.
  *
  * Returns `rounds` scaled by `target / elapsed`. When the measured duration
- * is not positive, returns `rounds` unchanged: dividing by a zero duration
- * would produce an infinite double, and converting that to unsigned int is
- * undefined behavior. */
+ * is not positive (or is NaN), returns `rounds` unchanged: dividing by a
+ * zero duration would produce an infinite or NaN double, and converting
+ * that to unsigned int is undefined behavior. */
 inline unsigned int ScaleCryptoRounds(unsigned int rounds, MillisecondsDouble target, MillisecondsDouble elapsed)
 {
-    if (elapsed <= MillisecondsDouble{0}) return rounds;
+    if (!(elapsed > MillisecondsDouble{0})) return rounds;
     return static_cast<unsigned int>(rounds * target / elapsed);
 }
 

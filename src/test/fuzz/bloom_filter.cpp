@@ -20,7 +20,7 @@ FUZZ_TARGET(bloom_filter)
     bool good_data{true};
 
     CBloomFilter bloom_filter{
-        fuzzed_data_provider.ConsumeIntegralInRange<unsigned int>(1, 10000000),
+        fuzzed_data_provider.ConsumeIntegralInRange<unsigned int>(0, 10000000),
         1.0 / fuzzed_data_provider.ConsumeIntegralInRange<unsigned int>(1, std::numeric_limits<unsigned int>::max()),
         fuzzed_data_provider.ConsumeIntegral<unsigned int>(),
         static_cast<unsigned char>(fuzzed_data_provider.PickValueInArray({BLOOM_UPDATE_NONE, BLOOM_UPDATE_ALL, BLOOM_UPDATE_P2PUBKEY_ONLY, BLOOM_UPDATE_MASK}))};

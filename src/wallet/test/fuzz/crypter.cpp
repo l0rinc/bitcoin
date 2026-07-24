@@ -47,6 +47,15 @@ FUZZ_TARGET(crypter, .init = initialize_crypter)
         CallOneOf(
             fuzzed_data_provider,
             [&] {
+                // Exercise the derivation-round scaling, including zero and
+                // negative measured durations (which must return the input
+                // unchanged rather than dividing by zero).
+                const unsigned int rounds = fuzzed_data_provider.ConsumeIntegral<unsigned int>();
+                const double target_ms = fuzzed_data_provider.ConsumeFloatingPointInRange<double>(0.0, 1000.0);
+                const double elapsed_ms = fuzzed_data_provider.ConsumeFloatingPointInRange<double>(-1000.0, 1000.0);
+                (void)ScaleCryptoRounds(rounds, MillisecondsDouble{target_ms}, MillisecondsDouble{elapsed_ms});
+            },
+            [&] {
                 const std::vector<unsigned char> random_vector = ConsumeFixedLengthByteVector(fuzzed_data_provider, WALLET_CRYPTO_KEY_SIZE);
                 plain_text_ed = CKeyingMaterial(random_vector.begin(), random_vector.end());
             },
