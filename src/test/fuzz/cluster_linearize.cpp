@@ -13,6 +13,7 @@
 #include <util/feefrac.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -418,6 +419,35 @@ int32_t ConsumePositiveExtremeSize(FuzzedDataProvider& fuzzed_data_provider)
     }
 }
 
+void CheckChunkingInfoSaturationConsistency(FuzzedDataProvider& fuzzed_data_provider)
+{
+    std::array<int64_t, 3> fees;
+    if (fuzzed_data_provider.ConsumeBool()) {
+        // This ordering makes saturation non-associative: (MIN + MIN) + 100 differs from
+        // MIN + (MIN + 100). ChunkLinearizationInfo must use the transaction set as its source of
+        // truth instead of depending on the order in which chunks were merged.
+        fees = {std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::min(), 100};
+    } else {
+        for (auto& fee : fees) fee = ConsumeExtremeFee(fuzzed_data_provider);
+    }
+
+    DepGraph<TestBitSet> depgraph;
+    for (const auto fee : fees) {
+        depgraph.AddTransaction(FeeFrac{fee, ConsumePositiveExtremeSize(fuzzed_data_provider)});
+    }
+    depgraph.AddDependencies(TestBitSet::Singleton(0), 1);
+    depgraph.AddDependencies(TestBitSet::Singleton(1), 2);
+    const std::array<DepGraphIndex, 3> linearization{0, 1, 2};
+
+    const auto chunking_info{ChunkLinearizationInfo(depgraph, linearization)};
+    const auto chunking{ChunkLinearization(depgraph, linearization)};
+    assert(chunking.size() == chunking_info.size());
+    for (size_t i{0}; i < chunking.size(); ++i) {
+        assert(chunking[i] == chunking_info[i].feerate);
+        assert(chunking_info[i].feerate == depgraph.FeeRate(chunking_info[i].transactions));
+    }
+}
+
 std::optional<std::vector<FeeFrac>> CheckedComparableChunkLinearization(const DepGraph<TestBitSet>& depgraph, std::span<const DepGraphIndex> linearization)
 {
     std::vector<FeeFrac> ret;
@@ -433,6 +463,9 @@ std::optional<std::vector<FeeFrac>> CheckedComparableChunkLinearization(const De
         ret.push_back(std::move(new_chunk));
     }
     if (!CanCompareChunks(ret)) return std::nullopt;
+    // Keep the checked model aligned with production when saturating arithmetic makes
+    // merge order observable.
+    if (ret != ChunkLinearization(depgraph, linearization)) return std::nullopt;
     return ret;
 }
 
@@ -1070,6 +1103,10 @@ FUZZ_TARGET(clusterlin_chunking)
     // Serialized depgraphs clamp fees and sizes below the overflow boundaries that
     // ComparableChunkLinearization is guarding. Exercise those guards directly.
     CheckComparableChunkLinearizationOverflow(fuzzed_data_provider);
+
+    // Exercise full-range fee aggregation separately from the serialized depgraph, whose fee
+    // encoding intentionally clamps values to the ordinary Bitcoin amount range.
+    CheckChunkingInfoSaturationConsistency(fuzzed_data_provider);
 }
 
 static constexpr auto MAX_SIMPLE_ITERATIONS = 300000;
