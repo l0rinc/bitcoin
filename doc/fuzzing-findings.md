@@ -4019,3 +4019,32 @@ The initial CLI attempt failed only before test execution with
 rerunning produced the passing result. This closes the live HTTP/RPC lifecycle
 gate for the configured components, but it is not a claim that wallet or IPC
 code was tested, and no production defect or permanent test gap was found.
+
+## Compact-block collision recheck on current master (2026-07-25)
+
+The collision-focused partial-block state machine was replayed again after the
+latest master rebase. The branch's `partially_downloaded_block` target completed
+all 2,016 inputs in the preserved corpus under the normal Clang 19 fuzzer. A
+selected 503-file spread containing inputs up to 939,095 bytes then completed
+504 ASan/UBSan executions and 504 TSan executions. All exited without an
+assertion, sanitizer diagnostic, race report, timeout, or artifact. The
+branch's `blockencodings_tests` suite also passed all 27 cases.
+
+To rule out a previous branch change masking a production failure, the same
+partial-block spread was run against an unmodified exact `origin/master`
+worktree at `e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`. Its original
+`partially_downloaded_block` fuzzer completed 504 ASan/UBSan executions without
+a report. The exact-master original `cmpctblock` target also completed a
+492-file collision-heavy spread in 498 ASan/UBSan executions without a report,
+assertion, or artifact. These clean-master controls cover production behavior
+without the branch's collision hooks or state assertions.
+
+The remaining position-mapping review found no new boundary failure. A
+repeated prefilled absolute position is not representable on the wire: each
+encoded prefilled offset advances the position by `index + 1`, so positions are
+strictly increasing. The 65,535-transaction boundary and the no-coinbase,
+prefilled, duplicate-source, null-source, early-exit, terminal-collision, and
+reusable-`FillBlock` transitions are covered by the deterministic tests and
+fuzzer controls already recorded above. No current-master compact-block
+collision defect, race, or deterministic test gap was demonstrated, so no
+production or fuzzer source change was warranted in this recheck.
