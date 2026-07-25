@@ -982,4 +982,44 @@ BOOST_AUTO_TEST_CASE(txgraph_staging_diagrams_sort_equal_feerate_chunks)
     graph->SanityCheck();
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_block_builder_saturated_chunk_fee_matches_members)
+{
+    // Reversing the merge order of these saturated fees used to make the chunk's cached fee
+    // differ from the aggregate of the transactions returned by the block builder.
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(3);
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{std::numeric_limits<int64_t>::min(), 1});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{std::numeric_limits<int64_t>::min(), 1});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{100, 1});
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[1], /*child=*/refs[2]);
+    graph->SanityCheck();
+    auto builder = graph->GetBlockBuilder();
+    auto chunk = builder->GetCurrentChunk();
+    BOOST_REQUIRE(chunk);
+    FeePerWeight sum;
+    for (auto* ref : chunk->first) sum += graph->GetIndividualFeerate(*ref);
+    BOOST_CHECK_EQUAL(sum.fee, chunk->second.fee);
+    BOOST_CHECK_EQUAL(sum.size, chunk->second.size);
+    BOOST_CHECK(sum == chunk->second);
+}
+
+BOOST_AUTO_TEST_CASE(txgraph_do_work_saturated_fee_merge_is_stable)
+{
+    // The full-range fee mutation used by the fuzzer used to overflow while DoWork activated a
+    // dependency, before any public block-builder result was returned.
+    auto graph = MakeTxGraph(16, 16'000'000, 300'000, PointerComparator);
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(3);
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{std::numeric_limits<int64_t>::min(), 1});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{std::numeric_limits<int64_t>::min(), 1});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{std::numeric_limits<int64_t>::min(), 1});
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[2]);
+    graph->DoWork(300'000);
+    graph->SanityCheck();
+    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 3U);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

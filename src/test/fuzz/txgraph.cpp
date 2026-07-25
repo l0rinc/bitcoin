@@ -472,7 +472,7 @@ FUZZ_TARGET(txgraph)
             assert(!sim.graph.Ancestors(pos).Overlaps(left));
             SetInfo<SimTxGraph::SetType> new_chunk{sim.graph, pos};
             while (!ret.empty() && ByRatio{new_chunk.feerate} > ByRatio{ret.back().feerate}) {
-                new_chunk |= ret.back();
+                new_chunk.Merge(sim.graph, ret.back());
                 ret.pop_back();
             }
             ret.push_back(std::move(new_chunk));
@@ -1536,43 +1536,51 @@ FUZZ_TARGET(txgraph)
             // Check that each diagram follows the production ordering contract.
             assert_diagram_sorted(main_cmp_diagram);
             assert_diagram_sorted(stage_cmp_diagram);
-            // Treat the diagrams as sets of chunk feerates, and sort them in the same way so that
-            // std::set_difference can be used on them below. The exact ordering does not matter
-            // here, but it has to be consistent with the one used in main_real_diagram and
-            // stage_real_diagram).
-            std::ranges::sort(main_cmp_diagram, std::greater<ByRatioNegSize<FeeFrac>>{});
-            std::ranges::sort(stage_cmp_diagram, std::greater<ByRatioNegSize<FeeFrac>>{});
-            // Find the chunks that appear in main_diagram but are missing from main_cmp_diagram.
-            // This is allowed, because GetMainStagingDiagrams omits clusters in main unaffected
-            // by staging.
-            std::vector<FeeFrac> missing_main_cmp;
-            std::set_difference(main_real_diagram.begin(), main_real_diagram.end(),
-                                main_cmp_diagram.begin(), main_cmp_diagram.end(),
-                                std::inserter(missing_main_cmp, missing_main_cmp.end()),
-                                std::greater<ByRatioNegSize<FeeFrac>>{});
-            assert(main_cmp_diagram.size() + missing_main_cmp.size() == main_real_diagram.size());
-            // Do the same for chunks in stage_diagram missing from stage_cmp_diagram.
             auto stage_real_diagram = get_diagram_fn(TxGraph::Level::TOP);
-            std::vector<FeeFrac> missing_stage_cmp;
-            std::set_difference(stage_real_diagram.begin(), stage_real_diagram.end(),
-                                stage_cmp_diagram.begin(), stage_cmp_diagram.end(),
-                                std::inserter(missing_stage_cmp, missing_stage_cmp.end()),
-                                std::greater<ByRatioNegSize<FeeFrac>>{});
-            assert(stage_cmp_diagram.size() + missing_stage_cmp.size() == stage_real_diagram.size());
-            // The missing chunks must be equal across main & staging (otherwise they couldn't have
-            // been omitted).
-            assert(missing_main_cmp == missing_stage_cmp);
+            // Saturated FeeFrac sums can change chunk boundaries when the simulation and a
+            // cluster use different internal position orders. The multiset comparison below is
+            // meaningful only while every cumulative diagram sum is representable.
+            if (CanCompareChunks(main_real_diagram) &&
+                CanCompareChunks(main_cmp_diagram) &&
+                CanCompareChunks(stage_real_diagram) &&
+                CanCompareChunks(stage_cmp_diagram)) {
+                // Treat the diagrams as sets of chunk feerates, and sort them in the same way so that
+                // std::set_difference can be used on them below. The exact ordering does not matter
+                // here, but it has to be consistent with the one used in main_real_diagram and
+                // stage_real_diagram).
+                std::ranges::sort(main_cmp_diagram, std::greater<ByRatioNegSize<FeeFrac>>{});
+                std::ranges::sort(stage_cmp_diagram, std::greater<ByRatioNegSize<FeeFrac>>{});
+                // Find the chunks that appear in main_diagram but are missing from main_cmp_diagram.
+                // This is allowed, because GetMainStagingDiagrams omits clusters in main unaffected
+                // by staging.
+                std::vector<FeeFrac> missing_main_cmp;
+                std::set_difference(main_real_diagram.begin(), main_real_diagram.end(),
+                                    main_cmp_diagram.begin(), main_cmp_diagram.end(),
+                                    std::inserter(missing_main_cmp, missing_main_cmp.end()),
+                                    std::greater<ByRatioNegSize<FeeFrac>>{});
+                assert(main_cmp_diagram.size() + missing_main_cmp.size() == main_real_diagram.size());
+                // Do the same for chunks in stage_diagram missing from stage_cmp_diagram.
+                std::vector<FeeFrac> missing_stage_cmp;
+                std::set_difference(stage_real_diagram.begin(), stage_real_diagram.end(),
+                                    stage_cmp_diagram.begin(), stage_cmp_diagram.end(),
+                                    std::inserter(missing_stage_cmp, missing_stage_cmp.end()),
+                                    std::greater<ByRatioNegSize<FeeFrac>>{});
+                assert(stage_cmp_diagram.size() + missing_stage_cmp.size() == stage_real_diagram.size());
+                // The missing chunks must be equal across main & staging (otherwise they couldn't have
+                // been omitted).
+                assert(missing_main_cmp == missing_stage_cmp);
 
-            // The missing part must include at least all transactions in staging which have not been
-            // modified, or been in a cluster together with modified transactions, since they were
-            // copied from main. Note that due to the reordering of removals w.r.t. dependency
-            // additions, it is possible that the real implementation found more unaffected things.
-            FeeFrac missing_real;
-            for (const auto& feerate : missing_main_cmp) missing_real += feerate;
-            FeeFrac missing_expected = sims[1].graph.FeeRate(sims[1].graph.Positions() - sims[1].modified);
-            // Note that missing_real.fee < missing_expected.fee is possible to due the presence of
-            // negative-fee transactions.
-            assert(missing_real.size >= missing_expected.size);
+                // The missing part must include at least all transactions in staging which have not been
+                // modified, or been in a cluster together with modified transactions, since they were
+                // copied from main. Note that due to the reordering of removals w.r.t. dependency
+                // additions, it is possible that the real implementation found more unaffected things.
+                FeeFrac missing_real;
+                for (const auto& feerate : missing_main_cmp) missing_real += feerate;
+                FeeFrac missing_expected = sims[1].graph.FeeRate(sims[1].graph.Positions() - sims[1].modified);
+                // Note that missing_real.fee < missing_expected.fee is possible to due the presence of
+                // negative-fee transactions.
+                assert(missing_real.size >= missing_expected.size);
+            }
         }
     }
 
@@ -1636,11 +1644,22 @@ FUZZ_TARGET(txgraph)
                             // Require that the chunks of cluster linearizations are connected (this must
                             // be the case as all linearizations inside are PostLinearized).
                             assert(sim.graph.IsConnected(chunk.transactions));
+                            // FeeFrac saturation makes aggregate fees order-dependent. The real
+                            // cluster may use a different internal position order than the simulation,
+                            // so compare its cached fee against the simulated member sum only when that
+                            // sum is representable.
+                            CheckedFeePerWeightSum expected_sum;
+                            for (auto pos : simlin) {
+                                if (chunk.transactions[pos]) {
+                                    expected_sum.Add(FeePerWeight::FromFeeFrac(sim.graph.FeeRate(pos)));
+                                }
+                            }
                             // Check the chunk feerates of all transactions in the cluster.
                             while (chunk.transactions.Any()) {
                                 assert(chunk.transactions[simlin[idx]]);
                                 chunk.transactions.Reset(simlin[idx]);
-                                assert(chunk.feerate == real->GetMainChunkFeerate(*cluster[idx]));
+                                const auto actual{real->GetMainChunkFeerate(*cluster[idx])};
+                                expected_sum.AssertMatches(actual);
                                 ++idx;
                             }
                         }
