@@ -3943,3 +3943,33 @@ demonstrated. Severity against clean master is medium: a local/direct fee
 modification can make cluster-mempool or block-builder fee metadata trap or become
 inconsistent, affecting local policy and construction, but it is not a consensus
 or remote memory-safety vulnerability.
+
+## Latest-master global transaction-rate-limit controls (2026-07-25)
+
+The latest baseline for this pass was the exact `origin/master` tip
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`, including the global transaction
+rate-limit and TokenBucket changes. The existing functional
+`p2p_tx_relay_rate_limit.py` scenario passed on the rebased branch: an 80-
+transaction burst at `-txsendrate=2`, a backlogged RBF replacement, and complete
+drainage all produced the expected 80 surviving announcements.
+
+The broad P2P controls were replayed from the preserved QA corpora under the
+Clang 19 TSan build: `process_messages` completed 4,432 inputs,
+`cmpctblock` 1,971, `txdownloadman` 1,501, `txdownloadman_impl` 1,561, and
+`txrequest` 810. Every run exited zero without a ThreadSanitizer report,
+sanitizer diagnostic, assertion, or artifact. Earlier normal and ASan/UBSan
+multi-worker controls for `process_messages` and `cmpctblock` were also clean.
+
+A deterministic delayed-verack probe checked a boundary where
+`ProcessInvBacklog()` runs before a peer's first post-verack `SendMessages()`
+initializes `m_next_inv_send_time`. A P2P transaction accepted while the only
+new peer was still completing its handshake left the global backlog at zero and
+the peer received no later `INV`. This is expected best-effort relay behavior,
+not a newly introduced defect: the pre-global-rate-limit clean-master source
+also skipped peers while `m_next_inv_send_time == 0`. The probe passed against
+both the rebased branch and an exact clean `origin/master` build; no production
+change or permanent test was warranted.
+
+Result: no new global-rate-limit, transaction-download race, compact-block
+collision, consensus, wallet, or unauthenticated memory-safety defect was
+demonstrated in this pass.
