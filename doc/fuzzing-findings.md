@@ -7,12 +7,13 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`610dd320d1a80838fdf30ed1cb2e6ae1ec717f74`. The historical exact-master controls
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`. The historical exact-master controls
 below retain their named baselines; they are evidence for the mutations they
 tested, not claims about an earlier branch tip. The latest rebase range from
-`afa5e46bbc6dd750bd71920b659162a945abf0ae` to this tip only removes a testnet3
-seed (`7295b8be70` and its merge), so it does not change the compact-block,
-cluster-mempool, coins-cache, validation-index, descriptor-cache, or TxGraph
+`afa5e46bbc6dd750bd71920b659162a945abf0ae` to this tip includes network-capacity,
+global transaction-rate limiting, and mempool-RPC presentation changes, but does
+not change the compact-block,
+cluster-mempool core, coins-cache, validation-index, descriptor-cache, or TxGraph
 production paths covered by the controls below. Earlier master ranges recorded
 in this file retain their own path-by-path qualifications.
 Controls that explicitly name an older baseline, including
@@ -29,17 +30,17 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 38 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 39 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | Remaining TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving another clean-master production bug. The full-range TxGraph mutation also exposed the production defect recorded below. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The thirty-eight confirmed runtime defects are: the index publication and restart race;
+The thirty-nine confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the equal-feerate TxGraph prefix
-fee overflow; the mempool info fee-delta
+fee overflow; the saturated cluster chunk fee aggregation mismatch; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
 arithmetic; `-maxmempool` byte-size multiplication overflow; stale Base58 output on
 decode failure; the descriptor-cache partial merge; stale mining `submitSolution`
@@ -2491,13 +2492,14 @@ short-ID underflow is already fixed by master `6aa5d8d948` (PR #35727), and the
 normal null-tail construction is avoided by master `6f1c56f03a` (PR #35670). The
 remaining null, oversized-position, sparse-block, and reusable-`FillBlock` cases
 are direct-API contracts covered by branch assertions/tests; no clean-master P2P
-caller or new collision race was found. The thirty-eight confirmed production defects
+caller or new collision race was found. The thirty-nine confirmed production defects
 listed above remain the only confirmed runtime defects in this ledger, ordered by
 the severity assigned against current master. The post-collision exact-master
 controls subsequently added five confirmed defects: duplicate snapshot records,
 failed candidate-set transitions, pruned unlinked-chain accounting, post-complete
 checkqueue work, and stale reusable sighash state. The later TxGraph control added
-the equal-feerate prefix fee overflow described above. The AddrMan and wallet
+the equal-feerate prefix fee overflow and saturated cluster chunk fee aggregation
+mismatch described above. The AddrMan and wallet
 sanitizer gates above found no additional production mistake, race, consensus issue,
 or remotely reachable memory-safety defect.
 
@@ -3869,3 +3871,75 @@ Severity: n/a. This is an error-code oracle and fuzzer-coverage improvement,
 not a confirmed master-branch production bug, vulnerability, race, or
 behavior change. The temporary mutation was deliberately non-consensus and was
 never committed.
+
+## Current-master FeeFrac aggregation follow-up (2026-07-24)
+
+* Current branch fix: `f1d3c0f450` (`txgraph: canonicalize saturated chunk fee aggregation`).
+
+The full-range fee mutation from `2de843c875` exposed a separate production defect
+in the cluster chunking path. The deterministic witness has three locally modified
+transactions with fees `FeeFrac{INT64_MIN, 1}`, `FeeFrac{INT64_MIN, 1}`, and
+`FeeFrac{100, 1}`, dependencies `0 -> 1 -> 2`, and linearization `{0, 1, 2}`.
+The values are outside ordinary transaction policy, but the TxGraph fee-modification
+API accepts the full signed fee coordinate and the cluster backend must remain
+internally consistent for such local state.
+
+An exact clean-master worktree at `6b059d9dbd` was built with Clang 19 Debug and
+`-ftrapv`. Calling `ChunkLinearizationInfo()` with the witness trapped in signed
+`FeeFrac` addition (exit 132). A second direct test built a real TxGraph with the
+same transactions and dependencies: `SanityCheck()` passed, but
+`GetBlockBuilder()` reached the same production aggregation and trapped. This
+distinguishes the finding from a fuzzer-only assertion or an invalid simulator
+model. On the branch before this follow-up, the earlier saturation fallback
+(`5fea0b29f4`, originally `eb5a249ff2`) avoided the trap but returned a cached
+chunk fee of `INT64_MIN` while summing the returned chunk's individual members
+gave `INT64_MIN + 100`; the new deterministic TxGraph test catches that mismatch.
+
+The same clean-master mutation also fails earlier in the graph lifecycle. A
+temporary `txgraph_full_range_probe` used three `FeeFrac{INT64_MIN, 1}` transactions
+of size 1 with star dependencies `0 -> 1` and `0 -> 2`, then called `DoWork(300000)`.
+The normal Clang 19 Debug `-ftrapv` build trapped in `FeeFrac::operator+=` while
+`SpanningForestState::Activate` loaded the linearization, before a block-builder
+query. An exact sanitized build reported signed overflow at `feefrac.h:109` and
+invalid negation of `INT64_MIN` at `cluster_linearize.h:1981`, then reached the
+staging-diagram invariant. This is the same aggregate-fee defect, not a second
+finding; `txgraph_do_work_saturated_fee_merge_is_stable` now covers the activation
+path deterministically on the fixed branch.
+
+The production fix makes the transaction set the source of truth for aggregate
+fees. `SetInfo::Set`, merge, and subtract operations now recompute with
+`DepGraph::FeeRate()` in canonical position order. `ChunkLinearization()` projects
+the same `ChunkLinearizationInfo()` result, and all spanning-forest activation and
+deactivation paths use the canonical merge/subtract operations. When saturating
+arithmetic makes a checked comparison diagram depend on merge order,
+`ComparableChunkLinearization()` declines comparison rather than asserting a false
+equivalence. The deterministic tests cover both the standalone chunking result and
+the real block-builder cache/member-fee contract, as well as the earlier `DoWork`
+activation path.
+
+The fuzzer changes are grouped with the production fix because they define the
+discovery and regression contract. `clusterlin_chunking` now constructs the
+full-range three-transaction case separately from the serialized depgraph format,
+whose fee encoding masks values to 52 bits. The TxGraph simulator uses the same
+canonical set aggregation, and its cached-fee and staging-diagram oracles skip
+only comparisons whose saturated sums are not representable. During development,
+two corpus inputs triggered those newly stricter fuzzer oracles: one exposed a
+simulation-versus-cluster position-order difference, and one exposed a staging
+diagram difference under saturation. Both replayed cleanly on the pre-change
+branch baseline, so they are recorded as oracle corrections, not additional
+production defects. A first comparator assertion was likewise caused by the new
+production change and was corrected by making the comparator reject that
+non-comparable case.
+
+Verification after the fix used the existing QA corpora with independent workers:
+`clusterlin_chunking` completed 16,000 normal and 8,000 ASan/UBSan executions;
+the TxGraph normal corpus completed two 5,121-input replays; the saved oracle
+inputs and two 258-input TxGraph ASan/UBSan slices completed without a report; and
+two 64-input TSan slices each for `txgraph` and `clusterlin_chunking` exited zero.
+The three new Debug unit tests also pass, including the `DoWork` regression. No
+sanitizer race, consensus effect,
+unauthenticated remote trigger, wallet impact, or persisted-state corruption was
+demonstrated. Severity against clean master is medium: a local/direct fee
+modification can make cluster-mempool or block-builder fee metadata trap or become
+inconsistent, affecting local policy and construction, but it is not a consensus
+or remote memory-safety vulnerability.
