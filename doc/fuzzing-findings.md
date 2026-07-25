@@ -3973,3 +3973,21 @@ change or permanent test was warranted.
 Result: no new global-rate-limit, transaction-download race, compact-block
 collision, consensus, wallet, or unauthenticated memory-safety defect was
 demonstrated in this pass.
+
+## Full coins-cache view sanitizer follow-up (2026-07-25)
+
+The preserved full corpora were replayed against the rebased branch to close
+the remaining sanitizer coverage gap around cache/view composition. The TSan
+libFuzzer build completed 21,874 `coins_view` inputs and 13,049
+`coins_view_overlay` inputs. A full ASan/UBSan replay of
+`coins_view_overlay` completed 14,072 executions at 577 MB peak RSS. All runs
+exited zero without an assertion, sanitizer diagnostic, race report, timeout,
+or artifact.
+
+These controls exercised cache reads and writes, overlay fetches, flush and
+restore transitions, backend replacement, reset/destruction, and asynchronous
+prevout-fetch work. Each fuzzer process owns its own cache and backend, so TSan
+does not establish that arbitrary live-node cache callers are race-free. The
+branch includes the previously recorded clean-master coins-cache fixes; no new
+clean-master failure, production inconsistency, or deterministic test gap was
+found, and no source change was warranted.
