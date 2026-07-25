@@ -53,8 +53,8 @@ public:
     uint256 GetBestBlock() const override;
     std::vector<uint256> GetHeadBlocks() const override;
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override;
-    //! Get a cursor to iterate over the whole state.
-    std::unique_ptr<CCoinsViewCursor> Cursor() const;
+    //! A cursor must not outlive its DB or leave its creating thread. That thread cannot lock cs_main or open another cursor for this DB.
+    std::unique_ptr<CCoinsViewCursor> Cursor() const EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex);
 
     //! Whether an unsupported database format is used.
     bool NeedsUpgrade();
