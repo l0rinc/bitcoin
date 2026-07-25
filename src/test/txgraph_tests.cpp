@@ -436,7 +436,7 @@ BOOST_AUTO_TEST_CASE(txgraph_equal_feerate_prefix_does_not_overflow)
 {
     auto graph = MakeTxGraph(/*max_cluster_count=*/10, /*max_cluster_size=*/1000, HIGH_ACCEPTABLE_COST, PointerComparator);
 
-    constexpr int64_t fee{std::numeric_limits<int64_t>::max() / 3}; // TODO: Equal-feerate FeeFrac sums can overflow.
+    constexpr int64_t fee{1 + std::numeric_limits<int64_t>::max() / 2}; // Smallest fee whose sum with itself exceeds int64_t's maximum.
     std::vector<TxGraph::Ref> refs;
     graph->AddTransaction(refs.emplace_back(), FeePerWeight{fee, 1});
     graph->AddTransaction(refs.emplace_back(), FeePerWeight{0, 1});

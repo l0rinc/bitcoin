@@ -99,11 +99,10 @@ struct TrimTxData
     uint64_t m_uf_size;
 };
 
-/** The sum of all chunk feerate FeeFracs with the same feerate as the current chunk,
- *  up to and including the current chunk. */
+/** Track the running size of an equal-feerate chunk prefix without summing fees. */
 struct EqualFeerateChunkPrefix
 {
-    FeeFrac m_feerate;
+    FeeFrac m_feerate; //!< The feerate of the last added chunk.
     int32_t m_size{0}; //!< Total size of the current equal-feerate chunk prefix.
 
     EqualFeerateChunkPrefix() = default;
@@ -111,15 +110,10 @@ struct EqualFeerateChunkPrefix
 
     void Add(const FeeFrac& feerate) noexcept
     {
-        // Update m_feerate to include this chunk, starting over when the feerate changed.
-        if (ByRatio{feerate} < ByRatio{m_feerate}) {
-            m_feerate = feerate;
-        } else {
-            // Note that this is adding fees to fees, and sizes to sizes, so the overall
-            // ratio remains the same; it's just accounting for the size of the added chunk.
-            m_feerate += feerate;
-        }
-        m_size = m_feerate.size;
+        // Update m_size to include this chunk, starting over when the feerate changed.
+        if (ByRatio{feerate} < ByRatio{m_feerate}) m_size = 0;
+        m_feerate = feerate;
+        m_size += feerate.size;
     }
 };
 
