@@ -3991,3 +3991,31 @@ does not establish that arbitrary live-node cache callers are race-free. The
 branch includes the previously recorded clean-master coins-cache fixes; no new
 clean-master failure, production inconsistency, or deterministic test gap was
 found, and no source change was warranted.
+
+## Live HTTP and CLI TSan integration (2026-07-25)
+
+A disposable Clang 19 `RelWithDebInfo` TSan node build was configured with
+`SANITIZERS=thread`, `BUILD_FOR_FUZZING=OFF`, `BUILD_DAEMON=ON`,
+`BUILD_TESTS=OFF`, `ENABLE_WALLET=OFF`, `ENABLE_IPC=OFF`, and `WITH_ZMQ=OFF`.
+This was necessary because the existing TSan libFuzzer build intentionally does
+not expose the `bitcoind` target. The daemon and CLI were then exercised through
+the functional framework using the build-generated `config.ini`.
+
+`interface_http.py` passed, covering HTTP/1.1 persistence and keep-alive,
+connection close, HEAD responses, request-size limits, pipelining, chunked
+requests, RPC timeouts, authentication failures, unsafe methods, path
+traversal, request smuggling, duplicate `Content-Length`, null bytes, invalid
+HTTP versions, and invalid header whitespace. `interface_bitcoin_cli.py` also
+passed after the omitted `bitcoin-cli` target was built; it covered malformed
+chunked responses, conflicting duplicate lengths, invalid status codes, named
+arguments, RPC wait timeouts, cookie/password handling, request IDs, CLI
+argument conflicts, and the no-IPC error path. Wallet-specific CLI cases were
+skipped because this integration build deliberately disabled the wallet.
+
+Both tests exited zero with `TSAN_OPTIONS=halt_on_error=1` and emitted no
+ThreadSanitizer race, sanitizer, assertion, timeout, or daemon-log diagnostic.
+The initial CLI attempt failed only before test execution with
+`FileNotFoundError` for the unbuilt `bitcoin-cli`; building that target and
+rerunning produced the passing result. This closes the live HTTP/RPC lifecycle
+gate for the configured components, but it is not a claim that wallet or IPC
+code was tested, and no production defect or permanent test gap was found.
