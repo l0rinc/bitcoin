@@ -865,4 +865,25 @@ BOOST_AUTO_TEST_CASE(comparable_chunk_linearization_rejects_merge_overflow)
     BOOST_CHECK(!ComparableChunkLinearization(depgraph, linearization));
 }
 
+BOOST_AUTO_TEST_CASE(chunk_linearization_info_handles_saturated_fee_order)
+{
+    DepGraph<TestBitSet> depgraph;
+    depgraph.AddTransaction(FeeFrac{std::numeric_limits<int64_t>::min(), 1});
+    depgraph.AddTransaction(FeeFrac{std::numeric_limits<int64_t>::min(), 1});
+    depgraph.AddTransaction(FeeFrac{100, 1});
+    depgraph.AddDependencies(TestBitSet::Singleton(0), 1);
+    depgraph.AddDependencies(TestBitSet::Singleton(1), 2);
+
+    const std::vector<DepGraphIndex> linearization{0, 1, 2};
+    const auto info{ChunkLinearizationInfo(depgraph, linearization)};
+    BOOST_REQUIRE_EQUAL(info.size(), 1U);
+    BOOST_CHECK(info[0].transactions == TestBitSet::Fill(3));
+    BOOST_CHECK((info[0].feerate == FeeFrac{std::numeric_limits<int64_t>::min() + 100, 3}));
+    BOOST_CHECK(info[0].feerate == depgraph.FeeRate(info[0].transactions));
+
+    const auto chunking{ChunkLinearization(depgraph, linearization)};
+    BOOST_REQUIRE_EQUAL(chunking.size(), 1U);
+    BOOST_CHECK(chunking[0] == info[0].feerate);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

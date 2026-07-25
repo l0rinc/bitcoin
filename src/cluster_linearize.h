@@ -441,32 +441,23 @@ struct SetInfo
     {
         Assume(!transactions[pos]);
         transactions.Set(pos);
-        feerate += depgraph.FeeRate(pos);
+        feerate = depgraph.FeeRate(transactions);
     }
 
-    /** Add the transactions of other to this SetInfo (no overlap allowed). */
-    SetInfo& operator|=(const SetInfo& other) noexcept
+    /** Add the transactions of other and recompute their aggregate fee in canonical order. */
+    void Merge(const DepGraph<SetType>& depgraph, const SetInfo& other) noexcept
     {
         Assume(!transactions.Overlaps(other.transactions));
         transactions |= other.transactions;
-        feerate += other.feerate;
-        return *this;
+        feerate = depgraph.FeeRate(transactions);
     }
 
-    /** Remove the transactions of other from this SetInfo (which must be a subset). */
-    SetInfo& operator-=(const SetInfo& other) noexcept
+    /** Remove the transactions of other and recompute the aggregate fee in canonical order. */
+    void Subtract(const DepGraph<SetType>& depgraph, const SetInfo& other) noexcept
     {
         Assume(other.transactions.IsSubsetOf(transactions));
         transactions -= other.transactions;
-        feerate -= other.feerate;
-        return *this;
-    }
-
-    /** Compute the difference between this and other SetInfo (which must be a subset). */
-    SetInfo operator-(const SetInfo& other) const noexcept
-    {
-        Assume(other.transactions.IsSubsetOf(transactions));
-        return {transactions - other.transactions, feerate - other.feerate};
+        feerate = depgraph.FeeRate(transactions);
     }
 
     /** Swap two SetInfo objects. */
@@ -492,13 +483,18 @@ std::vector<SetInfo<SetType>> ChunkLinearizationInfo(const DepGraph<SetType>& de
         SetInfo<SetType> new_chunk(depgraph, i);
         // As long as the new chunk has a higher feerate than the last chunk so far, absorb it.
         while (!ret.empty() && ByRatio{new_chunk.feerate} > ByRatio{ret.back().feerate}) {
-            new_chunk |= ret.back();
+            new_chunk.Merge(depgraph, ret.back());
             ret.pop_back();
         }
         Assume(new_chunk.transactions.Any());
         Assume(ret.empty() || !(ByRatio{new_chunk.feerate} > ByRatio{ret.back().feerate}));
         // Actually move that new chunk into the chunking.
         ret.emplace_back(std::move(new_chunk));
+    }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        for (const auto& chunk : ret) {
+            Assume(chunk.feerate == depgraph.FeeRate(chunk.transactions));
+        }
     }
     return ret;
 }
@@ -508,20 +504,11 @@ std::vector<SetInfo<SetType>> ChunkLinearizationInfo(const DepGraph<SetType>& de
 template<typename SetType>
 std::vector<FeeFrac> ChunkLinearization(const DepGraph<SetType>& depgraph, std::span<const DepGraphIndex> linearization) noexcept
 {
-    Assume(linearization.size() == depgraph.TxCount());
+    const auto chunking{ChunkLinearizationInfo(depgraph, linearization)};
     std::vector<FeeFrac> ret;
-    for (DepGraphIndex i : linearization) {
-        Assume(depgraph.Positions()[i]);
-        /** The new chunk to be added, initially a singleton. */
-        auto new_chunk = depgraph.FeeRate(i);
-        // As long as the new chunk has a higher feerate than the last chunk so far, absorb it.
-        while (!ret.empty() && ByRatio{new_chunk} > ByRatio{ret.back()}) {
-            new_chunk += ret.back();
-            ret.pop_back();
-        }
-        Assume(ret.empty() || !(ByRatio{new_chunk} > ByRatio{ret.back()}));
-        // Actually move that new chunk into the chunking.
-        ret.push_back(std::move(new_chunk));
+    ret.reserve(chunking.size());
+    for (const auto& chunk : chunking) {
+        ret.push_back(chunk.feerate);
     }
     return ret;
 }
@@ -559,9 +546,9 @@ std::optional<std::vector<FeeFrac>> ComparableChunkLinearization(const DepGraph<
     }
     if (!CanCompareChunks(ret)) return std::nullopt;
     Assume(CanCompareChunks(ret));
-    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
-        Assume(ret == ChunkLinearization(depgraph, linearization));
-    }
+    // Saturating FeeFrac arithmetic can make the checked merge order differ from the
+    // canonical fee for the resulting transaction set. Such a diagram is not comparable.
+    if (ret != ChunkLinearization(depgraph, linearization)) return std::nullopt;
     return ret;
 }
 
@@ -961,7 +948,7 @@ private:
             tx_data.chunk_idx = child_chunk_idx;
             for (auto dep_child_idx : tx_data.active_children) {
                 auto& dep_top_info = m_set_info[tx_data.dep_top_idx[dep_child_idx]];
-                if (dep_top_info.transactions[parent_idx]) dep_top_info |= bottom_info;
+                if (dep_top_info.transactions[parent_idx]) dep_top_info.Merge(m_depgraph, bottom_info);
             }
         }
         // Traverse the old child chunk bottom_info (DEF in example), and add top_info (ABC) to
@@ -970,11 +957,11 @@ private:
             auto& tx_data = m_tx_data[tx_idx];
             for (auto dep_child_idx : tx_data.active_children) {
                 auto& dep_top_info = m_set_info[tx_data.dep_top_idx[dep_child_idx]];
-                if (dep_top_info.transactions[child_idx]) dep_top_info |= top_info;
+                if (dep_top_info.transactions[child_idx]) dep_top_info.Merge(m_depgraph, top_info);
             }
         }
         // Merge top_info into bottom_info, which becomes the merged chunk.
-        bottom_info |= top_info;
+        bottom_info.Merge(m_depgraph, top_info);
         // Compute merged sets of reachable transactions from the new chunk, based on the input
         // chunks' reachable sets.
         m_reachable[child_chunk_idx].first |= m_reachable[parent_chunk_idx].first;
@@ -1014,7 +1001,7 @@ private:
         m_chunk_idxs.Set(parent_chunk_idx);
         auto ntx = bottom_info.transactions.Count();
         // Subtract the top_info from the bottom_info, as it will become the child chunk.
-        bottom_info -= top_info;
+        bottom_info.Subtract(m_depgraph, top_info);
         // See the comment above in Activate(). We perform the opposite operations here, removing
         // instead of adding. Simultaneously, aggregate the top/bottom's union of parents/children.
         SetType top_parents, top_children;
@@ -1025,7 +1012,7 @@ private:
             top_children |= tx_data.children;
             for (auto dep_child_idx : tx_data.active_children) {
                 auto& dep_top_info = m_set_info[tx_data.dep_top_idx[dep_child_idx]];
-                if (dep_top_info.transactions[parent_idx]) dep_top_info -= bottom_info;
+                if (dep_top_info.transactions[parent_idx]) dep_top_info.Subtract(m_depgraph, bottom_info);
             }
         }
         SetType bottom_parents, bottom_children;
@@ -1035,7 +1022,7 @@ private:
             bottom_children |= tx_data.children;
             for (auto dep_child_idx : tx_data.active_children) {
                 auto& dep_top_info = m_set_info[tx_data.dep_top_idx[dep_child_idx]];
-                if (dep_top_info.transactions[child_idx]) dep_top_info -= top_info;
+                if (dep_top_info.transactions[child_idx]) dep_top_info.Subtract(m_depgraph, top_info);
             }
         }
         // Compute the new sets of reachable transactions for each new chunk, based on the
