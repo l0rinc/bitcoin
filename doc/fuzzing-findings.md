@@ -4783,3 +4783,18 @@ writes, and cache/database lifetime transitions. No event-loop race, stale
 callback, database consistency failure, memory defect, or deterministic test
 omission was demonstrated; no production or fuzzer source change was
 warranted.
+
+## Independent cache sanitizer controls (2026-07-26)
+
+To cover cache implementations outside the UTXO view stack, two independent
+256-input corpus slices were exercised with two workers each. The
+`cuckoocache` target completed 1,589 and 1,751 executions under ASan/UBSan in
+61 seconds per worker. The `script_sigcache` target completed 1,377 and 1,563
+executions under TSan in 61 seconds per worker.
+
+All workers exited zero without assertions, sanitizer diagnostics, race
+reports, timeouts, or artifacts. The slices covered cache insertion,
+replacement, eviction, reset, script-key construction, and signature-cache
+lookup combinations. No cache corruption, stale entry, race, or deterministic
+test omission was demonstrated; no production or fuzzer source change was
+warranted.
