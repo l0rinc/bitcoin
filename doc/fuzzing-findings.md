@@ -4760,3 +4760,26 @@ interrupted thread-pool fallback. No compact-block collision defect, coins
 cache/overlay inconsistency, cluster graph error, mempool-load failure, race,
 or deterministic test omission was demonstrated, so no production or fuzzer
 source change was warranted.
+
+## Event-loop and database-thread TSan controls (2026-07-26)
+
+Against the same rebased tree and `origin/master` baseline, the live
+`interface_http.py` scenario passed under the Clang 19 TSan daemon in 45
+seconds. It covered persistent and keep-alive connections, close responses,
+HEAD and chunked requests, request-size limits, RPC timeouts, authentication,
+pipeline handling, request smuggling, duplicate `Content-Length`, malformed
+headers and HTTP versions, path traversal, and shutdown. The live
+`interface_rest.py` scenario passed in 11 seconds, covering transaction,
+UTXO, block, header, filter, mempool, spent-output, block-part streaming,
+missing-block, deployment, and compatibility endpoints.
+
+The direct concurrency fuzzers then used independent 256-input corpus slices
+under two TSan workers each. `threadpool` completed 6,744 and 6,294
+executions in 61 seconds; `dbwrapper_threaded` completed 3,630 and 3,407
+executions in 61 seconds. Every worker exited zero without an assertion,
+ThreadSanitizer report, timeout, or artifact. These controls exercise callback
+ordering and worker shutdown, task interruption, concurrent database reads and
+writes, and cache/database lifetime transitions. No event-loop race, stale
+callback, database consistency failure, memory defect, or deterministic test
+omission was demonstrated; no production or fuzzer source change was
+warranted.
