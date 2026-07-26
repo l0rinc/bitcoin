@@ -222,6 +222,27 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
             },
             [&] {
                 if (descriptor_writes_blocked || descriptor_metadata_writes_blocked) return;
+                LOCK(spk_manager->cs_desc_man);
+                auto wallet_desc{spk_manager->GetWalletDescriptor()};
+                const auto output_type{wallet_desc.descriptor->GetOutputType()};
+                if (!wallet_desc.descriptor->IsSingleType() || !output_type.has_value()) return;
+
+                int64_t reserved_index{-1};
+                const auto reserved{spk_manager->GetReservedDestination(*output_type, /*internal=*/false, reserved_index)};
+                if (!reserved) return;
+                const auto reserved_desc{spk_manager->GetWalletDescriptor()};
+                if (!BlockDescriptorWrites(wallet)) {
+                    good_data = false;
+                    return;
+                }
+                descriptor_writes_blocked = true;
+
+                spk_manager->ReturnDestination(reserved_index, /*internal=*/false, *reserved);
+                // A failed descriptor write must not publish the returned index in memory.
+                assert(spk_manager->GetWalletDescriptor().next_index == reserved_desc.next_index);
+            },
+            [&] {
+                if (descriptor_writes_blocked || descriptor_metadata_writes_blocked) return;
                 if (!BlockDescriptorWrites(wallet)) {
                     good_data = false;
                     return;
