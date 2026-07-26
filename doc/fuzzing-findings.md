@@ -4929,3 +4929,27 @@ The corpus replay did not demonstrate a coins-cache inconsistency, stale
 overlay state, database cursor failure, resize bug, hasher collision error,
 or deterministic test omission. No production or fuzzer source change was
 warranted.
+
+## Full TxGraph sanitizer replay (2026-07-26)
+
+The complete preserved `txgraph` corpus was replayed in two independent
+Clang 19 TSan file-driver processes. Each process completed all 5,292 files in
+27 seconds. The corpus exercises production-sized cluster staging, graph
+add/remove and dependency transitions, oversized-component handling, fee
+saturation, block-builder queries, and cached linearization repair. Both
+workers exited zero without an assertion, ThreadSanitizer report, timeout, or
+artifact.
+
+The same corpus was replayed in two independent Clang 19 ASan/UBSan libFuzzer
+processes with `-runs=1`. Each loaded 5,292 seed files and completed 6,295
+total executions in 556 seconds, reaching coverage 33,376 and 33,345 with
+peak RSS of 702 and 703 MiB. The final minimized corpora contained 2,074 and
+2,045 files. No assertion, sanitizer diagnostic, timeout, or crash artifact
+was produced.
+
+This closes the previously bounded TxGraph TSan/ASan slices for the current
+rebased branch. It found no cluster-mempool state inconsistency, fee
+aggregation error, staging lifetime problem, race, or deterministic test
+omission; no production or fuzzer source change was warranted. The earlier
+exact-master controls remain the evidence for the clean-master severity of the
+recorded TxGraph fixes.
