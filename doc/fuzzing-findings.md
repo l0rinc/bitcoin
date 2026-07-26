@@ -5492,3 +5492,27 @@ file-driver invocation.
 This is a clean-master control and coverage result, not a new production fix.
 The compact collision fixes and deterministic tests already present on the
 investigation branch remain attributed to their earlier commits.
+
+## Unsolicited BLOCKTXN after a short-ID collision (2026-07-26)
+
+The remaining compact-block state transition was tested independently on
+exact clean master and on the rebased branch. The mutation was: request a
+block by header, send a compact announcement whose two non-prefilled
+transactions share one short ID, then send `BLOCKTXN` without the node having
+sent `GETBLOCKTXN`.
+
+On exact master, the failed `InitData()` call leaves the partial object with a
+non-null header. A complete, valid `BLOCKTXN` therefore reconstructs and
+validates the block; an empty response reaches `FillBlock()`, is rejected, and
+the peer is disconnected. On the branch, the existing `InitData()` cleanup
+clears the retained object, so both later responses reach the existing
+empty-header guard and are discouraged. The requested full-block `GETDATA`
+fallback remains usable in both cases.
+
+This is an intentional malformed-peer recovery difference, not a new
+vulnerability: `BLOCKTXN` is unsolicited in this sequence, and the accepted
+clean-master case contains a fully valid block whose header and merkle root
+match. The cleanup commit message now records this behavior and its proof.
+The temporary functional probe passed on exact master and was not added as a
+production test because it documents an unsupported message ordering rather
+than a failing contract.
