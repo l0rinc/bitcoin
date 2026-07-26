@@ -442,6 +442,32 @@ BOOST_AUTO_TEST_CASE(package_test_accept_preserves_coins_cache)
     BOOST_CHECK(!chainstate.CoinsTip().HaveCoinInCache(uncached_input));
 }
 
+BOOST_AUTO_TEST_CASE(package_submit_rejection_uncaches_coins)
+{
+    mineBlocks(1);
+    LOCK(cs_main);
+    auto& chainstate = m_node.chainman->ActiveChainstate();
+    const COutPoint uncached_input{m_coinbase_txns[1]->GetHash(), 0};
+
+    chainstate.CoinsTip().Flush(/*reallocate_cache=*/false);
+    BOOST_REQUIRE(!chainstate.CoinsTip().HaveCoinInCache(uncached_input));
+
+    const CAmount input_value{m_coinbase_txns[1]->vout[0].nValue};
+    auto invalid_tx = CreateValidMempoolTransaction(
+        /*input_transaction=*/m_coinbase_txns[1], /*input_vout=*/0,
+        /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
+        /*output_destination=*/GetScriptForDestination(PKHash(GenerateRandomKey().GetPubKey())),
+        /*output_amount=*/input_value - 1, /*submit=*/false);
+    // Preserve a valid input and force a negative-fee consensus failure after the input is cached.
+    invalid_tx.vout[0].nValue = input_value + 1;
+    const auto tx{MakeTransactionRef(invalid_tx)};
+
+    const auto result = ProcessNewPackage(chainstate, *m_node.mempool, {tx},
+                                          /*test_accept=*/false, /*client_maxfeerate=*/{});
+    BOOST_REQUIRE(result.m_state.IsInvalid());
+    BOOST_CHECK(!chainstate.CoinsTip().HaveCoinInCache(uncached_input));
+}
+
 BOOST_AUTO_TEST_CASE(noncontextual_package_tests)
 {
     // The signatures won't be verified so we can just use a placeholder

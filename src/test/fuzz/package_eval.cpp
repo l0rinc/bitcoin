@@ -293,10 +293,27 @@ std::vector<PackageInputCacheSnapshot> SnapshotPackageInputCache(const CCoinsVie
     return snapshot;
 }
 
-void AssertPackageInputCacheUnchanged(const CCoinsViewCache& coins_cache, const std::vector<PackageInputCacheSnapshot>& expected)
+void AssertNoUnexpectedPackageInputCacheEntries(const CCoinsViewCache& coins_cache,
+                                                 const Package& package,
+                                                 const PackageMempoolAcceptResult& result,
+                                                 bool test_accept,
+                                                 const std::vector<PackageInputCacheSnapshot>& expected)
 {
+    // FlushStateToDisk may evict clean entries while enforcing the cache limit, so a rejected
+    // package cannot require unrelated pre-existing entries to remain cached. It must, however,
+    // not leave a newly fetched input cached unless its transaction was actually submitted.
+    std::set<COutPoint> submitted_inputs;
+    if (!test_accept) {
+        for (const auto& tx : package) {
+            const auto it{result.m_tx_results.find(tx->GetWitnessHash())};
+            if (it == result.m_tx_results.end() || it->second.m_result_type != MempoolAcceptResult::ResultType::VALID) continue;
+            for (const auto& txin : tx->vin) submitted_inputs.insert(txin.prevout);
+        }
+    }
     for (const auto& [outpoint, in_cache] : expected) {
-        Assert(coins_cache.HaveCoinInCache(outpoint) == in_cache);
+        if (!in_cache && !submitted_inputs.contains(outpoint)) {
+            Assert(!coins_cache.HaveCoinInCache(outpoint));
+        }
     }
 }
 
@@ -607,10 +624,13 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
         std::optional<MempoolSnapshot> test_accept_mempool_snapshot;
         std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
         std::optional<std::vector<PackageInputCacheSnapshot>> test_accept_coins_cache_snapshot;
+        std::optional<std::vector<PackageInputCacheSnapshot>> submit_coins_cache_snapshot;
         if (package_test_accept) {
             test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
             test_accept_outpoints_snapshot = mempool_outpoints;
             test_accept_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
+        } else {
+            submit_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
         }
 
         const auto result_package = WITH_LOCK(::cs_main,
@@ -620,7 +640,13 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
             node.validation_signals->SyncWithValidationInterfaceQueue();
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
-            WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *test_accept_coins_cache_snapshot));
+            WITH_LOCK(::cs_main,
+                      AssertNoUnexpectedPackageInputCacheEntries(chainstate.CoinsTip(), txs, result_package,
+                                                                /*test_accept=*/true, *test_accept_coins_cache_snapshot));
+        } else if (result_package.m_state.IsInvalid()) {
+            WITH_LOCK(::cs_main,
+                      AssertNoUnexpectedPackageInputCacheEntries(chainstate.CoinsTip(), txs, result_package,
+                                                                /*test_accept=*/false, *submit_coins_cache_snapshot));
         }
 
         if (package_test_accept) {
@@ -642,7 +668,9 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
             node.validation_signals->SyncWithValidationInterfaceQueue();
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
-            WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *test_accept_coins_cache_snapshot));
+            WITH_LOCK(::cs_main,
+                      AssertNoUnexpectedPackageInputCacheEntries(chainstate.CoinsTip(), txs, result_package,
+                                                                /*test_accept=*/true, *test_accept_coins_cache_snapshot));
         }
 
         if (!single_submit && result_package.m_state.GetResult() == PackageValidationResult::PCKG_POLICY) {
@@ -823,10 +851,13 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
         std::optional<MempoolSnapshot> test_accept_mempool_snapshot;
         std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
         std::optional<std::vector<PackageInputCacheSnapshot>> test_accept_coins_cache_snapshot;
+        std::optional<std::vector<PackageInputCacheSnapshot>> submit_coins_cache_snapshot;
         if (package_test_accept) {
             test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
             test_accept_outpoints_snapshot = mempool_outpoints;
             test_accept_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
+        } else {
+            submit_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
         }
 
         const auto result_package = WITH_LOCK(::cs_main,
@@ -837,7 +868,13 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
             Assert(added.empty());
-            WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *test_accept_coins_cache_snapshot));
+            WITH_LOCK(::cs_main,
+                      AssertNoUnexpectedPackageInputCacheEntries(chainstate.CoinsTip(), txs, result_package,
+                                                                /*test_accept=*/true, *test_accept_coins_cache_snapshot));
+        } else if (result_package.m_state.IsInvalid()) {
+            WITH_LOCK(::cs_main,
+                      AssertNoUnexpectedPackageInputCacheEntries(chainstate.CoinsTip(), txs, result_package,
+                                                                /*test_accept=*/false, *submit_coins_cache_snapshot));
         }
 
         if (package_test_accept) {
@@ -864,7 +901,9 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
             Assert(added.empty());
-            WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *test_accept_coins_cache_snapshot));
+            WITH_LOCK(::cs_main,
+                      AssertNoUnexpectedPackageInputCacheEntries(chainstate.CoinsTip(), txs, result_package,
+                                                                /*test_accept=*/true, *test_accept_coins_cache_snapshot));
         }
 
         // There is only 1 transaction in the package. We did a test-package-accept and a ATMP
