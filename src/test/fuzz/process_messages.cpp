@@ -228,6 +228,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
 
     CNode& inbound_relay_peer{*make_relay_peer(/*id=*/100, ConnectionType::INBOUND)};
     CNode& outbound_relay_peer{*make_relay_peer(/*id=*/101, ConnectionType::OUTBOUND_FULL_RELAY)};
+    CNode& legacy_relay_peer{*make_relay_peer(/*id=*/102, ConnectionType::OUTBOUND_FULL_RELAY)};
 
     auto process_relay_message = [&](CNode& peer, CSerializedNetMsg&& net_msg) NO_THREAD_SAFETY_ANALYSIS {
         connman.FlushSendBuffer(peer);
@@ -240,14 +241,17 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
         }
     };
 
-    // Complete BIP339 negotiation before VERACK. ConnmanTestMsg::Handshake intentionally drops
-    // the feature message from the synthetic wire, while this target needs the wtxid path.
+    // Complete BIP339 negotiation before VERACK for two peers. ConnmanTestMsg::Handshake
+    // intentionally drops the feature message from the synthetic wire, while this target needs
+    // both wtxid and legacy txid relay paths.
     process_relay_message(inbound_relay_peer, NetMsg::Make(NetMsgType::WTXIDRELAY));
     process_relay_message(outbound_relay_peer, NetMsg::Make(NetMsgType::WTXIDRELAY));
     process_relay_message(inbound_relay_peer, NetMsg::Make(NetMsgType::VERACK));
     process_relay_message(outbound_relay_peer, NetMsg::Make(NetMsgType::VERACK));
+    process_relay_message(legacy_relay_peer, NetMsg::Make(NetMsgType::VERACK));
     Assert(inbound_relay_peer.fSuccessfullyConnected);
     Assert(outbound_relay_peer.fSuccessfullyConnected);
+    Assert(legacy_relay_peer.fSuccessfullyConnected);
 
     auto peer_inv_to_send = [&](CNode& peer) {
         CNodeStateStats stats;
@@ -274,9 +278,9 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     add_relay_tx(all_known_tx);
     add_relay_tx(stale_tx);
 
-    // First queue a transaction for both peers. Sending it to the inbound peer records the hash
-    // only in that peer's known filter, so the next broadcast must refund the inbound bucket while
-    // consuming one more outbound token.
+    // First queue a transaction for all three peers. Sending it to the inbound peer records the
+    // hash only in that peer's known filter, so the next broadcast must refund the inbound bucket
+    // while consuming one more outbound token. The third peer exercises the legacy txid filter.
     const PeerManagerInfo before_mixed{node.peerman->GetInfo()};
     node.peerman->InitiateTxBroadcastToAll(mixed_tx->GetWitnessHash());
     const PeerManagerInfo after_mixed{node.peerman->GetInfo()};
@@ -284,6 +288,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     Assert(after_mixed.outbound_bucket.count_bucket == before_mixed.outbound_bucket.count_bucket - 1);
     Assert(peer_inv_to_send(inbound_relay_peer) == 1);
     Assert(peer_inv_to_send(outbound_relay_peer) == 1);
+    Assert(peer_inv_to_send(legacy_relay_peer) == 1);
     send_relay_inventory(inbound_relay_peer);
     Assert(peer_inv_to_send(inbound_relay_peer) == 0);
 
@@ -294,9 +299,10 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     Assert(after_mixed_retry.outbound_bucket.count_bucket == before_mixed_retry.outbound_bucket.count_bucket - 1);
     Assert(peer_inv_to_send(inbound_relay_peer) == 0);
     Assert(peer_inv_to_send(outbound_relay_peer) == 2);
+    Assert(peer_inv_to_send(legacy_relay_peer) == 2);
 
-    // Queue a second transaction for both peers, send it to both, and then rebroadcast it. Both
-    // filters now know the transaction, so neither bucket may spend another token. Repeating the
+    // Queue a second transaction for all peers, send it to all, and then rebroadcast it. Every
+    // filter now knows the transaction, so neither bucket may spend another token. Repeating the
     // call exercises duplicate wtxids in consecutive global backlogs.
     const PeerManagerInfo before_all_unknown{node.peerman->GetInfo()};
     node.peerman->InitiateTxBroadcastToAll(all_known_tx->GetWitnessHash());
@@ -305,8 +311,10 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     Assert(after_all_unknown.outbound_bucket.count_bucket == before_all_unknown.outbound_bucket.count_bucket - 1);
     send_relay_inventory(inbound_relay_peer);
     send_relay_inventory(outbound_relay_peer);
+    send_relay_inventory(legacy_relay_peer);
     Assert(peer_inv_to_send(inbound_relay_peer) == 0);
     Assert(peer_inv_to_send(outbound_relay_peer) == 0);
+    Assert(peer_inv_to_send(legacy_relay_peer) == 0);
 
     const PeerManagerInfo before_all_known{node.peerman->GetInfo()};
     node.peerman->InitiateTxBroadcastToAll(all_known_tx->GetWitnessHash());
@@ -315,6 +323,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     Assert(after_all_known.outbound_bucket.count_bucket == before_all_known.outbound_bucket.count_bucket);
     Assert(peer_inv_to_send(inbound_relay_peer) == 0);
     Assert(peer_inv_to_send(outbound_relay_peer) == 0);
+    Assert(peer_inv_to_send(legacy_relay_peer) == 0);
     node.peerman->InitiateTxBroadcastToAll(all_known_tx->GetWitnessHash());
     const PeerManagerInfo after_duplicate{node.peerman->GetInfo()};
     Assert(after_duplicate.inbound_bucket.count_bucket == after_all_known.inbound_bucket.count_bucket);
@@ -336,9 +345,11 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     Assert(after_stale.outbound_bucket.count_bucket == before_stale.outbound_bucket.count_bucket);
     Assert(peer_inv_to_send(inbound_relay_peer) == 0);
     Assert(peer_inv_to_send(outbound_relay_peer) == 0);
+    Assert(peer_inv_to_send(legacy_relay_peer) == 0);
 
     AssertSendQueueMemoryUsage(inbound_relay_peer);
     AssertSendQueueMemoryUsage(outbound_relay_peer);
+    AssertSendQueueMemoryUsage(legacy_relay_peer);
     {
         LOCK(node.mempool->cs);
         node.mempool->removeRecursive(*mixed_tx, MemPoolRemovalReason::REPLACED);
