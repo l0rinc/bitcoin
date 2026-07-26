@@ -50,3 +50,14 @@ Tier 1a: mechanical, prod-visible, mirrors chrono-literal availability already i
 Tier 1b: exactly the class the `_hex` work was built for, confined to tests, zero behavior change.
 Tier 2: one-word guarantee upgrade. All three keep semantics identical — verifiable by
 `static_assert(new == old)` per constant and existing test suites.
+
+## Implementation status (2026-07-26, branch `compile-time-hardening`)
+
+- ✅ Tier 1a committed as `79026584e2` (chrono literals, 6 prod sites). Note: the two test
+  chrono sites (util_tests/parse_iso8601 SECONDS_PER_DAY) did not exist on current master —
+  scope reduced to the 6 prod sites.
+- ✅ Tier 2 committed as `203dc7b58f` (base58 mapBase58 constexpr).
+- ⚪ Tier 1b (test ParseHex): dropped — already migrated upstream; only parser-behavior
+  tests remain (deliberately excluded).
+- Verification: value identities proven via static_asserts; full build green; 10/10
+  affected ctest suites pass.
