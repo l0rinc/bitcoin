@@ -52,6 +52,39 @@ BOOST_AUTO_TEST_CASE(desc_spkm_topup_fail)
         std::runtime_error, HasReason("Could not top up scriptPubKeys"));
 }
 
+BOOST_AUTO_TEST_CASE(get_new_destination_self_expanding_xpub)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    keystore.m_keypool_size = 1;
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtPubKey(extkey.Neuter()) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK(spkm->GetWalletDescriptor().descriptor->CanSelfExpand());
+        BOOST_CHECK(spkm->CanGetAddresses());
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().next_index, 0);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().range_end, 1);
+    }
+
+    BOOST_REQUIRE(spkm->GetNewDestination(OutputType::BECH32));
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().next_index, 1);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().range_end, 1);
+        BOOST_CHECK(spkm->CanGetAddresses());
+    }
+
+    BOOST_REQUIRE(spkm->GetNewDestination(OutputType::BECH32));
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().next_index, 2);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().range_end, 2);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(get_new_destination_write_failure)
 {
     CExtKey extkey;
