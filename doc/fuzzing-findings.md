@@ -4971,3 +4971,26 @@ public transaction-download-wrapper input. The earlier full-mutation ASan
 campaign remains a separate performance-limited gap; no production
 inconsistency, memory defect, race, or deterministic test omission was
 demonstrated, so no source change was warranted.
+
+## Full cmpctblock sanitizer replay (2026-07-26)
+
+The complete preserved `cmpctblock` corpus was replayed in two independent
+Clang 19 TSan file-driver processes. Each process completed all 1,970 files in
+72 seconds and exited zero without a ThreadSanitizer report, assertion,
+timeout, or artifact.
+
+Two independent Clang 19 ASan/UBSan libFuzzer processes then loaded the same
+1,970 seed files with `-runs=1024`. LibFuzzer completed 1,976 total runs in
+538 and 539 seconds, reaching final coverage of 63,531 and 63,525 features;
+peak RSS was 801 and 818 MiB. Both exited zero without an assertion,
+sanitizer diagnostic, timeout failure, or crash artifact. The replay covered
+the stateful peer/request paths together with the duplicate short-ID,
+parallel-peer fallback, `SENDCMPCT`, ignored-incoming-transaction, and
+extra-source collision constructions already present in this branch.
+
+This is branch evidence: the branch contains the collision hooks and
+postcondition assertions. The exact-master collision spread and original
+fuzzers remain the clean-baseline controls recorded in the compact-block
+recheck above. Across both controls, no compact-block collision defect, race,
+state inconsistency, or deterministic test omission was demonstrated, so no
+production or fuzzer source change was warranted.
