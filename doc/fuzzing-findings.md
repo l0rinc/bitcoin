@@ -4510,6 +4510,27 @@ also remained clean on this rebased source. No BIP32 seed-boundary
 inconsistency, memory defect, race, or deterministic test omission was
 demonstrated; no source or permanent test change was warranted.
 
+## Current-master relay control and process-message TSan replay (2026-07-26)
+
+The standalone Clang 19 TSan fuzz binary was rebuilt from the current rebased
+tree after detecting that the previous binary predated its directory-input
+driver. Two independent workers then replayed all 4,431 files in the
+`process_messages` corpus, each completing in 60 seconds with no assertion,
+ThreadSanitizer report, timeout, or artifact. The interrupted ASan jobs were
+libFuzzer mutation sessions rather than exact corpus replays and are not
+counted as a completed ASan gate.
+
+The branch's count-bucket and size-bucket relay scenarios passed in four and
+28 seconds. The count-bucket scenario also passed through the clean
+`origin/master` test runner at `e34b8d5a7d`; the size-bucket scenario is a
+branch-local test, so it was invoked directly against a separately built
+clean-master daemon and passed in 24 seconds. The clean-master runner does
+not list that branch-local test. These controls cover peer-message processing,
+RBF backlog replacement, count-token exhaustion, serialized-size-token
+exhaustion, mock-time refill, and final inventory accounting. No relay queue
+inconsistency, memory defect, race, or deterministic omission was
+demonstrated; no production or fuzzer source change was warranted.
+
 ## Wallet encryption and reorg functional gates (2026-07-26)
 
 Using the wallet-enabled Clang 19 Debug daemon, `wallet_reorgsrestore.py`
