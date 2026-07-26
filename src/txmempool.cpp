@@ -31,6 +31,7 @@
 #include <numeric>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <string_view>
 #include <utility>
 
@@ -642,6 +643,8 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
 
 std::vector<CTxMemPool::txiter> CTxMemPool::ExtractBestByMiningScoreWithTopology(std::vector<Wtxid>& wtxids, size_t n_to_sort) const
 {
+    AssertLockHeld(cs);
+
     /* This function takes a vector of `wtxids`, and returns the
      * best mempool entries corresponding to those `wtxids` (by mining
      * score/topology). It updates the input `wtxids` so that multiple
@@ -661,7 +664,9 @@ std::vector<CTxMemPool::txiter> CTxMemPool::ExtractBestByMiningScoreWithTopology
 
     std::vector<txiter> res;
 
-    n_to_sort = std::min(wtxids.size(), n_to_sort);
+    const size_t original_wtxid_count{wtxids.size()};
+    const size_t requested_count{n_to_sort};
+    n_to_sort = std::min(original_wtxid_count, n_to_sort);
     if (n_to_sort > 0) {
         res.reserve(wtxids.size());
         std::sort(wtxids.begin(), wtxids.end());
@@ -693,6 +698,28 @@ std::vector<CTxMemPool::txiter> CTxMemPool::ExtractBestByMiningScoreWithTopology
                 ++it;
             }
             res.erase(middle, end);
+        }
+    }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        const std::vector<Wtxid> original_wtxids{wtxids};
+        Assume(res.size() <= requested_count);
+        if (requested_count == 0) {
+            Assume(res.empty());
+            Assume(wtxids == original_wtxids);
+        } else {
+            Assume(res.size() + wtxids.size() <= original_wtxid_count || wtxids.empty());
+            std::set<Wtxid> seen_wtxids;
+            for (const auto& txiter : res) {
+                const Wtxid wtxid{txiter->GetTx().GetWitnessHash()};
+                Assume(seen_wtxids.insert(wtxid).second);
+            }
+            for (const Wtxid& wtxid : wtxids) {
+                Assume(GetIter(wtxid).has_value());
+                Assume(seen_wtxids.insert(wtxid).second);
+            }
+        }
+        for (size_t i{1}; i < res.size(); ++i) {
+            Assume(m_txgraph->CompareMainOrder(*res[i - 1], *res[i]) != std::strong_ordering::greater);
         }
     }
     return res;

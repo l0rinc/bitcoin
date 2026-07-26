@@ -237,6 +237,59 @@ void CheckRandomizedTxIndex(const CTxMemPool& tx_pool)
     }
 }
 
+void CheckExtractBestByMiningScoreWithTopology(const CTxMemPool& tx_pool, FuzzedDataProvider& provider)
+{
+    LOCK(tx_pool.cs);
+
+    const auto entries{tx_pool.entryAll()};
+    std::vector<Wtxid> wtxids;
+    if (!entries.empty()) {
+        const size_t num_known{provider.ConsumeIntegralInRange<size_t>(1, std::min<size_t>(entries.size(), 8))};
+        for (size_t i{0}; i < num_known; ++i) {
+            const auto& entry{entries[provider.ConsumeIntegralInRange<size_t>(0, entries.size() - 1)].get()};
+            wtxids.push_back(entry.GetTx().GetWitnessHash());
+        }
+    }
+    for (size_t i{0}; i < provider.ConsumeIntegralInRange<size_t>(0, 3); ++i) {
+        wtxids.push_back(Wtxid::FromUint256(ConsumeUInt256(provider)));
+    }
+    if (!wtxids.empty() && provider.ConsumeBool()) {
+        wtxids.push_back(wtxids[provider.ConsumeIntegralInRange<size_t>(0, wtxids.size() - 1)]);
+    }
+    if (wtxids.empty()) wtxids.push_back(Wtxid::FromUint256(ConsumeUInt256(provider)));
+
+    const std::vector<Wtxid> original_wtxids{wtxids};
+    const size_t n_to_sort{provider.ConsumeIntegralInRange<size_t>(0, wtxids.size() + 2)};
+    const std::set<Wtxid> requested_wtxids{wtxids.begin(), wtxids.end()};
+
+    std::vector<Wtxid> expected_order;
+    for (const auto& entry : entries) {
+        const Wtxid wtxid{entry.get().GetTx().GetWitnessHash()};
+        if (requested_wtxids.contains(wtxid)) expected_order.push_back(wtxid);
+    }
+
+    const auto extracted{tx_pool.ExtractBestByMiningScoreWithTopology(wtxids, n_to_sort)};
+    Assert(extracted.size() == (n_to_sort == 0 ? 0 : std::min(std::min(n_to_sort, original_wtxids.size()), expected_order.size())));
+    if (n_to_sort == 0) {
+        Assert(wtxids == original_wtxids);
+        Assert(extracted.empty());
+        return;
+    }
+
+    const size_t num_extracted{extracted.size()};
+    std::set<Wtxid> extracted_wtxids;
+    for (size_t i{0}; i < num_extracted; ++i) {
+        const Wtxid wtxid{extracted[i]->GetTx().GetWitnessHash()};
+        Assert(extracted_wtxids.insert(wtxid).second);
+        Assert(wtxid == expected_order[i]);
+    }
+
+    std::set<Wtxid> remaining_wtxids{wtxids.begin(), wtxids.end()};
+    std::set<Wtxid> expected_remaining{expected_order.begin() + num_extracted, expected_order.end()};
+    Assert(remaining_wtxids == expected_remaining);
+    for (const Wtxid& wtxid : remaining_wtxids) Assert(!extracted_wtxids.contains(wtxid));
+}
+
 void AssertInfoEmpty(const TxMempoolInfo& info)
 {
     Assert(!info.tx);
@@ -889,6 +942,8 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         CheckRandomizedTxIndex(tx_pool);
         CheckMempoolInfoViews(tx_pool);
     }
+    FuzzedDataProvider extract_provider(buffer.data(), buffer.size());
+    CheckExtractBestByMiningScoreWithTopology(tx_pool, extract_provider);
     Finish(fuzzed_data_provider, tx_pool, chainstate);
 }
 
@@ -964,6 +1019,8 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
         CheckPrioritisedTransactions(tx_pool);
         CheckMempoolInfoViews(tx_pool);
     }
+    FuzzedDataProvider extract_provider(buffer.data(), buffer.size());
+    CheckExtractBestByMiningScoreWithTopology(tx_pool, extract_provider);
     Finish(fuzzed_data_provider, tx_pool, chainstate);
 }
 } // namespace
