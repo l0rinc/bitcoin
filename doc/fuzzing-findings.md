@@ -5294,3 +5294,38 @@ seconds, and the Python file passed `py_compile` and `git diff --check`. No
 production defect, RPC inconsistency on master, race, or security issue was
 demonstrated; severity is none, with the previously untested output now covered
 deterministically.
+
+## TrimToSize no-spends output coverage (2026-07-26)
+
+`validation.cpp::LimitMempoolSize()` calls `CTxMemPool::TrimToSize()` with a
+`vNoSpendsRemaining` output vector and then uncaches the returned outpoints.
+The existing transaction-pool fuzzer and mempool unit tests used the default
+null output argument, so they did not exercise the vector population or the
+coin-cache handoff. This was a coverage omission, not evidence of a production
+bug.
+
+The fuzzer now runs the optional-output path after its graph, index, block
+builder, reorg, and mempool-view checks. It records every input outpoint before
+trimming, then requires the returned outpoints to be known inputs, unique, and
+absent from `mapNextTx`. Production code adds matching Debug/fuzz-only
+`Assume()` postconditions for uniqueness and the absence of a remaining
+spender. The deterministic unit test inserts one external-input transaction,
+trims the pool to zero, and requires that exact input outpoint to be returned.
+
+The exact clean-master worktree at
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6` received only the new unit test;
+the test passed there, as did the pre-existing `MempoolSizeLimitTest`. Removing
+only `pvNoSpendsRemaining->push_back(txin.prevout)` from that clean-master
+worktree left `MempoolSizeLimitTest` passing (exit 0) and made the new test fail
+with an empty vector (exit 201). Restoring the line made the new test pass.
+The same mutation was reproduced on the investigation branch. This proves the
+new test detects the intended mutation without attributing it to a clean-master
+production defect.
+
+The restored branch passed the full `mempool_tests` suite, 200 normal
+libFuzzer executions, 120 Clang 19 ASan/UBSan executions, and a direct-file
+Clang 19 TSan replay over 56 corpus files. No assertion, sanitizer diagnostic,
+race report, timeout, or crash artifact occurred. Severity is none: this change
+closes a deterministic test gap and adds assertion-only hardening; it does not
+change release behavior or establish a consensus, wallet, network, or cache
+vulnerability.
