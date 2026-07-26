@@ -4460,6 +4460,31 @@ TokenBucket unit cases. The production behavior remained consistent; no
 production fix, sanitizer finding, race, or clean-master comparison was
 warranted.
 
+## Permanent transaction relay outbound-bucket coverage (2026-07-26)
+
+The existing rate-limit functional tests exercised only an inbound peer. The
+new `p2p_tx_relay_rate_limit_outbound.py` scenario uses the framework's
+node-1-to-node-0 connection, configures node 1 with `-txsendrate=1`, submits
+40 self-transfers, and verifies that the outbound count bucket initially
+leaves exactly 10 transactions in the global backlog. It then advances mock
+time one second at a time, drives both peers, and requires the backlog to
+empty and node 0's mempool to equal the exact submitted transaction set.
+The wait includes the normal two-second non-preferred-peer announcement
+delay, so this covers bucket refill, node-to-node relay, multi-peer activity,
+and delayed request scheduling together.
+
+The scenario passed three independent functional runs and three independent
+Clang 19 TSan runs after rebuilding the daemon from the rebased branch at
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`; the TSan runs used
+`halt_on_error=1` and reported no race. The `InvToSendBucket`,
+`ProcessInvBacklog`, and related `TokenBucket` code has no diff from exact
+`origin/master`. An earlier exploratory
+oracle stopped after four seconds and observed 39 of 40 transactions at the
+receiver; tracing showed the missing transaction was still behind the
+documented non-preferred request delay, and the corrected wait converged in
+all six runs. This is a deterministic coverage omission, not a production
+defect; no production or fuzzer change was warranted.
+
 ## Rebased index concurrency gate (2026-07-26)
 
 After rebasing onto `origin/master` at
