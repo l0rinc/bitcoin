@@ -854,37 +854,40 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
 
     {
         LOCK2(m_relock_mutex, cs_wallet);
-        mapMasterKeys[++nMasterKeyMaxID] = master_key;
-        WalletBatch* encrypted_batch = new WalletBatch(GetDatabase());
-        if (!encrypted_batch->TxnBegin()) {
-            delete encrypted_batch;
-            encrypted_batch = nullptr;
-            return false;
-        }
-        encrypted_batch->WriteMasterKey(nMasterKeyMaxID, master_key);
-
-        for (const auto& spk_man_pair : m_spk_managers) {
-            auto spk_man = spk_man_pair.second.get();
-            if (!spk_man->Encrypt(plain_master_key, encrypted_batch)) {
-                encrypted_batch->TxnAbort();
-                delete encrypted_batch;
-                encrypted_batch = nullptr;
-                // We now probably have half of our keys encrypted in memory, and half not...
-                // die and let the user reload the unencrypted wallet.
-                assert(false);
+        const unsigned int old_master_key_max_id{nMasterKeyMaxID};
+        const unsigned int master_key_id{++nMasterKeyMaxID};
+        mapMasterKeys[master_key_id] = master_key;
+        WalletBatch encrypted_batch(GetDatabase());
+        const auto rollback = [&] {
+            if (encrypted_batch.HasActiveTxn()) {
+                encrypted_batch.TxnAbort();
             }
-        }
+            mapMasterKeys.erase(master_key_id);
+            nMasterKeyMaxID = old_master_key_max_id;
+        };
 
-        if (!encrypted_batch->TxnCommit()) {
-            delete encrypted_batch;
-            encrypted_batch = nullptr;
-            // We now have keys encrypted in memory, but not on disk...
-            // die to avoid confusion and let the user reload the unencrypted wallet.
-            assert(false);
-        }
+        try {
+            if (!encrypted_batch.TxnBegin() || !encrypted_batch.WriteMasterKey(master_key_id, master_key)) {
+                rollback();
+                return false;
+            }
 
-        delete encrypted_batch;
-        encrypted_batch = nullptr;
+            for (const auto& spk_man_pair : m_spk_managers) {
+                auto spk_man = spk_man_pair.second.get();
+                if (!spk_man->Encrypt(plain_master_key, &encrypted_batch)) {
+                    rollback();
+                    return false;
+                }
+            }
+
+            if (!encrypted_batch.TxnCommit()) {
+                rollback();
+                return false;
+            }
+        } catch (...) {
+            rollback();
+            throw;
+        }
 
         Lock();
         if (!Unlock(strWalletPassphrase)) {

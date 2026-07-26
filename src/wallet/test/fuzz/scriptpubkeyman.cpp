@@ -103,6 +103,14 @@ static bool BlockDescriptorWrites(CWallet& wallet)
                                     nullptr, nullptr, nullptr) == SQLITE_OK;
 }
 
+static bool BlockDescriptorKeyErases(CWallet& wallet)
+{
+    auto* database{dynamic_cast<MockableSQLiteDatabase*>(&wallet.GetDatabase())};
+    return database && sqlite3_exec(database->m_db,
+                                    "CREATE TRIGGER fail_descriptor_key_erases BEFORE DELETE ON main BEGIN SELECT RAISE(ABORT, 'injected'); END;",
+                                    nullptr, nullptr, nullptr) == SQLITE_OK;
+}
+
 static bool BlockDescriptorMetadataWrites(CWallet& wallet)
 {
     auto* database{dynamic_cast<MockableSQLiteDatabase*>(&wallet.GetDatabase())};
@@ -181,6 +189,48 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                 if (spk_manager->IsMine(script)) {
                     assert(spk_manager->GetScriptPubKeys().contains(script));
                 }
+            },
+            [&] {
+                if (descriptor_writes_blocked || descriptor_metadata_writes_blocked || !spk_manager->HavePrivateKeys()) return;
+                if (!BlockDescriptorWrites(wallet)) {
+                    good_data = false;
+                    return;
+                }
+                descriptor_writes_blocked = true;
+
+                CKeyingMaterial master_key;
+                master_key.resize(WALLET_CRYPTO_KEY_SIZE, 1);
+                WalletBatch batch(wallet.GetDatabase());
+                if (!batch.TxnBegin()) {
+                    good_data = false;
+                    return;
+                }
+                assert(!spk_manager->Encrypt(master_key, &batch));
+                assert(batch.TxnAbort());
+                assert(spk_manager->HavePrivateKeys());
+                assert(!spk_manager->HaveCryptedKeys());
+                assert(!spk_manager->CheckDecryptionKey(master_key));
+            },
+            [&] {
+                if (descriptor_writes_blocked || descriptor_metadata_writes_blocked || !spk_manager->HavePrivateKeys()) return;
+                if (!BlockDescriptorKeyErases(wallet)) {
+                    good_data = false;
+                    return;
+                }
+                descriptor_writes_blocked = true;
+
+                CKeyingMaterial master_key;
+                master_key.resize(WALLET_CRYPTO_KEY_SIZE, 1);
+                WalletBatch batch(wallet.GetDatabase());
+                if (!batch.TxnBegin()) {
+                    good_data = false;
+                    return;
+                }
+                assert(!spk_manager->Encrypt(master_key, &batch));
+                assert(batch.TxnAbort());
+                assert(spk_manager->HavePrivateKeys());
+                assert(!spk_manager->HaveCryptedKeys());
+                assert(!spk_manager->CheckDecryptionKey(master_key));
             },
             [&] {
                 auto spks{spk_manager->GetScriptPubKeys()};

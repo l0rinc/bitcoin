@@ -30,7 +30,7 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 41 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 42 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | Remaining TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving another clean-master production bug. The full-range TxGraph mutation also exposed the production defect recorded below. |
@@ -63,7 +63,9 @@ metadata inconsistency after a descriptor-row write failure; descriptor updates
 that publish replacement state before a cache write failure can be rolled back; and
 descriptor reservation returns that publish an in-memory index decrement before a
 descriptor-row write failure; `MarkUnusedAddresses()` descriptor writes that
-leave the live next index ahead of SQLite after a descriptor-row write failure.
+leave the live next index ahead of SQLite after a descriptor-row write failure;
+descriptor encryption that reports success or publishes encrypted state after
+an encrypted-key insert or plaintext-key erase failure.
 Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
@@ -138,6 +140,17 @@ created worker threads.
   keypool index. The branch now stages this caller's advance, forces its
   descriptor write, restores memory on failure, and preserves the ordinary
   `GetNewDestination()` write-failure return behavior.
+* Descriptor encryption had two independent clean-master database-failure
+  omissions. A failed `WALLETDESCRIPTORCKEY` insert was ignored by
+  `DescriptorScriptPubKeyMan::Encrypt()`, which could publish encrypted
+  in-memory state without an encrypted record on disk. A failed delete of the
+  corresponding plaintext `WALLETDESCRIPTORKEY` was ignored by
+  `WalletBatch::WriteCryptedDescriptorKey()`, which could commit both records.
+  Both are local storage-failure paths; neither produced a remote or consensus
+  attack, but either can make a wallet fail to load or leave key material and
+  encryption state inconsistent across restart. The branch stages all encrypted
+  keys until transaction commit, checks both database operations, and rolls back
+  the wallet master-key map and transaction on every failure.
 * `ExternalSignerScriptPubKeyMan::FillPSBT()` replaced a PSBT with the signer’s
   result without updating its `n_signed` output. The Qt PSBT operations dialog
   uses this count to report signing progress, so a partial PSBT with one newly
@@ -4213,3 +4226,57 @@ for 13,000 executions each, adding 32 and 31 units with peak RSS of about
 1,018 and 1,036 MB. One 10-second slow-unit artifact was replayed separately
 in 18.9 seconds without a diagnostic; it was a performance outlier, not a
 failure artifact.
+
+## Descriptor encryption after a descriptor-key database failure (2026-07-26)
+
+This is a new clean-master wallet-storage defect, distinct from the descriptor
+index and cache-row failures above. The exact baseline was
+`origin/master` `e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`. The deterministic
+mutation created a private `wpkh(xprv/*)` descriptor, opened an active
+`WalletBatch`, and injected SQLite failures in the descriptor-key transition.
+
+Two independent omissions were reproduced. With a `BEFORE INSERT` failure for
+the encrypted `WALLETDESCRIPTORCKEY` record, master ignored the false return
+from `WriteCryptedDescriptorKey()`. The direct control therefore returned true
+from `DescriptorScriptPubKeyMan::Encrypt()` and reported a valid decryption
+check even though the encrypted record was not written. With a `BEFORE DELETE`
+failure for the plaintext `WALLETDESCRIPTORKEY`, master also returned true and
+`TxnCommit()` succeeded: `WriteCryptedDescriptorKey()` ignored the failed
+`EraseIC()` call, leaving both plaintext and encrypted records in the database.
+The two exact-master controls each failed with exit code 201 at the expected
+`!encrypted` assertion; the second control specifically completed the commit.
+
+The production fix has three parts. `DescriptorScriptPubKeyMan::Encrypt()` now
+encrypts into a temporary `CryptedKeyMap`, checks every database result, and
+registers a transaction listener that publishes the map and clears plaintext
+memory only after commit. `WalletBatch::WriteCryptedDescriptorKey()` now returns
+the plaintext erase result instead of unconditionally returning true.
+`CWallet::EncryptWallet()` uses a stack-owned batch, checks transaction start,
+master-key write, manager encryption, and commit, and restores
+`mapMasterKeys`/`nMasterKeyMaxID` after any failed or exceptional transaction.
+
+The branch regression coverage is deterministic:
+`encrypt_descriptor_write_failure_preserves_state` covers the encrypted-record
+insert failure, `encrypt_descriptor_erase_failure_preserves_state` covers the
+plaintext-record delete failure and verifies that the database still contains
+only the plaintext record after rollback,
+`encrypt_wallet_descriptor_write_failure_preserves_state` covers the caller's
+descriptor-manager failure path, and
+`encrypt_wallet_master_key_write_failure_preserves_state` covers failure of the
+master-key record itself. The focused `scriptpubkeyman_tests` suite passed all
+14 cases after these additions.
+
+The `scriptpubkeyman` fuzzer now has matching insert-failure and delete-failure
+actions. The delete mutation was reached by both ASan/UBSan workers from a
+private 124-file corpus on their initial corpus pass. After removing the
+temporary reachability assertion, both generated inputs replayed cleanly. A
+real campaign then ran two independent sanitizer workers with `-jobs=2
+-workers=2`, each loading all 124 files and completing 5,000 executions in
+about 12 seconds; both exited zero without assertions, sanitizer diagnostics,
+timeouts, or artifacts, reaching coverage 12,238 and 12,256.
+
+Severity is low to medium against master: a local wallet database or storage
+failure is required, and no remote, consensus, or demonstrated key-loss path
+was found. The potential impact is wallet availability and inconsistent
+encryption state across restart, with the delete-failure path also leaving
+plaintext key material in the database until the fault is repaired.

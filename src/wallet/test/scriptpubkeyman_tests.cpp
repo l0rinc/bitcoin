@@ -16,6 +16,21 @@
 #include <streams.h>
 
 namespace wallet {
+
+static bool DatabaseHasKey(MockableSQLiteDatabase& database, const DataStream& key)
+{
+    sqlite3_stmt* statement{nullptr};
+    if (sqlite3_prepare_v2(database.m_db, "SELECT 1 FROM main WHERE key = ?", -1, &statement, nullptr) !=
+        SQLITE_OK) {
+        return false;
+    }
+    const bool bound{sqlite3_bind_blob(statement, 1, static_cast<const void*>(key.data()), key.size(), SQLITE_TRANSIENT) ==
+                     SQLITE_OK};
+    const bool present{bound && sqlite3_step(statement) == SQLITE_ROW};
+    sqlite3_finalize(statement);
+    return present;
+}
+
 BOOST_FIXTURE_TEST_SUITE(scriptpubkeyman_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(DescriptorScriptPubKeyManTests)
@@ -50,6 +65,131 @@ BOOST_AUTO_TEST_CASE(desc_spkm_topup_fail)
     BOOST_CHECK_EXCEPTION(
         CreateDescriptor(keystore, "wpkh(" + EncodeExtPubKey(extkey.Neuter()) + "/*h)", /*success=*/true),
         std::runtime_error, HasReason("Could not top up scriptPubKeys"));
+}
+
+BOOST_AUTO_TEST_CASE(encrypt_descriptor_write_failure_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtKey(extkey) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+    BOOST_REQUIRE(spkm->HavePrivateKeys());
+    BOOST_CHECK(!spkm->HaveCryptedKeys());
+
+    CKeyingMaterial master_key;
+    master_key.resize(WALLET_CRYPTO_KEY_SIZE, 1);
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db,
+                                     "CREATE TRIGGER fail_wallet_writes BEFORE INSERT ON main BEGIN SELECT RAISE(ABORT, 'injected'); END;",
+                                     nullptr, nullptr, nullptr),
+                        SQLITE_OK);
+
+    WalletBatch batch(keystore.GetDatabase());
+    BOOST_REQUIRE(batch.TxnBegin());
+    BOOST_CHECK(!spkm->Encrypt(master_key, &batch));
+    BOOST_REQUIRE(batch.TxnAbort());
+
+    BOOST_CHECK(spkm->HavePrivateKeys());
+    BOOST_CHECK(!spkm->HaveCryptedKeys());
+    BOOST_CHECK(!spkm->CheckDecryptionKey(master_key));
+}
+
+BOOST_AUTO_TEST_CASE(encrypt_descriptor_erase_failure_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtKey(extkey) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+    BOOST_REQUIRE(spkm->HavePrivateKeys());
+
+    CKeyingMaterial master_key;
+    master_key.resize(WALLET_CRYPTO_KEY_SIZE, 1);
+
+    const CPubKey pubkey{extkey.key.GetPubKey()};
+    DataStream descriptor_key;
+    descriptor_key << std::make_pair(DBKeys::WALLETDESCRIPTORKEY, std::make_pair(spkm->GetID(), pubkey));
+    DataStream crypted_descriptor_key;
+    crypted_descriptor_key << std::make_pair(DBKeys::WALLETDESCRIPTORCKEY, std::make_pair(spkm->GetID(), pubkey));
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    BOOST_REQUIRE(DatabaseHasKey(database, descriptor_key));
+    const std::string trigger{
+        "CREATE TRIGGER fail_descriptor_key_erase BEFORE DELETE ON main WHEN lower(hex(OLD.key)) = '" +
+        HexStr(std::span<const std::byte>{descriptor_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db,
+                                     trigger.c_str(),
+                                     nullptr, nullptr, nullptr),
+                        SQLITE_OK);
+
+    WalletBatch batch(keystore.GetDatabase());
+    BOOST_REQUIRE(batch.TxnBegin());
+    const bool encrypted{spkm->Encrypt(master_key, &batch)};
+    BOOST_CHECK(!encrypted);
+    if (encrypted) {
+        BOOST_REQUIRE(batch.TxnCommit());
+    } else {
+        BOOST_REQUIRE(batch.TxnAbort());
+    }
+
+    BOOST_CHECK(spkm->HavePrivateKeys());
+    BOOST_CHECK(!spkm->HaveCryptedKeys());
+    BOOST_CHECK(DatabaseHasKey(database, descriptor_key));
+    BOOST_CHECK(!DatabaseHasKey(database, crypted_descriptor_key));
+}
+
+BOOST_AUTO_TEST_CASE(encrypt_wallet_descriptor_write_failure_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtKey(extkey) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+
+    const CPubKey pubkey{extkey.key.GetPubKey()};
+    DataStream descriptor_key;
+    descriptor_key << std::make_pair(DBKeys::WALLETDESCRIPTORKEY, std::make_pair(spkm->GetID(), pubkey));
+    DataStream crypted_descriptor_key;
+    crypted_descriptor_key << std::make_pair(DBKeys::WALLETDESCRIPTORCKEY, std::make_pair(spkm->GetID(), pubkey));
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    BOOST_REQUIRE(DatabaseHasKey(database, descriptor_key));
+    BOOST_CHECK(!DatabaseHasKey(database, crypted_descriptor_key));
+    const std::string trigger{
+        "CREATE TRIGGER fail_descriptor_key_write BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{crypted_descriptor_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    SecureString passphrase{"passphrase"};
+    BOOST_CHECK(!keystore.EncryptWallet(passphrase));
+    BOOST_CHECK(!keystore.HasEncryptionKeys());
+    BOOST_CHECK(spkm->HavePrivateKeys());
+    BOOST_CHECK(!spkm->HaveCryptedKeys());
+    BOOST_CHECK(DatabaseHasKey(database, descriptor_key));
+    BOOST_CHECK(!DatabaseHasKey(database, crypted_descriptor_key));
+}
+
+BOOST_AUTO_TEST_CASE(encrypt_wallet_master_key_write_failure_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtKey(extkey) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db,
+                                     "CREATE TRIGGER fail_wallet_writes BEFORE INSERT ON main BEGIN SELECT RAISE(ABORT, 'injected'); END;",
+                                     nullptr, nullptr, nullptr),
+                        SQLITE_OK);
+
+    SecureString passphrase{"passphrase"};
+    BOOST_CHECK(!keystore.EncryptWallet(passphrase));
+    BOOST_CHECK(!keystore.HasEncryptionKeys());
+    BOOST_CHECK(spkm->HavePrivateKeys());
+    BOOST_CHECK(!spkm->HaveCryptedKeys());
 }
 
 BOOST_AUTO_TEST_CASE(get_new_destination_self_expanding_xpub)

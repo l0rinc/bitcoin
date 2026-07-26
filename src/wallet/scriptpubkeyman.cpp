@@ -959,6 +959,11 @@ bool DescriptorScriptPubKeyMan::Encrypt(const CKeyingMaterial& master_key, Walle
         return false;
     }
 
+    Assert(batch);
+    Assert(batch->HasActiveTxn());
+
+    CryptedKeyMap crypted_keys;
+
     for (const KeyMap::value_type& key_in : m_map_keys)
     {
         const CKey &key = key_in.second;
@@ -968,10 +973,23 @@ bool DescriptorScriptPubKeyMan::Encrypt(const CKeyingMaterial& master_key, Walle
         if (!EncryptSecret(master_key, secret, pubkey.GetHash(), crypted_secret)) {
             return false;
         }
-        m_map_crypted_keys[pubkey.GetID()] = make_pair(pubkey, crypted_secret);
-        batch->WriteCryptedDescriptorKey(GetID(), pubkey, crypted_secret);
+        crypted_keys.emplace(pubkey.GetID(), make_pair(pubkey, std::move(crypted_secret)));
     }
-    m_map_keys.clear();
+
+    for (const auto& key_pair : crypted_keys) {
+        if (!batch->WriteCryptedDescriptorKey(GetID(), key_pair.second.first, key_pair.second.second)) {
+            return false;
+        }
+    }
+
+    batch->RegisterTxnListener({
+        .on_commit = [this, crypted_keys = std::move(crypted_keys)]() mutable {
+            LOCK(cs_desc_man);
+            m_map_crypted_keys = std::move(crypted_keys);
+            m_map_keys.clear();
+        },
+        .on_abort = {},
+    });
     return true;
 }
 
