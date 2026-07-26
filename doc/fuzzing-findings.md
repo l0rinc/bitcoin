@@ -5366,3 +5366,33 @@ hardening, not a confirmed current-master production defect. Severity for the
 missing coverage is none; if the cleanup condition regressed, the resulting
 resource retention would be a local or authenticated package-submission memory
 pressure issue, not a consensus or unauthenticated P2P vulnerability.
+
+## Coin-control external-output accessor coverage (2026-07-26)
+
+The wallet `coincontrol` fuzzer called `CCoinControl::GetExternalOutput()` but
+discarded its result. It checked the neighboring `IsExternalSelected()` state
+and the mutable `PreselectedInput`, so a regression returning `nullopt` for a
+selected external input could pass both the fuzzer and the existing
+`max_signed_input_size_uses_external_outpoint` unit test. The latter exercises
+direct input sizing and does not call this accessor.
+
+The fuzzer now checks that the optional is present exactly when the selected
+input has a `CTxOut`, and that the returned output equals the stored output. A
+deterministic wallet test covers the absent, selected-with-output, and
+unselected states.
+
+At exact clean master `e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`, the injected
+test passed and the pre-existing sizing control passed. Mutating only
+`GetExternalOutput()` to return `std::nullopt` left the sizing control green but
+made the new test fail at its required output check (exit 201). Restoring the
+accessor made the new test pass. The current production implementation was
+already correct; no production change is included. This is a coverage omission,
+not a confirmed master defect. A regression would affect local wallet
+transaction input availability or size estimation for externally supplied
+inputs, not consensus or remote node safety.
+
+The investigation branch passed the focused test and all five `spend_tests`
+cases. The wallet-enabled Clang 19 normal fuzzer completed 512
+`coincontrol` executions, and the matching Clang 19 ASan/UBSan fuzzer completed
+256 executions over the expanded corpus. No assertion, sanitizer diagnostic,
+timeout, or artifact occurred.
