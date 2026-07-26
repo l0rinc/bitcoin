@@ -5447,3 +5447,32 @@ demonstrated; however, reuse of a discounted result could understate the fee
 and the stale state violated the accessor's empty-selection contract. The
 reset, deterministic regression check, and fuzzer transition are included in
 this commit.
+
+## Exact-master compact collision recheck (2026-07-26)
+
+The compact-block collision review was repeated against exact clean master
+`e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`, separately from the investigation
+branch. The reviewed state combinations included mempool/mempool,
+mempool/extra, extra/extra, duplicate extra transactions, null extra entries,
+prefilled-offset collisions, no-coinbase early exits, terminal collisions,
+duplicate message IDs, and the `BLOCKTXN` fallback path. No additional
+production inconsistency, race, or remotely reachable collision defect was
+identified. The existing master fixes for short-ID accounting and normal
+network null-tail construction remain effective; the branch-only guards and
+assertions were not needed to explain a new master failure.
+
+For dynamic control evidence, the exact-master Clang 19 normal fuzz build
+replayed the existing corpora with two independent workers per target:
+`cmpctblock` processed 1,970 files per worker and
+`partially_downloaded_block` processed 2,015 files per worker. A separate
+Clang 19 ASan/UBSan build replayed the same corpora with two workers per
+target. All four sanitizer workers exited 0 after processing every input:
+`cmpctblock` in 786--787 seconds and `partially_downloaded_block` in 246
+seconds. There were no assertions, sanitizer diagnostics, race reports,
+timeouts, or crash artifacts. The fuzz file driver accepts input paths rather
+than libFuzzer's `-fork` option; the final results use the supported direct
+file-driver invocation.
+
+This is a clean-master control and coverage result, not a new production fix.
+The compact collision fixes and deterministic tests already present on the
+investigation branch remain attributed to their earlier commits.
