@@ -4490,3 +4490,22 @@ spread. It does not establish a full ASan pass for all 1,500 inputs; the
 performance-limited remainder is still an explicit coverage gap. No production
 inconsistency, memory defect, race, or deterministic test omission was
 demonstrated, so no source or permanent test change was warranted.
+
+## Rebased key and BIP32 boundary gate (2026-07-26)
+
+The current master change `26b730cdbf` adds the BIP32 requirement that
+`CExtKey::SetSeed()` receive a 16-to-64-byte seed. The existing `key` fuzzer
+reaches that call only after `CKey::Set()` accepts the same input as a private
+key, which constrains the seed to 32 bytes. A fresh 128-file slice of existing
+32-byte `key` inputs therefore exercises the newly enforced path without
+turning an expected invalid-key mutation into an assertion failure.
+
+Two independent normal workers completed 5,000 mutations each, reaching
+coverage 3,468 and 3,467. Two fresh ASan/UBSan workers completed 257
+executions each, reaching coverage 14,651, and two fresh TSan workers completed
+129 executions each, reaching coverage 1,220. All six workers exited zero
+without an assertion, sanitizer diagnostic, race report, timeout, or artifact.
+The existing key fuzzer's invalid private/public/hardened derivation checks
+also remained clean on this rebased source. No BIP32 seed-boundary
+inconsistency, memory defect, race, or deterministic test omission was
+demonstrated; no source or permanent test change was warranted.
