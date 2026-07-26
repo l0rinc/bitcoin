@@ -25,10 +25,42 @@ class TxRelayRateLimitKnownTest(BitcoinTestFramework):
         node = self.nodes[0]
         wallet = MiniWallet(node)
         node.setmocktime(1_700_000_000)
-        self.generate(wallet, COINBASE_MATURITY + BUCKET_CAP + 10)
+        self.generate(wallet, COINBASE_MATURITY + 2 * (BUCKET_CAP + 1) + 10)
+
+        outbound_peer = node.add_outbound_p2p_connection(
+            P2PInterface(), p2p_idx=0, connection_type="outbound-full-relay"
+        )
+        node.bumpmocktime(10)
+        outbound_peer.sync_with_ping()
+
+        # Exercise the separate outbound bucket with the same known-filter
+        # contract before adding inbound peers.
+        for _ in range(BUCKET_CAP):
+            tx = wallet.create_self_transfer()
+            inv = msg_inv([CInv(MSG_WTX, int(tx["wtxid"], 16))])
+            outbound_peer.send_and_ping(inv)
+            wallet.sendrawtransaction(from_node=node, tx_hex=tx["hex"])
+            node.syncwithvalidationinterfacequeue()
+
+        outbound_peer.sync_with_ping()
+        bucket = node.getnetworkinfo()["inv_buckets"]["outbound"]
+        assert_equal(bucket["backlog"], 0)
+        assert_equal(bucket["count_tok"], BUCKET_CAP)
+        unknown_outbound = wallet.create_self_transfer()
+        wallet.sendrawtransaction(from_node=node, tx_hex=unknown_outbound["hex"])
+        node.syncwithvalidationinterfacequeue()
+        bucket = node.getnetworkinfo()["inv_buckets"]["outbound"]
+        assert_equal(bucket["backlog"], 0)
+        assert_equal(bucket["count_tok"], BUCKET_CAP - 1)
+        assert_equal(outbound_peer.message_count["inv"], 0)
+
+        # The two global buckets are independent, but the inbound bucket was
+        # consumed while no inbound peers existed. Refill it before switching
+        # to the inbound known-filter case below.
+        node.bumpmocktime(BUCKET_CAP + 1)
+        outbound_peer.sync_with_ping()
 
         peers = [node.add_p2p_connection(P2PInterface()) for _ in range(2)]
-        node.bumpmocktime(10)
         for peer in peers:
             peer.sync_with_ping()
 
