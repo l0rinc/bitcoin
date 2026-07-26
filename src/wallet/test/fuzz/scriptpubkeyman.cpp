@@ -195,6 +195,33 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
             },
             [&] {
                 if (descriptor_writes_blocked || descriptor_metadata_writes_blocked) return;
+                LOCK(spk_manager->cs_desc_man);
+                auto wallet_desc{spk_manager->GetWalletDescriptor()};
+                const auto output_type{wallet_desc.descriptor->GetOutputType()};
+                if (!wallet_desc.descriptor->IsSingleType() ||
+                    !wallet_desc.descriptor->IsRange() ||
+                    !wallet_desc.descriptor->CanSelfExpand() ||
+                    !output_type.has_value()) {
+                    return;
+                }
+
+                // Consume the current cache so the next request must rely on self-expansion.
+                while (wallet_desc.next_index < wallet_desc.range_end) {
+                    const auto dest{spk_manager->GetNewDestination(*output_type)};
+                    assert(dest && IsValidDestination(*dest));
+                    wallet_desc = spk_manager->GetWalletDescriptor();
+                }
+                assert(wallet_desc.next_index == wallet_desc.range_end);
+                assert(spk_manager->CanGetAddresses());
+
+                const auto dest{spk_manager->GetNewDestination(*output_type)};
+                assert(dest && IsValidDestination(*dest));
+                const auto descriptor_after{spk_manager->GetWalletDescriptor()};
+                assert(descriptor_after.next_index == wallet_desc.next_index + 1);
+                assert(descriptor_after.range_end > wallet_desc.range_end);
+            },
+            [&] {
+                if (descriptor_writes_blocked || descriptor_metadata_writes_blocked) return;
                 if (!BlockDescriptorWrites(wallet)) {
                     good_data = false;
                     return;
