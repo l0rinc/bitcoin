@@ -4798,3 +4798,24 @@ replacement, eviction, reset, script-key construction, and signature-cache
 lookup combinations. No cache corruption, stale entry, race, or deterministic
 test omission was demonstrated; no production or fuzzer source change was
 warranted.
+
+## Block-index and block-filter sanitizer controls (2026-07-26)
+
+The `block_index_tree` target completed 17,578 and 18,267 executions under
+TSan with two independent workers in 61 seconds. The target exercised block
+status transitions, parent/child linking, failed and pruned entries, active
+chain movement, and tree metadata invariants.
+
+The `blockfilter` target completed 513 executions per worker under ASan/UBSan
+in 152 and 154 seconds. LibFuzzer identified one 227 KB slow unit that ran in
+3.7 seconds in the normal build; no sanitizer diagnostic or assertion was
+present, so this is input-size and sanitizer overhead rather than a production
+failure. The related `block_index` ASan run reached its 128-input pulse in
+both workers and was stopped by the 180-second outer limit while replaying
+large states; it produced no diagnostic or artifact and is explicitly not
+counted as a completed corpus gate.
+
+The completed workers exited zero without a sanitizer report, race report, or
+crash artifact. No block-index publication inconsistency, malformed-filter
+memory defect, or deterministic test omission was demonstrated; no production
+or fuzzer source change was warranted.
