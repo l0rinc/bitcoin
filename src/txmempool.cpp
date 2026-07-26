@@ -1111,6 +1111,16 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
         }
     }
 
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (pvNoSpendsRemaining) {
+            std::set<COutPoint> unique_outpoints;
+            for (const COutPoint& outpoint : *pvNoSpendsRemaining) {
+                Assume(unique_outpoints.insert(outpoint).second);
+                Assume(!mapNextTx.count(outpoint));
+            }
+        }
+    }
+
     if (maxFeeRateRemoved > CFeeRate(0)) {
         LogDebug(BCLog::MEMPOOL, "Removed %u txn, rolling minimum fee bumped to %s\n", nTxnRemoved, maxFeeRateRemoved.ToString());
     }

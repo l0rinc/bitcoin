@@ -579,6 +579,28 @@ void CheckDirectMempoolEdges(const CTxMemPool& tx_pool)
     }
 }
 
+void CheckTrimToSizeNoSpendsRemaining(CTxMemPool& tx_pool)
+{
+    std::set<COutPoint> input_outpoints;
+    std::vector<COutPoint> no_spends_remaining;
+    LOCK(tx_pool.cs);
+    for (const auto& entry : tx_pool.mapTx) {
+        for (const auto& txin : entry.GetTx().vin) {
+            Assert(input_outpoints.insert(txin.prevout).second);
+        }
+    }
+
+    tx_pool.TrimToSize(0, &no_spends_remaining);
+    Assert(tx_pool.mapTx.empty());
+
+    std::set<COutPoint> returned_outpoints;
+    for (const COutPoint& outpoint : no_spends_remaining) {
+        Assert(input_outpoints.contains(outpoint));
+        Assert(returned_outpoints.insert(outpoint).second);
+        Assert(!tx_pool.mapNextTx.count(outpoint));
+    }
+}
+
 void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Chainstate& chainstate)
 {
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
@@ -661,6 +683,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     CheckRandomizedTxIndex(tx_pool);
     CheckMempoolInfoViews(tx_pool);
     CheckMempoolBlockBuilder(tx_pool);
+    CheckTrimToSizeNoSpendsRemaining(tx_pool);
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
 }
 
