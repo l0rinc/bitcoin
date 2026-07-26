@@ -986,11 +986,15 @@ util::Result<CTxDestination> DescriptorScriptPubKeyMan::GetReservedDestination(c
 void DescriptorScriptPubKeyMan::ReturnDestination(int64_t index, bool internal, const CTxDestination& addr)
 {
     LOCK(cs_desc_man);
+    WalletDescriptor descriptor{m_wallet_descriptor};
     // Only return when the index was the most recent
-    if (m_wallet_descriptor.next_index - 1 == index) {
-        m_wallet_descriptor.next_index--;
+    if (descriptor.next_index - 1 == index) {
+        descriptor.next_index--;
     }
-    WalletBatch(m_storage.GetDatabase()).WriteDescriptor(GetID(), m_wallet_descriptor);
+    if (!WalletBatch(m_storage.GetDatabase()).WriteDescriptor(GetID(), descriptor)) {
+        return;
+    }
+    m_wallet_descriptor = std::move(descriptor);
     NotifyCanGetAddressesChanged();
 }
 
