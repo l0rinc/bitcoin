@@ -11,6 +11,7 @@
 #include <uint256.h>
 #include <util/byte_units.h>
 #include <util/threadpool.h>
+#include <validation.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -27,6 +28,13 @@ std::shared_ptr<ThreadPool> MakeStartedThreadPool()
 {
     auto pool{std::make_shared<ThreadPool>("fetch_test")};
     pool->Start(DEFAULT_PREVOUTFETCH_THREADS);
+    return pool;
+}
+
+std::shared_ptr<ThreadPool> MakeStartedThreadPool(const int num_workers)
+{
+    auto pool{std::make_shared<ThreadPool>("fetch_b")};
+    pool->Start(num_workers);
     return pool;
 }
 
@@ -126,6 +134,21 @@ BOOST_AUTO_TEST_CASE(fetch_inputs_from_db)
     BOOST_CHECK(view.SpendCoin(outpoint));
     view.Flush();
     BOOST_CHECK(!main_cache.PeekCoin(outpoint).has_value());
+}
+
+BOOST_AUTO_TEST_CASE(fetch_inputs_with_worker_boundaries)
+{
+    const auto block{CreateBlock()};
+    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    PopulateView(block, db);
+    CCoinsViewCache main_cache{&db};
+
+    for (const int num_workers : {1, MAX_PREVOUTFETCH_THREADS}) {
+        auto pool{MakeStartedThreadPool(num_workers)};
+        CoinsViewOverlay view{&main_cache, pool};
+        const auto reset_guard{view.StartFetching(block)};
+        CheckCache(block, view);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(fetch_inputs_from_cache)

@@ -24,6 +24,7 @@
 #include <util/hasher.h>
 #include <util/threadpool.h>
 
+#include <array>
 #include <cassert>
 #include <algorithm>
 #include <cstdint>
@@ -135,13 +136,19 @@ public:
     using CCoinsViewCache::CCoinsViewCache;
 };
 
-// Reuse a single global thread pool across fuzz iterations. Creating and destroying a pool every
-// iteration leaks memory, since iterations can run faster than the OS can tear down the threads.
-std::shared_ptr<ThreadPool> g_thread_pool{std::make_shared<ThreadPool>("view_fuzz")};
+// Reuse pools across fuzz iterations. Creating and destroying a pool every iteration leaks memory,
+// since iterations can run faster than the OS can tear down the threads.
+std::array<std::shared_ptr<ThreadPool>, MAX_PREVOUTFETCH_THREADS + 1> g_thread_pools{};
 
-void StartPoolIfNeeded()
+std::shared_ptr<ThreadPool> GetThreadPool(FuzzedDataProvider& fuzzed_data_provider)
 {
-    if (!g_thread_pool->WorkersCount()) g_thread_pool->Start(DEFAULT_PREVOUTFETCH_THREADS);
+    const int workers{ConsumePrevoutFetchThreads(fuzzed_data_provider, DEFAULT_PREVOUTFETCH_THREADS, MAX_PREVOUTFETCH_THREADS)};
+    auto& pool{g_thread_pools[workers]};
+    if (!pool) {
+        pool = std::make_shared<ThreadPool>(std::string{"vwf_"} + std::to_string(workers));
+        if (workers > 0) pool->Start(workers);
+    }
+    return pool;
 }
 
 //! Build a random block and seed a view with utxos for its inputs.
@@ -675,10 +682,11 @@ FUZZ_TARGET(coins_view_db_resize_cursor, .init = initialize_coins_view)
 FUZZ_TARGET(coins_view_overlay, .init = initialize_coins_view)
 {
     SeedRandomStateForTest(SeedRand::ZEROS); // for SaltedCoinsCacheHasher
-    StartPoolIfNeeded();
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
+    FuzzedDataProvider thread_provider{buffer.data(), buffer.size()};
+    const auto thread_pool{GetThreadPool(thread_provider)};
     MutationGuardCoinsViewCache backend_cache{&CoinsViewEmpty::Get(), /*deterministic=*/true};
-    CoinsViewOverlay coins_view_cache{&backend_cache, g_thread_pool, /*deterministic=*/true};
+    CoinsViewOverlay coins_view_cache{&backend_cache, thread_pool, /*deterministic=*/true};
     CBlock block{BuildRandomBlock(fuzzed_data_provider, backend_cache)};
     const auto reset_guard{coins_view_cache.StartFetching(block)};
     TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache);
@@ -687,8 +695,9 @@ FUZZ_TARGET(coins_view_overlay, .init = initialize_coins_view)
 FUZZ_TARGET(coins_view_stacked, .init = initialize_coins_view)
 {
     SeedRandomStateForTest(SeedRand::ZEROS); // for SaltedCoinsCacheHasher
-    StartPoolIfNeeded();
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
+    FuzzedDataProvider thread_provider{buffer.data(), buffer.size()};
+    const auto thread_pool{GetThreadPool(thread_provider)};
     auto db_params = DBParams{
         .path = "",
         .cache_bytes = 1_MiB,
@@ -697,7 +706,7 @@ FUZZ_TARGET(coins_view_stacked, .init = initialize_coins_view)
     CCoinsViewDB backend_base_coins_view{std::move(db_params), CoinsViewOptions{}};
     CCoinsViewCache backend_cache{&backend_base_coins_view, /*deterministic=*/true};
     TestCoinsView(fuzzed_data_provider, backend_cache, &backend_base_coins_view);
-    CoinsViewOverlay coins_view_cache{&backend_cache, g_thread_pool, /*deterministic=*/true};
+    CoinsViewOverlay coins_view_cache{&backend_cache, thread_pool, /*deterministic=*/true};
     CBlock block{BuildRandomBlock(fuzzed_data_provider, backend_base_coins_view)};
     {
         const auto reset_guard{coins_view_cache.StartFetching(block)};

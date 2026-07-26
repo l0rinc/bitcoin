@@ -67,6 +67,17 @@ size_t CallOneOf(FuzzedDataProvider& fuzzed_data_provider, Callables... callable
     }
 }
 
+/** Select the disabled, serialized, default, and capped prevout-fetch configurations. */
+[[nodiscard]] inline int ConsumePrevoutFetchThreads(FuzzedDataProvider& fuzzed_data_provider, int default_threads, int max_threads) noexcept
+{
+    switch (fuzzed_data_provider.ConsumeIntegralInRange<uint8_t>(0, 3)) {
+    case 0: return 0;
+    case 1: return 1;
+    case 2: return default_threads;
+    default: return max_threads;
+    }
+}
+
 template <typename Collection>
 auto PickIterator(FuzzedDataProvider& fuzzed_data_provider, Collection& col)
 {
