@@ -76,12 +76,8 @@ class AsmapTest(BitcoinTestFramework):
         name = '1_asn_map'
         filename = os.path.join(self.datadir, name)
         shutil.copyfile(self.asmap_raw, filename)
-        if self.is_embedded_asmap_compiled():
-            with self.node.assert_debug_log(["Opened asmap data", "from embedded byte array"]): # TODO: `GetBoolArg()` parses the filename as a true boolean
-                self.start_node(0, [f'-asmap={name}'])
-        else:
-            msg = "Error: Embedded asmap data not available"
-            self.node.assert_start_raises_init_error(extra_args=[f'-asmap={name}'], expected_msg=msg) # TODO: `GetBoolArg()` tries to use unavailable embedded data
+        with self.node.assert_debug_log(expected_messages(filename)):
+            self.start_node(0, [f'-asmap={name}'])
         os.remove(filename)
 
     def test_embedded_asmap(self):

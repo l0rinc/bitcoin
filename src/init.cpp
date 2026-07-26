@@ -1617,8 +1617,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         assert(!node.netgroupman);
         if (args.IsArgSet("-asmap") && !args.IsArgNegated("-asmap")) {
             uint256 asmap_version{};
-            if (!args.GetBoolArg("-asmap", false)) {
-                fs::path asmap_path = args.GetPathArg("-asmap");
+            fs::path asmap_path{args.GetPathArg("-asmap")};
+            if (!asmap_path.empty() && asmap_path != "1") {
                 if (!asmap_path.is_absolute()) {
                     asmap_path = args.GetDataDirNet() / asmap_path;
                 }
