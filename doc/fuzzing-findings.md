@@ -2628,6 +2628,43 @@ node reorg schedules are race-free. At the time of this gate the confirmed-runti
 defect count was twelve; the later descriptor-index persistence defect is recorded
 above, and no further change was warranted by this gate.
 
+### Exact-master stale-candidate control (2026-07-26)
+
+The post-fix replay was independently checked against exact clean master
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f` to ensure that the branch's
+`5857b7e6aa` production changes were not the source of the assertion. A
+disposable clean-master worktree received only the branch's
+`validation_block_reorg` harness and its test-only `BestInvalid()` accessor;
+`src/validation.cpp` remained at clean master. Four independent TSan workers
+replayed the 2,257-input corpus, and all four failed in the harness oracle:
+`setBlockIndexCandidates` contained a block already marked
+`BLOCK_FAILED_VALID`.
+
+The representative 62-byte input
+`ddd28c657270042b8336d3358f6f35ba98b42570` is:
+
+    006c00eceb5afc006c7e00eceb433897405fd69f72afda09203ed3005fa3036775df003146cda51f38940f74ebfa0c00007e2e316c257e25bb40006c006c
+
+Its deterministic mutation is a sequence of genesis/reconsider/flush calls,
+then invalidation of a height-1 branch ancestor while the invalid height-2
+descendant is cached as a candidate. Clean master leaves that descendant in the
+candidate set after setting its failed-validation flag. Three other independent
+seeds reproduced the same failed-descendant transition. The fixed branch
+replayed all four seeds successfully, and the three deterministic regressions
+from `5857b7e6aa`
+(`received_block_transactions_skips_failed_unlinked_child`,
+`invalidate_block_removes_out_of_chain_candidate`, and
+`invalidate_block_removes_out_of_chain_descendant_during_disconnect`) each
+passed in isolation.
+
+This confirms the existing production fix as a real clean-master validation
+state defect, rather than a regression or overstrong branch-only oracle. The
+severity remains medium: it is a block-index candidate-set consistency failure
+that can trip assertion-enabled builds; no consensus bypass, wallet impact,
+persisted-format corruption, or remotely reachable memory-safety issue was
+demonstrated. The source fix and its deterministic tests remain grouped in
+`5857b7e6aa`; this section records the independent clean-master proof.
+
 ## Current-master block-index/reorg state gate (2026-07-23)
 
 The `block_index_tree` target was replayed from two independent copies of all
