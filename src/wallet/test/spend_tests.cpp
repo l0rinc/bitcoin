@@ -33,6 +33,26 @@ BOOST_AUTO_TEST_CASE(max_signed_input_size_uses_external_outpoint)
     BOOST_CHECK_EQUAL(high_r, low_r + 1);
 }
 
+BOOST_AUTO_TEST_CASE(coincontrol_external_output_contracts)
+{
+    const COutPoint outpoint{Txid::FromUint256(uint256::ONE), 0};
+    const CTxOut txout{COIN, CScript{} << OP_TRUE};
+    CCoinControl coin_control;
+
+    BOOST_CHECK(!coin_control.IsExternalSelected(outpoint));
+    BOOST_CHECK(!coin_control.GetExternalOutput(outpoint));
+
+    coin_control.Select(outpoint).SetTxOut(txout);
+    BOOST_CHECK(coin_control.IsExternalSelected(outpoint));
+    const auto external_output{coin_control.GetExternalOutput(outpoint)};
+    BOOST_REQUIRE(external_output);
+    BOOST_CHECK(*external_output == txout);
+
+    coin_control.UnSelect(outpoint);
+    BOOST_CHECK(!coin_control.IsExternalSelected(outpoint));
+    BOOST_CHECK(!coin_control.GetExternalOutput(outpoint));
+}
+
 BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
 {
     CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
