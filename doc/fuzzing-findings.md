@@ -4322,3 +4322,32 @@ divergent until restart or repair; no remote, consensus, or demonstrated key
 loss path was found. Severity against clean master is low to medium. The fix is
 already present in `a2560d7ef1`; this commit supplies the missing encrypted-path
 proof and fuzzer coverage.
+
+## Resumed RPC and relay corpus gates (2026-07-26)
+
+The latest-master RPC vsize fields were rechecked with the existing `rpc` target
+and its 13,390-input QA corpus. Two independent Clang 19 ASan/UBSan workers
+loaded the complete corpus and executed 13,534 and 13,531 units respectively;
+both exited zero, added no corpus units, and produced no assertion, sanitizer,
+timeout, or artifact. The corpus includes the mempool-related RPC commands
+`getmempoolentry`, `getrawtransaction`, `submitpackage`, and
+`testmempoolaccept`. The deterministic functional tests
+`mempool_accept.py`, `mempool_sigoplimit.py`, and `rpc_packages.py` also all
+passed, covering the distinction between sigop-adjusted vsize, BIP141 vsize,
+and the deprecated `vsize` field.
+
+The cluster-mempool transaction-pool target then replayed all 8,000 preserved
+inputs under two ASan/UBSan workers (8,002 and 8,003 units) and two TSan workers
+(8,001 units each). The global relay/message-processing target replayed all
+4,431 inputs under two ASan/UBSan workers (5,807 and 5,824 units) and two TSan
+workers (4,432 units each). Every worker exited zero without an assertion,
+sanitizer diagnostic, race report, timeout, or artifact, and none added a new
+unit.
+
+These runs exercise the latest mempool RPC presentation, cluster ancestry and
+fee metadata, global transaction-rate limiting, peer state transitions, and
+the narrowed malformed-message exception path. The RPC production sources are
+unchanged from clean master; the transaction-pool and message-processing
+assertions are branch hardening, and the existing exact-master controls cover
+the corresponding production paths. No new production mistake, race, or
+deterministic test omission was demonstrated; severity is none.
