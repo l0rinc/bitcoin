@@ -341,8 +341,10 @@ protected:
 
     WalletDescriptor m_wallet_descriptor GUARDED_BY(cs_desc_man);
 
+    bool TopUpInternal(unsigned int size, bool force_descriptor_write);
+
     //! Same as 'TopUp' but designed for use within a batch transaction context
-    bool TopUpWithDB(WalletBatch& batch, unsigned int size = 0);
+    bool TopUpWithDB(WalletBatch& batch, unsigned int size = 0, bool force_descriptor_write = false);
 
 public:
     static std::unique_ptr<DescriptorScriptPubKeyMan> LoadFromStorage(WalletStorage& storage, WalletDescriptor& descriptor, int64_t keypool_size, const KeyMap& keys, const CryptedKeyMap& ckeys);

@@ -29,6 +29,7 @@
 #include <wallet/test/util.h>
 #include <wallet/types.h>
 #include <wallet/wallet.h>
+#include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
 
 #include <limits>
@@ -36,6 +37,7 @@
 #include <memory>
 #include <optional>
 #include <sqlite3.h>
+#include <streams.h>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -110,6 +112,31 @@ static bool BlockDescriptorMetadataWrites(CWallet& wallet)
                                     nullptr, nullptr, nullptr) == SQLITE_OK;
 }
 
+static std::optional<WalletDescriptor> ReadPersistedDescriptor(CWallet& wallet, const uint256& id)
+{
+    auto* database{dynamic_cast<MockableSQLiteDatabase*>(&wallet.GetDatabase())};
+    if (!database) return std::nullopt;
+    DataStream key;
+    key << std::make_pair(DBKeys::WALLETDESCRIPTOR, id);
+    sqlite3_stmt* statement{nullptr};
+    if (sqlite3_prepare_v2(database->m_db, "SELECT value FROM main WHERE key = ?", -1, &statement, nullptr) != SQLITE_OK) {
+        sqlite3_finalize(statement);
+        return std::nullopt;
+    }
+    if (sqlite3_bind_blob(statement, 1, static_cast<const void*>(key.data()), key.size(), SQLITE_TRANSIENT) != SQLITE_OK ||
+        sqlite3_step(statement) != SQLITE_ROW) {
+        sqlite3_finalize(statement);
+        return std::nullopt;
+    }
+    SpanReader descriptor_reader{std::span<const std::byte>{static_cast<const std::byte*>(sqlite3_column_blob(statement, 0)), static_cast<size_t>(sqlite3_column_bytes(statement, 0))}};
+    WalletDescriptor descriptor;
+    descriptor_reader >> descriptor;
+    const bool unique{sqlite3_step(statement) == SQLITE_DONE};
+    sqlite3_finalize(statement);
+    if (!unique) return std::nullopt;
+    return descriptor;
+}
+
 FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -178,6 +205,80 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                     auto& spk{PickValue(fuzzed_data_provider, spks)};
                     (void)spk_manager->MarkUnusedAddresses(spk);
                 }
+            },
+            [&] {
+                if (descriptor_writes_blocked || descriptor_metadata_writes_blocked) return;
+                LOCK(spk_manager->cs_desc_man);
+                const auto descriptor_before_new{spk_manager->GetWalletDescriptor()};
+                const auto output_type{descriptor_before_new.descriptor->GetOutputType()};
+                if (!descriptor_before_new.descriptor->IsSingleType() ||
+                    !descriptor_before_new.descriptor->IsRange() ||
+                    !output_type.has_value() ||
+                    descriptor_before_new.next_index >= std::numeric_limits<int32_t>::max() - 10) {
+                    return;
+                }
+
+                if (!spk_manager->GetNewDestination(*output_type) || !spk_manager->TopUp(10)) return;
+                const auto descriptor_before_mark{spk_manager->GetWalletDescriptor()};
+                FlatSigningProvider out_keys;
+                std::vector<CScript> scripts;
+                if (!descriptor_before_mark.descriptor->ExpandFromCache(descriptor_before_mark.next_index,
+                                                                         descriptor_before_mark.cache,
+                                                                         scripts, out_keys) ||
+                    scripts.size() != 1) {
+                    return;
+                }
+
+                const auto marked{spk_manager->MarkUnusedAddresses(scripts.front())};
+                assert(marked.size() == 1);
+                const auto descriptor_after_mark{spk_manager->GetWalletDescriptor()};
+                assert(descriptor_after_mark.next_index == descriptor_before_mark.next_index + 1);
+                const auto persisted{ReadPersistedDescriptor(wallet, spk_manager->GetID())};
+                assert(persisted && persisted->next_index == descriptor_after_mark.next_index);
+            },
+            [&] {
+                if (descriptor_writes_blocked || descriptor_metadata_writes_blocked) return;
+                LOCK(spk_manager->cs_desc_man);
+                const auto descriptor_before_new{spk_manager->GetWalletDescriptor()};
+                const auto output_type{descriptor_before_new.descriptor->GetOutputType()};
+                if (!descriptor_before_new.descriptor->IsSingleType() ||
+                    !descriptor_before_new.descriptor->IsRange() ||
+                    !output_type.has_value() ||
+                    descriptor_before_new.next_index >= std::numeric_limits<int32_t>::max() - 10) {
+                    return;
+                }
+
+                if (!spk_manager->GetNewDestination(*output_type) || !spk_manager->TopUp(10)) return;
+                const auto descriptor_before_mark{spk_manager->GetWalletDescriptor()};
+                FlatSigningProvider out_keys;
+                std::vector<CScript> scripts;
+                if (!descriptor_before_mark.descriptor->ExpandFromCache(descriptor_before_mark.next_index,
+                                                                         descriptor_before_mark.cache,
+                                                                         scripts, out_keys) ||
+                    scripts.size() != 1) {
+                    return;
+                }
+
+                if (!BlockDescriptorMetadataWrites(wallet)) {
+                    good_data = false;
+                    return;
+                }
+                descriptor_metadata_writes_blocked = true;
+
+                bool expected_failure{false};
+                try {
+                    (void)spk_manager->MarkUnusedAddresses(scripts.front());
+                } catch (const std::runtime_error& error) {
+                    if (std::string_view{error.what()} != "TopUpWithDB: writing descriptor failed") {
+                        throw;
+                    }
+                    expected_failure = true;
+                }
+                assert(expected_failure);
+                const auto descriptor_after_failure{spk_manager->GetWalletDescriptor()};
+                assert(descriptor_after_failure.next_index == descriptor_before_mark.next_index);
+                const auto persisted{ReadPersistedDescriptor(wallet, spk_manager->GetID())};
+                assert(persisted && persisted->next_index == descriptor_before_mark.next_index);
             },
             [&] {
                 LOCK(spk_manager->cs_desc_man);

@@ -1049,14 +1049,19 @@ std::optional<CKey> DescriptorScriptPubKeyMan::GetKey(const CKeyID& keyid) const
 
 bool DescriptorScriptPubKeyMan::TopUp(unsigned int size)
 {
+    return TopUpInternal(size, /*force_descriptor_write=*/false);
+}
+
+bool DescriptorScriptPubKeyMan::TopUpInternal(unsigned int size, bool force_descriptor_write)
+{
     WalletBatch batch(m_storage.GetDatabase());
     if (!batch.TxnBegin()) return false;
-    bool res = TopUpWithDB(batch, size);
+    bool res = TopUpWithDB(batch, size, force_descriptor_write);
     if (!batch.TxnCommit()) throw std::runtime_error(strprintf("Error during descriptors keypool top up. Cannot commit changes for wallet [%s]", m_storage.LogName()));
     return res;
 }
 
-bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int size)
+bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int size, bool force_descriptor_write)
 {
     LOCK(cs_desc_man);
     std::set<CScript> new_spks;
@@ -1118,7 +1123,7 @@ bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int siz
     const bool descriptor_changed{descriptor.range_start != m_wallet_descriptor.range_start ||
                                   descriptor.range_end != m_wallet_descriptor.range_end ||
                                   max_cached_index != m_max_cached_index};
-    if (descriptor_changed && !batch.WriteDescriptor(GetID(), descriptor)) {
+    if ((force_descriptor_write || descriptor_changed) && !batch.WriteDescriptor(GetID(), descriptor)) {
         throw std::runtime_error(std::string(__func__) + ": writing descriptor failed");
     }
 
@@ -1146,6 +1151,7 @@ std::vector<WalletDestination> DescriptorScriptPubKeyMan::MarkUnusedAddresses(co
     if (IsMine(script)) {
         int32_t index = m_map_script_pub_keys[script];
         if (index >= m_wallet_descriptor.next_index) {
+            const WalletDescriptor descriptor_before{m_wallet_descriptor};
             WalletLogPrintf("%s: Detected a used keypool item at index %d, mark all keypool items up to this item as used\n", __func__, index);
             auto out_keys = std::make_unique<FlatSigningProvider>();
             std::vector<CScript> scripts_temp;
@@ -1158,6 +1164,16 @@ std::vector<WalletDestination> DescriptorScriptPubKeyMan::MarkUnusedAddresses(co
                 result.push_back({dest, std::nullopt});
                 m_wallet_descriptor.next_index++;
             }
+            try {
+                if (!TopUpInternal(0, /*force_descriptor_write=*/true)) {
+                    m_wallet_descriptor = descriptor_before;
+                    WalletLogPrintf("%s: Topping up keypool failed (locked wallet)\n", __func__);
+                }
+            } catch (...) {
+                m_wallet_descriptor = descriptor_before;
+                throw;
+            }
+            return result;
         }
         if (!TopUp()) {
             WalletLogPrintf("%s: Topping up keypool failed (locked wallet)\n", __func__);
