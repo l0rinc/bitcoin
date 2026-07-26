@@ -4351,3 +4351,21 @@ unchanged from clean master; the transaction-pool and message-processing
 assertions are branch hardening, and the existing exact-master controls cover
 the corresponding production paths. No new production mistake, race, or
 deterministic test omission was demonstrated; severity is none.
+
+## Resumed concurrent database-reader ASan gate (2026-07-26)
+
+The existing `dbwrapper_concurrent_reads` QA corpus has 1,116 small inputs.
+The earlier full ASan/UBSan attempt was performance-limited in large seeded
+databases, while the corresponding full TSan gate had already completed. To
+separate sanitizer cost from a diagnostic, two private 128-input slices were
+used: the 128 smallest seeds and the 128 largest seeds.
+
+The smallest-seed ASan/UBSan worker completed 512 executions, added 151 units,
+and exited zero without an assertion, sanitizer report, timeout, or artifact.
+The largest-seed worker was deliberately interrupted after 168 executions when
+it repeatedly reached the same 12-second slow unit; it produced no diagnostic
+or crash artifact. Replaying the two slow units individually exited zero in
+1.295 and 1.767 seconds with the normal fuzzer and in 154 and 160 milliseconds
+under TSan. This confirms database-model and sanitizer overhead rather than a
+runtime defect or race. The full ASan corpus gate remains incomplete and is
+not counted as a pass; no clean-master control or source change was warranted.
