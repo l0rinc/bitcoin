@@ -30,14 +30,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 39 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 40 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | Remaining TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving another clean-master production bug. The full-range TxGraph mutation also exposed the production defect recorded below. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The thirty-nine confirmed runtime defects are: the index publication and restart race;
+The forty confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the equal-feerate TxGraph prefix
 fee overflow; the saturated cluster chunk fee aggregation mismatch; the mempool info fee-delta
@@ -59,8 +59,10 @@ checkqueue completion; stale reusable sighash precomputation; duplicate serializ
 assumeutxo coin records; failed block candidates retained across invalidation and
 unlinked recovery; and pruned unlinked blocks no longer linked when their parent
 arrives; invalid raw fee-estimator success thresholds; descriptor top-up cache
-metadata inconsistency after a descriptor-row write failure; and descriptor updates
-that publish replacement state before a cache write failure can be rolled back. Their exact reproducer,
+metadata inconsistency after a descriptor-row write failure; descriptor updates
+that publish replacement state before a cache write failure can be rolled back; and
+descriptor reservation returns that publish an in-memory index decrement before a
+descriptor-row write failure. Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -4122,3 +4124,35 @@ itself is already on master.
 Result against clean master: the state transition is correct and no production
 defect was demonstrated. This is a coverage omission only; severity none. No
 production assertion or behavior change is warranted.
+
+## Descriptor reservation return after a descriptor write failure (2026-07-26)
+
+The existing reservation lifecycle calls `GetReservedDestination()` to consume
+an address and `ReturnDestination()` when the caller cancels the reservation.
+The clean-master mutation used a one-entry `wpkh(xpub/*)` descriptor, successfully
+reserved index 0, and then installed a deterministic SQLite `BEFORE INSERT`
+trigger that rejects the descriptor-row write. On the unmodified
+`origin/master` baseline `e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`,
+`ReturnDestination()` decremented `m_wallet_descriptor.next_index` in memory
+before checking the failed write. The database row remained at `next_index == 1`,
+while the live descriptor became `next_index == 0`; the deterministic test failed
+at the live-state assertion with `0 != 1` and exit code 201.
+
+The production fix stages the decremented `WalletDescriptor`, writes that copy,
+and publishes it to `m_wallet_descriptor` only after `WriteDescriptor()` returns
+true. A failed write therefore leaves both representations at the consumed index
+and suppresses the address-availability notification. This is distinct from the
+earlier branch-only `GetNewDestination()` write-failure fix (`059365c88b`): the
+exact-master control contained neither production change when this return-path
+failure was reproduced. Applying only the new fix to that control made the same
+test pass all 9/9 assertions.
+
+The branch's complete `scriptpubkeyman_tests` suite passed 8 cases and 64
+assertions. A direct `wpkh(%04/*)` fuzzer seed reached the new action and passed
+under ASan/UBSan. Two ASan/UBSan workers then loaded 10,026 corpus inputs and
+completed 13,000 executions each, exiting zero without an assertion, sanitizer
+diagnostic, timeout, or artifact; they added 33 and 31 units and peaked at 933
+and 977 MB RSS. The failure requires a local wallet database/storage failure or
+equivalent fault, not a remote or consensus input. It is a low-to-medium
+severity wallet state-consistency and availability defect, with no demonstrated
+key loss or remote attack path.
