@@ -4843,6 +4843,33 @@ TSan in 4.3 seconds, including initial sync, index reinitialization, null
 transaction-reference rejection, the reader-reinit race regression, and the
 reorg-crash regression.
 
+## Recent P2P relay-capacity and rate-limit gates (2026-07-26)
+
+The new inbound relay-capacity state machine was exercised with
+`p2p_connection_limits.py` under the Clang 19 TSan daemon. The test passed in
+about 16 seconds and covered full-relay versus block-relay-only admission,
+runtime `filterload` transition, `-inboundrelaypercent=0` and `=100`, and a
+21-peer block-relay-only saturation case. No TSan report, assertion, disconnect
+accounting error, or crash artifact was produced.
+
+The preserved P2P corpora were replayed concurrently under the unified TSan
+fuzzer: `process_message` completed 3,696 files in 23 seconds,
+`node_eviction` 609 files in 5 seconds, and `connman` 3,405 files in 21
+seconds. The same three corpora completed under ASan/UBSan with peak RSS of
+about 1.0 GiB for `process_message` and 966 MiB for `connman`; all workers
+exited without sanitizer diagnostics, assertions, or artifacts.
+
+The four global transaction-relay rate-limit scenarios were also run under
+TSan. `p2p_tx_relay_rate_limit.py`, the outbound backlog case, and the
+serialized-size case passed in 12, 10, and 179 seconds respectively. The
+generated build's functional symlink set did not yet include the newly added
+`p2p_tx_relay_rate_limit_known.py`, so the runner's initial attempt failed
+before starting it with a file-not-found error; running that source script
+directly against the same TSan daemon passed in 15 seconds. No token-bucket,
+RBF-backlog, known-transaction refund, multi-peer, serialized-size, race, or
+memory-safety defect was demonstrated; no production or fuzzer source change
+was warranted.
+
 ## Txospender index CompactSize offset boundary (2026-07-26)
 
 The existing txospender index tests did not cross the serialized block
