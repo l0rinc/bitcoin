@@ -4838,4 +4838,7 @@ deactivation, and unclean-restart paths. The initial timeout is recorded as a
 sanitizer execution-cost limitation, not a production failure. No index
 publication race, pruning inconsistency, memory defect, or deterministic test
 omission was demonstrated; no production or fuzzer source change was
-warranted.
+warranted. The five-case `blockfilter_index_tests` suite also passed under
+TSan in 4.3 seconds, including initial sync, index reinitialization, null
+transaction-reference rejection, the reader-reinit race regression, and the
+reorg-crash regression.
