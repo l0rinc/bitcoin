@@ -4510,6 +4510,18 @@ also remained clean on this rebased source. No BIP32 seed-boundary
 inconsistency, memory defect, race, or deterministic test omission was
 demonstrated; no source or permanent test change was warranted.
 
+## Wallet encryption and reorg functional gates (2026-07-26)
+
+Using the wallet-enabled Clang 19 Debug daemon, `wallet_reorgsrestore.py`
+passed in 10 seconds, covering wallet state restoration across chain reorgs.
+The first `wallet_encryption.py` invocation stopped before assertions because
+the build did not yet contain the `bitcoin-wallet` utility; after building that
+target, the complete encryption scenario passed in six seconds. It covered
+encrypted and watch-only wallets, timeout boundaries, key removal, backup and
+restore behavior, and wallet-tool interaction. No wallet restart, encryption,
+or reorg consistency defect was demonstrated; no source or permanent test
+change was warranted.
+
 ## Full RPC TSan replay (2026-07-26)
 
 The preserved `rpc` corpus contains 13,390 inputs and includes the recent
