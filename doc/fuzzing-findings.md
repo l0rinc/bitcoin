@@ -4509,3 +4509,19 @@ The existing key fuzzer's invalid private/public/hardened derivation checks
 also remained clean on this rebased source. No BIP32 seed-boundary
 inconsistency, memory defect, race, or deterministic test omission was
 demonstrated; no source or permanent test change was warranted.
+
+## Full RPC TSan replay (2026-07-26)
+
+The preserved `rpc` corpus contains 13,390 inputs and includes the recent
+`getmempoolcluster`, mempool-vsize, global-relay-rate, and
+`descriptorprocesspsbt` command paths. Two independent Clang 19 direct-file
+TSan workers replayed the complete corpus, each completing all 13,390 inputs in
+44 seconds. Both exited zero without an assertion, ThreadSanitizer report,
+timeout, or artifact. A separate 512-input spread completed cleanly before the
+full replay.
+
+The RPC fuzzer runs each command sequence against an independent node context,
+so this is evidence for the exercised command and validation paths rather than
+proof of arbitrary concurrent RPC callers. No RPC production inconsistency,
+race, or deterministic test omission was demonstrated; no source or permanent
+test change was warranted.
