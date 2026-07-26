@@ -566,7 +566,7 @@ struct InvToSendBucket {
         count_bucket.increment(now);
     }
 
-    std::vector<Wtxid> TakeForProcessing(CTxMemPool& mempool) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs);
+    std::vector<CTransactionRef> TakeForProcessing(CTxMemPool& mempool) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs);
 
     bool decrement(double size)
     {
@@ -2386,20 +2386,20 @@ void PeerManagerImpl::SendPings()
     for(auto& it : m_peer_map) it.second->m_ping_queued = true;
 }
 
-std::vector<Wtxid> InvToSendBucket::TakeForProcessing(CTxMemPool& mempool)
+std::vector<CTransactionRef> InvToSendBucket::TakeForProcessing(CTxMemPool& mempool)
 {
     AssertLockHeld(mempool.cs);
 
     size_t n_to_take = static_cast<size_t>(std::max<double>(count_bucket.value() - count_floor, 0));
 
-    std::vector<Wtxid> best;
+    std::vector<CTransactionRef> best;
 
     auto itervec = mempool.ExtractBestByMiningScoreWithTopology(backlog, n_to_take);
     bool tokens_left = true;
     for (auto txiter : itervec) {
         auto& wtxid = txiter->GetTx().GetWitnessHash();
         if (tokens_left) {
-            best.push_back(wtxid);
+            best.push_back(txiter->GetSharedTx());
             if (!decrement(txiter->GetTx().ComputeTotalSize())) {
                 tokens_left = false;
             }
@@ -2416,6 +2416,12 @@ std::vector<Wtxid> InvToSendBucket::TakeForProcessing(CTxMemPool& mempool)
     }
 
     return best;
+}
+
+static void RefundRelayTokens(InvToSendBucket& bucket, const CTransaction& tx)
+{
+    bucket.size_bucket.refund(tx.ComputeTotalSize());
+    bucket.count_bucket.refund();
 }
 
 void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_bumped)
@@ -2455,8 +2461,8 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
     bool out_avail = m_outbound_inv_bucket.avail();
     if (!in_avail && !out_avail) return;
 
-    std::vector<Wtxid> for_inbound;
-    std::vector<Wtxid> for_outbound;
+    std::vector<CTransactionRef> for_inbound;
+    std::vector<CTransactionRef> for_outbound;
 
     {
         LOCK(m_mempool.cs);
@@ -2465,8 +2471,8 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
     }
 
     if (!for_inbound.empty() || !for_outbound.empty()) {
-        bool any_inbound_connected = false;
-        bool any_outbound_connected = false;
+        std::vector<PeerRef> inbound_peers;
+        std::vector<PeerRef> outbound_peers;
         for (const PeerRef& peer_ref : GetAllPeers()) {
             if (!peer_ref) continue;
             Peer& peer{*peer_ref};
@@ -2481,20 +2487,59 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
             // in the announcement.
             if (tx_relay->m_next_inv_send_time == 0s) continue;
             if (peer.m_is_inbound) {
-                any_inbound_connected = true;
+                inbound_peers.push_back(peer_ref);
             } else {
-                any_outbound_connected = true;
-            }
-            for (auto& i : (peer.m_is_inbound ? for_inbound : for_outbound)) {
-                tx_relay->m_tx_inventory_to_send.push_back(i);
+                outbound_peers.push_back(peer_ref);
             }
         }
+
+        // Avoid consuming global relay budget for transactions that every
+        // eligible peer already knows. The selected vectors are bounded by
+        // the available token balance, so this check does not scan the full
+        // backlog or recreate the old per-peer queue cost.
+        auto distribute = [](InvToSendBucket& bucket, const std::vector<CTransactionRef>& txs,
+                             const std::vector<PeerRef>& peers) {
+            for (const CTransactionRef& tx : txs) {
+                Assert(tx);
+                bool unknown_to_a_peer{false};
+                for (const PeerRef& peer_ref : peers) {
+                    Peer& peer{*peer_ref};
+                    auto tx_relay = peer.GetTxRelay();
+                    Assert(tx_relay != nullptr);
+                    LOCK(tx_relay->m_tx_inventory_mutex);
+                    const uint256& hash = peer.m_wtxid_relay ?
+                        tx->GetWitnessHash().ToUint256() : tx->GetHash().ToUint256();
+                    if (!tx_relay->m_tx_inventory_known_filter.contains(hash)) {
+                        unknown_to_a_peer = true;
+                        break;
+                    }
+                }
+
+                if (!unknown_to_a_peer) {
+                    if (!peers.empty()) RefundRelayTokens(bucket, *tx);
+                    continue;
+                }
+
+                for (const PeerRef& peer_ref : peers) {
+                    Peer& peer{*peer_ref};
+                    auto tx_relay = peer.GetTxRelay();
+                    Assert(tx_relay != nullptr);
+                    LOCK(tx_relay->m_tx_inventory_mutex);
+                    if (tx_relay->m_next_inv_send_time != 0s) {
+                        tx_relay->m_tx_inventory_to_send.push_back(tx->GetWitnessHash());
+                    }
+                }
+            }
+        };
+
+        distribute(m_inbound_inv_bucket, for_inbound, inbound_peers);
+        distribute(m_outbound_inv_bucket, for_outbound, outbound_peers);
 
         // if the node has no in/outbound connections, clear the corresponding backlog entirely
         // this reduces wasted memory, and avoids having the bucket artificially empty for when
         // future peers do connect.
-        if (!any_inbound_connected) m_inbound_inv_bucket.backlog.clear();
-        if (!any_outbound_connected) m_outbound_inv_bucket.backlog.clear();
+        if (inbound_peers.empty()) m_inbound_inv_bucket.backlog.clear();
+        if (outbound_peers.empty()) m_outbound_inv_bucket.backlog.clear();
     }
 }
 
