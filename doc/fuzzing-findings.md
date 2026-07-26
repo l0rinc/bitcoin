@@ -4089,3 +4089,36 @@ Result against clean master: no new production bug, remote denial of service,
 state inconsistency, or race was demonstrated. The fuzzer target and the
 production invariant are retained as coverage and hardening for the new
 capacity/eviction feature; the finding severity is therefore none.
+
+## Descriptor self-expansion at an exhausted keypool (2026-07-26)
+
+The recent master change `1e996640e6` makes `CanGetAddresses()` return true
+for ranged descriptors whose keys can self-expand, even when
+`next_index == range_end`. The existing `scriptpubkeyman` target could parse
+unhardened xpub descriptors, but it did not deliberately consume the final
+cached address and then verify the self-expansion transition. The new action
+does exactly that: it consumes the current cache, asserts that availability
+remains true for a self-expanding single-type descriptor, requests the next
+destination, and checks that both `next_index` and `range_end` advance.
+
+The deterministic `get_new_destination_self_expanding_xpub` unit case uses a
+one-entry `wpkh(xpub/*)` keypool and makes the same transition in 12 assertions.
+The direct fuzzer seed is `wpkh(%04/*)` followed by the `FuzzedDataProvider`
+terminator and action-selection bytes; `%04` expands to a generated xpub.
+
+The branch unit test passed 12/12 assertions. The branch wallet ASan/UBSan
+target ran with two workers over the 10,026-input preserved corpus and a
+13,000-run budget per worker (about 2,974 mutations after corpus loading); both
+workers exited zero with no assertion, sanitizer, timeout, or artifact, adding
+43 and 25 units respectively. The direct seed also completed cleanly under the
+same sanitizer build. An exact detached `origin/master` worktree at
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`, with only the deterministic unit
+case injected, passed the same 12/12 assertions under the Debug
+`ABORT_ON_FAILED_ASSUME` configuration. This control is important because the
+branch contains earlier descriptor write/rollback changes
+(`059365c88b`, `5f9d7b084f`, and `a2560d7ef1`), while the self-expansion feature
+itself is already on master.
+
+Result against clean master: the state transition is correct and no production
+defect was demonstrated. This is a coverage omission only; severity none. No
+production assertion or behavior change is warranted.
