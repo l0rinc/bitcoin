@@ -5,7 +5,7 @@
 """Ensure already-known transactions do not consume the global relay budget."""
 
 from test_framework.blocktools import COINBASE_MATURITY
-from test_framework.messages import CInv, MSG_WTX, msg_inv
+from test_framework.messages import CInv, MSG_TX, MSG_WTX, msg_inv
 from test_framework.p2p import P2PInterface
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal
@@ -30,8 +30,12 @@ class TxRelayRateLimitKnownTest(BitcoinTestFramework):
         outbound_peer = node.add_outbound_p2p_connection(
             P2PInterface(), p2p_idx=0, connection_type="outbound-full-relay"
         )
+        legacy_peer = node.add_outbound_p2p_connection(
+            P2PInterface(wtxidrelay=False), p2p_idx=1, connection_type="outbound-full-relay"
+        )
         node.bumpmocktime(10)
         outbound_peer.sync_with_ping()
+        legacy_peer.sync_with_ping()
 
         # Exercise the separate outbound bucket with the same known-filter
         # contract before adding inbound peers.
@@ -39,6 +43,7 @@ class TxRelayRateLimitKnownTest(BitcoinTestFramework):
             tx = wallet.create_self_transfer()
             inv = msg_inv([CInv(MSG_WTX, int(tx["wtxid"], 16))])
             outbound_peer.send_and_ping(inv)
+            legacy_peer.send_and_ping(msg_inv([CInv(MSG_TX, int(tx["txid"], 16))]))
             wallet.sendrawtransaction(from_node=node, tx_hex=tx["hex"])
             node.syncwithvalidationinterfacequeue()
 
@@ -53,6 +58,7 @@ class TxRelayRateLimitKnownTest(BitcoinTestFramework):
         assert_equal(bucket["backlog"], 0)
         assert_equal(bucket["count_tok"], BUCKET_CAP - 1)
         assert_equal(outbound_peer.message_count["inv"], 0)
+        assert_equal(legacy_peer.message_count["inv"], 0)
 
         # The two global buckets are independent, but the inbound bucket was
         # consumed while no inbound peers existed. Refill it before switching

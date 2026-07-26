@@ -5212,3 +5212,35 @@ respectively; peak RSS was 752, 748, 765, and 752 MiB. All workers exited zero
 without an assertion, sanitizer diagnostic, race report, timeout, or crash
 artifact. This is sanitizer evidence for the guided mutation and its cleanup
 paths, not proof that all live relay scheduling interleavings are covered.
+
+## Legacy txid relay known-filter coverage (2026-07-26)
+
+The guided relay slice now adds a third outbound-full-relay peer that completes
+`VERACK` without sending `WTXIDRELAY`. The other inbound and outbound peers
+negotiate BIP339. The same mature-coinbase-backed mixed, all-known duplicate,
+and stale-mempool transitions therefore exercise both the txid and wtxid
+branches of `ProcessInvBacklog()`'s known-inventory filter. The existing
+functional regression was extended in parallel: it announces each known
+transaction to the modern peer as `MSG_WTX` and to a `P2PInterface(wtxidrelay=False)`
+peer as `MSG_TX` before local submission, then verifies that the outbound global
+count budget remains intact. The updated
+`p2p_tx_relay_rate_limit_known.py` passed end to end.
+
+The exact clean-master baseline at
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`, with only the guided harness
+transplanted and no production changes, fails at the existing mixed-rebroadcast
+known-filter assertion because `ed89ea1d6d` is absent. The same control with
+only the single commit diff from `ed89ea1d6d` applied to `net_processing.cpp`
+and `TokenBucket::refund()` passes. A disposable mutant that incorrectly uses
+the wtxid for every peer fails at the all-known outbound bucket assertion on
+the one-byte seed, proving that the new legacy path is exercised rather than
+being inert. No new clean-master production defect was demonstrated; the
+txid/wtxid selection in the existing `ed89ea1d6d` fix is correct.
+
+The current branch passed the one-byte seed under normal, ASan/UBSan, and
+direct-file TSan binaries. A normal 200-execution campaign completed at
+coverage 11,064 with 108 MiB peak RSS. An ASan/UBSan 100-execution campaign
+completed at coverage 34,857 with 678 MiB peak RSS. All controls exited zero
+without assertions, sanitizer diagnostics, race reports, timeouts, or
+artifacts. This is a coverage addition and attribution check, not another
+production fix.
