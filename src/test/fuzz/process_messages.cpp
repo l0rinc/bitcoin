@@ -82,6 +82,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
+    FuzzedDataProvider rate_provider(buffer.data(), buffer.size());
 
     auto& node{g_setup->m_node};
     auto& connman{static_cast<ConnmanTestMsg&>(*node.connman)};
@@ -90,6 +91,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     const auto block_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
     FakeNodeClock clock{1610000000s}; // any time to successfully reset ibd
     FakeSteadyClock steady_clock;
+    const unsigned int tx_send_rate{ConsumeTxSendRate(rate_provider, DEFAULT_TX_SEND_RATE)};
     chainman.ResetIbd();
     chainman.DisableNextWrite();
 
@@ -104,6 +106,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
                                      PeerManager::Options{
                                          .reconcile_txs = true,
                                          .deterministic_rng = true,
+                                         .tx_send_rate = tx_send_rate,
                                      });
     connman.SetMsgProc(node.peerman.get());
     connman.SetAddrman(*node.addrman);

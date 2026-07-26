@@ -4994,3 +4994,32 @@ fuzzers remain the clean-baseline controls recorded in the compact-block
 recheck above. Across both controls, no compact-block collision defect, race,
 state inconsistency, or deterministic test omission was demonstrated, so no
 production or fuzzer source change was warranted.
+
+## P2P fuzzer transaction-relay-rate mutation (2026-07-26)
+
+The `cmpctblock`, `process_message`, and `process_messages` harnesses previously
+constructed `PeerManager::Options` with the fixed default `tx_send_rate` of
+14 transactions per second. The functional suite already covered selected
+configurations (including rates 1, 2, and 1,000), but the sanitizer fuzzers did
+not combine the global relay queue with arbitrary rates, especially the two
+configuration boundaries. The new shared fuzzer helper selects 1, the default,
+1,000, or an arbitrary value in the valid 1..1,000 range. It uses an independent
+provider over the same input so the existing peer, message, and compact-block
+state-machine byte layout is unchanged.
+
+The rebuilt full TSan controls completed 1,970 `cmpctblock` inputs in 70
+seconds and 4,431 `process_messages` inputs in 63 seconds. Two ASan/UBSan
+workers replayed a 256-input compact-block slice, completing 261 runs each in
+88 seconds. Two workers replayed a 256-input message-processing slice,
+completing 363 and 364 runs in 44 seconds. All workers exited zero without an
+assertion, sanitizer diagnostic, race report, timeout, or artifact. The exact
+existing compact-block seed that exposed the intermediate harness regression
+was also replayed successfully under both TSan and ASan/UBSan after the
+provider was isolated.
+
+The intermediate implementation consumed the rate bytes from the primary
+provider and caused that seed to fail the fuzzer-only GETDATA oracle at
+`cmpctblock.cpp:466`; it changed peer construction rather than exposing a
+production problem. That implementation was discarded before the commit. The
+final mutation changes no production code, and no relay-token inconsistency,
+state race, memory defect, or deterministic test omission was demonstrated.
