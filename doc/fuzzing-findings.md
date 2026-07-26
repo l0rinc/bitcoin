@@ -5120,3 +5120,23 @@ remains performance-limited, and these per-process workers do not prove that
 arbitrary live AddrMan callers are race-free. No AddrMan inconsistency, memory
 defect, race, or deterministic test omission was demonstrated, so no source
 change was warranted.
+
+## Live TSan gates for recent P2P and mempool RPC features (2026-07-26)
+
+The Clang 19 TSan functional runner executed `p2p_connection_limits.py` with a
+TSan-instrumented `bitcoind` in 15 seconds. The test covers inbound and
+block-relay-only admission, `-inboundrelaypercent=0` and `100`, and eviction of
+transaction-relaying peers. It passed without a TSan report or functional
+failure.
+
+The same runner then executed `mempool_sigoplimit.py` in 28 seconds and
+`rpc_packages.py` in 71 seconds. These cover sigop-adjusted versus BIP141
+virtual sizes, `getrawtransaction`/mempool presentation, package acceptance,
+replacement, and package-result fields under live nodes. Both passed without a
+TSan report, assertion, or functional failure.
+
+These are live-process integration controls in addition to the independent
+fuzzer workers; they do not prove all possible peer scheduling or RPC/mempool
+interleavings. No inbound-relay race, vsize-reporting inconsistency, memory
+defect, or deterministic test omission was demonstrated, so no source change
+was warranted.
