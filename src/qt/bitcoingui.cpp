@@ -38,6 +38,7 @@
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <node/interface_ui.h>
+#include <util/time.h>
 #include <util/translation.h>
 #include <validation.h>
 
@@ -76,7 +77,7 @@
  *
  * Ref: https://github.com/bitcoin/bitcoin/pull/1026
  */
-static constexpr int64_t MAX_BLOCK_TIME_GAP = 90 * 60;
+static constexpr int64_t MAX_BLOCK_TIME_GAP{TicksSeconds(90min)};
 
 const std::string BitcoinGUI::DEFAULT_UIPLATFORM =
 #if defined(Q_OS_MACOS)

@@ -782,10 +782,10 @@ QString formatNiceTimeOffset(qint64 secs)
 {
     // Represent time from last generated block in human readable text
     QString timeBehindText;
-    const int HOUR_IN_SECONDS = 60*60;
-    const int DAY_IN_SECONDS = 24*60*60;
-    const int WEEK_IN_SECONDS = 7*24*60*60;
-    const int YEAR_IN_SECONDS = 31556952; // Average length of year in Gregorian calendar
+    constexpr int HOUR_IN_SECONDS{TicksSeconds(1h)};
+    constexpr int DAY_IN_SECONDS{TicksSeconds(24h)};
+    constexpr int WEEK_IN_SECONDS{TicksSeconds(7 * 24h)};
+    constexpr int YEAR_IN_SECONDS{TicksSeconds(std::chrono::years{1})};
     if(secs < 60)
     {
         timeBehindText = QObject::tr("%n second(s)","",secs);

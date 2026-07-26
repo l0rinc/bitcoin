@@ -97,7 +97,7 @@ static RPCMethod mockscheduler()
     }
 
     int64_t delta_seconds = request.params[0].getInt<int64_t>();
-    if (delta_seconds <= 0 || delta_seconds > 3600) {
+    if (delta_seconds <= 0 || delta_seconds > TicksSeconds(1h)) {
         throw std::runtime_error("delta_time must be between 1 and 3600 seconds (1 hr)");
     }
 

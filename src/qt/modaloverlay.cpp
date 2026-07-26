@@ -9,6 +9,7 @@
 
 #include <chainparams.h>
 #include <qt/guiutil.h>
+#include <util/time.h>
 
 #include <QEasingCurve>
 #include <QPropertyAnimation>
@@ -36,7 +37,7 @@ ModalOverlay::ModalOverlay(bool enable_wallet, QWidget* parent)
 
     m_animation.setTargetObject(this);
     m_animation.setPropertyName("pos");
-    m_animation.setDuration(300 /* ms */);
+    m_animation.setDuration(Ticks<std::chrono::milliseconds>(300ms));
     m_animation.setEasingCurve(QEasingCurve::OutQuad);
 }
 
@@ -113,10 +114,10 @@ void ModalOverlay::tipUpdate(int count, const QDateTime& blockDate, double nVeri
             QPair<qint64, double> sample = blockProcessTime[i];
 
             // take first sample after 500 seconds or last available one
-            if (sample.first < (currentDate.toMSecsSinceEpoch() - 500 * 1000) || i == blockProcessTime.size() - 1) {
+            if (sample.first < (currentDate.toMSecsSinceEpoch() - Ticks<std::chrono::milliseconds>(500s)) || i == blockProcessTime.size() - 1) {
                 progressDelta = blockProcessTime[0].second - sample.second;
                 timeDelta = blockProcessTime[0].first - sample.first;
-                progressPerHour = (progressDelta > 0) ? progressDelta / (double)timeDelta * 1000 * 3600 : 0;
+                progressPerHour = (progressDelta > 0) ? progressDelta / (double)timeDelta * Ticks<std::chrono::milliseconds>(1h) : 0;
                 remainingMSecs = (progressDelta > 0) ? remainingProgress / progressDelta * timeDelta : -1;
                 break;
             }
