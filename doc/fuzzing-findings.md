@@ -4048,3 +4048,44 @@ reusable-`FillBlock` transitions are covered by the deterministic tests and
 fuzzer controls already recorded above. No current-master compact-block
 collision defect, race, or deterministic test gap was demonstrated, so no
 production or fuzzer source change was warranted in this recheck.
+
+## Inbound transaction-relay capacity and eviction (2026-07-25)
+
+The latest master feature was exercised with a new `connman_inbound_relay_capacity`
+target. Each input chooses `m_max_automatic_connections` across the complete
+valid `0..200` range and `m_full_relay_inbound_percent` across `0..100`, then
+constructs 1..64 registered `CNode` objects. The first node is always inbound
+and tx-relaying so zero-capacity configurations are reachable. The remaining
+nodes vary connection type, relay state, disconnect state, NoBan permission,
+eviction preference, service/traffic timestamps, ping time, and network
+metadata. The target also mutates an optional protected peer and may invoke the
+capacity check twice, covering the post-eviction state rather than only a fresh
+node list.
+
+The oracle counts live inbound tx-relay peers before `EvictTxPeerIfFull()`. It
+requires no new disconnect while at or below capacity; above capacity it
+requires either one newly disconnected inbound tx-relay candidate that is not
+protected or a false return with no disconnect when every candidate is
+protected. The production path now also asserts this same inbound/tx-relay
+postcondition after the candidate snapshot is reacquired and before marking a
+node disconnected. This is invariant hardening at the snapshot/relock
+boundary, not a behavior change and not a discovered clean-master defect.
+
+The exact clean-master worktree at `e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`
+contained only the target and required headers; its production sources were
+otherwise unchanged. Two independent ASan/UBSan workers on the branch and two
+on exact master each completed 3,000 generated executions. Exact master also
+replayed the two branch corpora (60 and 63 inputs) without a diagnostic. After
+adding the production assertion, branch ASan/UBSan replays completed 60 and 63
+inputs, and branch TSan replays completed the same 60 and 63 inputs, all with
+zero exit status and no assertion, sanitizer, race, timeout, or artifact.
+The focused `net_peer_eviction_tests,net_tests` unit selection passed all 34
+cases, and the rebuilt `p2p_connection_limits.py` functional test passed in
+7 seconds. The existing functional test covers the live handshake, bloom-filter
+relay transition, zero/100 percent settings, and tx-only eviction behavior, so
+no additional deterministic regression test was needed.
+
+Result against clean master: no new production bug, remote denial of service,
+state inconsistency, or race was demonstrated. The fuzzer target and the
+production invariant are retained as coverage and hardening for the new
+capacity/eviction feature; the finding severity is therefore none.
