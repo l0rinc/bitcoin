@@ -966,7 +966,9 @@ CAmount SelectionResult::GetSelectedEffectiveValue() const
 
 CAmount SelectionResult::GetTotalBumpFees() const
 {
-    return std::accumulate(m_selected_inputs.cbegin(), m_selected_inputs.cend(), CAmount{0}, [](CAmount sum, const auto& coin) { return sum + coin->ancestor_bump_fees; }) - bump_fee_group_discount;
+    const CAmount total_bump_fees{std::accumulate(m_selected_inputs.cbegin(), m_selected_inputs.cend(), CAmount{0}, [](CAmount sum, const auto& coin) { return sum + coin->ancestor_bump_fees; })};
+    Assert(total_bump_fees >= bump_fee_group_discount);
+    return total_bump_fees - bump_fee_group_discount;
 }
 
 void SelectionResult::Clear()
@@ -974,6 +976,7 @@ void SelectionResult::Clear()
     m_selected_inputs.clear();
     m_waste.reset();
     m_weight = 0;
+    bump_fee_group_discount = 0;
 }
 
 void SelectionResult::AddInput(const OutputGroup& group)
