@@ -67,6 +67,120 @@ BOOST_AUTO_TEST_CASE(desc_spkm_topup_fail)
         std::runtime_error, HasReason("Could not top up scriptPubKeys"));
 }
 
+BOOST_AUTO_TEST_CASE(update_descriptor_key_write_failure_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtKey(extkey) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+
+    const CKey new_key{GenerateRandomKey()};
+    const CPubKey new_pubkey{new_key.GetPubKey()};
+    FlatSigningProvider provider;
+    provider.keys.emplace(new_pubkey.GetID(), new_key);
+    WalletDescriptor descriptor;
+    {
+        LOCK(spkm->cs_desc_man);
+        descriptor = spkm->GetWalletDescriptor();
+    }
+
+    DataStream descriptor_key;
+    descriptor_key << std::make_pair(DBKeys::WALLETDESCRIPTORKEY, std::make_pair(spkm->GetID(), new_pubkey));
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    BOOST_CHECK(!DatabaseHasKey(database, descriptor_key));
+    const std::string trigger{
+        "CREATE TRIGGER fail_descriptor_key_write BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{descriptor_key}) +
+        "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    {
+        LOCK(keystore.cs_wallet);
+        BOOST_CHECK_EXCEPTION(spkm->UpdateWalletDescriptor(descriptor, provider), std::runtime_error,
+                              HasReason("UpdateWithSigningProvider: writing descriptor private key failed"));
+    }
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK(!spkm->HasPrivKey(new_pubkey.GetID()));
+    }
+    BOOST_CHECK(!DatabaseHasKey(database, descriptor_key));
+
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, "DROP TRIGGER fail_descriptor_key_write", nullptr, nullptr, nullptr), SQLITE_OK);
+    WalletDescriptor retry_descriptor;
+    {
+        LOCK(spkm->cs_desc_man);
+        retry_descriptor = spkm->GetWalletDescriptor();
+    }
+    {
+        LOCK(keystore.cs_wallet);
+        BOOST_CHECK_NO_THROW(spkm->UpdateWalletDescriptor(retry_descriptor, provider));
+    }
+    BOOST_CHECK(DatabaseHasKey(database, descriptor_key));
+}
+
+BOOST_AUTO_TEST_CASE(update_encrypted_descriptor_key_write_failure_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtKey(extkey) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+
+    SecureString passphrase{"passphrase"};
+    BOOST_REQUIRE(keystore.EncryptWallet(passphrase));
+    BOOST_REQUIRE(keystore.Unlock(passphrase));
+    BOOST_CHECK(keystore.HasEncryptionKeys());
+    BOOST_CHECK(!keystore.IsLocked());
+
+    const CKey new_key{GenerateRandomKey()};
+    const CPubKey new_pubkey{new_key.GetPubKey()};
+    FlatSigningProvider provider;
+    provider.keys.emplace(new_pubkey.GetID(), new_key);
+    WalletDescriptor descriptor;
+    {
+        LOCK(spkm->cs_desc_man);
+        descriptor = spkm->GetWalletDescriptor();
+    }
+
+    DataStream descriptor_key;
+    descriptor_key << std::make_pair(DBKeys::WALLETDESCRIPTORKEY, std::make_pair(spkm->GetID(), new_pubkey));
+    DataStream crypted_descriptor_key;
+    crypted_descriptor_key << std::make_pair(DBKeys::WALLETDESCRIPTORCKEY, std::make_pair(spkm->GetID(), new_pubkey));
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    BOOST_CHECK(!DatabaseHasKey(database, descriptor_key));
+    BOOST_CHECK(!DatabaseHasKey(database, crypted_descriptor_key));
+    const std::string trigger{
+        "CREATE TRIGGER fail_descriptor_key_write BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{crypted_descriptor_key}) +
+        "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    {
+        LOCK(keystore.cs_wallet);
+        BOOST_CHECK_EXCEPTION(spkm->UpdateWalletDescriptor(descriptor, provider), std::runtime_error,
+                              HasReason("UpdateWithSigningProvider: writing descriptor private key failed"));
+    }
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK(!spkm->HasPrivKey(new_pubkey.GetID()));
+    }
+    BOOST_CHECK(!DatabaseHasKey(database, descriptor_key));
+    BOOST_CHECK(!DatabaseHasKey(database, crypted_descriptor_key));
+
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, "DROP TRIGGER fail_descriptor_key_write", nullptr, nullptr, nullptr), SQLITE_OK);
+    WalletDescriptor retry_descriptor;
+    {
+        LOCK(spkm->cs_desc_man);
+        retry_descriptor = spkm->GetWalletDescriptor();
+    }
+    {
+        LOCK(keystore.cs_wallet);
+        BOOST_REQUIRE(static_cast<bool>(spkm->UpdateWalletDescriptor(retry_descriptor, provider)));
+    }
+    BOOST_CHECK(DatabaseHasKey(database, crypted_descriptor_key));
+}
+
 BOOST_AUTO_TEST_CASE(encrypt_descriptor_write_failure_preserves_state)
 {
     CExtKey extkey;

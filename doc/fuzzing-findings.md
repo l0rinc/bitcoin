@@ -102,6 +102,13 @@ created worker threads.
   descriptor, script maps, and cached-index boundary disagreeing with one another
   and with the persisted descriptor. The branch now wraps the update in a database
   transaction and restores every affected in-memory map on failure.
+* A second mutation of that same descriptor-update defect rejects the database
+  insert for a newly supplied private descriptor key. On clean master, the
+  plaintext and encrypted key maps were published before the insert completed;
+  retrying after the injected failure then treated the key as already present and
+  skipped the missing database row. `a2560d7ef1` already rolls back both maps, so
+  this round adds the encrypted and plaintext deterministic controls plus the
+  matching fuzzer oracle without adding another production change.
 * The full-range TxGraph fee mutation was initially classified as fuzzer-only
   because three early failures were invalid arithmetic oracles. A later 384-byte
   input reached a different production path on clean master: `Updated()` summed
@@ -4280,3 +4287,38 @@ failure is required, and no remote, consensus, or demonstrated key-loss path
 was found. The potential impact is wallet availability and inconsistent
 encryption state across restart, with the delete-failure path also leaving
 plaintext key material in the database until the fault is repaired.
+
+## Descriptor update after a descriptor-key write failure (2026-07-26)
+
+This is an additional failure path through the descriptor-update transaction
+defect already fixed by `a2560d7ef1`; it is not a new production regression on
+this branch. An exact detached `origin/master` control at
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6` created an existing private
+`wpkh(xprv/*)` descriptor, encrypted and unlocked the wallet, supplied a fresh
+private key through `UpdateWalletDescriptor()`, and injected a SQLite
+`BEFORE INSERT` failure for that key's `WALLETDESCRIPTORCKEY` row. The first
+update threw the expected `UpdateWithSigningProvider: writing descriptor
+private key failed` error, but the live encrypted-key map retained the new key.
+After removing the trigger, retrying therefore skipped the database insert and
+the final database-key assertion failed. The same pre-fix ordering affected
+the plaintext `WALLETDESCRIPTORKEY` branch.
+
+The existing production transaction snapshots and restores both descriptor-key
+maps, the descriptor, script maps, and cached-index boundary around the update.
+This round adds deterministic plaintext and encrypted unit tests that require
+the failed call to leave both memory and SQLite unchanged, then require a
+retry to persist the key. The fuzzer adds the corresponding exact-key SQLite
+failure mutation, catches only the expected runtime error, checks the rollback
+oracle, drops the trigger, and checks that the retry writes the key. A temporary
+assertion proved the guided 20-byte seed selected this new action; after removing
+the probe, the seed passed under ASan/UBSan.
+
+The focused `scriptpubkeyman_tests` suite passed all 16 cases. Two independent
+ASan/UBSan workers loaded the preserved 10,025-file corpus plus the guided seed,
+executed 10,029 units each, and exited zero with no assertion, sanitizer,
+timeout, or artifact. The clean-master failure requires a local wallet database
+or storage failure and can leave the wallet's live and persisted key state
+divergent until restart or repair; no remote, consensus, or demonstrated key
+loss path was found. Severity against clean master is low to medium. The fix is
+already present in `a2560d7ef1`; this commit supplies the missing encrypted-path
+proof and fuzzer coverage.
