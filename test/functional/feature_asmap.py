@@ -70,6 +70,20 @@ class AsmapTest(BitcoinTestFramework):
             self.start_node(0, [f'-asmap={name}'])
         os.remove(filename)
 
+    def test_asmap_with_digit_leading_relative_path(self):
+        self.log.info('Test bitcoind -asmap=<digit-leading relative path>')
+        self.stop_node(0)
+        name = '1_asn_map'
+        filename = os.path.join(self.datadir, name)
+        shutil.copyfile(self.asmap_raw, filename)
+        if self.is_embedded_asmap_compiled():
+            with self.node.assert_debug_log(["Opened asmap data", "from embedded byte array"]): # TODO: `GetBoolArg()` parses the filename as a true boolean
+                self.start_node(0, [f'-asmap={name}'])
+        else:
+            msg = "Error: Embedded asmap data not available"
+            self.node.assert_start_raises_init_error(extra_args=[f'-asmap={name}'], expected_msg=msg) # TODO: `GetBoolArg()` tries to use unavailable embedded data
+        os.remove(filename)
+
     def test_embedded_asmap(self):
         if self.is_embedded_asmap_compiled():
             self.log.info('Test bitcoind -asmap (using embedded map data)')
@@ -161,6 +175,7 @@ class AsmapTest(BitcoinTestFramework):
         self.test_noasmap_arg()
         self.test_asmap_with_absolute_path()
         self.test_asmap_with_relative_path()
+        self.test_asmap_with_digit_leading_relative_path()
         self.test_embedded_asmap()
         self.test_asmap_interaction_with_addrman_containing_entries()
         self.test_asmap_with_missing_file()
