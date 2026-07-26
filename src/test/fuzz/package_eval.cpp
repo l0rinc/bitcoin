@@ -607,10 +607,13 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
         std::optional<MempoolSnapshot> test_accept_mempool_snapshot;
         std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
         std::optional<std::vector<PackageInputCacheSnapshot>> test_accept_coins_cache_snapshot;
+        std::optional<std::vector<PackageInputCacheSnapshot>> submit_coins_cache_snapshot;
         if (package_test_accept) {
             test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
             test_accept_outpoints_snapshot = mempool_outpoints;
             test_accept_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
+        } else {
+            submit_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
         }
 
         const auto result_package = WITH_LOCK(::cs_main,
@@ -621,6 +624,8 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
             WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *test_accept_coins_cache_snapshot));
+        } else if (result_package.m_state.IsInvalid()) {
+            WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *submit_coins_cache_snapshot));
         }
 
         if (package_test_accept) {
@@ -823,10 +828,13 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
         std::optional<MempoolSnapshot> test_accept_mempool_snapshot;
         std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
         std::optional<std::vector<PackageInputCacheSnapshot>> test_accept_coins_cache_snapshot;
+        std::optional<std::vector<PackageInputCacheSnapshot>> submit_coins_cache_snapshot;
         if (package_test_accept) {
             test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
             test_accept_outpoints_snapshot = mempool_outpoints;
             test_accept_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
+        } else {
+            submit_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
         }
 
         const auto result_package = WITH_LOCK(::cs_main,
@@ -838,6 +846,8 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
             Assert(added.empty());
             WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *test_accept_coins_cache_snapshot));
+        } else if (result_package.m_state.IsInvalid()) {
+            WITH_LOCK(::cs_main, AssertPackageInputCacheUnchanged(chainstate.CoinsTip(), *submit_coins_cache_snapshot));
         }
 
         if (package_test_accept) {

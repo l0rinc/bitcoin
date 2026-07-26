@@ -5329,3 +5329,40 @@ race report, timeout, or crash artifact occurred. Severity is none: this change
 closes a deterministic test gap and adds assertion-only hardening; it does not
 change release behavior or establish a consensus, wallet, network, or cache
 vulnerability.
+
+## Rejected submitted-package coins-cache cleanup coverage (2026-07-26)
+
+`ProcessNewPackage(..., test_accept=false)` may fetch chainstate coins while
+checking a package that is ultimately rejected. Those inputs must be uncached
+after an invalid result; otherwise repeated rejected submissions can retain
+otherwise unnecessary chainstate cache entries. The existing package fuzzers
+only checked cache preservation for `test_accept=true`, and the deterministic
+package tests did not cover this rejection path.
+
+Both `ephemeral_package_eval` and `tx_package_eval` now snapshot the package
+inputs before a non-test-accept call and require the cache state to be unchanged
+after an invalid result. The deterministic test flushes the cache, submits a
+validly signed transaction whose output is then raised above its input value to
+force a negative-fee consensus failure after the input lookup, and requires the
+coin to be absent from the cache afterward.
+
+The production condition and its `Assume(!HaveCoinInCache(...))` postcondition
+already existed on master, so this commit changes no production behavior. The
+exact clean-master worktree at `e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`
+received only the new deterministic test. The pre-existing
+`package_submission_tests` passed with the production code and still passed
+when the condition was mutated from
+`if (test_accept || result.m_state.IsInvalid())` to `if (test_accept)`. Under
+that same mutation, the new test failed with the input still cached (exit 201).
+Restoring the condition made the new test pass. This attributes the contract to
+the clean-master implementation rather than to an earlier branch change.
+
+The investigation branch passed all 15 `txpackage_tests` cases, 200 normal
+libFuzzer executions for each package target, 100 Clang 19 ASan/UBSan
+executions for each target, and direct-file Clang 19 TSan replay of four files
+for each target. All completed without assertions, sanitizer diagnostics, race
+reports, timeouts, or crash artifacts. This is coverage and regression
+hardening, not a confirmed current-master production defect. Severity for the
+missing coverage is none; if the cleanup condition regressed, the resulting
+resource retention would be a local or authenticated package-submission memory
+pressure issue, not a consensus or unauthenticated P2P vulnerability.
