@@ -4723,3 +4723,40 @@ signature and requires `complete == false` with no extracted transaction hex,
 along with descriptor signing, finalization, sighash, and PSBT round-trip
 cases. No RPC, wallet, signature-validation, or state-consistency defect was
 demonstrated; no source or permanent test change was warranted.
+
+## Stateful cluster, coins, and compact-block sanitizer gates (2026-07-26)
+
+The branch remained clean and rebased on the exact current `origin/master`
+baseline `e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`. The following independent
+two-worker controls used 256-file slices selected from the preserved QA
+corpora:
+
+* `clusterlin_depgraph_sim` under TSan completed 21,529 and 21,698 executions
+  in 46 seconds per worker.
+* `coins_view_stacked` under TSan completed 4,167 and 4,164 executions in 46
+  seconds per worker.
+* `cmpctblock` under ASan/UBSan completed 261 executions per worker in 98 and
+  99 seconds. This slow seed replay included the short-ID collision and
+  duplicate-candidate cases; neither worker produced a sanitizer diagnostic,
+  assertion, or artifact.
+* `coins_view_db_resize_cursor` under ASan/UBSan completed 1,829 and 1,812
+  executions in 46 seconds per worker.
+* `clusterlin_linearize` under ASan/UBSan completed 257 executions per worker
+  in 167 and 166 seconds. LibFuzzer reported one 121-byte slow unit at about
+  ten seconds under ASan. The normal build executed the same unit in 1.6
+  seconds, and the delay is in the fuzzer's reference/comparison oracles, not
+  a production failure.
+* `txgraph` under TSan completed 4,013 and 4,299 executions in 46 seconds per
+  worker.
+* `validation_load_mempool` under ASan/UBSan completed 257 executions per
+  worker in 96 seconds.
+
+All workers exited zero without an assertion, ASan/UBSan diagnostic, TSan
+report, timeout, or crash artifact. The live `feature_block.py` and
+`feature_proxy.py` tests also passed, as did the 31-case overlay and chainstate
+unit gate; these covered eight-worker and zero-worker prevout-fetch paths,
+invalid blocks, same-height forks, long reorgs, snapshot chainstate, and
+interrupted thread-pool fallback. No compact-block collision defect, coins
+cache/overlay inconsistency, cluster graph error, mempool-load failure, race,
+or deterministic test omission was demonstrated, so no production or fuzzer
+source change was warranted.
