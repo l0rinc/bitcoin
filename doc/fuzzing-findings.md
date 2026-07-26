@@ -4422,3 +4422,22 @@ This mutation was not covered by the existing rate-limit scenario or the
 TokenBucket unit cases. The production behavior remained consistent; no
 production fix, sanitizer finding, race, or clean-master comparison was
 warranted.
+
+## Rebased index concurrency gate (2026-07-26)
+
+After rebasing onto `origin/master` at
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`, the `baseindex_tests`,
+`blockfilter_index_tests`, `txindex_tests`, `txospenderindex_tests`, and
+`coinstatsindex_tests` suites were each run under the Clang 19 TSan unit
+binary. All five suites passed without a race report. This includes the
+explicit index reader schedule that calls `BlockUntilSyncedToCurrentChain()`
+while repeatedly stopping and reinitializing the index, and the blocked
+background-sync reorg schedule.
+
+The two highest-risk schedules were then stress-repeated in four independent
+TSan processes. Each process ran ten repetitions of both
+`index_reinit_reader_race` and `index_reorg_crash`, for 40 repetitions of each
+case overall. All 80 invocations passed with no TSan diagnostic, assertion,
+timeout, or test failure. The run found no new index lifetime, notification
+ordering, or reorg race on the rebased branch; no production or deterministic
+test change was warranted.
