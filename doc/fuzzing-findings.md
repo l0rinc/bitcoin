@@ -4388,3 +4388,20 @@ defect, or race; no production or fuzzer source change was warranted. The
 fixed-input replay covers the selected transaction-message path and the
 functional test covers the live bucket workflow, not arbitrary peer
 scheduling.
+
+## Resumed coins-cache simulation ASan gate (2026-07-26)
+
+The stateful `coinscache_sim` target was exercised from two independent
+64-input slices of its existing QA corpus. The 64 smallest seeds completed
+512 ASan/UBSan executions, added 109 units, and exited zero without an
+assertion, sanitizer report, timeout, or artifact. The 64 largest seeds were
+deliberately stopped after 13 executions when the same 12-second cache-model
+construction recurred; no diagnostic or crash artifact was produced.
+
+The resulting slow input replayed individually in 2.639 seconds with the
+normal fuzzer and 1.085 seconds under TSan, both with exit code zero and no
+report. This confirms model and sanitizer overhead rather than a coins-cache
+memory defect or race. The full ASan corpus gate remains incomplete; the
+existing full TSan gate and these bounded ASan controls found no new
+production inconsistency, so no clean-master control or source change was
+warranted.
