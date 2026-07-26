@@ -986,6 +986,61 @@ static std::set<Txid> EntryRefTxids(const std::vector<CTxMemPoolEntry::CTxMemPoo
     return txids;
 }
 
+BOOST_AUTO_TEST_CASE(MempoolExtractBestByMiningScoreWithTopology)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+
+    const CTransactionRef parent{make_tx(/*output_values=*/{10 * COIN})};
+    const CTransactionRef child{make_tx(/*output_values=*/{9 * COIN}, /*inputs=*/{parent})};
+    const CTransactionRef unrelated{make_tx(/*output_values=*/{8 * COIN})};
+
+    LOCK2(::cs_main, pool.cs);
+    TryAddToMempool(pool, entry.Fee(10'000).FromTx(parent));
+    TryAddToMempool(pool, entry.Fee(10'000).FromTx(child));
+    TryAddToMempool(pool, entry.Fee(10'000).FromTx(unrelated));
+
+    const auto sorted_entries{pool.entryAll()};
+    std::vector<Wtxid> sorted_wtxids;
+    for (const auto& entry_ref : sorted_entries) sorted_wtxids.push_back(entry_ref.get().GetTx().GetWitnessHash());
+
+    const Wtxid unknown{Wtxid::FromUint256(uint256::ONE)};
+    const std::vector<Wtxid> zero_input{child->GetWitnessHash(), unknown, child->GetWitnessHash(), parent->GetWitnessHash()};
+    auto zero_input_copy{zero_input};
+    BOOST_CHECK(pool.ExtractBestByMiningScoreWithTopology(zero_input_copy, /*n_to_sort=*/0).empty());
+    BOOST_CHECK(zero_input_copy == zero_input);
+
+    auto expected_known{[&](const std::vector<Wtxid>& input) {
+        const std::set<Wtxid> requested{input.begin(), input.end()};
+        std::vector<Wtxid> result;
+        for (const Wtxid& wtxid : sorted_wtxids) {
+            if (requested.contains(wtxid)) result.push_back(wtxid);
+        }
+        return result;
+    }};
+
+    const auto partial_expected{expected_known(zero_input)};
+    auto partial_input{zero_input};
+    const auto partial_result{pool.ExtractBestByMiningScoreWithTopology(partial_input, /*n_to_sort=*/1)};
+    BOOST_REQUIRE_EQUAL(partial_result.size(), 1U);
+    BOOST_CHECK(partial_result.front()->GetTx().GetWitnessHash() == partial_expected.front());
+    const std::set<Wtxid> partial_remaining{partial_input.begin(), partial_input.end()};
+    const std::set<Wtxid> expected_remaining{partial_expected.begin() + 1, partial_expected.end()};
+    BOOST_CHECK(partial_remaining == expected_remaining);
+
+    std::vector<Wtxid> unknown_input{unknown, unknown};
+    BOOST_CHECK(pool.ExtractBestByMiningScoreWithTopology(unknown_input, /*n_to_sort=*/1).empty());
+    BOOST_CHECK(unknown_input.empty());
+
+    auto full_input{zero_input};
+    const auto full_result{pool.ExtractBestByMiningScoreWithTopology(full_input, std::numeric_limits<size_t>::max())};
+    BOOST_CHECK_EQUAL(full_result.size(), partial_expected.size());
+    BOOST_CHECK(full_input.empty());
+    for (size_t i{0}; i < full_result.size(); ++i) {
+        BOOST_CHECK(full_result[i]->GetTx().GetWitnessHash() == partial_expected[i]);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(MempoolHasDescendantsMatchesChildren)
 {
     CTxMemPool& pool{*Assert(m_node.mempool)};

@@ -5057,3 +5057,44 @@ the existing 13-character `ThreadRename` contract. The label was shortened and
 the active eight-case overlay suite plus the two no-worker fallback cases then
 passed. No production source changed, and no cache inconsistency, worker
 lifetime defect, race, or deterministic production omission was demonstrated.
+
+## Wtxid batch extraction coverage (2026-07-26)
+
+`CTxMemPool::ExtractBestByMiningScoreWithTopology()` was added by
+`6cfc65d2103` and is used by both the global transaction-relay backlog and the
+per-peer relay inventory path. Before this slice, `tx_pool` had no direct
+fuzzer or deterministic unit coverage for that API. The new independent fuzzer
+oracle constructs requests containing known wtxids, unknown wtxids, repeated
+known wtxids, and combinations of those values. It exercises `n_to_sort == 0`,
+partial extraction, extraction larger than the request, and the full-sort
+case, and checks the returned `CompareMainOrder` sequence plus the remaining
+input set. The independent provider preserves the existing state-machine byte
+layout.
+
+The production method now has a lock precondition and Debug/fuzz-only
+postconditions for its documented behavior: positive requests return unique,
+known entries without overlap with the remaining input, and a zero-sized
+request returns no entries while preserving the input vector exactly. Release
+behavior is unchanged. The deterministic unit case covers a parent, child,
+unrelated transaction, duplicate and unknown wtxids, and zero/partial/full
+requests.
+
+The first focused run exposed an error in the new assertion rather than in
+production: the initial postcondition rejected duplicate input even when
+`n_to_sort == 0`, although that API path intentionally leaves duplicates and
+unknown IDs untouched. The assertion was restricted to positive requests and
+the zero-input preservation check was added. That stale-oracle failure is not
+counted as a production finding.
+
+The corrected branch passed the focused unit case and all 22 `mempool_tests`
+cases. An exact `origin/master` (`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`)
+worktree, with only the deterministic test applied and no branch assertions,
+passed the same case and its six-case `mempool_tests` suite. Two independent
+Clang 19 TSan workers processed 256 `tx_pool` and 256 `tx_pool_standard` seed
+files. Two Clang 19 ASan/UBSan workers processed the corresponding 256-file
+slices and completed 308 and 305 bounded runs. All workers exited without an
+assertion, sanitizer diagnostic, race report, timeout, or artifact.
+
+This is a coverage and contract-hardening change. The clean-master control did
+not demonstrate a production defect, race, or remotely reachable inconsistency
+in the extraction implementation, so no production behavior fix is claimed.
