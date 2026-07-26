@@ -4870,6 +4870,24 @@ RBF-backlog, known-transaction refund, multi-peer, serialized-size, race, or
 memory-safety defect was demonstrated; no production or fuzzer source change
 was warranted.
 
+## Wallet descriptor and coin-selection sanitizer gates (2026-07-26)
+
+The preserved wallet corpora were replayed concurrently under the Clang 19
+TSan fuzzer: `scriptpubkeyman` completed 10,025 files in 95 seconds,
+`coinselection_bnb` completed 483 in 17 seconds, and `coincontrol` completed
+497 in 1 second. The same targets were replayed under the wallet-enabled
+Clang 19 ASan/UBSan fuzzer, completing without diagnostics; peak RSS was about
+1.1 GiB for `scriptpubkeyman`.
+
+These cases exercised descriptor creation and update, script ownership and
+key/cache transitions, injected SQLite write/erase failures, BnB selection
+limits, and coin-control state. The non-wallet ASan build does not compile
+these targets, so its initial target-selection failure was a configuration
+capability mismatch rather than a test result; the wallet-enabled build was
+used for the memory-safety gate. No wallet state inconsistency, selection
+oracle failure, race, sanitizer defect, or deterministic test omission was
+demonstrated; no production or fuzzer source change was warranted.
+
 ## Txospender index CompactSize offset boundary (2026-07-26)
 
 The existing txospender index tests did not cross the serialized block
