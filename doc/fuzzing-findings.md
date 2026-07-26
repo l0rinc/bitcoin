@@ -4819,3 +4819,23 @@ The completed workers exited zero without a sanitizer report, race report, or
 crash artifact. No block-index publication inconsistency, malformed-filter
 memory defect, or deterministic test omission was demonstrated; no production
 or fuzzer source change was warranted.
+
+## Live index and pruning TSan integration (2026-07-26)
+
+The normal Clang 19 `feature_index_prune.py` run passed in about 95 seconds,
+covering block-filter and coinstats access before and after pruning, disabled
+and partially synced indexes, reindex and reindex-chainstate startup, missing
+block retrieval, and prune-lock behavior during reorgs. The same functional
+scenario initially hit the framework's default 30-second RPC timeout under the
+Clang 19 TSan daemon while `generatetoaddress` was still connecting blocks.
+Node logs showed continued progress through the requested 1,000 blocks and no
+ThreadSanitizer, deadlock, assertion, or crash marker.
+
+The test was rerun with its supported `--timeout-factor=4` setting and passed
+in about 451 seconds. The independent `feature_coinstatsindex.py` TSan run
+also passed in about 27 seconds, covering restart, reindex, reorg, index
+deactivation, and unclean-restart paths. The initial timeout is recorded as a
+sanitizer execution-cost limitation, not a production failure. No index
+publication race, pruning inconsistency, memory defect, or deterministic test
+omission was demonstrated; no production or fuzzer source change was
+warranted.
