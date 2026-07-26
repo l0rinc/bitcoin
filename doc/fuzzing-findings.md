@@ -37,7 +37,7 @@ production failure.
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The forty-one confirmed runtime defects are: the index publication and restart race;
+The forty-two confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the equal-feerate TxGraph prefix
 fee overflow; the saturated cluster chunk fee aggregation mismatch; the mempool info fee-delta
