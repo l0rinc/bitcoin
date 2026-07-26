@@ -961,6 +961,26 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     // ... unless it has gone all the way to 0 (after getting past DEFAULT_INCREMENTAL_RELAY_FEE/2)
 }
 
+BOOST_AUTO_TEST_CASE(MempoolTrimToSizeReportsNoSpendsRemaining)
+{
+    auto& pool{static_cast<MemPoolTest&>(*Assert(m_node.mempool))};
+    LOCK2(cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    CMutableTransaction tx;
+    tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256{1}), 0});
+    tx.vout.emplace_back(10 * COIN, CScript() << OP_1);
+    const COutPoint input{tx.vin.front().prevout};
+    TryAddToMempool(pool, entry.Fee(1000).FromTx(tx));
+
+    std::vector<COutPoint> no_spends_remaining;
+    pool.TrimToSize(0, &no_spends_remaining);
+
+    BOOST_CHECK(!pool.exists(tx.GetHash()));
+    BOOST_REQUIRE_EQUAL(no_spends_remaining.size(), 1U);
+    BOOST_CHECK(no_spends_remaining.front() == input);
+}
+
 inline CTransactionRef make_tx(std::vector<CAmount>&& output_values, std::vector<CTransactionRef>&& inputs=std::vector<CTransactionRef>(), std::vector<uint32_t>&& input_indices=std::vector<uint32_t>())
 {
     CMutableTransaction tx = CMutableTransaction();
