@@ -4953,3 +4953,21 @@ aggregation error, staging lifetime problem, race, or deterministic test
 omission; no production or fuzzer source change was warranted. The earlier
 exact-master controls remain the evidence for the clean-master severity of the
 recorded TxGraph fixes.
+
+## Full txdownloadman seed-only ASan replay (2026-07-26)
+
+The complete preserved `txdownloadman` corpus was replayed in two independent
+Clang 19 ASan/UBSan processes with `-runs=1`. Each process loaded all 1,500
+seed files and completed 1,501 executions in 1,200 seconds, reaching coverage
+23,060 and 23,069 with peak RSS of 729 and 733 MiB. Both exited zero without
+an assertion, sanitizer diagnostic, timeout failure, or crash artifact.
+
+LibFuzzer recorded one shared 15,748-byte slow unit while completing the
+replay (`SHA256
+40b6ace8f774977be1d4fa7bd2b3c5b86f772d778b0bec48c3133b2a6e99e81d`). Its
+direct-file Clang 19 TSan replay completed in one second without a race
+report. This closes memory-instrumented seed coverage for every preserved
+public transaction-download-wrapper input. The earlier full-mutation ASan
+campaign remains a separate performance-limited gap; no production
+inconsistency, memory defect, race, or deterministic test omission was
+demonstrated, so no source change was warranted.
