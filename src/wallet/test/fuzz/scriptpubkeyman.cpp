@@ -120,6 +120,34 @@ static bool BlockDescriptorMetadataWrites(CWallet& wallet)
                                     nullptr, nullptr, nullptr) == SQLITE_OK;
 }
 
+static bool BlockDescriptorKeyWrite(CWallet& wallet, const uint256& id, const CPubKey& pubkey)
+{
+    auto* database{dynamic_cast<MockableSQLiteDatabase*>(&wallet.GetDatabase())};
+    if (!database) return false;
+
+    DataStream key;
+    key << std::make_pair(DBKeys::WALLETDESCRIPTORKEY, std::make_pair(id, pubkey));
+    const std::string trigger{
+        "CREATE TRIGGER fail_descriptor_key_write BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{key}) +
+        "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    return sqlite3_exec(database->m_db, trigger.c_str(), nullptr, nullptr, nullptr) == SQLITE_OK;
+}
+
+static bool DatabaseHasKey(CWallet& wallet, const DataStream& key)
+{
+    auto* database{dynamic_cast<MockableSQLiteDatabase*>(&wallet.GetDatabase())};
+    if (!database) return false;
+    sqlite3_stmt* statement{nullptr};
+    if (sqlite3_prepare_v2(database->m_db, "SELECT 1 FROM main WHERE key = ?", -1, &statement, nullptr) != SQLITE_OK) {
+        return false;
+    }
+    const bool bound{sqlite3_bind_blob(statement, 1, static_cast<const void*>(key.data()), key.size(), SQLITE_TRANSIENT) == SQLITE_OK};
+    const bool present{bound && sqlite3_step(statement) == SQLITE_ROW};
+    sqlite3_finalize(statement);
+    return present;
+}
+
 static std::optional<WalletDescriptor> ReadPersistedDescriptor(CWallet& wallet, const uint256& id)
 {
     auto* database{dynamic_cast<MockableSQLiteDatabase*>(&wallet.GetDatabase())};
@@ -181,6 +209,7 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
     bool good_data{true};
     bool descriptor_writes_blocked{false};
     bool descriptor_metadata_writes_blocked{false};
+    bool descriptor_key_write_checked{false};
     LIMITED_WHILE (good_data && fuzzed_data_provider.ConsumeBool(), 20) {
         CallOneOf(
             fuzzed_data_provider,
@@ -476,6 +505,58 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                 assert(spk_manager->GetScriptPubKeys().size() == scripts_before);
                 assert(spk_manager->GetEndRange() == end_range_before);
                 assert(spk_manager->GetWalletDescriptor().range_end == descriptor_before.range_end);
+            },
+            [&] {
+                if (descriptor_writes_blocked || descriptor_metadata_writes_blocked || descriptor_key_write_checked) return;
+                const CKey new_key{GenerateRandomKey()};
+                const CPubKey new_pubkey{new_key.GetPubKey()};
+                {
+                    LOCK(spk_manager->cs_desc_man);
+                    if (spk_manager->HasPrivKey(new_pubkey.GetID())) return;
+                }
+
+                WalletDescriptor descriptor;
+                {
+                    LOCK(spk_manager->cs_desc_man);
+                    descriptor = spk_manager->GetWalletDescriptor();
+                }
+                DataStream descriptor_key;
+                descriptor_key << std::make_pair(DBKeys::WALLETDESCRIPTORKEY, std::make_pair(spk_manager->GetID(), new_pubkey));
+                if (!BlockDescriptorKeyWrite(wallet, spk_manager->GetID(), new_pubkey)) {
+                    good_data = false;
+                    return;
+                }
+                descriptor_key_write_checked = true;
+
+                FlatSigningProvider provider;
+                provider.keys.emplace(new_pubkey.GetID(), new_key);
+                bool expected_failure{false};
+                try {
+                    (void)spk_manager->UpdateWalletDescriptor(descriptor, provider);
+                } catch (const std::runtime_error& error) {
+                    if (std::string_view{error.what()} != "UpdateWithSigningProvider: writing descriptor private key failed") {
+                        throw;
+                    }
+                    expected_failure = true;
+                }
+                assert(expected_failure);
+                assert(!DatabaseHasKey(wallet, descriptor_key));
+                {
+                    LOCK(spk_manager->cs_desc_man);
+                    assert(!spk_manager->HasPrivKey(new_pubkey.GetID()));
+                }
+
+                auto* database{dynamic_cast<MockableSQLiteDatabase*>(&wallet.GetDatabase())};
+                assert(database);
+                assert(sqlite3_exec(database->m_db, "DROP TRIGGER fail_descriptor_key_write", nullptr, nullptr, nullptr) == SQLITE_OK);
+
+                WalletDescriptor retry_descriptor;
+                {
+                    LOCK(spk_manager->cs_desc_man);
+                    retry_descriptor = spk_manager->GetWalletDescriptor();
+                }
+                assert(static_cast<bool>(spk_manager->UpdateWalletDescriptor(retry_descriptor, provider)));
+                assert(DatabaseHasKey(wallet, descriptor_key));
             },
             [&] {
                 CMutableTransaction tx_to;
