@@ -4906,3 +4906,26 @@ same test fail at the parent lookup (`parent_spender.has_value()`), exit 201,
 and was then reverted. This is a deterministic coverage improvement; the
 production implementation was already correct and no production fix was
 warranted.
+
+## Coins view, overlay, database, and cache sanitizer gates (2026-07-26)
+
+The preserved coins corpora were replayed concurrently under the Clang 19
+TSan fuzzer. `coins_view` completed 21,873 files in 18 seconds,
+`coins_view_overlay` completed 13,048 files in 12 seconds, `coins_view_db`
+completed 4,896 files in 62 seconds, and `coinscache_sim` completed 1,515
+files in 77 seconds. These targets exercised cache hits and misses, overlay
+flush and rewind, database cursor and resize behavior, hasher reuse, and
+cache eviction and restoration combinations.
+
+The same four corpora were replayed under the Clang 19 ASan/UBSan fuzzer and
+exited zero. The final libFuzzer summaries were: `coins_view` #21875 with
+12,059 coverage features and 580 MiB peak RSS, `coins_view_overlay` #13064
+with 15,395 coverage features and 554 MiB peak RSS, `coins_view_db` #4899
+with 27,326 coverage features and 421 MiB peak RSS, and `coinscache_sim`
+#1518 with 14,194 coverage features and 421 MiB peak RSS. No sanitizer
+diagnostic, assertion, race report, timeout, or crash artifact was produced.
+
+The corpus replay did not demonstrate a coins-cache inconsistency, stale
+overlay state, database cursor failure, resize bug, hasher collision error,
+or deterministic test omission. No production or fuzzer source change was
+warranted.
