@@ -5274,3 +5274,23 @@ one direct-file Clang 19 TSan replay. All exited zero without assertions,
 sanitizer diagnostics, race reports, timeouts, or artifacts. These are smoke
 controls for the surrounding message path; the multi-peer capacity behavior is
 proved by the functional mutation test above.
+
+## Verbose getrawmempool sigop-size coverage (2026-07-26)
+
+The current master RPC change exposes `vsize_adjusted` and `vsize_bip141` in
+verbose `getrawmempool` entries. The existing sigop-limit functional test
+checked the corresponding values through `testmempoolaccept`, `getmempoolentry`,
+`getrawtransaction`, and `submitpackage`, but did not inspect this shared
+`entryToJSON()` path through `getrawmempool(true)`.
+
+The test now checks all three fields for a transaction whose sigop-adjusted
+size is larger than its BIP141 vsize. Mutation proof used a rebuilt `bitcoind`
+with only `entryToJSON()`'s `vsize_bip141` insertion removed. The pre-existing
+test passed unchanged, while the new assertion failed with `KeyError:
+'vsize_bip141'`. Restoring the production line made the expanded test pass.
+
+`mempool_sigoplimit.py` passed under the Clang 19 functional build in 14
+seconds, and the Python file passed `py_compile` and `git diff --check`. No
+production defect, RPC inconsistency on master, race, or security issue was
+demonstrated; severity is none, with the previously untested output now covered
+deterministically.

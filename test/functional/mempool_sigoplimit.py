@@ -161,6 +161,12 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         assert_equal(raw['vsize_adjusted'], sigop_equivalent_vsize)
         assert_greater_than(raw['vsize_adjusted'], raw['vsize'])
 
+        verbose_mempool = self.nodes[0].getrawmempool(True)
+        mempool_entry = verbose_mempool[txid]
+        assert_equal(mempool_entry['vsize_adjusted'], sigop_equivalent_vsize)
+        assert_equal(mempool_entry['vsize'], sigop_equivalent_vsize)
+        assert_equal(mempool_entry['vsize_bip141'], tx.get_vsize())
+
     def test_sigops_package(self):
         self.log.info("Test a overly-large sigops-vbyte hits package limits")
         # Make a 2-transaction package which fails vbyte checks even though
