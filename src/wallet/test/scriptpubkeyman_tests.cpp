@@ -85,6 +85,46 @@ BOOST_AUTO_TEST_CASE(get_new_destination_self_expanding_xpub)
     }
 }
 
+BOOST_AUTO_TEST_CASE(return_destination_write_failure_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    keystore.m_keypool_size = 1;
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtPubKey(extkey.Neuter()) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+
+    int64_t reserved_index{-1};
+    const auto reserved{spkm->GetReservedDestination(OutputType::BECH32, /*internal=*/false, reserved_index)};
+    BOOST_REQUIRE(reserved);
+    BOOST_CHECK_EQUAL(reserved_index, 0);
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().next_index, 1);
+    }
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db,
+                                     "CREATE TRIGGER fail_wallet_writes BEFORE INSERT ON main BEGIN SELECT RAISE(ABORT, 'injected'); END;",
+                                     nullptr, nullptr, nullptr),
+                        SQLITE_OK);
+
+    spkm->ReturnDestination(reserved_index, /*internal=*/false, *reserved);
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().next_index, 1);
+    }
+
+    sqlite3_stmt* statement{nullptr};
+    BOOST_REQUIRE_EQUAL(sqlite3_prepare_v2(database.m_db, "SELECT value FROM main WHERE length(key) = 49", -1, &statement, nullptr), SQLITE_OK);
+    BOOST_REQUIRE_EQUAL(sqlite3_step(statement), SQLITE_ROW);
+    SpanReader descriptor_reader{std::span<const std::byte>{static_cast<const std::byte*>(sqlite3_column_blob(statement, 0)), static_cast<size_t>(sqlite3_column_bytes(statement, 0))}};
+    WalletDescriptor persisted_descriptor;
+    descriptor_reader >> persisted_descriptor;
+    BOOST_CHECK_EQUAL(persisted_descriptor.next_index, 1);
+    sqlite3_finalize(statement);
+}
+
 BOOST_AUTO_TEST_CASE(get_new_destination_write_failure)
 {
     CExtKey extkey;
