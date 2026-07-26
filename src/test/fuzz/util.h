@@ -56,6 +56,17 @@ size_t CallOneOf(FuzzedDataProvider& fuzzed_data_provider, Callables... callable
     return call_size;
 }
 
+/** Select relay-rate boundaries as well as arbitrary valid configuration values. */
+[[nodiscard]] inline unsigned int ConsumeTxSendRate(FuzzedDataProvider& fuzzed_data_provider, unsigned int default_rate) noexcept
+{
+    switch (fuzzed_data_provider.ConsumeIntegralInRange<uint8_t>(0, 3)) {
+    case 0: return 1;
+    case 1: return default_rate;
+    case 2: return 1000;
+    default: return fuzzed_data_provider.ConsumeIntegralInRange<unsigned int>(1, 1000);
+    }
+}
+
 template <typename Collection>
 auto PickIterator(FuzzedDataProvider& fuzzed_data_provider, Collection& col)
 {
