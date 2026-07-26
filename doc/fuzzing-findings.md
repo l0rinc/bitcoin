@@ -4369,3 +4369,22 @@ or crash artifact. Replaying the two slow units individually exited zero in
 under TSan. This confirms database-model and sanitizer overhead rather than a
 runtime defect or race. The full ASan corpus gate remains incomplete and is
 not counted as a pass; no clean-master control or source change was warranted.
+
+## Resumed transaction-message relay gate (2026-07-26)
+
+The `process_message` QA corpus contains 29 existing inputs whose first
+message selector is `tx`. They were replayed as fixed inputs in independent
+directories under the current branch's Clang 19 ASan/UBSan and TSan
+libFuzzer builds with `LIMIT_TO_MESSAGE_TYPE=tx`. The ASan/UBSan replay
+completed 37 total executions and the TSan replay completed 30; both exited
+zero without an assertion, sanitizer report, race report, timeout, or
+artifact.
+
+The current functional `p2p_tx_relay_rate_limit.py` scenario also passed in
+four seconds. It covers the configured count-bucket burst, backlog drainage,
+an RBF replacement while the original is queued, and final announcement
+accounting. These checks found no global relay-rate inconsistency, memory
+defect, or race; no production or fuzzer source change was warranted. The
+fixed-input replay covers the selected transaction-message path and the
+functional test covers the live bucket workflow, not arbitrary peer
+scheduling.
