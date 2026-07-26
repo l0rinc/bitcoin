@@ -5023,3 +5023,37 @@ provider and caused that seed to fail the fuzzer-only GETDATA oracle at
 production problem. That implementation was discarded before the commit. The
 final mutation changes no production code, and no relay-token inconsistency,
 state race, memory defect, or deterministic test omission was demonstrated.
+
+## Prevout-fetch worker-count mutation (2026-07-26)
+
+The `coins_view_overlay`, `coins_view_stacked`, and `coinscache_sim` harnesses
+previously reused only the default eight-worker `ThreadPool`. Production accepts
+four materially different configurations: disabled fetching (`0`), serialized
+fetching (`1`), the default (`8`), and the configured cap (`16`). Existing unit
+and functional tests covered the disabled, interrupted, and default paths, but
+did not combine the active worker-count boundaries with the stateful cache
+overlay and cache-stack operations exercised by these fuzzers.
+
+The harnesses now select `0`, `1`, `8`, or `16` using an independent
+`FuzzedDataProvider`, preserving the existing cache-state-machine byte layout.
+Pools are lazily started and reused per worker count; the zero-worker pool is
+left unstarted, matching the production configuration without creating threads
+per iteration. The deterministic overlay suite also runs the same block through
+one-worker and capped-worker pools.
+
+Two independent branch TSan workers replayed 256 `coins_view_stacked` inputs
+each, and two replayed 256 `coinscache_sim` inputs each; all four choices were
+present in the slice. Two ASan/UBSan workers replayed the same 256-input stacked
+corpus and completed 262 runs each. Two additional ASan/UBSan workers replayed
+a bounded 16-input `coinscache_sim` slice (four inputs for each worker-count
+choice, all below 64 KiB) and completed 19 runs each in eight seconds. The
+completed workers exited without an assertion, sanitizer diagnostic, race
+report, timeout, or crash artifact. The full 256-input `coinscache_sim` ASan
+replay was intentionally stopped after inherited 46-second slow units; it is
+not counted as passing evidence.
+
+The first boundary test run also caught an overlong test thread label through
+the existing 13-character `ThreadRename` contract. The label was shortened and
+the active eight-case overlay suite plus the two no-worker fallback cases then
+passed. No production source changed, and no cache inconsistency, worker
+lifetime defect, race, or deterministic production omission was demonstrated.

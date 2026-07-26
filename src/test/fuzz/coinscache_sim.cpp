@@ -13,6 +13,7 @@
 #include <test/util/setup_common.h>
 #include <util/threadpool.h>
 
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <memory>
@@ -222,13 +223,19 @@ struct OverlayFetchScope
     OverlayFetchScope(CoinsViewOverlay& view, const CBlock& block) : guard(view.StartFetching(block)) {}
 };
 
-// Reuse a single global thread pool across fuzz iterations. Creating and destroying a pool every
-// iteration leaks memory, since iterations can run faster than the OS can tear down the threads.
-std::shared_ptr<ThreadPool> g_thread_pool{std::make_shared<ThreadPool>("cache_fuzz")};
+// Reuse pools across fuzz iterations. Creating and destroying a pool every iteration leaks memory,
+// since iterations can run faster than the OS can tear down the threads.
+std::array<std::shared_ptr<ThreadPool>, MAX_PREVOUTFETCH_THREADS + 1> g_thread_pools{};
 
-void StartPoolIfNeeded()
+std::shared_ptr<ThreadPool> GetThreadPool(FuzzedDataProvider& fuzzed_data_provider)
 {
-    if (!g_thread_pool->WorkersCount()) g_thread_pool->Start(DEFAULT_PREVOUTFETCH_THREADS);
+    const int workers{ConsumePrevoutFetchThreads(fuzzed_data_provider, DEFAULT_PREVOUTFETCH_THREADS, MAX_PREVOUTFETCH_THREADS)};
+    auto& pool{g_thread_pools[workers]};
+    if (!pool) {
+        pool = std::make_shared<ThreadPool>(std::string{"cfz_"} + std::to_string(workers));
+        if (workers > 0) pool->Start(workers);
+    }
+    return pool;
 }
 
 } // namespace
@@ -236,7 +243,8 @@ void StartPoolIfNeeded()
 FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<>()}; })
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
-    StartPoolIfNeeded();
+    FuzzedDataProvider thread_provider{buffer.data(), buffer.size()};
+    const auto thread_pool{GetThreadPool(thread_provider)};
     /** Precomputed COutPoint and CCoins values. */
     static const PrecomputedData data;
 
@@ -255,6 +263,8 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
     uint256 sim_best_blocks[MAX_CACHES + 1]{};
     /** Current height in the simulation. */
     uint32_t current_height = 1U;
+
+    FuzzedDataProvider provider(buffer.data(), buffer.size());
 
     // Initialize bottom simulated cache.
     sim_caches[0].Wipe();
@@ -493,7 +503,6 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
 
     // Main simulation loop: read commands from the fuzzer input, and apply them
     // to both the real cache stack and the simulation.
-    FuzzedDataProvider provider(buffer.data(), buffer.size());
     LIMITED_WHILE (provider.remaining_bytes(), 10000) {
         // Every operation (except "Change height") moves current height forward,
         // so it functions as a kind of epoch, making ~all UTXOs unique.
@@ -847,7 +856,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                         caches.emplace_back(new CCoinsViewCache(&*caches.back(), /*deterministic=*/true));
                         cache_is_overlay.push_back(false);
                     } else {
-                        caches.emplace_back(new CoinsViewOverlay(&*caches.back(), g_thread_pool, /*deterministic=*/true));
+                        caches.emplace_back(new CoinsViewOverlay(&*caches.back(), thread_pool, /*deterministic=*/true));
                         auto& overlay{static_cast<CoinsViewOverlay&>(*caches.back())};
                         overlay_fetch_scope = std::make_unique<OverlayFetchScope>(overlay, data.block);
                         cache_is_overlay.push_back(true);
