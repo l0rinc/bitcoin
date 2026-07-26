@@ -5098,3 +5098,25 @@ assertion, sanitizer diagnostic, race report, timeout, or artifact.
 This is a coverage and contract-hardening change. The clean-master control did
 not demonstrate a production defect, race, or remotely reachable inconsistency
 in the extraction implementation, so no production behavior fix is claimed.
+
+## AddrMan sanitizer slice (2026-07-26)
+
+The preserved `addrman` corpus was filtered to 1,845 inputs below 64 KiB. Two
+independent workers used the 256 largest inputs from that slice under the
+current Clang 19 ASan/UBSan fuzzer. Each completed 257 runs, reached coverage
+15,836, and used 625 MiB peak RSS without an assertion, sanitizer diagnostic,
+timeout, or artifact.
+
+The current Clang 19 TSan binary is a direct-file driver rather than a
+libFuzzer-linked binary. Two independent workers therefore replayed the same
+256-file slices one file at a time; each completed all 256 inputs with exit
+code zero and no TSan report. The earlier invocation that passed `-runs` to
+that driver failed before target execution while trying to open `-runs` and is
+excluded from this result.
+
+This is a bounded AddrMan construction, mutation, table-placement, equality,
+serialization-adjacent, and eviction sanitizer slice. The full ASan corpus
+remains performance-limited, and these per-process workers do not prove that
+arbitrary live AddrMan callers are race-free. No AddrMan inconsistency, memory
+defect, race, or deterministic test omission was demonstrated, so no source
+change was warranted.
