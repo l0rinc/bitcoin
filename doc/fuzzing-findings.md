@@ -4405,3 +4405,20 @@ memory defect or race. The full ASan corpus gate remains incomplete; the
 existing full TSan gate and these bounded ASan controls found no new
 production inconsistency, so no clean-master control or source change was
 warranted.
+
+## Permanent transaction relay size-bucket coverage (2026-07-26)
+
+The original `p2p_tx_relay_rate_limit.py` test exhausted only the count
+bucket with small transactions. The new
+`p2p_tx_relay_rate_limit_size.py` scenario sets `-txsendrate=1000`, submits
+140 standard 100,000-vbyte transactions to one inbound peer, and therefore
+exercises the 12 MB serialized-size bucket before the count bucket can limit
+the burst. It asserts that a backlog is created, advances mock time through
+size-bucket refills, and requires the backlog and peer announcement set to
+contain exactly the 140 submitted wtxids.
+
+The test passed through `test_runner.py` in 29 seconds on the rebased branch.
+This mutation was not covered by the existing rate-limit scenario or the
+TokenBucket unit cases. The production behavior remained consistent; no
+production fix, sanitizer finding, race, or clean-master comparison was
+warranted.
