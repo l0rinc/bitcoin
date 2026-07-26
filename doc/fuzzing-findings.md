@@ -21,7 +21,7 @@ Controls that explicitly name an older baseline, including
 are historical clean-master runs; they remain valid evidence for the mutations they
 tested, but are not claims that those exact controls include later master commits.
 
-## Ledger summary (2026-07-24)
+## Ledger summary (2026-07-26)
 
 The findings are classified by what failed on an unmodified master baseline. The
 branch's assertions, fuzzer-only checks, and deterministic tests are not counted as
@@ -30,14 +30,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 40 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 41 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | Remaining TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving another clean-master production bug. The full-range TxGraph mutation also exposed the production defect recorded below. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The forty confirmed runtime defects are: the index publication and restart race;
+The forty-one confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the equal-feerate TxGraph prefix
 fee overflow; the saturated cluster chunk fee aggregation mismatch; the mempool info fee-delta
@@ -62,7 +62,9 @@ arrives; invalid raw fee-estimator success thresholds; descriptor top-up cache
 metadata inconsistency after a descriptor-row write failure; descriptor updates
 that publish replacement state before a cache write failure can be rolled back; and
 descriptor reservation returns that publish an in-memory index decrement before a
-descriptor-row write failure. Their exact reproducer,
+descriptor-row write failure; `MarkUnusedAddresses()` descriptor writes that
+leave the live next index ahead of SQLite after a descriptor-row write failure.
+Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
 problems in local or startup workflows, not remotely reachable data races: the
@@ -130,6 +132,12 @@ created worker threads.
   persisted wallet state. The exact clean-master SQLite control returned a
   destination and advanced `next_index`; the branch now commits the descriptor
   index to the database before publishing it in memory.
+* `MarkUnusedAddresses()` had a separate clean-master descriptor-row failure:
+  rejecting the metadata write left the live descriptor at `next_index == 2`
+  while SQLite remained at `next_index == 1`, allowing a restart to reuse the
+  keypool index. The branch now stages this caller's advance, forces its
+  descriptor write, restores memory on failure, and preserves the ordinary
+  `GetNewDestination()` write-failure return behavior.
 * `ExternalSignerScriptPubKeyMan::FillPSBT()` replaced a PSBT with the signer’s
   result without updating its `n_signed` output. The Qt PSBT operations dialog
   uses this count to report signing progress, so a partial PSBT with one newly
@@ -4156,3 +4164,52 @@ and 977 MB RSS. The failure requires a local wallet database/storage failure or
 equivalent fault, not a remote or consensus input. It is a low-to-medium
 severity wallet state-consistency and availability defect, with no demonstrated
 key loss or remote attack path.
+
+## MarkUnusedAddresses after a descriptor write failure (2026-07-26)
+
+This is a separate clean-master wallet-state defect from the reservation return
+case above. The mutation used a one-entry `wpkh(xpub/*)` descriptor, consumed
+index 0, topped the cache through index 10, selected the cached script at index
+1, and called `MarkUnusedAddresses()` while a SQLite `BEFORE INSERT` trigger
+rejected only the 49-byte descriptor metadata row. On unmodified
+`origin/master` `e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`, the call left the live
+descriptor at `next_index == 2` while SQLite remained at `next_index == 1`.
+The exact deterministic control failed at the persisted-state assertion with
+`1 != 2`, 12/13 assertions passing, and exit code 201. A restart after this
+failure could reuse the already-used keypool index, causing wallet address
+reuse and inconsistent accounting. The trigger is local storage failure or an
+equivalent database fault, so severity is low to medium rather than remote or
+consensus-level.
+
+The first attempted repair restored the historical unconditional descriptor
+write. That fixed the successful next-index mutation, but changed the existing
+`get_new_destination_write_failure` contract from a returned error to a
+`TopUpWithDB: writing descriptor failed` exception. The final fix retains the
+staged top-up state from `5f9d7b084f`, adds a private `TopUpInternal()` force-write
+path for `MarkUnusedAddresses()`, and restores the pre-call descriptor if the
+transaction throws or returns false. Ordinary top-ups still write descriptor
+metadata only when their staged range/cache state changed.
+
+The branch regression introduced by `5f9d7b084f` is recorded separately from
+the clean-master finding: its conditional write skipped a successful
+`next_index`-only `MarkUnusedAddresses()` update, and the guided success seed
+`371c53b218e5c793e7f2c066809ab7345182b86cb1f24053f96908d5eb01880b` failed the
+new persisted oracle on that pre-repair branch. The exact clean master passed
+the same successful mutation, so that success-path discrepancy was not counted
+as a master defect. The clean-master write-failure control above is what
+establishes the confirmed production bug.
+
+The deterministic branch regression test now covers both successful persistence
+and the forced-write failure: the complete `scriptpubkeyman_tests` suite passed
+10 cases and 92 assertions, including 13 assertions for the failure case. The
+fuzzer has matching success and failure actions. The failure action catches only
+the exact expected `std::runtime_error` and asserts that both live and persisted
+`next_index` remain unchanged; the guided failure seed is
+`58055d264cf970c55e77782107e57f3fab082577906a57eeee1a20d9a537277d`.
+Removing the force-write condition made that seed abort at `assert(expected_failure)`
+(exit 77); restoring it passed the same seed under ASan/UBSan. Both guided
+seeds and a private 10,027-file corpus copy then passed two ASan/UBSan workers
+for 13,000 executions each, adding 32 and 31 units with peak RSS of about
+1,018 and 1,036 MB. One 10-second slow-unit artifact was replayed separately
+in 18.9 seconds without a diagnostic; it was a performance outlier, not a
+failure artifact.
