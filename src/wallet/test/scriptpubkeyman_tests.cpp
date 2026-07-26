@@ -125,6 +125,101 @@ BOOST_AUTO_TEST_CASE(return_destination_write_failure_preserves_state)
     sqlite3_finalize(statement);
 }
 
+BOOST_AUTO_TEST_CASE(mark_unused_persists_next_index)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    keystore.m_keypool_size = 1;
+    const std::string descriptor_string{"wpkh(" + EncodeExtPubKey(extkey.Neuter()) + "/*)"};
+    auto spkm = CreateDescriptor(keystore, descriptor_string, /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+
+    BOOST_REQUIRE(spkm->GetNewDestination(OutputType::BECH32));
+    BOOST_REQUIRE(spkm->TopUp(10));
+
+    CScript index_one_script;
+    {
+        LOCK(spkm->cs_desc_man);
+        const auto descriptor{spkm->GetWalletDescriptor()};
+        FlatSigningProvider out_keys;
+        std::vector<CScript> scripts;
+        BOOST_REQUIRE(descriptor.descriptor->ExpandFromCache(1, descriptor.cache, scripts, out_keys));
+        BOOST_REQUIRE_EQUAL(scripts.size(), 1U);
+        index_one_script = scripts.front();
+        BOOST_CHECK_EQUAL(descriptor.next_index, 1);
+        BOOST_CHECK_EQUAL(descriptor.range_end, 11);
+        BOOST_CHECK_EQUAL(spkm->GetEndRange(), 11);
+    }
+
+    const auto marked{spkm->MarkUnusedAddresses(index_one_script)};
+    BOOST_CHECK_EQUAL(marked.size(), 1U);
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().next_index, 2);
+        BOOST_CHECK_EQUAL(spkm->GetEndRange(), 11);
+    }
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    sqlite3_stmt* statement{nullptr};
+    BOOST_REQUIRE_EQUAL(sqlite3_prepare_v2(database.m_db, "SELECT value FROM main WHERE length(key) = 49", -1, &statement, nullptr), SQLITE_OK);
+    BOOST_REQUIRE_EQUAL(sqlite3_step(statement), SQLITE_ROW);
+    SpanReader descriptor_reader{std::span<const std::byte>{static_cast<const std::byte*>(sqlite3_column_blob(statement, 0)), static_cast<size_t>(sqlite3_column_bytes(statement, 0))}};
+    WalletDescriptor persisted_descriptor;
+    descriptor_reader >> persisted_descriptor;
+    BOOST_CHECK_EQUAL(persisted_descriptor.next_index, 2);
+    BOOST_CHECK_EQUAL(sqlite3_step(statement), SQLITE_DONE);
+    sqlite3_finalize(statement);
+}
+
+BOOST_AUTO_TEST_CASE(mark_unused_write_failure_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    keystore.m_keypool_size = 1;
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtPubKey(extkey.Neuter()) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+
+    BOOST_REQUIRE(spkm->GetNewDestination(OutputType::BECH32));
+    BOOST_REQUIRE(spkm->TopUp(10));
+
+    CScript index_one_script;
+    {
+        LOCK(spkm->cs_desc_man);
+        const auto descriptor{spkm->GetWalletDescriptor()};
+        FlatSigningProvider out_keys;
+        std::vector<CScript> scripts;
+        BOOST_REQUIRE(descriptor.descriptor->ExpandFromCache(1, descriptor.cache, scripts, out_keys));
+        BOOST_REQUIRE_EQUAL(scripts.size(), 1U);
+        index_one_script = scripts.front();
+        BOOST_CHECK_EQUAL(descriptor.next_index, 1);
+        BOOST_CHECK_EQUAL(descriptor.range_end, 11);
+    }
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db,
+                                     "CREATE TRIGGER fail_descriptor_writes BEFORE INSERT ON main WHEN length(NEW.key) = 49 BEGIN SELECT RAISE(ABORT, 'injected'); END;",
+                                     nullptr, nullptr, nullptr),
+                        SQLITE_OK);
+
+    BOOST_CHECK_EXCEPTION(spkm->MarkUnusedAddresses(index_one_script),
+                          std::runtime_error, HasReason("TopUpWithDB: writing descriptor failed"));
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().next_index, 1);
+    }
+
+    sqlite3_stmt* statement{nullptr};
+    BOOST_REQUIRE_EQUAL(sqlite3_prepare_v2(database.m_db, "SELECT value FROM main WHERE length(key) = 49", -1, &statement, nullptr), SQLITE_OK);
+    BOOST_REQUIRE_EQUAL(sqlite3_step(statement), SQLITE_ROW);
+    SpanReader descriptor_reader{std::span<const std::byte>{static_cast<const std::byte*>(sqlite3_column_blob(statement, 0)), static_cast<size_t>(sqlite3_column_bytes(statement, 0))}};
+    WalletDescriptor persisted_descriptor;
+    descriptor_reader >> persisted_descriptor;
+    BOOST_CHECK_EQUAL(persisted_descriptor.next_index, 1);
+    sqlite3_finalize(statement);
+}
+
 BOOST_AUTO_TEST_CASE(get_new_destination_write_failure)
 {
     CExtKey extkey;
