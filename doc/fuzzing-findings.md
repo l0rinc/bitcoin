@@ -4467,3 +4467,26 @@ state failure, or deterministic regression was demonstrated. The normal and
 sanitizer fuzzer processes own independent node state; this is evidence for the
 exercised lifecycle, not proof of arbitrary live connection interleavings. No
 source or permanent test change was warranted.
+
+## Transaction-download wrapper ASan slice (2026-07-26)
+
+The `txdownloadman` QA corpus contains 1,500 existing inputs. Its full TSan
+replay had already passed, while a full ASan/UBSan mutation run is
+performance-limited by the large synthetic transaction and orphan model. To
+obtain an independent sanitizer signal, a deterministic spread of 245 inputs
+below 16 KiB was selected from the corpus (826,805 bytes total; largest input
+11,438 bytes).
+
+Two independent Clang 19 ASan/UBSan workers loaded that slice and completed
+256 mutations plus seed replay each (257 and 256 executions reported), taking
+221 and 220 seconds and reaching coverage 23,057 and 23,071. Both exited zero
+with no assertion, sanitizer diagnostic, timeout, or artifact. The resulting
+expanded corpora were then replayed by direct-file TSan in 16 and 17 seconds
+(249 and 248 files), also without a race report or failure.
+
+This covers the public transaction-download wrapper's peer, transaction,
+orphan, reconciliation, and removal events across the selected compact-input
+spread. It does not establish a full ASan pass for all 1,500 inputs; the
+performance-limited remainder is still an explicit coverage gap. No production
+inconsistency, memory defect, race, or deterministic test omission was
+demonstrated, so no source or permanent test change was warranted.
