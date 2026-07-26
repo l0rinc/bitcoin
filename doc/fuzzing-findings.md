@@ -4545,3 +4545,15 @@ The full corpus ASan campaign is still incomplete because of the expensive
 large-state tail; this bounded result is not counted as a full-corpus pass. No
 AddrMan persistence inconsistency, memory defect, race, or deterministic test
 omission was demonstrated, so no source or permanent test change was warranted.
+
+## Wallet-enabled descriptor PSBT functional gate (2026-07-26)
+
+The earlier `rpc_psbt.py` attempt was skipped because the functional daemon
+build had wallet support disabled. A Clang 19 Debug wallet-enabled build was
+then used to build `bitcoind` and `bitcoin-cli`; it passed the complete
+`rpc_psbt.py` scenario in 34 seconds. This includes the recent
+`descriptorprocesspsbt` regression case that flips a finalized Taproot
+signature and requires `complete == false` with no extracted transaction hex,
+along with descriptor signing, finalization, sighash, and PSBT round-trip
+cases. No RPC, wallet, signature-validation, or state-consistency defect was
+demonstrated; no source or permanent test change was warranted.
