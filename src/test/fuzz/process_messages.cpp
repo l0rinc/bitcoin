@@ -4,14 +4,17 @@
 
 #include <addrman.h>
 #include <banman.h>
+#include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <kernel/chainparams.h>
 #include <net.h>
+#include <netmessagemaker.h>
 #include <net_processing.h>
 #include <node/mining_types.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <protocol.h>
+#include <script/script.h>
 #include <sync.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
@@ -20,9 +23,12 @@
 #include <test/util/mining.h>
 #include <test/util/net.h>
 #include <test/util/random.h>
+#include <test/util/script.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
+#include <test/util/txmempool.h>
 #include <test/util/validation.h>
+#include <txmempool.h>
 #include <util/check.h>
 #include <util/time.h>
 #include <validation.h>
@@ -37,6 +43,7 @@
 
 namespace {
 TestingSetup* g_setup;
+std::vector<std::pair<COutPoint, CAmount>> g_mature_coinbases;
 
 void ResetChainman(TestingSetup& setup)
 {
@@ -45,9 +52,27 @@ void ResetChainman(TestingSetup& setup)
     setup.m_make_chainman();
     setup.LoadVerifyActivateChainstate();
     node::BlockCreateOptions options;
+    options.coinbase_output_script = CScript() << OP_TRUE;
+    g_mature_coinbases.clear();
     for (int i = 0; i < 2 * COINBASE_MATURITY; i++) {
-        MineBlock(setup.m_node, options);
+        const COutPoint coinbase{MineBlock(setup.m_node, options)};
+        if (i < 3) {
+            LOCK(cs_main);
+            g_mature_coinbases.emplace_back(coinbase, setup.m_node.chainman->ActiveChainstate().CoinsTip().GetCoin(coinbase)->out.nValue);
+        }
     }
+}
+
+CTransactionRef MakeRelayTransaction(const std::pair<COutPoint, CAmount>& coinbase, uint32_t locktime)
+{
+    CMutableTransaction tx;
+    tx.nLockTime = locktime;
+    CTxIn input;
+    input.prevout = coinbase.first;
+    input.scriptWitness.stack = {WITNESS_STACK_ELEM_OP_TRUE};
+    tx.vin.push_back(input);
+    tx.vout.emplace_back(coinbase.second - 1000, CScript() << OP_TRUE);
+    return MakeTransactionRef(tx);
 }
 
 void AssertSendQueueMemoryUsage(CNode& node)
@@ -151,9 +176,175 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
             AssertSendQueueMemoryUsage(random_node);
         }
     }
+
     for (CNode* peer : peers) {
         AssertSendQueueMemoryUsage(*peer);
         AssertSpecialPeerAddressRelayDisabled(*node.peerman, *peer);
+    }
+    node.validation_signals->SyncWithValidationInterfaceQueue();
+    node.connman->StopNodes();
+    node.validation_signals->SyncWithValidationInterfaceQueue();
+    node.validation_signals->UnregisterValidationInterface(node.peerman.get());
+    node.peerman.reset();
+
+    // Start the guided relay slice with no random peers. The global relay buckets deliberately
+    // account for every eligible peer, so retaining the random peers would make the known-filter
+    // oracle depend on their fuzzed handshake state.
+    node.addrman.reset();
+    node.addrman = std::make_unique<AddrMan>(*node.netgroupman, /*deterministic=*/true, /*consistency_check_ratio=*/0);
+    node.peerman = PeerManager::make(connman, *node.addrman,
+                                     /*banman=*/nullptr, chainman,
+                                     *node.mempool, *node.warnings,
+                                     PeerManager::Options{
+                                         .reconcile_txs = true,
+                                         .deterministic_rng = true,
+                                         .tx_send_rate = tx_send_rate,
+                                     });
+    connman.SetMsgProc(node.peerman.get());
+    connman.SetAddrman(*node.addrman);
+    node.validation_signals->RegisterValidationInterface(node.peerman.get());
+
+    // The random-message loop configures tx_send_rate, but normally never creates a valid
+    // mempool transaction. Exercise the global relay buckets with deterministic peers and
+    // witness-shaped transactions so that known-filter, duplicate, and stale-entry paths are
+    // reached independently of wire-message luck.
+    auto make_relay_peer = [&](NodeId id, ConnectionType connection_type) NO_THREAD_SAFETY_ANALYSIS {
+        auto peer = std::make_unique<CNode>(
+            id, std::make_shared<ZeroSock>(), CAddress{}, /*nKeyedNetGroupIn=*/0,
+            /*nLocalHostNonceIn=*/0, CService{}, /*addrNameIn=*/"", connection_type,
+            /*inbound_onion=*/false, /*network_key=*/static_cast<uint64_t>(id),
+            CNodeOptions{.permission_flags = NetPermissionFlags::NoBan});
+        CNode* result{peer.release()};
+        connman.AddTestNode(*result);
+        connman.Handshake(
+            *result,
+            /*successfully_connected=*/false,
+            /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+            /*local_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+            /*version=*/PROTOCOL_VERSION,
+            /*relay_txs=*/true);
+        return result;
+    };
+
+    CNode& inbound_relay_peer{*make_relay_peer(/*id=*/100, ConnectionType::INBOUND)};
+    CNode& outbound_relay_peer{*make_relay_peer(/*id=*/101, ConnectionType::OUTBOUND_FULL_RELAY)};
+
+    auto process_relay_message = [&](CNode& peer, CSerializedNetMsg&& net_msg) NO_THREAD_SAFETY_ANALYSIS {
+        connman.FlushSendBuffer(peer);
+        Assert(connman.ReceiveMsgFrom(peer, std::move(net_msg)));
+        bool more_work{true};
+        while (more_work) {
+            peer.fPauseSend = false;
+            more_work = connman.ProcessMessagesOnce(peer);
+            node.peerman->SendMessages(peer);
+        }
+    };
+
+    // Complete BIP339 negotiation before VERACK. ConnmanTestMsg::Handshake intentionally drops
+    // the feature message from the synthetic wire, while this target needs the wtxid path.
+    process_relay_message(inbound_relay_peer, NetMsg::Make(NetMsgType::WTXIDRELAY));
+    process_relay_message(outbound_relay_peer, NetMsg::Make(NetMsgType::WTXIDRELAY));
+    process_relay_message(inbound_relay_peer, NetMsg::Make(NetMsgType::VERACK));
+    process_relay_message(outbound_relay_peer, NetMsg::Make(NetMsgType::VERACK));
+    Assert(inbound_relay_peer.fSuccessfullyConnected);
+    Assert(outbound_relay_peer.fSuccessfullyConnected);
+
+    auto peer_inv_to_send = [&](CNode& peer) {
+        CNodeStateStats stats;
+        Assert(node.peerman->GetNodeStateStats(peer.GetId(), stats));
+        return stats.m_inv_to_send;
+    };
+
+    Assert(g_mature_coinbases.size() >= 3);
+    auto add_relay_tx = [&](const CTransactionRef& tx) {
+        TestMemPoolEntryHelper entry;
+        TryAddToMempool(*node.mempool, entry.Fee(1000).SpendsCoinbase(true).FromTx(tx));
+        LOCK(node.mempool->cs);
+        Assert(node.mempool->GetIter(tx->GetWitnessHash()).has_value());
+    };
+    auto send_relay_inventory = [&](CNode& peer) NO_THREAD_SAFETY_ANALYSIS {
+        node.peerman->SendMessages(peer);
+        connman.FlushSendBuffer(peer);
+    };
+
+    const CTransactionRef mixed_tx{MakeRelayTransaction(g_mature_coinbases[0], /*locktime=*/0)};
+    const CTransactionRef all_known_tx{MakeRelayTransaction(g_mature_coinbases[1], /*locktime=*/0)};
+    const CTransactionRef stale_tx{MakeRelayTransaction(g_mature_coinbases[2], /*locktime=*/0)};
+    add_relay_tx(mixed_tx);
+    add_relay_tx(all_known_tx);
+    add_relay_tx(stale_tx);
+
+    // First queue a transaction for both peers. Sending it to the inbound peer records the hash
+    // only in that peer's known filter, so the next broadcast must refund the inbound bucket while
+    // consuming one more outbound token.
+    const PeerManagerInfo before_mixed{node.peerman->GetInfo()};
+    node.peerman->InitiateTxBroadcastToAll(mixed_tx->GetWitnessHash());
+    const PeerManagerInfo after_mixed{node.peerman->GetInfo()};
+    Assert(after_mixed.inbound_bucket.count_bucket == before_mixed.inbound_bucket.count_bucket - 1);
+    Assert(after_mixed.outbound_bucket.count_bucket == before_mixed.outbound_bucket.count_bucket - 1);
+    Assert(peer_inv_to_send(inbound_relay_peer) == 1);
+    Assert(peer_inv_to_send(outbound_relay_peer) == 1);
+    send_relay_inventory(inbound_relay_peer);
+    Assert(peer_inv_to_send(inbound_relay_peer) == 0);
+
+    const PeerManagerInfo before_mixed_retry{node.peerman->GetInfo()};
+    node.peerman->InitiateTxBroadcastToAll(mixed_tx->GetWitnessHash());
+    const PeerManagerInfo after_mixed_retry{node.peerman->GetInfo()};
+    Assert(after_mixed_retry.inbound_bucket.count_bucket == before_mixed_retry.inbound_bucket.count_bucket);
+    Assert(after_mixed_retry.outbound_bucket.count_bucket == before_mixed_retry.outbound_bucket.count_bucket - 1);
+    Assert(peer_inv_to_send(inbound_relay_peer) == 0);
+    Assert(peer_inv_to_send(outbound_relay_peer) == 2);
+
+    // Queue a second transaction for both peers, send it to both, and then rebroadcast it. Both
+    // filters now know the transaction, so neither bucket may spend another token. Repeating the
+    // call exercises duplicate wtxids in consecutive global backlogs.
+    const PeerManagerInfo before_all_unknown{node.peerman->GetInfo()};
+    node.peerman->InitiateTxBroadcastToAll(all_known_tx->GetWitnessHash());
+    const PeerManagerInfo after_all_unknown{node.peerman->GetInfo()};
+    Assert(after_all_unknown.inbound_bucket.count_bucket == before_all_unknown.inbound_bucket.count_bucket - 1);
+    Assert(after_all_unknown.outbound_bucket.count_bucket == before_all_unknown.outbound_bucket.count_bucket - 1);
+    send_relay_inventory(inbound_relay_peer);
+    send_relay_inventory(outbound_relay_peer);
+    Assert(peer_inv_to_send(inbound_relay_peer) == 0);
+    Assert(peer_inv_to_send(outbound_relay_peer) == 0);
+
+    const PeerManagerInfo before_all_known{node.peerman->GetInfo()};
+    node.peerman->InitiateTxBroadcastToAll(all_known_tx->GetWitnessHash());
+    const PeerManagerInfo after_all_known{node.peerman->GetInfo()};
+    Assert(after_all_known.inbound_bucket.count_bucket == before_all_known.inbound_bucket.count_bucket);
+    Assert(after_all_known.outbound_bucket.count_bucket == before_all_known.outbound_bucket.count_bucket);
+    Assert(peer_inv_to_send(inbound_relay_peer) == 0);
+    Assert(peer_inv_to_send(outbound_relay_peer) == 0);
+    node.peerman->InitiateTxBroadcastToAll(all_known_tx->GetWitnessHash());
+    const PeerManagerInfo after_duplicate{node.peerman->GetInfo()};
+    Assert(after_duplicate.inbound_bucket.count_bucket == after_all_known.inbound_bucket.count_bucket);
+    Assert(after_duplicate.outbound_bucket.count_bucket == after_all_known.outbound_bucket.count_bucket);
+
+    // A queued wtxid whose mempool entry disappeared must be dropped without spending tokens or
+    // leaving an unserviceable backlog behind.
+    {
+        LOCK(node.mempool->cs);
+        node.mempool->removeRecursive(*stale_tx, MemPoolRemovalReason::EXPIRY);
+        Assert(!node.mempool->GetIter(stale_tx->GetWitnessHash()).has_value());
+    }
+    const PeerManagerInfo before_stale{node.peerman->GetInfo()};
+    node.peerman->InitiateTxBroadcastToAll(stale_tx->GetWitnessHash());
+    const PeerManagerInfo after_stale{node.peerman->GetInfo()};
+    Assert(after_stale.inbound_bucket.backlog_count == 0);
+    Assert(after_stale.outbound_bucket.backlog_count == 0);
+    Assert(after_stale.inbound_bucket.count_bucket == before_stale.inbound_bucket.count_bucket);
+    Assert(after_stale.outbound_bucket.count_bucket == before_stale.outbound_bucket.count_bucket);
+    Assert(peer_inv_to_send(inbound_relay_peer) == 0);
+    Assert(peer_inv_to_send(outbound_relay_peer) == 0);
+
+    AssertSendQueueMemoryUsage(inbound_relay_peer);
+    AssertSendQueueMemoryUsage(outbound_relay_peer);
+    {
+        LOCK(node.mempool->cs);
+        node.mempool->removeRecursive(*mixed_tx, MemPoolRemovalReason::REPLACED);
+        node.mempool->removeRecursive(*all_known_tx, MemPoolRemovalReason::REPLACED);
+        Assert(!node.mempool->GetIter(mixed_tx->GetWitnessHash()).has_value());
+        Assert(!node.mempool->GetIter(all_known_tx->GetWitnessHash()).has_value());
     }
     node.validation_signals->SyncWithValidationInterfaceQueue();
     node.validation_signals->UnregisterValidationInterface(node.peerman.get());

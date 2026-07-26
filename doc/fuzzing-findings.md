@@ -5169,3 +5169,46 @@ branch-only failure after adding the outbound case was a test isolation error:
 the newly added outbound phase exhausted the shared inbound bucket before the
 original inbound phase ran. The test now advances mock time to refill that
 bucket before adding inbound peers.
+
+## Guided global relay-bucket state coverage (2026-07-26)
+
+The `process_messages` target previously varied `-txsendrate` but almost never
+created a valid mempool transaction or reached `InitiateTxBroadcastToAll()`.
+The guided slice now rebuilds the peer manager after the random-message phase,
+creates one inbound and one outbound-full-relay peer, explicitly completes
+BIP339 `WTXIDRELAY` plus `VERACK`, and adds three mature-coinbase-backed,
+witness-shaped mempool transactions. It then checks these state transitions:
+
+* a first broadcast consumes both global count buckets and queues both peers;
+  sending only to the inbound peer makes the next broadcast refund inbound
+  tokens through the known-inventory filter while consuming outbound tokens;
+* a transaction sent to both peers is refunded in both directions on two
+  consecutive rebroadcasts, including the duplicate global backlog mutation;
+* removing a queued transaction from the mempool before broadcasting its wtxid
+  clears both backlogs without consuming tokens; each synthetic transaction's
+  mempool insertion and removal is asserted as a harness pre/postcondition.
+
+The exact `origin/master` daemon at
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`, with only this guided harness
+applied, fails deterministically on the one-seed corpus at
+`after_mixed_retry.inbound_bucket.count_bucket` (`process_messages.cpp:270`).
+The same clean-master source plus only the production hunks from
+`ed89ea1d6d` (`net_processing.cpp` and `TokenBucket::refund`) passes the same
+seed. The branch also passes the normal, ASan/UBSan, and direct-file TSan
+one-seed controls. Four independent TSan workers replayed all 4,431
+`process_messages` corpus files, completing in 169, 169, 170, and 170 seconds
+with no race report, assertion, sanitizer diagnostic, or artifact.
+
+This is new deterministic coverage and stronger evidence for the existing
+`ed89ea1d6d` production fix, not a second production defect. The bare-master
+failure is the known-filter relay-budget starvation that `ed89ea1d6d` fixes;
+no consensus, wallet, mempool-acceptance, or memory-safety issue was found in
+this slice.
+
+The same current branch then ran four independent Clang 19 ASan/UBSan workers
+over the preserved `process_messages` corpus with `-runs=500`. They completed
+4,557, 4,559, 4,559, and 4,558 executions in 940, 937, 939, and 940 seconds,
+respectively; peak RSS was 752, 748, 765, and 752 MiB. All workers exited zero
+without an assertion, sanitizer diagnostic, race report, timeout, or crash
+artifact. This is sanitizer evidence for the guided mutation and its cleanup
+paths, not proof that all live relay scheduling interleavings are covered.
