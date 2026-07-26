@@ -5140,3 +5140,32 @@ fuzzer workers; they do not prove all possible peer scheduling or RPC/mempool
 interleavings. No inbound-relay race, vsize-reporting inconsistency, memory
 defect, or deterministic test omission was demonstrated, so no source change
 was warranted.
+
+## Outbound known-filter relay-budget coverage (2026-07-26)
+
+The existing `p2p_tx_relay_rate_limit_known.py` regression covered only the
+inbound bucket. The new mutation adds an `outbound-full-relay`
+`P2PInterface`, sends each of 30 valid self-transfer transactions to the node
+as a `MSG_WTX` `INV` before submitting it locally, and checks that the
+outbound count budget remains at 30. It then submits one transaction unknown
+to that peer and checks that the outbound budget falls to 29. The inbound
+case remains in the same deterministic test; its bucket is explicitly refilled
+between the two directional cases because the global inbound and outbound
+buckets are independent.
+
+This was a real uncovered production mutation, but not a new production bug:
+the branch's existing `ed89ea1d6d` implementation already applies the known
+filter and token refund to both directions. The exact clean-master daemon at
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`, run with only this test artifact
+added, failed deterministically at the first outbound known-batch assertion:
+`count_tok` was `0` instead of `30`. The branch test passed with the normal
+Clang 19 daemon and with the Clang 19 TSan daemon. The clean-master failure
+therefore confirms that the outbound mutation was not accidentally covered by
+an earlier master change, while the branch pass confirms that the existing
+production fix covers it.
+
+No additional production or fuzzer source change was warranted. The initial
+branch-only failure after adding the outbound case was a test isolation error:
+the newly added outbound phase exhausted the shared inbound bucket before the
+original inbound phase ran. The test now advances mock time to refill that
+bucket before adding inbound peers.
