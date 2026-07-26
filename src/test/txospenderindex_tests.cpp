@@ -78,6 +78,63 @@ BOOST_FIXTURE_TEST_CASE(txospenderindex_initial_sync, TestChain100Setup)
     txospenderindex.Stop();
 }
 
+BOOST_FIXTURE_TEST_CASE(txospenderindex_multibyte_tx_count_offsets, TestChain100Setup)
+{
+    constexpr size_t SPENDER_COUNT{253};
+    const CScript& coinbase_script = m_coinbase_txns[0]->vout[0].scriptPubKey;
+    const COutPoint parent_input{m_coinbase_txns[0]->GetHash(), 0};
+
+    CMutableTransaction parent;
+    parent.vin.resize(1);
+    parent.vin[0].prevout = parent_input;
+    parent.vout.resize(SPENDER_COUNT);
+    for (auto& output : parent.vout) {
+        output.nValue = 1'000'000;
+        output.scriptPubKey = CScript() << OP_TRUE;
+    }
+
+    std::vector<unsigned char> signature;
+    const uint256 signature_hash = SignatureHash(coinbase_script, parent, 0, SIGHASH_ALL, 0, SigVersion::BASE);
+    BOOST_REQUIRE(coinbaseKey.Sign(signature_hash, signature));
+    signature.push_back(static_cast<unsigned char>(SIGHASH_ALL));
+    parent.vin[0].scriptSig << signature;
+
+    const CBlock parent_block = CreateAndProcessBlock({parent}, coinbase_script);
+
+    std::vector<CMutableTransaction> spenders;
+    spenders.reserve(SPENDER_COUNT);
+    for (uint32_t output_index{0}; output_index < SPENDER_COUNT; ++output_index) {
+        CMutableTransaction spender;
+        spender.vin.resize(1);
+        spender.vin[0].prevout = COutPoint(parent.GetHash(), output_index);
+        spender.vout.resize(1);
+        spender.vout[0].nValue = 500'000;
+        spender.vout[0].scriptPubKey = CScript() << OP_TRUE;
+        spenders.push_back(std::move(spender));
+    }
+    const CBlock spender_block = CreateAndProcessBlock(spenders, coinbase_script);
+
+    TxoSpenderIndex txospenderindex(interfaces::MakeChain(m_node), 1 << 20, true);
+    BOOST_REQUIRE(txospenderindex.Init());
+    txospenderindex.Sync();
+
+    const auto parent_spender = txospenderindex.FindSpender(parent_input);
+    BOOST_REQUIRE(parent_spender.has_value());
+    BOOST_REQUIRE(parent_spender->has_value());
+    BOOST_CHECK_EQUAL((*parent_spender)->tx->GetHash(), parent.GetHash());
+    BOOST_CHECK_EQUAL((*parent_spender)->block_hash, parent_block.GetHash());
+
+    for (uint32_t output_index{0}; output_index < SPENDER_COUNT; ++output_index) {
+        const auto spender = txospenderindex.FindSpender(COutPoint(parent.GetHash(), output_index));
+        BOOST_REQUIRE(spender.has_value());
+        BOOST_REQUIRE(spender->has_value());
+        BOOST_CHECK_EQUAL((*spender)->tx->GetHash(), spenders[output_index].GetHash());
+        BOOST_CHECK_EQUAL((*spender)->block_hash, spender_block.GetHash());
+    }
+
+    txospenderindex.Stop();
+}
+
 BOOST_FIXTURE_TEST_CASE(txospenderindex_reinit_reader_race, TestChain100Setup)
 {
     const CScript& coinbase_script = m_coinbase_txns[0]->vout[0].scriptPubKey;

@@ -4842,3 +4842,22 @@ warranted. The five-case `blockfilter_index_tests` suite also passed under
 TSan in 4.3 seconds, including initial sync, index reinitialization, null
 transaction-reference rejection, the reader-reinit race regression, and the
 reorg-crash regression.
+
+## Txospender index CompactSize offset boundary (2026-07-26)
+
+The existing txospender index tests did not cross the serialized block
+transaction-count boundary. The new `txospenderindex_multibyte_tx_count_offsets`
+case builds a block with 254 transactions (a coinbase plus 253 spenders),
+where the transaction-count CompactSize occupies three bytes, and verifies
+the parent lookup plus all 253 disk-position lookups in the block. This covers
+the first transaction and the final offset rather than only a single one-byte
+count case.
+
+The test passed in 1.2 seconds under the Clang 19 TSan unit build, and all
+three `txospenderindex_tests` cases passed in 3.3 seconds. As a mutation
+control, temporarily replacing `GetSizeOfCompactSize(block.data->vtx.size())`
+in `BuildSpenderPositions()` with the raw `block.data->vtx.size()` made the
+same test fail at the parent lookup (`parent_spender.has_value()`), exit 201,
+and was then reverted. This is a deterministic coverage improvement; the
+production implementation was already correct and no production fix was
+warranted.
