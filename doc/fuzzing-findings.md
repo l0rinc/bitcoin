@@ -5329,3 +5329,57 @@ race report, timeout, or crash artifact occurred. Severity is none: this change
 closes a deterministic test gap and adds assertion-only hardening; it does not
 change release behavior or establish a consensus, wallet, network, or cache
 vulnerability.
+
+## Rejected submitted-package coins-cache cleanup coverage (2026-07-26)
+
+`ProcessNewPackage(..., test_accept=false)` may fetch chainstate coins while
+checking a package that is ultimately rejected. Those inputs must be uncached
+after an invalid result; otherwise repeated rejected submissions can retain
+otherwise unnecessary chainstate cache entries. The existing package fuzzers
+only checked cache preservation for `test_accept=true`, and the deterministic
+package tests did not cover this rejection path.
+
+Both `ephemeral_package_eval` and `tx_package_eval` now snapshot the package
+inputs before a non-test-accept call. For a rejected result they require that a
+newly fetched input is not left cached unless it belongs to a transaction that
+was actually submitted. The test-accept path requires all newly fetched inputs
+to be removed, while allowing normal eviction of pre-existing clean entries.
+The deterministic test flushes the cache, submits a validly signed transaction
+whose output is then raised above its input value to force a negative-fee
+consensus failure after the input lookup, and requires the coin to be absent
+from the cache afterward.
+
+The production condition and its `Assume(!HaveCoinInCache(...))` postcondition
+already existed on master, so this commit changes no production behavior. The
+exact clean-master worktree at `e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`
+received only the new deterministic test. The pre-existing
+`package_submission_tests` passed with the production code and still passed
+when the condition was mutated from
+`if (test_accept || result.m_state.IsInvalid())` to `if (test_accept)`. Under
+that same mutation, the new test failed with the input still cached (exit 201).
+Restoring the condition made the new test pass. This attributes the contract to
+the clean-master implementation rather than to an earlier branch change.
+
+The first full-corpus replay exposed a false positive in the original
+`AssertPackageInputCacheUnchanged` oracle: a 2,872-input `tx_package_eval`
+replay observed an expected pre-existing cache entry disappear while the cache
+limit was enforced. That is permitted by `FlushStateToDisk`; it is not evidence
+of lost chainstate data. `AcceptPackage` can also submit valid earlier package
+transactions before a later transaction makes the package invalid, so those
+transactions' newly fetched inputs cannot be treated as an unconditional
+rejection invariant. The helper was narrowed to assert only unexpected cache
+additions, and the optimized replay then passed all 2,872 inputs. The temporary
+clean-master fuzzer control reached unrelated branch-only result-shape oracles
+before this check, but the deterministic clean-master rejection test passed
+with the unmodified production code. No production defect was demonstrated.
+
+The investigation branch passed all 15 `txpackage_tests` cases and the
+optimized full-corpus replay. A five-minute Clang 19 ASan/UBSan replay reached
+1,024 inputs without a diagnostic before it was interrupted on a pathological
+slow input; that input independently completed in 10.8 seconds under ASan and
+in 285 milliseconds in the optimized target. This remains coverage and
+regression hardening, not a confirmed current-master production defect.
+Severity for the false-positive oracle is test correctness; severity for the
+missing coverage is none. If the cleanup condition regressed, the resulting
+resource retention would be a local or authenticated package-submission
+memory-pressure issue, not a consensus or unauthenticated P2P vulnerability.
