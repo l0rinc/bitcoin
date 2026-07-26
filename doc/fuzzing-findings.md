@@ -5244,3 +5244,33 @@ completed at coverage 34,857 with 678 MiB peak RSS. All controls exited zero
 without assertions, sanitizer diagnostics, race reports, timeouts, or
 artifacts. This is a coverage addition and attribution check, not another
 production fix.
+
+## FILTERCLEAR inbound relay-capacity coverage (2026-07-26)
+
+The inbound transaction-relay capacity functional scenario already covered a
+block-relay peer becoming transaction-relaying through `FILTERLOAD`, but did
+not cover the equivalent `FILTERCLEAR` transition. `ProcessMessage()` sets
+`m_relays_txs` on `FILTERCLEAR` and must then call
+`MaybeDisconnectForTxRelayCapacity()`; otherwise a peer can become a
+transaction-relay peer without enforcing the configured inbound capacity.
+
+The deterministic test now restarts with two inbound slots, connects one
+block-relay peer and one full-relay peer, sends `FILTERCLEAR` from the former,
+and requires the existing capacity log and one-peer result. This is a test
+coverage addition; the production call was already correct.
+
+Mutation proof was performed with a rebuilt `bitcoind`: removing only the
+`MaybeDisconnectForTxRelayCapacity(pfrom, msg_type)` call from the
+`FILTERCLEAR` branch passed the pre-existing test unchanged, but failed the new
+case at its expected `connection dropped after filterclear message` assertion.
+After restoring the call, the expanded `p2p_connection_limits.py` passed under
+the Clang 19 functional build in 9 seconds, and the Python file passed
+`py_compile`. No production defect, race, or security issue was demonstrated;
+severity is none, with the omission now covered deterministically.
+
+The adjacent `process_message` fuzzer also completed 200 normal libFuzzer
+executions (coverage 5,768), 100 ASan/UBSan executions (coverage 17,168), and
+one direct-file Clang 19 TSan replay. All exited zero without assertions,
+sanitizer diagnostics, race reports, timeouts, or artifacts. These are smoke
+controls for the surrounding message path; the multi-peer capacity behavior is
+proved by the functional mutation test above.
