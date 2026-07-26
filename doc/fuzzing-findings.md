@@ -5412,3 +5412,54 @@ cases. The wallet-enabled Clang 19 normal fuzzer completed 512
 `coincontrol` executions, and the matching Clang 19 ASan/UBSan fuzzer completed
 256 executions over the expanded corpus. No assertion, sanitizer diagnostic,
 timeout, or artifact occurred.
+
+## Coin-selection bump-fee total accounting (2026-07-26)
+
+The coin-selection fuzzers exercised `SetBumpFeeDiscount()` only with an
+unconstrained synthetic discount and never called `GetTotalBumpFees()`, even
+though the latter feeds the final wallet transaction fee calculation. The
+existing `bump_fee_test` verified the resulting waste score but did not verify
+the raw total before or after an ancestry-overlap discount. This left a sign
+regression in the fee accessor invisible to both the deterministic test and
+the prior fuzz oracle.
+
+The fuzzer now clones selected inputs, applies bounded nonnegative per-input
+bump fees, chooses a discount between zero and their sum, and requires
+`GetTotalBumpFees()` to equal `sum(individual bump fees) - discount`. The
+production accessor adds an always-active `Assert()` that the discount cannot
+exceed that sum, preventing an inconsistent selection from producing a
+negative bump-fee contribution to the final fee. The deterministic
+`bump_fee_test` covers the concrete `60`-sat total and `30`-sat discounted total.
+
+This is hardening and coverage, not a confirmed current-master production
+defect. At exact clean master `e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`, the
+two new deterministic checks passed. Mutating only
+`SelectionResult::GetTotalBumpFees()` from subtraction to addition left the
+pre-existing waste assertions green but failed the new discounted check with
+`90 != 30`; restoring the accessor made the control pass. No earlier branch
+commit was involved in that attribution. The clean-master test was built and
+run in a disposable wallet-enabled Clang 19 build with IPC disabled because
+the installed Cap'n Proto is incompatible with Clang 19.
+
+The rebased branch passed the focused `coinselector_tests/bump_fee_test`, all
+four `coinselection_tests` cases, normal Clang 19 forked runs over the
+existing BnB, SRD, Knapsack, CoinGrinder, CoinGrinder-optimal,
+minimum-waste, and attempt-limit corpora, and ASan/UBSan forked runs over the
+four algorithm corpora. No assertion, sanitizer diagnostic, race report,
+timeout, or crash artifact occurred. Severity is none for master behavior;
+without this guard, a future wallet-only accounting regression could
+understate a transaction fee or trigger an invalid negative bump-fee
+contribution, but this exercise found no remotely reachable, consensus, or
+wallet-loss vulnerability in the current implementation.
+
+The same contract audit found a real but local master defect in
+`SelectionResult::Clear()`: it emptied the selected inputs without clearing
+the overlap discount. Exact clean master reproduced `GetTotalBumpFees() == -30`
+after a `30`-sat discount was followed by `Clear()`. Adding only
+`bump_fee_group_discount = 0` made the control pass. This is severity low:
+current production coin-selection paths clear a fresh Knapsack result before
+any discount is assigned, so no current network or wallet-loss exploit was
+demonstrated; however, reuse of a discounted result could understate the fee
+and the stale state violated the accessor's empty-selection contract. The
+reset, deterministic regression check, and fuzzer transition are included in
+this commit.

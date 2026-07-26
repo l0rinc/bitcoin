@@ -78,6 +78,27 @@ static SelectionResult ManualSelection(std::vector<COutput>& utxos, const CAmoun
 // Returns true if the result contains an error and the message is not empty
 static bool HasErrorMsg(const util::Result<SelectionResult>& res) { return !util::ErrorString(res).empty(); }
 
+// Exercise bump-fee accounting on copies so the coin-selection result remains valid for later oracles.
+static void CheckBumpFeeAccounting(const SelectionResult& selection, FuzzedDataProvider& fuzzed_data_provider)
+{
+    SelectionResult result(/*target=*/0, SelectionAlgorithm::MANUAL);
+    OutputSet inputs;
+    CAmount total_bump_fees{0};
+    for (const auto& input : selection.GetInputSet()) {
+        auto coin{std::make_shared<COutput>(*input)};
+        const CAmount bump_fee{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)};
+        coin->ApplyBumpFee(bump_fee);
+        total_bump_fees += bump_fee;
+        inputs.insert(std::move(coin));
+    }
+    result.AddInputs(inputs, /*subtract_fee_outputs=*/false);
+    const CAmount discount{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(0, total_bump_fees)};
+    result.SetBumpFeeDiscount(discount);
+    assert(result.GetTotalBumpFees() == total_bump_fees - discount);
+    result.Clear();
+    assert(result.GetTotalBumpFees() == 0);
+}
+
 FUZZ_TARGET(coin_grinder)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
@@ -435,6 +456,7 @@ void FuzzCoinSelectionAlgorithm(std::span<const uint8_t> buffer) {
                 assert(result_bnb->GetChange(coin_params.min_viable_change, coin_params.m_change_fee) == 0);
                 assert(result_bnb->GetSelectedValue() >= target);
                 assert(result_bnb->GetWeight() <= max_selection_weight);
+                CheckBumpFeeAccounting(*result_bnb, fuzzed_data_provider);
                 (void)result_bnb->GetShuffledInputVector();
                 (void)result_bnb->GetInputSet();
             }
@@ -448,7 +470,7 @@ void FuzzCoinSelectionAlgorithm(std::span<const uint8_t> buffer) {
             assert(result_srd->GetSelectedValue() >= target);
             assert(result_srd->GetChange(CHANGE_LOWER, coin_params.m_change_fee) > 0);
             assert(result_srd->GetWeight() <= max_selection_weight);
-            result_srd->SetBumpFeeDiscount(ConsumeMoney(fuzzed_data_provider));
+            CheckBumpFeeAccounting(*result_srd, fuzzed_data_provider);
             result_srd->RecalculateWaste(coin_params.min_viable_change, coin_params.m_cost_of_change, coin_params.m_change_fee);
             (void)result_srd->GetShuffledInputVector();
             (void)result_srd->GetInputSet();
@@ -475,7 +497,7 @@ void FuzzCoinSelectionAlgorithm(std::span<const uint8_t> buffer) {
             result = *result_knapsack;
             assert(result_knapsack->GetSelectedValue() >= target);
             assert(result_knapsack->GetWeight() <= max_selection_weight);
-            result_knapsack->SetBumpFeeDiscount(ConsumeMoney(fuzzed_data_provider));
+            CheckBumpFeeAccounting(*result_knapsack, fuzzed_data_provider);
             result_knapsack->RecalculateWaste(coin_params.min_viable_change, coin_params.m_cost_of_change, coin_params.m_change_fee);
             (void)result_knapsack->GetShuffledInputVector();
             (void)result_knapsack->GetInputSet();
