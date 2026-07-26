@@ -1759,6 +1759,7 @@ bool CConnman::AttemptToEvictConnection(bool evict_tx_relay_peer_only, std::opti
                 pnode->ConnectionTypeAsString().c_str(),
                 pnode->ConnectedThroughNetwork(),
                 TicksSinceEpoch<std::chrono::seconds>(pnode->m_connected));
+            Assert(!evict_tx_relay_peer_only || (pnode->IsInboundConn() && pnode->m_relays_txs));
             pnode->fDisconnect = true;
             return true;
         }

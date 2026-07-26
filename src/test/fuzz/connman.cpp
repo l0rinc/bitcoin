@@ -18,6 +18,7 @@
 #include <test/util/time.h>
 #include <util/translation.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -332,4 +333,115 @@ FUZZ_TARGET(connman, .init = initialize_connman)
     connman.ClearTestNodes();
     g_dns_lookup = g_dns_lookup_orig;
     CreateSock = CreateSockOrig;
+}
+
+FUZZ_TARGET(connman_inbound_relay_capacity, .init = initialize_connman)
+{
+    SeedRandomStateForTest(SeedRand::ZEROS);
+    ResetFuzzedSockMockedFds();
+    FuzzedDataProvider provider{buffer.data(), buffer.size()};
+    FakeNodeClock clock{1610000000s};
+    FakeSteadyClock steady_clock;
+
+    auto netgroupman{ConsumeNetGroupManager(provider)};
+    auto addr_man{std::make_unique<AddrManDeterministic>(netgroupman, provider, GetCheckRatio())};
+    ConnmanTestMsg connman{provider.ConsumeIntegral<uint64_t>(),
+                           provider.ConsumeIntegral<uint64_t>(),
+                           *addr_man,
+                           netgroupman,
+                           Params()};
+
+    CConnman::Options options;
+    options.m_max_automatic_connections = provider.ConsumeIntegralInRange<int>(0, 200);
+    options.m_full_relay_inbound_percent = provider.ConsumeIntegralInRange<int>(0, 100);
+    connman.Init(options);
+
+    const int max_inbound{std::max(0, options.m_max_automatic_connections -
+                                          MAX_OUTBOUND_FULL_RELAY_CONNECTIONS -
+                                          MAX_BLOCK_RELAY_ONLY_CONNECTIONS -
+                                          MAX_FEELER_CONNECTIONS)};
+    const int max_inbound_full_relay{std::max(
+        0, static_cast<int>(options.m_full_relay_inbound_percent / 100.0 * max_inbound))};
+
+    std::vector<CNode*> nodes;
+    const size_t num_nodes{provider.ConsumeIntegralInRange<size_t>(1, 64)};
+    for (size_t i{0}; i < num_nodes; ++i) {
+        const ConnectionType connection_type{i == 0
+                                                  ? ConnectionType::INBOUND
+                                                  : provider.PickValueInArray(ALL_CONNECTION_TYPES)};
+        auto node{std::make_unique<CNode>(
+            static_cast<NodeId>(i),
+            std::make_shared<FuzzedSock>(provider, steady_clock),
+            ConsumeAddress(provider),
+            provider.ConsumeIntegral<uint64_t>(),
+            provider.ConsumeIntegral<uint64_t>(),
+            ConsumeAddress(provider),
+            provider.ConsumeRandomLengthString(64),
+            connection_type,
+            connection_type == ConnectionType::INBOUND && provider.ConsumeBool(),
+            provider.ConsumeIntegral<uint64_t>(),
+            CNodeOptions{
+                .permission_flags = ConsumeWeakEnum(provider, ALL_NET_PERMISSION_FLAGS),
+                .prefer_evict = provider.ConsumeBool(),
+            })};
+        node->m_relays_txs = i == 0 || provider.ConsumeBool();
+        node->m_bloom_filter_loaded = provider.ConsumeBool();
+        node->m_has_all_wanted_services = provider.ConsumeBool();
+        node->m_last_block_time = ConsumeTime(provider).time_since_epoch();
+        node->m_last_tx_time = ConsumeTime(provider).time_since_epoch();
+        node->m_min_ping_time = ConsumeDuration<decltype(CNode::m_min_ping_time.load())>(
+            provider, /*min=*/std::chrono::microseconds{0}, /*max=*/std::chrono::seconds{1});
+        node->fDisconnect = i != 0 && provider.ConsumeBool();
+        nodes.push_back(node.release());
+        connman.AddTestNode(*nodes.back());
+    }
+
+    const std::optional<NodeId> protect_peer{provider.ConsumeBool()
+                                                 ? std::optional<NodeId>{provider.ConsumeIntegralInRange<NodeId>(
+                                                       0, static_cast<NodeId>(nodes.size() - 1))}
+                                                 : std::nullopt};
+
+    const auto check_eviction{[&](const std::optional<NodeId> protected_peer) {
+        std::vector<bool> disconnected_before;
+        disconnected_before.reserve(nodes.size());
+        for (const CNode* node : nodes) disconnected_before.push_back(node->fDisconnect.load());
+
+        int live_inbound_tx_peers{0};
+        for (const CNode* node : nodes) {
+            if (!node->fDisconnect && node->IsInboundConn() && node->m_relays_txs) {
+                ++live_inbound_tx_peers;
+            }
+        }
+
+        const bool result{connman.EvictTxPeerIfFull(protected_peer)};
+        size_t newly_disconnected{0};
+        for (size_t i{0}; i < nodes.size(); ++i) {
+            if (!disconnected_before[i] && nodes[i]->fDisconnect) {
+                ++newly_disconnected;
+                assert(nodes[i]->IsInboundConn());
+                assert(nodes[i]->m_relays_txs);
+                assert(!protected_peer || nodes[i]->GetId() != *protected_peer);
+            }
+        }
+
+        if (live_inbound_tx_peers <= max_inbound_full_relay) {
+            assert(result);
+            assert(newly_disconnected == 0);
+        } else if (result) {
+            assert(newly_disconnected == 1);
+        } else {
+            assert(newly_disconnected == 0);
+        }
+    }};
+
+    check_eviction(protect_peer);
+    if (provider.ConsumeBool()) {
+        check_eviction(provider.ConsumeBool() && !nodes.empty()
+                           ? std::optional<NodeId>{provider.ConsumeIntegralInRange<NodeId>(
+                                 0, static_cast<NodeId>(nodes.size() - 1))}
+                           : std::nullopt);
+    }
+
+    connman.ClearTestNodes();
+    ResetFuzzedSockMockedFds();
 }
