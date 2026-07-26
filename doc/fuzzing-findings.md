@@ -4525,3 +4525,23 @@ so this is evidence for the exercised command and validation paths rather than
 proof of arbitrary concurrent RPC callers. No RPC production inconsistency,
 race, or deterministic test omission was demonstrated; no source or permanent
 test change was warranted.
+
+## AddrMan serialization sanitizer slices (2026-07-26)
+
+The `addrman_serdeser` corpus contains 1,437 inputs and remains expensive as
+serialized address state grows. Two independent ASan/UBSan workers replayed 128
+of the smallest states and completed 129 executions each in 30 seconds,
+reaching coverage 13,002. Two independent workers replayed 64 of the largest
+states (14.95 MB per copy) and completed 65 executions each in 321 and 322
+seconds, reaching coverage 13,125 at approximately 765 MB peak RSS. All four
+workers exited zero without an assertion, sanitizer diagnostic, timeout, or
+artifact.
+
+Direct-file TSan replay covered both smallest 128-file slices in three seconds
+each and both largest 64-file slices in 23 seconds each, also without a race
+report or failure. The slices exercised AddrMan construction, serialization,
+deserialization, equality, network grouping, and large tried/new-table state.
+The full corpus ASan campaign is still incomplete because of the expensive
+large-state tail; this bounded result is not counted as a full-corpus pass. No
+AddrMan persistence inconsistency, memory defect, race, or deterministic test
+omission was demonstrated, so no source or permanent test change was warranted.
