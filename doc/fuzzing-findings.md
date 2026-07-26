@@ -4441,3 +4441,29 @@ case overall. All 80 invocations passed with no TSan diagnostic, assertion,
 timeout, or test failure. The run found no new index lifetime, notification
 ordering, or reorg race on the rebased branch; no production or deterministic
 test change was warranted.
+
+## Private-broadcast live-harness gate (2026-07-26)
+
+The `p2p_private_broadcast` target had no preserved QA corpus, so a private
+128-file seed spread was assembled from the existing `process_message`,
+`cmpctblock`, and `txdownloadman` corpora. Two independent normal workers
+completed 1,000 mutations each, reaching coverage 8,120 and 8,166. Two
+independent ASan/UBSan workers completed 500 mutations each, reaching coverage
+24,454 and 24,460, and two TSan workers completed 500 each, reaching coverage
+2,705 and 2,709. All six workers exited zero without an assertion, sanitizer
+diagnostic, race report, timeout, or artifact.
+
+The live target exercises private-broadcast queue initialization, zero through
+three pending transactions, private and ordinary peer handshakes, relay=false
+connected-in-vain disconnects, valid and malformed GETDATA/PONG traffic,
+transaction push and confirmation, incoming-transaction broadcast abortion,
+and repeated peer-manager/connection-manager cleanup. The corresponding
+`p2p_private_broadcast.py` functional test also passed in 17 seconds, covering
+SOCKS5-routed private peers, rebroadcast, abort, txid/wtxid transaction pairs,
+invalid-witness rejection, and the no-relay peer path.
+
+No private-broadcast production inconsistency, memory defect, race, privacy
+state failure, or deterministic regression was demonstrated. The normal and
+sanitizer fuzzer processes own independent node state; this is evidence for the
+exercised lifecycle, not proof of arbitrary live connection interleavings. No
+source or permanent test change was warranted.
