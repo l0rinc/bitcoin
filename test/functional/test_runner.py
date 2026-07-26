@@ -278,6 +278,7 @@ BASE_SCRIPTS = [
     'p2p_tx_relay_rate_limit.py',
     'p2p_tx_relay_rate_limit_size.py',
     'p2p_tx_relay_rate_limit_outbound.py',
+    'p2p_tx_relay_rate_limit_known.py',
     'p2p_eviction.py',
     'p2p_outbound_eviction.py',
     'p2p_ibd_stalling.py --v1transport',

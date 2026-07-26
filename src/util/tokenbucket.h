@@ -55,6 +55,12 @@ public:
         return (m_value > floor);
     }
 
+    /** Return previously consumed tokens without changing the time baseline. */
+    void refund(double n = 1.0)
+    {
+        m_value = std::min(m_cap, m_value + n);
+    }
+
     /** Current token balance. */
     double value() const { return m_value; }
 

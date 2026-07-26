@@ -2575,6 +2575,23 @@ BOOST_AUTO_TEST_CASE(token_bucket_decrement_with_debt)
     BOOST_CHECK_EQUAL(b.value(), -3);
 }
 
+BOOST_AUTO_TEST_CASE(token_bucket_refund)
+{
+    util::TokenBucket<NodeClock> b(/*rate=*/1, /*value=*/5, /*cap=*/10);
+    b.increment(NodeClock::time_point{1s});
+    b.decrement(4); // 5 -> 1
+    b.refund(2);    // 1 -> 3
+    BOOST_CHECK_EQUAL(b.value(), 3);
+
+    // Refunding does not reset the refill baseline.
+    b.increment(NodeClock::time_point{2s});
+    BOOST_CHECK_EQUAL(b.value(), 4);
+
+    // A refund cannot raise the balance above the configured capacity.
+    b.refund(100);
+    BOOST_CHECK_EQUAL(b.value(), 10);
+}
+
 BOOST_AUTO_TEST_CASE(token_bucket_drain_and_refill)
 {
     util::TokenBucket<NodeClock> b(/*rate=*/10, /*value=*/20, /*cap=*/100);

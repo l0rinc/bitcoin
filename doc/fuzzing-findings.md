@@ -30,19 +30,20 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 42 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 43 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P relay availability, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | Remaining TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving another clean-master production bug. The full-range TxGraph mutation also exposed the production defect recorded below. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The forty-two confirmed runtime defects are: the index publication and restart race;
+The forty-three confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the equal-feerate TxGraph prefix
 fee overflow; the saturated cluster chunk fee aggregation mismatch; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
-arithmetic; `-maxmempool` byte-size multiplication overflow; stale Base58 output on
+arithmetic; `-maxmempool` byte-size multiplication overflow; global
+transaction-relay known-filter budget starvation; stale Base58 output on
 decode failure; the descriptor-cache partial merge; stale mining `submitSolution`
 failure outputs; stale `TxIndex::FindTx` failure outputs; stale wallet transaction
 detail outputs; the descriptor next-index persistence failure; stale
@@ -84,6 +85,16 @@ created worker threads.
   `6aa5d8d948`, the normal P2P null-tail construction is avoided by current master
   `6f1c56f03a`, and the remaining branch fixes are direct-API contracts or test
   coverage. No additional compact-block collision defect was found after the rebase.
+* The global transaction-relay queue had a clean-master availability defect:
+  it consumed count and serialized-size tokens before checking whether any
+  eligible peer still needed the transaction. A remote party with multiple
+  inbound connections could announce each transaction to all of them first,
+  then submit the transactions through one connection; no `INV` was sent, but
+  the relay budget was exhausted and unrelated transactions were delayed. The
+  branch now refunds the bounded batch reservation when every eligible peer
+  already knows the transaction. This is a medium-severity transaction-relay
+  availability issue, not a consensus, mempool-acceptance, wallet, or memory
+  safety defect.
 * The descriptor-cache partial-merge defect below is a real clean-master production
   defect. Its fuzzer construction was temporarily copied into an exact-master
   control, while `src/script/descriptor.cpp` remained unchanged; the fixed branch
@@ -4571,6 +4582,66 @@ The existing key fuzzer's invalid private/public/hardened derivation checks
 also remained clean on this rebased source. No BIP32 seed-boundary
 inconsistency, memory defect, race, or deterministic test omission was
 demonstrated; no source or permanent test change was warranted.
+
+## Clean-master global relay known-filter budget starvation (2026-07-26)
+
+The exact clean-master baseline for this control is
+`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`. Before the fix, the relevant
+`InvToSendBucket::TakeForProcessing()` and `ProcessInvBacklog()` logic in the
+working tree had no production difference from that master path. The global
+relay queue selected transactions and consumed its count and serialized-size
+tokens first; `SendMessages()` checked each peer's known-inventory filter only
+after those tokens had been spent and the transaction had been placed in a
+per-peer queue.
+
+The deterministic mutation used one node with `-txsendrate=1`, frozen
+mocktime, and two inbound `P2PInterface` connections. For each of 30 valid
+self-transfer transactions, both peers first sent a `MSG_WTX` `INV` so the
+node recorded the transaction in each peer's known filter. The transaction was
+then accepted locally. The test peers deliberately did not answer the
+resulting `GETDATA`, so the observation was about inventory scheduling rather
+than transaction download. Running the permanent test against an exact
+`origin/master` daemon failed deterministically at the count assertion:
+`count_tok` was `0` instead of the expected `30`. On the clean-master-equivalent
+pre-fix daemon, the same run continued with the following unknown transaction:
+all 30 selected transactions consumed the inbound count budget even though
+both eligible peers already knew them: the backlog was zero, the count-token
+balance was zero, and no `INV` was observed. Submitting one more transaction
+that neither peer knew left it in the global backlog instead of announcing it.
+
+An independent historical control used the pre-global implementation at
+`46c8c471dcf55f0e631cd4281d2413a63e7b3775` without `-txsendrate`. It announced
+430 transactions to both peers before local submission, then submitted an
+unknown transaction. That daemon's per-peer queue retained the unknown
+transaction (`inv_to_send > 0`) because the known filter was consulted before
+queueing. This rules out the test construction itself as the cause of the
+regression.
+
+The branch fix keeps the selected transactions alive through distribution,
+checks the bounded selected batch against the known filter of each eligible
+peer, and refunds both token types when every eligible peer already knows a
+transaction. If at least one eligible peer does not know it, the existing
+behavior of queueing the announcement for every eligible peer is preserved;
+the later per-peer filter check still suppresses it for peers with false
+positive or already-known entries. The new `TokenBucket::refund()` contract
+has a unit test for ordinary refunds and capacity clamping. The permanent
+functional test asserts that the 30 known transactions leave the count balance
+at 30 and the backlog empty, while the next unknown transaction consumes one
+token and also leaves the backlog empty.
+
+Verification was per path and per build: the new functional test passed with
+the normal Clang 19 daemon; the existing count, size, and outbound relay-rate
+tests also passed normally; the new test passed with the wallet-enabled Clang
+19 TSan daemon without a race report; and it passed with a disposable Clang
+19 ASan/UBSan daemon without a sanitizer diagnostic. The 78-case `util_tests`
+suite, including `token_bucket_refund`, passed. The defect is medium severity:
+an attacker needs multiple inbound connections and a sustained stream of
+valid relayable transactions, and can delay propagation of unrelated
+transactions by exhausting the victim's global announcement budget. It does
+not bypass transaction validation, alter consensus, corrupt the mempool or
+wallet, or provide a memory-safety primitive. The functional construction is
+deterministic; a future regression can be reproduced by running
+`p2p_tx_relay_rate_limit_known.py` with the test runner's generated config.
 
 ## Current-master relay control and process-message TSan replay (2026-07-26)
 
