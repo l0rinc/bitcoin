@@ -170,6 +170,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
+    FuzzedDataProvider rate_provider(buffer.data(), buffer.size());
 
     FakeNodeClock clock{1610000000s};
     FakeSteadyClock steady_clock;
@@ -180,6 +181,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
     auto& chainman = static_cast<TestChainstateManager&>(*setup->m_node.chainman);
     chainman.ResetIbd();
     chainman.DisableNextWrite();
+    const unsigned int tx_send_rate{ConsumeTxSendRate(rate_provider, DEFAULT_TX_SEND_RATE)};
     const NodeSeconds tip_time{WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip()->Time())};
     clock.set(tip_time + 1s);
     const size_t initial_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
@@ -192,6 +194,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
                                      PeerManager::Options{
                                          .ignore_incoming_txs = ignore_incoming_txs,
                                          .deterministic_rng = true,
+                                         .tx_send_rate = tx_send_rate,
                                      });
     connman.SetMsgProc(peerman.get());
 
