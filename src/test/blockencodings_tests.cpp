@@ -971,6 +971,61 @@ BOOST_AUTO_TEST_CASE(ShortIDCollisionTracksSourceCounts)
     BOOST_CHECK_EQUAL(partial_block_with_mempool_collision.ExtraCount(), 0U);
 }
 
+BOOST_AUTO_TEST_CASE(IndependentShortIDCollisionsTrackSourceCounts)
+{
+    bilingual_str error;
+    CTxMemPool pool{MemPoolOptionsForTest(m_node), error};
+    BOOST_REQUIRE(error.empty());
+    TestMemPoolEntryHelper entry;
+    auto rand_ctx(FastRandomContext(uint256{43}));
+    const CBlock block{BuildBlockTestCase(rand_ctx)};
+    const CBlockHeaderAndShortTxIDs cmpctblock{block, rand_ctx.rand64()};
+
+    auto make_variant = [](const CTransactionRef& tx, uint32_t mask) {
+        CMutableTransaction mutable_tx{*tx};
+        mutable_tx.nLockTime ^= mask;
+        return MakeTransactionRef(std::move(mutable_tx));
+    };
+    const CTransactionRef mempool_a{make_variant(block.vtx[1], 1U)};
+    const CTransactionRef mempool_b{make_variant(block.vtx[2], 2U)};
+    const CTransactionRef extra_a{make_variant(block.vtx[1], 4U)};
+    const CTransactionRef extra_b{make_variant(block.vtx[2], 8U)};
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.FromTx(mempool_a));
+        TryAddToMempool(pool, entry.FromTx(mempool_b));
+    }
+    BOOST_REQUIRE_EQUAL(pool.size(), 2U);
+
+    const Wtxid mempool_a_wtxid{mempool_a->GetWitnessHash()};
+    const Wtxid mempool_b_wtxid{mempool_b->GetWitnessHash()};
+    const Wtxid extra_a_wtxid{extra_a->GetWitnessHash()};
+    const Wtxid extra_b_wtxid{extra_b->GetWitnessHash()};
+    const uint64_t mempool_shortid{cmpctblock.GetShortID(block.vtx[1]->GetWitnessHash())};
+    const uint64_t extra_shortid{cmpctblock.GetShortID(block.vtx[2]->GetWitnessHash())};
+
+    TestPartiallyDownloadedBlock partial_block{&pool};
+    partial_block.m_get_short_id_mock = [mempool_a_wtxid, mempool_b_wtxid, extra_a_wtxid, extra_b_wtxid, mempool_shortid, extra_shortid](const CBlockHeaderAndShortTxIDs& ids, const Wtxid& wtxid) {
+        if (wtxid == mempool_a_wtxid || wtxid == mempool_b_wtxid) return mempool_shortid;
+        if (wtxid == extra_a_wtxid || wtxid == extra_b_wtxid) return extra_shortid;
+        return ids.GetShortID(wtxid);
+    };
+
+    BOOST_CHECK_EQUAL(partial_block.InitData(cmpctblock, {
+        {extra_a_wtxid, extra_a},
+        {extra_b_wtxid, extra_b},
+    }), READ_STATUS_OK);
+    BOOST_CHECK(partial_block.IsTxAvailable(0));
+    BOOST_CHECK(!partial_block.IsTxAvailable(1));
+    BOOST_CHECK(!partial_block.IsTxAvailable(2));
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+
+    CBlock reconstructed_block;
+    BOOST_CHECK_EQUAL(partial_block.FillBlock(reconstructed_block, {block.vtx[1], block.vtx[2]}, /*segwit_active=*/true), READ_STATUS_OK);
+    BOOST_CHECK_EQUAL(reconstructed_block.GetHash(), block.GetHash());
+}
+
 BOOST_AUTO_TEST_CASE(ShortIDCollisionAfterMempoolEarlyExitIsRejected)
 {
     bilingual_str error;
