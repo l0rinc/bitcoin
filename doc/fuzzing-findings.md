@@ -7,11 +7,12 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`. The historical exact-master controls
+`a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`. The historical exact-master controls
 below retain their named baselines; they are evidence for the mutations they
 tested, not claims about an earlier branch tip. Since the previous functional
 baseline, master adds only the Guix/toolchain and documentation commits
-`e34b8d5a7d` and `e75b76b1`; those commits do not change the compact-block,
+`e34b8d5a7d`, `e75b76b12c`, `a92e93429e`, and `a2aab6df97`; those commits do not
+change the compact-block,
 cluster-mempool core, coins-cache, validation-index, descriptor-cache, or TxGraph
 production paths covered by the controls below. Earlier master ranges recorded
 in this file retain their own path-by-path qualifications.
@@ -1300,6 +1301,39 @@ checked the exact `uint16_t` position boundary: 65,535 transactions is represent
 while 65,536 is rejected before allocation or index mapping. No additional wraparound
 candidate was found. No compact-block race in the extra vector was found; its access
 remains serialized by the message-processing mutex.
+
+### Independent source collisions in separate slots
+
+The collision campaign had one remaining deterministic combination omission: it
+did not put two distinct mempool candidates into the same short-ID slot and two
+distinct extra-transaction candidates into a different slot during the same
+`InitData()` call. (The clean-master suite already covered collisions between a
+mempool source and an extra source in separate slots.) The new unit mutation uses
+two distinct mempool candidates mapped to the first short ID and two distinct
+extra candidates mapped to the second. Both slots must remain empty, both source
+counters must return to zero, and the later `FillBlock()` with the genuine missing
+transactions must reconstruct the original block.
+
+The `partially_downloaded_block` fuzzer now constructs the same four candidates
+and checks those postconditions on every forced mutation. The deterministic
+`IndependentShortIDCollisionsTrackSourceCounts` test is the functional oracle.
+This exposed no clean-master production defect: it is coverage and counter
+invariant hardening, not another vulnerability or a fix to the historical
+short-ID underflow. The exact-master replay below is retained as the production
+baseline control; branch-only forced collision hooks are not treated as evidence
+against master.
+
+For the current baseline `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, the
+unmodified clean-master `cmpctblock` harness processed all 1,970 retained corpus
+files plus one execution (`1,971` total) without a report. The clean-master
+`partially_downloaded_block` harness likewise processed all 2,015 retained
+corpus files plus one execution (`2,016` total) without a report. The branch
+`partially_downloaded_block` harness completed 3,000 normal runs and 2,016
+ASan/UBSan runs over the same retained corpus, also without a report or artifact.
+The branch unit oracle passed 29 cases under TSan, and the clean-master
+`blockencodings_tests` control passed all 8 cases. The slow compact replay spent
+most of its time in block deserialization and sanitizer coverage, rather than
+waiting in compact-block code; no production hang was demonstrated.
 
 The focused mutation comparison used the same 3,646-byte seed directory on both
 implementations. The branch collision harness completed 1,000 mutations in each of
