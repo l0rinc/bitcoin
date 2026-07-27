@@ -7,12 +7,11 @@ clean-master reproducer or an independent race/sanitizer result demonstrated a s
 bug. Contract assertions and better fuzzer construction are recorded separately.
 
 The current baseline after the latest fetch and rebase is
-`e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6`. The historical exact-master controls
+`e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`. The historical exact-master controls
 below retain their named baselines; they are evidence for the mutations they
-tested, not claims about an earlier branch tip. The latest rebase range from
-`afa5e46bbc6dd750bd71920b659162a945abf0ae` to this tip includes network-capacity,
-global transaction-rate limiting, and mempool-RPC presentation changes, but does
-not change the compact-block,
+tested, not claims about an earlier branch tip. Since the previous functional
+baseline, master adds only the Guix/toolchain and documentation commits
+`e34b8d5a7d` and `e75b76b1`; those commits do not change the compact-block,
 cluster-mempool core, coins-cache, validation-index, descriptor-cache, or TxGraph
 production paths covered by the controls below. Earlier master ranges recorded
 in this file retain their own path-by-path qualifications.
@@ -5567,3 +5566,38 @@ the call passed. This proves the stateful fuzzer catches the cleanup omission,
 while the clean-master functional control proves that omission is not present
 in the production baseline. No production defect, race, resource exhaustion,
 or remotely exploitable issue was demonstrated.
+
+## Latest-master rebase: cluster and coins gates (2026-07-27)
+
+The latest fetch leaves `origin/master` at
+`e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`, and it is an ancestor of this
+branch. The only commits after the previously audited functional master tip
+are Guix/toolchain and documentation changes, so they do not introduce a new
+cluster-linearization, coins-cache, or compact-block production path.
+
+The review nevertheless rechecked the recent functional changes that are now
+in the rebased master: the SFL per-transaction intersection-count cache from
+`22a03ca694`, the `SipHasher13UJ` coins-cache key migration from
+`32eb521002`, and the global relay path from `b33a7fcd7b`. The relay path's
+known-filter token starvation is the already-confirmed clean-master defect
+fixed by `9ab7923904`; it is not counted again here. The SFL optimization only
+reuses counts computed from the same top and bottom transaction sets, and the
+coins migration preserves the outpoint's txid-plus-output-index key identity.
+
+The rebased branch's normal Clang 19 fuzzer gate processed bounded corpus
+slices for `clusterlin_sfl` (257 executions), `clusterlin_linearize`,
+`coins_view`, `coins_view_overlay`, `coinscache_sim`, and `txgraph` (129 each).
+A separate Clang 19 ASan/UBSan gate processed the 16 smallest inputs for each
+target and completed 17, 17, 17, 19, 20, and 33 executions respectively,
+without assertions, sanitizer diagnostics, race reports, timeouts, or
+artifacts. A larger sanitizer replay was started but stopped at a known slow
+`coinscache_sim` corpus input; it is deliberately excluded from the passing
+count and does not establish a full sanitizer replay.
+
+The targeted Debug unit selection ran 90 cluster, coins, overlay, graph, and
+hash cases and ended with `*** No errors detected`. These are branch gates,
+not a new clean-master production reproducer; the exact-master controls for
+the earlier cache and cluster defects remain attributed in their own sections.
+No additional production inconsistency, race, memory defect, or deterministic
+test omission was demonstrated in this rebase pass, so no source or permanent
+fuzzer change was warranted.
