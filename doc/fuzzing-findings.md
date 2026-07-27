@@ -5930,3 +5930,39 @@ independent optimized runs completed 7,000 executions each; two ASan/UBSan
 runs replayed 5,093 and 5,106 inputs; and four parallel direct-file TSan
 workers replayed 512 inputs. No assertion, sanitizer diagnostic, race report,
 timeout, or artifact occurred.
+
+## Exact-master rebase controls (2026-07-27)
+
+After fetching and rebasing, `origin/master` remained
+`a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `git rebase origin/master` was a
+no-op because that commit was already the branch base. A disposable worktree
+at that exact commit was built with Clang 19, Assume-active Debug, and
+address/undefined sanitizers. Its focused `httpserver_tests` selection passed
+6 cases, and the combined block-encoding, cluster, coins, overlay, and TxGraph
+selection passed 36 cases.
+
+The unmodified master `http_request` fuzzer still contains the historical
+bodyless-request oracle. Replaying its preserved 12,069-file corpus aborted
+on a valid request with `Content-Length: 5` at
+`src/test/fuzz/http_request.cpp:49` (`assert(body.empty())`), before any
+production assertion or sanitizer report. This is direct clean-master proof
+of a fuzzer accuracy defect, not a new HTTP production defect; the branch
+already fixes the contract in `406262fba7` and the later parser-atomicity
+commits `d136d1bc34` and `ee190cc079`.
+
+The exact-master ASan/UBSan controls completed without reports or artifacts:
+`clusterlin_linearize` 2,000 runs, `clusterlin_sfl` 1,000,
+`clusterlin_depgraph_sim` 1,667, `coinscache_sim` 1,517,
+`coins_view` 21,875, `coins_view_overlay` 13,055, `coins_view_db` 4,899,
+and `txgraph` 6,295. The compact-block fuzzer was not rerun in this gate
+because its exact-master collision corpus was already recorded in the
+current-master compact controls above; the branch collision construction and
+the clean-master 8-case block-encoding control remain separate evidence.
+
+A second exact-master fuzz build with Clang 19 TSan replayed 257 inputs per
+target for `clusterlin_linearize`, `clusterlin_sfl`, `coinscache_sim`,
+`coins_view_db`, `coins_view`, `coins_view_overlay`, and `txgraph`. Every
+worker exited zero without a ThreadSanitizer report, assertion, timeout, or
+artifact. The stateful corpus gates therefore found no new cluster, coins,
+TxGraph, or race defect on current master, and no additional production or
+permanent fuzzer change was warranted in this rebase pass.
