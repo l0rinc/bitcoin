@@ -30,20 +30,21 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 46 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, disconnected-block reorg ordering, P2P relay availability, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, watch-only export availability, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 47 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, disconnected-block reorg ordering, P2P relay availability, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, watch-only export availability, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | Remaining TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving another clean-master production bug. The full-range TxGraph mutation also exposed the production defect recorded below. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The forty-six confirmed runtime defects are: the index publication and restart race;
+The forty-seven confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the equal-feerate TxGraph prefix
 fee overflow; the saturated cluster chunk fee aggregation mismatch; the mempool info fee-delta
 overflow; cache-allocation percentage overflow; coins-cache state capacity
 arithmetic; `-maxmempool` byte-size multiplication overflow; global
-transaction-relay known-filter budget starvation; stale Base58 output on
+transaction-relay known-filter budget starvation; transaction-relay budget
+consumption with no eligible peers; stale Base58 output on
 decode failure; the descriptor-cache partial merge; stale mining `submitSolution`
 failure outputs; stale `TxIndex::FindTx` failure outputs; stale wallet transaction
 detail outputs; the descriptor next-index persistence failure; stale
@@ -113,16 +114,19 @@ created worker threads.
   controls are grouped in `f787aa2eb5`; this is a medium local/custom-chain
   availability issue and lower-severity mainnet reachability issue, not a
   consensus or key-loss bug.
-* The global transaction-relay queue had a clean-master availability defect:
+* The global transaction-relay queue had two distinct clean-master availability
+  defects:
   it consumed count and serialized-size tokens before checking whether any
   eligible peer still needed the transaction. A remote party with multiple
   inbound connections could announce each transaction to all of them first,
   then submit the transactions through one connection; no `INV` was sent, but
   the relay budget was exhausted and unrelated transactions were delayed. The
   branch now refunds the bounded batch reservation when every eligible peer
-  already knows the transaction. This is a medium-severity transaction-relay
-  availability issue, not a consensus, mempool-acceptance, wallet, or memory
-  safety defect.
+  already knows the transaction. Separately, a local submission with no
+  eligible peers consumed the same reservation and then lost its global
+  backlog entry; the follow-up fix refunds that empty-peer reservation too.
+  Both are medium-low to medium transaction-relay availability issues, not
+  consensus, mempool-acceptance, wallet, or memory-safety defects.
 * The descriptor-cache partial-merge defect below is a real clean-master production
   defect. Its fuzzer construction was temporarily copied into an exact-master
   control, while `src/script/descriptor.cpp` remained unchanged; the fixed branch
@@ -5966,3 +5970,50 @@ worker exited zero without a ThreadSanitizer report, assertion, timeout, or
 artifact. The stateful corpus gates therefore found no new cluster, coins,
 TxGraph, or race defect on current master, and no additional production or
 permanent fuzzer change was warranted in this rebase pass.
+
+## Clean-master no-eligible-peer relay budget consumption (2026-07-27)
+
+The global relay-budget fix for known transactions had one remaining empty-set
+case. `ProcessInvBacklog()` selected mempool transactions and consumed both
+global token buckets before it enumerated eligible peers. The follow-up refund
+logic returned tokens when every non-empty eligible peer set already knew the
+transaction, but did not return them when there were no eligible peers at all
+(for example, before any peer connected). The selected transaction was then
+dropped when the empty backlog was cleared.
+
+The deterministic mutation submits one valid self-transfer with
+`-txsendrate=1` while the node has no P2P peers, and compares both inbound and
+outbound `getnetworkinfo()['inv_buckets']` objects before and after the local
+submission. The exact clean-master daemon at
+`a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b` failed immediately: each bucket
+changed from `count_tok=30, size_tok=12000000, backlog=0` to
+`count_tok=29, size_tok=11999867, backlog=0`. No peer received the inventory,
+and the transaction was no longer queued for a future peer. This is distinct
+from the already recorded known-filter starvation case: here the eligible
+peer set is empty, so no known-filter lookup is involved.
+
+The fix treats an empty eligible set as having no unknown recipient and refunds
+the count and serialized-size reservation for every selected transaction. The
+production path asserts that an empty-peer distribution does not reduce either
+balance further. `process_messages` now creates and removes a valid mempool
+transaction around the same no-peer broadcast and checks both buckets'
+backlog, count, and size state. The functional test retains the assertion and
+then exercises the existing inbound/outbound known-filter and unknown-peer
+cases.
+
+This is a medium-low availability/policy defect on master, not a consensus,
+acceptance, wallet, memory-safety, or direct remote-code-execution issue. A
+local transaction submitted while the node is offline or all relay peers are
+still ineligible silently burns the global relay allowance; later peers do not
+receive that transaction, and subsequent local transactions can be delayed by
+the depleted allowance. A remote peer can influence connection timing but
+cannot trigger the condition without the node also submitting local
+transactions, so the direct attack surface is limited.
+
+The fixed branch passed the deterministic functional test with the Clang 19
+TSan daemon in 20 seconds. Four normal libFuzzer workers completed 724
+`process_messages` executions, and four ASan/UBSan workers completed 524
+executions seeded with a retained P2P corpus; all exited zero without an
+assertion, sanitizer diagnostic, race report, timeout, or artifact. The
+clean-master failure and branch pass were run from separate worktrees, so the
+finding is attributed to master rather than to this follow-up change.

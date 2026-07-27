@@ -204,6 +204,30 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     connman.SetAddrman(*node.addrman);
     node.validation_signals->RegisterValidationInterface(node.peerman.get());
 
+    // A local transaction with no eligible peers must not consume either global
+    // relay bucket or leave an undeliverable backlog behind.
+    TestMemPoolEntryHelper no_peer_entry;
+    const CTransactionRef no_peer_tx{MakeRelayTransaction(g_mature_coinbases[0], /*locktime=*/0)};
+    TryAddToMempool(*node.mempool, no_peer_entry.Fee(1000).SpendsCoinbase(true).FromTx(no_peer_tx));
+    {
+        LOCK(node.mempool->cs);
+        Assert(node.mempool->GetIter(no_peer_tx->GetWitnessHash()).has_value());
+    }
+    const PeerManagerInfo before_no_peer{node.peerman->GetInfo()};
+    node.peerman->InitiateTxBroadcastToAll(no_peer_tx->GetWitnessHash());
+    const PeerManagerInfo after_no_peer{node.peerman->GetInfo()};
+    Assert(after_no_peer.inbound_bucket.backlog_count == before_no_peer.inbound_bucket.backlog_count);
+    Assert(after_no_peer.outbound_bucket.backlog_count == before_no_peer.outbound_bucket.backlog_count);
+    Assert(after_no_peer.inbound_bucket.count_bucket == before_no_peer.inbound_bucket.count_bucket);
+    Assert(after_no_peer.outbound_bucket.count_bucket == before_no_peer.outbound_bucket.count_bucket);
+    Assert(after_no_peer.inbound_bucket.size_bucket == before_no_peer.inbound_bucket.size_bucket);
+    Assert(after_no_peer.outbound_bucket.size_bucket == before_no_peer.outbound_bucket.size_bucket);
+    {
+        LOCK(node.mempool->cs);
+        node.mempool->removeRecursive(*no_peer_tx, MemPoolRemovalReason::EXPIRY);
+        Assert(!node.mempool->GetIter(no_peer_tx->GetWitnessHash()).has_value());
+    }
+
     // The random-message loop configures tx_send_rate, but normally never creates a valid
     // mempool transaction. Exercise the global relay buckets with deterministic peers and
     // witness-shaped transactions so that known-filter, duplicate, and stale-entry paths are
