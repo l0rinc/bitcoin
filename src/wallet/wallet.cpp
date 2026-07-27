@@ -3819,7 +3819,10 @@ util::Result<std::reference_wrapper<DescriptorScriptPubKeyMan>> CWallet::AddWall
             return util::Error{util::ErrorString(spkm_res)};
         }
     } else {
-        auto new_spk_man = DescriptorScriptPubKeyMan::CreateFromImport(*this, desc, m_keypool_size, signing_provider);
+        // A public descriptor that cannot self-expand must use only its serialized range. Private keys in the
+        // signing provider can still expand the descriptor during a normal import.
+        const int64_t keypool_size{(!signing_provider.keys.empty() || desc.descriptor->CanSelfExpand()) ? m_keypool_size : 0};
+        auto new_spk_man = DescriptorScriptPubKeyMan::CreateFromImport(*this, desc, keypool_size, signing_provider);
         spk_man = new_spk_man.get();
 
         // Save the descriptor to memory

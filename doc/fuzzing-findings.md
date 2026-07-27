@@ -29,14 +29,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 43 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P relay availability, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 45 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P relay availability, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, watch-only export availability, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | Remaining TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving another clean-master production bug. The full-range TxGraph mutation also exposed the production defect recorded below. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The forty-three confirmed runtime defects are: the index publication and restart race;
+The forty-five confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the equal-feerate TxGraph prefix
 fee overflow; the saturated cluster chunk fee aggregation mismatch; the mempool info fee-delta
@@ -65,7 +65,10 @@ descriptor reservation returns that publish an in-memory index decrement before 
 descriptor-row write failure; `MarkUnusedAddresses()` descriptor writes that
 leave the live next index ahead of SQLite after a descriptor-row write failure;
 descriptor encryption that reports success or publishes encrypted state after
-an encrypted-key insert or plaintext-key erase failure.
+an encrypted-key insert or plaintext-key erase failure; watch-only export
+attempting to extend a non-self-expanding hardened descriptor beyond its
+serialized cache; and watch-only export dereferencing a missing source
+descriptor after public descriptor normalization changed its ID.
 Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
@@ -5634,3 +5637,80 @@ focused six-case `spend_tests` suite. The normal Clang 19 coin-control replay
 processed 498 inputs, and the Clang 19 ASan/UBSan replay processed 65 inputs;
 all exited zero without diagnostics. No production fix, race, memory defect,
 or wallet-loss behavior was demonstrated.
+
+## Watch-only export source-ID null dereference (2026-07-27)
+
+Severity against current master: **low**, an authenticated/local denial of
+service in the wallet export RPC. A caller who can invoke the wallet RPC could
+terminate the node while exporting a wallet containing a descriptor whose
+public normalized form has a different `DescriptorID` from the descriptor
+stored in the source wallet. No remote, consensus, key-loss, or persistent
+database corruption path was demonstrated.
+
+The new `scriptpubkeyman` export action reduced this to the 119-byte corpus
+input `crash-45116b29202f371fac876c43d69abe7f0069665c`. It constructs a
+`tr(sortedmulti_a(...))` descriptor containing mocked private/public keys and
+a hardened wildcard, then calls `ExportWatchOnlyWallet`. On an exact clean
+`origin/master` build at `e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`, the
+unmodified code dereferenced a null `DescriptorScriptPubKeyMan` at
+`export.cpp:112`; the direct fuzzer exited with SIGSEGV. UBSan symbolization
+on the branch showed the null read in `__pthread_mutex_lock` while constructing
+the `WITH_LOCK` guard, confirming that this was a real null-reference bug and
+not an assertion introduced by the new oracle.
+
+The fix retains the original source manager ID in `WalletDescInfo` while
+exporting descriptors. The temporary watch-only wallet still uses the public
+descriptor ID for its own manager, but cache retrieval now uses the saved
+source ID. A missing source manager returns an export error instead of
+derefencing null. The RPC JSON shape is unchanged because the ID is internal
+to the helper structure.
+
+The exact-master control was rerun with the same temporary export action and
+the unmodified input after the fix and exited zero. The branch replay of the
+minimized input also exited zero under the fuzzer build. The focused
+`scriptpubkeyman_tests` suite passed all 17 cases, the existing
+`wallet_exported_watchonly.py` functional test passed, the normal
+`scriptpubkeyman` corpus completed 10,026 executions, and the ASan/UBSan
+corpus completed 10,028 executions without a diagnostic or artifact.
+
+## Watch-only export beyond a hardened descriptor cache (2026-07-27)
+
+Severity against current master: **low**, a local wallet-export availability
+failure. The source wallet remains usable and no keys or transactions are
+lost, but exporting a watch-only backup could fail when a hardened descriptor
+was already at the end of its serialized range. The trigger requires an
+authenticated/local wallet operation; it is not remotely reachable.
+
+The fuzzer mutation was precise: construct a valid private descriptor with a
+hardened wildcard, set `range_start=0`, `range_end=1`, and `next_index=1`,
+then export immediately. The source wallet has a cached index, while the
+temporary wallet has no private signing keys and must not derive index 1.
+The 45-byte input `crash-583f6d772cb70cfb4eb39f2bc8776a4d8523aa97` made exact
+clean master throw `std::runtime_error("Could not top up scriptPubKeys")`.
+The same exact-master control passed when the export action was removed, so
+the failure is specifically the newly exercised export contract, not a
+pre-existing descriptor-construction failure.
+
+The production fix makes `CWallet::AddWalletDescriptor()` use zero additional
+lookahead when the signing provider has no private keys and the descriptor
+cannot self-expand. Private imports retain the configured keypool, and public
+self-expanding descriptors retain their normal lookahead. The deterministic
+`add_wallet_descriptor_does_not_extend_non_self_expanding` unit test builds
+the source descriptor, exports its public/cache form, and verifies that the
+watch-only import succeeds; it also checks that the source ID is preserved.
+
+The exact clean-master artifact failed before the fix and passed after the
+same source change. The repaired branch passed the minimized artifact, the
+focused 17-case suite, the existing watch-only functional test, the complete
+normal corpus (10,026 executions), and the complete ASan/UBSan corpus (10,028
+executions). No additional compact-block collision defect was found in this
+round; these two wallet export defects were discovered only after extending
+the descriptor fuzzer to exercise the export state transition.
+
+The same export audit now checks the return value of every remaining batched
+write for the order position, transactions, and address-book records. These
+were error-reporting omissions found by contract review, not a separately
+reproduced clean-master crash or data-loss case, so they are recorded as
+hardening and are not included in the confirmed-defect count. The existing
+transaction rollback still keeps a failed export from publishing a partial
+destination wallet.
