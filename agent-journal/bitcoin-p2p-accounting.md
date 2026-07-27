@@ -63,6 +63,40 @@ VERACK ordering, pre-version drop) is identical for both transports because
 filtering happens above the transport layer. v2 key-exchange failure paths
 remain to be verified in net.cpp (queued).
 
+### P2 (peer accounting / quota): DISMISSED — all per-peer structures bounded
+
+Hypothesis: unauthenticated peer could grow per-peer memory unboundedly via
+repeated GETBLOCKS (m_blocks_for_inv_relay) or GETDATA (m_getdata_requests).
+Both refuted by tracing the drain interleaving:
+
+1. LOAD-BEARING INVARIANT (net.cpp:3232-3242 ThreadMessageHandler): for each
+   node, SendMessages(node) runs immediately after EVERY single-message
+   ProcessMessages(node). A peer's queued messages are processed one at a
+   time with a full drain pass between them. Any code that accumulates
+   per-peer state "until SendMessages" therefore has a transient bound of
+   one message's worth. If this interleaving ever changes (batch processing
+   before SendMessages), the GETBLOCKS accumulation below becomes a ~266x
+   memory-amplification DoS (83k 60-byte GETBLOCKS in the 5MB recv window ×
+   500 × 32B hashes ≈ 1.3GB transient per peer). Worth a comment or test?
+   Noted as fragility, not a current defect.
+2. m_blocks_for_inv_relay (net_processing.cpp:4363): ≤500 hashes per
+   GETBLOCKS message, unconditionally clear()ed at 6147 in the SendMessages
+   pass that follows each message. Transient bound ~500 entries. Bounded.
+3. m_getdata_requests (4302): appended ≤50000 invs per GETDATA (MAX_INV_SZ
+   punished at 4261-4264), drained inline by ProcessGetData (4303) and at
+   the top of each ProcessMessages (5230-5233); new messages are not polled
+   while the deque is non-empty (5243-5248). Transient bound 50000 invs.
+   Send-side throttled by fPauseSend (2618). Bounded.
+4. m_addr_known: CRollingBloomFilter, fixed allocation by construction.
+5. m_addrs_to_send: MAX_ADDR_TO_SEND cap enforced at push site (guarded
+   Assume at 5584). Bounded.
+6. vExtraTxnForCompact: ring buffer capped at m_opts.max_extra_txs
+   (default 100), 1934-1940. Bounded.
+7. Receive side: m_msg_process_queue_size pauses recv at m_recv_flood_size
+   (5MB, net.cpp:4130/4142). Send side: fPauseSend thresholds. Bounded.
+
+Verdict: no unbounded per-peer memory found on the unauthenticated surface.
+
 ## Next queue
 (start P1 with highest-amplification message handlers: INV/GETDATA/ADDR/TX,
 then P2 accounting bounds; then P4 handshake state machine)
