@@ -11,6 +11,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -58,6 +59,18 @@ FUZZ_TARGET(difference_formatter)
 
     } catch (const std::ios_base::failure&) {
         // Expected for malformed input
+    }
+
+    if (buffer.empty()) {
+        // Exercise the complete uint16_t index domain, which is too large for
+        // the ordinary randomized vector budget below.
+        BlockTransactionsRequest boundary;
+        boundary.blockhash = block_hash;
+        boundary.indexes.resize(std::numeric_limits<uint16_t>::max() + 1U);
+        for (size_t i{0}; i < boundary.indexes.size(); ++i) {
+            boundary.indexes[i] = static_cast<uint16_t>(i);
+        }
+        AssertBlockTxnRequestRoundTrip(boundary);
     }
 
     BlockTransactionsRequest constructed;

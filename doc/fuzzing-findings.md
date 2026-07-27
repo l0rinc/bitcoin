@@ -5500,3 +5500,34 @@ match. The cleanup commit message now records this behavior and its proof.
 The temporary functional probe passed on exact master and was not added as a
 production test because it documents an unsupported message ordering rather
 than a failing contract.
+
+## Compact transaction-request cardinality boundary (2026-07-27)
+
+The compact collision audit found one adjacent coverage omission in
+`BlockTransactionsRequest`: the `uint16_t` differential decoder accepts exactly
+65,536 strictly increasing indexes, `0..65535`, but must reject the next index.
+The existing unit tests covered the highest single index and a three-element
+overflow, while `difference_formatter` limited constructed vectors to 64
+elements and had no deterministic maximum-cardinality path.
+
+The deterministic unit test now serializes 65,536 zero deltas and checks the
+complete index domain, then serializes 65,537 deltas and requires a
+`std::ios_base::failure`. The fuzzer exercises the same legal boundary on its
+empty canonical input, while retaining the smaller randomized vector budget
+for ordinary executions. A canonical maximum-count request with a truncated
+payload was also probed against exact master; `VectorFormatter` bounded the
+initial allocation batch and raised the expected stream exception.
+
+The exact clean-master worktree at
+`e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421` passed the temporary cardinality
+test with production code unchanged. On the investigation branch, mutating
+only `DifferenceFormatter::Unser()`'s inclusive upper-bound check from `>` to
+`>=` made the new test fail at the legal 65,535 index with
+`differential value overflow`; restoring the comparison made it pass. The
+focused and full `blockencodings_tests` suites passed with 1 and 28 cases,
+respectively. The normal `difference_formatter` fuzzer passed its empty
+canonical run and 256 executions over the existing 67-file corpus. A Clang 19
+ASan/UBSan build passed 128 executions over a private copy of the same corpus
+without a diagnostic or artifact. No production defect, race, resource
+exhaustion, or remotely exploitable issue was demonstrated; this commit is
+deterministic coverage and fuzzer-oracle hardening only.
