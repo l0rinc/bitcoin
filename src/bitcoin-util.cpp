@@ -165,7 +165,8 @@ static int GetChainParams(const std::vector<std::string>& args, std::string& str
     UniValue result{UniValue::VOBJ};
     result.pushKV("chain", params.GetChainTypeString());
     result.pushKV("test_chain", params.IsTestChain());
-    result.pushKV("genesis", HexStr(consensus.hashGenesisBlock));
+    // Use the conventional public hash representation, matching RPC output.
+    result.pushKV("genesis", consensus.hashGenesisBlock.GetHex());
     result.pushKV("subsidy_halving_interval", consensus.nSubsidyHalvingInterval);
 
     if (consensus.signet_blocks) {
