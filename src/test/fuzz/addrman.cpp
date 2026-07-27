@@ -190,6 +190,24 @@ void AssertEntriesMatchSizes(const AddrMan& addrman)
     }
 }
 
+void AssertSerializationRoundTrip(AddrManDeterministic& addrman,
+                                  const NetGroupManager& netgroupman,
+                                  FuzzedDataProvider& fuzzed_data_provider)
+{
+    const CAddress query{ConsumeAddress(fuzzed_data_provider)};
+    const auto before{addrman.FindAddressEntry(query)};
+    DataStream data_stream{};
+    data_stream << addrman;
+    const std::string serialized{data_stream.str()};
+    AddrManDeterministic restored{netgroupman, fuzzed_data_provider, GetCheckRatio()};
+    data_stream >> restored;
+    DataStream restored_data_stream{};
+    restored_data_stream << restored;
+    assert(serialized == restored_data_stream.str());
+    assert(addrman == restored);
+    assert(before == restored.FindAddressEntry(query));
+}
+
 FUZZ_TARGET(addrman, .init = initialize_addrman)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -207,6 +225,8 @@ FUZZ_TARGET(addrman, .init = initialize_addrman)
         }
     }
     AddrManDeterministic& addr_man = *addr_man_ptr;
+    size_t operation_count{0};
+    size_t round_trip_count{0};
     LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 10000) {
         CallOneOf(
             fuzzed_data_provider,
@@ -246,6 +266,10 @@ FUZZ_TARGET(addrman, .init = initialize_addrman)
                 auto n_services = ConsumeWeakEnum(fuzzed_data_provider, ALL_SERVICE_FLAGS);
                 addr_man.SetServices(addr, n_services);
             });
+        if (++operation_count % 64 == 0 && round_trip_count < 16) {
+            AssertSerializationRoundTrip(addr_man, netgroupman, fuzzed_data_provider);
+            ++round_trip_count;
+        }
     }
     const AddrMan& const_addr_man{addr_man};
     AssertEntriesMatchSizes(const_addr_man);
@@ -302,8 +326,7 @@ FUZZ_TARGET(addrman, .init = initialize_addrman)
         in_new = fuzzed_data_provider.ConsumeBool();
     }
     (void)const_addr_man.Size(network, in_new);
-    DataStream data_stream{};
-    data_stream << const_addr_man;
+    AssertSerializationRoundTrip(addr_man, netgroupman, fuzzed_data_provider);
 }
 
 // Check that serialize followed by unserialize produces the same addrman.
