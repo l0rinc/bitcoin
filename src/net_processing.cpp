@@ -2479,12 +2479,16 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
             auto tx_relay = peer.GetTxRelay();
             if (!tx_relay) continue;
 
-            LOCK(tx_relay->m_tx_inventory_mutex);
             // Only queue transactions for announcement once the version handshake
             // is completed. The time of arrival for these transactions is
             // otherwise at risk of leaking to a spy, if the spy is able to
             // distinguish transactions received during the handshake from the rest
             // in the announcement.
+            // A peer that negotiated relay=0 may have a TxRelay object when we
+            // offer NODE_BLOOM, but it is not an announcement recipient until it
+            // enables relay with FILTERLOAD or FILTERCLEAR.
+            if (!WITH_LOCK(tx_relay->m_bloom_filter_mutex, return tx_relay->m_relay_txs)) continue;
+            LOCK(tx_relay->m_tx_inventory_mutex);
             if (tx_relay->m_next_inv_send_time == 0s) continue;
             if (peer.m_is_inbound) {
                 inbound_peers.push_back(peer_ref);
@@ -2528,6 +2532,7 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
                     Peer& peer{*peer_ref};
                     auto tx_relay = peer.GetTxRelay();
                     Assert(tx_relay != nullptr);
+                    if (!WITH_LOCK(tx_relay->m_bloom_filter_mutex, return tx_relay->m_relay_txs)) continue;
                     LOCK(tx_relay->m_tx_inventory_mutex);
                     if (tx_relay->m_next_inv_send_time != 0s) {
                         tx_relay->m_tx_inventory_to_send.push_back(tx->GetWitnessHash());
