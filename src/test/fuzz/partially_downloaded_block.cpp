@@ -189,28 +189,36 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         cmpctblock.EraseShortTxID(prefilled_position - 1);
     }
 
-    const bool force_short_id_index_overflow{!force_invalid_init && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeIntegralInRange<uint8_t>(0, 31) == 0};
+    const bool force_prefilled_short_id_collision{!force_invalid_init && !force_valid_prefilled_tx && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    if (force_prefilled_short_id_collision) {
+        // Prefill transaction 1, then reuse its short ID for the final slot.
+        cmpctblock.AddPrefilledTx(/*index=*/0, block->vtx[1]);
+        cmpctblock.EraseShortTxID(0);
+        cmpctblock.ReplaceShortTxID(0, cmpctblock.GetShortID(block->vtx[1]->GetWitnessHash()));
+    }
+
+    const bool force_short_id_index_overflow{!force_invalid_init && !force_prefilled_short_id_collision && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeIntegralInRange<uint8_t>(0, 31) == 0};
     if (force_short_id_index_overflow) {
         cmpctblock.FillShortTxIDs(std::numeric_limits<uint16_t>::max() + 2U);
     }
 
-    const bool force_message_short_id_collision{!force_invalid_init && !force_short_id_index_overflow && cmpctblock.ShortTxIDCount() >= 2 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_short_id_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_mempool_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_mempool_extra_sequence{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_null_extra_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_message_short_id_collision{!force_invalid_init && !force_prefilled_short_id_collision && !force_short_id_index_overflow && cmpctblock.ShortTxIDCount() >= 2 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_short_id_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_extra_sequence{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_null_extra_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_null_extra_after_extra_source{force_null_extra_collision && fuzzed_data_provider.ConsumeBool()};
-    const bool force_duplicate_extra_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_mempool_duplicate_then_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_duplicate_extra_txn{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_mempool_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_mempool_early_exit_collision_with_prefilled{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && block->vtx.size() == 4 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_mempool_early_exit_collision_without_coinbase{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_with_prefilled && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_null_extra_after_mempool_completion{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_with_prefilled && !force_mempool_early_exit_collision_without_coinbase && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_extra_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_without_coinbase && !force_null_extra_after_mempool_completion && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_extra_early_exit_collision_with_prefilled{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_without_coinbase && !force_null_extra_after_mempool_completion && !force_extra_early_exit_collision && block->vtx.size() == 4 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_extra_early_exit_collision_without_coinbase{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_without_coinbase && !force_null_extra_after_mempool_completion && !force_extra_early_exit_collision && !force_extra_early_exit_collision_with_prefilled && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_independent_slot_collisions{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_with_prefilled && !force_mempool_early_exit_collision_without_coinbase && !force_null_extra_after_mempool_completion && !force_extra_early_exit_collision && !force_extra_early_exit_collision_with_prefilled && !force_extra_early_exit_collision_without_coinbase && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_duplicate_extra_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_duplicate_then_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_duplicate_extra_txn{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_early_exit_collision_with_prefilled{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && block->vtx.size() == 4 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_early_exit_collision_without_coinbase{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_with_prefilled && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_null_extra_after_mempool_completion{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_with_prefilled && !force_mempool_early_exit_collision_without_coinbase && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_extra_early_exit_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_without_coinbase && !force_null_extra_after_mempool_completion && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_extra_early_exit_collision_with_prefilled{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_without_coinbase && !force_null_extra_after_mempool_completion && !force_extra_early_exit_collision && block->vtx.size() == 4 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_extra_early_exit_collision_without_coinbase{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_without_coinbase && !force_null_extra_after_mempool_completion && !force_extra_early_exit_collision && !force_extra_early_exit_collision_with_prefilled && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_independent_slot_collisions{!force_invalid_init && !force_valid_prefilled_tx && !force_prefilled_short_id_collision && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && !force_duplicate_extra_txn && !force_mempool_early_exit_collision && !force_mempool_early_exit_collision_with_prefilled && !force_mempool_early_exit_collision_without_coinbase && !force_null_extra_after_mempool_completion && !force_extra_early_exit_collision && !force_extra_early_exit_collision_with_prefilled && !force_extra_early_exit_collision_without_coinbase && block->vtx.size() == 3 && fuzzed_data_provider.ConsumeBool()};
     if (force_extra_early_exit_collision_without_coinbase || force_mempool_early_exit_collision_without_coinbase) {
         const uint64_t coinbase_short_id{cmpctblock.GetShortID(block->vtx[0]->GetWitnessHash())};
         cmpctblock.RemoveCoinbasePrefill();
@@ -234,6 +242,14 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     Assert(error.empty());
     FuzzedPartiallyDownloadedBlock pdb{&pool};
 
+    bool forced_prefilled_short_id_collision_applied{false};
+    if (force_prefilled_short_id_collision) {
+        TestMemPoolEntryHelper entry;
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.FromTx(block->vtx[1]));
+        forced_prefilled_short_id_collision_applied = pool.exists(block->vtx[1]->GetHash());
+    }
+
     std::vector<std::pair<Wtxid, CTransactionRef>> extra_txn;
     for (size_t i = 1; i < block->vtx.size(); ++i) {
         auto tx{block->vtx[i]};
@@ -243,7 +259,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
 
         // Keep forced source sequences isolated and leave at least two short-ID slots so
         // InitData's early exit cannot skip their duplicate/collision tail.
-        if (force_short_id_index_overflow || force_mempool_extra_sequence || force_short_id_collision || force_mempool_collision || force_independent_slot_collisions ||
+        if (force_prefilled_short_id_collision || force_short_id_index_overflow || force_mempool_extra_sequence || force_short_id_collision || force_mempool_collision || force_independent_slot_collisions ||
             force_null_extra_collision || force_duplicate_extra_collision ||
             force_mempool_duplicate_then_collision || force_duplicate_extra_txn || force_mempool_early_exit_collision || force_mempool_early_exit_collision_with_prefilled || force_mempool_early_exit_collision_without_coinbase || force_null_extra_after_mempool_completion || force_extra_early_exit_collision ||
             force_extra_early_exit_collision_with_prefilled || force_extra_early_exit_collision_without_coinbase) continue;
@@ -813,6 +829,14 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         assert(pdb.MempoolCount() == 0);
         assert(pdb.ExtraCount() == 0);
     }
+    if (forced_prefilled_short_id_collision_applied) {
+        assert(pdb.IsTxAvailable(0));
+        assert(pdb.IsTxAvailable(1));
+        assert(pdb.IsTxAvailable(2));
+        assert(pdb.PrefilledCount() == 2);
+        assert(pdb.MempoolCount() == 1);
+        assert(pdb.ExtraCount() == 0);
+    }
     if (forced_null_extra_applied) {
         assert(pdb.IsTxAvailable(1));
         assert(pdb.MempoolCount() == 1);
@@ -927,7 +951,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         skipped_missing |= (!tx_available && skip);
     }
 
-    const bool extra_missing{!skipped_missing && fuzzed_data_provider.ConsumeBool()};
+    const bool extra_missing{!skipped_missing && !forced_prefilled_short_id_collision_applied && fuzzed_data_provider.ConsumeBool()};
     if (extra_missing) {
         missing.push_back(block->vtx[fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, block->vtx.size() - 1)]);
     }
@@ -936,12 +960,12 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
 
     // Mock IsBlockMutated
     bool fail_block_mutated{fuzzed_data_provider.ConsumeBool()};
-    if (!forced_mempool_early_exit_collision_applied && !forced_mempool_early_exit_collision_with_prefilled_applied && !forced_mempool_early_exit_collision_without_coinbase_applied && !forced_null_extra_after_mempool_completion_applied && !forced_extra_early_exit_collision_applied && !forced_extra_early_exit_collision_with_prefilled_applied && !forced_extra_early_exit_collision_without_coinbase_applied) {
+    if (!forced_prefilled_short_id_collision_applied && !forced_mempool_early_exit_collision_applied && !forced_mempool_early_exit_collision_with_prefilled_applied && !forced_mempool_early_exit_collision_without_coinbase_applied && !forced_null_extra_after_mempool_completion_applied && !forced_extra_early_exit_collision_applied && !forced_extra_early_exit_collision_with_prefilled_applied && !forced_extra_early_exit_collision_without_coinbase_applied) {
         pdb.m_check_block_mutated_mock = FuzzedIsBlockMutated(fail_block_mutated);
     }
     // A forced early-exit construction intentionally leaves a colliding candidate unexamined;
     // exercise the production mutation check on the resulting wrong transaction set.
-    const bool expected_block_mutated{fail_block_mutated || forced_mempool_early_exit_collision_applied || forced_mempool_early_exit_collision_with_prefilled_applied || forced_mempool_early_exit_collision_without_coinbase_applied || forced_null_extra_after_mempool_completion_applied || forced_extra_early_exit_collision_applied || forced_extra_early_exit_collision_with_prefilled_applied || forced_extra_early_exit_collision_without_coinbase_applied};
+    const bool expected_block_mutated{fail_block_mutated || forced_prefilled_short_id_collision_applied || forced_mempool_early_exit_collision_applied || forced_mempool_early_exit_collision_with_prefilled_applied || forced_mempool_early_exit_collision_without_coinbase_applied || forced_null_extra_after_mempool_completion_applied || forced_extra_early_exit_collision_applied || forced_extra_early_exit_collision_with_prefilled_applied || forced_extra_early_exit_collision_without_coinbase_applied};
 
     CBlock reconstructed_block{*block};
     reconstructed_block.vtx = {block->vtx[0]};
@@ -950,6 +974,9 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     assert(std::all_of(missing.cbegin(), missing.cend(),
         [](const auto& tx) { return tx != nullptr; }));
     auto fill_status{pdb.FillBlock(reconstructed_block, missing, segwit_active)};
+    if (forced_prefilled_short_id_collision_applied) {
+        assert(fill_status == READ_STATUS_FAILED);
+    }
     switch (fill_status) {
     case READ_STATUS_OK:
         assert(!skipped_missing);
