@@ -6092,3 +6092,54 @@ cluster TSan selection was stopped at the time bound inside
 the slow replay was in the harness shutdown path, not production code. The
 smaller 71-case TSan selection covering coins, overlays, TxGraph, and peer
 eviction completed with `*** No errors detected`.
+
+## Non-relaying peer still consumed global relay budget (2026-07-27)
+
+The global relay-bucket audit found a second recipient-eligibility omission
+after the empty-peer fix. `ProcessInvBacklog()` treated every
+handshake-complete `Peer::TxRelay` object as an eligible recipient, but a peer
+that negotiated `VERSION relay=0` is not permitted to receive transaction
+announcements until it later enables relay with `filterload` or
+`filterclear`. A normal node does not create the object for this state, but a
+node started with `-peerbloomfilters` offers `NODE_BLOOM` and deliberately
+creates it so the peer can opt in later.
+
+The deterministic mutation used the exact clean-master daemon at
+`a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`: start with `-peerbloomfilters=1`,
+connect one inbound P2P peer, send `VERSION` with `relay=0`, complete `VERACK`,
+and submit one valid local self-transfer. The peer received no `INV`, but both
+global buckets changed from `count_tok=420` to `count_tok=419` (the size values
+refilled slightly between RPC calls). The existing BIP37 functional test
+checked only that this peer received no transaction, and the existing relay
+rate tests did not combine `NODE_BLOOM` with `relay=0`; neither caught the
+budget loss.
+
+The production fix excludes `m_relay_txs=false` peers while building the
+recipient sets and rechecks the flag while queuing, so a peer that changes its
+relay state during processing cannot receive a new reservation. The guided
+`process_messages` mutation creates the same `NODE_BLOOM`/`relay=0` peer and
+requires both bucket directions, both backlog counts, and the peer queue to
+remain unchanged. The functional regression uses the real wire handshake and
+checks the same preconditions. No consensus, acceptance, wallet, or memory
+safety behavior is involved.
+
+Severity on master is low, conditional availability/policy impact. A remote
+peer can choose `relay=0`, but it cannot spend the allowance without the node
+also running the opt-in bloom-filter service and submitting local
+transactions. Under those conditions, repeated local broadcasts silently
+burn one global count reservation per direction without a recipient; later
+local transactions can be delayed until the buckets refill, and the affected
+transaction is deferred to the periodic unbroadcast retry. This is not a
+direct remote DoS or consensus vulnerability.
+
+Attribution is clean-master based: the failure above was reproduced before
+the branch change in a disposable worktree at the exact master commit. The
+fixed branch passed the functional regression, four normal libFuzzer workers
+replaying 3,697 retained `process_messages` inputs each, an ASan/UBSan replay
+of the guided seeds plus four workers (65, 66, 72, and 74 executions), and
+four parallel TSan direct-file workers covering 32 inputs. All gates exited
+without assertions, sanitizer diagnostics, race reports, timeouts, or
+artifacts. An intermediate fuzzer assertion failure was a harness-only
+ordering mistake: eligible peers had been created before the isolated
+`relay=0` check; moving that mutation before peer creation made the oracle
+stable and did not change the production conclusion.

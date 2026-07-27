@@ -5,8 +5,8 @@
 """Ensure already-known transactions do not consume the global relay budget."""
 
 from test_framework.blocktools import COINBASE_MATURITY
-from test_framework.messages import CInv, MSG_TX, MSG_WTX, msg_inv
-from test_framework.p2p import P2PInterface
+from test_framework.messages import CInv, MSG_TX, MSG_WTX, msg_inv, msg_version
+from test_framework.p2p import P2PInterface, P2P_SERVICES, P2P_SUBVERSION, P2P_VERSION
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal
 from test_framework.wallet import MiniWallet
@@ -19,7 +19,7 @@ BUCKET_CAP = SEND_RATE * 30
 class TxRelayRateLimitKnownTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [[f"-txsendrate={SEND_RATE}"]]
+        self.extra_args = [[f"-txsendrate={SEND_RATE}", "-peerbloomfilters=1"]]
 
     def run_test(self):
         node = self.nodes[0]
@@ -35,6 +35,28 @@ class TxRelayRateLimitKnownTest(BitcoinTestFramework):
         after_no_peer = node.getnetworkinfo()["inv_buckets"]
         for direction in ("inbound", "outbound"):
             assert_equal(after_no_peer[direction], before_no_peer[direction])
+
+        # A relay=0 peer still gets a TxRelay object when NODE_BLOOM is offered,
+        # but it must not consume global budget before enabling relay with a
+        # filter message.
+        non_relay_peer = node.add_p2p_connection(
+            P2PInterface(), send_version=False, wait_for_verack=False
+        )
+        version_without_relay = msg_version()
+        version_without_relay.nVersion = P2P_VERSION
+        version_without_relay.strSubVer = P2P_SUBVERSION
+        version_without_relay.nServices = P2P_SERVICES
+        version_without_relay.relay = 0
+        non_relay_peer.send_without_ping(version_without_relay)
+        non_relay_peer.wait_for_verack()
+        assert_equal(node.getpeerinfo()[0]["relaytxes"], False)
+        before_non_relay = node.getnetworkinfo()["inv_buckets"]
+        non_relay_tx = wallet.create_self_transfer()
+        wallet.sendrawtransaction(from_node=node, tx_hex=non_relay_tx["hex"])
+        after_non_relay = node.getnetworkinfo()["inv_buckets"]
+        for direction in ("inbound", "outbound"):
+            assert_equal(after_non_relay[direction], before_non_relay[direction])
+        assert_equal(non_relay_peer.message_count["inv"], 0)
 
         outbound_peer = node.add_outbound_p2p_connection(
             P2PInterface(), p2p_idx=0, connection_type="outbound-full-relay"

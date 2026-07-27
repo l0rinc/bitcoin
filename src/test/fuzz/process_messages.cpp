@@ -232,7 +232,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     // mempool transaction. Exercise the global relay buckets with deterministic peers and
     // witness-shaped transactions so that known-filter, duplicate, and stale-entry paths are
     // reached independently of wire-message luck.
-    auto make_relay_peer = [&](NodeId id, ConnectionType connection_type) NO_THREAD_SAFETY_ANALYSIS {
+    auto make_relay_peer = [&](NodeId id, ConnectionType connection_type, bool relay_txs = true) NO_THREAD_SAFETY_ANALYSIS {
         auto peer = std::make_unique<CNode>(
             id, std::make_shared<ZeroSock>(), CAddress{}, /*nKeyedNetGroupIn=*/0,
             /*nLocalHostNonceIn=*/0, CService{}, /*addrNameIn=*/"", connection_type,
@@ -244,15 +244,14 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
             *result,
             /*successfully_connected=*/false,
             /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
-            /*local_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+            /*local_services=*/relay_txs ? ServiceFlags(NODE_NETWORK | NODE_WITNESS) :
+                                           ServiceFlags(NODE_NETWORK | NODE_WITNESS | NODE_BLOOM),
             /*version=*/PROTOCOL_VERSION,
-            /*relay_txs=*/true);
+            /*relay_txs=*/relay_txs);
         return result;
     };
 
-    CNode& inbound_relay_peer{*make_relay_peer(/*id=*/100, ConnectionType::INBOUND)};
-    CNode& outbound_relay_peer{*make_relay_peer(/*id=*/101, ConnectionType::OUTBOUND_FULL_RELAY)};
-    CNode& legacy_relay_peer{*make_relay_peer(/*id=*/102, ConnectionType::OUTBOUND_FULL_RELAY)};
+    CNode& non_relay_peer{*make_relay_peer(/*id=*/103, ConnectionType::INBOUND, /*relay_txs=*/false)};
 
     auto process_relay_message = [&](CNode& peer, CSerializedNetMsg&& net_msg) NO_THREAD_SAFETY_ANALYSIS {
         connman.FlushSendBuffer(peer);
@@ -265,6 +264,39 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
         }
     };
 
+    process_relay_message(non_relay_peer, NetMsg::Make(NetMsgType::VERACK));
+
+    auto peer_inv_to_send = [&](CNode& peer) {
+        CNodeStateStats stats;
+        Assert(node.peerman->GetNodeStateStats(peer.GetId(), stats));
+        return stats.m_inv_to_send;
+    };
+
+    // A handshake-complete peer that negotiated relay=0 is not an eligible
+    // recipient, even when NODE_BLOOM caused a TxRelay object to be created.
+    TestMemPoolEntryHelper non_relay_entry;
+    const CTransactionRef non_relay_tx{MakeRelayTransaction(g_mature_coinbases[0], /*locktime=*/1)};
+    TryAddToMempool(*node.mempool, non_relay_entry.Fee(1000).SpendsCoinbase(true).FromTx(non_relay_tx));
+    const PeerManagerInfo before_non_relay{node.peerman->GetInfo()};
+    node.peerman->InitiateTxBroadcastToAll(non_relay_tx->GetWitnessHash());
+    const PeerManagerInfo after_non_relay{node.peerman->GetInfo()};
+    Assert(after_non_relay.inbound_bucket.backlog_count == before_non_relay.inbound_bucket.backlog_count);
+    Assert(after_non_relay.outbound_bucket.backlog_count == before_non_relay.outbound_bucket.backlog_count);
+    Assert(after_non_relay.inbound_bucket.count_bucket == before_non_relay.inbound_bucket.count_bucket);
+    Assert(after_non_relay.outbound_bucket.count_bucket == before_non_relay.outbound_bucket.count_bucket);
+    Assert(after_non_relay.inbound_bucket.size_bucket == before_non_relay.inbound_bucket.size_bucket);
+    Assert(after_non_relay.outbound_bucket.size_bucket == before_non_relay.outbound_bucket.size_bucket);
+    Assert(peer_inv_to_send(non_relay_peer) == 0);
+    {
+        LOCK(node.mempool->cs);
+        node.mempool->removeRecursive(*non_relay_tx, MemPoolRemovalReason::EXPIRY);
+        Assert(!node.mempool->GetIter(non_relay_tx->GetWitnessHash()).has_value());
+    }
+
+    CNode& inbound_relay_peer{*make_relay_peer(/*id=*/100, ConnectionType::INBOUND)};
+    CNode& outbound_relay_peer{*make_relay_peer(/*id=*/101, ConnectionType::OUTBOUND_FULL_RELAY)};
+    CNode& legacy_relay_peer{*make_relay_peer(/*id=*/102, ConnectionType::OUTBOUND_FULL_RELAY)};
+
     // Complete BIP339 negotiation before VERACK for two peers. ConnmanTestMsg::Handshake
     // intentionally drops the feature message from the synthetic wire, while this target needs
     // both wtxid and legacy txid relay paths.
@@ -276,12 +308,6 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     Assert(inbound_relay_peer.fSuccessfullyConnected);
     Assert(outbound_relay_peer.fSuccessfullyConnected);
     Assert(legacy_relay_peer.fSuccessfullyConnected);
-
-    auto peer_inv_to_send = [&](CNode& peer) {
-        CNodeStateStats stats;
-        Assert(node.peerman->GetNodeStateStats(peer.GetId(), stats));
-        return stats.m_inv_to_send;
-    };
 
     Assert(g_mature_coinbases.size() >= 3);
     auto add_relay_tx = [&](const CTransactionRef& tx) {
