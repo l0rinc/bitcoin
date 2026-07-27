@@ -40,16 +40,17 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 5/52 | boundary/integer | DONE | 2026-07-27 | B1-B4 inclusive-boundary consistent; audit/boundary-integer |
 | 62 | rejected-finding-resurrection | DONE | 2026-07-27 | R1 attack on P2.1 FAILED (dismissal strengthened) |
 | 56 | stale-pr-resurrection | DONE | 2026-07-27 | 33916 gap confirmed, target queued; scan empty |
+| 96 | todo-deferred-work | DONE | 2026-07-27 | 66 TODOs, top falsified: 1 masked, 1 own-PR, rest design |
 
 ## Next-up queue (severity-first)
-1. 96 — TODO/FIXME challenge — NEXT
-2. 20 — micro-optimization (user-directed interest earlier)
+1. 20 — micro-optimization (user-directed interest earlier) — NEXT
+2. then re-rank from accumulated journals
 3. then re-rank from accumulated journals
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56 DONE.
+5/52, 62, 56, 96 DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #96 on branch
-audit/todo-deferred-work.
+full cross-backend differential in ~35s on this host. NEXT: #20 on branch
+audit/micro-optimization.
