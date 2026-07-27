@@ -19,7 +19,6 @@
 #include <validationinterface.h>
 
 #include <array>
-#include <ios>
 #include <memory>
 #include <vector>
 
@@ -247,10 +246,7 @@ FUZZ_TARGET(p2p_private_broadcast, .init = ::initialize)
             bool more_work{true};
             while (more_work) {
                 p2p_node.fPauseSend = false;
-                try {
-                    more_work = connman.ProcessMessagesOnce(p2p_node);
-                } catch (const std::ios_base::failure&) {
-                }
+                more_work = connman.ProcessMessagesOnce(p2p_node);
                 node.peerman->SendMessages(p2p_node);
             }
         }

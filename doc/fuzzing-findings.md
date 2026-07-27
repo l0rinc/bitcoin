@@ -5730,3 +5730,21 @@ reproduced clean-master crash or data-loss case, so they are recorded as
 hardening and are not included in the confirmed-defect count. The existing
 transaction rollback still keeps a failed export from publishing a partial
 destination wallet.
+
+## Private-broadcast exception transparency (2026-07-27)
+
+The `p2p_private_broadcast` harness had an outer `catch (const
+std::ios_base::failure&)` around `ProcessMessagesOnce()`. This was a fuzzer
+oracle omission: `PeerManagerImpl::ProcessMessages()` already classifies
+expected peer-message deserialization failures inside the production handler
+and asserts that other exceptions are not expected in Assume-active builds.
+The outer catch could therefore turn an exception from code outside that
+classifier into a successful fuzz iteration, hiding a production state or
+memory defect.
+
+The catch and its now-unused `<ios>` include were removed. This is not a
+production bug and no exception was observed by the mutation: the optimized
+Clang 19 target completed 4,000 generated executions and the ASan/UBSan target
+completed 1,500 generated executions after removal, both without an assertion,
+sanitizer diagnostic, timeout, or artifact. The change improves discovery
+accuracy by allowing any unexpected exception to reach libFuzzer.
