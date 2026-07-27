@@ -16,3 +16,11 @@ Minor: the fetestexcept check only pins the FE_INVALID (NaN) defect; the int div
 ## PR 35814 (contrib: autogenerate bitcoin-cli completion from getopenrpcinfo) — 🟢 contrib+test only; generated file + sync test, sensible.
 
 Marker → 35819. Known issues unchanged (32387/26022/27409/35387/30437 still open).
+
+## Reachability of the leftover (follow-up, 2026-07-27)
+
+The residual `nFPRate==0 && nElements>0` UB is NOT remotely accessible: the 4-arg
+constructor's only call sites are the unit test and fuzz target; BIP37 `filterload`
+uses the default constructor + Unserialize (wire data, no formula evaluation);
+net_processing.cpp:5073 is the copy ctor. Not a vulnerability — latent UB for local
+library callers only; fix remains worthwhile for UB-hygiene and fuzz-domain coverage.
