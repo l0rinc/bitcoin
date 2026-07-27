@@ -97,6 +97,29 @@ Both refuted by tracing the drain interleaving:
 
 Verdict: no unbounded per-peer memory found on the unauthenticated surface.
 
+### P3 (in-flight block tracking): DISMISSED — bounded at every insertion path
+
+1. Per-peer in-flight cap (MAX_BLOCKS_IN_TRANSIT_PER_PEER = 16) is enforced at
+   all three BlockRequested call paths: headers direct-fetch (2938 gate),
+   compact-block reconstruction (4727 gate), and FindNextBlocksToDownload
+   budget (6337-6347, budget = 16 - in-flight). A peer cannot exceed 16
+   in-flight blocks (~64MB worst case, but only for blocks we requested).
+2. Per-block compact in-flight cap (MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK)
+   enforced at 4727; Assumes at 1243/1278 are downstream of that gate.
+3. In-flight entries are only created for blocks WE requested (or compact
+   blocks from announced high-bandwidth peers, gated as above); an
+   unauthenticated peer cannot insert entries by itself.
+4. Stall accounting: m_stalling_since + BLOCK_STALLING_TIMEOUT marks the
+   staller and redownloads elsewhere (nodeStaller return path); sustained
+   stalls hit BLOCK_DOWNLOAD_TIMEOUT → disconnect. Worst case an attacker
+   wastes one download slot, not memory.
+5. Headers-presync (headerssync.cpp): m_header_commitments hard-capped by
+   m_max_commitments (213, peer flagged malicious above); m_redownloaded_headers
+   capped by redownload_buffer_size (311-320). Area is heavily fuzzed
+   (src/test/fuzz/headerssync.cpp). Bounded.
+6. Disconnect cleanup of in-flight state (FinalizeNode → RemoveBlockRequest)
+   verified present at 1253-1267; deeper disconnect-lifecycle checks are P6.
+
 ## Next queue
 (start P1 with highest-amplification message handlers: INV/GETDATA/ADDR/TX,
 then P2 accounting bounds; then P4 handshake state machine)
