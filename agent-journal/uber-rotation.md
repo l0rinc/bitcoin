@@ -51,17 +51,18 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 27 | error-path-state | DONE | 2026-07-27 | failure contracts clean (2 shapes) |
 | 7 | resource-exhaustion-variants | CYCLE-1 | 2026-07-27 | HTTP accounting bounded |
 | 3 | current-pr-leftovers | DONE | 2026-07-27 | TopUpWithDB fix (2a4e8edcfc); maxmempool FP retracted |
+| 9 | hit-frequency-coverage | CYCLE-1 | 2026-07-27 | coins subsystem fully covered |
 
 ## Next-up queue (severity-first)
-1. 9 — hit-frequency coverage — NEXT
+1. 11 — sanitizer/valgrind true-positive sweep — NEXT
 2. then re-rank from accumulated journals
 4. then re-rank from accumulated journals
 3. then re-rank from accumulated journals
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3 DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #9 on branch
-audit/hit-frequency-coverage.
+full cross-backend differential in ~35s on this host. NEXT: #11 on branch
+audit/sanitizer-valgrind.
