@@ -16,13 +16,13 @@ permissions (unless default-granted), other peers' state, or disk.
 
 | # | area | hypothesis seeds | verdict |
 |---|------|------------------|---------|
-| P1 | message processing per msg type | assert/Assume reachable from crafted msg; deser over-read; per-msg work amplification | open |
-| P2 | peer accounting / quota | m_addr_known/bloom filter memory per peer; send queue bounds; inventory tracking bounds | open |
-| P3 | in-flight block tracking | mapBlocksInFlight bounds; stalls; timeout accounting | open |
-| P4 | transport handshake (v1/v2) | pre-VERSION messages; duplicate VERSION; v2 key-exchange failure paths; message before handshake complete | open |
-| P5 | discouragement/ban state | misbehavior score accounting; discouragement vs permission bypass; stale state after reconnect | open |
-| P6 | disconnect/shutdown cleanup | peer state teardown races; m_peer_map vs CNode lifetime; orphan tracking on disconnect | open |
-| P7 | v1/v2 transport parity | checks applied on one transport but not the other; header size limits; garbage/buffer bounds | open |
+| P1 | message processing per msg type | assert/Assume reachable from crafted msg; deser over-read; per-msg work amplification | DISMISSED |
+| P2 | peer accounting / quota | m_addr_known/bloom filter memory per peer; send queue bounds; inventory tracking bounds | DISMISSED |
+| P3 | in-flight block tracking | mapBlocksInFlight bounds; stalls; timeout accounting | DISMISSED |
+| P4 | transport handshake (v1/v2) | pre-VERSION messages; duplicate VERSION; v2 key-exchange failure paths; message before handshake complete | DISMISSED |
+| P5 | discouragement/ban state | misbehavior score accounting; discouragement vs permission bypass; stale state after reconnect | DISMISSED |
+| P6 | disconnect/shutdown cleanup | peer state teardown races; m_peer_map vs CNode lifetime; orphan tracking on disconnect | DISMISSED |
+| P7 | v1/v2 transport parity | checks applied on one transport but not the other; header size limits; garbage/buffer bounds | DISMISSED |
 
 ## Verdicts
 
@@ -120,6 +120,72 @@ Verdict: no unbounded per-peer memory found on the unauthenticated surface.
 6. Disconnect cleanup of in-flight state (FinalizeNode → RemoveBlockRequest)
    verified present at 1253-1267; deeper disconnect-lifecycle checks are P6.
 
+### P5 (discouragement/ban state): DISMISSED — permission gates correct, state fresh per connection
+
+1. Misbehavior model: any Misbehaving() sets m_should_discourage (1948);
+   MaybeDiscourageAndDisconnect (5177-5214) disconnects and discourages the
+   address. Score-based accumulation is gone — one strike, by design.
+2. Permission bypass checks (5188-5207): NoBan (config-granted only),
+   IsManualConn, IsLocal — none are settable by an unauthenticated remote
+   peer. Verified the flags come from connection setup, not message content.
+3. Reconnect from a discouraged address is rejected at connection handling
+   (5854: IsDiscouraged/IsBanned → immediate disconnect). Discouragement is
+   address-scoped in banman and persisted to banlist.dat.
+4. m_should_discourage lives on the Peer object, destroyed with the
+   connection — no stale ban state carries to a new NodeId.
+5. KNOWN DESIGN TRADEOFF (not a defect): inbound onion peers get a fresh
+   random address per connection, so they are disconnected but not
+   discouraged (5200-5207 comment) — discouragement would be meaningless.
+   A malicious Tor peer can reconnect-and-misbehave in a loop, but each
+   iteration costs only a transient connection slot. Documented in code.
+
+### P6 (disconnect/shutdown cleanup): DISMISSED — teardown complete with global consistency asserts
+
+FinalizeNode (net_processing.cpp ~1700-1783) removes every per-peer state:
+mapBlocksInFlight entries erased (with m_peers_downloading_from accounting),
+m_txdownloadman.DisconnectedPeer, m_txreconciliation ForgetPeer,
+m_headers_presync_stats erase (under its mutex), private-broadcast slot
+returned to the pool, and all download counters decremented. When the last
+peer is removed, hard asserts verify global consistency: mapBlocksInFlight
+empty, all counters zero, txdownloadman empty (1757-1765). Peer object is
+removed from m_peer_map via RemovePeer. Shutdown: flagInterruptMsgProc is
+checked per message and per loop iteration; connman joins the message
+handler before tearing down. No stale-state or use-after-teardown path found.
+
+### P7 (v1/v2 transport parity): DISMISSED — checks are transport-agnostic; v2 state machine fuzzed
+
+1. All message-level checks (pre-VERSION drop, per-message size caps,
+   inventory limits, misbehavior) live in net_processing above the transport
+   layer — verified in P1/P4 that no check branches on transport type.
+2. V2Transport (net.cpp): key-exchange and packet state machine is
+   deterministic over input bytes; all malformed inputs (wrong keys, garbage
+   terminator mismatch, AAD/decrypt failure, oversized packets) return
+   errors → disconnect. The Assumes in the transport guard internal
+   invariants (buffer caps by construction per state, state enums), not
+   peer-controlled values.
+3. Fuzz coverage matches the exact parity surface: dedicated targets
+   p2p_transport_bidirectional_v2 and p2p_transport_bidirectional_v1v2
+   (src/test/fuzz/p2p_transport_serialization.cpp:417-434) fuzz v2↔v2 and
+   v1↔v2 interop with randomized garbage and keys.
+
+## Cycle verdict
+
+All 7 ledger areas verdict-locked: P1, P2, P3, P4, P5, P6, P7 all DISMISSED
+with file:line evidence. No confirmed defect on the unauthenticated P2P
+surface in this audit pass; no fix commits required. Two fragilities noted
+for the record (not defects): the ThreadMessageHandler drain interleaving is
+load-bearing for m_blocks_for_inv_relay bounds (P2.1), and inbound-onion
+misbehavior is disconnect-only by design (P5.5).
+
 ## Next queue
-(start P1 with highest-amplification message handlers: INV/GETDATA/ADDR/TX,
-then P2 accounting bounds; then P4 handshake state machine)
+Goal 89 audit pass complete (all 7 areas DISMISSED with evidence). Residual
+for future cycles:
+- Dynamic validation of the P2.1 load-bearing invariant: a functional test
+  that floods GETBLOCKS and asserts m_blocks_for_inv_relay stays bounded
+  would convert the fragility note into a regression oracle (needs a
+  debug-only accessor; judged not worth the surface change for a non-defect).
+- Orphanage and txdownloadman adversarial sequences (ProcessOrphanTx paths)
+  belong to the mempool-accounting campaign (goal 87) — cross-reference.
+- Rotation: next campaign per severity-first order — goal 88 (wallet
+  key-loss) was passed over for this goal; return to it or to goal 86
+  (chainstate crash-symmetry).
