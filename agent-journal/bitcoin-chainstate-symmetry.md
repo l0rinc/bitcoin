@@ -101,6 +101,32 @@ blk/rev flush → WriteBlockIndexDB → prune unlink → coins flush.
 
 ### C4 (prune vs read races): DISMISSED — deletion under cs_main, reads graceful or buffer-protected
 
+### C5 (block/undo file lifecycle): DISMISSED — allocation/undo/xor all idempotent or loud under crash
+
+Resumed from goal-86 pause (C1-C4 locked earlier).
+1. Position allocation vs crash: FindNextBlockPos allocations live in
+   m_blockfile_info memory until WriteBlockIndexDB persists them. Crash
+   loses unflushed allocations → stale tail bytes at file end are
+   OVERWRITTEN when the same positions are re-allocated from DB-loaded
+   sizes on restart. Consistent by construction.
+2. Undo lifecycle (WriteBlockUndo, blockstorage.cpp:1022-1089): undo bytes
+   written and file fclose-checked BEFORE nUndoPos/HAVE_UNDO is set in
+   m_dirty_blockindex (1082-1085); HAVE_UNDO persists only with the block
+   index DB. Crash between → index lacks HAVE_UNDO → undo rewritten at the
+   same re-allocated position (idempotent). Crash after index persisted
+   but before coins flush → C2's two-phase replay reconnects and reuses
+   existing undo (GetUndoPos non-null, skip at 1029). Consistent.
+3. blk/rev pairing: undo goes to the rev file matching block.nFile by
+   design.
+4. xor.dat (InitBlocksdirXorKey, 1240-1277): random key only on first
+   run; existing file takes priority; exclusive "wbx" create; fclose
+   checked. Torn xor.dat on restart → deserialization throws → LOUD
+   startup failure, never silent wrong-key reads. Disable-after-random-key
+   rejected (1268-1275).
+5. Known area issues (PR 33324 resumable reobfuscation,
+   DirectoryCommit+blocksxor=0) already fixed/verified per standing
+   cron state.
+
 1. Deletion protocol: FindFilesToPrune (blockstorage.cpp:363-442) runs under
    cs_main, calls PruneOneBlockFile (clears BLOCK_HAVE_DATA/positions for
    contained blocks) in the SAME critical section in which
