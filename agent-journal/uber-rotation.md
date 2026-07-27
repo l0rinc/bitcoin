@@ -36,9 +36,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 83 | secp-group-ecmult | DONE | 2026-07-27 | parity oracles green both backends + exhaustive order-13 |
 | 84 | secp-nonce-session | DONE | 2026-07-27 | all 5 dismissed; zero-before-checks enforcement verified |
 
+## Done since seeding
+| 5/52 | boundary/integer | DONE | 2026-07-27 | B1-B4 inclusive-boundary consistent; audit/boundary-integer |
+
 ## Next-up queue (severity-first)
-1. 5/52 — boundary/integer (shared lineage) — NEXT
-2. 62 — rejected-finding resurrection (feeds on accumulated journals)
+1. 62 — rejected-finding resurrection (feeds on accumulated journals) — NEXT
+2. 56 — stale PR resurrection
 3. 5/52 — boundary/integer (shared lineage)
 4. 62 — rejected-finding resurrection (feeds on accumulated journals)
 5. 56 — stale PR resurrection
@@ -47,8 +50,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 8. then re-rank from accumulated journals
 
 ## Handoff
-Updated after every rotation. Current: #86, #88, #87, #82, #83, #84 DONE (all secp campaigns done this pass).
+Updated after every rotation. Current: #86, #88, #87, #82, #83, #84, 5/52 DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #5/#52 boundary/integer on branch
-audit/boundary-integer.
+full cross-backend differential in ~35s on this host. NEXT: #62 on branch
+audit/rejected-finding-resurrection.
