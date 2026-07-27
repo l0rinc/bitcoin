@@ -364,6 +364,51 @@ BOOST_AUTO_TEST_CASE(FillBlockResetsPartialBlock)
     BOOST_CHECK_EQUAL(block.GetHash().ToString(), reconstructed_again.GetHash().ToString());
 }
 
+BOOST_AUTO_TEST_CASE(FillBlockRejectsPrefilledShortIDDuplicate)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    TestMemPoolEntryHelper entry;
+    auto rand_ctx(FastRandomContext(uint256{43}));
+    const CBlock block{BuildBlockTestCase(rand_ctx)};
+
+    TestHeaderAndShortIDs short_ids{block, rand_ctx};
+    // Keep transaction 1 prefilled, then reuse its short ID for transaction 2's slot.
+    short_ids.prefilledtxn.emplace_back(/*index=*/0, block.vtx[1]);
+    short_ids.shorttxids.erase(short_ids.shorttxids.begin());
+    short_ids.shorttxids[0] = short_ids.GetShortID(block.vtx[1]->GetWitnessHash());
+
+    DataStream stream{};
+    stream << short_ids;
+    CBlockHeaderAndShortTxIDs decoded_short_ids;
+    stream >> decoded_short_ids;
+
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.FromTx(block.vtx[1]));
+    }
+    TestPartiallyDownloadedBlock partial_block(&pool);
+    BOOST_CHECK_EQUAL(partial_block.InitData(decoded_short_ids, empty_extra_txn), READ_STATUS_OK);
+    BOOST_CHECK(partial_block.IsTxAvailable(0));
+    BOOST_CHECK(partial_block.IsTxAvailable(1));
+    BOOST_CHECK(partial_block.IsTxAvailable(2));
+    BOOST_CHECK_EQUAL(partial_block.AvailableTxCount(), 3U);
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 2U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 1U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+
+    CBlock rejected_block{block};
+    const uint256 rejected_block_hash{rejected_block.GetHash()};
+    const auto rejected_block_txs{rejected_block.vtx};
+    BOOST_CHECK_EQUAL(partial_block.FillBlock(rejected_block, {}, /*segwit_active=*/true), READ_STATUS_FAILED);
+    BOOST_CHECK_EQUAL(rejected_block.GetHash(), rejected_block_hash);
+    BOOST_CHECK(rejected_block.vtx == rejected_block_txs);
+    BOOST_CHECK(partial_block.header.IsNull());
+    BOOST_CHECK_EQUAL(partial_block.AvailableTxCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+}
+
 BOOST_AUTO_TEST_CASE(FillBlockTooFewTransactionsClearsPartialBlock)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);

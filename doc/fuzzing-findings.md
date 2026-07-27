@@ -6268,3 +6268,36 @@ peer queue, left the queue empty, and retained the already-consumed selection
 reservation. The same sequence is safe in the production call chain, so no
 production change or refund is justified. The corrected guided fuzzer target
 build and its canonical ASan/UBSan execution also passed.
+
+## Prefilled transaction reusing a short ID (2026-07-27)
+
+The compact-block collision matrix was missing a duplicate that crosses the
+prefilled/short-ID boundary. The deterministic mutation keeps coinbase and
+transaction 1 prefilled, removes transaction 1's original short ID, replaces
+the remaining short ID with transaction 1's short ID, and puts transaction 1
+in the local mempool. `InitData()` then has the same transaction in both a
+prefilled slot and a short-ID slot, so `FillBlock()` must reject the candidate
+as mutated.
+
+This is a real low-severity state-invariant defect on clean master, not a
+branch-only regression. A detached exact-master control at
+`a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b` returned `READ_STATUS_FAILED` and
+cleared the header and availability vector, but left `prefilled_count == 2`
+and `mempool_count == 1`. A temporary source mutation that added the three
+counter resets made the same control pass. The stale counters are not used
+after the network path observes the cleared header, and no crash, consensus
+failure, validation bypass, or memory-safety impact was demonstrated. The
+existing production cleanup in `843aefaf80` resets these counters; this change
+adds the missing deterministic unit and fuzzer coverage for the exact
+prefilled/short-ID construction.
+
+The unit case checks the initialized source counts, the mutation rejection,
+caller-output preservation, and complete cleanup. The guided
+`partially_downloaded_block` mode constructs the same shape, disables the
+random mutation mock and extra missing transaction, and requires the real
+`IsBlockMutated()` path to return `READ_STATUS_FAILED`. The focused unit case
+passed on the fixed branch. A bounded Clang 19 ASan/UBSan replay over 100
+medium-sized retained inputs plus 100 mutations exited 0. A larger two-worker
+replay over all 2,021 retained inputs was stopped after it stalled on a large
+generated input; its interrupt trace was from libFuzzer shutdown, not the
+target, and no crash or sanitizer artifact was produced.
