@@ -5547,3 +5547,39 @@ ASan/UBSan build passed 128 executions over a private copy of the same corpus
 without a diagnostic or artifact. No production defect, race, resource
 exhaustion, or remotely exploitable issue was demonstrated; this commit is
 deterministic coverage and fuzzer-oracle hardening only.
+
+## Compact BLOCKTXN response cardinality (2026-07-27)
+
+The collision investigation found that the existing unit test exercised
+`PartiallyDownloadedBlock::FillBlock()` with too few and too many transactions,
+but neither the compact-block fuzzer nor the functional network suite forced
+those cardinalities after a real `GETBLOCKTXN` request. The new fuzzer slice
+constructs a valid requested compact block and sends both a one-transaction
+response for two missing slots and a three-transaction response for those same
+slots. The matching functional test repeats both mutations with ordinary peers.
+
+The expected contract is that both responses return `READ_STATUS_INVALID`,
+remove only that peer's in-flight request before punishment, do not request a
+full block, do not advance the tip, and disconnect a non-exempt peer. This is
+distinct from a short-ID collision (`READ_STATUS_FAILED`), which retains the
+first peer's partial object for full-block fallback. The unit test already
+covered the direct `FillBlock()` cardinality behavior; this change adds the
+wire/state-machine coverage and a deterministic functional check.
+
+This is a clean-master coverage omission, not a production fix. Exact clean
+master `e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421` passed the added functional
+test with production code unchanged. The fuzzer now forces the same sequence
+on a deterministic empty seed: valid compact request, too-few response,
+re-announcement, too-many response, re-announcement, and finally a valid
+response. Its pending-message oracle checks both `vSendMsg` and the transport,
+so optimistic writes do not hide the requested `GETBLOCKTXN`.
+
+The exact fuzzer mutation proof changed only
+`RemoveBlockRequest(block_transactions.blockhash, pfrom.GetId())` in the
+`READ_STATUS_INVALID` branch of `ProcessCompactBlockTxns` to a no-op. The
+normal Clang 19 fuzzer failed deterministically on the empty seed when the
+same block was re-announced and no fresh `GETBLOCKTXN` was produced; restoring
+the call passed. This proves the stateful fuzzer catches the cleanup omission,
+while the clean-master functional control proves that omission is not present
+in the production baseline. No production defect, race, resource exhaustion,
+or remotely exploitable issue was demonstrated.
