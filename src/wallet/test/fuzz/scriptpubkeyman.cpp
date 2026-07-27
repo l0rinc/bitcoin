@@ -25,6 +25,7 @@
 #include <util/string.h>
 #include <validation.h>
 #include <wallet/context.h>
+#include <wallet/export.h>
 #include <wallet/scriptpubkeyman.h>
 #include <wallet/test/util.h>
 #include <wallet/types.h>
@@ -601,6 +602,20 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
     (void)spk_manager->GetDescriptorString(descriptor, /*priv=*/fuzzed_data_provider.ConsumeBool());
     (void)spk_manager->GetEndRange();
     (void)spk_manager->GetKeyPoolSize();
+
+    if (fuzzed_data_provider.ConsumeBool() && !descriptor_writes_blocked && !descriptor_metadata_writes_blocked) {
+        const fs::path export_path{g_setup->m_args.GetDataDirNet() / "fuzzed_watchonly_export.dat"};
+        fs::remove(export_path);
+        WalletContext context;
+        context.args = node.args;
+        {
+            LOCK(wallet.cs_wallet);
+            const auto exported{ExportWatchOnlyWallet(wallet, export_path, context)};
+            assert(exported);
+        }
+        assert(fs::exists(export_path));
+        fs::remove(export_path);
+    }
 }
 
 FUZZ_TARGET(spkm_migration, .init = initialize_spkm_migration)
