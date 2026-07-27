@@ -46,21 +46,22 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 4 | public-interface-contracts | CYCLE-1 | 2026-07-27 | maxmempool assert fix (36156ad934) |
 | 8 | locking-threading | DONE | 2026-07-27 | all 4 areas dismissed |
 | 15 | public-object-validation | DONE | 2026-07-27 | all paths gate consistently |
-| 4 | public-interface-contracts | CYCLE-2 | 2026-07-27 | RPC bounds consistent |
+| 4 | public-interface-contracts | CYCLE-2 | 2026-07-27 | RPC bounds consistent; c1 finding RETRACTED (5a16d316af) |
 | 6 | serialization-untrusted-input | CYCLE-1 | 2026-07-27 | compact-block + addrv2 bounded |
 | 27 | error-path-state | DONE | 2026-07-27 | failure contracts clean (2 shapes) |
 | 7 | resource-exhaustion-variants | CYCLE-1 | 2026-07-27 | HTTP accounting bounded |
+| 3 | current-pr-leftovers | DONE | 2026-07-27 | TopUpWithDB fix (2a4e8edcfc); maxmempool FP retracted |
 
 ## Next-up queue (severity-first)
-1. 3 — current branch and PR leftover sweep — NEXT (own PR stack has grown)
+1. 9 — hit-frequency coverage — NEXT
 2. then re-rank from accumulated journals
 4. then re-rank from accumulated journals
 3. then re-rank from accumulated journals
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3 DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #3 on branch
-audit/current-pr-leftovers.
+full cross-backend differential in ~35s on this host. NEXT: #9 on branch
+audit/hit-frequency-coverage.
