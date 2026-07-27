@@ -43,3 +43,13 @@ still insufficient since it says nothing about rate > 1, non-finite, or the
 finite overflow; (b) 133020edfd/d6472bc4aa are review-doc commits on the local
 audit branch, not proposed patches for the PR; (c) their internal-target point
 (bitcoin_common static lib, no public API) further narrows the leftover's reach.
+
+## Scope precision (2026-07-27)
+
+What the PR fixes: (1) int div-by-zero at nElements==0, and (2) the float-to-unsigned
+conversion UB for the zero-element trigger (0 * log(0) = NaN). The leftover is the
+SAME conversion UB with different triggers: (nElements>0, rate=0) -> +inf, plus
+rate>1, NaN, +-inf, and finite pre-clamp overflow (Codex probe). The PR is correctly
+scoped to zero-element construction; the conversion-UB class needs the separate
+domain-validation change (0 < rate <= 1, deliberate non-finite handling, clamp in
+double space before narrowing).
