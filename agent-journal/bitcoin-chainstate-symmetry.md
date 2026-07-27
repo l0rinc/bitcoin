@@ -99,6 +99,29 @@ blk/rev flush → WriteBlockIndexDB → prune unlink → coins flush.
    validity — even a hypothetical stale entry could stall sync, not corrupt
    state; and it would assert on restart anyway.
 
+### C4 (prune vs read races): DISMISSED — deletion under cs_main, reads graceful or buffer-protected
+
+1. Deletion protocol: FindFilesToPrune (blockstorage.cpp:363-442) runs under
+   cs_main, calls PruneOneBlockFile (clears BLOCK_HAVE_DATA/positions for
+   contained blocks) in the SAME critical section in which
+   FlushStateToDisk later calls UnlinkPrunedFiles — no cs_main-holding
+   reader can observe HAVE_DATA on a file that is already unlinked.
+2. Height guard: only files entirely within [min_block_to_prune,
+   last_block_can_prune] are pruned; last_block_can_prune is bounded by
+   MIN_BLOCKS_TO_KEEP (288) below the tip and by every registered prune lock
+   (m_prune_locks, e.g. dumptxoutset-rollback, rpc/blockchain.cpp:3048).
+3. Non-cs_main read paths fail gracefully: ProcessGetData block serving
+   (net_processing.cpp:2484-2490) logs "Block was pruned before it could be
+   read" / disk error and disconnects — no assert, no corruption.
+4. The two assert-on-read-failure paths are protected by the 288-block
+   buffer, not by luck: GETBLOCKTXN (4413-4416) only reads blocks within
+   MAX_BLOCKTXN_DEPTH(10) of the tip (gated at 4406-4408); CMPCTBLOCK
+   announcement (6082-6083) reads our own tip block. Both are unreachable
+   by pruning. Asserts unfalsifiable.
+5. POSIX semantics help the remaining window: a reader that already opened
+   the file before unlink keeps a valid fd; only pre-open unlink is
+   possible, which is the graceful path in (3).
+
 ## Next queue
 (start C1 with a unit-level connect→disconnect→reconnect differential on
 regtest chains, then C2 via FlushStateToDisk ordering trace + dbcrash replay)
