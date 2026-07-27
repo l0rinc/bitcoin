@@ -53,6 +53,39 @@ BOOST_AUTO_TEST_CASE(coincontrol_external_output_contracts)
     BOOST_CHECK(!coin_control.GetExternalOutput(outpoint));
 }
 
+BOOST_FIXTURE_TEST_CASE(wallet_preserves_preselected_input_order, TestChain100Setup)
+{
+    for (int i = 0; i < 4; ++i) {
+        CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
+    }
+    auto wallet = CreateSyncedWallet(*m_node.chain, WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain()), coinbaseKey);
+
+    std::vector<COutput> available;
+    CTxDestination recipient_destination;
+    {
+        LOCK(wallet->cs_wallet);
+        available = AvailableCoins(*wallet).All();
+        BOOST_REQUIRE_GE(available.size(), 2U);
+        recipient_destination = *Assert(wallet->GetNewDestination(OutputType::BECH32, ""));
+    }
+
+    CCoinControl coin_control;
+    coin_control.m_allow_other_inputs = false;
+    coin_control.m_feerate = CFeeRate{1};
+    coin_control.fOverrideFeeRate = true;
+    coin_control.m_change_type = OutputType::BECH32;
+    coin_control.Select(available[1].outpoint);
+    coin_control.Select(available[0].outpoint);
+
+    const auto result = CreateTransaction(*wallet,
+                                          {{recipient_destination, /*nAmount=*/99 * COIN, /*fSubtractFeeFromAmount=*/false}},
+                                          /*change_pos=*/std::nullopt, coin_control);
+    BOOST_REQUIRE(result);
+    BOOST_REQUIRE_EQUAL(result->tx->vin.size(), 2U);
+    BOOST_CHECK(result->tx->vin[0].prevout == available[1].outpoint);
+    BOOST_CHECK(result->tx->vin[1].prevout == available[0].outpoint);
+}
+
 BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
 {
     CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
