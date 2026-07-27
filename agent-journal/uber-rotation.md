@@ -41,16 +41,17 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 62 | rejected-finding-resurrection | DONE | 2026-07-27 | R1 attack on P2.1 FAILED (dismissal strengthened) |
 | 56 | stale-pr-resurrection | DONE | 2026-07-27 | 33916 gap confirmed, target queued; scan empty |
 | 96 | todo-deferred-work | DONE | 2026-07-27 | 66 TODOs, top falsified: 1 masked, 1 own-PR, rest design |
+| 20 | micro-optimization | DONE | 2026-07-27 | IsRoutable dedup -8.8% wall (769822b5a6) |
 
 ## Next-up queue (severity-first)
-1. 20 — micro-optimization (user-directed interest earlier) — NEXT
+1. 0 — continuous bug-mining — NEXT; first task: #56-queued TransactionCanBeBumped fuzz target (per 33916 revival path: real mempool, direct add-tx helpers)
 2. then re-rank from accumulated journals
 3. then re-rank from accumulated journals
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96 DONE.
+5/52, 62, 56, 96, 20 DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #20 on branch
-audit/micro-optimization.
+full cross-backend differential in ~35s on this host. NEXT: #0 on branch
+audit/continuous-bug-mining.
