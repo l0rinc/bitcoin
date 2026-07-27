@@ -24,3 +24,22 @@ constructor's only call sites are the unit test and fuzz target; BIP37 `filterlo
 uses the default constructor + Unserialize (wire data, no formula evaluation);
 net_processing.cpp:5073 is the copy ctor. Not a vulnerability — latent UB for local
 library callers only; fix remains worthwhile for UB-hygiene and fuzz-domain coverage.
+
+## Correction (2026-07-27, prompted by Codex review)
+
+My "one-line guard closes the class" was WRONG. The defect class is wider:
+rate <= 0 (NaN), rate > 1 (negative size), non-finite (NaN/+-inf), AND finite
+pre-clamp overflow — UINT_MAX elements at rate 0.01 yields ~4.12e10 before
+conversion (verified numerically), which is out of unsigned range even inside the
+"valid" (0,1] domain because std::min clamps AFTER the conversion, not before.
+A complete fix is a real parameter-validation change: define the accepted rate
+domain (0 < rate <= 1), handle non-finite values deliberately, and clamp in
+floating-point space before narrowing. That is separate scope from #35818 and
+should not ride along on it.
+
+Codex nuances: (a) their "assert disappears in release" is wrong for THIS project
+(Core strips -DNDEBUG; asserts stay live) — but a bare assert(nFPRate > 0) is
+still insufficient since it says nothing about rate > 1, non-finite, or the
+finite overflow; (b) 133020edfd/d6472bc4aa are review-doc commits on the local
+audit branch, not proposed patches for the PR; (c) their internal-target point
+(bitcoin_common static lib, no public API) further narrows the leftover's reach.
