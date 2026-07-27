@@ -57,15 +57,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 13 | secret-lifetime-zeroization | DONE | 2026-07-27 | lattice complete, boundaries documented |
 | 14 | secret-control-flow | DONE | 2026-07-27 | BIP324 lattice complete |
 | 18 | exhaustive-algebraic | CYCLE-1 | 2026-07-27 | script round-trip gap closed (8e7513bb1c, mutation-verified); amount round-trip queued |
+| 19 | benchmark-integrity | CYCLE-1 | 2026-07-27 | prevector bench elision confirmed+fixed (138ef3c044); mutation-sweep queued |
 
 ## Next-up queue (severity-first)
-1. 19 — benchmark-integrity — NEXT
-2. then re-rank: 16 (api-misuse), 17 (build-matrix), 28 (weak-test oracles), 61 (stateful contract fuzz)
+1. 28 — weak-test-oracles — NEXT (continues oracle-strengthening theme from 18/19)
+2. then re-rank: 16 (api-misuse), 17 (build-matrix), 61 (stateful contract fuzz)
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c1), 19(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #19 on branch
-audit/benchmark-integrity.
+full cross-backend differential in ~35s on this host. NEXT: #28 on branch
+audit/weak-test-oracles.
