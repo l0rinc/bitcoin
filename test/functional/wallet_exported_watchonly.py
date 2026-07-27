@@ -12,7 +12,6 @@ from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
     assert_not_equal,
-    assert_raises,
     assert_raises_rpc_error,
 )
 from test_framework.wallet_util import generate_keypair
@@ -173,9 +172,7 @@ class WalletExportedWatchOnly(BitcoinTestFramework):
             online_wallet = self.export_and_restore(offline_wallet, "normalized_id_watchonly")
             assert_equal(online_wallet.getwalletinfo()["private_keys_enabled"], False)
 
-        assert_raises((ConnectionResetError, ConnectionAbortedError), export_and_check_watchonly)  # TODO: Export should not terminate the node when normalization changes the descriptor ID
-        self.offline.wait_until(lambda: self.offline.process.poll() is not None)
-        self.offline.wait_until_stopped(expected_ret_code=self.offline.process.returncode)
+        export_and_check_watchonly()
 
     def test_export_imported_descriptors(self):
         self.log.info("Test imported descriptors are exported to the watchonly wallet")
