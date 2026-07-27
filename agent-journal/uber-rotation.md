@@ -43,18 +43,19 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 96 | todo-deferred-work | DONE | 2026-07-27 | 66 TODOs, top falsified: 1 masked, 1 own-PR, rest design |
 | 20 | micro-optimization | DONE | 2026-07-27 | IsRoutable dedup -8.8% wall (769822b5a6) |
 | 0 | continuous-bug-mining | CYCLE-1 | 2026-07-27 | bump fuzz target delivered (da8b249776) |
+| 4 | public-interface-contracts | CYCLE-1 | 2026-07-27 | maxmempool assert fix (36156ad934) |
 
 ## Next-up queue (severity-first)
-1. 4 — public interface contracts (RPC/CLI/config/help) — NEXT (fresh surface, never run)
-2. 8 — locking/threading/scheduler
-3. 15 — public object parsing/validation variants
+1. 8 — locking/threading/scheduler — NEXT
+2. 15 — public object parsing/validation variants
+3. 4 — cycle 2 later (RPC help bounds)
 4. then re-rank from accumulated journals
 3. then re-rank from accumulated journals
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #4 on branch
-audit/public-interface-contracts.
+full cross-backend differential in ~35s on this host. NEXT: #8 on branch
+audit/locking-threading.
