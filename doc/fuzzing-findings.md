@@ -5841,3 +5841,27 @@ at the duplicate transition (exit 77 through libFuzzer). The production fix,
 unit test, functional regression, fuzzer, and this attribution record are
 grouped in the follow-up commit to the earlier assertion-only hardening
 `4cffa2c2dd`.
+
+## Multi-entry NOTFOUND response coverage (2026-07-27)
+
+The transaction-download audit found a state-machine coverage omission, not a
+production defect. `TxDownloadManager::ReceivedNotFound()` accepts a vector of
+transaction identifiers, but the existing deterministic test and both
+transaction-download fuzzer actions supplied one identifier per call. That
+left the interaction between txid and wtxid entries in one `NOTFOUND` message
+unexercised.
+
+The new unit case puts both requests for one segwit transaction in flight and
+sends `{wtxid, txid}` together. The fuzzer adds the same sequence on a fresh
+tracker for every input, then inspects the implementation's candidate-peer
+view immediately after the response and requires both hashes to be absent.
+The production loop already performs the matching per-entry
+`AssertNoTxRequestFromPeer()` check; no production behavior change was needed.
+
+Mutation proof: adding an unconditional `return` after the first loop entry in
+`src/node/txdownloadman_impl.cpp` made the deterministic unit fail with exit
+201 and made the optimized empty-seed fuzzer fail at the new oracle with
+libFuzzer exit 77. Restoring the loop passed the unit case, the optimized
+empty-seed run, and the ASan/UBSan empty-seed run. The clean-master production
+implementation is unchanged in this area, so this commit is coverage and
+oracle hardening only; no vulnerability is counted.

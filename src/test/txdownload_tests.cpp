@@ -576,11 +576,7 @@ BOOST_FIXTURE_TEST_CASE(received_responses_clear_peer_requests, TestingSetup)
     CheckTxRequestPeers(txdownload_impl, txid.ToUint256(), {peer_1});
     CheckTxRequestPeers(txdownload_impl, wtxid.ToUint256(), {peer_1});
 
-    txdownload_impl.ReceivedNotFound(peer_1, {wtxid});
-    CheckTxRequestPeers(txdownload_impl, txid.ToUint256(), {peer_1});
-    CheckTxRequestPeers(txdownload_impl, wtxid.ToUint256(), {});
-
-    txdownload_impl.ReceivedNotFound(peer_1, {txid});
+    txdownload_impl.ReceivedNotFound(peer_1, {wtxid, txid});
     CheckNoTxRequestsForTx(txdownload_impl, tx);
 
     txdownload_impl.DisconnectedPeer(peer_0);
