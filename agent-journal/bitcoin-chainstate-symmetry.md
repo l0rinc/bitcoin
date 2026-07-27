@@ -127,6 +127,33 @@ Resumed from goal-86 pause (C1-C4 locked earlier).
    DirectoryCommit+blocksxor=0) already fixed/verified per standing
    cron state.
 
+### C6 (snapshot/background chainstate transitions): DISMISSED — atomic renames, loud recovery, startup-only by design
+
+ValidatedSnapshotCleanup (validation.cpp:6520-6585) sequence:
+ResetChainstates (DBs closed) → rename(main → main_todelete) →
+rename(snapshot → main) → best-effort delete of _todelete.
+1. Each rename is atomic (POSIX same-fs): the validated snapshot contents
+   are never in a half-moved state. Crash before/between/after the two
+   renames leaves BOTH directories intact — worst case is names in an
+   intermediate arrangement, never torn data.
+2. The cleanup is deliberately confined to startup (node/chainstate.cpp:
+   200-203 comment: "too risky to do in the middle of normal runtime").
+   The validated-snapshot marker is persisted in the snapshot chainstate's
+   own DBs (m_assumeutxo == VALIDATED), so the completion state survives
+   the crash and MaybeValidateSnapshot re-detects it on restart
+   (node/chainstate.cpp:204-235), rerunning the cleanup.
+3. Ugliest case — crash between rename #1 and #2: main dir missing,
+   snapshot intact. On restart a fresh empty main chainstate may be
+   created, then the rerun's rename #1 hits the pre-existing _todelete →
+   ENOTEMPTY → rename_failed_abort → FatalError with an explicit message
+   (6550-6553). LOUD halt, manual cleanup (remove the stale dir, restart),
+   zero corruption, zero data loss (validated snapshot intact).
+4. No fsync of the directory entries between renames: a lost rename #2
+   reverts to the pre-rename state, which is exactly the handled case (3).
+5. CAVEAT (not a defect): there is no "cleanup in progress" marker file;
+   the crash-between-renames recovery needs one manual step. Upstream's
+   startup-only design accepts this; documented here for future cycles.
+
 1. Deletion protocol: FindFilesToPrune (blockstorage.cpp:363-442) runs under
    cs_main, calls PruneOneBlockFile (clears BLOCK_HAVE_DATA/positions for
    contained blocks) in the SAME critical section in which
