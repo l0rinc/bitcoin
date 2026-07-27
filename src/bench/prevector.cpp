@@ -35,6 +35,11 @@ static void PrevectorDestructor(benchmark::Bench& bench)
         prevector<CScriptBase::STATIC_SIZE, T> t1;
         t0.resize(CScriptBase::STATIC_SIZE);
         t1.resize(CScriptBase::STATIC_SIZE + 1);
+        // Keep the resize stores from being optimized away: for trivial T the
+        // compiler can otherwise eliminate them as dead stores, making this
+        // benchmark measure only harness overhead (plus malloc/free for t1).
+        ankerl::nanobench::doNotOptimizeAway(t0);
+        ankerl::nanobench::doNotOptimizeAway(t1);
     });
 }
 
@@ -45,8 +50,14 @@ static void PrevectorClear(benchmark::Bench& bench)
     prevector<CScriptBase::STATIC_SIZE, T> t1;
     bench.batch(2).run([&] {
         t0.resize(CScriptBase::STATIC_SIZE);
-        t0.clear();
         t1.resize(CScriptBase::STATIC_SIZE + 1);
+        // Barriers must fire while the vectors are full: after clear() the
+        // fill stores are semantically dead and the compiler eliminates them,
+        // making this benchmark measure only harness overhead (doubling the
+        // work left ns/op unchanged before this fix).
+        ankerl::nanobench::doNotOptimizeAway(t0);
+        ankerl::nanobench::doNotOptimizeAway(t1);
+        t0.clear();
         t1.clear();
     });
 }
@@ -58,8 +69,14 @@ static void PrevectorResize(benchmark::Bench& bench)
     prevector<CScriptBase::STATIC_SIZE, T> t1;
     bench.batch(4).run([&] {
         t0.resize(CScriptBase::STATIC_SIZE);
-        t0.resize(0);
         t1.resize(CScriptBase::STATIC_SIZE + 1);
+        // Barriers must fire while the vectors are full: after resize(0) the
+        // fill stores are semantically dead and the compiler eliminates them,
+        // making this benchmark measure only harness overhead (doubling the
+        // resizes left ns/op unchanged at 3.13 before this fix).
+        ankerl::nanobench::doNotOptimizeAway(t0);
+        ankerl::nanobench::doNotOptimizeAway(t1);
+        t0.resize(0);
         t1.resize(0);
     });
 }
