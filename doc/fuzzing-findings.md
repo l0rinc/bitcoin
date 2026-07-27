@@ -5684,6 +5684,51 @@ No additional production inconsistency, race, memory defect, or deterministic
 test omission was demonstrated in this rebase pass, so no source or permanent
 fuzzer change was warranted.
 
+## Exact-master compact source-collision controls (2026-07-27)
+
+The compact-block collision investigation was repeated against the fetched
+`origin/master` tip
+`a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b` in a detached disposable worktree.
+The clean-master Clang 19 Debug fuzz build used address and undefined-behavior
+sanitizers. The unmodified `partially_downloaded_block` target replayed all
+2,021 retained seeds in eight groups, and the unmodified `cmpctblock` target
+replayed all 1,970 retained seeds in eight groups. Every completed group exited
+zero without an assertion, sanitizer diagnostic, race report, timeout, or
+artifact. These are clean-baseline controls; the unmodified master fuzzer does
+not intentionally manufacture independent short-ID source collisions.
+
+Three temporary controls then exercised the remaining source-order cases on
+exact master without changing the production algorithm: two distinct extra
+transactions were mapped to one short-ID and required `READ_STATUS_OK` with an
+unavailable slot; the same extra transaction was supplied twice and required
+the slot to remain available; and a freshly accepted mempool transaction was
+paired with a distinct extra transaction forced onto its short-ID and required
+the slot to become unavailable exactly once. The accepted mempool control used
+the ordinary `AcceptToMemoryPool()` path and a verified mature, unspent
+coinbase, so it did not rely on test-only insertion of invalid entries. The
+instrumented exact-master target passed the empty input, the minimized prior
+harness reproducer, and three large retained seeds under ASan/UBSan, with no
+production or sanitizer failure.
+
+Two intermediate aborts were rejected as harness errors rather than findings.
+The first duplicate fixture reused a generated block transaction, so the
+compact message already contained a pre-existing transaction short-ID
+collision. The second used `TryAddToMempool()` with a synthetic transaction
+that could be spent or invalid after the stateful replay; it reached the
+cluster-mempool `TxGraphImpl::CompareMainTransactions()` assertion before the
+compact control. Replacing it with normal acceptance and an unspent coinbase
+removed the abort on the minimized input. Neither failure reproduced through a
+valid production transaction path.
+
+A direct null `PrefilledTransaction::tx` call still dereferences on the clean
+master API, but compact-block deserialization always constructs a transaction
+object for a serialized transaction; no network path can encode a null shared
+pointer. It remains an internal invariant worth guarding in the branch, not a
+master wire vulnerability. The existing master fixes for extra-transaction
+counting and compact-block cache slots remain effective. No new compact-block
+production defect, race, or deterministic test omission was demonstrated, so
+no source or permanent fuzzer change was warranted in this pass.
+
 ## Wallet preselected-input ordering coverage (2026-07-27)
 
 The wallet review found an interaction that the existing tests did not drive:
