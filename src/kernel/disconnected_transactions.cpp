@@ -53,10 +53,12 @@ size_t DisconnectedBlockTransactions::DynamicMemoryUsage() const
     Assert(std::all_of(vtx.cbegin(), vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
     iters_by_txid.reserve(iters_by_txid.size() + vtx.size());
     for (auto block_it = vtx.rbegin(); block_it != vtx.rend(); ++block_it) {
-        auto it = queuedTx.insert(queuedTx.end(), *block_it);
-        auto [_, inserted] = iters_by_txid.emplace((*block_it)->GetHash(), it);
-        // Callers may never pass multiple transactions with the same txid.
-        Assert(inserted);
+        auto [iter, inserted] = iters_by_txid.try_emplace((*block_it)->GetHash(), queuedTx.end());
+        if (!inserted) {
+            // Historical duplicate coinbase txids can occur across disconnected blocks.
+            continue;
+        }
+        iter->second = queuedTx.insert(queuedTx.end(), *block_it);
         cachedInnerUsage += RecursiveDynamicUsage(*block_it);
     }
     return LimitMemoryUsage();

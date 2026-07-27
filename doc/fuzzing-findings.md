@@ -20,7 +20,7 @@ Controls that explicitly name an older baseline, including
 are historical clean-master runs; they remain valid evidence for the mutations they
 tested, but are not claims that those exact controls include later master commits.
 
-## Ledger summary (2026-07-26)
+## Ledger summary (2026-07-27)
 
 The findings are classified by what failed on an unmodified master baseline. The
 branch's assertions, fuzzer-only checks, and deterministic tests are not counted as
@@ -29,14 +29,14 @@ production failure.
 
 | Classification | Count or status | Current assessment |
 | --- | --- | --- |
-| Confirmed runtime defects | 45 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, P2P relay availability, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, watch-only export availability, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
+| Confirmed runtime defects | 46 | Fixed on this branch; the highest severity is medium, with triggers ranging from local/startup/direct-API workflows to malformed snapshots, disconnected-block reorg ordering, P2P relay availability, P2P block ordering, cluster-mempool fee coordinates, malformed fee-estimator inputs, descriptor storage failures, watch-only export availability, and malformed HTTP/RPC input. No consensus, key-loss, unauthenticated memory-safety, or remote race bug was demonstrated. |
 | Historical compact-block defect | 1 | Real short-ID accounting underflow on the pre-`6aa5d8d948` master; already fixed by current master and not counted among current defects. |
 | Compact-block direct-API hardening | 4 families | Null/sparse inputs, oversized short-ID positions, and reusable `FillBlock()` state are now guarded and tested; no current P2P trigger was demonstrated. |
 | Fuzzer/oracle and coverage omissions | Several | Remaining TxGraph saturation contracts, mempool/cluster assertions, network collision fallback, and parser exception classification were corrected without proving another clean-master production bug. The full-range TxGraph mutation also exposed the production defect recorded below. |
 | CI supply-chain findings | 2 | Separate `audit/supply-chain` work: mutable executable and SDK downloads were pinned; these are CI risks, not runtime Bitcoin Core defects. |
 | Confirmed consensus, key-loss, unauthenticated memory-safety, or remote race bugs | 0 | No clean-master campaign in this ledger demonstrated one. |
 
-The forty-five confirmed runtime defects are: the index publication and restart race;
+The forty-six confirmed runtime defects are: the index publication and restart race;
 the persistent coins cursor versus database resize race; the V2 transport direct
 boundary overflow; the RBF fee-diagram overflow; the equal-feerate TxGraph prefix
 fee overflow; the saturated cluster chunk fee aggregation mismatch; the mempool info fee-delta
@@ -67,8 +67,9 @@ leave the live next index ahead of SQLite after a descriptor-row write failure;
 descriptor encryption that reports success or publishes encrypted state after
 an encrypted-key insert or plaintext-key erase failure; watch-only export
 attempting to extend a non-self-expanding hardened descriptor beyond its
-serialized cache; and watch-only export dereferencing a missing source
-descriptor after public descriptor normalization changed its ID.
+serialized cache; watch-only export dereferencing a missing source descriptor
+after public descriptor normalization changed its ID; and duplicate transaction
+IDs retained across disconnected BIP30 blocks during a stronger genesis reorg.
 Their exact reproducer,
 clean-master evidence, branch fix, and residual reachability are recorded in the
 corresponding sections below. The two race findings are correctness/availability
@@ -87,6 +88,13 @@ created worker threads.
   `6aa5d8d948`, the normal P2P null-tail construction is avoided by current master
   `6f1c56f03a`, and the remaining branch fixes are direct-API contracts or test
   coverage. No additional compact-block collision defect was found after the rebase.
+* The disconnected-transaction reorg audit found one additional current-master
+  production defect: a valid stronger genesis fork could present a historical
+  duplicate coinbase txid twice, and the queue asserted instead of retaining one
+  indexed transaction. The fix and deterministic unit, functional, and fuzzer
+  controls are grouped in `ad161fff20`; this is a medium local/custom-chain
+  availability issue and lower-severity mainnet reachability issue, not a
+  consensus or key-loss bug.
 * The global transaction-relay queue had a clean-master availability defect:
   it consumed count and serialized-size tokens before checking whether any
   eligible peer still needed the transaction. A remote party with multiple
@@ -5773,3 +5781,46 @@ label, and BIP352 vector suites. A Clang 19 ASan/UBSan build passed the ten
 Silent Payments API/vector/tag tests. These are verification gates, not new
 Bitcoin Core production findings; no mutation failed and no source change was
 warranted in this continuation.
+
+## Duplicate disconnected transactions during a genesis reorg (2026-07-27)
+
+The reorg audit found a real current-master availability defect in
+`DisconnectedBlockTransactions::AddTransactionsFromBlock()`. Exact clean
+master `e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421` appended a transaction to
+`queuedTx` before inserting its txid into `iters_by_txid`, then used
+`assert(inserted)`. Bitcoin Core removes `NDEBUG` from every C++ build
+configuration, so this assertion is active in production-style builds as well
+as Debug and fuzz builds.
+
+The deterministic valid-chain mutation is the existing BIP30 duplicate
+coinbase setup followed by a stronger competing chain from genesis. The first
+duplicate coinbase is spent and recreated at the historical duplicate height;
+the stronger height-121 genesis fork then disconnects both blocks. The two
+disconnect calls present the same txid to the pool. On exact master, a
+temporary direct unit reproducer aborted with exit 134 at
+`kernel/disconnected_transactions.cpp:55` (`Assertion 'inserted' failed`). An
+isolated exact-master functional run with the same genesis-fork mutation
+reached the reorg and then lost its peer connection; the node's stderr
+contained the same assertion. This is a node-availability defect, not a
+consensus or key-loss defect. Triggering it on a production network requires a
+valid stronger chain containing the historical duplicate-coinbase lineage, so
+the severity is medium for supported custom/test chains and lower for mainnet
+remote reachability.
+
+The fix inserts the txid into the index first and skips an already indexed txid
+before appending to the list or updating cached memory usage. This preserves
+the list/map/cache invariant while retaining the first transaction's reorg
+ordering. The deterministic unit test covers the duplicate across two block
+calls and verifies that removal leaves an empty pool. The new
+`disconnected_transactions` fuzzer forces the same transition on an empty seed
+and mutates duplicate, removal, and `take()` orderings.
+
+Verification is mutation-proven. The fixed branch passed the focused unit
+suite, the full `feature_block.py --skipreorg` functional test including the
+stronger fork and invalidation back to the duplicate branch, 1,024 optimized
+fuzzer executions, and 512 ASan/UBSan executions. Restoring only the old
+append-then-assert implementation made the new fuzzer fail on its empty seed
+at the duplicate transition (exit 77 through libFuzzer). The production fix,
+unit test, functional regression, fuzzer, and this attribution record are
+grouped in the follow-up commit to the earlier assertion-only hardening
+`4cffa2c2dd`.
