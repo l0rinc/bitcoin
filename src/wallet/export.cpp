@@ -37,7 +37,8 @@ util::Expected<std::vector<WalletDescInfo>, std::string> ExportDescriptors(const
             wallet.IsActiveScriptPubKeyMan(*desc_spk_man),
             wallet.IsInternalScriptPubKeyMan(desc_spk_man),
             is_range ? std::optional(std::make_pair(wallet_descriptor.range_start, wallet_descriptor.range_end)) : std::nullopt,
-            wallet_descriptor.next_index
+            wallet_descriptor.next_index,
+            wallet_descriptor.id
         );
     }
     return wallet_descriptors;
@@ -108,7 +109,10 @@ util::Result<std::string> ExportWatchOnlyWallet(const CWallet& wallet, const fs:
             // For descriptors that cannot self expand (i.e. needs private keys or cache), retrieve the cache
             uint256 desc_id = w_desc.id;
             if (!w_desc.descriptor->CanSelfExpand()) {
-                DescriptorScriptPubKeyMan* desc_spkm = dynamic_cast<DescriptorScriptPubKeyMan*>(wallet.GetScriptPubKeyMan(desc_id));
+                DescriptorScriptPubKeyMan* desc_spkm = dynamic_cast<DescriptorScriptPubKeyMan*>(wallet.GetScriptPubKeyMan(desc_info.source_id));
+                if (!desc_spkm) {
+                    return util::Error{strprintf(_("Could not find source descriptor %s"), desc_info.source_id.GetHex())};
+                }
                 w_desc.cache = WITH_LOCK(desc_spkm->cs_desc_man, return desc_spkm->GetWalletDescriptor().cache);
             }
 
@@ -143,7 +147,9 @@ util::Result<std::string> ExportWatchOnlyWallet(const CWallet& wallet, const fs:
             }
 
             // Copy orderPosNext
-            watchonly_batch.WriteOrderPosNext(wallet.nOrderPosNext);
+            if (!watchonly_batch.WriteOrderPosNext(wallet.nOrderPosNext)) {
+                return util::Error{_("Error: Unable to write watchonly wallet order position")};
+            }
 
             // Write the best block locator to avoid rescanning on reload
             CBlockLocator best_block_locator;
@@ -167,18 +173,28 @@ util::Result<std::string> ExportWatchOnlyWallet(const CWallet& wallet, const fs:
                 })) {
                     return util::Error{strprintf(_("Error: Could not add tx %s to watchonly wallet"), txid.GetHex())};
                 }
-                watchonly_batch.WriteTx(watchonly_wallet->mapWallet.at(txid));
+                if (!watchonly_batch.WriteTx(watchonly_wallet->mapWallet.at(txid))) {
+                    return util::Error{strprintf(_("Error: Could not write watchonly tx %s to wallet"), txid.GetHex())};
+                }
             }
 
             // Copy address book
             for (const auto& [dest, entry] : wallet.m_address_book) {
                 auto address{EncodeDestination(dest)};
-                if (entry.purpose) watchonly_batch.WritePurpose(address, PurposeToString(*entry.purpose));
-                if (entry.label) watchonly_batch.WriteName(address, *entry.label);
-                for (const auto& [id, request] : entry.receive_requests) {
-                    watchonly_batch.WriteAddressReceiveRequest(dest, id, request);
+                if (entry.purpose && !watchonly_batch.WritePurpose(address, PurposeToString(*entry.purpose))) {
+                    return util::Error{_("Error: Unable to write watchonly wallet address book data")};
                 }
-                if (entry.previously_spent) watchonly_batch.WriteAddressPreviouslySpent(dest, true);
+                if (entry.label && !watchonly_batch.WriteName(address, *entry.label)) {
+                    return util::Error{_("Error: Unable to write watchonly wallet address book data")};
+                }
+                for (const auto& [id, request] : entry.receive_requests) {
+                    if (!watchonly_batch.WriteAddressReceiveRequest(dest, id, request)) {
+                        return util::Error{_("Error: Unable to write watchonly wallet address book data")};
+                    }
+                }
+                if (entry.previously_spent && !watchonly_batch.WriteAddressPreviouslySpent(dest, true)) {
+                    return util::Error{_("Error: Unable to write watchonly wallet address book data")};
+                }
             }
 
             if (!watchonly_batch.TxnCommit()) {
