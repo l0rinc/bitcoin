@@ -30,20 +30,21 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 97 | cpp-defect-taxonomy | DONE | 2026-07-27 | all 18 classes + leftovers; audit/cpp-taxonomy |
 | 98 | float-sanitizer-fuzz-exclusions | DONE | 2026-07-27 | 1 finding (99d98861fc); audit/float-sanitizer |
 | (all others) | — | PENDING | — | unrun |
+| 88 | bitcoin-wallet-recovery | DONE | 2026-07-27 | 6 dismissed; W4 finding fixed (0e7a8fabb5) |
 
 ## Next-up queue (severity-first)
-1. 88 — wallet key-loss (highest unrun severity class) — NEXT
-2. 87 — mempool/package accounting
-3. 82/83/84 — secp256k1 crypto matrix (field/scalar, ecmult, nonce/session)
-4. 5/52 — boundary/integer (shared lineage)
-5. 62 — rejected-finding resurrection (feeds on accumulated journals)
-6. 56 — stale PR resurrection
-7. 96 — TODO/FIXME challenge
-8. 20 — micro-optimization (user-directed interest earlier)
-9. then re-rank from accumulated journals
+1. 87 — mempool/package accounting — NEXT
+2. 82/83/84 — secp256k1 crypto matrix (field/scalar, ecmult, nonce/session)
+3. 5/52 — boundary/integer (shared lineage)
+4. 62 — rejected-finding resurrection (feeds on accumulated journals)
+5. 56 — stale PR resurrection
+6. 96 — TODO/FIXME challenge
+7. 20 — micro-optimization (user-directed interest earlier)
+8. then re-rank from accumulated journals
 
 ## Handoff
-Updated after every rotation. Ledger + goal library now live on
-audit/resurrection (main campaign branch). Current: #86 finished
-(C5-C7 locked, all areas dismissed-or-owned). NEXT: #88 wallet key-loss,
-starting fresh cycle on branch audit/bitcoin-wallet-recovery.
+Updated after every rotation. Ledger + goal library live on
+audit/resurrection. Current: #86 and #88 DONE (88 produced one fix:
+WriteDescriptor result checks, 0e7a8fabb5, on
+audit/bitcoin-wallet-recovery). NEXT: #87 mempool accounting on branch
+audit/bitcoin-mempool-accounting.
