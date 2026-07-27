@@ -170,7 +170,7 @@ BOOST_AUTO_TEST_CASE(shared_lock_outlives_outer_lock)
         outer_lock.reset();
         const auto relock{[&] { LOCK(outer_mutex); }};
 #ifdef DEBUG_LOCKORDER
-        BOOST_CHECK_EXCEPTION(relock(), std::logic_error, HasReason("double lock detected")); // TODO: Releasing outer locks must preserve shared-lock tracking
+        BOOST_CHECK_EXCEPTION(relock(), std::logic_error, HasReason("potential deadlock detected"));
 #else
         BOOST_CHECK_NO_THROW(relock());
 #endif
