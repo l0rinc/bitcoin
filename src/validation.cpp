@@ -1711,6 +1711,8 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptPackage(const Package& package, 
             // package transaction passed in.
             // TODO: allow witness replacement in packages.
             const auto& entry{*Assert(m_pool.GetEntry(txid))};
+            Assert(entry.GetTx().GetHash() == txid);
+            Assert(entry.GetTx().GetWitnessHash() != wtxid);
             // Provide the wtxid of the mempool tx so that the caller can look it up in the mempool.
             results_final.emplace(wtxid, MempoolAcceptResult::MempoolTxDifferentWitness(entry.GetTx().GetWitnessHash()));
         } else {
