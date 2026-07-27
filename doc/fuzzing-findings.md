@@ -88,11 +88,28 @@ created worker threads.
   `6aa5d8d948`, the normal P2P null-tail construction is avoided by current master
   `6f1c56f03a`, and the remaining branch fixes are direct-API contracts or test
   coverage. No additional compact-block collision defect was found after the rebase.
+* The package-evaluation witness-swap audit found a coverage omission, not a
+  production defect. Before this change, `tx_package_eval` generated fresh
+  transactions and treated `DIFFERENT_WITNESS` as unreachable, so it did not
+  deliberately exercise `AcceptPackage`'s same-txid/different-witness result.
+  The new mutation selects a live mempool transaction, copies its non-witness
+  fields, appends a witness stack item without changing its txid, and forces a
+  one-transaction submission package. The oracle checks txid/wtxid membership,
+  empty fee/result fields, and the returned in-mempool alternative wtxid. The
+  retained input `c9933f73d3dcd03e9b4d2f320fe06d56aaeb9c9d` reached this path in
+  a temporary sanitized-fuzzer probe. Existing
+  `txpackage_tests/package_witness_swap_tests` already covers the production
+  behavior on current master, so the matching production assertions are
+  invariant hardening rather than a behavior fix. A rejected full-mempool
+  snapshot also exposed a fuzzer-model assumption: `AcceptPackage` always runs
+  expiry/size cleanup, so unrelated evictions are legitimate; the fuzzer now
+  preserves exact snapshots for test-accept packages and checks witness-swap
+  result/state consistency for submission packages.
 * The disconnected-transaction reorg audit found one additional current-master
   production defect: a valid stronger genesis fork could present a historical
   duplicate coinbase txid twice, and the queue asserted instead of retaining one
   indexed transaction. The fix and deterministic unit, functional, and fuzzer
-  controls are grouped in `ad161fff20`; this is a medium local/custom-chain
+  controls are grouped in `f787aa2eb5`; this is a medium local/custom-chain
   availability issue and lower-severity mainnet reachability issue, not a
   consensus or key-loss bug.
 * The global transaction-relay queue had a clean-master availability defect:
