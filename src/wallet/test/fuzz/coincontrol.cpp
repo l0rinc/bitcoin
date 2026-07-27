@@ -149,6 +149,18 @@ FUZZ_TARGET(coincontrol, .init = initialize_coincontrol)
                 input.SetPosition(pos);
                 assert(input.GetPosition() == pos);
                 assert(coin_control.GetSelectionPos(out_point) == pos);
+            },
+            [&] {
+                const COutPoint first{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider)), fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
+                const COutPoint second{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider)), fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
+                if (first == second) return;
+                coin_control.UnSelectAll();
+                coin_control.Select(second);
+                coin_control.Select(first);
+                const auto first_pos{coin_control.GetSelectionPos(first)};
+                const auto second_pos{coin_control.GetSelectionPos(second)};
+                assert(first_pos && second_pos);
+                assert(*second_pos < *first_pos);
             });
     }
 }
