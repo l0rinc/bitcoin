@@ -5865,3 +5865,34 @@ libFuzzer exit 77. Restoring the loop passed the unit case, the optimized
 empty-seed run, and the ASan/UBSan empty-seed run. The clean-master production
 implementation is unchanged in this area, so this commit is coverage and
 oracle hardening only; no vulnerability is counted.
+
+## Repeated persistent coins cursor/resize cycles (2026-07-27)
+
+The coins-database resize audit found one state-machine omission in the
+existing `coins_view_db_resize_cursor` target: it created one persistent DB
+cursor, resized the cache once on a thread holding `cs_main`, destroyed that
+cursor, and then checked one post-resize cursor. It never reopened a cursor and
+repeated the resize operation. The new mutation consumes 1-4 cycles. Each
+cycle creates a cursor, runs `ResizeCache()` concurrently with the cursor
+scan, destroys the cursor before joining the resize thread, and verifies the
+complete expected UTXO map. The deterministic test covers two fixed cache
+sizes and retains the final post-resize cursor check.
+
+The production methods already declare the required `cs_main` and
+`!m_db_mutex` contract. Matching runtime checks were added to `ResizeCache()`,
+`CompactFullAsync()`, and `Cursor()` so Debug and fuzz builds fail at the
+violating call site instead of relying only on annotations. All known call
+sites satisfy those contracts.
+
+The earlier exact-master control already reproduced the cursor/`ResizeCache()`
+lifetime defect, which is fixed by `9559ca270e`. Replaying the expanded
+repeated-cycle mutation on that fixed branch found no distinct second defect.
+This follow-up is coverage and invariant hardening, not a new vulnerability
+fix; the clean-master result is attributed to the already recorded
+`9559ca270e` defect rather than counted again.
+
+Verification after the change: the 36-case `coins_tests` suite passed; two
+independent optimized runs completed 7,000 executions each; two ASan/UBSan
+runs replayed 5,093 and 5,106 inputs; and four parallel direct-file TSan
+workers replayed 512 inputs. No assertion, sanitizer diagnostic, race report,
+timeout, or artifact occurred.
