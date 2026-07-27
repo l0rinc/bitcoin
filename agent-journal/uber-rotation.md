@@ -55,17 +55,18 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 11 | sanitizer-valgrind | DONE | 2026-07-27 | ASan/LSan/valgrind clean |
 | 12 | static-analysis-true-positives | DONE | 2026-07-27 | CSA clean; 1 FP documented |
 | 13 | secret-lifetime-zeroization | DONE | 2026-07-27 | lattice complete, boundaries documented |
+| 14 | secret-control-flow | DONE | 2026-07-27 | BIP324 lattice complete |
 
 ## Next-up queue (severity-first)
-1. 14 — secret-dependent control flow — NEXT
+1. 18 — exhaustive/algebraic invariants — NEXT
 2. then re-rank from accumulated journals
 4. then re-rank from accumulated journals
 3. then re-rank from accumulated journals
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13 DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14 DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #14 on branch
-audit/secret-control-flow.
+full cross-backend differential in ~35s on this host. NEXT: #18 on branch
+audit/exhaustive-algebraic.
