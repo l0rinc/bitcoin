@@ -6017,3 +6017,33 @@ executions seeded with a retained P2P corpus; all exited zero without an
 assertion, sanitizer diagnostic, race report, timeout, or artifact. The
 clean-master failure and branch pass were run from separate worktrees, so the
 finding is attributed to master rather than to this follow-up change.
+
+## Current-master cluster, eviction, and coins recheck (2026-07-27)
+
+The branch was rechecked against the fetched `origin/master` tip
+`a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `git rebase origin/master` was a
+no-op. No additional production or fuzzer defect was found in this pass.
+
+The inbound transaction-relay-capacity construction ran four ASan/UBSan
+workers for 4,000 executions. A possible outbound-eviction candidate was
+ruled out by the clean-master call chain: `SelectNodeToEvict()` removes all
+non-inbound candidates through `ProtectOutboundConnections()`, while the
+transaction-relay-only path also checks the inbound and relay flags. The
+branch fuzzer oracle and production assertions therefore found no master
+inconsistency, and no source change was warranted.
+
+Current cluster and cache controls also remained clean. Four normal workers
+ran 2,692 `clusterlin_linearize` executions and 3,584 `clusterlin_sfl`
+executions. Four ASan/UBSan workers ran 2,000 `integer`/SipHash executions;
+two workers ran 514 `coins_view_db_resize_cursor` executions; and two TSan
+workers ran 514 `coins_view_stacked` executions. There were no assertions,
+sanitizer diagnostics, race reports, timeouts, or artifacts.
+
+Two gates are deliberately recorded as incomplete rather than passing:
+`clusterlin_linearize` ASan replay was stopped after all workers repeatedly
+reached the known roughly ten-second slow unit, and the exhaustive 90-case
+cluster TSan selection was stopped at the time bound inside
+`depgraph_optimal_tests`. The libFuzzer ASan stack emitted while interrupting
+the slow replay was in the harness shutdown path, not production code. The
+smaller 71-case TSan selection covering coins, overlays, TxGraph, and peer
+eviction completed with `*** No errors detected`.
