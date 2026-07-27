@@ -25,7 +25,43 @@ permissions (unless default-granted), other peers' state, or disk.
 | P7 | v1/v2 transport parity | checks applied on one transport but not the other; header size limits; garbage/buffer bounds | open |
 
 ## Verdicts
-(empty — filled per area)
+
+### P1 (message processing — assert/Assume reachability): DISMISSED
+
+Swept all 60 Assert/Assume sites in net_processing.cpp; examined the 8 clusters
+with plausible peer influence. All unfalsifiable by an unauthenticated peer:
+
+1. blockencodings.h:39-45 DifferenceFormatter::Unser — strictly-increasing
+   indexes are guaranteed by construction (each index = prev + 1 + n, n >= 0,
+   overflow throws). The Assume at net_processing.cpp:4381 (GETBLOCKTXN) is
+   provably unreachable. Dismissed with proof.
+2. net_processing.cpp:4705 (CMPCTBLOCK unsolicited) — Assume immediately
+   preceded by the identical condition + return at 4701-4704. Dismissed.
+3. net_processing.cpp:3548/4798 (LookupBlockIndex Assume in compact-block
+   paths) — CMPCTBLOCK handler returns early when prev unknown (4627-4633);
+   header is index-inserted via ProcessNewBlockHeaders (4647) before any
+   Assume; block-index entries are never deleted at runtime. Dismissed.
+4. Pre-VERSION filtering (3884-3888): any non-VERSION message before the
+   handshake is dropped; duplicate VERSION dropped at 3648-3651; redundant
+   VERACK dropped at 3891-3894. The VERACK-path Assumes (3921-3929 and
+   similar at 3968-3969, 4043-4044) are set by our own VERSION handler.
+   Handshake state machine tight. Dismissed.
+5. VERSION deserialization (3662-3709): truncated streams set failbit →
+   exception → standard deserialization-failure disconnect path
+   (IsExpectedPeerMessageDeserializationFailure, 4063). Dismissed.
+6. Guarded Assumes that return instead of abort (3246 package size,
+   5584 addr bound, 754/757 feature id/data bounds): fail-safe direction.
+   Dismissed.
+
+Remaining P1 sub-area (work amplification per message type — INV/GETDATA/ADDR
+rates) deferred to P2, where the accounting bounds live.
+
+### P4 (transport handshake v1/v2): DISMISSED (merged into P1 items 4-5)
+
+The handshake state machine (VERSION-first enforcement, duplicate suppression,
+VERACK ordering, pre-version drop) is identical for both transports because
+filtering happens above the transport layer. v2 key-exchange failure paths
+remain to be verified in net.cpp (queued).
 
 ## Next queue
 (start P1 with highest-amplification message handlers: INV/GETDATA/ADDR/TX,
