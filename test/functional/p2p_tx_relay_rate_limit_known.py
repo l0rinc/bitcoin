@@ -4,6 +4,7 @@
 # file COPYING or https://opensource.org/license/mit.
 """Ensure already-known transactions do not consume the global relay budget."""
 
+from p2p_filter import P2PBloomFilter
 from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.messages import CInv, MSG_TX, MSG_WTX, msg_inv, msg_version
 from test_framework.p2p import P2PInterface, P2P_SERVICES, P2P_SUBVERSION, P2P_VERSION
@@ -56,6 +57,18 @@ class TxRelayRateLimitKnownTest(BitcoinTestFramework):
         after_non_relay = node.getnetworkinfo()["inv_buckets"]
         for direction in ("inbound", "outbound"):
             assert_equal(after_non_relay[direction], before_non_relay[direction])
+        assert_equal(non_relay_peer.message_count["inv"], 0)
+
+        # Enabling a nonmatching BIP37 filter makes the peer relay-enabled, but
+        # it still cannot receive an announcement for the filtered transaction.
+        non_relay_peer.send_and_ping(P2PBloomFilter.watch_filter_init)
+        before_filtered = node.getnetworkinfo()["inv_buckets"]
+        filtered_tx = wallet.create_self_transfer()
+        wallet.sendrawtransaction(from_node=node, tx_hex=filtered_tx["hex"])
+        node.syncwithvalidationinterfacequeue()
+        after_filtered = node.getnetworkinfo()["inv_buckets"]
+        for direction in ("inbound", "outbound"):
+            assert_equal(after_filtered[direction], before_filtered[direction])
         assert_equal(non_relay_peer.message_count["inv"], 0)
 
         outbound_peer = node.add_outbound_p2p_connection(

@@ -2507,36 +2507,36 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
             const double size_before{bucket.size_bucket.value()};
             for (const CTransactionRef& tx : txs) {
                 Assert(tx);
-                bool unknown_to_a_peer{false};
+                bool queued_to_a_peer{false};
                 for (const PeerRef& peer_ref : peers) {
                     Peer& peer{*peer_ref};
                     auto tx_relay = peer.GetTxRelay();
                     Assert(tx_relay != nullptr);
+
+                    // Keep the known-inventory and bloom-filter checks next to
+                    // queue insertion. This matches SendMessages()'s lock order
+                    // and avoids reserving a token for a peer that cannot receive
+                    // this transaction.
                     LOCK(tx_relay->m_tx_inventory_mutex);
+                    if (tx_relay->m_next_inv_send_time == 0s) continue;
                     const uint256& hash = peer.m_wtxid_relay ?
                         tx->GetWitnessHash().ToUint256() : tx->GetHash().ToUint256();
-                    if (!tx_relay->m_tx_inventory_known_filter.contains(hash)) {
-                        unknown_to_a_peer = true;
-                        break;
-                    }
+                    if (tx_relay->m_tx_inventory_known_filter.contains(hash)) continue;
+                    LOCK(tx_relay->m_bloom_filter_mutex);
+                    if (!tx_relay->m_relay_txs) continue;
+                    if (tx_relay->m_bloom_filter && !tx_relay->m_bloom_filter->IsRelevantAndUpdate(*tx)) continue;
+                    tx_relay->m_tx_inventory_to_send.push_back(tx->GetWitnessHash());
+                    queued_to_a_peer = true;
                 }
 
-                if (!unknown_to_a_peer) {
-                    // An empty peer set also has no recipient, so the reservation
-                    // must be returned instead of consuming relay capacity.
+                if (!queued_to_a_peer) {
+                    // An empty peer set, an all-known set, and an all-filtered
+                    // set have no recipient, so return the reservation.
+                    const double tx_count_before{bucket.count_bucket.value()};
+                    const double tx_size_before{bucket.size_bucket.value()};
                     RefundRelayTokens(bucket, *tx);
-                    continue;
-                }
-
-                for (const PeerRef& peer_ref : peers) {
-                    Peer& peer{*peer_ref};
-                    auto tx_relay = peer.GetTxRelay();
-                    Assert(tx_relay != nullptr);
-                    if (!WITH_LOCK(tx_relay->m_bloom_filter_mutex, return tx_relay->m_relay_txs)) continue;
-                    LOCK(tx_relay->m_tx_inventory_mutex);
-                    if (tx_relay->m_next_inv_send_time != 0s) {
-                        tx_relay->m_tx_inventory_to_send.push_back(tx->GetWitnessHash());
-                    }
+                    Assert(bucket.count_bucket.value() >= tx_count_before);
+                    Assert(bucket.size_bucket.value() >= tx_size_before);
                 }
             }
             if (peers.empty()) {
