@@ -154,6 +154,36 @@ rename(snapshot → main) → best-effort delete of _todelete.
    the crash-between-renames recovery needs one manual step. Upstream's
    startup-only design accepts this; documented here for future cycles.
 
+### C7 (BaseIndex durability/rewind): DISMISSED — locator guard, idempotent rewind, assert-backed replay
+
+1. Locator durability guard: Commit skips when the index best block is
+   ahead of the chainstate's last flushed block (base.h:96-99 +
+   base.cpp:344-349 "the committed index state must never be ahead of the
+   flushed chainstate"); ChainStateFlushed commits only for
+   chainstate-durable blocks (ancestor check, base.cpp:443). Crash →
+   locator ≤ flushed tip → consistent replay.
+2. Commit failure is safe by design (base.cpp:451-454): a missed commit
+   only reprocesses from an older locator.
+3. Crash MID-REWIND (the critical case): CustomRemove's only durable write
+   is the height→hash index copy batch (coinstatsindex.cpp:218-227) —
+   idempotent (same key, same values; the height entry still exists on
+   replay). The muhash/counter rollback in RevertBlock (326-403) is
+   MEMORY-ONLY until the guarded CustomCommit — so a crash leaves no
+   durable index-state change to double-apply.
+4. Replay verification: RevertBlock recomputes the rolled-back muhash and
+   ASSERTs it equals the stored parent muhash (386) — any replay
+   inconsistency is a LOUD failure, never silent. The hash-index fallback
+   (341-345) exists precisely so repeated rewinds find the parent after
+   height-entry overwrite.
+5. Restart stress coverage exists: index/txindex/txospenderindex
+   _reinit_reader_race tests (f344e8102c series).
+
+## Goal-86 cycle complete
+
+All 7 ledger areas locked: C1, C3, C4, C5, C7 DISMISSED; C2 one real defect
+already fixed by own open PR 35714; C6 DISMISSED with startup-recovery
+caveat. No new defects. Rotation: uber-ledger marks #86 DONE, next #88.
+
 1. Deletion protocol: FindFilesToPrune (blockstorage.cpp:363-442) runs under
    cs_main, calls PruneOneBlockFile (clears BLOCK_HAVE_DATA/positions for
    contained blocks) in the SAME critical section in which
