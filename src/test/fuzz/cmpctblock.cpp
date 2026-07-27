@@ -205,9 +205,26 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
 
     std::vector<CNode*> peers;
     for (int i = 0; i < 4; ++i) {
-        peers.push_back(ConsumeNodeAsUniquePtr(fuzzed_data_provider, steady_clock, i).release());
+        // Keep one ordinary, connected peer available for deterministic network oracles while
+        // retaining fuzzed connection properties on the other peers.
+        peers.push_back(ConsumeNodeAsUniquePtr(
+            fuzzed_data_provider, steady_clock, i,
+            i == 0 ? std::optional<NetPermissionFlags>{NetPermissionFlags::NoBan} : std::nullopt,
+            i == 0 ? std::optional<ConnectionType>{ConnectionType::INBOUND} : std::nullopt).release());
         CNode& p2p_node = *peers.back();
-        FillNode(fuzzed_data_provider, connman, p2p_node);
+        if (i == 0) {
+            // Keep the deterministic oracle independent of fuzzed socket failures and optimistic
+            // writes. The CNode test APIs explicitly support peers without a socket.
+            {
+                LOCK(p2p_node.m_sock_mutex);
+                p2p_node.m_sock.reset();
+            }
+            connman.Handshake(p2p_node, /*successfully_connected=*/true,
+                              ServiceFlags(NODE_NETWORK | NODE_WITNESS), ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                              PROTOCOL_VERSION, /*relay_txs=*/true);
+        } else {
+            FillNode(fuzzed_data_provider, connman, p2p_node);
+        }
         connman.AddTestNode(p2p_node);
     }
 
@@ -406,14 +423,18 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         return WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size());
     };
 
-    auto has_queued_message = [](CNode& node, const std::string& msg_type) {
+    auto has_pending_message = [&](CNode& node, const std::string& msg_type) {
         LOCK(node.cs_vSend);
-        return std::any_of(node.vSendMsg.cbegin(), node.vSendMsg.cend(), [&](const auto& msg) {
-            return msg.m_type == msg_type;
-        });
+        if (std::any_of(node.vSendMsg.cbegin(), node.vSendMsg.cend(), [&](const auto& msg) {
+                return msg.m_type == msg_type;
+            })) {
+            return true;
+        }
+        const auto& [to_send, _more, transport_msg_type] = node.m_transport->GetBytesToSend(false);
+        return !to_send.empty() && transport_msg_type == msg_type;
     };
 
-    auto process_net_msg = [&](CNode& random_node, CSerializedNetMsg&& net_msg) NO_THREAD_SAFETY_ANALYSIS {
+    auto process_net_msg = [&](CNode& random_node, CSerializedNetMsg&& net_msg, const bool send_messages = true) NO_THREAD_SAFETY_ANALYSIS {
         connman.FlushSendBuffer(random_node);
         (void)connman.ReceiveMsgFrom(random_node, std::move(net_msg));
 
@@ -422,7 +443,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
             random_node.fPauseSend = false;
 
             more_work = connman.ProcessMessagesOnce(random_node);
-            peerman->SendMessages(random_node);
+            if (send_messages) peerman->SendMessages(random_node);
         }
 
         return check_high_bandwidth_to_count();
@@ -452,10 +473,49 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
     check_sendcmpct_state(*peers[0], /*hb=*/0, /*version=*/CMPCTBLOCKS_VERSION + 1);
     check_sendcmpct_state(*peers[1], /*hb=*/2, /*version=*/CMPCTBLOCKS_VERSION);
 
+    auto exercise_blocktxn_cardinality = [&](CNode& peer) {
+        BlockInfo block_info{create_oracle_block()};
+        peer.m_bip152_highbandwidth_to = true;
+
+        CBlockHeaderAndShortTxIDs cmpctblock{*block_info.block, /*nonce=*/0};
+        (void)process_net_msg(peer, NetMsg::Make(NetMsgType::CMPCTBLOCK, cmpctblock), /*send_messages=*/false);
+        assert(has_pending_message(peer, NetMsgType::GETBLOCKTXN));
+
+        BlockTransactions block_txn;
+        block_txn.blockhash = block_info.hash;
+        block_txn.txn = {block_info.block->vtx[1]};
+        (void)process_net_msg(peer, NetMsg::Make(NetMsgType::BLOCKTXN, block_txn), /*send_messages=*/false);
+        // Cardinality failures are invalid, rather than short-ID collisions that can use the
+        // full-block fallback. The request must be gone before reannouncing the same block.
+        assert(!peer.fDisconnect);
+        assert(!has_pending_message(peer, NetMsgType::GETDATA));
+        assert(!has_pending_message(peer, NetMsgType::GETBLOCKTXN));
+        assert(WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip()->GetBlockHash()) == block_info.block->hashPrevBlock);
+
+        CBlockHeaderAndShortTxIDs valid_cmpctblock_again{*block_info.block, /*nonce=*/0};
+        (void)process_net_msg(peer, NetMsg::Make(NetMsgType::CMPCTBLOCK, valid_cmpctblock_again), /*send_messages=*/false);
+        assert(has_pending_message(peer, NetMsgType::GETBLOCKTXN));
+        block_txn.txn = {block_info.block->vtx[1], block_info.block->vtx[2], block_info.block->vtx[0]};
+        (void)process_net_msg(peer, NetMsg::Make(NetMsgType::BLOCKTXN, block_txn), /*send_messages=*/false);
+        assert(!peer.fDisconnect);
+        assert(!has_pending_message(peer, NetMsgType::GETDATA));
+        assert(!has_pending_message(peer, NetMsgType::GETBLOCKTXN));
+        assert(WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip()->GetBlockHash()) == block_info.block->hashPrevBlock);
+
+        // A cleaned request remains usable for a final valid response.
+        CBlockHeaderAndShortTxIDs valid_cmpctblock_final{*block_info.block, /*nonce=*/0};
+        (void)process_net_msg(peer, NetMsg::Make(NetMsgType::CMPCTBLOCK, valid_cmpctblock_final), /*send_messages=*/false);
+        assert(has_pending_message(peer, NetMsgType::GETBLOCKTXN));
+        block_txn.txn = {block_info.block->vtx[1], block_info.block->vtx[2]};
+        (void)process_net_msg(peer, NetMsg::Make(NetMsgType::BLOCKTXN, block_txn), /*send_messages=*/false);
+        assert(WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip()->GetBlockHash()) == block_info.hash);
+    };
+
     // Exercise the requested first-in-flight path with a deterministic malformed
     // announcement. InitData must reject the duplicate and the network handler
     // must fall back to a full block request without asking for blocktxn data.
-    if (!peers[0]->fDisconnect && peers[0]->fSuccessfullyConnected && can_serve_oracle_block(*peers[0])) {
+    if (!ignore_incoming_txs && !peers[0]->fDisconnect && peers[0]->fSuccessfullyConnected && can_serve_oracle_block(*peers[0])) {
+        exercise_blocktxn_cardinality(*peers[0]);
         BlockInfo block_info{create_oracle_block()};
         FuzzedCBlockHeaderAndShortTxIDs cmpctblock{*block_info.block, /*nonce=*/0};
         if (cmpctblock.ShortTxIDCount() >= 2) {
@@ -464,15 +524,15 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
             std::vector<CBlock> headers{block_header};
             const size_t index_size_before{block_index_size()};
             (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::HEADERS, TX_WITH_WITNESS(headers)));
-            assert(has_queued_message(*peers[0], NetMsgType::GETDATA));
+            assert(has_pending_message(*peers[0], NetMsgType::GETDATA));
             assert(block_index_size() > index_size_before);
 
             cmpctblock.ForceShortTxIDCollision();
             CBlockHeaderAndShortTxIDs base_cmpctblock{cmpctblock};
             (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::CMPCTBLOCK, base_cmpctblock));
             assert(!peers[0]->fDisconnect);
-            assert(has_queued_message(*peers[0], NetMsgType::GETDATA));
-            assert(!has_queued_message(*peers[0], NetMsgType::GETBLOCKTXN));
+            assert(has_pending_message(*peers[0], NetMsgType::GETDATA));
+            assert(!has_pending_message(*peers[0], NetMsgType::GETBLOCKTXN));
         }
     }
 
@@ -489,20 +549,20 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
             block_header.vtx.clear();
             std::vector<CBlock> headers{block_header};
             (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::HEADERS, TX_WITH_WITNESS(headers)));
-            assert(has_queued_message(*peers[0], NetMsgType::GETDATA));
+            assert(has_pending_message(*peers[0], NetMsgType::GETDATA));
 
             connman.FlushSendBuffer(*peers[1]);
             cmpctblock.ForceShortTxIDCollision();
             CBlockHeaderAndShortTxIDs malformed_cmpctblock{cmpctblock};
             (void)process_net_msg(*peers[1], NetMsg::Make(NetMsgType::CMPCTBLOCK, malformed_cmpctblock));
             assert(!peers[1]->fDisconnect);
-            assert(!has_queued_message(*peers[1], NetMsgType::GETDATA));
-            assert(!has_queued_message(*peers[1], NetMsgType::GETBLOCKTXN));
+            assert(!has_pending_message(*peers[1], NetMsgType::GETDATA));
+            assert(!has_pending_message(*peers[1], NetMsgType::GETBLOCKTXN));
 
             connman.FlushSendBuffer(*peers[0]);
             CBlockHeaderAndShortTxIDs valid_cmpctblock{*block_info.block, /*nonce=*/0};
             (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::CMPCTBLOCK, valid_cmpctblock));
-            assert(has_queued_message(*peers[0], NetMsgType::GETBLOCKTXN));
+            assert(has_pending_message(*peers[0], NetMsgType::GETBLOCKTXN));
             BlockTransactions block_txn;
             block_txn.blockhash = block_info.hash;
             block_txn.txn = {block_info.block->vtx[1], block_info.block->vtx[2]};
@@ -517,7 +577,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         CBlockHeaderAndShortTxIDs base_cmpctblock{cmpctblock};
         const size_t index_size_before{block_index_size()};
         (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::CMPCTBLOCK, base_cmpctblock));
-        assert(!has_queued_message(*peers[0], NetMsgType::GETBLOCKTXN));
+        assert(!has_pending_message(*peers[0], NetMsgType::GETBLOCKTXN));
         assert(block_index_size() == index_size_before);
         info.push_back(std::move(block_info));
     }
@@ -684,7 +744,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
             const size_t index_size_before{sent_cmpctblock ? block_index_size() : 0};
             (void)process_net_msg(random_node, std::move(net_msg));
             if (ignore_incoming_txs && sent_cmpctblock && !random_node.fDisconnect) {
-                assert(!has_queued_message(random_node, NetMsgType::GETBLOCKTXN));
+                assert(!has_pending_message(random_node, NetMsgType::GETBLOCKTXN));
                 assert(block_index_size() == index_size_before);
             }
         }
