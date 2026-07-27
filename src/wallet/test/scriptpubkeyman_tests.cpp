@@ -7,6 +7,7 @@
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <script/solver.h>
+#include <wallet/export.h>
 #include <wallet/scriptpubkeyman.h>
 #include <wallet/wallet.h>
 #include <wallet/test/util.h>
@@ -65,6 +66,58 @@ BOOST_AUTO_TEST_CASE(desc_spkm_topup_fail)
     BOOST_CHECK_EXCEPTION(
         CreateDescriptor(keystore, "wpkh(" + EncodeExtPubKey(extkey.Neuter()) + "/*h)", /*success=*/true),
         std::runtime_error, HasReason("Could not top up scriptPubKeys"));
+}
+
+BOOST_AUTO_TEST_CASE(add_wallet_descriptor_does_not_extend_non_self_expanding)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet source(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    source.m_keypool_size = 1;
+
+    FlatSigningProvider keys;
+    std::string error;
+    auto descriptors{Parse("wpkh(" + EncodeExtKey(extkey) + "/*h)", keys, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_EQUAL(descriptors.size(), 1);
+    WalletDescriptor source_descriptor{std::move(descriptors.at(0)), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/1, /*next_index=*/1};
+
+    DescriptorScriptPubKeyMan* source_spkm;
+    {
+        LOCK(source.cs_wallet);
+        source.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+        auto spkm{source.AddWalletDescriptor(source_descriptor, keys, /*label=*/"", /*internal=*/false)};
+        BOOST_REQUIRE(spkm);
+        source_spkm = &spkm.value().get();
+    }
+
+    std::string public_descriptor;
+    BOOST_REQUIRE(source_spkm->GetDescriptorString(public_descriptor, /*priv=*/false));
+    WalletDescriptor source_state;
+    {
+        LOCK(source_spkm->cs_desc_man);
+        source_state = source_spkm->GetWalletDescriptor();
+    }
+    {
+        LOCK(source.cs_wallet);
+        auto exported{ExportDescriptors(source, /*export_private=*/false)};
+        BOOST_REQUIRE(exported);
+        BOOST_REQUIRE_EQUAL(exported->size(), 1);
+        BOOST_CHECK_EQUAL(exported->at(0).source_id, source_state.id);
+    }
+
+    FlatSigningProvider public_keys;
+    auto public_descriptors{Parse(public_descriptor, public_keys, error, /*require_checksum=*/true)};
+    BOOST_REQUIRE_EQUAL(public_descriptors.size(), 1);
+    WalletDescriptor exported_descriptor{std::move(public_descriptors.at(0)), source_state.creation_time,
+                                         source_state.range_start, source_state.range_end, source_state.next_index};
+    exported_descriptor.cache = source_state.cache;
+
+    CWallet watchonly(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    {
+        LOCK(watchonly.cs_wallet);
+        watchonly.SetWalletFlag(WALLET_FLAG_DESCRIPTORS | WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+        BOOST_CHECK(watchonly.AddWalletDescriptor(exported_descriptor, public_keys, /*label=*/"", /*internal=*/false));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(update_descriptor_key_write_failure_preserves_state)
