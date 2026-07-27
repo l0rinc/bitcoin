@@ -5748,3 +5748,28 @@ Clang 19 target completed 4,000 generated executions and the ASan/UBSan target
 completed 1,500 generated executions after removal, both without an assertion,
 sanitizer diagnostic, timeout, or artifact. The change improves discovery
 accuracy by allowing any unexpected exception to reach libFuzzer.
+
+## Continuation race and subtree gates (2026-07-27)
+
+The branch remained based on exact `origin/master`
+`e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`; no newer master commit was
+available during this gate. The inbound relay-capacity target completed 4,000
+optimized executions and 1,200 ASan/UBSan executions. The optimized `connman`
+corpus completed 3,406 executions, and the ASan/UBSan `addrman` corpus replayed
+all 2,192 inputs. None produced an assertion, sanitizer diagnostic, timeout,
+or artifact.
+
+The race-focused Clang 19 TSan slices completed 409 `coinscache_sim` inputs,
+128 `coins_view_overlay` executions, 256 generated `process_messages`
+executions, 138 `validation_block_reorg` inputs, and 64 `coins_view`
+executions. The latter varies prevout-fetch worker counts and directly covers
+the lifetime path changed by master commit `fae067ec4a`. No TSan race report,
+state inconsistency, teardown failure, or sanitizer diagnostic appeared.
+
+The vendored secp256k1 update was tested separately because its new Silent
+Payments API is not part of the Bitcoin Core fuzz target registry. A Clang 19
+RelWithDebInfo build passed all 226 CTest cases, including the send, receive,
+label, and BIP352 vector suites. A Clang 19 ASan/UBSan build passed the ten
+Silent Payments API/vector/tag tests. These are verification gates, not new
+Bitcoin Core production findings; no mutation failed and no source change was
+warranted in this continuation.
