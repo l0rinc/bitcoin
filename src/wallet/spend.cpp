@@ -984,6 +984,7 @@ static bool IsCurrentForAntiFeeSniping(interfaces::Chain& chain, const uint256& 
         return false;
     }
     constexpr int64_t MAX_ANTI_FEE_SNIPING_TIP_AGE{TicksSeconds(8h)};
+    static_assert(MAX_ANTI_FEE_SNIPING_TIP_AGE == 8 * 60 * 60);
     int64_t block_time;
     CHECK_NONFATAL(chain.findBlock(block_hash, FoundBlock().time(block_time)));
     if (block_time < (GetTime() - MAX_ANTI_FEE_SNIPING_TIP_AGE)) {

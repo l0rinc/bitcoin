@@ -127,7 +127,9 @@ public:
         consensus.MinBIP9WarningHeight = 711648; // taproot activation height + miner confirmation window
         consensus.powLimit = uint256{"00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
         consensus.nPowTargetTimespan = TicksSeconds(2 * 7 * 24h);
+        static_assert(TicksSeconds(2 * 7 * 24h) == 14 * 24 * 60 * 60);
         consensus.nPowTargetSpacing = TicksSeconds(10min);
+        static_assert(TicksSeconds(10min) == 10 * 60);
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.enforce_BIP94 = false;
         consensus.fPowNoRetargeting = false;
@@ -251,7 +253,9 @@ public:
         consensus.MinBIP9WarningHeight = 2013984; // taproot activation height + miner confirmation window
         consensus.powLimit = uint256{"00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
         consensus.nPowTargetTimespan = TicksSeconds(2 * 7 * 24h);
+        static_assert(TicksSeconds(2 * 7 * 24h) == 14 * 24 * 60 * 60);
         consensus.nPowTargetSpacing = TicksSeconds(10min);
+        static_assert(TicksSeconds(10min) == 10 * 60);
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.enforce_BIP94 = false;
         consensus.fPowNoRetargeting = false;
@@ -351,7 +355,9 @@ public:
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256{"00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
         consensus.nPowTargetTimespan = TicksSeconds(2 * 7 * 24h);
+        static_assert(TicksSeconds(2 * 7 * 24h) == 14 * 24 * 60 * 60);
         consensus.nPowTargetSpacing = TicksSeconds(10min);
+        static_assert(TicksSeconds(10min) == 10 * 60);
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.enforce_BIP94 = true;
         consensus.fPowNoRetargeting = false;
@@ -495,7 +501,9 @@ public:
         consensus.CSVHeight = 1;
         consensus.SegwitHeight = 1;
         consensus.nPowTargetTimespan = TicksSeconds(2 * 7 * 24h);
+        static_assert(TicksSeconds(2 * 7 * 24h) == 14 * 24 * 60 * 60);
         consensus.nPowTargetSpacing = TicksSeconds(10min);
+        static_assert(TicksSeconds(10min) == 10 * 60);
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.enforce_BIP94 = false;
         consensus.fPowNoRetargeting = false;
@@ -580,7 +588,9 @@ public:
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256{"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
         consensus.nPowTargetTimespan = TicksSeconds(24h);
+        static_assert(TicksSeconds(24h) == 24 * 60 * 60);
         consensus.nPowTargetSpacing = TicksSeconds(10min);
+        static_assert(TicksSeconds(10min) == 10 * 60);
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.enforce_BIP94 = opts.enforce_bip94;
         consensus.fPowNoRetargeting = true;

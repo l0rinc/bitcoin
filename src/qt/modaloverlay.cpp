@@ -38,6 +38,7 @@ ModalOverlay::ModalOverlay(bool enable_wallet, QWidget* parent)
     m_animation.setTargetObject(this);
     m_animation.setPropertyName("pos");
     m_animation.setDuration(Ticks<std::chrono::milliseconds>(300ms));
+    static_assert(Ticks<std::chrono::milliseconds>(300ms) == 300);
     m_animation.setEasingCurve(QEasingCurve::OutQuad);
 }
 
@@ -115,9 +116,11 @@ void ModalOverlay::tipUpdate(int count, const QDateTime& blockDate, double nVeri
 
             // take first sample after 500 seconds or last available one
             if (sample.first < (currentDate.toMSecsSinceEpoch() - Ticks<std::chrono::milliseconds>(500s)) || i == blockProcessTime.size() - 1) {
+                static_assert(Ticks<std::chrono::milliseconds>(500s) == 500 * 1000);
                 progressDelta = blockProcessTime[0].second - sample.second;
                 timeDelta = blockProcessTime[0].first - sample.first;
                 progressPerHour = (progressDelta > 0) ? progressDelta / (double)timeDelta * Ticks<std::chrono::milliseconds>(1h) : 0;
+                static_assert(Ticks<std::chrono::milliseconds>(1h) == 1000 * 3600);
                 remainingMSecs = (progressDelta > 0) ? remainingProgress / progressDelta * timeDelta : -1;
                 break;
             }

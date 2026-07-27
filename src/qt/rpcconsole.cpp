@@ -676,9 +676,13 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         peersTableContextMenu->addSeparator();
         peersTableContextMenu->addAction(tr("&Disconnect"), this, &RPCConsole::disconnectSelectedNode);
         peersTableContextMenu->addAction(ts.ban_for + " " + tr("1 &hour"), [this] { banSelectedNode(TicksSeconds(1h)); });
+        static_assert(TicksSeconds(1h) == 60 * 60);
         peersTableContextMenu->addAction(ts.ban_for + " " + tr("1 d&ay"), [this] { banSelectedNode(TicksSeconds(24h)); });
+        static_assert(TicksSeconds(24h) == 60 * 60 * 24);
         peersTableContextMenu->addAction(ts.ban_for + " " + tr("1 &week"), [this] { banSelectedNode(TicksSeconds(7 * 24h)); });
+        static_assert(TicksSeconds(7 * 24h) == 60 * 60 * 24 * 7);
         peersTableContextMenu->addAction(ts.ban_for + " " + tr("1 &year"), [this] { banSelectedNode(TicksSeconds(365 * 24h)); });
+        static_assert(TicksSeconds(365 * 24h) == 60 * 60 * 24 * 365);
         connect(ui->peerWidget, &QTableView::customContextMenuRequested, this, &RPCConsole::showPeersTableContextMenu);
 
         // peer table signal handling - update peer details when selecting new node

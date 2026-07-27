@@ -2392,6 +2392,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             script_check_reason = nullptr;
         }
     }
+    static_assert(TicksSeconds(2 * 7 * 24h) == 60 * 60 * 24 * 7 * 2);
 
     const auto time_1{SteadyClock::now()};
     m_chainman.time_check += time_1 - time_start;

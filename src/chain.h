@@ -27,6 +27,7 @@
  * current time before the block will be accepted.
  */
 static constexpr int64_t MAX_FUTURE_BLOCK_TIME{TicksSeconds(2h)};
+static_assert(MAX_FUTURE_BLOCK_TIME == 2 * 60 * 60);
 
 /**
  * Timestamp window used as a grace period by code that compares external

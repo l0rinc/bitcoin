@@ -100,6 +100,7 @@ static RPCMethod mockscheduler()
     if (delta_seconds <= 0 || delta_seconds > TicksSeconds(1h)) {
         throw std::runtime_error("delta_time must be between 1 and 3600 seconds (1 hr)");
     }
+    static_assert(TicksSeconds(1h) == 3600);
 
     const NodeContext& node_context{EnsureAnyNodeContext(request.context)};
     CHECK_NONFATAL(node_context.scheduler)->MockForward(std::chrono::seconds{delta_seconds});

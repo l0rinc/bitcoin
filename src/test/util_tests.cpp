@@ -612,6 +612,36 @@ BOOST_AUTO_TEST_CASE(util_ticksseconds)
     BOOST_CHECK_EQUAL(TicksSeconds(1500ms), 1);
 }
 
+BOOST_AUTO_TEST_CASE(util_chrono_literal_equivalence)
+{
+    BOOST_REQUIRE_EQUAL(60 * 60 * 24, TicksSeconds(24h));
+    BOOST_REQUIRE_EQUAL(2 * 60 * 60, TicksSeconds(2h));
+    BOOST_REQUIRE_EQUAL(14 * 24 * 60 * 60, TicksSeconds(2 * 7 * 24h));
+    BOOST_REQUIRE_EQUAL(10 * 60, TicksSeconds(10min));
+    BOOST_REQUIRE_EQUAL(24 * 60 * 60, TicksSeconds(24h));
+    BOOST_REQUIRE_EQUAL(std::chrono::seconds{60 * 60 * 24}.count(), std::chrono::seconds{24h}.count());
+    BOOST_REQUIRE_EQUAL(30 * 24 * 60 * 60, TicksSeconds(30 * 24h));
+    BOOST_REQUIRE_EQUAL(7 * 24 * 60 * 60, TicksSeconds(7 * 24h));
+    BOOST_REQUIRE_EQUAL(60 * 60 * 12, TicksSeconds(12h));
+    BOOST_REQUIRE_EQUAL(8 * 60 * 60, TicksSeconds(8h));
+    BOOST_REQUIRE_EQUAL(90 * 60, TicksSeconds(90min));
+    BOOST_REQUIRE_EQUAL(3600 / (10 * 60), TicksSeconds(1h) / TicksSeconds(10min));
+    BOOST_REQUIRE_EQUAL(300, Ticks<std::chrono::milliseconds>(300ms));
+    BOOST_REQUIRE_EQUAL(500 * 1000, Ticks<std::chrono::milliseconds>(500s));
+    BOOST_REQUIRE_EQUAL(1000 * 3600, Ticks<std::chrono::milliseconds>(1h));
+    BOOST_REQUIRE_EQUAL(3600, TicksSeconds(1h));
+    BOOST_REQUIRE_EQUAL(60 * 60, TicksSeconds(1h));
+    BOOST_REQUIRE_EQUAL(24 * 60 * 60, TicksSeconds(24h));
+    BOOST_REQUIRE_EQUAL(7 * 24 * 60 * 60, TicksSeconds(7 * 24h));
+    BOOST_REQUIRE_EQUAL(60 * 60 * 24 * 365, TicksSeconds(365 * 24h));
+    BOOST_REQUIRE_EQUAL(31556952, TicksSeconds(std::chrono::years{1}));
+    BOOST_REQUIRE_EQUAL(10 * 60, TicksSeconds(10min));
+    BOOST_REQUIRE_EQUAL(uint64_t{2250000} * 86400 / uint64_t{600}, uint64_t{2250000} * TicksSeconds(24h) / uint64_t{600});
+    BOOST_REQUIRE_EQUAL(30 * 24 * 60 * 60 / (10 * 60), TicksSeconds(30 * 24h) / TicksSeconds(10min));
+    BOOST_REQUIRE_EQUAL(5 * 60, TicksSeconds(5min));
+    BOOST_REQUIRE_EQUAL(60 * 60 * 24 * 7 * 2, TicksSeconds(2 * 7 * 24h));
+}
+
 BOOST_AUTO_TEST_CASE(test_IsDigit)
 {
     BOOST_CHECK_EQUAL(IsDigit('0'), true);

@@ -18,6 +18,7 @@
 
 // NOTE: When adjusting this, update rpcnet:setban's help ("24h")
 static constexpr unsigned int DEFAULT_MISBEHAVING_BANTIME{TicksSeconds(24h)};
+static_assert(DEFAULT_MISBEHAVING_BANTIME == 60 * 60 * 24);
 
 /// How often to dump banned addresses/subnets to disk.
 static constexpr std::chrono::minutes DUMP_BANS_INTERVAL{15};

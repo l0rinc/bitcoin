@@ -1849,6 +1849,7 @@ static RPCMethod getchaintxstats()
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     const CBlockIndex* pindex;
     int blockcount = TicksSeconds(30 * 24h) / chainman.GetParams().GetConsensus().nPowTargetSpacing; // By default: 1 month
+    static_assert(TicksSeconds(30 * 24h) == 30 * 24 * 60 * 60);
 
     if (request.params[1].isNull()) {
         LOCK(cs_main);
