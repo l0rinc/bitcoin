@@ -270,7 +270,10 @@ inline std::vector<CService> ConsumeServiceVector(FuzzedDataProvider& fuzzed_dat
 CAddress ConsumeAddress(FuzzedDataProvider& fuzzed_data_provider) noexcept;
 
 template <bool ReturnUniquePtr = false>
-auto ConsumeNode(FuzzedDataProvider& fuzzed_data_provider, FakeSteadyClock& clock, const std::optional<NodeId>& node_id_in = std::nullopt) noexcept
+auto ConsumeNode(FuzzedDataProvider& fuzzed_data_provider, FakeSteadyClock& clock,
+                 const std::optional<NodeId>& node_id_in = std::nullopt,
+                 const std::optional<NetPermissionFlags>& permission_flags_override = std::nullopt,
+                 const std::optional<ConnectionType>& connection_type_override = std::nullopt) noexcept
 {
     const NodeId node_id = node_id_in.value_or(fuzzed_data_provider.ConsumeIntegralInRange<NodeId>(0, std::numeric_limits<NodeId>::max()));
     const auto sock = std::make_shared<FuzzedSock>(fuzzed_data_provider, clock);
@@ -279,11 +282,13 @@ auto ConsumeNode(FuzzedDataProvider& fuzzed_data_provider, FakeSteadyClock& cloc
     const uint64_t local_host_nonce = fuzzed_data_provider.ConsumeIntegral<uint64_t>();
     const CAddress addr_bind = ConsumeAddress(fuzzed_data_provider);
     const std::string addr_name = fuzzed_data_provider.ConsumeRandomLengthString(64);
-    const ConnectionType conn_type = fuzzed_data_provider.PickValueInArray(ALL_CONNECTION_TYPES);
-    const bool inbound_onion{conn_type == ConnectionType::INBOUND ? fuzzed_data_provider.ConsumeBool() : false};
+    const ConnectionType fuzzed_conn_type = fuzzed_data_provider.PickValueInArray(ALL_CONNECTION_TYPES);
+    const ConnectionType conn_type = connection_type_override.value_or(fuzzed_conn_type);
+    const bool inbound_onion{fuzzed_conn_type == ConnectionType::INBOUND ? fuzzed_data_provider.ConsumeBool() && conn_type == ConnectionType::INBOUND : false};
     const uint64_t network_id = fuzzed_data_provider.ConsumeIntegral<uint64_t>();
 
-    NetPermissionFlags permission_flags = ConsumeWeakEnum(fuzzed_data_provider, ALL_NET_PERMISSION_FLAGS);
+    const NetPermissionFlags fuzzed_permission_flags = ConsumeWeakEnum(fuzzed_data_provider, ALL_NET_PERMISSION_FLAGS);
+    const NetPermissionFlags permission_flags = permission_flags_override.value_or(fuzzed_permission_flags);
     if constexpr (ReturnUniquePtr) {
         return std::make_unique<CNode>(node_id,
                                        sock,
@@ -310,7 +315,13 @@ auto ConsumeNode(FuzzedDataProvider& fuzzed_data_provider, FakeSteadyClock& cloc
                      CNodeOptions{ .permission_flags = permission_flags }};
     }
 }
-inline std::unique_ptr<CNode> ConsumeNodeAsUniquePtr(FuzzedDataProvider& fdp, FakeSteadyClock& clock, const std::optional<NodeId>& node_id_in = std::nullopt) { return ConsumeNode<true>(fdp, clock, node_id_in); }
+inline std::unique_ptr<CNode> ConsumeNodeAsUniquePtr(FuzzedDataProvider& fdp, FakeSteadyClock& clock,
+                                                     const std::optional<NodeId>& node_id_in = std::nullopt,
+                                                     const std::optional<NetPermissionFlags>& permission_flags_override = std::nullopt,
+                                                     const std::optional<ConnectionType>& connection_type_override = std::nullopt)
+{
+    return ConsumeNode<true>(fdp, clock, node_id_in, permission_flags_override, connection_type_override);
+}
 
 void FillNode(FuzzedDataProvider& fuzzed_data_provider, ConnmanTestMsg& connman, CNode& node) noexcept EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex);
 

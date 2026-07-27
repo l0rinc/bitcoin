@@ -608,6 +608,36 @@ class CompactBlocksTest(BitcoinTestFramework):
         test_node.send_and_ping(msg_block(block))
         assert_equal(node.getbestblockhash(), block.hash_hex)
 
+    # A BLOCKTXN response with fewer or more transactions than requested is invalid, not a
+    # short-ID collision. The request must be removed before the peer is disconnected.
+    def test_blocktxn_response_cardinality(self):
+        node = self.nodes[0]
+
+        def test_response(transactions):
+            peer = node.add_p2p_connection(TestP2PConn())
+            peer.send_and_ping(msg_sendcmpct())
+
+            utxo = self.utxos.pop(0)
+            block = self.build_block_with_transactions(node, utxo, 2)
+            self.utxos.append(utxo)
+
+            peer.send_without_ping(msg_headers([block]))
+            peer.wait_for_getdata([block.hash_int], timeout=30)
+
+            comp_block = HeaderAndShortIDs()
+            comp_block.initialize_from_block(block, prefill_list=[0], use_witness=True)
+            peer.send_and_ping(msg_cmpctblock(comp_block.to_p2p()))
+            self.getblocktxn_expected(peer, block.hash_int, indices=[1, 2])
+            assert_equal(int(node.getbestblockhash(), 16), block.hashPrevBlock)
+
+            msg = msg_blocktxn()
+            msg.block_transactions = BlockTransactions(block.hash_int, transactions(block))
+            peer.send_await_disconnect(msg)
+            assert_equal(int(node.getbestblockhash(), 16), block.hashPrevBlock)
+
+        test_response(lambda block: [block.vtx[1]])
+        test_response(lambda block: [block.vtx[1], block.vtx[2], block.vtx[0]])
+
     # Multiple blocktxn responses will cause a node to get disconnected.
     def test_multiple_blocktxn_response(self, test_node):
         node = self.nodes[0]
@@ -1142,6 +1172,9 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         self.log.info("Testing handling of incorrect blocktxn responses...")
         self.test_incorrect_blocktxn_response(self.segwit_node)
+
+        self.log.info("Testing malformed blocktxn response cardinality...")
+        self.test_blocktxn_response_cardinality()
 
         self.log.info("Testing duplicate short-ID compact-block fallback...")
         self.test_duplicate_short_id_compact_block(self.segwit_node)
