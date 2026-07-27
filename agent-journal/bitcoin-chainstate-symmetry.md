@@ -49,6 +49,33 @@ bit-flips, adversarial filesystem, cosmic rays (hardware campaign).
 No asymmetry candidate survives; the connect/disconnect pair is one of the
 most heavily oracled paths in the tree.
 
+### C2 (flush/restart durability): one real defect, already fixed by own open PR 35714; rest DISMISSED
+
+Flush ordering trace (FlushStateToDisk, validation.cpp:2807-2851):
+blk/rev flush → WriteBlockIndexDB → prune unlink → coins flush.
+
+1. Coins flush two-phase commit (txdb.cpp:123-190): first batch erases
+   DB_BEST_BLOCK and writes DB_HEAD_BLOCKS=[new_tip, old_tip] transition
+   marker; partial coin batches follow; final batch erases HEAD_BLOCKS and
+   writes BEST_BLOCK. Every batch is one atomic LevelDB WriteBatch. Crash
+   mid-flush → DB has HEAD_BLOCKS but no BEST_BLOCK → restart replays from
+   old_tip with a loud -reindex-chainstate error on inconsistency
+   (130-141). Correct under any-instruction crash. Crash-injection oracle
+   exists: simulate_crash_ratio (171-177) exercised by feature_dbcrash.py.
+   DISMISSED.
+2. Crash windows in the ordering: block files or block index ahead of the
+   coins flush are harmless — unconnected candidate blocks on disk are
+   re-requested/reconnected on restart; chainstate never references
+   unflushed block data because coins flush is LAST. DISMISSED.
+3. CONFIRMED-ALREADY-FIXED (own PR): block-file flush failure was warn-only
+   (validation.cpp:2819-2823 TODO) — FlushStateToDisk continued to
+   WriteBlockIndexDB and the coins flush and advanced m_last_flushed_block
+   after a failed block-file flush, potentially marking undurable state as
+   flushed. Fixed by own open upstream PR 35714 "validation: stop writes
+   after flush failure" (head e1a337ee96, + characterization test
+   0f04fbee2f): return the error before the metadata/coins writes. Open,
+   unmerged at check time; not new work — tracked by the watch crons.
+
 ## Next queue
 (start C1 with a unit-level connect→disconnect→reconnect differential on
 regtest chains, then C2 via FlushStateToDisk ordering trace + dbcrash replay)
