@@ -5617,3 +5617,36 @@ the earlier cache and cluster defects remain attributed in their own sections.
 No additional production inconsistency, race, memory defect, or deterministic
 test omission was demonstrated in this rebase pass, so no source or permanent
 fuzzer change was warranted.
+
+## Wallet preselected-input ordering coverage (2026-07-27)
+
+The wallet review found an interaction that the existing tests did not drive:
+`CreateTransaction()` must place multiple preselected inputs first and preserve
+the order in which the caller selected them. The standalone `coincontrol`
+fuzzer previously used one outpoint, so its position checks could not exercise
+the relation between two entries; `wallet_create_transaction` did not create
+preselected inputs either.
+
+The new `coincontrol` action resets the selection set, selects two distinct
+fuzzed outpoints in reverse order, and asserts that their stored positions are
+strictly increasing in selection order. The deterministic
+`wallet_preserves_preselected_input_order` test creates two spendable wallet
+outputs, selects them in reverse `AvailableCoins()` order, creates a
+transaction with automatic inputs disabled, and checks both final vin
+positions.
+
+This is a clean-master coverage omission, not a production bug. The relevant
+`CCoinControl` and `CreateTransaction` implementations are unchanged at exact
+clean master `e75b76b12c5dcaf1c3b9f02d8739b1f551dcf421`; the branch-only wallet
+source difference in this area is an unrelated null-coin-control guard in
+`AvailableCoins()`.
+
+Both checks have mutation proof. Temporarily disabling the production
+`std::stable_sort` made the deterministic test fail both vin assertions with
+exit 201. Temporarily forcing `CCoinControl::Select()` to store position zero
+made the existing 497-file corpus fail at the new relative-position assertion
+and produced a libFuzzer artifact. Restoring both implementations passed the
+focused six-case `spend_tests` suite. The normal Clang 19 coin-control replay
+processed 498 inputs, and the Clang 19 ASan/UBSan replay processed 65 inputs;
+all exited zero without diagnostics. No production fix, race, memory defect,
+or wallet-loss behavior was demonstrated.
