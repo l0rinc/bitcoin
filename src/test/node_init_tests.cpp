@@ -11,6 +11,9 @@
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 
+#include <limits>
+#include <string>
+
 using node::NodeContext;
 
 //! Like BasicTestingSetup, but using regtest network instead of mainnet.
@@ -53,6 +56,20 @@ BOOST_AUTO_TEST_CASE(init_test)
     BOOST_CHECK(AppInitMain(m_node));
     Interrupt(m_node);
     Shutdown(m_node);
+}
+
+BOOST_AUTO_TEST_CASE(init_rejects_out_of_range_buffer_arguments)
+{
+    LogInstance().DisconnectTestLogger();
+    m_node.args->ForceSetArg("-server", "0");
+    m_node.args->ForceSetArg("-listen", "0");
+    m_node.args->ForceSetArg("-maxsendbuffer", std::to_string(std::numeric_limits<unsigned int>::max() / 1000 + 1));
+
+    BOOST_CHECK(!AppInitParameterInteraction(*m_node.args));
+
+    m_node.args->ForceSetArg("-maxsendbuffer", "1000");
+    m_node.args->ForceSetArg("-maxreceivebuffer", std::to_string(std::numeric_limits<unsigned int>::max() / 1000 + 1));
+    BOOST_CHECK(!AppInitParameterInteraction(*m_node.args));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

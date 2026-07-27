@@ -115,6 +115,7 @@
 #include <functional>
 #include <initializer_list>
 #include <list>
+#include <limits>
 #include <memory>
 #include <new>
 #include <optional>
@@ -956,6 +957,16 @@ bool AppInitParameterInteraction(const ArgsManager& args)
 {
     const CChainParams& chainparams = Params();
     // ********************************************************* Step 2: parameter interactions
+
+    constexpr uint64_t MAX_BUFFER_ARG{std::numeric_limits<unsigned int>::max() / 1000};
+    const int64_t max_send_buffer{args.GetIntArg("-maxsendbuffer", DEFAULT_MAXSENDBUFFER)};
+    const int64_t max_receive_buffer{args.GetIntArg("-maxreceivebuffer", DEFAULT_MAXRECEIVEBUFFER)};
+    if (max_send_buffer < 0 || static_cast<uint64_t>(max_send_buffer) > MAX_BUFFER_ARG) {
+        return InitError(strprintf(_("-maxsendbuffer must be between 0 and %u."), static_cast<unsigned int>(MAX_BUFFER_ARG)));
+    }
+    if (max_receive_buffer < 0 || static_cast<uint64_t>(max_receive_buffer) > MAX_BUFFER_ARG) {
+        return InitError(strprintf(_("-maxreceivebuffer must be between 0 and %u."), static_cast<unsigned int>(MAX_BUFFER_ARG)));
+    }
 
     // also see: InitParameterInteraction()
 
@@ -2141,8 +2152,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     connOptions.uiInterface = &uiInterface;
     connOptions.m_banman = node.banman.get();
     connOptions.m_msgproc = node.peerman.get();
-    connOptions.nSendBufferMaxSize = 1000 * args.GetIntArg("-maxsendbuffer", DEFAULT_MAXSENDBUFFER);
-    connOptions.nReceiveFloodSize = 1000 * args.GetIntArg("-maxreceivebuffer", DEFAULT_MAXRECEIVEBUFFER);
+    connOptions.nSendBufferMaxSize = static_cast<unsigned int>(static_cast<uint64_t>(args.GetIntArg("-maxsendbuffer", DEFAULT_MAXSENDBUFFER)) * 1000);
+    connOptions.nReceiveFloodSize = static_cast<unsigned int>(static_cast<uint64_t>(args.GetIntArg("-maxreceivebuffer", DEFAULT_MAXRECEIVEBUFFER)) * 1000);
     connOptions.m_added_nodes = args.GetArgs("-addnode");
     connOptions.nMaxOutboundLimit = *opt_max_upload;
     connOptions.m_peer_connect_timeout = peer_connect_timeout;
