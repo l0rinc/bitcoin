@@ -177,6 +177,34 @@ void CheckUniqueParents(const std::vector<Txid>& unique_parents, const CTransact
     Assert(unique_parents.size() <= tx.vin.size());
 }
 
+void ExerciseMultipleNotFoundResponse(const CTxMemPool& pool, FastRandomContext& rng, std::chrono::microseconds now)
+{
+    const CTransactionRef& tx{TRANSACTIONS.at(1)}; // Segwit transaction with distinct txid and wtxid.
+    const Txid& txid{tx->GetHash()};
+    const Wtxid& wtxid{tx->GetWitnessHash()};
+    Assert(txid.ToUint256() != wtxid.ToUint256());
+
+    node::TxDownloadManagerImpl manager{node::TxDownloadOptions{pool, rng, true}};
+    constexpr NodeId peer{0};
+    manager.ConnectedPeer(peer, node::TxDownloadConnectionInfo{
+        .m_preferred = true,
+        .m_relay_permissions = false,
+        .m_wtxid_relay = false,
+    });
+    Assert(!manager.AddTxAnnouncement(peer, txid, now));
+    Assert(!manager.AddTxAnnouncement(peer, wtxid, now));
+    Assert(manager.GetRequestsToSend(peer, now).size() == 2);
+
+    manager.ReceivedNotFound(peer, {GenTxid{wtxid}, GenTxid{txid}});
+    for (const auto& hash : {txid.ToUint256(), wtxid.ToUint256()}) {
+        std::vector<NodeId> peers;
+        manager.m_txrequest.GetCandidatePeers(hash, peers);
+        Assert(peers.empty());
+    }
+    manager.DisconnectedPeer(peer);
+    manager.CheckIsEmpty();
+}
+
 void AssertNoTxRequest(const node::TxDownloadManagerImpl& txdownload_impl, const uint256& txhash)
 {
     std::vector<NodeId> peers;
@@ -322,6 +350,7 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
         txdownloadman.CheckIsEmpty(nodeid);
     }
     txdownloadman.CheckIsEmpty();
+    ExerciseMultipleNotFoundResponse(pool, det_rand, time);
 }
 
 // Give node 0 relay permissions, and nobody else. This helps us remember who is a RelayPermissions
