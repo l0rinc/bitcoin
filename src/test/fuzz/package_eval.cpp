@@ -437,8 +437,21 @@ void AssertATMPResultShape(const MempoolAcceptResult& res, const Wtxid& wtxid, b
         break;
     }
     case MempoolAcceptResult::ResultType::MEMPOOL_ENTRY:
-    case MempoolAcceptResult::ResultType::DIFFERENT_WITNESS:
         Assert(false);
+        break;
+    case MempoolAcceptResult::ResultType::DIFFERENT_WITNESS:
+        // Package evaluation reports a valid result when a same-txid transaction with a
+        // different witness is already in the mempool, without validating the package copy.
+        Assert(txid_in_mempool);
+        Assert(!wtxid_in_mempool);
+        Assert(res.m_state.IsValid());
+        Assert(!res.m_state.IsInvalid());
+        Assert(!res.m_vsize);
+        Assert(!res.m_base_fees);
+        Assert(!res.m_effective_feerate);
+        Assert(!res.m_wtxids_fee_calculations);
+        Assert(res.m_other_wtxid);
+        break;
     }
 }
 
@@ -457,6 +470,11 @@ void AssertPackageResultSubsetShape(const Package& txs,
         Assert(tx_it != package_tx_by_wtxid.end());
         AssertATMPResultShape(tx_result, wtxid, submitted,
                               tx_pool.exists(tx_it->second->GetHash()), tx_pool.exists(wtxid));
+        if (tx_result.m_result_type == MempoolAcceptResult::ResultType::DIFFERENT_WITNESS) {
+            Assert(tx_result.m_other_wtxid);
+            Assert(*tx_result.m_other_wtxid != wtxid);
+            Assert(tx_pool.exists(*tx_result.m_other_wtxid));
+        }
     }
 }
 
@@ -727,11 +745,42 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
         std::vector<CTransactionRef> txs;
 
         // Make packages of 1-to-26 transactions
-        const auto num_txs = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 26);
+        auto num_txs = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 26);
         std::set<COutPoint> package_outpoints;
+        std::optional<CTransactionRef> witness_swap;
+        if (tx_pool.size() > 0 && fuzzed_data_provider.ConsumeBool()) {
+            const auto info_all{tx_pool.infoAll()};
+            std::vector<CTransactionRef> candidates;
+            const bool within_size_limit{
+                tx_pool.DynamicMemoryUsage() <= static_cast<size_t>(tx_pool.m_opts.max_size_bytes)};
+            const auto now{GetTime<std::chrono::seconds>()};
+            for (const auto& info : info_all) {
+                // AcceptPackage always enforces expiry and the size limit, even when it only
+                // returns DIFFERENT_WITNESS. Avoid selecting a transaction that cleanup
+                // pass would remove, so the result contract remains deterministic.
+                const bool within_expiry{info.m_time + tx_pool.m_opts.expiry >= now};
+                if (within_size_limit && within_expiry) candidates.push_back(info.tx);
+            }
+            if (!candidates.empty()) {
+                witness_swap = PickValue(fuzzed_data_provider, candidates);
+                // Keep the witness-swap mutation as a one-transaction package. This is the
+                // minimal valid input for the submission path that reports DIFFERENT_WITNESS.
+                num_txs = 1;
+            }
+        }
         while (txs.size() < num_txs) {
             // Create transaction to add to the mempool
             txs.emplace_back([&] {
+                if (witness_swap && txs.empty()) {
+                    CMutableTransaction tx_mut{**witness_swap};
+                    Assert(!tx_mut.vin.empty());
+                    tx_mut.vin.front().scriptWitness.stack.emplace_back(0);
+                    auto tx = MakeTransactionRef(tx_mut);
+                    Assert(tx->GetHash() == (*witness_swap)->GetHash());
+                    Assert(tx->GetWitnessHash() != (*witness_swap)->GetWitnessHash());
+                    return tx;
+                }
+
                 CMutableTransaction tx_mut;
                 tx_mut.version = fuzzed_data_provider.ConsumeBool() ? TRUC_VERSION : CTransaction::CURRENT_VERSION;
                 tx_mut.nLockTime = fuzzed_data_provider.ConsumeBool() ? 0 : fuzzed_data_provider.ConsumeIntegral<uint32_t>();
@@ -840,7 +889,9 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
         // Multi-transaction package test-accept keeps ATMP in test-accept mode so the whole iteration must
         // leave mempool state unchanged.
         const bool single_submit{txs.size() == 1 && fuzzed_data_provider.ConsumeBool()};
-        const bool package_test_accept{single_submit || (txs.size() > 1 && fuzzed_data_provider.ConsumeBool())};
+        const bool package_test_accept{
+            !witness_swap && (single_submit || (txs.size() > 1 && fuzzed_data_provider.ConsumeBool()))};
+        const bool package_state_unchanged{package_test_accept};
 
         // Exercise client_maxfeerate logic
         std::optional<CFeeRate> client_maxfeerate{};
@@ -852,7 +903,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
         std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
         std::optional<std::vector<PackageInputCacheSnapshot>> test_accept_coins_cache_snapshot;
         std::optional<std::vector<PackageInputCacheSnapshot>> submit_coins_cache_snapshot;
-        if (package_test_accept) {
+        if (package_state_unchanged) {
             test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
             test_accept_outpoints_snapshot = mempool_outpoints;
             test_accept_coins_cache_snapshot = WITH_LOCK(::cs_main, return SnapshotPackageInputCache(chainstate.CoinsTip(), txs));
@@ -863,7 +914,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
         const auto result_package = WITH_LOCK(::cs_main,
                                     return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/package_test_accept, client_maxfeerate));
 
-        if (package_test_accept) {
+        if (package_state_unchanged) {
             node.validation_signals->SyncWithValidationInterfaceQueue();
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
@@ -877,10 +928,10 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
                                                                 /*test_accept=*/false, *submit_coins_cache_snapshot));
         }
 
-        if (package_test_accept) {
+        if (package_test_accept || witness_swap) {
             AssertPackageResultSubsetShape(txs, result_package, tx_pool, /*submitted=*/false);
         }
-        if (package_test_accept && result_package.m_state.IsValid()) {
+        if ((package_test_accept || witness_swap) && result_package.m_state.IsValid()) {
             Assert(!CheckPackageMempoolAcceptResult(txs, result_package, result_package.m_state.IsValid(), nullptr));
         }
 
@@ -897,7 +948,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
         node.validation_signals->SyncWithValidationInterfaceQueue();
         node.validation_signals->UnregisterSharedValidationInterface(txr);
 
-        if (package_test_accept && !single_submit) {
+        if (package_state_unchanged && !single_submit) {
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
             Assert(added.empty());
