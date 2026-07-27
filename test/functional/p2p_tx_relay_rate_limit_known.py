@@ -2,11 +2,13 @@
 # Copyright (c) 2026-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/license/mit.
-"""Ensure already-known transactions do not consume the global relay budget."""
+"""Ensure suppressed transactions do not consume the global relay budget."""
+
+from decimal import Decimal
 
 from p2p_filter import P2PBloomFilter
 from test_framework.blocktools import COINBASE_MATURITY
-from test_framework.messages import CInv, MSG_TX, MSG_WTX, msg_inv, msg_version
+from test_framework.messages import CInv, MSG_TX, MSG_WTX, msg_feefilter, msg_filterclear, msg_inv, msg_version
 from test_framework.p2p import P2PInterface, P2P_SERVICES, P2P_SUBVERSION, P2P_VERSION
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal
@@ -70,6 +72,20 @@ class TxRelayRateLimitKnownTest(BitcoinTestFramework):
         for direction in ("inbound", "outbound"):
             assert_equal(after_filtered[direction], before_filtered[direction])
         assert_equal(non_relay_peer.message_count["inv"], 0)
+
+        # A peer's fee filter also makes it ineligible for a particular announcement.
+        non_relay_peer.send_and_ping(msg_filterclear())
+        non_relay_peer.send_and_ping(msg_feefilter(100000))
+        before_fee_filtered = node.getnetworkinfo()["inv_buckets"]
+        fee_filtered_tx = wallet.create_self_transfer(fee_rate=Decimal("0.00000100"))
+        wallet.sendrawtransaction(from_node=node, tx_hex=fee_filtered_tx["hex"])
+        node.syncwithvalidationinterfacequeue()
+        after_fee_filtered = node.getnetworkinfo()["inv_buckets"]
+        for direction in ("inbound", "outbound"):
+            assert_equal(after_fee_filtered[direction], before_fee_filtered[direction])
+        assert_equal(non_relay_peer.message_count["inv"], 0)
+        non_relay_peer.peer_disconnect()
+        non_relay_peer.wait_for_disconnect()
 
         outbound_peer = node.add_outbound_p2p_connection(
             P2PInterface(), p2p_idx=0, connection_type="outbound-full-relay"

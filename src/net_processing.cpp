@@ -523,6 +523,12 @@ struct CNodeState {
     int64_t m_last_block_announcement{0};
 };
 
+struct TxToSend {
+    CTransactionRef tx;
+    CAmount fee;
+    int32_t vsize;
+};
+
 struct InvToSendBucket {
     const double count_floor{0};
     std::vector<Wtxid> backlog;
@@ -566,7 +572,7 @@ struct InvToSendBucket {
         count_bucket.increment(now);
     }
 
-    std::vector<CTransactionRef> TakeForProcessing(CTxMemPool& mempool) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs);
+    std::vector<TxToSend> TakeForProcessing(CTxMemPool& mempool) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs);
 
     bool decrement(double size)
     {
@@ -2386,20 +2392,24 @@ void PeerManagerImpl::SendPings()
     for(auto& it : m_peer_map) it.second->m_ping_queued = true;
 }
 
-std::vector<CTransactionRef> InvToSendBucket::TakeForProcessing(CTxMemPool& mempool)
+std::vector<TxToSend> InvToSendBucket::TakeForProcessing(CTxMemPool& mempool)
 {
     AssertLockHeld(mempool.cs);
 
     size_t n_to_take = static_cast<size_t>(std::max<double>(count_bucket.value() - count_floor, 0));
 
-    std::vector<CTransactionRef> best;
+    std::vector<TxToSend> best;
 
     auto itervec = mempool.ExtractBestByMiningScoreWithTopology(backlog, n_to_take);
     bool tokens_left = true;
     for (auto txiter : itervec) {
         auto& wtxid = txiter->GetTx().GetWitnessHash();
         if (tokens_left) {
-            best.push_back(txiter->GetSharedTx());
+            best.push_back({
+                .tx = txiter->GetSharedTx(),
+                .fee = txiter->GetFee(),
+                .vsize = txiter->GetTxSize(),
+            });
             if (!decrement(txiter->GetTx().ComputeTotalSize())) {
                 tokens_left = false;
             }
@@ -2461,8 +2471,8 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
     bool out_avail = m_outbound_inv_bucket.avail();
     if (!in_avail && !out_avail) return;
 
-    std::vector<CTransactionRef> for_inbound;
-    std::vector<CTransactionRef> for_outbound;
+    std::vector<TxToSend> for_inbound;
+    std::vector<TxToSend> for_outbound;
 
     {
         LOCK(m_mempool.cs);
@@ -2501,11 +2511,12 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
         // eligible peer already knows. The selected vectors are bounded by
         // the available token balance, so this check does not scan the full
         // backlog or recreate the old per-peer queue cost.
-        auto distribute = [](InvToSendBucket& bucket, const std::vector<CTransactionRef>& txs,
+        auto distribute = [](InvToSendBucket& bucket, const std::vector<TxToSend>& txs,
                              const std::vector<PeerRef>& peers) {
             const double count_before{bucket.count_bucket.value()};
             const double size_before{bucket.size_bucket.value()};
-            for (const CTransactionRef& tx : txs) {
+            for (const TxToSend& tx_info : txs) {
+                const CTransactionRef& tx{tx_info.tx};
                 Assert(tx);
                 bool queued_to_a_peer{false};
                 for (const PeerRef& peer_ref : peers) {
@@ -2519,6 +2530,8 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
                     // this transaction.
                     LOCK(tx_relay->m_tx_inventory_mutex);
                     if (tx_relay->m_next_inv_send_time == 0s) continue;
+                    const CFeeRate filterrate{tx_relay->m_fee_filter_received.load()};
+                    if (tx_info.fee < filterrate.GetFee(tx_info.vsize)) continue;
                     const uint256& hash = peer.m_wtxid_relay ?
                         tx->GetWitnessHash().ToUint256() : tx->GetHash().ToUint256();
                     if (tx_relay->m_tx_inventory_known_filter.contains(hash)) continue;
