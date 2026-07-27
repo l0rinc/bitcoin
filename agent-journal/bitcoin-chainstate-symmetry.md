@@ -24,7 +24,30 @@ bit-flips, adversarial filesystem, cosmic rays (hardware campaign).
 | C7 | BaseIndex durability/rewind | index locator ahead of chainstate flush (the base.cpp:96-99 guard); Rewind vs crash mid-reorg; Commit ordering | open |
 
 ## Verdicts
-(empty — filled per area)
+
+### C1 (connect/disconnect symmetry): DISMISSED — inverse by construction, oracles at 4 levels
+
+1. BY CONSTRUCTION: DisconnectBlock (validation.cpp:2215-2284) spends every
+   output the block created and restores every spent input from undo data,
+   verifying EXACT equality per output (value, script, height, coinbase flag,
+   2249-2259); any mismatch flips fClean — a non-inverse disconnect is loud,
+   not silent. BIP30 duplicate-coinbase exceptions are hash-pinned (2237-2238).
+2. CACHE-LEVEL randomized inverse simulation (coins_tests.cpp:620-698):
+   random tx connect/ApplyTxInUndo-undo with full-cache equality verification
+   every ~1000 iterations against a reference map, across cache-stack flushes
+   and uncaches.
+3. BLOCK-INDEX metadata invariants asserted by CheckBlockIndex
+   (validation.cpp:5421-5506): VALID_TRANSACTIONS ⟺ nTx>0 (pruning-
+   independent), HAVE_UNDO ⟹ HAVE_DATA, failed-flag propagation. nChainTx
+   persisting after disconnect is by design (LoadBlockIndex invariant 5475).
+4. FUNCTIONAL round-trip oracle: feature_coinstatsindex.py performs
+   invalidateblock/reconsiderblock cycles and compares the incrementally
+   maintained muhash of the UTXO set (lines 266-291) — a disconnect that
+   failed to restore the exact UTXO set would corrupt the muhash and fail
+   the comparison.
+
+No asymmetry candidate survives; the connect/disconnect pair is one of the
+most heavily oracled paths in the tree.
 
 ## Next queue
 (start C1 with a unit-level connect→disconnect→reconnect differential on
