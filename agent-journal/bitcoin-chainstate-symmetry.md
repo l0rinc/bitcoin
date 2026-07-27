@@ -76,6 +76,29 @@ blk/rev flush → WriteBlockIndexDB → prune unlink → coins flush.
    0f04fbee2f): return the error before the metadata/coins writes. Open,
    unmerged at check time; not new work — tracked by the watch crons.
 
+### C3 (reorg accounting): DISMISSED — complete-membership invariants asserted over the whole block index
+
+1. setBlockIndexCandidates has BIDIRECTIONAL membership invariants in
+   CheckBlockIndex (validation.cpp:5508-5563): every block that has more work
+   than the tip, all parents processed, data not missing, and not invalid
+   MUST be a candidate (5554); every block sorting worse than the tip or with
+   an unprocessed ancestor MUST NOT be (5562). A stale entry left by an
+   unequal-height reorg, or an entry wrongly dropped, both trip asserts.
+2. m_best_header bound asserted globally (5506): no valid block may have
+   more work than m_best_header.
+3. All invalidation/reorg paths erase candidates explicitly: InvalidBlockFound
+   (2030), InvalidChainFound/FindMostWorkChain (3229-3247), InvalidateBlock
+   (3650/3734 highpow cache), ResetBlockFailureFlags (3826/3963), and
+   PruneBlockIndexCandidates. m_blocks_unlinked tracks data-missing former
+   candidates (5561-5562).
+4. Oracles: CheckBlockIndex runs on every startup (LoadBlockIndex) and
+   periodically under test debug builds; block_index_tree fuzz target;
+   functional reorg coverage (feature_block, p2p_invalid_block,
+   feature_assumeutxo snapshot candidates, invalidate/reconsider cycles).
+5. Impact framing: candidates only steer download/activation choice, never
+   validity — even a hypothetical stale entry could stall sync, not corrupt
+   state; and it would assert on restart anyway.
+
 ## Next queue
 (start C1 with a unit-level connect→disconnect→reconnect differential on
 regtest chains, then C2 via FlushStateToDisk ordering trace + dbcrash replay)
