@@ -24,7 +24,12 @@ using CompressedScript = prevector<33, unsigned char>;
 
 
 bool CompressScript(const CScript& script, CompressedScript& out);
-unsigned int GetSpecialScriptSize(unsigned int nSize);
+constexpr unsigned int GetSpecialScriptSize(unsigned int nSize)
+{
+    if (nSize == 0 || nSize == 1) return 20;
+    if (nSize >= 2 && nSize <= 5) return 32;
+    return 0;
+}
 bool DecompressScript(CScript& script, unsigned int nSize, const CompressedScript& in);
 
 /**

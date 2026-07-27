@@ -83,15 +83,6 @@ bool CompressScript(const CScript& script, CompressedScript& out)
     return false;
 }
 
-unsigned int GetSpecialScriptSize(unsigned int nSize)
-{
-    if (nSize == 0 || nSize == 1)
-        return 20;
-    if (nSize == 2 || nSize == 3 || nSize == 4 || nSize == 5)
-        return 32;
-    return 0;
-}
-
 bool DecompressScript(CScript& script, unsigned int nSize, const CompressedScript& in)
 {
     switch(nSize) {
@@ -184,9 +175,8 @@ uint64_t DecompressAmount(uint64_t x)
     } else {
         n = x+1;
     }
-    while (e) {
-        n *= 10;
-        e--;
-    }
-    return n;
+    static constexpr uint64_t POW10[]{
+        1, 10, 100, 1'000, 10'000, 100'000, 1'000'000, 10'000'000, 100'000'000, 1'000'000'000,
+    };
+    return n * POW10[e];
 }
