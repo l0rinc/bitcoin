@@ -6143,3 +6143,56 @@ artifacts. An intermediate fuzzer assertion failure was a harness-only
 ordering mistake: eligible peers had been created before the isolated
 `relay=0` check; moving that mutation before peer creation made the oracle
 stable and did not change the production conclusion.
+
+## Filtered peer still consumed global relay budget (2026-07-27)
+
+The next recipient-eligibility mutation combined the global inventory bucket
+with the BIP37 filter path. `ProcessInvBacklog()` reserved count and serialized
+size tokens before `SendMessages()` applied the peer's bloom filter. A peer can
+be relay-enabled and still intentionally reject a particular transaction when
+its filter does not match; in that case no `INV` is sent and there is no relay
+recipient for that reservation.
+
+The first disposable control used an empty filter, but BIP37 defines a zero-size
+filter as match-all, so that control was discarded. The valid control used the
+existing one-script watch filter and paid a new local transaction to a different
+script. Against the exact clean-master daemon at
+`a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, with `-peerbloomfilters=1` and
+`-txsendrate=1`, the peer sent `VERSION relay=0`, completed `VERACK`, then
+enabled the nonmatching filter. The node delivered no transaction, but the
+inbound count bucket moved from approximately `23.0101` to `22.1360` during
+the short control window; the small refill explains why the observed integer
+decrement was less than one. The same assertion failed on the pre-fix branch
+(`24.0339` to `23.1613`). Existing BIP37 coverage checked only that the
+transaction was not received, while relay-rate coverage did not inspect the
+bucket state after a filtered transaction.
+
+The production path now checks each candidate's known-inventory state, relay
+state, and bloom relevance while holding the inventory mutex followed by the
+bloom mutex, matching `SendMessages()`'s lock order. It queues only peers that
+can receive the transaction and refunds both token types when the peer set is
+empty, all peers already know the transaction, or every peer's filter excludes
+it. The always-active postcondition checks that a refunded reservation does
+not reduce either bucket. The `process_messages` target constructs the same
+`NODE_BLOOM`/`relay=0` peer, sends a nonmatching `FILTERLOAD`, and asserts both
+bucket directions, both backlogs, and the per-peer queue. The functional
+rate-limit test uses the real handshake and the same BIP37 filter mutation.
+
+Severity on master is low, conditional availability/policy impact. A remote
+peer can choose a filter that excludes local transactions, but the node must
+enable `-peerbloomfilters` and have local broadcasts; the peer cannot directly
+spend the allowance without those local conditions. Repeated local broadcasts
+can silently deplete the global relay allowance even though the filtered peer
+receives no announcements, delaying later local announcements until refill.
+This is not consensus, wallet, memory-safety, or direct remote-code-execution
+impact.
+
+The exact-master failure was run in a separate disposable worktree before the
+source change. The fixed branch passed the focused functional test, four ASan/
+UBSan workers over 64 retained `process_messages` inputs (214, 227, 234, and
+235 executions, no sanitizer diagnostics), four parallel TSan direct-file
+workers over 32 inputs, `net_tests`, all 14 `bloom_tests`, and the token-bucket
+refund unit case. The same functional regression also passed with the Clang 19
+TSan daemon. The earlier full-corpus ASan attempt was stopped after all workers
+stalled on a large input at roughly 512 executions; it is recorded as
+incomplete and is not part of the passing evidence.

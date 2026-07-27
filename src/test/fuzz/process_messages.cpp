@@ -4,6 +4,7 @@
 
 #include <addrman.h>
 #include <banman.h>
+#include <common/bloom.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <kernel/chainparams.h>
@@ -291,6 +292,30 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
         LOCK(node.mempool->cs);
         node.mempool->removeRecursive(*non_relay_tx, MemPoolRemovalReason::EXPIRY);
         Assert(!node.mempool->GetIter(non_relay_tx->GetWitnessHash()).has_value());
+    }
+
+    // A relay-enabled BIP37 peer with a nonmatching filter must not consume a
+    // global relay reservation when SendMessages() will suppress the inventory.
+    CBloomFilter nonmatching_filter{/*nElements=*/10, /*nFPRate=*/0.000001, /*nTweakIn=*/0, BLOOM_UPDATE_NONE};
+    const CTransactionRef filtered_tx{MakeRelayTransaction(g_mature_coinbases[0], /*locktime=*/2)};
+    TestMemPoolEntryHelper filtered_entry;
+    TryAddToMempool(*node.mempool, filtered_entry.Fee(1000).SpendsCoinbase(true).FromTx(filtered_tx));
+    Assert(!nonmatching_filter.IsRelevantAndUpdate(*filtered_tx));
+    process_relay_message(non_relay_peer, NetMsg::Make(NetMsgType::FILTERLOAD, nonmatching_filter));
+    const PeerManagerInfo before_filtered{node.peerman->GetInfo()};
+    node.peerman->InitiateTxBroadcastToAll(filtered_tx->GetWitnessHash());
+    const PeerManagerInfo after_filtered{node.peerman->GetInfo()};
+    Assert(after_filtered.inbound_bucket.backlog_count == before_filtered.inbound_bucket.backlog_count);
+    Assert(after_filtered.outbound_bucket.backlog_count == before_filtered.outbound_bucket.backlog_count);
+    Assert(after_filtered.inbound_bucket.count_bucket == before_filtered.inbound_bucket.count_bucket);
+    Assert(after_filtered.outbound_bucket.count_bucket == before_filtered.outbound_bucket.count_bucket);
+    Assert(after_filtered.inbound_bucket.size_bucket == before_filtered.inbound_bucket.size_bucket);
+    Assert(after_filtered.outbound_bucket.size_bucket == before_filtered.outbound_bucket.size_bucket);
+    Assert(peer_inv_to_send(non_relay_peer) == 0);
+    {
+        LOCK(node.mempool->cs);
+        node.mempool->removeRecursive(*filtered_tx, MemPoolRemovalReason::EXPIRY);
+        Assert(!node.mempool->GetIter(filtered_tx->GetWitnessHash()).has_value());
     }
 
     CNode& inbound_relay_peer{*make_relay_peer(/*id=*/100, ConnectionType::INBOUND)};
