@@ -318,6 +318,29 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
         Assert(!node.mempool->GetIter(filtered_tx->GetWitnessHash()).has_value());
     }
 
+    // A relay-enabled peer whose fee filter rejects a transaction must not consume a
+    // global relay reservation when SendMessages() will suppress the inventory.
+    process_relay_message(non_relay_peer, NetMsg::Make(NetMsgType::FILTERCLEAR));
+    process_relay_message(non_relay_peer, NetMsg::Make(NetMsgType::FEEFILTER, CAmount{100'000}));
+    const CTransactionRef fee_filtered_tx{MakeRelayTransaction(g_mature_coinbases[0], /*locktime=*/3)};
+    TestMemPoolEntryHelper fee_filtered_entry;
+    TryAddToMempool(*node.mempool, fee_filtered_entry.Fee(1000).SpendsCoinbase(true).FromTx(fee_filtered_tx));
+    const PeerManagerInfo before_fee_filtered{node.peerman->GetInfo()};
+    node.peerman->InitiateTxBroadcastToAll(fee_filtered_tx->GetWitnessHash());
+    const PeerManagerInfo after_fee_filtered{node.peerman->GetInfo()};
+    Assert(after_fee_filtered.inbound_bucket.backlog_count == before_fee_filtered.inbound_bucket.backlog_count);
+    Assert(after_fee_filtered.outbound_bucket.backlog_count == before_fee_filtered.outbound_bucket.backlog_count);
+    Assert(after_fee_filtered.inbound_bucket.count_bucket == before_fee_filtered.inbound_bucket.count_bucket);
+    Assert(after_fee_filtered.outbound_bucket.count_bucket == before_fee_filtered.outbound_bucket.count_bucket);
+    Assert(after_fee_filtered.inbound_bucket.size_bucket == before_fee_filtered.inbound_bucket.size_bucket);
+    Assert(after_fee_filtered.outbound_bucket.size_bucket == before_fee_filtered.outbound_bucket.size_bucket);
+    Assert(peer_inv_to_send(non_relay_peer) == 0);
+    {
+        LOCK(node.mempool->cs);
+        node.mempool->removeRecursive(*fee_filtered_tx, MemPoolRemovalReason::EXPIRY);
+        Assert(!node.mempool->GetIter(fee_filtered_tx->GetWitnessHash()).has_value());
+    }
+
     CNode& inbound_relay_peer{*make_relay_peer(/*id=*/100, ConnectionType::INBOUND)};
     CNode& outbound_relay_peer{*make_relay_peer(/*id=*/101, ConnectionType::OUTBOUND_FULL_RELAY)};
     CNode& legacy_relay_peer{*make_relay_peer(/*id=*/102, ConnectionType::OUTBOUND_FULL_RELAY)};
@@ -404,20 +427,33 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     Assert(after_duplicate.inbound_bucket.count_bucket == after_all_known.inbound_bucket.count_bucket);
     Assert(after_duplicate.outbound_bucket.count_bucket == after_all_known.outbound_bucket.count_bucket);
 
-    // A queued wtxid whose mempool entry disappeared must be dropped without spending tokens or
-    // leaving an unserviceable backlog behind.
+    // A transaction selected for relay can be evicted before SendMessages() extracts it from the
+    // mempool. The queued entry must be dropped without leaving stale per-peer state behind. The
+    // reservation is intentionally retained: it paid for the relay attempt at selection time.
+    const PeerManagerInfo before_stale{node.peerman->GetInfo()};
+    node.peerman->InitiateTxBroadcastToAll(stale_tx->GetWitnessHash());
+    const PeerManagerInfo after_stale_queue{node.peerman->GetInfo()};
+    Assert(after_stale_queue.inbound_bucket.backlog_count == 0);
+    Assert(after_stale_queue.outbound_bucket.backlog_count == 0);
+    Assert(after_stale_queue.inbound_bucket.count_bucket == before_stale.inbound_bucket.count_bucket - 1);
+    Assert(after_stale_queue.outbound_bucket.count_bucket == before_stale.outbound_bucket.count_bucket - 1);
+    Assert(peer_inv_to_send(inbound_relay_peer) == 1);
+    Assert(peer_inv_to_send(outbound_relay_peer) == 1);
+    Assert(peer_inv_to_send(legacy_relay_peer) == 1);
+
     {
         LOCK(node.mempool->cs);
         node.mempool->removeRecursive(*stale_tx, MemPoolRemovalReason::EXPIRY);
         Assert(!node.mempool->GetIter(stale_tx->GetWitnessHash()).has_value());
     }
-    const PeerManagerInfo before_stale{node.peerman->GetInfo()};
-    node.peerman->InitiateTxBroadcastToAll(stale_tx->GetWitnessHash());
+    send_relay_inventory(inbound_relay_peer);
+    send_relay_inventory(outbound_relay_peer);
+    send_relay_inventory(legacy_relay_peer);
     const PeerManagerInfo after_stale{node.peerman->GetInfo()};
     Assert(after_stale.inbound_bucket.backlog_count == 0);
     Assert(after_stale.outbound_bucket.backlog_count == 0);
-    Assert(after_stale.inbound_bucket.count_bucket == before_stale.inbound_bucket.count_bucket);
-    Assert(after_stale.outbound_bucket.count_bucket == before_stale.outbound_bucket.count_bucket);
+    Assert(after_stale.inbound_bucket.count_bucket == after_stale_queue.inbound_bucket.count_bucket);
+    Assert(after_stale.outbound_bucket.count_bucket == after_stale_queue.outbound_bucket.count_bucket);
     Assert(peer_inv_to_send(inbound_relay_peer) == 0);
     Assert(peer_inv_to_send(outbound_relay_peer) == 0);
     Assert(peer_inv_to_send(legacy_relay_peer) == 0);

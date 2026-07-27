@@ -6196,3 +6196,75 @@ refund unit case. The same functional regression also passed with the Clang 19
 TSan daemon. The earlier full-corpus ASan attempt was stopped after all workers
 stalled on a large input at roughly 512 executions; it is recorded as
 incomplete and is not part of the passing evidence.
+
+## Fee-filtered peer still consumed global relay budget (2026-07-27)
+
+The relay-budget audit then found the same accounting omission for BIP133 fee
+filters. `ProcessInvBacklog()` selected a transaction and reserved global
+count/serialized-size tokens, but retained only its transaction reference.
+`SendMessages()` later looked up the mempool entry and applied the peer's fee
+filter before constructing `INV`. A peer whose filter rejected the transaction
+therefore received no announcement while the reservation was still consumed.
+
+The exact clean-master mutation is deliberately minimal: run one regtest node
+with `-txsendrate=1`, connect an inbound relay peer, send `feefilter=150`, and
+submit a valid local self-transfer paying `0.1 sat/vB`. The peer receives no
+`INV`. At exact `origin/master` commit
+`a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, the strict bucket postcondition
+failed: inbound and outbound count tokens both changed from `30` to `29`, and
+size tokens changed from `12,200,000`/`12,500,000` to `12,199,867`/`12,499,867`.
+The same control on the pre-fix branch changed only the inbound bucket because
+the earlier no-recipient fix already handled the empty outbound peer set. This
+was not covered by the existing fee-filter functional test, which checked only
+transaction delivery, or by the relay-rate tests, which did not combine a fee
+filter with the global bucket state.
+
+The production path now carries the mempool entry's base fee and virtual size
+alongside the shared transaction reference, and applies the identical fee
+predicate before queueing an announcement. A fee-filter rejection follows the
+existing refund path, whose always-active postconditions check that both token
+types do not decrease. The guided `process_messages` mutation enables relay on
+a `relay=0`/`NODE_BLOOM` peer, clears its BIP37 filter, sends a high
+`FEEFILTER`, and checks both bucket directions, both backlogs, and the per-peer
+queue. The real-wire relay-rate functional test performs the same isolated
+mutation and then disconnects that synthetic peer before its later known-filter
+checks.
+
+Severity on master is low and conditional availability/policy impact. A peer
+can set a high fee filter, but it cannot spend the node's relay allowance
+without the node also submitting local transactions. Repeated local
+broadcasts could silently consume the allowance even though that peer receives
+no announcements, delaying subsequent local transaction relay until refill.
+This is not a consensus, acceptance, wallet, memory-safety, or direct
+remote-code-execution issue.
+
+The exact-master strict control failed before the source change, while the
+same control passed on the fixed Clang 19 Debug daemon with both bucket objects
+unchanged. The focused functional regression passed, and the ASan/UBSan
+`process_messages` fuzzer completed 32 guided executions without an assertion,
+sanitizer diagnostic, race report, timeout, or artifact. The clean-master
+failure and fixed-branch pass used separate worktrees and binaries, so this
+finding is attributed to master rather than to the new oracle.
+
+## Selected relay entry evicted before `SendMessages()` (2026-07-27)
+
+The relay fuzzer had a stale-entry mutation, but its ordering did not reach the
+state it claimed to test. It removed the transaction from the mempool before
+calling `InitiateTxBroadcastToAll()`, so `ProcessInvBacklog()` discarded the
+wtxid before selecting it and no peer queue ever contained a selected stale
+entry. The corrected mutation first selects the transaction and queues it for
+all three relay peers, then removes it from the mempool, and only then calls
+`SendMessages()` for each peer. It asserts that the per-peer queues are drained
+and that the selection-time count reservations are unchanged during the stale
+lookup.
+
+This is a coverage correction, not a production finding. The exact clean-master
+control was run from a detached worktree at
+`a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b` with a handshake-complete inbound
+peer and a test mempool entry. It passed 10/10 under the Debug build with
+`ABORT_ON_FAILED_ASSUME`: after selection and eviction,
+`ExtractBestByMiningScoreWithTopology()` removed the missing wtxid from the
+peer queue, left the queue empty, and retained the already-consumed selection
+reservation. The same sequence is safe in the production call chain, so no
+production change or refund is justified. The corrected guided fuzzer target
+build and its canonical ASan/UBSan execution also passed.
