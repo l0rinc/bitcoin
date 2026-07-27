@@ -59,15 +59,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 18 | exhaustive-algebraic | CYCLE-1 | 2026-07-27 | script round-trip gap closed (8e7513bb1c, mutation-verified); amount round-trip queued |
 | 19 | benchmark-integrity | CYCLE-1 | 2026-07-27 | prevector bench elision confirmed+fixed (138ef3c044); mutation-sweep queued |
 | 28 | weak-test-oracles | CYCLE-1 | 2026-07-27 | amount oracle mutation-hard (5/5 killed); survey dismissals; next battery queued |
+| 16 | api-misuse-resistance | CYCLE-1 | 2026-07-27 | kernel _at getters @pre doc fix (b6b48987a5); #33943 precedent journaled |
 
 ## Next-up queue (severity-first)
-1. 16 — api-misuse-resistance — NEXT (kernel public API surface)
-2. then re-rank: 17 (build-matrix), 61 (stateful contract fuzz)
+1. 61 — stateful contract fuzz — NEXT (uses existing build_fuzz; light on ~full disk)
+2. then re-rank: 17 (build-matrix; needs extra build dirs — disk 99% full, may defer)
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c1), 19(c1), 28(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c1), 19(c1), 28(c1), 16(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #16 on branch
-audit/api-misuse.
+full cross-backend differential in ~35s on this host. NEXT: #61 on branch
+audit/stateful-contract-fuzz.
