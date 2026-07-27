@@ -73,6 +73,8 @@ CCoinsViewDB::~CCoinsViewDB()
 
 void CCoinsViewDB::ResizeCache(size_t new_cache_size)
 {
+    AssertLockHeld(::cs_main);
+    AssertLockNotHeld(m_db_mutex);
     // We can't do this operation with an in-memory DB since we'll lose all the coins upon
     // reset.
     if (!m_db_params.memory_only) {
@@ -202,6 +204,7 @@ std::optional<std::string> CCoinsViewDB::GetDBProperty(const std::string& proper
 std::shared_future<void> CCoinsViewDB::CompactFullAsync()
 {
     AssertLockHeld(::cs_main);
+    AssertLockNotHeld(m_db_mutex);
     if (m_compaction.valid() && m_compaction.wait_for(std::chrono::seconds{0}) != std::future_status::ready) {
         Assume(m_compaction.valid());
         return m_compaction;
@@ -249,6 +252,7 @@ private:
 
 std::unique_ptr<CCoinsViewCursor> CCoinsViewDB::Cursor() const
 {
+    AssertLockNotHeld(m_db_mutex);
     auto db_lock = std::make_unique<UniqueLock<Mutex>>(m_db_mutex, "m_db_mutex", __FILE__, __LINE__);
     auto i = std::make_unique<CCoinsViewDBCursor>(
         std::move(db_lock), const_cast<CDBWrapper&>(*m_db).NewIterator(), GetBestBlock());

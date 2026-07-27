@@ -628,36 +628,43 @@ FUZZ_TARGET(coins_view_db_resize_cursor, .init = initialize_coins_view)
     }
     cache.Flush();
 
-    const size_t resized_cache_size{provider.ConsumeIntegralInRange<size_t>(1_MiB, 4_MiB)};
-    auto cursor{db.Cursor()};
-    std::promise<void> resize_ready;
-    auto resize_ready_future{resize_ready.get_future()};
-    std::thread resize_thread{[&] {
-        LOCK(::cs_main);
-        resize_ready.set_value();
-        db.ResizeCache(resized_cache_size);
+    const size_t num_resizes{provider.ConsumeIntegralInRange<size_t>(1, 4)};
+    auto assert_expected{[&](const std::map<COutPoint, Coin>& observed) {
+        assert(observed.size() == expected.size());
+        for (const auto& [outpoint, coin] : expected) {
+            const auto it{observed.find(outpoint)};
+            assert(it != observed.end());
+            assert(it->second == coin);
+        }
     }};
-    resize_ready_future.wait();
+
+    for (size_t resize_index{0}; resize_index < num_resizes; ++resize_index) {
+        const size_t resized_cache_size{provider.ConsumeIntegralInRange<size_t>(1_MiB, 4_MiB)};
+        auto cursor{db.Cursor()};
+        std::promise<void> resize_ready;
+        auto resize_ready_future{resize_ready.get_future()};
+        std::thread resize_thread{[&] {
+            LOCK(::cs_main);
+            resize_ready.set_value();
+            db.ResizeCache(resized_cache_size);
+        }};
+        resize_ready_future.wait();
+
+        std::map<COutPoint, Coin> observed;
+        while (cursor->Valid()) {
+            COutPoint outpoint;
+            Coin coin;
+            assert(cursor->GetKey(outpoint));
+            assert(cursor->GetValue(coin));
+            observed.emplace(outpoint, std::move(coin));
+            cursor->Next();
+        }
+        cursor.reset();
+        resize_thread.join();
+        assert_expected(observed);
+    }
 
     std::map<COutPoint, Coin> observed;
-    while (cursor->Valid()) {
-        COutPoint outpoint;
-        Coin coin;
-        assert(cursor->GetKey(outpoint));
-        assert(cursor->GetValue(coin));
-        observed.emplace(outpoint, std::move(coin));
-        cursor->Next();
-    }
-    cursor.reset();
-    resize_thread.join();
-    assert(observed.size() == expected.size());
-    for (const auto& [outpoint, coin] : expected) {
-        const auto it{observed.find(outpoint)};
-        assert(it != observed.end());
-        assert(it->second == coin);
-    }
-
-    observed.clear();
     auto resized_cursor{db.Cursor()};
     while (resized_cursor->Valid()) {
         COutPoint outpoint;
@@ -667,12 +674,7 @@ FUZZ_TARGET(coins_view_db_resize_cursor, .init = initialize_coins_view)
         observed.emplace(outpoint, std::move(coin));
         resized_cursor->Next();
     }
-    assert(observed.size() == expected.size());
-    for (const auto& [outpoint, coin] : expected) {
-        const auto it{observed.find(outpoint)};
-        assert(it != observed.end());
-        assert(it->second == coin);
-    }
+    assert_expected(observed);
 }
 
 // Creates a CoinsViewOverlay and a MutationGuardCoinsViewCache as the base.

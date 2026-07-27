@@ -1540,32 +1540,34 @@ BOOST_FIXTURE_TEST_CASE(coins_db_resize_cursor, FlushTest)
     cache.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
     cache.Flush();
 
-    auto cursor{base.Cursor()};
-    std::promise<void> resize_ready;
-    auto resize_ready_future{resize_ready.get_future()};
-    std::thread resize_thread{[&] {
-        LOCK(::cs_main);
-        resize_ready.set_value();
-        base.ResizeCache(2_MiB);
-    }};
-    resize_ready_future.wait();
-
     COutPoint read_outpoint;
     Coin read_coin;
-    const bool cursor_valid{cursor->Valid()};
-    const bool got_key{cursor->GetKey(read_outpoint)};
-    const bool got_value{cursor->GetValue(read_coin)};
-    cursor->Next();
-    const bool cursor_exhausted{!cursor->Valid()};
-    cursor.reset();
-    resize_thread.join();
+    for (const size_t cache_size : {2_MiB, 3_MiB}) {
+        auto cursor{base.Cursor()};
+        std::promise<void> resize_ready;
+        auto resize_ready_future{resize_ready.get_future()};
+        std::thread resize_thread{[&] {
+            LOCK(::cs_main);
+            resize_ready.set_value();
+            base.ResizeCache(cache_size);
+        }};
+        resize_ready_future.wait();
 
-    BOOST_REQUIRE(cursor_valid);
-    BOOST_REQUIRE(got_key);
-    BOOST_REQUIRE(got_value);
-    BOOST_CHECK(read_outpoint == outpoint);
-    BOOST_CHECK(read_coin == coin);
-    BOOST_CHECK(cursor_exhausted);
+        const bool cursor_valid{cursor->Valid()};
+        const bool got_key{cursor->GetKey(read_outpoint)};
+        const bool got_value{cursor->GetValue(read_coin)};
+        cursor->Next();
+        const bool cursor_exhausted{!cursor->Valid()};
+        cursor.reset();
+        resize_thread.join();
+
+        BOOST_REQUIRE(cursor_valid);
+        BOOST_REQUIRE(got_key);
+        BOOST_REQUIRE(got_value);
+        BOOST_CHECK(read_outpoint == outpoint);
+        BOOST_CHECK(read_coin == coin);
+        BOOST_CHECK(cursor_exhausted);
+    }
 
     auto resized_cursor{base.Cursor()};
     BOOST_REQUIRE(resized_cursor->Valid());
