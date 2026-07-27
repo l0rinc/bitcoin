@@ -20,15 +20,22 @@ BOOST_AUTO_TEST_CASE(disconnectpool_rejects_null_tx_refs)
     BOOST_CHECK_THROW(disconnectpool.removeForBlock(resized_block_vtx), NonFatalCheckError);
 }
 
-BOOST_AUTO_TEST_CASE(disconnectpool_rejects_duplicate_txids)
+BOOST_AUTO_TEST_CASE(disconnectpool_ignores_duplicate_txids)
 {
-    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
     DisconnectedBlockTransactions disconnectpool{MAX_DISCONNECTED_TX_POOL_BYTES};
-    const CTransactionRef tx{MakeTransactionRef(CMutableTransaction{})};
-    const std::vector<CTransactionRef> duplicate_block_vtx{tx, tx};
+    CMutableTransaction coinbase;
+    coinbase.vin.emplace_back();
+    const CTransactionRef tx{MakeTransactionRef(coinbase)};
 
-    BOOST_CHECK_THROW((void)disconnectpool.AddTransactionsFromBlock(duplicate_block_vtx), NonFatalCheckError);
-    disconnectpool.clear();
+    // A historical BIP30 duplicate coinbase can be encountered in two different disconnected
+    // blocks. Keep one indexed entry so removeForBlock() can remove the transaction cleanly.
+    BOOST_CHECK(disconnectpool.AddTransactionsFromBlock({tx}).empty());
+    BOOST_CHECK(disconnectpool.AddTransactionsFromBlock({tx}).empty());
+    BOOST_CHECK_EQUAL(disconnectpool.size(), 1);
+
+    disconnectpool.removeForBlock({tx});
+    BOOST_CHECK_EQUAL(disconnectpool.size(), 0);
+    BOOST_CHECK(disconnectpool.take().empty());
 }
 
 //! Tests that DisconnectedBlockTransactions limits its own memory properly

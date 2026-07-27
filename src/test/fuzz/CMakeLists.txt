@@ -46,6 +46,7 @@ add_executable(fuzz
   decode_tx.cpp
   descriptor_parse.cpp
   deserialize.cpp
+  disconnected_transactions.cpp
   difference_formatter.cpp
   eval_script.cpp
   feefrac.cpp
