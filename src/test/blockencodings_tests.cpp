@@ -1526,6 +1526,30 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationMaxTest) {
     BOOST_CHECK_EQUAL(req0.indexes[0], req1.indexes[0]);
 }
 
+BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationCardinalityBoundaryTest)
+{
+    const auto make_zero_delta_stream = [](const uint64_t count) {
+        DataStream stream{};
+        stream << uint256::ONE;
+        WriteCompactSize(stream, count);
+        for (uint64_t i{0}; i < count; ++i) WriteCompactSize(stream, 0);
+        return stream;
+    };
+
+    // 65536 zero deltas decode to the complete uint16_t index domain [0, 65535].
+    DataStream max_cardinality_stream{make_zero_delta_stream(65536)};
+    BlockTransactionsRequest max_cardinality;
+    max_cardinality_stream >> max_cardinality;
+    BOOST_CHECK_EQUAL(max_cardinality.indexes.size(), 65536U);
+    BOOST_CHECK_EQUAL(max_cardinality.indexes.front(), 0U);
+    BOOST_CHECK_EQUAL(max_cardinality.indexes.back(), 0xffffU);
+
+    // The next delta would produce index 65536 and must be rejected.
+    DataStream overflow_stream{make_zero_delta_stream(65537)};
+    BlockTransactionsRequest overflow;
+    BOOST_CHECK_THROW(overflow_stream >> overflow, std::ios_base::failure);
+}
+
 BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationOverflowTest) {
     // Any set of index deltas that starts with N values that sum to (0x10000 - N)
     // causes the edge-case overflow that was originally not checked for. Such
