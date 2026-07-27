@@ -27,6 +27,15 @@ class TxRelayRateLimitKnownTest(BitcoinTestFramework):
         node.setmocktime(1_700_000_000)
         self.generate(wallet, COINBASE_MATURITY + 2 * (BUCKET_CAP + 1) + 10)
 
+        # A local submission with no eligible relay peer must not spend either
+        # global budget or leave a backlog that cannot be delivered.
+        before_no_peer = node.getnetworkinfo()["inv_buckets"]
+        no_peer_tx = wallet.create_self_transfer()
+        wallet.sendrawtransaction(from_node=node, tx_hex=no_peer_tx["hex"])
+        after_no_peer = node.getnetworkinfo()["inv_buckets"]
+        for direction in ("inbound", "outbound"):
+            assert_equal(after_no_peer[direction], before_no_peer[direction])
+
         outbound_peer = node.add_outbound_p2p_connection(
             P2PInterface(), p2p_idx=0, connection_type="outbound-full-relay"
         )
@@ -59,12 +68,6 @@ class TxRelayRateLimitKnownTest(BitcoinTestFramework):
         assert_equal(bucket["count_tok"], BUCKET_CAP - 1)
         assert_equal(outbound_peer.message_count["inv"], 0)
         assert_equal(legacy_peer.message_count["inv"], 0)
-
-        # The two global buckets are independent, but the inbound bucket was
-        # consumed while no inbound peers existed. Refill it before switching
-        # to the inbound known-filter case below.
-        node.bumpmocktime(BUCKET_CAP + 1)
-        outbound_peer.sync_with_ping()
 
         peers = [node.add_p2p_connection(P2PInterface()) for _ in range(2)]
         for peer in peers:

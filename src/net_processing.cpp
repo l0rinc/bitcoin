@@ -2499,6 +2499,8 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
         // backlog or recreate the old per-peer queue cost.
         auto distribute = [](InvToSendBucket& bucket, const std::vector<CTransactionRef>& txs,
                              const std::vector<PeerRef>& peers) {
+            const double count_before{bucket.count_bucket.value()};
+            const double size_before{bucket.size_bucket.value()};
             for (const CTransactionRef& tx : txs) {
                 Assert(tx);
                 bool unknown_to_a_peer{false};
@@ -2516,7 +2518,9 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
                 }
 
                 if (!unknown_to_a_peer) {
-                    if (!peers.empty()) RefundRelayTokens(bucket, *tx);
+                    // An empty peer set also has no recipient, so the reservation
+                    // must be returned instead of consuming relay capacity.
+                    RefundRelayTokens(bucket, *tx);
                     continue;
                 }
 
@@ -2529,6 +2533,10 @@ void PeerManagerImpl::ProcessInvBacklog(NodeClock::time_point now, bool backlog_
                         tx_relay->m_tx_inventory_to_send.push_back(tx->GetWitnessHash());
                     }
                 }
+            }
+            if (peers.empty()) {
+                Assert(bucket.count_bucket.value() >= count_before);
+                Assert(bucket.size_bucket.value() >= size_before);
             }
         };
 
