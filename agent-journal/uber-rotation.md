@@ -63,15 +63,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 61 | stateful-contract-fuzzing | CYCLE-1 | 2026-07-27 | script_sigcache transparency oracle (a4ff67417e, mutation-verified) |
 | 30 | security-logging | CYCLE-1 | 2026-07-27 | RPC method log injection fixed (19c7dc6233, fail-before/pass-after) |
 | 31 | cross-layer-contracts | CYCLE-1 | 2026-07-27 | descriptors.md range off-by-one fixed (1f7f73b02e, regtest-proven) |
+| 29 | dead-stale-code | CYCLE-1 | 2026-07-27 | 3 sweeps clean; SAFE_CHARS_FILENAME parked inconclusive |
 
 ## Next-up queue (severity-first)
-1. 29 — dead-stale-code — NEXT (pairs with #96 TODO triage; disk-light)
-2. then re-rank: 17 (build-matrix; needs extra build dirs — disk 99% full, may defer)
+1. 17 — build-matrix — NEXT (cycle 1 = text-based inventory vs CI, no new build dirs needed)
+2. then re-rank: 21/22 (profiling), resume CYCLE-1 queues (18 amount round-trip, 19 bench sweep)
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c1), 19(c1), 28(c1), 16(c1), 61(c1), 30(c1), 31(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c1), 19(c1), 28(c1), 16(c1), 61(c1), 30(c1), 31(c1), 29(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #29 on branch
-audit/dead-stale-code.
+full cross-backend differential in ~35s on this host. NEXT: #17 on branch
+audit/build-matrix.
