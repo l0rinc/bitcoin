@@ -23,10 +23,17 @@ across the tree. For each candidate site: hypothesis, trust boundary, caller tra
 verdict (confirmed/dismissed/inconclusive) + evidence.
 
 ## Verdicts
-(empty — filled per cycle)
+Cycle 1 complete (see sections below): S1 DISMISSED beyond origin class
+(PR 35744), S2 DISMISSED on master, S5 DISMISSED beyond origin site
+(fork branch l0rinc/rpc-gettxspendingprevout-linear). No new confirmed
+findings; no fix commits required by this cycle.
 
 ## Next queue
-S6/S7/S8/S9 mapping; then goal 5/52 (boundary/integer) campaign with this shape index as seeds.
+- Cycle 2 (goal 5/52, boundary/integer): use S6/S7/S8/S9 as seeds; first
+  candidates — S9 first-vs-rest divergence in other cursor/range consumers,
+  S8 signed accumulation in other RPC loops, S6 rate-domain leftovers.
+- Track open upstream PRs from these shapes: 35744 (coins cursor lock),
+  gettxspendingprevout-linear PR, 35654, 35818 — via the watch crons.
 
 ## S2 verdict (cycle 1): DISMISSED on master
 
@@ -80,3 +87,42 @@ Mapped every DB-object-replacement vs live-iterator/cursor site:
    replaced object. Dismissed.
 
 No new S1 defect found on master beyond the already-patched origin class.
+
+## S5 verdict (cycle 1): origin class covered by own fix branch; all analogous sites DISMISSED
+
+Swept every `.erase(`/remove_if inside loops in rpc/, net_processing.cpp, net.cpp,
+validation.cpp, txmempool.cpp, coins.cpp, txdb.cpp, node/, wallet/, index/,
+kernel/, addrman.cpp, banman.cpp, blockstorage.cpp, and inline header containers.
+Per-site container check:
+
+1. Origin site — rpc/mempool.cpp:1015-1027 (gettxspendingprevout): `std::vector`
+   erase-in-loop under `LOCK(mempool.cs)`, RPC-controllable length. CONFIRMED and
+   already fixed on fork branch l0rinc/rpc-gettxspendingprevout-linear
+   (b9d291db41 "rpc: avoid quadratic prevout resolution" + e0d7c81f10 test,
+   std::erase_if single-pass compaction), upstream PR open. Not on this branch's
+   base; no new work needed here.
+2. net_processing.cpp:6206-6227 (tx relay trickle): erases from
+   `std::set<Wtxid>` — O(log n) per erase, loop bounded by broadcast_max.
+   Dismissed.
+3. net_processing.cpp:2630 (m_getdata_requests deque): single range-erase of a
+   consumed prefix per message, amortized O(k). Not a loop of middle erases.
+   Dismissed.
+4. net_processing.cpp:5597 / net.cpp:1980,2705,3787: erase-remove_if idiom —
+   single O(n) pass, which is the fix pattern itself. Dismissed.
+5. validation.cpp:3734 (highpow_outofchain_headers): std::multimap, O(log n).
+   Dismissed. validation.cpp:1788 (results_final): std::map. Dismissed.
+   setBlockIndexCandidates / m_blocks_unlinked / m_dirty_*: std::set. Dismissed.
+6. txmempool.cpp (mapNextTx/mapTx/mapDeltas): boost multi_index/std::map —
+   O(log n). Dismissed. coins.cpp (cacheCoins): hash map. Dismissed.
+7. wallet/scriptpubkeyman.cpp:556-571, 689-760 (migration keyids/spks): both
+   std::set, O(log n), and one-shot authenticated migration path. Dismissed.
+8. addrman.cpp:950,971 (m_tried_collisions): std::set. Dismissed.
+   banman.cpp:201 (m_banned): std::map. Dismissed.
+9. rpc/mempool.cpp:825 (setDescendants), rpc/server.cpp:414,441 (argsIn),
+   rpc/blockchain.cpp:1636 (setPrevs): std::set, O(log n). Dismissed.
+10. node/miner.cpp:94 (tx.vout erase): single erase per coinbase construction,
+    not in a loop. Dismissed.
+
+Conclusion: no second instance of the quadratic erase-under-lock shape exists in
+production code on master; the shape is fully accounted for by the origin site
+and its open fix PR. Verdict: dismissed beyond origin.
