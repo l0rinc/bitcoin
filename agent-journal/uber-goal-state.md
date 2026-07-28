@@ -6,10 +6,19 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Latest authoritative checkpoint
 
-- Cycle 81 is complete. Goal 6 (`serialization-untrusted-input`) confirmed and fixed a PSBT Taproot BIP32 keypath field-boundary/resource-validation defect in source/test commit `1a1a51aa96873c8fd8715b5a2b9b74a7e550a65f`, authored as `Lőrinc <pap.lorinc@gmail.com>`.
-- The fix bounds both input and output Taproot BIP32 keypath values with a `SpanReader` and checks the nested leaf-hash count before set insertion. The two regressions prove the old parser consumed 32 bytes from the following map entry and the fixed parser leaves all 36 bytes unread.
-- `build_unit_clang19` and `build_unit_tsan_clang19` rebuilt `test_bitcoin`; both `psbt_tests` runs passed all 10 cases. No relevant process remains running.
-- Current branch: `uber-cycle-81-serialization-untrusted-input-20260728`; current HEAD: `1a1a51aa96873c8fd8715b5a2b9b74a7e550a65f`. A state-only close snapshot and the next exact random selector remain to be recorded.
+- Cycle 82 is complete. Goal 7 (`resource-exhaustion-variants`) confirmed and fixed a remotely reachable P2P locator allocation/parse-boundary defect in source/test/journal commit `1e0091464ceb4c13c2b5d33eaedbefc0b6d57452`, authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- The old `getblocks` and `getheaders` handlers deserialized a generic locator vector before applying `MAX_LOCATOR_SZ=101`; the regression's advertised count of `1,048,576` triggered the generic formatter's first 5,000,000-byte reservation before the truncated hash read failed. The fix checks the count before resizing or reading hashes and preserves explicit disconnect behavior.
+- The focused normal regression failed on the unmodified source and passed after the fix for both message types. The normal Clang 19 `net_tests` suite passed 33 cases. The rebuilt Clang 19 TSan target passed the focused regression without diagnostics. `git diff --check` passed.
+- Current branch: `uber-cycle-82-resource-exhaustion-variants-20260728`; current HEAD: `1e0091464ceb4c13c2b5d33eaedbefc0b6d57452`. `origin/master...HEAD` is `2 947`; no relevant process remains running. The next exact random selector is pending.
+
+## Cycle 82 Completion
+
+- Selected by exact `shuf -i 0-98 -n 1` -> `7` (`resource-exhaustion-variants`), excluding cycle 57's cfilters/BIP35 response-watermark cells and previously closed relay-backlog, integer-option, and receive-buffer cells.
+- Branch: `uber-cycle-82-resource-exhaustion-variants-20260728`; start HEAD `d86caff0a23f0ba042ced945520dffb1ee224164`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `2 945`.
+- Confirmed finding: an unauthenticated peer could advertise an oversized locator count in `getblocks` or `getheaders`; generic vector deserialization reserved about 5 MiB before the later 101-entry check. `ReadBlockLocator` now checks the CompactSize count first. The source/test regression and exact resource equation are recorded in `agent-journal/resource-exhaustion-variants.md`.
+- Source/test/journal commit: `1e0091464ceb4c13c2b5d33eaedbefc0b6d57452` (`net: reject oversized locators before deserialization`).
+- Validation: normal focused before/after regression, normal full `net_tests` (33 cases), Clang 19 TSan focused regression, and `git diff --check`. An initial test launch without `TMPDIR` was discarded because the root filesystem was full before fixture setup; the authoritative reruns used `/data/my_storage/tmp`.
+- Gate: tracked source is clean after the source commit; known untracked agent artifacts and `test/cache` remain preserved and excluded; catalog/protocol/TSV hashes remain recorded; no relevant process is running.
 
 ## Cycle 82 Active State
 
