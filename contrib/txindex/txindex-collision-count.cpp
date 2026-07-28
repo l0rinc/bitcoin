@@ -22,7 +22,7 @@
 
 namespace {
 constexpr char HASHED_ROW{'x'};
-constexpr size_t HASH_PREFIX_BYTES{5};
+constexpr size_t HASH_PREFIX_BYTES{6};
 constexpr size_t GROUP_BYTES{1 + HASH_PREFIX_BYTES};
 constexpr size_t HASHED_KEY_BYTES{GROUP_BYTES + 3 + 3};
 constexpr uint64_t PREFIX_BUCKETS{uint64_t{1} << (8 * HASH_PREFIX_BYTES)};
