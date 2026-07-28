@@ -359,6 +359,35 @@ BOOST_AUTO_TEST_CASE(encrypt_wallet_master_key_write_failure_preserves_state)
     BOOST_CHECK(!spkm->HaveCryptedKeys());
 }
 
+BOOST_AUTO_TEST_CASE(change_wallet_passphrase_write_failure_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtKey(extkey) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+
+    SecureString old_passphrase{"old passphrase"};
+    SecureString new_passphrase{"new passphrase"};
+    BOOST_REQUIRE(keystore.EncryptWallet(old_passphrase));
+    BOOST_REQUIRE(keystore.IsLocked());
+
+    const auto master_key_id = keystore.mapMasterKeys.begin()->first;
+    DataStream master_key_db_key;
+    master_key_db_key << std::make_pair(DBKeys::MASTER_KEY, master_key_id);
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    const std::string trigger{
+        "CREATE TRIGGER fail_master_key_write BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{master_key_db_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    BOOST_CHECK(!keystore.ChangeWalletPassphrase(old_passphrase, new_passphrase));
+    BOOST_CHECK(keystore.IsLocked());
+    BOOST_CHECK(keystore.Unlock(old_passphrase));
+    BOOST_CHECK(!keystore.Unlock(new_passphrase));
+}
+
 BOOST_AUTO_TEST_CASE(get_new_destination_self_expanding_xpub)
 {
     CExtKey extkey;
