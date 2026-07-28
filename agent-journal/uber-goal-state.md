@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 58 complete; selected goal 32 (`history-incomplete-fixes`) from the full catalog after a fresh gate and selector draw. Cycle 59 is pending a fresh gate and selector draw.
+- Status: cycle 59 in progress; selected goal 45 (`constant-time-boundary`) from the full catalog after a fresh gate and selector draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -15,6 +15,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 58 gate: fetched `origin/master`; HEAD `75b1f55d251ea4cab3ebd827ece57eb6a8c41969`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 884`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 58 selector: exact `shuf -i 0-98 -n 1` -> `32` (`history-incomplete-fixes`). Scope excludes the cycle-43 wallet migration write-return cell, cycle-56 database output-on-decode-failure cell, and cycle-57 compact-filter range-output/resource cell; this run mines the distinct current output-contract follow-up cluster.
 - Current HEAD after cycle 58 source/test fix: `3e4ec4e7ef0f216c09c10b1d577fc1517a043434` (`blockstorage: publish undo data after checksum verification`). `BlockManager::ReadBlockUndo` now publishes decoded undo data only after checksum verification; `blockmanager_readblockundo_preserves_output_on_checksum_failure` reproduced the old partial-output behavior and passed after the fix. The focused regression passed with 11 assertions, the full `blockmanager_tests` suite passed 12 cases and 128 assertions, `git diff --check` passed, and ASan was unavailable in the local build environment. No relevant process remains running.
+- Cycle 59 gate: fetched `origin/master`; HEAD `3b4c458d37861c084d074becaae27e4228fd07d0`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 887`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
+- Cycle 59 selector: exact `shuf -i 0-98 -n 1` -> `45` (`constant-time-boundary`). The cycle-40 EllSwift auxiliary-input boundary is closed. This run selects the distinct MuSig session/keypair declassification boundary and will not modify EllSwift code without new independent evidence.
 - Current HEAD after cycle 17: `ffda33a38f5fddab57e4618775d22ce31d8eda09`
 - Current HEAD after cycle 18: `55eaf087c189ae871878692fb20a90ac3533084d`
 - Current HEAD before cycle 19 journal handoff: `ec4401b816f132f2f35c1f2e64cf51e2046e8e32`
