@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 62 complete; goal 26 (`cross-subsystem-bug-shapes`) was selected from the full catalog, investigated, and dismissed on reachability grounds. Cycle 63 is pending a fresh gate and selector draw.
+- Status: cycle 63 in progress; goal 59 (`cpp-supply-chain`) was selected from the full catalog after a fresh gate and selector draw. The prior cycle-41 release-signature threshold findings are closed; this run audits distinct toolchain, dependency, generated-input, and provenance gates.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -29,6 +29,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 62 gate: fetched `origin/master`; HEAD `387f5a122f1c85655253cd35b47d49140317e8a9`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 894`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 62 selector: exact `shuf -i 0-98 -n 1` -> `26` (`cross-subsystem-bug-shapes`). The cycle-48 wallet-rescan reservation-ordering cell is closed; this run must mine a distinct structural fix shape and prove an analogous reachable site.
 - Cycle 62 completion: dismissed. The `b0ce659a98` shared-candidate mutation fix was compared with `Chainstate::PreciousBlock`, but a block eligible for active reprioritization cannot be a valid background candidate under the current historical `TargetBlock` contract. The controlled active-child setup showed background candidate counts of zero before reprioritization; injecting membership would violate the production invariant. No source change was made. See `cross-subsystem-bug-shapes.md`; `git diff --check` passed and no relevant process remains running.
+- Cycle 63 gate: fetched `origin/master`; HEAD `70caa034b9aa598e10bfd5091f2e6358f843a610`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 896`; tracked/staged state clean with known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
+- Cycle 63 selector: exact `shuf -i 0-98 -n 1` -> `59` (`cpp-supply-chain`). Reopen only the compiler/tool acquisition, dependency-cache, generated-input, license, and provenance cells; do not repeat cycle 41's trusted-signature threshold fixes.
 - Current HEAD after cycle 17: `ffda33a38f5fddab57e4618775d22ce31d8eda09`
 - Current HEAD after cycle 18: `55eaf087c189ae871878692fb20a90ac3533084d`
 - Current HEAD before cycle 19 journal handoff: `ec4401b816f132f2f35c1f2e64cf51e2046e8e32`
@@ -216,13 +218,13 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 62 closed with no source change. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: `cpp-supply-chain` (cycle 63); goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 62 is complete on goal 26, `cross-subsystem-bug-shapes`, selected by `shuf -i 0-98 -n 1` -> `26`. The historical shared-candidate mutation shape was audited against snapshot candidate eligibility and found unreachable for `PreciousBlock`; no production source change was justified. The next run must recheck branch/base/HEAD, dirty state, processes, catalog hashes, existing journals, history, and review precedent before drawing cycle 63.
+Cycle 63 is active on goal 59, `cpp-supply-chain`, selected by `shuf -i 0-98 -n 1` -> `59`. The current run must inventory the distinct toolchain, dependency-cache, generated-input, license, and provenance surfaces, prove one concrete hypothesis or dismiss it with an exact boundary argument, and then hand off to the next fresh catalog draw.
 
 Cycle 50 selected `exhaustive-algebraic` with `shuf -i 0-98 -n 1` -> `18`. The distinct cell defined `GCSFilter::MatchAny(Q) == OR Match(q)` over all 16 filter subsets and 16 query subsets of four one-byte elements, with checked encoded reconstruction as a second path. The disposable matrix passed 1,555 assertions; a temporary `return false` mutation failed at the singleton check with exit 201 and 606 failed assertions. After restoring source and removing the disposable test, the production block-filter suite passed 8 cases and 499 assertions. No source defect was justified. The exact evidence and limits are in `exhaustive-algebraic.md`; no process remains running. The next run must re-check the gate and draw another distinct goal.
 
