@@ -80,3 +80,42 @@ Existing tests injected failures into initial wallet encryption and descriptor k
 - Confirmed and fixed: passphrase changes could report success and desynchronize in-memory and persisted master-key state after a database write failure.
 - Dismissed for this cycle: the intentionally partial `ReadBlock` output contract and the previously covered descriptor/address/encryption rollback paths.
 - Next queue: draw a distinct catalog goal after recording the source/test commit and this handoff; do not reopen passphrase-change failure handling unless a new backend, restart, or encryption-failure witness appears.
+
+## Cycle 22: transaction-download and index failure-state audit
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `27`
+- Selected slug: `error-path-state`
+- Branch: `fuzz-contract-cluster-oracles-20260709`
+- HEAD at gate: `d2c2ef6a4ccf03a50a22917d100b70a3294cdb93`
+- `origin/master` at gate: `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Source was clean at the gate; existing agent artifacts and `test/cache/` were preserved.
+- `git diff --check`: passed.
+- No daemon, test, fuzz, sanitizer, or benchmark process was running at the gate.
+
+This was an intentional repeat of goal 27 on a different evidence cell. The cycle did not reopen the wallet passphrase path fixed in cycle 18. The catalog and prior journals were searched before selecting transaction-download and index transitions.
+
+### Candidate ledger
+
+| Surface | Hypothesis | Evidence | Verdict |
+|---|---|---|---|
+| `TxDownloadManager` response, rejection, orphan, and disconnect paths | A normal failure could leave request, orphan, peer, or accounting state mutated | Existing contracts and postconditions cover unknown peers, response cleanup, request issuance, orphan rejection, disconnect cleanup, and duplicate peer connection. `txdownload_tests` passed all 14 cases, including missing-input, rejection, and package-retry cases. | Dismissed; no new partial-state defect |
+| `CoinStatsIndex::CustomAppend` | `m_total_subsidy` is incremented before a previous-block-hash mismatch returns false | The mismatch is dispatched only through `BaseIndex::ProcessBlock`, which treats failure as a fatal index error. `BlockConnected` and `Sync` provide contiguous chain transitions, while `CustomInit` rejects a corrupt persisted tip before append. No supported production transition reached the mismatch. | Dismissed as a reachable production defect; retain as an internal-contract hardening lead |
+| `BlockFilterIndex` append/remove persistence | A write or filter-header failure could expose a recoverable partial index state | The suspicious writes can precede later failure, but the failure path is terminal node shutdown and no externally observable restart inconsistency was reproduced in this cycle. | Dismissed for this cycle; revisit only with a fault-schedule witness |
+
+The transaction-download state machine already has direct unit and fuzz coverage from earlier cycles. `GetNodeStateStats` can return false after filling an output if its peer disconnects between state lookups, but its RPC caller explicitly ignores the failure and the current test suite did not establish a caller-visible contract violation. It remains a lower-priority future queue item rather than a finding for this cycle.
+
+### Verification
+
+- `build_unit_clang19/bin/test_bitcoin --run_test=txdownload_tests --catch_system_error=no --log_level=test_suite`: all 14 cases passed; `*** No errors detected`.
+- `build_unit_clang19/bin/test_bitcoin --run_test=coinstatsindex_tests,baseindex_tests --catch_system_error=no --log_level=test_suite`: all 3 cases passed; `*** No errors detected`.
+- Normal fuzz replay, isolated under `/data/my_storage/tmp/cycle22-fuzz-work`, used 128 deterministic seeds selected from `qa-assets` and `-jobs=1 -workers=1 -runs=1`. It completed 129 runs in 68 seconds, exit code 0, 8,203 coverage edges, peak RSS 109 MB, and no artifact.
+- ASan/UBSan fuzz replay, isolated under `/data/my_storage/tmp/cycle22-fuzz-asan`, used the identical 128 seeds and the same fixed run count. It completed 129 runs in 309 seconds, exit code 0, 26,028 coverage edges, peak RSS 693 MB, and no crash artifact. Four `slow-unit-*` files were emitted by libFuzzer's slow-unit reporting; they are not failure inputs.
+
+The earlier full-corpus attempt used two parallel workers in the repository checkout, which caused `fuzz-0.log` and `fuzz-1.log` path collisions. It was stopped after the configured time budgets because seed processing dominated. Ctrl-C produced an ASan `DEADLYSIGNAL` stack rooted in `fuzzer::Fuzzer::InterruptExitCode()`; this is an interrupted libFuzzer driver trace, not a production crash. The clean isolated subset above is the authoritative fuzz evidence for this cycle.
+
+### Handoff
+
+No source change is justified. Cycle 22 is a journal-only dismissal: transaction-download failure edges remain covered, and the CoinStats mutation is behind an internal invariant violation that currently terminates index processing rather than returning a recoverable failure to a caller. The next cycle must run a fresh gate and draw another catalog goal, avoiding wallet passphrase handling, the immediate direct-fetch boundary cell, and already-closed generic P2P lifecycle surfaces unless new evidence changes their priority.
