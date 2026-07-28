@@ -4,11 +4,11 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 77 complete; goal 57 (`local-reasoning-domain`) found no new source defect after auditing fresh relationship/state-domain cells. Cycle 76 confirmed and fixed a distinct compact-block announcement read-failure path. Cycle 75 fixed the nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
+- Status: cycle 78 in progress; goal 36 (`sanitizer-analysis-matrix`) is reopening only distinct MSan/instrumented-dependency, Valgrind, direct TokenPipe, new analyzer-warning, and new source/configuration cells after cycle 26's matrix close. Cycle 77's fresh relationship/state-domain cells found no new source defect. Cycle 76 confirmed and fixed a distinct compact-block announcement read-failure path. Cycle 75 fixed the nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
-- Branch: `uber-cycle-77-local-reasoning-domain-20260728`
+- Branch: `uber-cycle-78-sanitizer-analysis-matrix-20260728`
 - Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
 - HEAD at initialization: `1dcc2da988ee625fbc5d7d55eb6f894c1103ec52`
 - Current HEAD after cycle 16: `1926a4dbf612f3ce2fd43b61c0691360930a952f`
@@ -17,9 +17,11 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Current cycle-76 source/test/journal HEAD: `ddbb88ed12` (`net: disconnect on compact block announcement read failure`).
 - Current cycle-77 start HEAD: `76a2240168` (`journal: close cross-subsystem bug-shapes cycle 76`).
 - Current cycle-77 pre-close HEAD: `fc42eb9f32` (`journal: start local-reasoning-domain cycle 77`).
+- Current cycle-78 start HEAD: `b9bb184352` (`journal: close local-reasoning-domain cycle 77`).
 - Cycle 76 gate: HEAD `02e0a92ddc33af203f4204848eb6095312f052af`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 930`; tracked source clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 76 selector: initial `shuf -i 0-98 -n 1` -> `37` (`build-dead-zones`) was rejected as the just-closed cell; retry `shuf -i 0-98 -n 1` -> `26` (`cross-subsystem-bug-shapes`). Cycles 48 and 62's wallet-rescan and chainstate candidate-set cells are excluded; this cycle targets a distinct historical failure-publication or lifecycle-asymmetry shape.
 - Cycle 77 selector: exact `shuf -i 0-98 -n 1` -> `57` (`local-reasoning-domain`). Cycle 65's AddrMan `GetNetwork()`/`GetNetClass()` relationship and linked-IPv4 cells are excluded; this cycle targets a distinct local relationship or state-domain assumption.
+- Cycle 78 selector: initial `shuf -i 0-98 -n 1` -> `2` (`assertion-invariant-audit`) was rejected because cycle 68 closed that GETBLOCKTXN assertion cell; retry `shuf -i 0-98 -n 1` -> `36` (`sanitizer-analysis-matrix`) was accepted for the distinct queued MSan/instrumented-dependency, Valgrind, direct TokenPipe, new-warning, and new source/configuration cells.
 - Cycle 74 gate: HEAD `ddde67072a`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 925`; tracked source clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 74 selector: exact `shuf -i 0-98 -n 1` -> `37` (`build-dead-zones`). Cycle 20's GCC `BUILD_FOR_FUZZING=ON`, `ENABLE_IPC=ON`, wallet-enabled parser/fuzz cell is excluded; this cycle targets wallet-off, IPC-off/monolithic, test/bench, and generated-source parity.
 - Cycle 74 close: current source/journal HEAD before the state-only close commit is `8063cae3aa`; no source change was justified. The wallet-off/IPC-off Clang, wallet-on/IPC-off Clang, wallet-off/IPC-on GCC, fuzz-only wallet-off Clang, and GUI wallet-off Clang matrices all configured and built as expected. Focused unit, IPC, Qt, target-registration, and `/data`-backed fuzz controls passed; the only negative results were a malformed full-root temp setup and the documented release-build fuzz refusal. See `build-dead-zones.md`.
@@ -262,6 +264,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 75 | `shuf -i 0-98 -n 1` -> `15` | `public-object-validation` (nested descriptor keys and wrapper/output parity) | confirmed; fixed | Full compressed keys in P2TR expanded as x-only script keys but `ConstPubkeyProvider` looked up only the parity-specific key ID. The separate lookup flag preserves descriptor spelling while using `GetKeyByXOnly()`; direct/nested Miniscript, opposite-parity, NUMS, and script-equivalence regression controls passed. See `public-object-validation.md`. | `d02e22867b` (`descriptor: use x-only lookup for Taproot compressed keys`) | Recheck the gate and draw the next eligible goal |
 | 76 | initial `37` rejected; retry `shuf -i 0-98 -n 1` -> `26` | `cross-subsystem-bug-shapes` (failure-publication and lifecycle asymmetry) | confirmed; fixed | The compact-block announcement path asserted after `ReadBlock` failed, so a reachable disk corruption/truncation/I/O failure could abort the node. The fix logs the failure, marks the peer for disconnect, and returns before compact-block publication. Candidate 1 (`dumptxoutset` rename) was dismissed because the throwing filesystem API already propagates an RPC error; candidate 2 (package fee metadata) was dismissed after all call sites were classified. The focused regression, old-source assertion mutation, full normal `net_tests`, and full TSan `net_tests` passed as documented in `cross-subsystem-bug-shapes.md`. | `ddbb88ed12` (`net: disconnect on compact block announcement read failure`) | Recheck the gate and draw the next eligible goal |
 | 77 | `shuf -i 0-98 -n 1` -> `57` | `local-reasoning-domain` (relationship and state-domain follow-up) | dismissed; no source change | Four distinct cells were checked: P2P transport/public network identity, BaseIndex commit snapshot versus flushed chainstate, transaction-download peer/orphan ownership, and descriptor x-only/full-key identity. Existing contracts, lifecycle serialization, deterministic controls, and independent focused suites found no new reachable mismatch. See `local-reasoning-domain.md`. | Journal-only close snapshot; no source change justified | Recheck the gate and draw the next eligible goal |
+| 78 | initial `2` rejected; retry `shuf -i 0-98 -n 1` -> `36` | `sanitizer-analysis-matrix` (distinct tool/configuration reopen) | in progress | Do not repeat cycle 26's TSan, ASan/UBSan, `scan-build`, or GCC CWE-457 matrix. Probe only the queued MSan/instrumented-dependency, Valgrind, direct TokenPipe, new analyzer-warning, and new source/configuration cells. See `sanitizer-analysis-matrix.md`. | Start state pending | Complete the distinct sanitizer/analyzer reopen and then draw the next eligible goal |
 
 ## Cycle 72 Completion
 
@@ -291,6 +294,15 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Verdict: dismissed for a new source defect. Wallet-off/on monolithic Clang builds completed 651/716 steps; wallet-off IPC-on GCC completed 709; wallet-off fuzz-only Clang completed 452; and wallet-off GUI Clang completed 452. The effective target graph matched the option guards, including absent wallet targets, IPC stub/real library selection, fuzz-only target suppression, and Qt wallet exclusion.
 - Validation: wallet-off/on focused DB/network/wallet suites passed; IPC tests passed 2 cases and 44 assertions; all four offscreen Qt groups passed 15 cases; fuzz-only `process_messages` and `tx_in` smokes passed with `/data` scratch state; wallet and IPC registration matched feature flags. Release-like fuzz binaries refused execution as documented. The first malformed test invocation used a missing `TMPDIR` under a full root filesystem and was discarded, then corrected.
 - Evidence: `/data/my_storage/tmp/build-dead-zones-cycle74/`; `git diff --check` and process cleanup remain required before the state-only close commit.
+
+## Cycle 78 Active State
+
+- Gate: HEAD `b9bb18435221ef31a7e6bf9a9b761c080ea39af7`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 935`.
+- Branch: `uber-cycle-78-sanitizer-analysis-matrix-20260728`.
+- Draw: initial `2` rejected as the cycle-68 GETBLOCKTXN assertion cell; retry `36` (`sanitizer-analysis-matrix`).
+- Excluded prior evidence: cycle 26's TSan unit slices, ASan/UBSan fuzz and unit slices, Clang `scan-build`, and the existing GCC `-fanalyzer` CWE-457 warning cluster.
+- Current hypothesis: an omitted diagnostic boundary, direct TokenPipe path, or new source/configuration combination may invalidate the prior cross-tool classification without requiring broad repeated matrix work.
+- Required evidence: tool/dependency inventory, exact new diagnostic or coverage path, first-invalid-operation/dataflow proof, independent contract classification, and preserved raw logs before any fix or suppression.
 
 ## Cycle 77 Initial Active State
 
@@ -358,11 +370,13 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 77 is closed. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
-- Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
+- Active goals this cycle: `sanitizer-analysis-matrix` cycle 78 only. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Reopened goals: `sanitizer-analysis-matrix` cycle 78 on the distinct queued cells; `statistical-timing` (cycle 5) remains reopened, with its GCC compiler/backend cell closed while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
+
+Cycle 78 is active. The initial draw was `2`, rejected because cycle 68 closed the GETBLOCKTXN assertion cell; the retry draw was `36`, `sanitizer-analysis-matrix`. This cycle must avoid cycle 26's completed TSan, ASan/UBSan, `scan-build`, and GCC CWE-457 work and investigate only the queued MSan/instrumented-dependency, Valgrind, direct TokenPipe, new-warning, or new source/configuration cells. The exact gate and hypotheses are recorded in `sanitizer-analysis-matrix.md`.
 
 Cycle 77 is complete. The exact draw was `shuf -i 0-98 -n 1` -> `57`, `local-reasoning-domain`, after the cycle-76 gate. It excluded cycle 65's AddrMan classifier and linked-IPv4 relationship cells, plus cycles 48 and 76's closed findings. Four relationship/state-domain cells were independently reviewed and dismissed; the corrected focused suites and evidence are recorded in `local-reasoning-domain.md`. The next run must re-check the gate and draw a distinct goal from the full catalog.
 

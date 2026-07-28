@@ -103,3 +103,26 @@ The repository TSan file contains an intentional test deadlock, Qt/ZMQ/external-
 Verdict: dismissed as a production defect for this cycle; the matrix found no confirmed memory, undefined-behavior, race, leak, or Clang static-analysis issue. The GCC analyzer warning cluster is a useful reproducible tooling artifact with explicit source-level explanations and cross-tool/runtime controls. No source or test change was needed. Raw evidence remains under `/data/my_storage/tmp/sanitizer-analysis-matrix-cycle26/`. No process remains running.
 
 Reopen this goal for MSan with instrumented dependencies, Valgrind when installed, a direct TokenPipe test, a new analyzer warning class, or a new source/configuration path that invalidates the current classifications.
+
+## Cycle 78: distinct sanitizer and analyzer reopen
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Initial draw: `2` (`assertion-invariant-audit`), rejected because cycle 68 already closed the selected GETBLOCKTXN assertion cell.
+- Retry draw: `36` (`sanitizer-analysis-matrix`), accepted as a distinct reopen of the queued MSan/instrumented-dependency, Valgrind, direct TokenPipe, new analyzer-warning, and new source/configuration cells.
+- Branch: `uber-cycle-78-sanitizer-analysis-matrix-20260728`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- HEAD at cycle start: `b9bb18435221ef31a7e6bf9a9b761c080ea39af7`
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Gate: `git fetch origin master --quiet` passed; `origin/master...HEAD` was `2 935`; tracked source was clean apart from known agent-owned artifacts and `test/cache`; no relevant test, fuzz, sanitizer, daemon, or profiling process was running.
+
+### Reopen scope and exclusions
+
+Cycle 26 already covered Clang/GCC TSan unit slices, Clang/GCC ASan/UBSan fuzz slices, a Clang ASan/UBSan unit slice, Clang `scan-build`, and the existing GCC `-fanalyzer` CWE-457 warning cluster. This cycle must not repeat those same configurations or reclassify the same warnings. It instead asks whether a currently unavailable or omitted diagnostic path exposes a real defect: MSan with an instrumented dependency boundary, Valgrind/Memcheck if the tool is available, direct production-like `TokenPipe` execution and failure coverage, a new analyzer warning class, or a newly reached source/configuration path.
+
+### Hypothesis and required evidence
+
+The earlier cross-tool agreement may be incomplete at an omitted boundary rather than proving the whole subsystem safe. Inventory available compilers, runtimes, suppression files, dependencies, and build flags first. For each new report, identify the first invalid operation or exact dataflow, reproduce it on clean HEAD, and independently classify it as a source defect, test/harness defect, dependency/tool artifact, unsupported instrumentation, or intentional contract. Any source change requires a failing-before/passing-after oracle, preserved raw diagnostic, and focused then broad validation; do not add a suppression to hide a new report.
