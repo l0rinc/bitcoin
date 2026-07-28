@@ -724,11 +724,18 @@ class PrecomputedTransactionData : public Handle<btck_PrecomputedTransactionData
 {
 public:
     explicit PrecomputedTransactionData(const Transaction& tx_to, std::span<const TransactionOutput> spent_outputs)
-        : Handle{btck_precomputed_transaction_data_create(
-            tx_to.get(),
-            reinterpret_cast<const btck_TransactionOutput**>(
-                const_cast<TransactionOutput*>(spent_outputs.data())),
-            spent_outputs.size())} {}
+        : Handle{Create(tx_to, spent_outputs)} {}
+
+private:
+    static btck_PrecomputedTransactionData* Create(const Transaction& tx_to, std::span<const TransactionOutput> spent_outputs)
+    {
+        std::vector<const btck_TransactionOutput*> spent_output_ptrs;
+        spent_output_ptrs.reserve(spent_outputs.size());
+        for (const auto& spent_output : spent_outputs) {
+            spent_output_ptrs.push_back(spent_output.get());
+        }
+        return btck_precomputed_transaction_data_create(tx_to.get(), spent_output_ptrs.data(), spent_output_ptrs.size());
+    }
 };
 
 template <typename Derived>
