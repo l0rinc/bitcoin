@@ -521,6 +521,24 @@ struct ThrowingUnserializer {
     }
 };
 
+struct PartiallyDecoded {
+    uint32_t first{0};
+    uint32_t second{0};
+
+    template<typename Stream>
+    void Serialize(Stream& s) const
+    {
+        s << first << second;
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream& s)
+    {
+        s >> first;
+        s >> second;
+    }
+};
+
 BOOST_AUTO_TEST_CASE(dbwrapper_deserialize_failure_classification)
 {
     const fs::path path{m_args.GetDataDirBase() / "dbwrapper_deserialize_failure_classification"};
@@ -547,6 +565,52 @@ BOOST_AUTO_TEST_CASE(dbwrapper_deserialize_failure_classification)
     parsed.failure = ThrowingUnserializer::Failure::Runtime;
     BOOST_CHECK_EXCEPTION(it->GetKey(parsed), std::runtime_error, HasReason{"unexpected dbwrapper deserialize error"});
     BOOST_CHECK_EXCEPTION(it->GetValue(parsed), std::runtime_error, HasReason{"unexpected dbwrapper deserialize error"});
+}
+
+BOOST_AUTO_TEST_CASE(dbwrapper_output_unchanged_on_deserialize_failure)
+{
+    constexpr std::string_view malformed_value{"\x01\x00\x00\x00\x02\x03", 6};
+    constexpr uint32_t sentinel_first{0xa1b2c3d4};
+    constexpr uint32_t sentinel_second{0xe5f60718};
+
+    // A lookup and iterator value must not expose fields decoded before a
+    // malformed later field causes deserialization to fail.
+    for (const bool obfuscate : {false, true}) {
+        const fs::path path{m_args.GetDataDirBase() / (obfuscate ? "dbwrapper_output_failure_obfuscated" : "dbwrapper_output_failure_plain")};
+        CDBWrapper dbw{{.path = path, .cache_bytes = 1_MiB, .memory_only = true, .wipe_data = true, .obfuscate = obfuscate}};
+
+        constexpr uint8_t direct_key{0x41};
+        dbw.Write(direct_key, StringContentsSerializer{std::string{malformed_value}});
+
+        PartiallyDecoded direct{sentinel_first, sentinel_second};
+        BOOST_CHECK(!dbw.Read(direct_key, direct));
+        BOOST_CHECK_EQUAL(direct.first, sentinel_first);
+        BOOST_CHECK_EQUAL(direct.second, sentinel_second);
+
+        constexpr uint8_t iterator_value_key{0x42};
+        dbw.Write(iterator_value_key, StringContentsSerializer{std::string{malformed_value}});
+
+        const std::unique_ptr<CDBIterator> it{dbw.NewIterator()};
+        it->Seek(iterator_value_key);
+        BOOST_REQUIRE(it->Valid());
+        PartiallyDecoded iterator_value{sentinel_first, sentinel_second};
+        BOOST_CHECK(!it->GetValue(iterator_value));
+        BOOST_CHECK_EQUAL(iterator_value.first, sentinel_first);
+        BOOST_CHECK_EQUAL(iterator_value.second, sentinel_second);
+    }
+
+    // A malformed key must obey the same output contract.
+    const fs::path key_path{m_args.GetDataDirBase() / "dbwrapper_key_output_failure"};
+    CDBWrapper key_db{{.path = key_path, .cache_bytes = 1_MiB, .memory_only = true, .wipe_data = true, .obfuscate = false}};
+    key_db.Write(StringContentsSerializer{std::string{malformed_value}}, uint8_t{0x01});
+
+    const std::unique_ptr<CDBIterator> key_it{key_db.NewIterator()};
+    key_it->SeekToFirst();
+    BOOST_REQUIRE(key_it->Valid());
+    PartiallyDecoded iterator_key{sentinel_first, sentinel_second};
+    BOOST_CHECK(!key_it->GetKey(iterator_key));
+    BOOST_CHECK_EQUAL(iterator_key.first, sentinel_first);
+    BOOST_CHECK_EQUAL(iterator_key.second, sentinel_second);
 }
 
 BOOST_AUTO_TEST_CASE(iterator_string_ordering)

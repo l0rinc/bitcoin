@@ -42,6 +42,36 @@ The following historical output-contract cells are closed and will not be reopen
 - Run the focused DB wrapper unit suite, dependent persistence tests, a sanitizer smoke, and the relevant fuzzer or record replay if available.
 - Search history/issues/PRs for an existing contract or duplicate finding before committing.
 
+## Verification Results
+
+### Failing-before proof
+
+The regression test was added before changing production code. With the original direct-deserialization implementation, this command exited `201`:
+
+`TMPDIR=/data/my_storage/tmp/cycle56-dbwrapper-before build_unit_clang19/bin/test_bitcoin --run_test=dbwrapper_tests/dbwrapper_output_unchanged_on_deserialize_failure --catch_system_error=no --report_level=short --log_level=test_suite`
+
+The old implementation returned `false` but changed `PartiallyDecoded::first` from `0xa1b2c3d4` to `1` in direct `Read`, iterator `GetValue`, and iterator `GetKey`; 5 of 18 assertions failed across plain and obfuscated cases. The stored malformed payload is exactly six bytes: `01 00 00 00 02 03`, so the first field is complete and the second field is truncated.
+
+### Source fix
+
+`src/dbwrapper.h` now parses keys and values into temporary objects and commits them only after the complete stream succeeds. Trivially default-constructible scalar outputs are value-initialized without reading possibly uninitialized caller storage; nontrivial or non-default-constructible objects are initialized from their already-constructed destination so serializer configuration and existing behavior are preserved. Normal assignment is used when available; types such as `CDiskBlockIndex` with intentionally deleted assignment are reconstructed at the same address only after successful parsing. Runtime exceptions from custom unserializers remain uncaught, while `std::ios_base::failure` still returns `false`.
+
+### Passing-after and compatibility proof
+
+- `cmake --build build_unit_clang19 --target test_bitcoin -j2` passed after compiling all DB wrapper callers, including non-default `DBHeightKey` and non-assignable `CDiskBlockIndex` instantiations.
+- The focused malformed-output regression passed 18/18 assertions in both obfuscation modes.
+- `TMPDIR=/data/my_storage/tmp/cycle56-dbwrapper-suite build_unit_clang19/bin/test_bitcoin --run_test=dbwrapper_tests --catch_system_error=no --report_level=short --log_level=test_suite` passed 13 cases and 2,472 assertions, including the existing runtime-exception classification and successful read tests.
+- The dependent `blockfilter_index_tests,coinstatsindex_tests,txindex_tests,txospenderindex_tests,validation_chainstate_tests,validation_flush_tests` selection passed 19 cases and 61,104 assertions.
+- The rebuilt normal `FUZZ=dbwrapper` target replayed all 1,835 corpus files plus initialization, 1,836 executions, with no crash, no new units, coverage `6035`, and peak RSS `1650 MB`.
+- The rebuilt Clang ASan/UBSan `FUZZ=dbwrapper` target replayed the same 1,835 corpus files plus initialization, 1,836 executions, with no sanitizer diagnostic, no new units, coverage `18806`, and peak RSS `1683 MB`.
+- The existing fuzzer's `FailUnserialize` and `UnexpectedFailUnserialize` oracles remain covered by the full DB wrapper suite and normal corpus replay; runtime errors still propagate.
+
+### Verdict
+
+Confirmed local persistence/API defect: a malformed or truncated database record could return failure while publishing a partially decoded caller output. This is reachable through corrupted or incompatible persisted bytes, affects direct lookup and iterator key/value APIs, and is not a network parser or consensus change. The smallest shared boundary fix is justified because all three APIs expose the same bool-plus-output contract and existing callers/tests treat failed reads as non-committing operations.
+
+Independent verification forms were the failing-before regression, the fixed-after regression, historical exception classification, successful and non-default production instantiations, dependent index/chainstate behavior, normal corpus replay, and ASan/UBSan replay. The disposable mutation restoring direct deserialization only in `CDBWrapper::Read` rebuilt successfully and made exactly 2 direct-read sentinel assertions fail while leaving the 2 iterator paths passing; after restoration, the focused regression passed 18/18 again. The mutation did not enter history.
+
 ## Handoff
 
-The next action is to add only the failing regression test for the DB output contract. Do not broaden the patch until the old implementation demonstrably mutates a sentinel on a malformed record. Keep scratch databases under a temporary directory and preserve raw malformed bytes and exact commands in this journal.
+The source finding is ready for one independently authored source commit. Then update the uber ledger with the source commit and final state commit, verify no processes remain, and draw cycle 57 from the full catalog.
