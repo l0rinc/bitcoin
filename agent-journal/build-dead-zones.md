@@ -122,4 +122,51 @@ A feature-disabled configuration may compile only because an unrelated default t
 
 Record each configure command and summary, source/target membership, generated files, build result, test/bench/fuzz registration, and runtime output. A source fix requires a clean failing configuration or runtime control, a minimal mutation or old-source reproduction, and a passing independent control after the fix. Do not treat a missing optional target as a defect unless the option contract and supported configuration require it.
 
-Status: active; no source hypothesis is confirmed yet.
+## Cycle 74 Verification
+
+### Configuration matrix
+
+All build trees were isolated below `/data/my_storage/tmp/build-dead-zones-cycle74/`; `cmake`, Ninja, Clang 19.1.7, GCC 12.2.0, Cap'n Proto 0.9.2, and Qt 6.4.2 were available. The host root filesystem was 100% full, so all test and compiler temporary state used `/data` scratch directories. The relevant configure commands were:
+
+```text
+cmake -S /data/my_storage/bitcoin -B /data/my_storage/tmp/build-dead-zones-cycle74/wallet-off-ipc-off-clang -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19 -DENABLE_WALLET=OFF -DENABLE_IPC=OFF -DBUILD_GUI=OFF -DBUILD_TESTS=ON -DBUILD_BENCH=ON -DBUILD_FUZZ_BINARY=ON -DBUILD_FOR_FUZZING=OFF -DWITH_EMBEDDED_ASMAP=OFF -DWITH_CCACHE=OFF
+cmake -S /data/my_storage/bitcoin -B /data/my_storage/tmp/build-dead-zones-cycle74/wallet-on-ipc-off-clang -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19 -DENABLE_WALLET=ON -DENABLE_IPC=OFF -DBUILD_GUI=OFF -DBUILD_TESTS=ON -DBUILD_BENCH=ON -DBUILD_FUZZ_BINARY=ON -DBUILD_FOR_FUZZING=OFF -DWITH_EMBEDDED_ASMAP=OFF -DWITH_CCACHE=OFF
+cmake -S /data/my_storage/bitcoin -B /data/my_storage/tmp/build-dead-zones-cycle74/wallet-off-ipc-on-gcc -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DENABLE_WALLET=OFF -DENABLE_IPC=ON -DBUILD_GUI=OFF -DBUILD_TESTS=ON -DBUILD_BENCH=ON -DBUILD_FUZZ_BINARY=ON -DBUILD_FOR_FUZZING=OFF -DWITH_EMBEDDED_ASMAP=OFF -DWITH_CCACHE=OFF
+cmake -S /data/my_storage/bitcoin -B /data/my_storage/tmp/build-dead-zones-cycle74/fuzz-wallet-off-ipc-off-clang -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19 -DENABLE_WALLET=OFF -DENABLE_IPC=OFF -DBUILD_FOR_FUZZING=ON -DBUILD_GUI=OFF -DWITH_EMBEDDED_ASMAP=OFF -DWITH_CCACHE=OFF
+cmake -S /data/my_storage/bitcoin -B /data/my_storage/tmp/build-dead-zones-cycle74/gui-wallet-off-ipc-off-clang -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19 -DENABLE_WALLET=OFF -DENABLE_IPC=OFF -DBUILD_GUI=ON -DBUILD_TESTS=ON -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DBUILD_FOR_FUZZING=OFF -DWITH_EMBEDDED_ASMAP=OFF -DWITH_CCACHE=OFF
+```
+
+All five configurations completed successfully. The first two Clang monolithic builds completed 651 and 716 Ninja steps respectively with `test_bitcoin`, `bench_bitcoin`, and `fuzz`. The GCC IPC-on build completed 709 steps for `bitcoin-node`, `bitcoin-cli`, `test_bitcoin`, `bench_bitcoin`, and `fuzz`. The fuzz-only build completed 452 steps and linked only the effective `fuzz` graph. The GUI wallet-off build completed 452 steps and linked both `bitcoin-qt` and `test_bitcoin-qt`.
+
+`BUILD_FOR_FUZZING=ON` intentionally overrides ordinary target variables after cache initialization. Its cache still displays requested values such as `BUILD_TESTS:BOOL=ON`, but the configure summary and generated graph correctly show tests, bench, node, CLI, wallet tool, and GUI OFF and only fuzz ON. This behavior is documented in `CMakeLists.txt` and `doc/fuzzing.md`; it is not a stale-target defect.
+
+### Target and registration parity
+
+- Wallet-off IPC-off Clang: `bitcoin-wallet` is an unknown target; the generated header undefines `ENABLE_WALLET`; wallet tests and wallet fuzzers are absent; the wallet-specific benchmark names are absent.
+- Wallet-on IPC-off Clang: `bitcoin-wallet` resolves; wallet tests, wallet fuzzers (`wallet_bdb_parser`, `wallet_create_transaction`, and `wallet_fees`), and wallet benchmarks register.
+- Wallet-off IPC-on GCC: `bitcoin-node`, generated Cap'n Proto/multiprocess libraries, `ipc_tests`, and the `ipc` fuzz target resolve; `bitcoin-wallet` and wallet fuzzers remain absent.
+- Wallet-off IPC-off fuzz-only Clang: `fuzz` resolves; `test_bitcoin`, `bench_bitcoin`, `bitcoin-node`, and `bitcoin-wallet` are unknown targets; the compiled registry contains `process_messages` and no wallet or IPC target.
+- Wallet-off GUI Clang: `bitcoin-qt` and `test_bitcoin-qt` resolve; `bitcoin-wallet` is unknown and `ENABLE_WALLET` is undefined in the generated header.
+
+The wallet-off Clang tests registered DB, network, and chainstate suites but no wallet or IPC suites. The wallet-on tests registered the wallet suites. The IPC-on GCC test registry contained `ipc_tests` and no wallet suite. Wallet-related benchmark names appeared only in the wallet-on build, apart from the shared `ExpandDescriptor` benchmark.
+
+### Runtime controls
+
+With pre-created `/data` `TMPDIR` directories, the following passed:
+
+```text
+wallet-off IPC-off: dbwrapper_tests/dbwrapper, dbwrapper_tests/dbwrapper_constructor_failure_cleanup, netbase_tests/netbase_splithost
+wallet-on IPC-off: dbwrapper_tests/dbwrapper, dbwrapper_tests/dbwrapper_constructor_failure_cleanup, wallet_tests/wallet_interface_missing_tx_outputs, walletdb_tests/walletdb_readkeyvalue, wallet_crypto_tests
+wallet-off IPC-on: ipc_tests (2 cases, 44 assertions)
+wallet-off GUI: all four Qt test groups (15 total test cases) under QT_QPA_PLATFORM=offscreen
+```
+
+The fuzz-only `process_messages` and `tx_in` empty-input smokes passed with `/data` scratch state. Its wallet target was rejected as `No fuzz target compiled for wallet_bdb_parser`. The release-like Clang and GCC fuzz binaries correctly refused execution with `Must compile with -DBUILD_FOR_FUZZING=ON or in Debug mode`, matching the documented release-build contract. The wallet-on release-like registry still listed its wallet fuzz targets, and the IPC-on registry listed `ipc` and `process_messages`.
+
+One early combined test command used a non-existent `TMPDIR` and consequently reported a missing temp directory; its chainstate fixture also encountered an existing assertion before the process was stopped. It was discarded as a malformed environment control and rerun with individual Boost filters and pre-created scratch directories. No source behavior was inferred from that run.
+
+## Verdict and Handoff
+
+**Dismissed for a new source defect:** the distinct wallet-off, IPC-off/monolithic, IPC-on wallet-off, fuzz-only, and GUI wallet-off conditional matrix compiled and registered exactly the sources and targets required by the option contracts. Focused runtime controls passed, and the only negative results were the full-root temporary-directory setup and the documented release-build fuzz refusal. No production or test source change is justified.
+
+Evidence logs and build trees remain under `/data/my_storage/tmp/build-dead-zones-cycle74/`. The prior cycle-20 wallet-enabled GCC fuzz cell remains excluded. Future re-entry should use a different compiler/dependency version, sanitizer combination, generated-file perturbation, or feature interaction.
