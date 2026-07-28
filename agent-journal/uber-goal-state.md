@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 55 complete; ready to draw cycle 56 from the full catalog.
+- Status: cycle 56 in progress; selected goal 46 (`public-output-failure`).
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -114,6 +114,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 54 source fix: `4f867fc8a3` (`net: bound duplicate global relay backlog`) is the independent finding commit; the selected journal, source, regression, and exact validation are included.
 - Cycle 55 gate: fetched state is at HEAD `98150b59231b0e5229a229da2c3a29abd824e5fa`; `origin/master` is `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` is `2 877`; tracked and staged state is clean with only recorded agent-owned untracked paths; catalog/protocol/TSV hashes are unchanged; no relevant process is running.
 - Cycle 55 selector: `shuf -i 0-98 -n 1` -> `78` (`translation-validation`).
+- Cycle 55 completion: the SipHash translation-validation cycle was closed at HEAD `dd4cac6cddbf4e6131b7be23c3d65c4bd7553705`; no source defect was justified. See `translation-validation.md`.
 - Cycle 54 selector: `shuf -i 0-98 -n 1` drew `60` (`reviewer-preference-mining`). The cycle-25 assertion/lifecycle/fuzz-review clusters and cycle-49 interface/schema/build/documentation cluster are excluded. This cycle selects the separate global-backlog memory-bound and data-structure-lifecycle review cluster from PR `#34628`.
 - Cycle 37 selector: `shuf -i 0-98 -n 1` drew `62` (`rejected-finding-resurrection`). The cycle-33 CoinStats cell was excluded; the distinct cell attacked `GetNodeStateStats()` false results through the Qt peer-detail refresh path.
 - Cycle 37 verification: `NodeImpl::getNodesStats()` can leave state statistics unavailable when `cs_main` is busy, and `dataChanged` immediately refreshes the selected peer details. The old Qt false path left nine state-only labels unchanged, preserving stale values after a true-to-false refresh. The new `ts.na` clearing branch is built and tested by the Qt 6 suite: AppTests 3, OptionTests 6, URITests 3, and RPCNestedTests 3 all passed. The focused `get_node_state_stats_overwrites_reused_output` control passed 1 case/4 assertions and `git diff --check` passed. No direct GUI fixture currently covers the lock-busy transition; see `rejected-finding-resurrection.md`.
@@ -183,17 +184,18 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 53 | `shuf -i 0-98 -n 1` -> `74` | `memory-pressure-allocator` | dismissed; no new source defect | `prevector` direct and realloc allocation failures were reproduced under a 128 MiB address-space limit and matched the deliberate fatal-OOM policy. Normal and ASan fuzz runs plus 102 allocator/accounting test cases found no new corruption, bound bypass, or accounting drift. See `memory-pressure-allocator.md`. | Journal-only handoff; no source change justified | Re-check the gate and draw cycle 54 from the full catalog |
 | 54 | `shuf -i 0-98 -n 1` -> `60` | `reviewer-preference-mining` | confirmed; fixed | PR `#34628` review concern reproduced a remotely reachable duplicate-retention defect: 35 batched identical ForceRelay messages with `-txsendrate=1` left four vector entries after token exhaustion. Unique `std::set<Wtxid>` global backlogs reduce this to one pending identity while preserving the mining-order extractor. Functional, unit, normal fuzz, and ASan/UBSan controls passed; see `reviewer-preference-mining.md`. | `4f867fc8a3` (`net: bound duplicate global relay backlog`) | Draw cycle 55 from the full catalog; keep this relay cell closed unless a new caller, container/backend, or recurrence appears |
 | 55 | `shuf -i 0-98 -n 1` -> `78` | `translation-validation` | dismissed; no new source defect | Supported Clang 19 and GCC 12 produced the same checksum for 100,004 fixed-width SipHash cases at `-O0/-O1/-O2/-O3/-Os`, ThinLTO, and LTO; Clang 19 IR passed `opt-19` verification at `-O0` and `-O3`; the hash unit suite passed 4 cases; and normal/ASan/UBSan probe and integer-fuzzer controls found no diagnostic. Clang 14 failed only at the documented unsupported compiler boundary. See `translation-validation.md`. | Journal-only handoff; no source change justified | Draw cycle 56 from the full catalog; reopen only with a new compiler/backend/architecture/transformation or minimized counterexample |
+| 56 | `shuf -i 0-98 -n 1` -> `46` | `public-output-failure` | in progress | The DB wrapper directly deserializes persisted bytes into caller-owned outputs. A malformed-record regression is being prepared to establish whether `Read`, `GetKey`, and `GetValue` can expose partial state on failure. | Pending evidence | Complete the failing-before contract test, then independently verify and fix only if the old behavior is proven unsafe or contradictory |
 
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 55 is closed and cycle 56 must draw a distinct eligible goal.
+- Active goals this cycle: `public-output-failure` (cycle 56); cycle 55 is closed.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 55 is in progress on goal 78, `translation-validation`, selected by `shuf -i 0-98 -n 1` -> `78`. The gate is HEAD `98150b5923`, with base and catalog hashes recorded above. The next experiment must distinguish source UB, compiler transformation, inline assembly contract, or test error using deterministic vectors and available IR/compiler evidence. Record exact tool versions, pre/post IR or assembly, minimized inputs, rejected hypotheses, and any source fix in `agent-journal/translation-validation.md` before continuing.
+Cycle 56 is in progress on goal 46, `public-output-failure`, selected by `shuf -i 0-98 -n 1` -> `46`. The gate is HEAD `dd4cac6cdd`, with base and catalog hashes recorded above. The next experiment must establish a failing-before output contract for malformed DB records before any production edit. Record raw bytes, sentinel values, exact commands, caller expectations, rejected hypotheses, and any source fix in `agent-journal/public-output-failure.md` before continuing.
 
 Cycle 50 selected `exhaustive-algebraic` with `shuf -i 0-98 -n 1` -> `18`. The distinct cell defined `GCSFilter::MatchAny(Q) == OR Match(q)` over all 16 filter subsets and 16 query subsets of four one-byte elements, with checked encoded reconstruction as a second path. The disposable matrix passed 1,555 assertions; a temporary `return false` mutation failed at the singleton check with exit 201 and 606 failed assertions. After restoring source and removing the disposable test, the production block-filter suite passed 8 cases and 499 assertions. No source defect was justified. The exact evidence and limits are in `exhaustive-algebraic.md`; no process remains running. The next run must re-check the gate and draw another distinct goal.
 
