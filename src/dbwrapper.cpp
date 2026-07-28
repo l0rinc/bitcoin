@@ -413,7 +413,12 @@ std::span<const std::byte> CDBIterator::GetValueImpl() const
 }
 
 CDBIterator::~CDBIterator() = default;
-bool CDBIterator::Valid() const { return m_impl_iter->iter->Valid(); }
+bool CDBIterator::Valid() const
+{
+    const bool valid{m_impl_iter->iter->Valid()};
+    if (!valid) HandleError(m_impl_iter->iter->status());
+    return valid;
+}
 void CDBIterator::SeekToFirst() { m_impl_iter->iter->SeekToFirst(); }
 void CDBIterator::Next() { m_impl_iter->iter->Next(); }
 
