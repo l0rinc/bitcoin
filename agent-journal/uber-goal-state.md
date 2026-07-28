@@ -4,19 +4,21 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 75 in progress; goal 15 (`public-object-validation`) is reopened only for nested `multi_a`/multisig/miniscript public-key parsing and wrapper/output parity after cycles 27 and 51 closed the full-key P2PK and x-only/taproot inference cells. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
+- Status: cycle 75 complete; goal 15 (`public-object-validation`) found and fixed a nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
-- Branch: `uber-cycle-74-build-dead-zones-20260728`
+- Branch: `uber-cycle-75-public-object-validation-20260728`
 - Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
 - HEAD at initialization: `1dcc2da988ee625fbc5d7d55eb6f894c1103ec52`
 - Current HEAD after cycle 16: `1926a4dbf612f3ce2fd43b61c0691360930a952f`
 - Current cycle-73 source/test/journal HEAD: `548d8cc8f8` (`dbwrapper: clean up resources on constructor failure`). The next state-only close commit records this cycle as complete.
+- Current cycle-75 source/test/journal HEAD: `d02e22867b` (`descriptor: use x-only lookup for Taproot compressed keys`).
 - Cycle 74 gate: HEAD `ddde67072a`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 925`; tracked source clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 74 selector: exact `shuf -i 0-98 -n 1` -> `37` (`build-dead-zones`). Cycle 20's GCC `BUILD_FOR_FUZZING=ON`, `ENABLE_IPC=ON`, wallet-enabled parser/fuzz cell is excluded; this cycle targets wallet-off, IPC-off/monolithic, test/bench, and generated-source parity.
 - Cycle 74 close: current source/journal HEAD before the state-only close commit is `8063cae3aa`; no source change was justified. The wallet-off/IPC-off Clang, wallet-on/IPC-off Clang, wallet-off/IPC-on GCC, fuzz-only wallet-off Clang, and GUI wallet-off Clang matrices all configured and built as expected. Focused unit, IPC, Qt, target-registration, and `/data`-backed fuzz controls passed; the only negative results were a malformed full-root temp setup and the documented release-build fuzz refusal. See `build-dead-zones.md`.
 - Cycle 75 selector: exact `shuf -i 0-98 -n 1` -> `15` (`public-object-validation`). Cycles 27 and 51's P2PK and x-only/taproot inference cells are excluded; this cycle targets nested `multi_a`/multisig/miniscript public-key parsing, serialization, failure-state outputs, and wrapper parity. Branch `uber-cycle-75-public-object-validation-20260728` starts at `df9c8d76c7`.
+- Cycle 75 source/test/journal completion: `d02e22867b` (`descriptor: use x-only lookup for Taproot compressed keys`). A full compressed key accepted in P2TR retained its descriptor spelling but used parity-specific private-key lookup, so an equivalent opposite-parity provider key was not found. The fix separates spelling from lookup mode and uses `GetKeyByXOnly()` for full compressed P2TR keys. Normal descriptor/miniscript, TSan, ASan/UBSan fuzz smoke, and the status-201 old-source mutation passed as documented in `public-object-validation.md`.
 - Cycle 73 completion: the old source leaked 4064 bytes in 19 allocations when a filesystem exception interrupted `CDBWrapper` construction. The fixed `LevelDBContext` destructor and exception-safe option allocation passed the dedicated normal and ASan/LSan dbwrapper suites (14 cases, 2475 assertions each), the standalone fixed probe, and the negative-control mutation reproduced the old leak. A broader block/index/flush suite was blocked by the host root filesystem being 100% full and was terminated after cascading fixture assertions; no process remains running. See `raai-resource-leaks.md`.
 - Cycle 71 gate: fetched `origin/master`; HEAD `9eb6b4ad1b66f030f0019b759d0c8017993cf63b`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 917`; tracked/staged state clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 71 selector: exact `shuf -i 0-98 -n 1` -> `53` (`statistical-timing`). Cycles 1, 44, and 46 timing cells are excluded; this run targets the remaining ElligatorSwift XDH and Silent Payments secret-bearing callers.
@@ -251,7 +253,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 72 | `shuf -i 0-98 -n 1` -> `84` | `secp-nonce-session` (failure/retry and state-binding cell) | dismissed; no new source defect | The standalone state-machine probe passed valid signing, failure-state, nonce-consumption, malformed-binding, infinity, duplicate-key, and Schnorr callback controls under normal and ASan/UBSan-linked runs. MuSig/Schnorr module tests passed 4 iterations; the full libsecp256k1 test binary passed 16 iterations. Static contracts explain the observed deliberate nonce invalidation and output behavior. See `secp-nonce-session.md`. | Journal/probe close snapshot; no source change justified | Start cycle 73 from the next draw |
 | 73 | `shuf -i 0-98 -n 1` -> `54` | `raai-resource-leaks` (constructor/error/cancellation ownership cell) | confirmed; fixed | `CDBWrapper` leaked LevelDB cache, filter policy, logger, and related allocations when construction threw before its destructor became active. `LevelDBContext` now owns idempotent cleanup, `GetOptions()` is exception-safe, and the focused normal/ASan/LSan suites plus standalone negative control prove the change. The broader dependent suite was blocked by a full root filesystem. See `raai-resource-leaks.md`. | `548d8cc8f8` source/test/probe/journal; `e8db2906f7` close snapshot | Recheck the gate and draw the next distinct goal |
 | 74 | `shuf -i 0-98 -n 1` -> `37` | `build-dead-zones` (wallet-off, IPC-off/monolithic, test/bench, and generated-source matrix) | dismissed; no new source defect | Excluded cycle 20's GCC wallet-parser/IPC fuzz cell. Five isolated configuration families matched their effective option contracts: wallet-off/on monolithic, wallet-off IPC-on, fuzz-only wallet-off, and GUI wallet-off. Target graphs, generated headers, test/bench/fuzz registries, focused unit/IPC/Qt tests, and `/data`-backed fuzz smokes passed. See `build-dead-zones.md`. | Journal-only close; no source change justified | Draw the next eligible goal |
-| 75 | `shuf -i 0-98 -n 1` -> `15` | `public-object-validation` (nested descriptor keys and wrapper/output parity) | in progress; distinct re-entry | Exclude cycles 27 and 51's full-key P2PK and x-only/taproot inference fixes. Audit nested `multi_a`/multisig/miniscript parse/serialize paths, malformed-key failure state, and public wrapper parity. See `public-object-validation.md`. | Start state pending | Complete the nested/wrapper cell and then draw the next eligible goal |
+| 75 | `shuf -i 0-98 -n 1` -> `15` | `public-object-validation` (nested descriptor keys and wrapper/output parity) | confirmed; fixed | Full compressed keys in P2TR expanded as x-only script keys but `ConstPubkeyProvider` looked up only the parity-specific key ID. The separate lookup flag preserves descriptor spelling while using `GetKeyByXOnly()`; direct/nested Miniscript, opposite-parity, NUMS, and script-equivalence regression controls passed. See `public-object-validation.md`. | `d02e22867b` (`descriptor: use x-only lookup for Taproot compressed keys`) | Recheck the gate and draw the next eligible goal |
 
 ## Cycle 72 Completion
 
@@ -282,14 +284,16 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Validation: wallet-off/on focused DB/network/wallet suites passed; IPC tests passed 2 cases and 44 assertions; all four offscreen Qt groups passed 15 cases; fuzz-only `process_messages` and `tx_in` smokes passed with `/data` scratch state; wallet and IPC registration matched feature flags. Release-like fuzz binaries refused execution as documented. The first malformed test invocation used a missing `TMPDIR` under a full root filesystem and was discarded, then corrected.
 - Evidence: `/data/my_storage/tmp/build-dead-zones-cycle74/`; `git diff --check` and process cleanup remain required before the state-only close commit.
 
-## Cycle 75 Active State
+## Cycle 75 Completion
 
 - Gate: HEAD `df9c8d76c7`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 927`.
 - Branch: `uber-cycle-75-public-object-validation-20260728`.
 - Draw: `15` (`public-object-validation`).
 - Excluded prior cells: cycle 27's `InferPubkey()` full-key P2PK raw fallback and cycle 51's `InferXOnlyPubkey()` taproot leaf raw fallback, plus their regressions and source commits.
-- Current hypothesis: nested descriptor public-key paths or wrappers may accept a key representation that fails its corresponding serializer/consumer or leaves output state partially mutated after malformed nested input.
-- Required evidence: contract table, parser/serializer round trips, malformed and noncanonical nested-key corpus, wrapper comparison, focused regression or rigorous dismissal, and independent validation under normal/sanitized builds where available.
+- Finding: full compressed public keys accepted in P2TR retained their full-key spelling but used parity-specific private-key lookup, while the generated Taproot script consumed only the x-only point. An even provider key and odd descriptor spelling reproduced failed private-key discovery and private-string conversion before the fix.
+- Commit: `d02e22867b` separates serialization spelling from lookup mode, sets x-only lookup for full compressed P2TR keys, and preserves the mode through `Clone()`.
+- Validation: normal focused/full descriptor and Miniscript suites passed; the 219/219-step Clang 19 TSan build and combined 16-case TSan suite passed; the 173/173-step Clang 19 ASan/UBSan fuzz build passed; descriptor and Miniscript corpus smokes completed without sanitizer diagnostics; the old-source mutation exited 201 with four failed assertions.
+- Limitations: no additional wrapper/FFI defect was confirmed. MuSig aggregate providers and external language bindings remain separate cells without a failing reproducer. The fuzz run was a deterministic smoke, not exhaustive coverage.
 
 ## Cycle 71 Completion
 
@@ -313,13 +317,13 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: `public-object-validation` cycle 75 only; goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: none; cycle 75 is closed. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 75 is active. It selected goal 15, `public-object-validation`, by `shuf -i 0-98 -n 1` -> `15` after the cycle-74 gate. Cycles 27 and 51's full-key P2PK and x-only/taproot inference cells are excluded; the current scope is nested `multi_a`/multisig/miniscript public-key parsing, serialization, malformed failure state, and wrapper parity. The exact candidate ledger and next queue will be recorded in `public-object-validation.md`.
+Cycle 75 is complete. It selected goal 15, `public-object-validation`, by `shuf -i 0-98 -n 1` -> `15` after the cycle-74 gate. The confirmed Taproot compressed-key lookup mismatch is fixed in `d02e22867b`; the exact candidate ledger, mutation, corpus, validation, and limitations are recorded in `public-object-validation.md`. The next run must re-check the gate and draw a distinct goal from the full catalog.
 
 Cycle 74 is complete. It selected goal 37, `build-dead-zones`, by `shuf -i 0-98 -n 1` -> `37` after the cycle-73 gate. Cycle 20's GCC wallet-enabled IPC fuzz cell was excluded; the distinct wallet-off, IPC-off/monolithic, IPC-on wallet-off, fuzz-only, and GUI wallet-off matrix found no source defect. The exact configuration ledger, runtime evidence, and limitations are recorded in `build-dead-zones.md`. The next run must re-check the gate and draw a distinct goal from the full catalog.
 
