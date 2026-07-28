@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 61 in progress; selected goal 22 (`full-sync-ibd-profile`) from the full catalog after a fresh gate and selector draw.
+- Status: cycle 61 complete; cycle 62 pending a fresh gate and selector draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -24,6 +24,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Current HEAD after cycle 60 source/test fix: `765e82e8ab` (`secp256k1: validate MuSig nonce output argument`). No relevant process remains running.
 - Cycle 61 gate: fetched `origin/master`; HEAD `3d67541b54019711263e742be691e83da57cd0ec`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 892`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 61 selector: exact `shuf -i 0-98 -n 1` -> `22` (`full-sync-ibd-profile`). Prior rebuild, disk, perf, and regression-profile cells are closed; this run measures a distinct end-to-end local import/IBD phase and separates validation, chainstate, block I/O, compaction, logging, and harness time.
+- Cycle 61 completion: no source defect found. A fresh optimized Clang 19 local-peer IBD matrix imported 20,000 deterministic regtest blocks into five empty sinks. The exact tip and 20,001 transaction count matched in every run. Regtest's intentional default `-checkblockindex=1` consumed about 55% of sampled cycles and made the run about 130 seconds; `-checkblockindex=100` took 4.545 seconds and `=0` took 2.899 seconds. Database-cache variation (16/64/256 MB) was non-monotonic within observed noise. See `full-sync-ibd-profile.md`.
+- Cycle 61 artifacts: `/data/my_storage/tmp/full-sync-ibd-profile-cycle61/` contains the release-like build, source/sink datadirs, raw `perf stat` outputs, and a 54,683,552-byte DWARF call-stack profile with zero lost samples. No relevant process remains running.
 - Current HEAD after cycle 17: `ffda33a38f5fddab57e4618775d22ce31d8eda09`
 - Current HEAD after cycle 18: `55eaf087c189ae871878692fb20a90ac3533084d`
 - Current HEAD before cycle 19 journal handoff: `ec4401b816f132f2f35c1f2e64cf51e2046e8e32`
@@ -205,17 +207,18 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 58 | `shuf -i 0-98 -n 1` -> `32` | `history-incomplete-fixes` (current output-contract follow-up) | confirmed; fixed | `BlockManager::ReadBlockUndo` deserialized into caller-owned output before validating the trailing checksum. A scratch undo file with one flipped checksum byte reproduced the old loss of a pre-seeded `CBlockUndo`; the fixed local decode/publish boundary preserved both output sizes. Focused block-manager regression passed with 11 assertions; full `blockmanager_tests` passed 12 cases and 128 assertions. See `history-incomplete-fixes.md`. | `3e4ec4e7ef0f216c09c10b1d577fc1517a043434` (`blockstorage: publish undo data after checksum verification`) | Recheck the gate and draw cycle 59 from the full catalog |
 | 59 | `shuf -i 0-98 -n 1` -> `45` | `constant-time-boundary` (MuSig session/keypair declassification cell) | dismissed; no new source defect | Static contract/dataflow review found session state public, secret nonce scalars retained as undefined, and only public metadata declassified. Three temporary source/harness mutations each failed with an MSan first-invalid trace; restored ctime, regular, and exhaustive tests passed. See `constant-time-boundary.md`. | Journal-only handoff; no source change justified | Recheck the gate and draw cycle 60 from the full catalog |
 | 60 | `shuf -i 0-98 -n 1` -> `84` | `secp-nonce-session` (MuSig invalid-argument ordering) | confirmed; fixed | `secp256k1_musig_nonce_gen` checked all-zero session randomness before required `pubnonce`, so two invalid arguments bypassed the illegal callback. The old-source mutation failed at `_calls_to_callback == 1` with exit 134; the fixed focused API test and full 16-iteration libsecp suite passed. See `secp-nonce-session.md`. | `765e82e8ab` (`secp256k1: validate MuSig nonce output argument`) | Recheck the gate and draw cycle 61 from the full catalog |
+| 61 | `shuf -i 0-98 -n 1` -> `22` | `full-sync-ibd-profile` (local-peer IBD and debug-check attribution) | dismissed; no source defect | Five fresh sinks reached the expected 20,000-block/20,001-transaction tip. Default regtest consistency checks dominated the call-stack profile; `-checkblockindex=100` and `=0` controls reproduced the documented frequency effect. 16/64/256 MB cache timings were non-monotonic within noise. See `full-sync-ibd-profile.md`. | Journal-only handoff; no source change justified | Recheck the gate and draw cycle 62 from the full catalog |
 
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: `full-sync-ibd-profile` (cycle 61); goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: none; cycle 61 is closed and goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 60 is complete on goal 84, `secp-nonce-session`, selected by `shuf -i 0-98 -n 1` -> `84`. The MuSig nonce-generation API now validates its required public output before the all-zero session-random early return, with a regression proving the old callback bypass and fixed focused/full tests passing. The next run must recheck branch/base/HEAD, dirty state, processes, catalog hashes, existing journals, history, and review precedent before drawing cycle 61.
+Cycle 61 is complete on goal 22, `full-sync-ibd-profile`, selected by `shuf -i 0-98 -n 1` -> `22`. The local-peer IBD matrix established a reproducible chainstate baseline and isolated the intentional regtest `CheckBlockIndex` cost; no production source change was justified. The next run must recheck branch/base/HEAD, dirty state, processes, catalog hashes, existing journals, history, and review precedent before drawing cycle 62.
 
 Cycle 50 selected `exhaustive-algebraic` with `shuf -i 0-98 -n 1` -> `18`. The distinct cell defined `GCSFilter::MatchAny(Q) == OR Match(q)` over all 16 filter subsets and 16 query subsets of four one-byte elements, with checked encoded reconstruction as a second path. The disposable matrix passed 1,555 assertions; a temporary `return false` mutation failed at the singleton check with exit 201 and 606 failed assertions. After restoring source and removing the disposable test, the production block-filter suite passed 8 cases and 499 assertions. No source defect was justified. The exact evidence and limits are in `exhaustive-algebraic.md`; no process remains running. The next run must re-check the gate and draw another distinct goal.
 
