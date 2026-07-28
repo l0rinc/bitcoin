@@ -9,6 +9,7 @@
 #include <node/database_args.h>
 #include <tinyformat.h>
 #include <util/byte_units.h>
+#include <util/overflow.h>
 #include <util/result.h>
 #include <util/translation.h>
 #include <validation.h>
@@ -24,7 +25,11 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& args, BlockManager::Op
     if (nPruneArg < 0) {
         return util::Error{_("Prune cannot be configured with a negative value.")};
     }
-    uint64_t nPruneTarget{uint64_t(nPruneArg) * 1_MiB};
+    const auto prune_target{CheckedMul<uint64_t>(static_cast<uint64_t>(nPruneArg), 1_MiB)};
+    if (!prune_target) {
+        return util::Error{Untranslated(strprintf("-prune is too large (got %d MiB)", nPruneArg))};
+    }
+    uint64_t nPruneTarget{*prune_target};
     if (nPruneArg == 1) { // manual pruning: -prune=1
         nPruneTarget = BlockManager::PRUNE_TARGET_MANUAL;
     } else if (nPruneTarget) {
