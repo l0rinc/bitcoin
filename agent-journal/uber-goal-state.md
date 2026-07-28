@@ -4,11 +4,11 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 69 complete; goal 27 (`error-path-state`) confirmed and fixed the standalone `setlabel` RPC's discarded address-book write failure. Cycle 68's `GETBLOCKTXN` assertion fix remains closed; adjacent `getnewaddress`, import-label, and transaction-enrichment paths are recorded as distinct contract-sensitive candidates rather than being changed by analogy.
+- Status: cycle 70 in progress; goal 94 (`bindings-ffi-parity`) selected a high-confidence C/C++ kernel-wrapper pointer-array contract mismatch. Cycle 69's `setlabel` RPC fix and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
-- Branch: `uber-cycle-69-error-path-state-20260728`
+- Branch: `uber-cycle-70-bindings-ffi-parity-20260728`
 - Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
 - HEAD at initialization: `1dcc2da988ee625fbc5d7d55eb6f894c1103ec52`
 - Current HEAD after cycle 16: `1926a4dbf612f3ce2fd43b61c0691360930a952f`
@@ -235,26 +235,25 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 67 | `shuf -i 0-98 -n 1` -> `66` | `backport-correctness` (29.x #34370 Berkeley wallet file ownership and cleanup) | dismissed; no confirmed finding | `7475d134f6` and the 28.x rebased `29abedc97b` have identical patch-id and semantic source hunks. BDB-enabled v29.4 built successfully; focused wallet/database/filesystem tests and corrected `tool_wallet.py --legacy-wallet` passed. `wallet_migration.py` skipped because previous-release binaries were unavailable. See `backport-correctness.md`. | Journal-only handoff; no production source change justified | Recheck the gate and draw cycle 68 from the full catalog |
 | 68 | `shuf -i 0-98 -n 1` -> `2` | `assertion-invariant-audit` (release-reachable assumption and invariant cells) | confirmed; fixed | `GETBLOCKTXN` asserted that a recent block read could not fail, but local corruption/I/O/hash validation can make `ReadBlock` return false. A scratch block-header corruption probe killed the unpatched daemon; the fixed path logged the failure and disconnected only the peer. DifferenceFormatter/TransactionsRequest guards were independently covered by focused tests, mutation, and fuzz. The full compact-block functional suite passed. See `assertion-invariant-audit.md`. | `6fbcd16491` (`net: handle GETBLOCKTXN block read failures`) | Recheck the gate and draw cycle 69 from the full catalog |
 | 69 | `shuf -i 0-98 -n 1` -> `27` | `error-path-state` (standalone `setlabel` RPC failure propagation) | confirmed; fixed | `SetAddressBook` returns false without publishing state after a database write failure, but `setlabel` discarded that result. A mock SQLite `NAME`-row fault preserved the old label and made the unpatched RPC return success; the fixed RPC raises `RPC_WALLET_ERROR`. Adjacent generation/import/enrichment callers remain contract-sensitive and are not assumed equivalent. See `error-path-state.md`. | `ca5f4d5279` (`wallet: report setlabel address-book write failures`) | Recheck the gate and draw cycle 70 from the full catalog |
+| 70 | `shuf -i 0-98 -n 1` -> `94` | `bindings-ffi-parity` (C++ kernel wrapper opaque pointer-array boundary) | in progress; high-confidence candidate | `btck::PrecomputedTransactionData` reinterprets `TransactionOutput` objects as `const btck_TransactionOutput**`, while the C API indexes an array of opaque pointers. Existing tests pass an empty span only. A non-empty spent-output regression and pre-fix control are in progress. See `bindings-ffi-parity.md`. | Source/test uncommitted | Complete cycle 70 evidence and then draw the next distinct goal |
 
-## Cycle 69 Completion
+## Cycle 70 Active State
 
-- Gate: HEAD `f9b2760a5fc00c588d4e4502bc026e7681d160bd`; source-fix HEAD `ca5f4d5279`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence at gate `911 2`.
-- Branch: `uber-cycle-69-error-path-state-20260728`.
-- Draw: `27` (`error-path-state`).
-- Source/test: `src/wallet/rpc/addresses.cpp`, `src/wallet/test/wallet_tests.cpp`, and `agent-journal/error-path-state.md` in `ca5f4d5279`.
-- Verification: focused fixed regression passed; all 17 `wallet_tests` cases passed; the restored-old-source mutation failed with exit 201; wallet-enabled `wallet_labels.py` passed; `git diff --check` passed; no relevant process remains running.
-- Limitations: the fault is injected through mock SQLite and does not cover Berkeley DB or a power-loss/restart boundary. Adjacent label side effects remain separate contract-sensitive cells.
+- Gate: HEAD `3fac7b6827c9a45d91d299ad717276b5539c0572`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 914`.
+- Branch: `uber-cycle-70-bindings-ffi-parity-20260728`.
+- Draw: `94` (`bindings-ffi-parity`).
+- Source/test under investigation: `src/kernel/bitcoinkernel_wrapper.h`, `src/test/kernel/test_kernel.cpp`.
 
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 69 is closed. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: goal 94, `bindings-ffi-parity`; cycle 70 is in progress. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 69 is closed. It selected goal 27, `error-path-state`, by `shuf -i 0-98 -n 1` -> `27` after the cycle-68 gate. The standalone `setlabel` RPC discarded a false return from `SetAddressBook`, so a deterministic database failure was reported as success. Commit `ca5f4d5279` now raises `RPC_WALLET_ERROR`, with a mock-SQLite regression and wallet functional control. The focused test, all 17 wallet unit cases, restored-old-source mutation control, wallet-enabled `wallet_labels.py`, and diff checks passed. Adjacent `getnewaddress`, import-label, and transaction-enrichment callers remain separate contract-sensitive follow-ups. The exact evidence and limitations are in `error-path-state.md`; draw cycle 70 only after a fresh gate.
+Cycle 70 is active. It selected goal 94, `bindings-ffi-parity`, by `shuf -i 0-98 -n 1` -> `94` after the cycle-69 gate. The distinct scope is the C/C++ `libbitcoinkernel` wrapper and its ownership, width, view, callback, and opaque-handle contracts. The first candidate is a non-empty `TransactionOutput` span being passed as a C array of opaque pointers in `PrecomputedTransactionData`; existing tests exercise only empty spent-output spans. The exact candidate ledger and pre-fix/fixed verification will be recorded in `bindings-ffi-parity.md` before the next draw.
 
 Cycle 50 selected `exhaustive-algebraic` with `shuf -i 0-98 -n 1` -> `18`. The distinct cell defined `GCSFilter::MatchAny(Q) == OR Match(q)` over all 16 filter subsets and 16 query subsets of four one-byte elements, with checked encoded reconstruction as a second path. The disposable matrix passed 1,555 assertions; a temporary `return false` mutation failed at the singleton check with exit 201 and 606 failed assertions. After restoring source and removing the disposable test, the production block-filter suite passed 8 cases and 499 assertions. No source defect was justified. The exact evidence and limits are in `exhaustive-algebraic.md`; no process remains running. The next run must re-check the gate and draw another distinct goal.
 
