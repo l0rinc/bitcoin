@@ -2227,6 +2227,9 @@ std::unique_ptr<PubkeyProvider> InferPubkey(const CPubKey& pubkey, ParseScriptCo
 
 std::unique_ptr<PubkeyProvider> InferXOnlyPubkey(const XOnlyPubKey& xkey, ParseScriptContext ctx, const SigningProvider& provider)
 {
+    if (!xkey.IsFullyValid()) {
+        return nullptr;
+    }
     CPubKey pubkey{xkey.GetEvenCorrespondingCPubKey()};
     std::unique_ptr<PubkeyProvider> key_provider = std::make_unique<ConstPubkeyProvider>(0, pubkey, true);
     KeyOriginInfo info;
@@ -2778,7 +2781,9 @@ std::unique_ptr<DescriptorImpl> InferScript(const CScript& script, ParseScriptCo
 {
     if (ctx == ParseScriptContext::P2TR && script.size() == 34 && script[0] == 32 && script[33] == OP_CHECKSIG) {
         XOnlyPubKey key{std::span{script}.subspan(1, 32)};
-        return std::make_unique<PKDescriptor>(InferXOnlyPubkey(key, ctx, provider), true);
+        if (auto key_provider = InferXOnlyPubkey(key, ctx, provider)) {
+            return std::make_unique<PKDescriptor>(std::move(key_provider), true);
+        }
     }
 
     if (ctx == ParseScriptContext::P2TR) {

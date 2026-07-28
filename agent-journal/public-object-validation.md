@@ -1,5 +1,74 @@
 # Public object parsing and validation variant analysis
 
+## Cycle 51: taproot inference must reject off-curve x-only leaf keys
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `15`
+- Slug: `public-object-validation`
+- Branch: `fuzz-contract-cluster-oracles-20260709`
+- Gate HEAD: `7fab5aba5a3fc152c56217460fdfb44beec508c3`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD=2 868`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Corrected goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The gate fetch passed, tracked and staged state was clean, and no relevant process was running. The prior cycle-27 P2PK inference finding and commit `c125061aa4` were searched before selecting this distinct x-only/taproot leaf cell.
+
+### Contract and path map
+
+`InferDescriptor(script, provider)` must return a descriptor whose public string can be parsed by `Parse()` and serialized back without changing the inferred contract. When a script tree contains a byte-level tapscript that cannot be represented by a structured descriptor, inference must fall back to a descriptor that preserves the output script rather than constructing an invalid `pk(...)` key provider.
+
+The relevant validity domain is a 32-byte x-only value. `XOnlyPubKey::IsFullyValid()` is the authoritative curve-membership check. `ParsePubkeyInner()` already applies the same check to 32-byte keys in P2TR context, so `InferXOnlyPubkey()` must not emit a provider for an off-curve value. The direct 34-byte tapscript branch in `InferScript()` must also avoid wrapping a null provider in `PKDescriptor`.
+
+### Minimal reproducer and confirmed finding
+
+The deterministic test builds a tracked taproot tree with:
+
+```text
+leaf = <32 zero bytes> OP_CHECKSIG
+internal key = XOnlyPubKey::NUMS_H
+```
+
+`TaprootBuilder` accepts the byte-level leaf and computes a valid output key. The provider stores that tree, then `InferDescriptor()` reconstructs the output. Before the fix, it produced:
+
+```text
+tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,pk(0000000000000000000000000000000000000000000000000000000000000000))#vcy6jk8v
+```
+
+Feeding this public output back into `Parse()` failed with:
+
+```text
+pk(): Pubkey '0000000000000000000000000000000000000000000000000000000000000000' is invalid
+```
+
+This is a confirmed local cross-path contract defect. The output of inference was not accepted by the corresponding public parser. It is distinct from cycle 27: that fix covered full P2PK keys, while this path uses `InferXOnlyPubkey()` for a tracked tapscript leaf.
+
+### Fix and mutation evidence
+
+The final source change does two things:
+
+1. `InferXOnlyPubkey()` returns null unless `xkey.IsFullyValid()` succeeds.
+2. The direct P2TR leaf branch only constructs `PKDescriptor` when the provider is non-null; otherwise inference continues to the existing fallback path.
+
+The first implementation attempt added only the validity guard. The regression then exposed the caller contract: the direct branch wrapped the null provider and the focused test segfaulted with status 139. Adding the null-aware branch fixed that second defect and produced the intended `rawtr(...)` fallback.
+
+The final regression test asserts that the descriptor starts with `rawtr(`, parses successfully, and has an identical serialized descriptor after parsing. Mutation proof removed only the new `IsFullyValid()` guard while retaining the null-aware caller. The focused test exited 201: the `rawtr(` assertion failed and parsing reported the original `tr(...,pk(0000...))` invalid-key error. The raw mutation log is `/data/my_storage/tmp/cycle51-taproot-mutation.log`; the pre-fix log is `/data/my_storage/tmp/cycle51-taproot-before-fix.log`.
+
+### Validation
+
+- Build: `env TMPDIR=/data/my_storage/tmp/cycle51-taproot cmake --build build_unit_clang19 --target test_bitcoin -j2`; final build exited 0.
+- Focused fixed regression: `descriptor_tests/infer_descriptor_taproot_off_curve_leaf_roundtrips`; 1 case, 4 assertions passed. Log: `/data/my_storage/tmp/cycle51-taproot-after-restore.log`.
+- Full descriptor suite: 12 cases, 30,419 assertions passed. Log: `/data/my_storage/tmp/cycle51-descriptor-suite.log`.
+- Adjacent script control: `script_tests/sign_invalid_miniscript`; 1 case, 1 assertion passed. Log: `/data/my_storage/tmp/cycle51-script-adjacent.log`.
+- Adjacent miniscript suite: 3 cases, 10,692 assertions passed. Log: `/data/my_storage/tmp/cycle51-miniscript-suite.log`.
+- Rebuilt ASan/UBSan fuzzer: `cmake --build build_fuzz_asan_clang19 --target fuzz -j2`; then `FUZZ=script` with `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1` over `/data/my_storage/tmp/qa-assets/fuzz_corpora/script`. All 2,537 corpus units completed with `#2537 DONE`, coverage 14,887, feature count 43,263, peak RSS 794 MB, and no sanitizer diagnostic or crash artifact. Log: `/data/my_storage/tmp/cycle51-script-asan.log`; slow-unit files are performance artifacts only.
+- `git diff --check` passed. No source, test, fuzz, sanitizer, daemon, or profiling process remains running.
+
+### Handoff
+
+Commit the source/test change with the exact author required by the uber protocol, then close this x-only/taproot cell. The broader goal remains eligible for other parser variants: direct invalid taproot output keys, nested `multi_a`/miniscript key paths, wrapper/binding parity, and future malformed-input recurrence. Do not reopen the P2PK or this tracked-leaf cell without a new caller, parser mode, backend, or regression signal.
+
 ## Cycle 27: descriptor inference must round-trip invalid public keys
 
 ### Selection and gate
