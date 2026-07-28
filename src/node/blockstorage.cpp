@@ -757,8 +757,9 @@ bool BlockManager::ReadBlockUndo(CBlockUndo& blockundo, const CBlockIndex& index
         // Read block
         HashVerifier verifier{filein}; // Use HashVerifier, as reserializing may lose data, c.f. commit d3424243
 
+        CBlockUndo decoded_blockundo;
         verifier << index.pprev->GetBlockHash();
-        verifier >> blockundo;
+        verifier >> decoded_blockundo;
 
         uint256 hashChecksum;
         filein >> hashChecksum;
@@ -768,6 +769,7 @@ bool BlockManager::ReadBlockUndo(CBlockUndo& blockundo, const CBlockIndex& index
             LogError("Checksum mismatch at %s while reading block undo", pos.ToString());
             return false;
         }
+        blockundo = std::move(decoded_blockundo);
     } catch (const std::exception& e) {
         LogError("Deserialize or I/O error - %s at %s while reading block undo", e.what(), pos.ToString());
         return false;
