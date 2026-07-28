@@ -38,8 +38,39 @@ Primary surfaces are constructors/destructors and manual ownership bridges in `s
 - Use compiler warnings/static analysis, ASan/LSan or Valgrind where available, deterministic fault injection, and small lifetime counters or test-only deleters. A leak report alone is insufficient if it is a harness or intentional process-lifetime object.
 - For every candidate, establish a reachable failing path, minimize the resource count, compare before/after process or handle state, and preserve a regression test. Do not change ownership style without proving the old path leaks or double-releases.
 
-## Active State
+## Cycle 73 Evidence and Verdict
 
-- Status: in progress
-- Current focus: constructor/error/cancellation ownership asymmetry across sockets, files, database iterators, callback registrations, and secure resources.
-- Next action: search the existing journal/history ledger, inventory manual ownership sites, then choose the highest-risk unchecked cell.
+### Candidate ledger
+
+| Candidate | Acquire/owner path | Failure edge | Evidence | Verdict |
+| --- | --- | --- | --- | --- |
+| LevelDB options and environment in `CDBWrapper` | `GetOptions()` allocated an LRU cache, optional Bloom policy, and `CBitcoinLevelDBLogger`; `LevelDBContext` stored those objects, `pdb`, and an optional `NewMemEnv` as raw pointers | `CDBWrapper` construction could throw from `TryCreateDirectories()` or `HandleError()` before `CDBWrapper::~CDBWrapper()` became active | Clang 19 ASan/LSan standalone probe, a temporary destructor mutation, and the focused unit regression | Confirmed and fixed |
+| Other manual file/socket/mapping/database ownership sites | Reviewed prior journals, current `new`/`delete`, `release`, `CloseSocket`, file, mmap, and database call chains in the scoped surfaces | No second reachable leak or double-release with an independent reproducer was established in this cycle | Static review and existing tests only | Inconclusive; queued with named surfaces rather than converted into speculative cleanup |
+
+### Confirmed finding
+
+Before the fix, `GetOptions()` transferred three raw allocations directly into a local `leveldb::Options`. `LevelDBContext` had no destructor, while `CDBWrapper::~CDBWrapper()` called `Close()` only for fully constructed objects. A deterministic constructor failure therefore skipped cleanup. The minimal trigger uses a regular file as the parent of the requested database path, so `TryCreateDirectories()` throws after options allocation and before `DB::Open()`:
+
+```text
+CDBWrapper({.path = "/dev/null/bitcoin-raii-cycle73", .cache_bytes = 1 << 20})
+```
+
+The old-source Clang 19 ASan/LSan probe caught the expected filesystem error and reported `4064 byte(s) leaked in 19 allocation(s)`, including the direct LRU cache, Bloom policy, logger, and indirect cache buckets. The same probe against the fixed source caught the same exception and produced no leak report. Replacing only `~LevelDBContext() { Close(); }` with `~LevelDBContext() = default;` restored the exact 4064-byte leak, establishing that the destructor is causally required rather than the result of probe setup.
+
+The fix makes the three `GetOptions()` allocations local `unique_ptr`s until all allocations succeed, initializes raw context fields to null, gives `LevelDBContext` an idempotent `Close()` plus destructor, and makes `CDBWrapper::Close()` delegate to that owner. Cleanup order is database, filter policy, logger, block cache, then custom environment. The new `dbwrapper_constructor_failure_cleanup` test creates an uncreatable child path and verifies the public exception contract and parent cleanup.
+
+### Commands and validation
+
+- `cmake --build build_unit_clang19 --target test_bitcoin -j2` passed after the fix was restored.
+- `build_unit_clang19/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=test_suite --report_level=short` passed: 14 cases, 2475 assertions.
+- `/data/my_storage/tmp/sanitizer-analysis-matrix-cycle26/asan-unit-clang/bin/test_bitcoin --run_test=dbwrapper_tests --detect_memory_leaks --log_level=test_suite --report_level=short` passed: 14 cases, 2475 assertions, no leak diagnostic.
+- The standalone probe in `agent-journal/raai_cycle73_dbwrapper_probe.cpp` was compiled and linked against the Clang 19 ASan/UBSan LevelDB build. With `ASAN_OPTIONS='detect_leaks=1:halt_on_error=1:allocator_may_return_null=1'`, `LSAN_OPTIONS='detect_leaks=1:report_objects=1'`, and `UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1'`, the fixed run exited 0 with the expected filesystem error and no leak output.
+- A selected block/index/flush dependent-suite attempt was stopped after the host root filesystem reported `Disk space is too low!`; subsequent cascading assertions included `cs_args` double-lock state from the aborted fixture. The raw log is `/data/my_storage/tmp/raai-cycle73-dependent-tests.log`. The dedicated dbwrapper normal and sanitized suites are the authoritative validation for this finding; no process remains running.
+- `git diff --check` passed. The temporary source mutation was restored before closing the cycle.
+
+### Commit and handoff
+
+- Source/test/probe commit: pending at journal finalization; intended message `dbwrapper: clean up resources on constructor failure`.
+- Raw evidence: `/data/my_storage/tmp/raai-cycle73-dbwrapper-before.log`, `/data/my_storage/tmp/raai-cycle73-dbwrapper-after-asan.log`, `/data/my_storage/tmp/raai-cycle73-dbwrapper-mutated.log`, `/data/my_storage/tmp/raai-cycle73-dbwrapper-after-asan-tests.log`, and `/data/my_storage/tmp/raai-cycle73-dependent-tests.log`.
+- Remaining resource cells: socket and callback cancellation, file/mapping failure paths, database iterator/transaction ownership, and secure allocation cleanup. Re-check the deduplication ledger before selecting one in the next cycle.
+- Verdict: cycle 73 confirmed one reachable resource leak and fixed it; no repository-completion claim is made.

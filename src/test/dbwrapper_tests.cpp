@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <fstream>
 #include <memory>
 #include <ranges>
 #include <stdexcept>
@@ -117,6 +118,22 @@ BOOST_AUTO_TEST_CASE(dbwrapper)
             }
         }
     }
+}
+
+BOOST_AUTO_TEST_CASE(dbwrapper_constructor_failure_cleanup)
+{
+    const fs::path parent{m_args.GetDataDirBase() / "dbwrapper_uncreatable_parent"};
+    fs::remove(parent);
+    {
+        std::ofstream file{parent.std_path()};
+        BOOST_REQUIRE(file.good());
+    }
+
+    const fs::path child{parent / "child"};
+    BOOST_CHECK_THROW(([&] {
+        CDBWrapper dbw({.path = child, .cache_bytes = 1_MiB});
+    }()), fs::filesystem_error);
+    BOOST_CHECK(fs::remove(parent));
 }
 
 BOOST_AUTO_TEST_CASE(dbwrapper_basic_data)
