@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 56 complete; ready to draw cycle 57 from the full catalog.
+- Status: cycle 57 in progress; selected goal 7 (`resource-exhaustion-variants`) from the full catalog.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -84,6 +84,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 45 selector: `shuf -i 0-98 -n 1` drew `95` (`database-semantics-differential`). The prior LevelDB work covered read/write errors and compaction backports, so this cycle selected the distinct iterator-status propagation cell.
 - Cycle 45 verification: LevelDB's iterator contract exposes read failures through `Iterator::status()`, but `CDBIterator::Valid()` discarded that status and made corrupted/unreadable iteration appear to end normally. A deterministic memenv fault after `CompactFull()` failed to raise `dbwrapper_error` against the old implementation, passed after status propagation, and failed again under a mutation restoring the old method. The unit target, full dbwrapper suite, dependent chainstate/index suites, and diff checks passed. See `database-semantics-differential.md`.
 - Current HEAD after cycle 45 source finding: `2340c73ef0` (`dbwrapper: preserve iterator read errors`). No source, test, daemon, fuzz, sanitizer, or profiling process remains running.
+- Cycle 57 gate: fetched `origin/master`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` was `2 882`; tracked and staged state was clean with only known agent-owned untracked artifacts; catalog, protocol, and corrected-tab TSV hashes matched; no relevant process was running.
+- Cycle 57 selector: `shuf -i 0-98 -n 1` drew `7` (`resource-exhaustion-variants`). The prior global ForceRelay relay-backlog cell and the earlier integer-domain option cells are closed; this cycle starts a distinct P2P/RPC/mempool resource-accounting sweep.
 - Cycle 46 gate: fetched `origin/master`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` was `2 862`; tracked and staged state was clean; catalog/protocol/TSV hashes validated; no relevant process was running.
 - Cycle 46 selector: `shuf -i 0-98 -n 1` drew `53` (`statistical-timing`). The cycle-44 MuSig ctime boundary was closed; this draw selected the distinct GCC compiler/backend and `-O3` optimization cell.
 - Cycle 46 verification: GCC 12.2 `-O2` and `-O3` builds with x86_64 assembly `AUTO` and `OFF` ran deterministic ECDH, Schnorr, and MuSig timing probes for both `1` versus `0x7f...7f` and `1` versus `2` classes. Across eight build/class combinations, 12 API/repetition t-statistics each, the maximum absolute t was `1.267`; directions changed across repetitions and variants, sinks matched, and official GCC AUTO/OFF tests plus noverify tests passed with the fixed seed. `objdump` showed the fixed-window multiplication call/loop structure without a source-level secret-branch finding. Valgrind, dudect, GCC 13+, LTO, and non-x86 execution remain unavailable. See `statistical-timing.md`.
