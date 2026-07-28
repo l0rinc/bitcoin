@@ -122,12 +122,26 @@ The cycle-41 verify-binaries findings are closed: trusted-signature thresholds a
 
 ### Evidence Log
 
-- Pending: inventory compiler/tool acquisition, dependency-cache reuse, generated-source inputs, and license/provenance checks; then select one concrete trust-boundary hypothesis and verify it independently.
+- `contrib/guix/guix-build:412-442` maps the writable `OUTDIR_BASE` into the isolated build container and sets `DIST_ARCHIVE_BASE=/outdir-base/dist-archive`. `contrib/guix/libexec/setup.sh:102-108` previously created `${DISTNAME}.tar.gz` only when absent. Every platform build then extracted that path directly (`build_linux.sh:72-73`, with equivalent macOS/Windows consumers).
+- The source archive's digest is recorded only after extraction/build by `contrib/guix/libexec/package.sh:133-143`; that output attestation does not prevent a bad archive from influencing the build that produces the attestation. The historical rationale in `d522d8006b` confirms the archive is treated as a build input, so the check must precede extraction.
+- The cache key is a short/tag-derived `DISTNAME` (`contrib/guix/libexec/prelude.bash:116-117`), and `OUTDIR_BASE` may be kept outside the worktree for reuse. An existing archive therefore crosses a cache boundary without a pre-use comparison to the checked-out tree.
+- Controlled baseline replay at gate `70caa034b9aa598e10bfd5091f2e6358f843a610`: seeded `/data/my_storage/tmp/cpp-supply-chain-archive-probe-1785254185129255019/bitcoin-probe.tar.gz` from `54de023a7c9^`, then sourced the old `setup.sh` with the same `DISTNAME`. The script returned success and left the stale bytes in place:
+
+  ```text
+  old_hash=152c5861294c9b301eeceb03a5a9afa70b12c4412a8bb88e7d84ceab4562f356
+  kept_hash=152c5861294c9b301eeceb03a5a9afa70b12c4412a8bb88e7d84ceab4562f356
+  expected_hash=339e8f43a28b940e41dd5cc6add96859bcc3b015ff4f403e5e9f7f3d751a1425
+  archive_reused=yes
+  current_setup_present=1
+  reused_setup_present=0
+  source_sha_mismatch=yes
+  ```
+- The stale archive came from a real Git commit and was accepted without any malformed-tar or extraction failure, so this is a provenance mismatch rather than a parser robustness issue. The same unchecked reuse existed for detached signature archives in `contrib/guix/libexec/codesign.sh:55-61`.
 
 ### Verdict
 
-- Pending.
+- Pending source validation and independent regression replay.
 
 ### Handoff
 
-- Pending completion. Record exact source URLs/commits/hashes, cache and verification order, negative controls, reproducible evidence, and the next unchecked supply-chain cell.
+- Pending completion. The selected fix must bind both source and detached-signature archive bytes to their repository `HEAD` before extraction, then continue with dependency/tool and license-gate controls.

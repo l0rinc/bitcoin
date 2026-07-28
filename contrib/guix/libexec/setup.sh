@@ -5,6 +5,9 @@
 export LC_ALL=C.UTF-8
 set -o errexit -o pipefail
 
+# shellcheck source=archive.sh
+source "$(dirname "${BASH_SOURCE[0]}")/archive.sh"
+
 # Environment variables for determinism
 export TAR_OPTIONS="--no-same-owner --owner=0 --group=0 --numeric-owner --mtime='@${SOURCE_DATE_EPOCH}' --sort=name"
 export TZ=UTC
@@ -101,11 +104,8 @@ export GUIX_LD_WRAPPER_DISABLE_RPATH=yes
 
 GIT_ARCHIVE="${DIST_ARCHIVE_BASE}/${DISTNAME}.tar.gz"
 
-# Create the source tarball if not already there
-if [ ! -e "$GIT_ARCHIVE" ]; then
-    mkdir -p "$(dirname "$GIT_ARCHIVE")"
-    git archive --prefix="${DISTNAME}/" --output="$GIT_ARCHIVE" HEAD
-fi
+# Create the source tarball or verify a cached one before it is used.
+create_or_verify_git_archive . "${DISTNAME}/" "$GIT_ARCHIVE"
 
 mkdir -p "$OUTDIR"
 
