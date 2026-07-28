@@ -74,6 +74,7 @@ struct ConnmanTestMsg : public CConnman {
             delete node;
         }
         m_nodes.clear();
+        m_network_conn_counts.fill(0);
     }
 
     void CreateNodeFromAcceptedSocketPublic(std::unique_ptr<Sock> sock,
@@ -113,6 +114,12 @@ struct ConnmanTestMsg : public CConnman {
     void FlushSendBuffer(CNode& node) const;
 
     bool AlreadyConnectedToAddressPublic(const CNetAddr& addr) { return AlreadyConnectedToAddress(addr); };
+
+    bool MultipleManualOrFullOutboundConnsPublic(Network net) const
+    {
+        LOCK(m_nodes_mutex);
+        return MultipleManualOrFullOutboundConns(net);
+    }
 
     CNode* ConnectNodePublic(PeerManager& peerman, const char* pszDest, ConnectionType conn_type)
         EXCLUSIVE_LOCKS_REQUIRED(!m_unused_i2p_sessions_mutex);
