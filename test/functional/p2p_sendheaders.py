@@ -521,6 +521,38 @@ class SendHeadersTest(BitcoinTestFramework):
         # Now deliver all those blocks we announced.
         [test_node.send_without_ping(msg_block(x)) for x in blocks]
 
+        self.nodes[0].waitforblock(blocks[-1].hash_hex)
+
+        # Direct fetch must request exactly the per-peer limit, but fall back
+        # when the announced chain is one block beyond that limit.
+        boundary_blocks = []
+        for _ in range(16):
+            boundary_blocks.append(create_block(tip, height=height, ntime=block_time))
+            boundary_blocks[-1].solve()
+            tip = boundary_blocks[-1].hash_int
+            height += 1
+            block_time += 1
+        test_node.send_header_for_blocks(boundary_blocks)
+        test_node.sync_with_ping()
+        test_node.wait_for_getdata([x.hash_int for x in boundary_blocks], timeout=DIRECT_FETCH_RESPONSE_TIME)
+        [test_node.send_without_ping(msg_block(x)) for x in boundary_blocks]
+        self.nodes[0].waitforblock(boundary_blocks[-1].hash_hex)
+
+        over_limit_blocks = []
+        for _ in range(17):
+            over_limit_blocks.append(create_block(tip, height=height, ntime=block_time))
+            over_limit_blocks[-1].solve()
+            tip = over_limit_blocks[-1].hash_int
+            height += 1
+            block_time += 1
+        test_node.last_message.pop("getdata", None)
+        test_node.send_header_for_blocks(over_limit_blocks)
+        test_node.sync_with_ping()
+        with p2p_lock:
+            assert "getdata" not in test_node.last_message
+        [test_node.send_without_ping(msg_block(x)) for x in over_limit_blocks]
+        self.nodes[0].waitforblock(over_limit_blocks[-1].hash_hex)
+
         self.log.info("Part 5: Testing handling of unconnecting headers")
         # First we test that receipt of an unconnecting header doesn't prevent
         # chain sync.

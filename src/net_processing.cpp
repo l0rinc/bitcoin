@@ -3174,10 +3174,12 @@ void PeerManagerImpl::HeadersDirectFetchBlocks(CNode& pfrom, const Peer& peer, c
         std::vector<const CBlockIndex*> vToFetch;
         const CBlockIndex* pindexWalk{&last_header};
         // Calculate all the blocks we'd need to switch to last_header, up to a limit.
-        while (pindexWalk && !m_chainman.ActiveChain().Contains(*pindexWalk) && vToFetch.size() <= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-            if (!(pindexWalk->nStatus & BLOCK_HAVE_DATA) &&
-                    !IsBlockRequested(pindexWalk->GetBlockHash()) &&
-                    (!DeploymentActiveAt(*pindexWalk, m_chainman, Consensus::DEPLOYMENT_SEGWIT) || CanServeWitnesses(peer))) {
+        while (pindexWalk && !m_chainman.ActiveChain().Contains(*pindexWalk)) {
+            const bool can_fetch{!(pindexWalk->nStatus & BLOCK_HAVE_DATA) &&
+                                 !IsBlockRequested(pindexWalk->GetBlockHash()) &&
+                                 (!DeploymentActiveAt(*pindexWalk, m_chainman, Consensus::DEPLOYMENT_SEGWIT) || CanServeWitnesses(peer))};
+            if (can_fetch && vToFetch.size() >= MAX_BLOCKS_IN_TRANSIT_PER_PEER) break;
+            if (can_fetch) {
                 // We don't have this block, and it's not yet in flight.
                 vToFetch.push_back(pindexWalk);
             }
