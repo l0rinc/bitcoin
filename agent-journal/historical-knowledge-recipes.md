@@ -114,3 +114,62 @@ When reviewing a resource-limited state machine with deferred destinations, appl
 **Recipe confirmed; no new production defect found on current HEAD.** The relay sequence supplies five independently demonstrated post-reservation exits, while private-broadcast removal/disconnect provides an independent held-out match and the coin-spend/dump-failure commits prevent overgeneralization. No implementation commit is warranted in this cycle. The recipe is indexed by `reservation-conservation-after-deferred-eligibility` and is distinct from `presence-vs-verification-before-assertion`, `failed-operation-must-be-local-no-op`, and wallet rollback.
 
 Next queue: draw another eligible goal. If goal 90 is drawn again, select a different history cluster and validate it against held-out commits rather than appending another relay-accounting variant.
+
+## Cycle 31: Configurable Parallel-Feature Lifecycle and Fallback
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `90`
+- Selected goal: `historical-knowledge-recipes` (reopened on a third, distinct history cluster)
+- Gate: fetched `origin/master`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` was `2 834`; HEAD before this handoff was `0b265d3668853de9d679c2a8e1532ef7087e3b6`; tracked and staged state was clean; no source, build, test, daemon, or fuzz process remained active.
+- Prior-recipe exclusions: this is neither the cycle-4 `presence-vs-verification-before-assertion` recipe nor the cycle-19 `reservation-conservation-after-deferred-eligibility` recipe. It targets configuration-driven concurrency and fallback semantics.
+
+### Seed history and evidence
+
+The seed cluster is Bitcoin Core PR `#35295`, merge `c0e91efdb31fa930593f61cc87464e94c9f1ac72`, `validation: fetch block input prevouts in parallel during ConnectBlock`. Its ten-commit history supplies a complete migration trail:
+
+- `5bf1c32008173db2080286b2690f4951299d1619` registers `-prevoutfetchthreads`, stores the typed option, rejects negative values, and clamps larger values to `MAX_PREVOUTFETCH_THREADS`.
+- `f82043af507a2f2caacdae1af6bcacddc8c4876b`, `ede11b83141d0d0998cd95ebabf8d1656c6f7765`, `fdf283036a1e16f546f96ca9c2d6d33f3a4fea56`, and `ab2a3792372c6b99b9d6749a1841dbb363264573` carry the option into the overlay, prefetch state, ready-state synchronization, and concurrent fetch implementation.
+- `d69a3b20deca56ff8f925d93471d4caeacaa4d21` updates the ownership/lifecycle documentation; `760fb22dc370b0882bd345ff913f9337a9b6e4c1` adds `StartFetching` unit coverage; `ce610a6ff445bb8a812e650c91f501a1ecf0b19c` and `0e10937184438f8d81940336b183267e59f959b7` expand fuzz reachability; and `dc1c17c0856e3455a0d62f9ffd807c0d14feff62` records the migration in release notes.
+
+The PR description and review record establish the intended contract: the feature only parallelizes existing UTXO reads, does not change validation or consensus, defaults to eight workers, permits at most sixteen, and uses zero to restore serial behavior. The safety argument depends on concurrent LevelDB reads, `ConnectBlock` remaining under `cs_main`, only `ProcessInput` running concurrently, and `Reset`/`Flush`/`StopFetching` joining workers before state is reused. ACKs from `l0rinc`, `willcl-ark`, `theStack`, and `ryanofsky` include the final `StopFetching` and `AllInputsConsumed` lifecycle changes, which are evidence that review focused on shutdown and completion semantics rather than only the option parser.
+
+The reusable contract cells are therefore: public registration/help and release documentation; typed option storage; default, zero, negative, and above-maximum parsing; runtime wiring; serial fallback; worker start/ready/stop/reset/flush behavior; lock and object-lifetime assumptions; normal tests; fuzz state coverage; and representative performance evidence. The defect shape to mine in future migrations is a split contract where an option is accepted but one of those cells still assumes the old fixed behavior.
+
+### Held-out validation and controls
+
+`c7af7477b106e321d161f97c4893373426fc152b`, `validation: add -inputfetchthreads configuration option`, is a useful negative control. Its standalone four-file diff adds help text, typed storage, and a parser that rejects negative values and clamps to sixteen, but it adds no runtime consumer and no test. It is not evidence of a current production bug because it is a staged historical option commit on a detached branch; it demonstrates why a recipe must not treat parser coverage as feature completion. Its later branch context was not used as a production oracle.
+
+The later local follow-up `3873d90f06df3cbec47277b5c48778bdbcd03219`, `fuzz, test: cover prevout-fetch worker count boundaries`, is a second control. It adds a shared fuzz input provider for zero/one/default/maximum workers, a direct overlay boundary test, and bounded stacked-coins/cache simulations. The recorded ASan/UBSan and TSan slices found no production defect, but the follow-up proves that the initial unit coverage did not exercise every worker-count state. It is retained as evidence for the coverage cell, not treated as upstream review evidence.
+
+### Verification
+
+The current chainstate option tests were rerun independently after the cycle gate:
+
+```text
+build_unit_clang19/bin/test_bitcoin --run_test=validation_chainstatemanager_tests --report_level=short
+
+Test module "Bitcoin Core Test Suite" has passed with:
+  22 test cases out of 1189 passed
+  1167 test cases out of 1189 skipped
+  2068 assertions out of 2068 passed
+```
+
+The current tree uses the later `-prevoutfetchthreads` option rather than the staged `-inputfetchthreads` name. History and source searches found the option registration, typed storage, parser, runtime worker lifecycle, tests, fuzz harnesses, and release documentation in the PR cluster; the branch's existing boundary follow-up covers zero, one, default, and maximum worker selections. No current source change is justified by this recipe cycle. Raw command output and the catalog/protocol hashes are represented in the uber-goal state handoff.
+
+### Reusable recipe
+
+When reviewing a configurable parallel or asynchronous feature, apply this sequence:
+
+1. Build a lifecycle matrix before reading the diff: registration/help, typed option, parser domain, default/zero/max/negative behavior, runtime consumer, worker ownership, completion, shutdown, reset/flush, documentation, tests, fuzz reachability, and held-out performance evidence.
+2. Prove the fallback contract first. The disabling value must reproduce the old serial behavior, while default and maximum values must exercise the new path without changing externally visible correctness or consensus semantics.
+3. Trace every boundary where the option becomes a thread pool or scheduler: start, ready, concurrent work, cancellation, error propagation, join, object reuse, and destruction. Treat comments and ACKs about stop ordering as contract evidence.
+4. Test parser values at zero, one, default, maximum, maximum plus one, negative, and the largest representable input. Distinguish deliberate clamping from rejection and verify the typed conversion cannot overflow before the clamp.
+5. Add behavior-sensitive unit tests plus stateful fuzz inputs that actually select each worker mode. A test that only constructs the pool or reaches a branch is insufficient; assert output, error, state, and shutdown behavior.
+6. Separate performance claims from correctness. Record storage/CPU environment, compare serial and parallel paths on held-out workloads, and reject a feature if its speedup depends on an unbounded queue, altered validation rule, or unverified lifetime assumption.
+7. Use staged option-only commits as negative controls during review. If a change has help and parsing but no consumer, tests, or fallback proof, keep it in the migration queue rather than declaring the feature complete.
+
+### Verdict and next queue
+
+**Recipe confirmed; no new production defect found on current HEAD.** PR `#35295` supplies the complete lifecycle and independent review evidence; `c7af7477` demonstrates the incomplete-parser-only control; and `3873d90` demonstrates why worker-count boundary coverage must be added separately. The focused chainstate tests passed all 2068 assertions. No implementation commit is warranted in this history-only cycle.
+
+Next queue: draw another eligible goal. If goal 90 repeats, select a fourth history cluster unrelated to PSBT verification, relay reservations, and configurable parallel features, and preserve this recipe under the fingerprint `configurable-parallel-feature-lifecycle`.
