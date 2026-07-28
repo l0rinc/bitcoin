@@ -62,18 +62,18 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 16 | api-misuse-resistance | CYCLE-2 | 2026-07-28 | 5+7 kernel C API @pre doc fixes (b6b48987a5, 8b0e92b4a2); #33943 precedent journaled |
 | 61 | stateful-contract-fuzzing | CYCLE-3 | 2026-07-28 | sigcache oracle (a4ff67417e); c2/c3 assessments all already-strong; triage guidance updated |
 | 30 | security-logging | CYCLE-3 | 2026-07-28 | 2 injection fixes; amplification dismissed by design (0 bytes at default, 14.6KB/round at -debug) |
-| 31 | cross-layer-contracts | CYCLE-2 | 2026-07-28 | descriptors.md off-by-one (1f7f73b02e) + assumeutxo rejection rules (f7513f4990) doc fixes |
+| 31 | cross-layer-contracts | CYCLE-3 | 2026-07-28 | +gettxoutsetinfo use_index restriction (9396f0b414); 3 doc/RPC layer fixes total |
 | 29 | dead-stale-code | CYCLE-2 | 2026-07-28 | util/common + node/wallet/script scans clean; SAFE_CHARS_FILENAME parked |
 | 17 | build-matrix-modules | CYCLE-2 | 2026-07-28 | option/CI inventory + manifest drift + guard sweep all clean (no builds; disk) |
 
 ## Next-up queue (severity-first)
-1. 31 — cross-layer-contracts CYCLE-3 — NEXT (gettxoutsetinfo hash_type option names across layers; resume)
-2. then re-rank: 21 c2 (tx-heavy reindex), 18 c3 (CTxOutUndo round-trip)
+1. 21 — rebuild-recovery-profile CYCLE-2 — NEXT (tx-heavy reindex: does consistency domination persist with validation work?; resume)
+2. then re-rank: 18 c3 (CTxOutUndo round-trip), 22 c2 (two-node P2P IBD)
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c3), 28(c2), 16(c2), 61(c3), 30(c3), 31(c2), 29(c2), 17(c2), 21(c1), 22(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c3), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3), 29(c2), 17(c2), 21(c1), 22(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #31 on branch
-audit/cross-layer-contracts.
+full cross-backend differential in ~35s on this host. NEXT: #21 on branch
+audit/rebuild-recovery-profile.
