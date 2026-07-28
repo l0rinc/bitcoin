@@ -240,3 +240,48 @@ The ElligatorSwift header promises constant time in `seckey32` for XDH and in `s
 ### Initial execution plan
 
 Build current source with Clang 19 at Release `-O2`, x86_64 assembly `AUTO` and `OFF`, enabling ElligatorSwift, extra keys, MuSig, Schnorr, and Silent Payments. Use a deterministic CPU-pinned paired probe with two valid scalar classes, randomized class order, fixed public peers/recipients, raw monotonic timing, medians/percentiles, Welch statistics, and a same-input control where the secret class is held constant. Preserve raw traces and exact build/toolchain metadata. Run the official module tests and the available ctime/MSan target or document why it cannot run.
+
+### Measurements and independent checks
+
+The matched builds were configured in `/data/my_storage/tmp/statistical-timing-cycle71/auto` and `/data/my_storage/tmp/statistical-timing-cycle71/off` with Clang 19.1.7, `RelWithDebInfo`, `-O2`, static libraries, all relevant modules enabled, and `SECP256K1_ASM=AUTO` or `OFF`. The probe source is `agent-journal/statistical_timing_cycle71_probe.cpp`; it pins to CPU 2, randomizes class order, uses 1,500 samples per class and four calls per sample, records raw `CLOCK_MONOTONIC_RAW` samples, and writes complete traces to:
+
+- `/data/my_storage/tmp/statistical-timing-cycle71/auto.log`
+- `/data/my_storage/tmp/statistical-timing-cycle71/off.log`
+
+The repeated Welch statistics were:
+
+| Operation | AUTO repetitions | ASM-OFF repetitions |
+|---|---:|---:|
+| Ellswift create | `-202.796, -277.246, -162.903` | `-226.116, -304.722, -256.284` |
+| Ellswift XDH | `-0.037, 0.347, -0.224` | `-0.428, 0.760, 0.549` |
+| Silent sender outputs | `1.161, 0.458, 0.743` | `1.440, 1.196, 1.826` |
+| Silent recipient label | `0.496, -0.373, 0.533` | `0.226, 0.471, -0.073` |
+| Silent recipient scan | `6.826, 6.022, 6.170` | `8.183, 7.355, 9.448` |
+| Same-key scan control | `0.519, -0.311, -0.526` | `0.080, -0.392, 0.587` |
+
+The large Ellswift-create separation is expected because the API documents the resulting public key as variable-time. XDH, sender output creation, and label creation showed no stable class effect. Scan showed a repeatable approximately 1.2 microsecond low/high mean difference, while the same-key control was near zero. This is not a secret-control-flow finding: the scan API explicitly declassifies the hash-derived output tweak before variable-time public-key arithmetic, because callers branch on a found public output. The probe also held a deliberately nonmatching transaction output fixed rather than generating a matching transaction separately for each secret, so its scan timing is a screening observation of declassified public-output work, not a valid payment-recognition oracle or a proof of leakage.
+
+The AUTO and ASM-OFF module suites both passed with the exact commands:
+
+```text
+bin/tests --seed=0123456789abcdef --iterations=1 --jobs=2
+bin/noverify_tests --seed=0123456789abcdef --iterations=1 --jobs=2
+```
+
+All four commands exited `0`; logs are `/data/my_storage/tmp/statistical-timing-cycle71/auto-tests.log`, `/data/my_storage/tmp/statistical-timing-cycle71/off-tests.log`, and the corresponding console capture. No Valgrind or dudect binary was available.
+
+### MSan ctime boundary control
+
+A separate Clang 19 MSan build was configured in `/data/my_storage/tmp/statistical-timing-cycle71/msan` with `SECP256K1_ASM=OFF`, all ElligatorSwift/Silent Payments dependencies enabled, and `SECP256K1_BUILD_CTIME_TESTS=ON`. The restored source passed:
+
+```text
+MSAN_OPTIONS='halt_on_error=1:exit_code=86:report_umrs=1:print_summary=1' bin/ctime_tests
+```
+
+The pass is recorded in `msan-ctime.log` and `msan-ctime-restored.log`. As an independent sensitivity control, the `secp256k1_declassify(ctx, hash_ser, sizeof(hash_ser))` call in `secp256k1_silentpayments_create_output_tweak` was temporarily removed. The rebuilt ctime test then exited `86` at `secp256k1_silentpayments_create_output_pubkey` line 160, called from the sender path at line 325 and `ctime_tests.c:327`; the raw report is `msan-ctime-mutated.log`. Restoring the declassification and rebuilding returned ctime to exit `0`. The mutation was not committed.
+
+Source review confirms that `secp256k1_ellswift_xdh` uses `secp256k1_ecmult_const_xonly` for the secret scalar, clears the scalar and shared coordinate, and has no new secret-dependent branch in the valid-key path. Silent Payments uses constant-time `ecmult_const` for the shared secret and clears its secret material. The validity return and output-tweak/public-output boundaries are explicitly declassified. The independent MSan pass and the targeted failure after removing the boundary match those contracts.
+
+### Cycle 71 verdict and handoff
+
+**No new source defect; timing-only scan signal dismissed as a declassified public-output path.** The caller cell is closed without a production or test change. The probe and raw logs remain available for a future cycle only if a new API contract, compiler/backend, architecture, or caller setup changes the assumptions. The next uber cycle must draw a distinct goal from the full catalog.
