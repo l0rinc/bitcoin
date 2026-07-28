@@ -2203,6 +2203,9 @@ std::vector<std::unique_ptr<PubkeyProvider>> ParsePubkey(uint32_t& key_exp_index
 
 std::unique_ptr<PubkeyProvider> InferPubkey(const CPubKey& pubkey, ParseScriptContext ctx, const SigningProvider& provider)
 {
+    if (!pubkey.IsFullyValid()) {
+        return nullptr;
+    }
     // Key cannot be hybrid
     if (!pubkey.IsValidNonHybrid()) {
         return nullptr;
