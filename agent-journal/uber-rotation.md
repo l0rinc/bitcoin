@@ -98,11 +98,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 76 | reproducible-builds | CYCLE-2 | 2026-07-28 | depends pins exact (qrencode primary 404, fallback serves pinned bytes); secp ccache = absolute-I key divergence, not uncacheable |
 | 21 | rebuild-recovery-profile | CYCLE-2 | 2026-07-28 | tx-heavy reindex-chainstate: 6.8s user, 85% secp256k1 EC math; checks negligible at 610 blocks; harness lessons logged |
 | 2 | assertion-invariant-audit | CYCLE-1 | 2026-07-28 | fork production Assumes all construction-tautologies; cache-overflow fix verified; no input-validation-by-assert |
+| 65 | contributor-branch-radar | CYCLE-2 | 2026-07-28 | perf seam: CheckBlock dup-check 1.85x branch locally absent (equivalence plausible), prevector-36 + serialization seeds recorded |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=9227947000855944028 -> idx 0 (of 53) -> #2.
+   raw=9142664693120658118 -> idx 42 (of 52) -> #65.
    POOL-REPAIR NOTE (2026-07-28): the incremental pools used from the
    #75 draw onward carried stale CYCLE-2+ entries (4, 28, 61), and a
    draw of #61(c3) over that 27-entry pool (raw=2149655188711527484,
@@ -135,7 +136,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
 7(c1), 2(c1), 9(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1), 21(c1,c2), 43(c1), 45(c1), 47(c1,c2), 51(c1), 59(c1), 60(c1),
-61(c1,c2,c3), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1),
+61(c1,c2,c3), 65(c1,c2), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1),
 76(c1,c2), 81(c1,c2), 90(c1), 91(c1), 94(c1), 95(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
