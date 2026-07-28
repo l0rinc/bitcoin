@@ -66,15 +66,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 29 | dead-stale-code | CYCLE-1 | 2026-07-27 | 3 sweeps clean; SAFE_CHARS_FILENAME parked inconclusive |
 | 17 | build-matrix-modules | CYCLE-1 | 2026-07-27 | option/CI inventory + manifest drift clean (no builds; disk) |
 | 21 | rebuild-recovery-profile | CYCLE-1 | 2026-07-28 | regtest reindex = 92% consistency checks; -checkblockindex=0 6.2x wall, proven |
+| 22 | full-sync-ibd-profile | CYCLE-1 | 2026-07-28 | import replay = 85% consistency machinery; -checkblockindex=0 6x wall; obfuscation gotcha journaled |
 
 ## Next-up queue (severity-first)
-1. 22 — full-sync-ibd-profile — NEXT (bounded: loadblock/import replay on scratch chain)
-2. then re-rank: 61 c3 (medium-strength target deepening), 30 c2 (wallet label logging)
+1. 30 — security-logging CYCLE-2 — NEXT (wallet label/descriptor strings in logs; resume)
+2. then re-rank: 61 c3 (medium-strength target deepening), 16 c2 (assert-precondition sweep)
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c2), 28(c2), 16(c1), 61(c2), 30(c1), 31(c1), 29(c1), 17(c1), 21(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c2), 28(c2), 16(c1), 61(c2), 30(c1), 31(c1), 29(c1), 17(c1), 21(c1), 22(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #22 on branch
-audit/full-sync-profile.
+full cross-backend differential in ~35s on this host. NEXT: #30 on branch
+audit/security-logging.
