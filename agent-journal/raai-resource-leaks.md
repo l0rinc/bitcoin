@@ -70,7 +70,8 @@ The fix makes the three `GetOptions()` allocations local `unique_ptr`s until all
 
 ### Commit and handoff
 
-- Source/test/probe commit: pending at journal finalization; intended message `dbwrapper: clean up resources on constructor failure`.
+- Source/test/probe/journal commit: `548d8cc8f8` (`dbwrapper: clean up resources on constructor failure`).
+- Post-commit validation: normal and Clang ASan/LSan `dbwrapper_tests` each passed 14 cases and 2475 assertions with no leak diagnostic; `git diff --check` passed.
 - Raw evidence: `/data/my_storage/tmp/raai-cycle73-dbwrapper-before.log`, `/data/my_storage/tmp/raai-cycle73-dbwrapper-after-asan.log`, `/data/my_storage/tmp/raai-cycle73-dbwrapper-mutated.log`, `/data/my_storage/tmp/raai-cycle73-dbwrapper-after-asan-tests.log`, and `/data/my_storage/tmp/raai-cycle73-dependent-tests.log`.
 - Remaining resource cells: socket and callback cancellation, file/mapping failure paths, database iterator/transaction ownership, and secure allocation cleanup. Re-check the deduplication ledger before selecting one in the next cycle.
 - Verdict: cycle 73 confirmed one reachable resource leak and fixed it; no repository-completion claim is made.

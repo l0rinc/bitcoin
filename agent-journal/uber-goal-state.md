@@ -4,15 +4,16 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 72 in progress; goal 84 (`secp-nonce-session`) selected a distinct failure/retry and state-binding cell across MuSig nonce generation, aggregation, session processing, partial-signature consumption, and Schnorr custom-nonce failure. Cycle 71's timing cell found no new source defect and remains closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
+- Status: cycle 73 complete; goal 54 (`raai-resource-leaks`) confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
-- Branch: `uber-cycle-72-secp-nonce-session-20260728`
+- Branch: `uber-cycle-73-raii-resource-leaks-20260728`
 - Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
 - HEAD at initialization: `1dcc2da988ee625fbc5d7d55eb6f894c1103ec52`
 - Current HEAD after cycle 16: `1926a4dbf612f3ce2fd43b61c0691360930a952f`
-- Current cycle-70 source/test/journal HEAD: `0ab4d16796` (`kernel: bridge spent output handles explicitly`). The next state-only close commit records this cycle as complete.
+- Current cycle-73 source/test/journal HEAD: `548d8cc8f8` (`dbwrapper: clean up resources on constructor failure`). The next state-only close commit records this cycle as complete.
+- Cycle 73 completion: the old source leaked 4064 bytes in 19 allocations when a filesystem exception interrupted `CDBWrapper` construction. The fixed `LevelDBContext` destructor and exception-safe option allocation passed the dedicated normal and ASan/LSan dbwrapper suites (14 cases, 2475 assertions each), the standalone fixed probe, and the negative-control mutation reproduced the old leak. A broader block/index/flush suite was blocked by the host root filesystem being 100% full and was terminated after cascading fixture assertions; no process remains running. See `raai-resource-leaks.md`.
 - Cycle 71 gate: fetched `origin/master`; HEAD `9eb6b4ad1b66f030f0019b759d0c8017993cf63b`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 917`; tracked/staged state clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 71 selector: exact `shuf -i 0-98 -n 1` -> `53` (`statistical-timing`). Cycles 1, 44, and 46 timing cells are excluded; this run targets the remaining ElligatorSwift XDH and Silent Payments secret-bearing callers.
 - Cycle 71 completion: no new source defect. Clang 19 AUTO/OFF probes found no stable class effect for Ellswift XDH, Silent Payments sender output creation, or label creation. A repeatable scan-only difference was explained by the documented declassification of the hash-derived public-output tweak; the fixed nonmatching-output probe is not a payment-recognition oracle. AUTO/OFF module suites passed, MSan ctime passed, and removing only that declassification reproduced a status-86 use-of-uninitialized-value report at the variable-time public-key tweak before restoration returned ctime to status 0. See `statistical-timing.md`.
@@ -244,7 +245,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 70 | `shuf -i 0-98 -n 1` -> `94` | `bindings-ffi-parity` (C++ kernel wrapper opaque pointer-array boundary) | confirmed; fixed | `btck::PrecomputedTransactionData` reinterpreted `TransactionOutput` objects as `const btck_TransactionOutput**`, relying on the current object layout instead of constructing the C API's documented opaque-pointer array. The explicit pointer bridge passed the focused and full kernel suites; restoring the old cast plus a temporary one-byte layout mutation made the two-output taproot verifier exit 139. See `bindings-ffi-parity.md`. | `0ab4d16796` (`kernel: bridge spent output handles explicitly`) | Recheck the gate and draw cycle 71 from the full catalog |
 | 71 | `shuf -i 0-98 -n 1` -> `53` | `statistical-timing` (ElligatorSwift XDH and Silent Payments secret callers) | dismissed; no new source defect | Clang 19 AUTO/OFF matched probes, module suites, MSan ctime, source review, and the intentional declassification-removal control found no new secret-dependent defect. The scan-only timing signal belongs to documented declassified public-output arithmetic, and the probe's fixed nonmatching output is not a valid payment-recognition oracle. See `statistical-timing.md`. | Journal/probe close snapshot; no source change justified | Recheck the gate and draw the next distinct goal |
 | 72 | `shuf -i 0-98 -n 1` -> `84` | `secp-nonce-session` (failure/retry and state-binding cell) | dismissed; no new source defect | The standalone state-machine probe passed valid signing, failure-state, nonce-consumption, malformed-binding, infinity, duplicate-key, and Schnorr callback controls under normal and ASan/UBSan-linked runs. MuSig/Schnorr module tests passed 4 iterations; the full libsecp256k1 test binary passed 16 iterations. Static contracts explain the observed deliberate nonce invalidation and output behavior. See `secp-nonce-session.md`. | Journal/probe close snapshot; no source change justified | Start cycle 73 from the next draw |
-| 73 | `shuf -i 0-98 -n 1` -> `54` | `raai-resource-leaks` (constructor/error/cancellation ownership cell) | in progress; distinct RAII/resource cell | Audit sockets, files/mappings, database iterators/transactions, callback registrations, threads, and secure allocations for leak, double-release, dangling-owner, and cleanup asymmetry across constructors, moves, errors, cancellation, and shutdown. See `raai-resource-leaks.md`. | Start state pending | Complete cycle 73 evidence and then draw the next distinct goal |
+| 73 | `shuf -i 0-98 -n 1` -> `54` | `raai-resource-leaks` (constructor/error/cancellation ownership cell) | confirmed; fixed | `CDBWrapper` leaked LevelDB cache, filter policy, logger, and related allocations when construction threw before its destructor became active. `LevelDBContext` now owns idempotent cleanup, `GetOptions()` is exception-safe, and the focused normal/ASan/LSan suites plus standalone negative control prove the change. The broader dependent suite was blocked by a full root filesystem. See `raai-resource-leaks.md`. | `548d8cc8f8` source/test/probe/journal commit; close snapshot pending | Recheck the gate and draw the next distinct goal |
 
 ## Cycle 72 Completion
 
@@ -256,13 +257,15 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Evidence: probe `agent-journal/secp_nonce_cycle72_probe.cpp`; raw logs `/data/my_storage/tmp/secp-nonce-cycle72-*.log`; `git diff --check` passed.
 - No production, test, fuzz, sanitizer, daemon, or profiling process remains running.
 
-## Cycle 73 Active State
+## Cycle 73 Completion
 
 - Gate: HEAD `4935b3908795d5e2196fbf2b91c667790776cffa`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 921`.
 - Branch: `uber-cycle-73-raii-resource-leaks-20260728`.
 - Draw: `54` (`raai-resource-leaks`).
-- Current hypothesis: a manually owned resource may escape cleanup on construction, move, error, callback, cancellation, or shutdown paths, or a smart-pointer transfer may leave a dangling or duplicated owner.
-- Required evidence: a distinct reachable resource path, exact acquire/release accounting or sanitizer trace, and a focused regression oracle before any source commit.
+- Source/test/probe/journal commit: `548d8cc8f8` (`dbwrapper: clean up resources on constructor failure`).
+- Verdict: confirmed and fixed. A regular file used as the database parent made `TryCreateDirectories()` throw after `GetOptions()` allocated LevelDB resources. Old-source Clang 19 ASan/LSan reported 4064 bytes in 19 allocations; the fixed probe had no leak report, and removing only the new destructor restored the exact leak.
+- Validation: normal `dbwrapper_tests` and the Clang ASan/LSan `dbwrapper_tests` each passed 14 cases and 2475 assertions after the commit. `git diff --check` passed. The broader block/index/flush attempt was blocked by `/` at 100% and terminated; no relevant process remains running.
+- Remaining queue: socket and callback cancellation, file/mapping failure paths, database iterator/transaction ownership, and secure allocation cleanup remain distinct unchecked resource cells.
 
 ## Cycle 71 Completion
 
@@ -286,13 +289,13 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 72 is complete. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: none; cycle 73 is complete. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 73 is active. It selected goal 54, `raai-resource-leaks`, by `shuf -i 0-98 -n 1` -> `54` after the cycle-72 gate. The distinct scope is constructor/error/cancellation ownership across sockets, files/mappings, database iterators/transactions, callback registrations, threads, and secure allocations. The exact resource ledger, verification, and next queue will be recorded in `raai-resource-leaks.md`.
+Cycle 73 is complete. It selected goal 54, `raai-resource-leaks`, by `shuf -i 0-98 -n 1` -> `54` after the cycle-72 gate. The confirmed `CDBWrapper` constructor-failure leak is fixed in `548d8cc8f8`; focused normal and ASan/LSan suites passed, while the broader dependent suite was blocked by the full root filesystem. The exact resource ledger and limitations are recorded in `raai-resource-leaks.md`. The next run must re-check the gate and draw a distinct goal from the full catalog.
 
 Cycle 72 is complete. It selected goal 84, `secp-nonce-session`, by `shuf -i 0-98 -n 1` -> `84` after the cycle-71 gate. The distinct scope was MuSig/Schnorr failure, retry, nonce-consumption, malformed-binding, duplicate-key, infinity, and callback state. The probe and all relevant normal/sanitized test controls passed; no source defect was confirmed. The exact evidence and limitations are recorded in `secp-nonce-session.md`. The next run must re-check the gate and draw a distinct goal from the full catalog.
 
