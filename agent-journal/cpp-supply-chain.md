@@ -60,12 +60,30 @@ Count only `good_trusted` signatures and make the diagnostic name the counted qu
 - The full release verification integration script was not run because it downloads historical release artifacts and depends on external network/keyserver state; the deterministic control is independent of that environment.
 - The duplicate-signer threshold behavior was separately reproduced before this patch (`AAAA1111` repeated three times returned success) and remains a queued distinct hypothesis for the next finding.
 
-## Verdict
+## First Verdict
 
 **Confirmed and fixed.** The old release security gate accepted a threshold met entirely by valid but untrusted signatures. The minimal fix makes the threshold match its documented trusted-key contract and preserves the existing reporting of untrusted signatures.
 
+## Follow-up Hypothesis: Duplicate Trusted Signers
+
+The same threshold must count distinct trusted signer keys, not repeated valid signatures from one key. The README describes a threshold over public keys, and the original multisignature commit used a set for `good_trusted`; refactor `17575c0efa` changed that collection to a list to return it from the helper but retained a signature-count threshold. The current `SigData` objects are identity-distinct, so three repeated status records for `AAAA1111` were counted as three.
+
+The pre-fix parser-level execution probe used three `GOODSIG AAAA1111` records with `TRUST_FULLY` and `--min-good-sigs 3`. It returned success and logged three trusted signatures even though only one signer key was present. This is a separate failure mode from counting untrusted signatures.
+
+Fix the threshold count to `len({sig.key for sig in good_trusted})` while retaining the full trusted signature list for reporting and JSON output. Add a separate deterministic regression control requiring `NOT_ENOUGH_GOOD_SIGS` for three repeated signatures from one trusted key.
+
+## Follow-up Validation
+
+- The duplicate-signer regression control passes after the distinct-key fix; the same status sequence now returns `NOT_ENOUGH_GOOD_SIGS`.
+- The untrusted-signer regression continues to pass after the follow-up fix.
+- Python syntax compilation for both verifier files and `git diff --check` pass.
+- The full release verification integration script remains unrun because it downloads historical release artifacts and depends on external artifacts and keyserver state.
+
+## Overall Verdict
+
+**Confirmed and fixed.** The release security gate now requires the configured number of distinct trusted signer keys and rejects thresholds met by untrusted signatures or duplicate packets from one key.
+
 ## Limitations and Next Queue
 
-1. Verify the separate duplicate trusted-signer threshold issue and decide whether the contract requires distinct signer keys; preserve it as a separate commit if confirmed.
-2. Run the release verifier integration tests when network and keyserver state are available, including JSON output and explicit trusted-key modes.
-3. Continue the supply-chain inventory across compiler/tool downloads, generated inputs, license gates, and release signing manifests without repeating this threshold finding.
+1. Run the release verifier integration tests when network and keyserver state are available, including JSON output and explicit trusted-key modes.
+2. Continue the supply-chain inventory across compiler/tool downloads, generated inputs, license gates, and release signing manifests without repeating these threshold findings.

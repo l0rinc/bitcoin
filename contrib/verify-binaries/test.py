@@ -8,12 +8,17 @@ import subprocess
 from pathlib import Path
 
 
-def test_untrusted_signatures_do_not_meet_threshold():
+def load_verify_module():
     spec = importlib.util.spec_from_file_location(
         "verify_binaries", Path(__file__).with_name('verify.py'))
     assert spec is not None and spec.loader is not None
     verify = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(verify)
+    return verify
+
+
+def test_untrusted_signatures_do_not_meet_threshold():
+    verify = load_verify_module()
 
     status = '\n'.join([
         '[GNUPG:] NEWSIG', '[GNUPG:] GOODSIG AAAA1111 Alice', '[GNUPG:] TRUST_UNDEFINED',
@@ -39,10 +44,39 @@ def test_untrusted_signatures_do_not_meet_threshold():
     assert not result[2]
 
 
+def test_duplicate_trusted_signatures_do_not_meet_threshold():
+    verify = load_verify_module()
+
+    status = '\n'.join([
+        '[GNUPG:] NEWSIG', '[GNUPG:] GOODSIG AAAA1111 Alice', '[GNUPG:] TRUST_FULLY',
+        '[GNUPG:] NEWSIG', '[GNUPG:] GOODSIG AAAA1111 Alice', '[GNUPG:] TRUST_FULLY',
+        '[GNUPG:] NEWSIG', '[GNUPG:] GOODSIG AAAA1111 Alice', '[GNUPG:] TRUST_FULLY',
+    ])
+    original_verify_with_gpg = verify.verify_with_gpg
+    try:
+        verify.verify_with_gpg = lambda _sums, _sig: (2, status)
+        args = argparse.Namespace(
+            min_good_sigs=3,
+            trusted_keys='',
+            import_keys=False,
+            verbose=False,
+            keyserver='test',
+        )
+        result = verify.verify_shasums_signature('ignored', 'ignored', args)
+    finally:
+        verify.verify_with_gpg = original_verify_with_gpg
+
+    assert result[0] == verify.ReturnCode.NOT_ENOUGH_GOOD_SIGS
+    assert not result[1]
+    assert not result[2]
+
+
 def main():
     """Tests ordered roughly from faster to slower."""
     print("- testing trusted signature threshold")
     test_untrusted_signatures_do_not_meet_threshold()
+    print("- testing distinct trusted signer threshold")
+    test_duplicate_trusted_signatures_do_not_meet_threshold()
     expect_code(run_verify("", "pub", '0.32'), 4, "Nonexistent version should fail")
     expect_code(run_verify("", "pub", '0.32.awefa.12f9h'), 11, "Malformed version should fail")
     expect_code(run_verify('--min-good-sigs 20', "pub", "22.0"), 9, "--min-good-sigs 20 should fail")
