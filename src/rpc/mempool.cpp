@@ -44,6 +44,32 @@ using node::NodeContext;
 using node::TransactionError;
 using util::ToString;
 
+/** Decode an RPC array of hex-encoded transactions, throwing an RPC error on
+ * the first undecodable entry. The per_tx_check overload runs the check on
+ * each transaction right after it is decoded, preserving the error ordering
+ * of the open-coded loops this replaces. */
+template <typename F>
+static std::vector<CTransactionRef> DecodeHexTransactions(const UniValue& raw_transactions, F&& per_tx_check)
+{
+    std::vector<CTransactionRef> txns;
+    txns.reserve(raw_transactions.size());
+    for (const auto& rawtx : raw_transactions.getValues()) {
+        CMutableTransaction mtx;
+        if (!DecodeHexTx(mtx, rawtx.get_str())) {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR,
+                               "TX decode failed: " + rawtx.get_str() + " Make sure the tx has at least one input.");
+        }
+        per_tx_check(mtx);
+        txns.emplace_back(MakeTransactionRef(std::move(mtx)));
+    }
+    return txns;
+}
+
+static std::vector<CTransactionRef> DecodeHexTransactions(const UniValue& raw_transactions)
+{
+    return DecodeHexTransactions(raw_transactions, [](const CMutableTransaction&) {});
+}
+
 static RPCMethod sendrawtransaction()
 {
     return RPCMethod{
@@ -344,16 +370,7 @@ static RPCMethod testmempoolaccept()
 
             const CFeeRate max_raw_tx_fee_rate{ParseFeeRate(self.Arg<UniValue>("maxfeerate"))};
 
-            std::vector<CTransactionRef> txns;
-            txns.reserve(raw_transactions.size());
-            for (const auto& rawtx : raw_transactions.getValues()) {
-                CMutableTransaction mtx;
-                if (!DecodeHexTx(mtx, rawtx.get_str())) {
-                    throw JSONRPCError(RPC_DESERIALIZATION_ERROR,
-                                       "TX decode failed: " + rawtx.get_str() + " Make sure the tx has at least one input.");
-                }
-                txns.emplace_back(MakeTransactionRef(std::move(mtx)));
-            }
+            const std::vector<CTransactionRef> txns{DecodeHexTransactions(raw_transactions)};
 
             NodeContext& node = EnsureAnyNodeContext(request.context);
             CTxMemPool& mempool = EnsureMemPool(node);
@@ -1418,23 +1435,13 @@ static RPCMethod submitpackage()
             // Burn sanity check is run with no context
             const CAmount max_burn_amount = request.params[2].isNull() ? 0 : AmountFromValue(request.params[2]);
 
-            std::vector<CTransactionRef> txns;
-            txns.reserve(raw_transactions.size());
-            for (const auto& rawtx : raw_transactions.getValues()) {
-                CMutableTransaction mtx;
-                if (!DecodeHexTx(mtx, rawtx.get_str())) {
-                    throw JSONRPCError(RPC_DESERIALIZATION_ERROR,
-                                       "TX decode failed: " + rawtx.get_str() + " Make sure the tx has at least one input.");
-                }
-
+            const std::vector<CTransactionRef> txns{DecodeHexTransactions(raw_transactions, [&](const CMutableTransaction& mtx) {
                 for (const auto& out : mtx.vout) {
                     if((out.scriptPubKey.IsUnspendable() || !out.scriptPubKey.HasValidOps()) && out.nValue > max_burn_amount) {
                         throw JSONRPCTransactionError(TransactionError::MAX_BURN_EXCEEDED);
                     }
                 }
-
-                txns.emplace_back(MakeTransactionRef(std::move(mtx)));
-            }
+            })};
             CHECK_NONFATAL(!txns.empty());
             if (txns.size() > 1 && !IsChildWithParentsTree(txns)) {
                 throw JSONRPCTransactionError(TransactionError::INVALID_PACKAGE, "package topology disallowed. not child-with-parents or parents depend on each other.");
