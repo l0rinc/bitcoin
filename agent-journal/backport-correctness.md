@@ -27,7 +27,37 @@ The trust boundary is a legacy Berkeley wallet directory containing a single wal
 
 ### Status
 
-Cycle 67 is in progress. Candidate ancestry and source differences have been identified; independent release-tree execution and mutation-sensitive file-list tests remain to be completed. No production source has been changed.
+Cycle 67 is complete. The candidate is dismissed as a current backport defect; no production source has been changed.
+
+### Ancestry and semantic comparison
+
+- `origin/29.x` at `3fc0865963` contains the original `7475d134f6` Berkeley wallet file-list change through merge `115172ceb8`; `origin/28.x` contains the later rebased `29abedc97b`, whose metadata records `Rebased-From: 7475d134f6`.
+- The isolated source hunks in `src/wallet/bdb.cpp` and `src/wallet/bdb.h` are semantically identical. The differing blob indexes are the only difference between the source-side patch views, and both isolated patches have patch-id `212ea0ca53a6439bfae9d61a4f0e50fcd183e5ed`.
+- The 29.x merge also contains the expected migration backup-location, cleanup, error-name, and functional-test follow-ups. No missing generated file, build-list entry, guard, or prerequisite was found.
+- `BerkeleyDatabase::Files()` conservatively enumerates the single-wallet environment, its recognized files, and `database/log.*`; it falls back to the wallet path when the environment is shared or enumeration fails. The active BDB environment removes its temporary `database` directory during normal shutdown, so the exploratory log-prefix lead did not establish a release-specific data-loss contract.
+
+### Release verification
+
+The detached v29.4 worktree `/data/my_storage/tmp/backport-correctness-cycle67-29x` was built with Berkeley DB 4.8 enabled in `/data/my_storage/tmp/backport-correctness-cycle67-29x-build`. The `test_bitcoin` and `bitcoin-wallet` targets completed all `482/482` build actions; `bitcoind` and `bitcoin-cli` also rebuilt successfully. The focused release unit command selected wallet, wallet database/load, filesystem, and related cases: 26 cases were selected or reported in the run, including 17 wallet, 2 wallet-database, 2 wallet-load, and 5 filesystem cases, with `*** No errors detected`.
+
+The legacy-wallet functional control passed with a fixed seed and exercised invalid dumps, unnamed and named wallets, multiple non-directory wallets, preservation of `db.log` and unrelated `test.dat`, cleanup, chainless conflicts, large records, and BDB parser comparison. Its first invocation failed before product startup because `bitcoin-cli` had not yet been built; after building that target, the corrected invocation exited 0 and reported `Tests successful`. `wallet_migration.py` exited 77 with the framework's documented skip because previous-release binaries were unavailable; this is an execution limitation, not product evidence.
+
+### Verdict
+
+**Dismissed as a current backport defect; no confirmed finding.** The 29.x implementation matches the independently rebased 28.x patch, preserves the intended single-wallet ownership boundary, and passes the available BDB-enabled unit and functional controls. No production or test repair commit is justified by this cycle.
+
+### Limitations and rejected leads
+
+- The full wallet migration matrix could not run because the test requires a v28 previous-release node that is not installed in the detached build environment.
+- Windows, non-x86, sanitizer, and injected active multi-database crash schedules were not run for this release tree.
+- The temporary `database/log.*` exploration did not prove a defect: the directory is an active BDB environment area and is removed by normal environment shutdown, while the functional test independently preserved unrelated root files and `db.log`.
+- The initial missing-`bitcoin-cli` functional invocation was a harness setup error and was excluded from the verdict.
+
+### Next queue
+
+1. Recheck the repository gate and draw the next eligible catalog goal with the exact selector command.
+2. If goal 66 repeats, choose a distinct 28.x/29.x/30.x backport, migration fixture, or release-branch behavior cell rather than reopening this patch.
+3. Keep upgrade/downgrade, filesystem fault injection, and non-x86 release execution as separate evidence cells.
 
 ## Cycle Identity
 
