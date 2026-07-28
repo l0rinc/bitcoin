@@ -64,6 +64,13 @@ public:
     //! findBlock() is called for its hash (mid-scan reorg).
     int flip_idx{-1};
     bool flip_triggered{false};
+    //! When >= 0, on the first findBlock() for extend_at, the chain grows
+    //! by extension and the wallet's last processed block advances to the
+    //! new tip (deterministic mid-scan block-connection).
+    CWallet* wallet{nullptr};
+    int extend_at{-1};
+    std::vector<Block> extension;
+    bool extend_triggered{false};
 
 private:
     const Block* Find(const uint256& hash) const
@@ -100,6 +107,20 @@ public:
         if (height == flip_idx && !flip_triggered) {
             blocks[flip_idx].active = false;
             flip_triggered = true;
+        }
+        if (height == extend_at && !extend_triggered) {
+            extend_triggered = true;
+            int64_t ext_max{blocks.empty() ? 0 : blocks.back().max_time};
+            for (Block& eb : extension) {
+                ext_max = std::max(ext_max, eb.time);
+                eb.max_time = ext_max;
+                blocks.push_back(std::move(eb));
+            }
+            if (!extension.empty()) {
+                LOCK2(::cs_main, wallet->cs_wallet);
+                wallet->SetLastBlockProcessed(static_cast<int>(blocks.size()) - 1, blocks.back().hash);
+            }
+            extension.clear();
         }
         const Block& b{blocks[height]};
         fb.found = true;
@@ -269,6 +290,10 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
     if (fdp.ConsumeBool() && fdp.ConsumeBool()) {                          // ~1/4 schedule a mid-scan reorg
         chain.flip_idx = fdp.ConsumeIntegralInRange<int>(0, n_blocks - 1);
     }
+    if (fdp.ConsumeBool() && fdp.ConsumeBool()) {                          // ~1/4 schedule mid-scan tip extension
+        chain.extend_at = fdp.ConsumeIntegralInRange<int>(0, n_blocks - 1);
+    }
+    const int n_ext{chain.extend_at >= 0 ? fdp.ConsumeIntegralInRange<int>(1, 6) : 0};
     const bool have_mempool_tx{fdp.ConsumeBool()};
     const int64_t now_step{fdp.ConsumeBool() ? 61 : 1};
 
@@ -298,6 +323,31 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
         }
         chain.blocks.push_back(std::move(b));
     }
+
+    // Pre-build the extension blocks (active, with data, maybe wallet txs).
+    std::vector<CTransactionRef> ext_wallet_txs(n_ext);
+    for (int i = 0; i < n_ext; ++i) {
+        FuzzRescanChain::Block eb;
+        eb.hash = ConsumeUInt256(fdp);
+        if (eb.hash.IsNull()) eb.hash = uint256::ONE;
+        eb.time = fdp.ConsumeIntegralInRange<int64_t>(1, 1LL << 40);
+        eb.active = true;
+        eb.has_data = true;
+        CMutableTransaction cb;
+        cb.vin.emplace_back(COutPoint{Txid::FromUint256(ConsumeUInt256(fdp)), 0});
+        cb.vout.emplace_back(CAmount{1}, CScript{} << OP_1);
+        eb.data.vtx.push_back(MakeTransactionRef(std::move(cb)));
+        eb.data.nBits = 0x207fffff;
+        if (fdp.ConsumeBool()) {
+            CMutableTransaction mtx;
+            mtx.vin.emplace_back(COutPoint{Txid::FromUint256(ConsumeUInt256(fdp)), 1});
+            mtx.vout.emplace_back(CAmount{2000 + i}, wallet_script);
+            ext_wallet_txs[i] = MakeTransactionRef(std::move(mtx));
+            eb.data.vtx.push_back(ext_wallet_txs[i]);
+        }
+        chain.extension.push_back(std::move(eb));
+    }
+    chain.wallet = wallet.get();
 
     if (have_mempool_tx) {
         CMutableTransaction mtx;
@@ -345,6 +395,11 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
             Assert(chain.blocks[i].active && chain.blocks[i].has_data);
         }
         Assert(result.last_failed_block.IsNull());
+        // A triggered extension without max_height must extend the scan to
+        // the grown tip (the wallet's last block advanced mid-scan).
+        if (chain.extend_triggered && !use_max_height) {
+            Assert(scanned_upto == n_blocks + n_ext - 1);
+        }
     } else if (result.status == CWallet::ScanResult::FAILURE) {
         // A failure must have a reason: unreadable scanned block, an
         // initially-inactive start block, or the triggered deactivation.
@@ -361,9 +416,19 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
 
     // Wallet transactions in fully scanned blocks must be in the wallet.
     for (int i = 0; i <= scanned_upto; ++i) {
-        if (!wallet_txs[i] || !chain.blocks[i].active || !chain.blocks[i].has_data) continue;
+        if (i < n_blocks && (!wallet_txs[i] || !chain.blocks[i].active || !chain.blocks[i].has_data)) continue;
+        if (i < n_blocks) {
+            LOCK(wallet->cs_wallet);
+            Assert(wallet->mapWallet.contains(wallet_txs[i]->GetHash()));
+        }
+    }
+    // Extension-block wallet transactions likewise, once scanned past the
+    // original tip.
+    for (int i = n_blocks; i <= scanned_upto; ++i) {
+        const CTransactionRef& tx{ext_wallet_txs[i - n_blocks]};
+        if (!tx) continue;
         LOCK(wallet->cs_wallet);
-        Assert(wallet->mapWallet.contains(wallet_txs[i]->GetHash()));
+        Assert(wallet->mapWallet.contains(tx->GetHash()));
     }
 }
 
