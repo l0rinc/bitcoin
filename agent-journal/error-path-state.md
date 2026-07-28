@@ -173,3 +173,30 @@ The test uses the mock SQLite backend and does not exercise Berkeley DB, an on-d
 - Confirmed and fixed: address-book writes could return failure while exposing a new in-memory record, and purpose/name writes could persist asymmetrically.
 - Related queued lead: `src/wallet/rpc/addresses.cpp` ignores `SetAddressBook` failure and can report RPC success after the wallet operation fails. Keep it distinct from the transaction/state fix.
 - Next queue: perform a fresh gate and draw another eligible catalog goal. Do not reopen this address-book cell unless a new backend, restart, commit-failure, or RPC-level reproduction supplies independent evidence.
+
+## Cycle 69: public address-book failure propagation
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `27`
+- Selected slug: `error-path-state`
+- Branch: `uber-cycle-69-error-path-state-20260728`
+- HEAD at gate: `f9b2760a5fc00c588d4e4502bc026e7681d160bd`
+- `origin/master` at gate: `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `911 2`.
+- The catalog, uber protocol, and 99-row TSV hashes matched their recorded values. Tracked and staged state was clean except for the known untracked agent artifacts; no Bitcoin Core, test, fuzz, sanitizer, or benchmark process was running.
+- Earlier cycle-18 passphrase, cycle-22 transaction/index, and cycle-39 address-book state-publication cells are excluded. This cycle mines the still-open RPC caller contract from cycle 39 and then checks adjacent public wallet result paths without assuming that all ignored metadata writes are defects.
+
+### Candidate ledger
+
+| Surface | Hypothesis | Evidence | Verdict |
+|---|---|---|---|
+| `setlabel` RPC | A failed address-book database write is discarded, so the RPC reports success even though the requested label was not stored. | `SetAddressBook` returns false on a `WritePurpose`/`WriteName` failure and, after the cycle-39 fix, leaves memory and persisted state unchanged. The current RPC ignored that return. An exact SQLite `NAME`-row abort preserved `old label`; the unpatched RPC test returned success (exit 201 under the new error oracle), while the fixed path raised `RPC_WALLET_ERROR`. | Confirmed; fix in progress |
+| `CWallet::GetNewDestination` / `getnewaddress` | A label write failure is also ignored after descriptor index advancement. | History describes labeling as a side effect of address generation, and the RPC maps all `util::Result` errors to keypool exhaustion. Changing this contract would require a distinct typed error and a policy for an already-persisted descriptor index; no standalone fix is justified by the current evidence. | Contract-sensitive follow-up; not changed |
+| `AddToWalletIfInvolvingMe` address-book enrichment | A failure to add a restored receive address could leave transaction accounting metadata incomplete. | The write is explicitly secondary enrichment performed before the transaction write, and callers do not expose a partial transaction result. No direct user-visible invariant or restart inconsistency was reproduced in this cycle. | Deferred; best-effort boundary |
+| `ImportDescriptor` label application | Ignoring a label failure may report an import error after descriptor state has already changed. | Import labels are optional metadata and the operation can add descriptors/cache state before applying them. Returning a late error would create a larger partial-import contract; current code and history provide no rollback promise. | Deferred; requires an import transaction contract |
+
+### Work in progress
+
+The source/test changes currently make `setlabel` derive its purpose once, check `SetAddressBook`, and raise `RPC_WALLET_ERROR` with `Failed to set address label` on failure. The focused regression uses `MockableSQLiteDatabase`, an exact serialized `DBKeys::NAME` trigger, a pre-existing label, and a direct RPC request; it also checks that the old in-memory label remains visible.
