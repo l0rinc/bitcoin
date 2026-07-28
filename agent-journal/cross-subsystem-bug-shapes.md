@@ -38,7 +38,8 @@ Two concurrent `rescanblockchain` calls can both succeed. A reserves, validates,
 - `cmake --build build_unit_wallet_clang19 --target bitcoind -j2` passed after the repair.
 - New `test/functional/wallet_rescan.py` disables the block-filter fast path, generates 1,000 wallet-relevant blocks, and runs ten pairs of concurrent rescan RPCs over separate authenticated connections. The repaired build exited 0 with one success and one `-4` conflict in every pair.
 - The same normal workload against the pre-repair ordering also exited 0 in this environment. It did not hit the rare scheduler ordering, so it is retained as a workload control rather than treated as a dismissal.
-- The existing wallet-enabled `test/functional/wallet_importdescriptors.py` completed successfully before this source change, including its historical concurrent-import regression.
+- The existing wallet-enabled `test/functional/wallet_importdescriptors.py` completed successfully after the repair, including its historical concurrent-import regression.
+- `TMPDIR=/data/my_storage/tmp/cycle48-wallet-unit-tmp build_unit_wallet_clang19/bin/test_bitcoin --run_test=wallet_tests --log_level=message` passed all 15 enabled wallet test cases. An initial run without `TMPDIR` exited 201 after the host root filesystem's 100% usage triggered `Disk space is too low!`; redirecting temporary files to the workspace removed that environmental failure.
 
 ### Independent forced schedule
 
@@ -50,11 +51,11 @@ This is an independent schedule proof, not a production timing assumption: it di
 
 Verdict: **confirmed**. Move `WalletRescanReserver` construction and `reserve()` before `BlockUntilSyncedToCurrentChain()` in `rescanblockchain`, matching the already-fixed `importdescriptors` contract. The smallest source change is the four-line move in `src/wallet/rpc/transactions.cpp`; no behavior changes for a single caller beyond reserving earlier, and invalid parameter validation still occurs after synchronization as before.
 
-The regression test is `test/functional/wallet_rescan.py`. Source/test commit: pending. Journal/state commit: pending.
+The regression test is `test/functional/wallet_rescan.py`. Source/test commit: `9911bb75a8520990a6e9ca6405269dd634a7a50c` (`wallet: reserve rescan before syncing wallet`). Journal/state commit: pending.
 
 ## Limitations and handoff
 
 - The ordinary pre-fix stress workload did not reproduce the race within ten pairs; the forced schedule did. The race is scheduler-dependent without a test hook.
 - The disposable instrumentation was not committed. The durable test validates the public mutual-exclusion contract but is not solely relied on for the proof.
-- Narrow source build and functional validation passed. A broader wallet functional suite remains in the next validation stack.
+- Source build, the focused rescan test, the existing import-descriptor suite, and the redirected wallet unit suite passed. No source, test, daemon, or profiling process remains running.
 - Next cycle must re-check branch/base/HEAD, worktree, processes, hashes, journals, and history before drawing a distinct goal.
