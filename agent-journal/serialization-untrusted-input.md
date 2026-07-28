@@ -50,4 +50,13 @@ For every candidate, retain the smallest input and exact command. A confirmed fi
 - Independent before evidence: after adding the output regression but before the source change, `./build_unit_clang19/bin/test_bitcoin --run_test=psbt_tests/taproot_bip32_keypath_does_not_read_past_value --log_level=message` failed with `reader.size() == tail.size()` reported as `[4 != 36]`, proving 32 bytes crossed the declared value boundary.
 - Fix: read the declared value into a vector, parse it through a bounded `SpanReader`, check the leaf-hash count against the remaining bytes before set insertion, and then parse the remaining bytes as the key origin. Apply the same helper to input and output maps.
 - After evidence: `ninja -C build_unit_clang19 test_bitcoin -j2` succeeded; `./build_unit_clang19/bin/test_bitcoin --run_test=psbt_tests --log_level=message` passed all 10 PSBT cases, including both regressions. `git diff --check` is clean.
-- Classification: confirmed local parser defect; source and regression tests are ready for one self-contained commit. The cycle still needs the commit, broader build verification, final review, state update, and next-goal selection.
+- Classification: confirmed local parser defect; fixed in source/test commit `1a1a51aa96873c8fd8715b5a2b9b74a7e550a65f`.
+
+## Cycle 81 completion
+
+- Source/test commit: `1a1a51aa96873c8fd8715b5a2b9b74a7e550a65f` (`psbt: bound Taproot BIP32 keypath deserialization`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- Narrow verification: `ninja -C build_unit_clang19 test_bitcoin -j2`; `./build_unit_clang19/bin/test_bitcoin --run_test=psbt_tests --log_level=message` passed all 10 cases.
+- Independent verification: `ninja -C build_unit_tsan_clang19 test_bitcoin -j2`; `./build_unit_tsan_clang19/bin/test_bitcoin --run_test=psbt_tests --log_level=message` passed all 10 cases with no TSAN report.
+- The old-code regression failure and the passing-after result are recorded above. `git diff --check` passed before the source commit.
+- No production behavior outside malformed Taproot BIP32 PSBT rejection changed. No relevant build, test, fuzz, sanitizer, daemon, or profiling process remains running.
+- Cycle status: complete. The next run must re-check branch/base/HEAD, dirty state, known artifacts, process state, catalog/protocol/TSV hashes, existing journals/history, and review precedent before selecting a distinct next cell.
