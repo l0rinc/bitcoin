@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 60 complete; cycle 61 pending a fresh gate and selector draw.
+- Status: cycle 61 in progress; selected goal 22 (`full-sync-ibd-profile`) from the full catalog after a fresh gate and selector draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -22,6 +22,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 60 selector: exact `shuf -i 0-98 -n 1` -> `84` (`secp-nonce-session`). Earlier MuSig ctime and secret-lifetime cells are closed. This run audits invalid-order, single-use, duplicate/replay, malformed-object, callback, and output-on-failure transitions, starting with MuSig public output state.
 - Cycle 60 completion: confirmed and fixed a MuSig API validation-ordering gap. `secp256k1_musig_nonce_gen` returned early for all-zero session randomness before validating required `pubnonce`, bypassing the illegal-argument callback when both were invalid. Removing the new precondition made `musig_api_tests` fail at `_calls_to_callback == 1` with exit 134; restoring it passed the focused test and the full libsecp test binary (16 iterations, 76.329 seconds, exit 0). See `secp-nonce-session.md`.
 - Current HEAD after cycle 60 source/test fix: `765e82e8ab` (`secp256k1: validate MuSig nonce output argument`). No relevant process remains running.
+- Cycle 61 gate: fetched `origin/master`; HEAD `3d67541b54019711263e742be691e83da57cd0ec`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 892`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
+- Cycle 61 selector: exact `shuf -i 0-98 -n 1` -> `22` (`full-sync-ibd-profile`). Prior rebuild, disk, perf, and regression-profile cells are closed; this run measures a distinct end-to-end local import/IBD phase and separates validation, chainstate, block I/O, compaction, logging, and harness time.
 - Current HEAD after cycle 17: `ffda33a38f5fddab57e4618775d22ce31d8eda09`
 - Current HEAD after cycle 18: `55eaf087c189ae871878692fb20a90ac3533084d`
 - Current HEAD before cycle 19 journal handoff: `ec4401b816f132f2f35c1f2e64cf51e2046e8e32`
@@ -207,7 +209,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 60 is closed and goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: `full-sync-ibd-profile` (cycle 61); goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
