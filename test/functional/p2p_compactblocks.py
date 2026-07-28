@@ -62,6 +62,7 @@ from test_framework.util import (
     assert_not_equal,
     assert_equal,
     softfork_active,
+    util_xor,
 )
 from test_framework.wallet import MiniWallet
 
@@ -787,6 +788,33 @@ class CompactBlocksTest(BitcoinTestFramework):
             bad_peer.send_without_ping(msg)
             bad_peer.wait_for_disconnect()
 
+    def test_getblocktxn_read_failure_disconnects_peer(self):
+        node = self.nodes[0]
+        target_hash = self.generate(node, 2)[0]
+        target_bytes = bytes.fromhex(node.getblock(target_hash, 0))
+        xor_dat = node.read_xor_key()
+
+        for block_file in sorted(node.blocks_path.glob("blk*.dat")):
+            with open(block_file, "r+b") as file:
+                stored = file.read()
+                decoded = util_xor(stored, xor_dat, offset=0)
+                block_offset = decoded.find(target_bytes)
+                if block_offset < 0:
+                    continue
+                file.seek(block_offset + 10)
+                file.write(bytes([stored[block_offset + 10] ^ xor_dat[(block_offset + 10) % len(xor_dat)] ^ 1]))
+                break
+        else:
+            raise AssertionError("generated block was not found in block files")
+
+        peer = node.add_p2p_connection(TestP2PConn())
+        request = msg_getblocktxn()
+        request.block_txn_request = BlockTransactionsRequest(int(target_hash, 16), [0])
+        with node.assert_debug_log(["Cannot load block from disk"]):
+            peer.send_without_ping(request)
+            peer.wait_for_disconnect()
+        assert node.process.poll() is None
+
     def test_low_work_compactblocks(self, test_node):
         # A compactblock with insufficient work won't get its header included
         node = self.nodes[0]
@@ -1222,6 +1250,9 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         self.log.info("Testing CMPCTBLOCK messages are ignored when expected...")
         self.test_compact_blocks_ignored()
+
+        self.log.info("Testing GETBLOCKTXN read failures disconnect peers without stopping the node...")
+        self.test_getblocktxn_read_failure_disconnects_peer()
 
 
 if __name__ == '__main__':
