@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 59 in progress; selected goal 45 (`constant-time-boundary`) from the full catalog after a fresh gate and selector draw.
+- Status: cycle 59 complete; selected goal 45 (`constant-time-boundary`) from the full catalog after a fresh gate and selector draw. Cycle 60 is pending a fresh gate and selector draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -17,6 +17,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Current HEAD after cycle 58 source/test fix: `3e4ec4e7ef0f216c09c10b1d577fc1517a043434` (`blockstorage: publish undo data after checksum verification`). `BlockManager::ReadBlockUndo` now publishes decoded undo data only after checksum verification; `blockmanager_readblockundo_preserves_output_on_checksum_failure` reproduced the old partial-output behavior and passed after the fix. The focused regression passed with 11 assertions, the full `blockmanager_tests` suite passed 12 cases and 128 assertions, `git diff --check` passed, and ASan was unavailable in the local build environment. No relevant process remains running.
 - Cycle 59 gate: fetched `origin/master`; HEAD `3b4c458d37861c084d074becaae27e4228fd07d0`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 887`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 59 selector: exact `shuf -i 0-98 -n 1` -> `45` (`constant-time-boundary`). The cycle-40 EllSwift auxiliary-input boundary is closed. This run selects the distinct MuSig session/keypair declassification boundary and will not modify EllSwift code without new independent evidence.
+- Cycle 59 completion: no source defect found. The live MSan ctime baseline, regular libsecp256k1 tests, and exhaustive order-13 tests passed. Removing keypair public declassification, secnonce invalidation-status declassification, or invalid-session-randomness status declassification each produced a first-invalid-operation MSan trace; all temporary mutations were restored. Valgrind was unavailable, `git diff --check` passed, and no relevant process remains running.
 - Current HEAD after cycle 17: `ffda33a38f5fddab57e4618775d22ce31d8eda09`
 - Current HEAD after cycle 18: `55eaf087c189ae871878692fb20a90ac3533084d`
 - Current HEAD before cycle 19 journal handoff: `ec4401b816f132f2f35c1f2e64cf51e2046e8e32`
@@ -196,11 +197,12 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 56 | `shuf -i 0-98 -n 1` -> `46` | `public-output-failure` | confirmed; fixed | A six-byte truncated record changed the first field of a caller output from its sentinel to `1` while all three DB APIs returned `false`. Commit `260e49e22d` makes decode transactional while preserving exception/configuration and non-assignable type behavior. Focused, full DB wrapper, dependent persistence/index, normal fuzz, ASan/UBSan, and direct-Read mutation controls passed. See `public-output-failure.md`. | `260e49e22d` (`dbwrapper: preserve outputs on decode failure`) | Draw cycle 57 from the full catalog; keep this persistence output cell closed unless a new serializer, caller, backend, or recurrence appears |
 | 57 | `shuf -i 0-98 -n 1` -> `7` | `resource-exhaustion-variants` | inconclusive; no source change justified | GETDATA, GETBLOCKTXN, block inventory, address relay, compact-filter, mempool-response, and global relay-backlog paths were traced with explicit wire, queue, mempool, and indexed-state bounds. Block-filter and BIP37 functional tests, the send-queue contract test, block-filter unit/index tests, and the production block-filter fuzzer passed. See `resource-exhaustion-variants.md`. | Journal-only handoff; no source change justified | Cycle 58 is next |
 | 58 | `shuf -i 0-98 -n 1` -> `32` | `history-incomplete-fixes` (current output-contract follow-up) | confirmed; fixed | `BlockManager::ReadBlockUndo` deserialized into caller-owned output before validating the trailing checksum. A scratch undo file with one flipped checksum byte reproduced the old loss of a pre-seeded `CBlockUndo`; the fixed local decode/publish boundary preserved both output sizes. Focused block-manager regression passed with 11 assertions; full `blockmanager_tests` passed 12 cases and 128 assertions. See `history-incomplete-fixes.md`. | `3e4ec4e7ef0f216c09c10b1d577fc1517a043434` (`blockstorage: publish undo data after checksum verification`) | Recheck the gate and draw cycle 59 from the full catalog |
+| 59 | `shuf -i 0-98 -n 1` -> `45` | `constant-time-boundary` (MuSig session/keypair declassification cell) | dismissed; no new source defect | Static contract/dataflow review found session state public, secret nonce scalars retained as undefined, and only public metadata declassified. Three temporary source/harness mutations each failed with an MSan first-invalid trace; restored ctime, regular, and exhaustive tests passed. See `constant-time-boundary.md`. | Journal-only handoff; no source change justified | Recheck the gate and draw cycle 60 from the full catalog |
 
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 58 is closed and goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: none; cycle 59 is closed and goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
