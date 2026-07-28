@@ -138,12 +138,15 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
 
 static leveldb::Options GetOptions(size_t nCacheSize, bool bloom_filter)
 {
+    std::unique_ptr<leveldb::Cache> block_cache{leveldb::NewLRUCache(nCacheSize / 2)};
+    std::unique_ptr<const leveldb::FilterPolicy> filter_policy{bloom_filter ? leveldb::NewBloomFilterPolicy(10) : nullptr};
+    std::unique_ptr<leveldb::Logger> info_log{std::make_unique<CBitcoinLevelDBLogger>()};
     leveldb::Options options;
-    options.block_cache = leveldb::NewLRUCache(nCacheSize / 2);
+    options.block_cache = block_cache.release();
     options.write_buffer_size = nCacheSize / 4; // up to two write buffers may be held in memory simultaneously
-    options.filter_policy = bloom_filter ? leveldb::NewBloomFilterPolicy(10) : nullptr;
+    options.filter_policy = filter_policy.release();
     options.compression = leveldb::kNoCompression;
-    options.info_log = new CBitcoinLevelDBLogger();
+    options.info_log = info_log.release();
     if (leveldb::kMajorVersion > 1 || (leveldb::kMajorVersion == 1 && leveldb::kMinorVersion >= 16)) {
         // LevelDB versions before 1.16 consider short writes to be corruption. Only trigger error
         // on corruption in later versions.
@@ -196,7 +199,7 @@ size_t CDBBatch::ApproximateSize() const
 
 struct LevelDBContext {
     //! custom environment this database is using (may be nullptr in case of default environment)
-    leveldb::Env* penv;
+    leveldb::Env* penv{nullptr};
 
     //! database options used
     leveldb::Options options;
@@ -214,7 +217,24 @@ struct LevelDBContext {
     leveldb::WriteOptions syncoptions;
 
     //! the database itself
-    leveldb::DB* pdb;
+    leveldb::DB* pdb{nullptr};
+
+    void Close()
+    {
+        delete pdb;
+        pdb = nullptr;
+        delete options.filter_policy;
+        options.filter_policy = nullptr;
+        delete options.info_log;
+        options.info_log = nullptr;
+        delete options.block_cache;
+        options.block_cache = nullptr;
+        delete penv;
+        penv = nullptr;
+        options.env = nullptr;
+    }
+
+    ~LevelDBContext() { Close(); }
 };
 
 CDBWrapper::CDBWrapper(const DBParams& params)
@@ -282,17 +302,7 @@ CDBWrapper::CDBWrapper(const DBParams& params)
 
 void CDBWrapper::Close()
 {
-    delete DBContext().pdb;
-    DBContext().pdb = nullptr;
-    delete DBContext().options.filter_policy;
-    DBContext().options.filter_policy = nullptr;
-    delete DBContext().options.info_log;
-    DBContext().options.info_log = nullptr;
-    delete DBContext().options.block_cache;
-    DBContext().options.block_cache = nullptr;
-    delete DBContext().penv;
-    DBContext().penv = nullptr;
-    DBContext().options.env = nullptr;
+    DBContext().Close();
 }
 
 CDBWrapper::~CDBWrapper() { Close(); }
