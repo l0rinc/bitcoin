@@ -58,3 +58,37 @@ The normal libFuzzer `addrman` corpus replay was independently attempted with `-
 ### Status
 
 Confirmed and repaired in the current branch by `b2d858ae4e` (`addrman: match Select contract to transport network`). The production behavior remains transport-network based; only the invalid postcondition and duplicated test/fuzzer relationship were corrected. The focused and full unit builds, fuzz-target rebuild, mutation control, and clean empty-corpus smoke passed. The large corpus replay was stopped at a documented resource boundary, and its unrelated serialization assertion is retained as a limitation.
+
+## Cycle 77: relationship and state-domain follow-up
+
+### Cycle identity and gate
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `57`
+- Selected goal: `local-reasoning-domain`
+- Worktree: `/data/my_storage/bitcoin`
+- Branch: `uber-cycle-77-local-reasoning-domain-20260728`
+- HEAD at cycle start: `76a22401689d56e337474da9003114b013e6fbd6`
+- `origin/master`: `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Divergence: `origin/master...HEAD = 2 933`
+- Catalog/protocol/TSV hashes matched the authoritative values.
+- Tracked state was clean; known agent-owned untracked artifacts and `test/cache/` were preserved. No relevant process was running.
+
+### Scope and exclusions
+
+This is a fresh relationship-domain cycle, not a reopening of cycle 65. Exclude the already fixed AddrMan `GetNetwork()` versus `GetNetClass()` relationship, linked-IPv4 classification, `Size()`, `Select()`, `GetAddr()`, and their duplicate test/fuzzer oracles unless a new caller or regression signal changes the contract. Also exclude cycle 48's wallet-rescan reservation ordering and cycle 76's compact-block read-failure publication path.
+
+Inventory local assumptions where a helper's result is combined with a related value from another object, lifecycle, lock, queue, or namespace. Prioritize relationships that cross a trust boundary or determine peer/accounting state, persistence, wallet ownership, consensus selection, or cryptographic validity. Do not treat naming symmetry as proof: state the mathematical or state-machine relationship before testing it.
+
+### Initial hypothesis queue
+
+1. P2P connection and peer-accounting helpers may compare a transport/network identity from one representation against a policy/permission identity from another, causing valid peers to be omitted, miscounted, or retained after lifecycle transitions.
+2. Chainstate, index, or mempool selection helpers may assume that a returned object belongs to the same active snapshot/transaction view as the metadata used to validate or publish it.
+3. Wallet/descriptor helpers may pair an object identifier with a key, script, or ownership domain that is equivalent only after normalization, creating a false negative or stale state.
+
+### Falsifiable cycle protocol
+
+For each candidate, record the local domain, related values, invariant, caller path, and failure consequence. Compare implementation, callers, tests, documentation, blame, and historical rationale. Build a deterministic fixture or model that exercises the smallest valid and invalid relationship pairs. Require a failing-before contract oracle, a restored passing result, and an independent mutation, alternate implementation, sanitizer trace, or exhaustive boundary check before changing production code. Dismiss candidates where the apparent mismatch is an intentional domain boundary and preserve the exact reason and next unchecked cell.
+
+Status: active; no source finding claimed yet.
