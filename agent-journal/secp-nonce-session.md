@@ -30,12 +30,19 @@ Primary surfaces: `musig_nonce_gen`, `musig_nonce_gen_counter`, `musig_nonce_pro
 
 ## Evidence Log
 
-- Pending: source/history contract inventory, targeted failure-state controls, and focused test execution.
+- `secp256k1_musig_nonce_gen` is declared with `SECP256K1_ARG_NONNULL(3)` for `pubnonce`. Its implementation first validates and clears `secnonce`, then checks `session_secrand32` for an all-zero value and returns through `secp256k1_musig_secnonce_invalidate` before calling `secp256k1_musig_nonce_gen_internal`. The internal helper validates `pubnonce`, but that validation is unreachable when the session randomness is all zero.
+- The existing `CHECK_ILLEGAL` callback contract provides an independent oracle: a call with `pubnonce == NULL` must invoke the configured illegal-argument callback exactly once. The new regression combines that invalid output pointer with an all-zero session-random buffer, the early-return path, and otherwise valid inputs.
+- Old-source control: temporarily removing only the new `ARG_CHECK(pubnonce != NULL)` and rebuilding `build_unit_wallet_clang19` produced `musig_api_tests` failure at `tests_impl.h:282`, `test condition failed: _calls_to_callback == 1`; the process aborted with exit status 134. The observed callback count was zero, proving the old ordering bypassed the required argument validation.
+- Fixed-source control: restoring the precondition, rebuilding target `tests`, and running `build_unit_wallet_clang19/src/secp256k1/bin/tests -t=musig_api_tests -i=1 -log=1` passed with exit status 0. The full corrected run `build_unit_wallet_clang19/src/secp256k1/bin/tests -i=16` completed 16 iterations in 76.329 seconds with exit status 0. `git diff --check` passed.
+- The fix is intentionally limited to validation ordering. `musig_pubnonce_parse` and `musig_aggnonce_parse` publish only after both points parse; `musig_partial_sig_parse` explicitly zeroes its output on failure; `musig_nonce_process` publishes the session only after complete success; and `musig_partial_sign` consumes the secret nonce before later validation as documented protection against nonce reuse. These are distinct contracts and supplied no independent source defect in this cycle.
+- Verdict: confirmed and fixed. The defect is an API validation/diagnostic contract gap for a caller supplying two invalid arguments, not a dereference or consensus break on the exact early-return path. The minimal fix is the precondition in `session_impl.h` plus the focused `CHECK_ILLEGAL` regression in `tests_impl.h`.
 
 ## Verdict
 
-- Pending.
+- Confirmed and fixed in the source commit recorded below. No additional state-machine defect met the evidence threshold this cycle.
 
 ## Handoff
 
-- Pending completion. Record exact operation sequences, pre/post object bytes, callback behavior, minimized reproducer, and the next distinct state-machine cell.
+- Source finding: `secp256k1_musig_nonce_gen` now validates the required public-nonce output before the all-zero session-random early return. The regression uses a null `pubnonce`, an all-zero 32-byte session-random buffer, valid key/session inputs, and requires one illegal callback.
+- Validation: old-source mutation failed at `_calls_to_callback == 1` with exit 134; fixed focused test passed; fixed full libsecp test binary passed 16 iterations/76.329 seconds; `git diff --check` passed.
+- Negative controls: no stale-public-output, nonce-consumption, parse, or post-failure publication defect was independently proven. Next run must recheck the gate, search this journal and history, and select a distinct catalog cell.
