@@ -1,13 +1,48 @@
 #!/usr/bin/env python3
 
+import argparse
+import importlib.util
 import json
 import sys
 import subprocess
 from pathlib import Path
 
 
+def test_untrusted_signatures_do_not_meet_threshold():
+    spec = importlib.util.spec_from_file_location(
+        "verify_binaries", Path(__file__).with_name('verify.py'))
+    assert spec is not None and spec.loader is not None
+    verify = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(verify)
+
+    status = '\n'.join([
+        '[GNUPG:] NEWSIG', '[GNUPG:] GOODSIG AAAA1111 Alice', '[GNUPG:] TRUST_UNDEFINED',
+        '[GNUPG:] NEWSIG', '[GNUPG:] GOODSIG BBBB2222 Bob', '[GNUPG:] TRUST_UNDEFINED',
+        '[GNUPG:] NEWSIG', '[GNUPG:] GOODSIG CCCC3333 Carol', '[GNUPG:] TRUST_UNDEFINED',
+    ])
+    original_verify_with_gpg = verify.verify_with_gpg
+    try:
+        verify.verify_with_gpg = lambda _sums, _sig: (2, status)
+        args = argparse.Namespace(
+            min_good_sigs=3,
+            trusted_keys='',
+            import_keys=False,
+            verbose=False,
+            keyserver='test',
+        )
+        result = verify.verify_shasums_signature('ignored', 'ignored', args)
+    finally:
+        verify.verify_with_gpg = original_verify_with_gpg
+
+    assert result[0] == verify.ReturnCode.NOT_ENOUGH_GOOD_SIGS
+    assert not result[1]
+    assert not result[2]
+
+
 def main():
     """Tests ordered roughly from faster to slower."""
+    print("- testing trusted signature threshold")
+    test_untrusted_signatures_do_not_meet_threshold()
     expect_code(run_verify("", "pub", '0.32'), 4, "Nonexistent version should fail")
     expect_code(run_verify("", "pub", '0.32.awefa.12f9h'), 11, "Malformed version should fail")
     expect_code(run_verify('--min-good-sigs 20', "pub", "22.0"), 9, "--min-good-sigs 20 should fail")
