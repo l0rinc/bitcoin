@@ -11,6 +11,7 @@
 #include <pow.h>
 #include <script/solver.h>
 #include <primitives/block.h>
+#include <undo.h>
 #include <util/byte_units.h>
 #include <util/chaintype.h>
 #include <util/check.h>
@@ -22,6 +23,7 @@
 #include <test/util/setup_common.h>
 
 #include <algorithm>
+#include <fstream>
 
 using kernel::CBlockFileInfo;
 using kernel::BlockTreeDB;
@@ -368,6 +370,52 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_hash_mismatch, TestingSetup)
     ASSERT_DEBUG_LOG("GetHash() doesn't match index");
     CBlock block;
     BOOST_CHECK(!m_node.chainman->m_blockman.ReadBlock(block, index));
+}
+
+BOOST_FIXTURE_TEST_CASE(blockmanager_readblockundo_preserves_output_on_checksum_failure, TestChain100Setup)
+{
+    auto& blockman{m_node.chainman->m_blockman};
+    LOCK(::cs_main);
+    const CBlockIndex* tip{m_node.chainman->ActiveTip()};
+    BOOST_REQUIRE(tip);
+    BOOST_REQUIRE(tip->nHeight > 0);
+
+    CBlockUndo valid_undo;
+    BOOST_REQUIRE(blockman.ReadBlockUndo(valid_undo, *tip));
+
+    const FlatFilePos pos{tip->GetUndoPos()};
+    const auto checksum_offset{::GetSerializeSize(valid_undo) + uint256::size() - 1};
+    const fs::path undo_path{m_args.GetBlocksDirPath() / fs::u8path(strprintf("rev%05u.dat", pos.nFile))};
+    const auto file_offset{static_cast<std::streamoff>(pos.nPos) + static_cast<std::streamoff>(checksum_offset)};
+    std::fstream undo_file{undo_path.std_path(), std::ios::in | std::ios::out | std::ios::binary};
+    BOOST_REQUIRE(undo_file.is_open());
+    undo_file.seekg(file_offset);
+    char original_byte{};
+    undo_file.get(original_byte);
+    BOOST_REQUIRE(undo_file.good());
+    undo_file.seekp(file_offset);
+    undo_file.put(static_cast<char>(original_byte ^ 1));
+    undo_file.flush();
+    BOOST_REQUIRE(undo_file.good());
+    undo_file.close();
+
+    CBlockUndo output;
+    output.vtxundo.resize(1);
+    output.vtxundo.front().vprevout.resize(1);
+    const CBlockUndo before{output};
+    BOOST_CHECK(!blockman.ReadBlockUndo(output, *tip));
+
+    // Restore the checksum before checking the output contract's failure result.
+    std::fstream restore_file{undo_path.std_path(), std::ios::in | std::ios::out | std::ios::binary};
+    BOOST_REQUIRE(restore_file.is_open());
+    restore_file.seekp(file_offset);
+    restore_file.put(original_byte);
+    restore_file.flush();
+    BOOST_REQUIRE(restore_file.good());
+    restore_file.close();
+
+    BOOST_CHECK_EQUAL(output.vtxundo.size(), before.vtxundo.size());
+    BOOST_CHECK_EQUAL(output.vtxundo.front().vprevout.size(), before.vtxundo.front().vprevout.size());
 }
 
 BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)

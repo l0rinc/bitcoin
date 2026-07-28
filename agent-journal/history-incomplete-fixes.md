@@ -21,6 +21,15 @@
 
 For each candidate I will trace the authoritative contract through callers, tests, blame, and the originating fix; use a pre-seeded output or state snapshot; inject the earliest realistic failure; and require a failing-before/passing-after regression or a proof that no later fallible write exists. A source change is justified only for a distinct confirmed omission. Otherwise the exact tested negative control and next history cell remain in this journal.
 
+### Confirmed finding: undo lookup published data before checksum verification
+
+- `BlockManager::ReadBlockUndo` deserialized directly into its caller-owned `CBlockUndo`, then read and verified the trailing checksum. A corrupted undo record could therefore return `false` while replacing a previously seeded output with a partial or otherwise untrusted decoded value.
+- The analogous `ReadBlock` routine and the recent `LookupFilterRange`, `FindTx`, and database output fixes establish the relevant rule: disk data is not published to the caller until all integrity checks for the operation pass. The `ReadBlockUndo` callers already treat a false result as an unusable read, so this is a local output-atomicity and corruption-handling defect, not a consensus change.
+- Deterministic regression: `blockmanager_readblockundo_preserves_output_on_checksum_failure` reads a real scratch-chain undo record, flips one byte in its stored checksum, seeds the output with one `CTxUndo` and one previous-output slot, and requires the failed read to preserve both sizes. On the old implementation the test failed with `output.vtxundo.size() == before.vtxundo.size()` reported as `[0 != 1]`.
+- Fix: deserialize into a local `decoded_blockundo` and move it into `blockundo` only after checksum verification. The test restores the original checksum byte before completing so the fixture remains clean.
+- Verification: `git diff --check`; `cmake --build build_unit_clang19 --target test_bitcoin -j4`; focused block-manager regression passed with 11 assertions; full `blockmanager_tests` passed with 12 cases and 128 assertions. The old-source mutation was independently observed before the production edit.
+- Impact and limits: this prevents stale/partial caller output after a failed local undo-file read. It does not make corrupted undo data valid, alter the on-disk format, change recovery policy, or claim a remote trigger; callers still fail and report the underlying corruption.
+
 ## Cycle 43: initial history sweep
 
 - Goal: mine historical partial fixes, follow-ups, reverted work, and migrations for omitted analogous sites on current code.
