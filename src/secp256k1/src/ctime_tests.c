@@ -101,6 +101,7 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
 #endif
 #ifdef ENABLE_MODULE_ELLSWIFT
     unsigned char ellswift[64];
+    unsigned char auxrnd[32];
     static const unsigned char prefix[64] = {'t', 'e', 's', 't'};
 #endif
 #ifdef ENABLE_MODULE_SILENTPAYMENTS
@@ -128,6 +129,10 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
     for (i = 0; i < 32; i++) {
         msg[i] = i + 1;
     }
+
+#ifdef ENABLE_MODULE_ELLSWIFT
+    memcpy(auxrnd, key, sizeof(auxrnd));
+#endif
 
     /* Test keygen. */
     SECP256K1_CHECKMEM_UNDEFINE(key, 32);
@@ -275,7 +280,8 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
     CHECK(ret == 1);
 
     SECP256K1_CHECKMEM_UNDEFINE(key, 32);
-    ret = secp256k1_ellswift_create(ctx, ellswift, key, ellswift);
+    SECP256K1_CHECKMEM_UNDEFINE(auxrnd, sizeof(auxrnd));
+    ret = secp256k1_ellswift_create(ctx, ellswift, key, auxrnd);
     SECP256K1_CHECKMEM_DEFINE(&ret, sizeof(ret));
     CHECK(ret == 1);
 
