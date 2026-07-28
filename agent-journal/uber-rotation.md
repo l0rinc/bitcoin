@@ -96,11 +96,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 81 | spec-vector-drift | CYCLE-1 (retro) | 2026-07-28 | BIP324+RFC8439 vectors byte-exact (0f6c2640b7, own branch; row restored) |
 | 81 | spec-vector-drift | CYCLE-2 | 2026-07-28 | BIP173/350 bech32(m): no drift across unit/key_io/functional layers |
 | 76 | reproducible-builds | CYCLE-2 | 2026-07-28 | depends pins exact (qrencode primary 404, fallback serves pinned bytes); secp ccache = absolute-I key divergence, not uncacheable |
+| 21 | rebuild-recovery-profile | CYCLE-2 | 2026-07-28 | tx-heavy reindex-chainstate: 6.8s user, 85% secp256k1 EC math; checks negligible at 610 blocks; harness lessons logged |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=7558471623584234425 -> idx 50 (of 55) -> #76.
+   raw=9147548957504681430 -> idx 36 (of 54) -> #21.
    POOL-REPAIR NOTE (2026-07-28): the incremental pools used from the
    #75 draw onward carried stale CYCLE-2+ entries (4, 28, 61), and a
    draw of #61(c3) over that 27-entry pool (raw=2149655188711527484,
@@ -130,9 +131,9 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
-7(c1), 9(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1), 22(c1,c2),
+7(c1), 9(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
-37(c1), 39(c1), 43(c1), 45(c1), 47(c1,c2), 51(c1), 59(c1), 60(c1),
+37(c1), 39(c1), 21(c1,c2), 43(c1), 45(c1), 47(c1,c2), 51(c1), 59(c1), 60(c1),
 61(c1,c2,c3), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1),
 76(c1,c2), 81(c1,c2), 90(c1), 91(c1), 94(c1), 95(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
@@ -167,3 +168,13 @@ with per-line UNCOVERED_PC before classifying. Single-file -runs=1
 grep fallback as coverage evidence. A padded NetMsgType dictionary
 (-dict, 28 tokens from src/protocol.h) lifted process_messages edge
 coverage 42% and is reusable across P2P targets.
+Reindex-harness note (#21 c2): plain -reindex on a synced datadir is
+block-INDEX-only; the validation cell needs -reindex-chainstate.
+Completion gating must not poll pre-wipe-true state (610/False matches
+BEFORE the wipe) — gate on the debug.log markers ('Wiping LevelDB' ->
+final 'UpdateTip.*height=N version') and distrust gates against copied
+datadir logs (stale matches). /usr/bin/time user-CPU is the
+gate-independent metric. MiniWallet (~80 tx/s, no wallet DB) beats
+wallet-RPC (~0.1-26 tx/s with silent failure modes; fresh regtest
+needs -fallbackfee) for tx-heavy chain construction; the fork's
+framework needs called_by_framework=True on generate().
