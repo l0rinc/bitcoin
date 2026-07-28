@@ -64,16 +64,43 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 30 | security-logging | CYCLE-3 | 2026-07-28 | 2 injection fixes; amplification dismissed by design (0 bytes at default, 14.6KB/round at -debug) |
 | 31 | cross-layer-contracts | CYCLE-3 | 2026-07-28 | +gettxoutsetinfo use_index restriction (9396f0b414); 3 doc/RPC layer fixes total |
 | 29 | dead-stale-code | CYCLE-2 | 2026-07-28 | util/common + node/wallet/script scans clean; SAFE_CHARS_FILENAME parked |
-| 17 | build-matrix-modules | CYCLE-2 | 2026-07-28 | option/CI inventory + manifest drift + guard sweep all clean (no builds; disk) |
+| 17 | build-matrix-modules | CYCLE-3 | 2026-07-28 | c1-c3 all clean (fbe821c003, own branch) |
+| 18 | exhaustive-algebraic | QUEUE-COMPLETE | 2026-07-28 | c1-c3 round-trips all mutation-verified (c382122eeb, own branch) |
+| 31 | cross-layer-contracts | CYCLE-4 | 2026-07-28 | testnet-key examples labeled (b2a0c38154, own branch) |
+| 36 | cross-tool-analysis-matrix | CYCLE-1 | 2026-07-28 | UBSan unit suite: 1 UB found+fixed (22aa75a2eb, own branch) |
+| 37 | build-dead-zones | CYCLE-1 | 2026-07-28 | parity/empty-arm/#if 0/DEBUG_LOCK clean (442db1aa87, own branch) |
+| 39 | generated-artifact-determinism | CYCLE-1 | 2026-07-28 | raw+json regen byte-identical (4bdf490240, own branch) |
+| 43 | option-api-lifecycle | CYCLE-1 | 2026-07-28 | -prevoutfetchthreads lifecycle clean (331048ba1e, own branch) |
+| 45 | constant-time-declassification | CYCLE-1 | 2026-07-28 | AES ctaes + CBC padding constant-time; declassifications intended-only |
+| 47 | build-ci-parity | CYCLE-1 | 2026-07-28 | 4 registration/preset cells clean (f874c8a9c3, own branch) |
+| 51 | differential-metamorphic | CYCLE-1 | 2026-07-28 | full-UTXO undo oracle (47e5bf2f95, own branch) |
+| 59 | supply-chain-security-gates | CYCLE-1 | 2026-07-28 | script_assets sha256 pin (4124803dff, own branch) |
+| 65 | contributor-branch-radar | CYCLE-1 | 2026-07-28 | l0rinc radar (bfd36c032b, own branch) |
+| 66 | backport-correctness | CYCLE-1 | 2026-07-28 | 18/18 fixes unreachable from ledger tip (ce7810b484, own branch) |
+| 68 | architecture-abi-parity | CYCLE-1 | 2026-07-28 | no arch skips; endian-safe (b11311d7cf, own branch) |
+| 71 | deterministic-simulation | CYCLE-1 | 2026-07-28 | tip-extension fault class (b427b59b54, audit/fuzz-target-gaps) |
+| 73 | network-state-machine | CYCLE-1 | 2026-07-28 | BIP324 replay/reorder oracle (754add19dd, own branch) |
+| 90 | historical-knowledge-recipes | CYCLE-1 | 2026-07-28 | 14 recipes (abb74fe38c, own branch) |
+| 91 | compiler-binary-hardening | CYCLE-1 | 2026-07-28 | BTI enforcement toolchain-inactive (12ec75620a, own branch) |
+| 94 | bindings-ffi-parity | CYCLE-1 | 2026-07-28 | View/Range lifetime doc fix (0a6c377ddb, own branch) |
+| 95 | database-semantics-differential | CYCLE-1 | 2026-07-28 | leveldb exact sync (c784869048, own branch) |
 
-## Next-up queue (severity-first)
-1. 21 — rebuild-recovery-profile CYCLE-2 — NEXT (tx-heavy reindex: does consistency domination persist with validation work?; resume)
-2. then re-rank: 18 c3 (CTxOutUndo round-trip), 22 c2 (two-node P2P IBD)
+## Next-up queue
+1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
+   pending + CYCLE-1 pool, exhausted excluded; this cycle:
+   raw=13722416236855635760 -> idx 14 -> #45.
+2. then re-rank: 21 c2 (tx-heavy reindex), 22 c2 (two-node P2P IBD),
+   #45 queue (passphrase rate-limiting semantics), #43 queue
+   (-capturemessages lifecycle), #36 queue (clang-18 differential),
+   #73 queue (handshake EOF sweep).
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c3), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3), 29(c2), 17(c2), 21(c1), 22(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2,c3,QUEUE-COMPLETE), 19(EXHAUSTED), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3,c4), 29(c2), 17(c2,c3), 21(c1), 22(c1), 36(c1), 37(c1), 39(c1), 43(c1), 45(c1), 47(c1), 51(c1), 59(c1), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 90(c1), 91(c1), 94(c1), 95(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #21 on branch
-audit/rebuild-recovery-profile.
+full cross-backend differential in ~35s on this host.
+Declassification note (#45 c1): a padding check that masks padsize to
+zero on failure is the whole Vaudenay defense — verify the mask, the
+full-length scan, and that failure/success timing is identical before
+claiming a leak.
