@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 61 complete; cycle 62 pending a fresh gate and selector draw.
+- Status: cycle 62 in progress; selected goal 26 (`cross-subsystem-bug-shapes`) from the full catalog after a fresh gate and selector draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -26,6 +26,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 61 selector: exact `shuf -i 0-98 -n 1` -> `22` (`full-sync-ibd-profile`). Prior rebuild, disk, perf, and regression-profile cells are closed; this run measures a distinct end-to-end local import/IBD phase and separates validation, chainstate, block I/O, compaction, logging, and harness time.
 - Cycle 61 completion: no source defect found. A fresh optimized Clang 19 local-peer IBD matrix imported 20,000 deterministic regtest blocks into five empty sinks. The exact tip and 20,001 transaction count matched in every run. Regtest's intentional default `-checkblockindex=1` consumed about 55% of sampled cycles and made the run about 130 seconds; `-checkblockindex=100` took 4.545 seconds and `=0` took 2.899 seconds. Database-cache variation (16/64/256 MB) was non-monotonic within observed noise. See `full-sync-ibd-profile.md`.
 - Cycle 61 artifacts: `/data/my_storage/tmp/full-sync-ibd-profile-cycle61/` contains the release-like build, source/sink datadirs, raw `perf stat` outputs, and a 54,683,552-byte DWARF call-stack profile with zero lost samples. No relevant process remains running.
+- Cycle 62 gate: fetched `origin/master`; HEAD `387f5a122f1c85655253cd35b47d49140317e8a9`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 894`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
+- Cycle 62 selector: exact `shuf -i 0-98 -n 1` -> `26` (`cross-subsystem-bug-shapes`). The cycle-48 wallet-rescan reservation-ordering cell is closed; this run must mine a distinct structural fix shape and prove an analogous reachable site.
 - Current HEAD after cycle 17: `ffda33a38f5fddab57e4618775d22ce31d8eda09`
 - Current HEAD after cycle 18: `55eaf087c189ae871878692fb20a90ac3533084d`
 - Current HEAD before cycle 19 journal handoff: `ec4401b816f132f2f35c1f2e64cf51e2046e8e32`
@@ -212,7 +214,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 61 is closed and goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: `cross-subsystem-bug-shapes` (cycle 62); goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
