@@ -21,6 +21,9 @@ AutoFile::AutoFile(std::FILE* file, const Obfuscation& obfuscation) : m_file{fil
 std::size_t AutoFile::detail_fread(std::span<std::byte> dst)
 {
     if (!m_file) throw std::ios_base::failure("AutoFile::read: file handle is nullptr");
+    // An empty span may have a null data pointer, and passing it to
+    // std::fread (nonnull contract) is undefined even for size zero.
+    if (dst.empty()) return 0;
     const size_t ret = std::fread(dst.data(), 1, dst.size(), m_file);
     if (m_obfuscation) {
         if (!m_position) throw std::ios_base::failure("AutoFile::read: position unknown");
@@ -98,6 +101,9 @@ void AutoFile::ignore(size_t nSize)
 void AutoFile::write(std::span<const std::byte> src)
 {
     if (!m_file) throw std::ios_base::failure("AutoFile::write: file handle is nullptr");
+    // An empty span may have a null data pointer, and passing it to
+    // std::fwrite (nonnull contract) is undefined even for size zero.
+    if (src.empty()) return;
     if (!m_obfuscation) {
         if (std::fwrite(src.data(), 1, src.size(), m_file) != src.size()) {
             throw std::ios_base::failure("AutoFile::write: write failed");
@@ -118,6 +124,8 @@ void AutoFile::write(std::span<const std::byte> src)
 void AutoFile::write_buffer(std::span<std::byte> src)
 {
     if (!m_file) throw std::ios_base::failure("AutoFile::write_buffer: file handle is nullptr");
+    // An empty span may have a null data pointer; see AutoFile::write.
+    if (src.empty()) return;
     if (m_obfuscation) {
         if (!m_position) throw std::ios_base::failure("AutoFile::write_buffer: obfuscation position unknown");
         m_obfuscation(src, *m_position); // obfuscate in-place
