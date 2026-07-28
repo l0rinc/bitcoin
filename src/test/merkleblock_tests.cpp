@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <hash.h>
 #include <merkleblock.h>
 #include <streams.h>
 #include <test/util/common.h>
@@ -160,6 +161,71 @@ BOOST_AUTO_TEST_CASE(merkleblock_reject_trailing_bits_beyond_padding)
     std::vector<Txid> vMatched;
     std::vector<unsigned int> vIndex;
     BOOST_CHECK(tree.ExtractMatches(vMatched, vIndex).IsNull());
+}
+
+//! Build a CPartialMerkleTree from attacker-shaped serialization:
+//! uint32 nTransactions, compactsize-vector<uint256> hashes,
+//! compactsize-vector<uint8> packed flag bits (LSB first).
+static CPartialMerkleTree MakePartialTree(unsigned int ntx, const std::vector<uint256>& hashes, const std::vector<unsigned char>& bitbytes)
+{
+    DataStream ss{};
+    ss << ntx;
+    ss << hashes;
+    ss << bitbytes;
+    CPartialMerkleTree pmt;
+    SpanReader{ss} >> pmt;
+    return pmt;
+}
+
+BOOST_AUTO_TEST_CASE(merkleblock_extract_rejects_malformed_trees)
+{
+    std::vector<Txid> matched;
+    std::vector<unsigned int> indices;
+
+    // Control: a well-formed single-transaction proof verifies.
+    {
+        const uint256 h{uint256::ONE};
+        CPartialMerkleTree pmt{MakePartialTree(1, {h}, {0b1})};
+        BOOST_CHECK_EQUAL(pmt.ExtractMatches(matched, indices), h);
+        BOOST_CHECK_EQUAL(matched.size(), 1U);
+    }
+
+    // Traversal runs out of flag bits (fBad: nBitsUsed >= vBits.size()):
+    // 8-transaction tree, all-parent bits down the left half consume the
+    // whole packed byte, the right half needs a 9th bit.
+    {
+        const uint256 h{uint256::ONE};
+        CPartialMerkleTree pmt{MakePartialTree(8, {h, h, h, h}, {0b00100111})};
+        BOOST_CHECK(pmt.ExtractMatches(matched, indices).IsNull());
+    }
+
+    // Traversal runs out of hashes (fBad: nHashUsed >= vHash.size()).
+    {
+        CPartialMerkleTree pmt{MakePartialTree(2, {}, {0b0})};
+        BOOST_CHECK(pmt.ExtractMatches(matched, indices).IsNull());
+    }
+
+    // Identical left/right subtree hashes (fBad; CVE-2012-2459 guard):
+    // 3 transactions, both left leaves stored as h, the right subtree hash
+    // set to Hash(h, h) so it equals the computed left subtree.
+    {
+        const uint256 h{uint256::ONE};
+        const uint256 dup{Hash(h, h)};
+        // bits: root=parent(1), left=parent(1), leaf0=match(1), leaf1=no(0), right=no(0)
+        CPartialMerkleTree pmt{MakePartialTree(3, {h, h, dup}, {0b00111})};
+        BOOST_CHECK(pmt.ExtractMatches(matched, indices).IsNull());
+    }
+}
+
+BOOST_AUTO_TEST_CASE(merkleblock_construct_with_bloom_filter_match)
+{
+    CBlock block = getBlock13b8a();
+
+    // A filter whose tiny bitfield saturates to all-ones matches every
+    // transaction, exercising the IsRelevantAndUpdate match path.
+    CBloomFilter filter{10, 0.999999, 0, BLOOM_UPDATE_ALL};
+    CMerkleBlock merkleBlock(block, filter);
+    BOOST_CHECK_EQUAL(merkleBlock.vMatchedTxn.size(), block.vtx.size());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
