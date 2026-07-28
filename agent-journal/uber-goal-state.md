@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 59 complete; selected goal 45 (`constant-time-boundary`) from the full catalog after a fresh gate and selector draw. Cycle 60 is pending a fresh gate and selector draw.
+- Status: cycle 60 in progress; selected goal 84 (`secp-nonce-session`) from the full catalog after a fresh gate and selector draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -18,6 +18,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 59 gate: fetched `origin/master`; HEAD `3b4c458d37861c084d074becaae27e4228fd07d0`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 887`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 59 selector: exact `shuf -i 0-98 -n 1` -> `45` (`constant-time-boundary`). The cycle-40 EllSwift auxiliary-input boundary is closed. This run selects the distinct MuSig session/keypair declassification boundary and will not modify EllSwift code without new independent evidence.
 - Cycle 59 completion: no source defect found. The live MSan ctime baseline, regular libsecp256k1 tests, and exhaustive order-13 tests passed. Removing keypair public declassification, secnonce invalidation-status declassification, or invalid-session-randomness status declassification each produced a first-invalid-operation MSan trace; all temporary mutations were restored. Valgrind was unavailable, `git diff --check` passed, and no relevant process remains running.
+- Cycle 60 gate: fetched `origin/master`; HEAD `a064c61c3e77cbf08e9a68cd466f12cd50654ec3`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 889`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
+- Cycle 60 selector: exact `shuf -i 0-98 -n 1` -> `84` (`secp-nonce-session`). Earlier MuSig ctime and secret-lifetime cells are closed. This run audits invalid-order, single-use, duplicate/replay, malformed-object, callback, and output-on-failure transitions, starting with MuSig public output state.
 - Current HEAD after cycle 17: `ffda33a38f5fddab57e4618775d22ce31d8eda09`
 - Current HEAD after cycle 18: `55eaf087c189ae871878692fb20a90ac3533084d`
 - Current HEAD before cycle 19 journal handoff: `ec4401b816f132f2f35c1f2e64cf51e2046e8e32`
