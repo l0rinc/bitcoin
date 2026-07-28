@@ -184,6 +184,30 @@ void DeserializeHDKeypaths(Stream& s, const std::vector<unsigned char>& key, std
     hd_keypaths.emplace(pubkey, std::move(keypath));
 }
 
+// Deserialize the length-prefixed value of a Taproot BIP32 keypath without
+// allowing its nested leaf-hash count to read into the next PSBT field.
+template<typename Stream>
+std::pair<std::set<uint256>, KeyOriginInfo> DeserializeTaprootBIP32Keypath(Stream& s, const std::string& context)
+{
+    std::vector<unsigned char> value;
+    s >> value;
+    SpanReader s_value{value};
+
+    const uint64_t leaf_hash_count = ReadCompactSize(s_value);
+    if (leaf_hash_count > s_value.size() / CSHA256::OUTPUT_SIZE) {
+        throw std::ios_base::failure(context + " has an invalid length");
+    }
+
+    std::set<uint256> leaf_hashes;
+    for (uint64_t i = 0; i < leaf_hash_count; ++i) {
+        uint256 leaf_hash;
+        s_value >> leaf_hash;
+        leaf_hashes.emplace(std::move(leaf_hash));
+    }
+
+    return std::make_pair(std::move(leaf_hashes), DeserializeKeyOrigin(s_value, s_value.size()));
+}
+
 // Serialize a KeyOriginInfo to a stream
 template<typename Stream>
 void SerializeKeyOrigin(Stream& s, KeyOriginInfo hd_keypath)
@@ -836,17 +860,7 @@ public:
                     SpanReader s_key{std::span{key}.subspan(1)};
                     XOnlyPubKey xonly;
                     s_key >> xonly;
-                    std::set<uint256> leaf_hashes;
-                    uint64_t value_len = ReadCompactSize(s);
-                    size_t before_hashes = s.size();
-                    s >> leaf_hashes;
-                    size_t after_hashes = s.size();
-                    size_t hashes_len = before_hashes - after_hashes;
-                    if (hashes_len > value_len) {
-                        throw std::ios_base::failure("Input Taproot BIP32 keypath has an invalid length");
-                    }
-                    size_t origin_len = value_len - hashes_len;
-                    m_tap_bip32_paths.emplace(xonly, std::make_pair(leaf_hashes, DeserializeKeyOrigin(s, origin_len)));
+                    m_tap_bip32_paths.emplace(xonly, DeserializeTaprootBIP32Keypath(s, "Input Taproot BIP32 keypath"));
                     break;
                 }
                 case PSBT_IN_TAP_INTERNAL_KEY:
@@ -1181,17 +1195,7 @@ public:
                 {
                     ExpectedKeySize("Output Taproot BIP32 Keypath", key, 33);
                     XOnlyPubKey xonly(uint256(std::span<uint8_t>(key).last(32)));
-                    std::set<uint256> leaf_hashes;
-                    uint64_t value_len = ReadCompactSize(s);
-                    size_t before_hashes = s.size();
-                    s >> leaf_hashes;
-                    size_t after_hashes = s.size();
-                    size_t hashes_len = before_hashes - after_hashes;
-                    if (hashes_len > value_len) {
-                        throw std::ios_base::failure("Output Taproot BIP32 keypath has an invalid length");
-                    }
-                    size_t origin_len = value_len - hashes_len;
-                    m_tap_bip32_paths.emplace(xonly, std::make_pair(leaf_hashes, DeserializeKeyOrigin(s, origin_len)));
+                    m_tap_bip32_paths.emplace(xonly, DeserializeTaprootBIP32Keypath(s, "Output Taproot BIP32 keypath"));
                     break;
                 }
                 case PSBT_OUT_MUSIG2_PARTICIPANT_PUBKEYS:

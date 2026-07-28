@@ -118,6 +118,50 @@ BOOST_AUTO_TEST_CASE(hd_keypaths_roundtrip)
     BOOST_CHECK(roundtrip == hd_keypaths);
 }
 
+BOOST_AUTO_TEST_CASE(taproot_bip32_keypath_does_not_read_past_value)
+{
+    std::vector<unsigned char> serialized;
+    VectorWriter writer{serialized, 0};
+
+    std::vector<unsigned char> key{PSBT_OUT_TAP_BIP32_DERIVATION};
+    key.resize(33, 0);
+    writer << key;
+
+    // The value contains only a leaf-hash count, but that count claims one hash.
+    writer << std::vector<unsigned char>{1};
+
+    // Follow it with a complete unknown map entry. The parser must not use these
+    // bytes to satisfy the malformed leaf-hash count.
+    std::vector<unsigned char> tail{1, 9, 32};
+    tail.insert(tail.end(), 32, 0x42);
+    tail.push_back(PSBT_SEPARATOR);
+    serialized.insert(serialized.end(), tail.begin(), tail.end());
+
+    SpanReader reader{serialized};
+    BOOST_CHECK_THROW((PSBTOutput{deserialize, reader, /*psbt_version=*/2}), std::ios_base::failure);
+    BOOST_CHECK_EQUAL(reader.size(), tail.size());
+}
+
+BOOST_AUTO_TEST_CASE(taproot_bip32_input_keypath_does_not_read_past_value)
+{
+    std::vector<unsigned char> serialized;
+    VectorWriter writer{serialized, 0};
+
+    std::vector<unsigned char> key{PSBT_IN_TAP_BIP32_DERIVATION};
+    key.resize(33, 0);
+    writer << key;
+    writer << std::vector<unsigned char>{1};
+
+    std::vector<unsigned char> tail{1, 9, 32};
+    tail.insert(tail.end(), 32, 0x42);
+    tail.push_back(PSBT_SEPARATOR);
+    serialized.insert(serialized.end(), tail.begin(), tail.end());
+
+    SpanReader reader{serialized};
+    BOOST_CHECK_THROW((PSBTInput{deserialize, reader, /*psbt_version=*/2}), std::ios_base::failure);
+    BOOST_CHECK_EQUAL(reader.size(), tail.size());
+}
+
 BOOST_AUTO_TEST_CASE(analyzepsbt_invalid_result_contract)
 {
     CMutableTransaction mtx;
