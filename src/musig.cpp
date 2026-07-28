@@ -143,7 +143,7 @@ std::vector<uint8_t> CreateMuSig2Nonce(MuSig2SecNonce& secnonce, const uint256& 
     }
 
     // Generate randomness for nonce
-    uint256 rand;
+    std::vector<unsigned char, secure_allocator<unsigned char>> rand(32);
     GetStrongRandBytes(rand);
 
     // Generate nonce
