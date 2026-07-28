@@ -98,3 +98,82 @@ No gap found in the release path.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-28): depends provenance spot-check (1 dead primary URL, fallback hash-exact) + secp ccache root cause (key divergence, not uncacheability)
+
+Base: e34ab0139f (journal commit for #81 cycle-2 on
+audit/spec-drift-c2; ledger-lineage anchor audit/resurrection @
+5d0155254c). Branch: audit/repro-c2 (c1 journal already in lineage).
+Start state: clean (untracked scratch only).
+
+### Draw (with second pool repair)
+A draw over the 61-entry pool landed on #98 — DISCARDED: #98 has a
+DONE table row (1 finding, 99d98861fc) that the handoff DONE-list
+omitted. Reconciliation: the handoff line was rebuilt MECHANICALLY
+from the table rows (see ledger), yielding: 28 DONE/QC/EXHAUSTED
+(3,5,8,11,12,13,14,15,18,19,20,26,27,33,52,56,62,82-89,96,97,98) +
+2 deferred (72,77) + 14 CYCLE-2+ + 22 CYCLE-1 + 33 pending = 99.
+5/52 verified complete via audit/boundary-integer journal (B1-B4 all
+dismissed). Redraw over the 55-entry eligible pool (33 pending + 22
+CYCLE-1): raw=7558471623584234425, index 50 -> #76 (cycle 2).
+
+### Cell A: depends/ source-hash spot verification
+- expat 2.7.3 (depends/packages/expat.mk): downloaded from the pinned
+  primary URL (github.com/libexpat releases R_2_7_3):
+  sha256 821ac9710d...dd732 == pin. MATCH.
+- qrencode 4.1.1 (depends/packages/qrencode.mk): PRIMARY URL
+  https://fukuchi.org/works/qrencode/qrencode-4.1.1.tar.gz -> 404
+  (the whole /works/qrencode/ path is gone; site root lives; project
+  exists at github.com/fukuchi/libqrencode with tag v4.1.1).
+  The .mk is byte-identical to upstream master (verified via raw
+  bitcoin/bitcoin master) — not a fork divergence. The depends
+  fallback (Makefile:46 FALLBACK_DOWNLOAD_PATH=
+  https://bitcoincore.org/depends-sources, funcs.mk:40) serves
+  qrencode-4.1.1.tar.gz with sha256 da448ed4f5...71e8e == pin.
+  MATCH via fallback.
+Verdict: provenance chain INTACT (every verified artifact matches its
+pin); one dead primary URL documented — operationally benign because
+the fallback mirror serves the exact pinned bytes, and hash
+verification (not the URL) is the trust anchor. No tree change:
+diverging from upstream's .mk for a URL-only update buys nothing
+while the fallback covers it; queued as an upstream-watch item.
+
+### Cell B: secp256k1 ccache "uncacheability" root cause — CORRECTION to c1
+c1 inferred secp256k1.c is "among ccache's 45 uncacheable calls".
+Wrong mechanism, proven by the compile line
+(ninja -C build-before -t commands):
+  /usr/bin/ccache /usr/bin/cc ... -I/mnt/my_storage/bitcoin/build-before/src
+  -I/mnt/my_storage/bitcoin/src ... -c .../src/secp256k1/src/secp256k1.c
+The secp objects compile with ABSOLUTE -I flags, inherited from the
+directory-scoped include_directories(${CMAKE_CURRENT_BINARY_DIR}
+${CMAKE_CURRENT_SOURCE_DIR}) at src/CMakeLists.txt:8 (the subtree is
+added under src/). Absolute -I puts the BUILD DIR in the ccache key,
+so every new build directory misses and recompiles secp fresh —
+legitimate key divergence (the -I content could differ), NOT
+uncacheability. The fresh compile then embeds DW_AT_comp_dir of that
+dir (no -ffile-prefix-map), producing c1's 1-byte .debug_str delta.
+Main-tree C++ objects use relative -I (-I src -I ../src) and hit.
+The "45 uncacheable calls" in ccache -s are a separate un-itemized
+class, unrelated to this effect (secp calls are cacheable-but-missing).
+Verdict: not a bug; no fix (relative-ifying the directory includes is
+a churn/risk trade against a cosmetic cache-miss + debug-path byte).
+
+### Exact commands
+- curl -fsSL <primary URLs> / sha256sum vs depends/packages/*.mk pins
+- curl -fsSL https://bitcoincore.org/depends-sources/qrencode-4.1.1.tar.gz
+- curl raw.githubusercontent.com/bitcoin/bitcoin/master/depends/
+  packages/qrencode.mk (byte-identical check)
+- ninja -C build-before -t commands | grep -m1 secp256k1.c
+- grep include_directories src/CMakeLists.txt cmake/*.cmake
+
+### Limitations / queue
+- Full `make -C depends download` hash sweep over ALL packages (each
+  primary+fallback) not done — the two-package spot check sampled
+  one GitHub-release-style and one upstream-site-style source.
+- The 45 ccache-uncacheable calls remain un-itemized (likely IPC/
+  capnp-generated or similar; CCACHE_DEBUG rebuild would name them).
+- qrencode primary URL upstream-watch: if bitcoin/bitcoin updates the
+  .mk, take theirs.
+
+## Rotation note
+Cycle 2 complete; rotating per uber-goal policy. Not exhausted.

@@ -95,11 +95,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 47 | build-ci-parity | CYCLE-2 | 2026-07-28 | install manifest declarative-single-source; 17-file install set exact match |
 | 81 | spec-vector-drift | CYCLE-1 (retro) | 2026-07-28 | BIP324+RFC8439 vectors byte-exact (0f6c2640b7, own branch; row restored) |
 | 81 | spec-vector-drift | CYCLE-2 | 2026-07-28 | BIP173/350 bech32(m): no drift across unit/key_io/functional layers |
+| 76 | reproducible-builds | CYCLE-2 | 2026-07-28 | depends pins exact (qrencode primary 404, fallback serves pinned bytes); secp ccache = absolute-I key divergence, not uncacheable |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=13968128799102658417 -> idx 33 (of 62) -> #81.
+   raw=7558471623584234425 -> idx 50 (of 55) -> #76.
    POOL-REPAIR NOTE (2026-07-28): the incremental pools used from the
    #75 draw onward carried stale CYCLE-2+ entries (4, 28, 61), and a
    draw of #61(c3) over that 27-entry pool (raw=2149655188711527484,
@@ -108,19 +109,32 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    EXHAUSTED/QUEUE-COMPLETE/deferred #72/#77, minus the just-cycled
    campaign): 41 pending + 23 CYCLE-1 = 64 entries. Campaigns at
    CYCLE-2+ are reachable via the re-rank queue, not the random pool.
+   POOL-REPAIR 2 (2026-07-28): a draw of #98 over that 64-entry pool
+   was DISCARDED — #98 has a DONE table row the handoff list omitted.
+   The handoff DONE list is now rebuilt MECHANICALLY from table rows
+   (see Handoff); the eligible pool is 33 pending + 22 CYCLE-1 = 55.
 2. then re-rank: 21 c2 (tx-heavy reindex), #22 queue (fee-estimator
    UpdateMovingAverages per-block gating; tx-heavy import),
    #1 queue (net_processing/txmempool claim sweep, fork-added comments),
    #60 queue (line-level review comments, contentious-PR NACK pass),
    #45 queue (passphrase rate-limiting semantics), #43 queue
-   (-capturemessages lifecycle), #76 queue (depends source-hash spot
-   check; secp ccache-uncacheability root cause),
+   (-capturemessages lifecycle), #76 queue (full depends download
+   sweep; 45-uncacheable itemization; qrencode upstream-watch),
    #73 queue (handshake EOF sweep), #75 queue (clean-build wall,
    CI cache keys, header-cost -ftime-report).
 
 ## Handoff
-Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1,c2), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1,c2), 11, 12, 13, 14, 18(c2,c3,QUEUE-COMPLETE), 19(EXHAUSTED), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3,c4), 29(c2), 17(c2,c3), 21(c1), 22(c1,c2), 1(c1), 36(c1,c2), 37(c1), 39(c1), 43(c1), 45(c1), 51(c1), 59(c1), 60(c1), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1), 76(c1), 47(c1,c2), 81(c1,c2), 90(c1), 91(c1), 94(c1), 95(c1) DONE.
+Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
+(mechanically rebuilt from table rows 2026-07-28): 3, 5, 8, 11, 12,
+13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 20, 26, 27, 33, 52,
+56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
+96, 97, 98.
+Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
+7(c1), 9(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1), 22(c1,c2),
+28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
+37(c1), 39(c1), 43(c1), 45(c1), 47(c1,c2), 51(c1), 59(c1), 60(c1),
+61(c1,c2,c3), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1),
+76(c1,c2), 81(c1,c2), 90(c1), 91(c1), 94(c1), 95(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
