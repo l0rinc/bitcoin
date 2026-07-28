@@ -1586,4 +1586,22 @@ BOOST_AUTO_TEST_CASE(unused_descriptor_test)
     CheckUnused("unused(xprvA1RpRA33e1JQ7ifknakTFpgNXPmW2YvmhqLQYMmrj4xJXXWYpDPS3xz7iAxn8L39njGVyuoseXzU6rcxFLJ8HFsTjSyQbLYnMpCqE2VbFWc/0h/0h/1)", "unused(xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0h/0h/1)");
 }
 
+BOOST_AUTO_TEST_CASE(infer_descriptor_off_curve_pubkey_falls_back_to_raw)
+{
+    std::vector<unsigned char> bytes(33, 0);
+    bytes[0] = 0x02;
+    const CScript script{CScript{} << bytes << OP_CHECKSIG};
+    FlatSigningProvider provider;
+    const auto inferred{InferDescriptor(script, provider)};
+    BOOST_REQUIRE_MESSAGE(inferred, "off-curve P2PK was not inferred");
+    const std::string descriptor{inferred->ToString()};
+    BOOST_CHECK_EQUAL(descriptor.rfind("raw(", 0), 0U);
+
+    FlatSigningProvider parsed_provider;
+    std::string error;
+    const auto parsed{Parse(descriptor, parsed_provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_MESSAGE(!parsed.empty(), error);
+    BOOST_CHECK_EQUAL(parsed[0]->ToString(), descriptor);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
