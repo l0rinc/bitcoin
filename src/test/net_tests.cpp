@@ -325,6 +325,47 @@ BOOST_AUTO_TEST_CASE(cnode_refcount_contracts)
     BOOST_CHECK_EQUAL(node.GetRefCount(), 0);
 }
 
+BOOST_AUTO_TEST_CASE(connman_stop_nodes_resets_network_connection_counts)
+{
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    const CAddress addr{Lookup("1.2.3.4", 8333, /*fAllowLookup=*/false).value(), NODE_NETWORK};
+
+    auto add_node{[&](NodeId id) {
+        auto node{std::make_unique<CNode>(id,
+                                           /*sock=*/nullptr,
+                                           /*addrIn=*/addr,
+                                           /*nKeyedNetGroupIn=*/0,
+                                           /*nLocalHostNonceIn=*/0,
+                                           /*addrBindIn=*/CService{},
+                                           /*addrNameIn=*/"",
+                                           /*conn_type_in=*/ConnectionType::OUTBOUND_FULL_RELAY,
+                                           /*inbound_onion=*/false,
+                                           /*network_key=*/0)};
+        node->SetCommonVersion(PROTOCOL_VERSION);
+        m_node.peerman->InitializeNode(*node, NODE_NETWORK);
+        node->fSuccessfullyConnected = true;
+        connman.AddTestNode(*node.release());
+    }};
+
+    add_node(/*id=*/0);
+    BOOST_CHECK(!connman.MultipleManualOrFullOutboundConnsPublic(Network::NET_IPV4));
+
+    connman.StopNodes();
+    BOOST_REQUIRE(connman.TestNodes().empty());
+
+    add_node(/*id=*/1);
+    BOOST_CHECK(!connman.MultipleManualOrFullOutboundConnsPublic(Network::NET_IPV4));
+
+    for (CNode* node : connman.TestNodes()) {
+        m_node.peerman->FinalizeNode(*node);
+    }
+    connman.ClearTestNodes();
+
+    add_node(/*id=*/2);
+    BOOST_CHECK(!connman.MultipleManualOrFullOutboundConnsPublic(Network::NET_IPV4));
+    connman.StopNodes();
+}
+
 BOOST_AUTO_TEST_CASE(cnode_send_queue_memory_usage_contracts)
 {
     auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};

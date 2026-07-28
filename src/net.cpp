@@ -3774,7 +3774,11 @@ void CConnman::StopNodes()
 
     // Delete peer connections.
     std::vector<CNode*> nodes;
-    WITH_LOCK(m_nodes_mutex, nodes.swap(m_nodes));
+    {
+        LOCK(m_nodes_mutex);
+        nodes.swap(m_nodes);
+        m_network_conn_counts.fill(0);
+    }
     for (CNode* pnode : nodes) {
         LogDebug(BCLog::NET, "Stopping node, %s", pnode->DisconnectMsg());
         pnode->CloseSocketDisconnect();
