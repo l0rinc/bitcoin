@@ -74,4 +74,4 @@ Independent verification forms were the failing-before regression, the fixed-aft
 
 ## Handoff
 
-The source finding is ready for one independently authored source commit. Then update the uber ledger with the source commit and final state commit, verify no processes remain, and draw cycle 57 from the full catalog.
+Source finding commit: `260e49e22d` (`dbwrapper: preserve outputs on decode failure`), authored as `Lőrinc <pap.lorinc@gmail.com>`. It contains `src/dbwrapper.h`, the focused regression in `src/test/dbwrapper_tests.cpp`, and this journal's evidence. The next run must recheck the authoritative gate, keep the malformed-record and mutation artifacts available under `/data/my_storage/tmp/cycle56-*`, and draw cycle 57 from the full catalog.
