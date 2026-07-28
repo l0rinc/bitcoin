@@ -64,18 +64,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 30 | security-logging | CYCLE-3 | 2026-07-28 | 2 injection fixes; amplification dismissed by design (0 bytes at default, 14.6KB/round at -debug) |
 | 31 | cross-layer-contracts | CYCLE-2 | 2026-07-28 | descriptors.md off-by-one (1f7f73b02e) + assumeutxo rejection rules (f7513f4990) doc fixes |
 | 29 | dead-stale-code | CYCLE-2 | 2026-07-28 | util/common + node/wallet/script scans clean; SAFE_CHARS_FILENAME parked |
-| 17 | build-matrix-modules | CYCLE-1 | 2026-07-27 | option/CI inventory + manifest drift clean (no builds; disk) |
-| 21 | rebuild-recovery-profile | CYCLE-1 | 2026-07-28 | regtest reindex = 92% consistency checks; -checkblockindex=0 6.2x wall, proven |
-| 22 | full-sync-ibd-profile | CYCLE-1 | 2026-07-28 | import replay = 85% consistency machinery; -checkblockindex=0 6x wall; obfuscation gotcha journaled |
+| 17 | build-matrix-modules | CYCLE-2 | 2026-07-28 | option/CI inventory + manifest drift + guard sweep all clean (no builds; disk) |
 
 ## Next-up queue (severity-first)
-1. 17 — build-matrix-modules CYCLE-2 — NEXT (stale preprocessor guard sweep; resume, text-only)
-2. then re-rank: 19 c3 (bench units/batching), 31 c3 (gettxoutsetinfo hash_type)
+1. 19 — benchmark-integrity CYCLE-3 — NEXT (bench units/batching claims; resume)
+2. then re-rank: 31 c3 (gettxoutsetinfo hash_type), 21 c2 (tx-heavy reindex)
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c2), 28(c2), 16(c2), 61(c3), 30(c3), 31(c2), 29(c2), 17(c1), 21(c1), 22(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c2), 28(c2), 16(c2), 61(c3), 30(c3), 31(c2), 29(c2), 17(c2), 21(c1), 22(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #17 on branch
-audit/build-matrix.
+full cross-backend differential in ~35s on this host. NEXT: #19 on branch
+audit/benchmark-integrity.
