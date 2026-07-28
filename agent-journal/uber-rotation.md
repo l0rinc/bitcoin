@@ -91,11 +91,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 60 | reviewer-preference-skill | CYCLE-1 | 2026-07-28 | l0rinc seam: 7 rules (R1-R7), held-out 2/3+1 refined; reviewer map n=5 |
 | 36 | cross-tool-analysis-matrix | CYCLE-2 | 2026-07-28 | clang-18 differential green; 4 clang-only warnings triaged (3 fuzz-only-helper, 1 test-annotation) |
 | 76 | reproducible-builds | CYCLE-1 | 2026-07-28 | A/B rebuild: code bit-identical; 1-byte secp comp_dir DWARF delta attributed; Guix packaging sound |
+| 9 | hit-frequency-coverage | CYCLE-2 | 2026-07-28 | net_processing sancov: all gaps harness-scope; 0/23 alarm resolved as inlining artifact via per-line PC check |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=4368789968832384158 -> idx 30 (of 64) -> #76.
+   raw=13504447271606250885 -> idx 43 (of 63) -> #9.
    POOL-REPAIR NOTE (2026-07-28): the incremental pools used from the
    #75 draw onward carried stale CYCLE-2+ entries (4, 28, 61), and a
    draw of #61(c3) over that 27-entry pool (raw=2149655188711527484,
@@ -116,7 +117,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1,c2), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2,c3,QUEUE-COMPLETE), 19(EXHAUSTED), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3,c4), 29(c2), 17(c2,c3), 21(c1), 22(c1,c2), 1(c1), 36(c1,c2), 37(c1), 39(c1), 43(c1), 45(c1), 47(c1), 51(c1), 59(c1), 60(c1), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1), 76(c1), 90(c1), 91(c1), 94(c1), 95(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1,c2), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1,c2), 11, 12, 13, 14, 18(c2,c3,QUEUE-COMPLETE), 19(EXHAUSTED), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3,c4), 29(c2), 17(c2,c3), 21(c1), 22(c1,c2), 1(c1), 36(c1,c2), 37(c1), 39(c1), 43(c1), 45(c1), 47(c1), 51(c1), 59(c1), 60(c1), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1), 76(c1), 90(c1), 91(c1), 94(c1), 95(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
@@ -141,3 +142,11 @@ Cross-tool note (#36 c2): clang -Wunneeded-internal-declaration/
 from a discarded `if constexpr (G_ABORT_ON_FAILED_ASSUME)` block —
 by design, NOT dead code; check the caller's guard before proposing
 removal. gcc has no equivalent warning and no thread-safety analysis.
+Coverage note (#9 c2): sancov UNCOVERED_FUNC 0/N for a small static
+function with few call sites is usually an INLINING artifact (edges
+executed at the call sites; out-of-line symbol never called) — confirm
+with per-line UNCOVERED_PC before classifying. Single-file -runs=1
+-print_coverage output can omit the function entirely; never treat a
+grep fallback as coverage evidence. A padded NetMsgType dictionary
+(-dict, 28 tokens from src/protocol.h) lifted process_messages edge
+coverage 42% and is reusable across P2P targets.
