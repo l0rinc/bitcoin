@@ -86,13 +86,15 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 95 | database-semantics-differential | CYCLE-1 | 2026-07-28 | leveldb exact sync (c784869048, own branch) |
 | 75 | build-throughput-cacheability | CYCLE-1 | 2026-07-28 | no-op 0.19s stable; generator cascade restat-bounded; fan-out leaf-only; warm 2.85s / cold 30.78s incremental |
 | 22 | full-sync-ibd-profile | CYCLE-2 | 2026-07-28 | two-node P2P IBD: bloom reset-per-tip 40.6% CPU, clean-flag fix c8f53e58d9 (-58% user); checks-on 17.0s vs 2.96s re-confirmed |
+| 1 | comment-code-contract | CYCLE-1 | 2026-07-28 | LockPoints bound comment wrong (b1c267c9f1); AddCoin/lock/nullptr-parent claims verified true |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=1670674105687797563 -> idx 6 (of 31) -> #22.
+   raw=11412206341905458499 -> idx 1 (of 30) -> #1.
 2. then re-rank: 21 c2 (tx-heavy reindex), #22 queue (fee-estimator
    UpdateMovingAverages per-block gating; tx-heavy import),
+   #1 queue (net_processing/txmempool claim sweep, fork-added comments),
    #45 queue (passphrase rate-limiting semantics), #43 queue
    (-capturemessages lifecycle), #36 queue (clang-18 differential),
    #73 queue (handshake EOF sweep), #75 queue (clean-build wall,
@@ -100,7 +102,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2,c3,QUEUE-COMPLETE), 19(EXHAUSTED), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3,c4), 29(c2), 17(c2,c3), 21(c1), 22(c1,c2), 36(c1), 37(c1), 39(c1), 43(c1), 45(c1), 47(c1), 51(c1), 59(c1), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1), 90(c1), 91(c1), 94(c1), 95(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2,c3,QUEUE-COMPLETE), 19(EXHAUSTED), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3,c4), 29(c2), 17(c2,c3), 21(c1), 22(c1,c2), 1(c1), 36(c1), 37(c1), 39(c1), 43(c1), 45(c1), 47(c1), 51(c1), 59(c1), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1), 90(c1), 91(c1), 94(c1), 95(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
