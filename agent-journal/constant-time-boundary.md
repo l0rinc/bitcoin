@@ -1,3 +1,47 @@
+# Constant-Time Boundary Cycle 59
+
+## Identity and Gate
+
+- Cycle: `59`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `45`
+- Goal: `Constant-time boundary and declassification audit`
+- Slug: `constant-time-boundary`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Branch: `fuzz-contract-cluster-oracles-20260709`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- HEAD at cycle start: `3b4c458d37861c084d074becaae27e4228fd07d0`
+- `origin/master...HEAD` at the gate: `2 887`
+- Tracked/staged state at the gate: clean. Existing untracked agent artifacts and `test/cache/` were preserved.
+- `goals.tsv` validation: `validated_rows=99 total_lines=100`
+- No relevant test, fuzz, sanitizer, daemon, or profiling process was running at the gate.
+
+Cycle 40 closed the EllSwift `secp256k1_ellswift_create` auxiliary-input boundary after an MSan ctime failure. This cycle is a distinct current-source cell: MuSig session/keypair transitions and their explicit public declassification. The EllSwift finding and cycle-44 MuSig counter-public-key fix are negative controls, not candidates for duplicate repair.
+
+## Cycle 59 Hypotheses
+
+1. A MuSig session or keypair helper declassifies an intermediate before all secret-dependent processing has finished, allowing a secret-bearing value to influence a branch or memory access after the claimed boundary.
+2. A public output is declassified too late or too broadly, causing checkmem to report a false secret use, or too early, allowing a secret-derived value to cross the boundary before its documented public representation is complete.
+3. A ctime test marks a composite secret/public object with a boundary that does not match the API contract, leaving a reachable caller path untested.
+
+For each candidate I will trace the public header contract, declassification helper, secret/public object layout, caller lifecycle, and checkmem tests. A finding requires a first-invalid-operation diagnostic or a precise source-level taint proof, plus a negative control showing the existing boundary is intentionally public. Any source change must be limited to one independent contract defect and carry a focused ctime or API regression.
+
+## Cycle 59 Evidence Log
+
+- Pending: code/dataflow inventory and independent checkmem execution.
+
+## Cycle 59 Verdict
+
+- Pending.
+
+## Cycle 59 Handoff
+
+- Pending completion; leave the exact commands, tool availability, verifier results, and next distinct boundary cell here.
+
+---
+
 # Constant-Time Boundary Cycle 40
 
 ## Identity and Gate
