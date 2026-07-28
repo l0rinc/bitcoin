@@ -4674,8 +4674,12 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             CBlock block;
             const bool ret{m_chainman.m_blockman.ReadBlock(block, block_pos, req.blockhash)};
             // If height is above MAX_BLOCKTXN_DEPTH then this block cannot get
-            // pruned after we release cs_main above, so this read should never fail.
-            assert(ret);
+            // pruned after we release cs_main above, but other disk-read failures remain possible.
+            if (!ret) {
+                LogError("Cannot load block from disk, %s", pfrom.DisconnectMsg());
+                pfrom.fDisconnect = true;
+                return;
+            }
 
             SendBlockTransactions(pfrom, peer, block, req);
             return;
