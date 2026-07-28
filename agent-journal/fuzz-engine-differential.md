@@ -90,3 +90,41 @@ The existing Cycle 8 section in this journal compared libFuzzer, AFL++, and Hong
 ### Hypothesis
 
 Different engines may reach different parser states or preserve different boundary inputs on the same `parse_numbers` target, exposing a harness/engine adapter gap, a corpus transfer loss, or a reproducible crash/hang. Compare libFuzzer, AFL++, and Honggfuzz with identical initial inputs, target arguments, one worker, and sanitizer replay for every failure. Record throughput, coverage signal, corpus growth, memory, crashes, hangs, determinism, and unsupported features. Do not modify production code for metric differences alone.
+
+### Cycle 79 build and tool matrix
+
+- The initial source corpus was `/data/my_storage/tmp/qa-assets/fuzz_corpora/parse_numbers`: 220 files, 4,568,572 bytes, and manifest SHA256 `79d0fa63f4272d5490e240e3f626ec57f5fd094b3058720c4c2a272286de0253`. The AFL++ and Honggfuzz input copies matched this manifest before mutation; libFuzzer's input directory retained new units during its run, so its post-run directory is reported separately.
+- All throughput builds used current HEAD `4230363290` or later journal-only state, Clang 19.1.7, Debug, `BUILD_FOR_FUZZING=ON`, wallet/IPC/ZMQ/Qt disabled, x86_64, and `FUZZ=parse_numbers`. Each engine used one worker and no default datadir, wallet, key, or database.
+- The current-head libFuzzer target rebuilt with `ninja -C build_fuzz_libfuzzer_clang19 fuzz -j2` (20/20). The current-head AFL++ target rebuilt with `ninja -C /data/my_storage/tmp/fuzz-engine-differential/build_afl19b fuzz -j2` (186/186), using `afl-clang-fast++` and `lld-19`; host LLVM 14 gold-plugin warnings were non-fatal static-library diagnostics.
+- Honggfuzz initially compiled current-head objects with `HFUZZ_CC_PATH=/usr/bin/clang-19` and `HFUZZ_CXX_PATH=/usr/bin/clang++-19`, but its final link exposed three unresolved `nsEnter`/`nsIfaceUp`/`nsMountTmpfs` references from a stale embedded `libhfcommon` archive. The verified build-tree archives were supplied through `HFUZZ_LHFUZZ_PATH`, `HFUZZ_LHFCOMMON_PATH`, and `HFUZZ_LHFNETDRIVER_PATH`; the target then linked successfully. This was an external scratch-toolchain issue, not a Bitcoin source result.
+- FuzzTest was searched in the repository and installed paths and remains unavailable; no substitute property framework was silently counted as a FuzzTest run.
+
+### Cycle 79 fixed-budget comparison
+
+The same original 220-file corpus was used for each first run. Native counters are engine-specific and are not comparable as equal coverage units.
+
+| Engine | Executions | Throughput | Native coverage/corpus signal | Peak RSS | Crashes/hangs |
+|---|---:|---:|---|---:|---|
+| libFuzzer, seed `7901`, 15 seconds | 6,110 | 381/sec | 920 coverage units, 45 new units; 261 files remained on disk after the run | 63 MiB | 0/0 |
+| AFL++ 5.03a, seed `7901`, 15 seconds | 61,202 | 4,074.70/sec | 958 edges, 0.32% bitmap, 100% stability; 248 queue entries and 28 found | 21 MiB | 0/0 |
+| Honggfuzz 2.6, one thread, 15 seconds | 5,839 | 364/sec | 305,559 guards, 52 new units; 202 `.cov` inputs emitted; branch metric reported 0% | 0 MiB reported | 0/0 |
+
+The libFuzzer log's final in-memory minimized corpus was 149 entries; its retained input directory was 261 files because the engine appended new files to the copied directory. AFL++ raw stats are in `/data/my_storage/tmp/fuzz-engine-differential-cycle79/runs/afl/default/fuzzer_stats`; libFuzzer and Honggfuzz raw logs are `runs/libfuzzer/run.log` and `runs/honggfuzz/run.log` under the same cycle directory. Honggfuzz exposes no fixed mutation-seed option in this build, so its result is fixed-corpus evidence but not a byte-for-byte deterministic replay.
+
+The first libFuzzer `-runs=1` corpus-only control hit its default 2,048 MiB RSS limit after 220 seeds, using 2,141 MiB and exiting 71. The preserved artifact is `runs/libfuzzer/oom-corpus-limit`. Repeating the full corpus with `-rss_limit_mb=8192` and the fixed 15-second budget completed normally at 63 MiB peak RSS. This is a libFuzzer resource-guard sensitivity, not a parser failure.
+
+### Cycle 79 transfer and sanitizer verification
+
+- Current Clang 19 ASan replay completed all retained libFuzzer inputs (`INFO: 261 files found`, runner reported 262 executions), all 249 AFL++ queue inputs, and all 202 Honggfuzz `.cov` inputs. The exact logs are `runs/asan-libfuzzer/replay.log`, `runs/asan-afl/replay.log`, and `runs/asan-hong-cov/replay.log`; none contains an ASan error, UBSan-style assertion, timeout, or crash artifact.
+- A short cross-engine transfer consumed 249 AFL++ queue inputs in libFuzzer for 4,068 executions, 21 new units, and 64 MiB peak RSS without failure. AFL++ consumed 202 Honggfuzz `.cov` inputs and found 38 new queue items without crashes or hangs. Honggfuzz's five-second transfer control ended during dry-run before feedback counters initialized and is excluded from comparison; the repeated 15-second transfer consumed 249 AFL++ inputs for 4,202 iterations, 34 new units, and 305,559 guards without crashes or timeouts.
+- The stale-build attempts made while the current-head AFL++/Honggfuzz links were still running are quarantined under `runs/afl-stale-build` and `runs/honggfuzz-stale-build`; none is used as evidence.
+
+### Cycle 79 verdict
+
+The hypothesis is **dismissed** for a new repository defect. Current-head libFuzzer, AFL++, and Honggfuzz all exercised the same production parser and initial corpus; their native coverage and corpus-growth differences are expected engine behavior, not a semantic divergence. No crash, hang, sanitizer failure, corpus corruption, or target-state mismatch survived cross-engine transfer and ASan replay. No production or test change is justified. This parser cell is closed, but the broader `fuzz-engine-differential` goal remains eligible for a future distinct target or engine/toolchain evidence cell.
+
+### Cycle 79 handoff
+
+- Close the cycle with a journal/state-only commit; no source finding was confirmed.
+- Preserve the initial corpus manifest, current-head build commands, engine-specific metrics, Honggfuzz archive override, stale-build exclusion, default-RSS OOM control, and all ASan/transfer logs above.
+- Next cycle must re-check the repository gate and draw a distinct eligible goal from all 99 catalog rows. Do not repeat cycle 8's `bech32_roundtrip` comparison or this cycle's `parse_numbers` cell without new compiler, engine, corpus, or regression evidence.
