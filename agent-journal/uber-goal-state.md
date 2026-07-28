@@ -27,6 +27,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Current HEAD at cycle 26 gate: `eaf1b625e35b2e3b9d71dbd9f8a70426b651bbec`
 - Current HEAD at cycle 27 gate: `ceb274f236881febe70aabeb534bde7f5d8babfd`
 - Current HEAD after cycle 27 source fix: `c125061aa4`
+- Current HEAD after cycle 27 journal handoff: `cadecc3a73`
 - Dirty state at initialization: only agent-owned catalog artifacts existed before authoritative files were added.
 
 ## Cycle Ledger
