@@ -106,8 +106,27 @@ class MerkleBlockTest(BitcoinTestFramework):
         for n in self.nodes:
             assert not n.verifytxoutproof(tweaked_proof.serialize().hex())
 
-        # TODO: try more variants, eg transactions at different depths, and
-        # verify that the proofs are invalid
+        # More invalid-proof variants: every malformed proof must be rejected
+        # gracefully — an empty result (documented for unverifiable proofs) or
+        # an RPC error — never wrong txids.
+        def mutate_proof(mut):
+            m = from_hex(CMerkleBlock(), proof)
+            mut(m)
+            return m.serialize().hex()
+
+        # Flipping one bit in an included hash changes the computed root
+        assert not self.nodes[0].verifytxoutproof(mutate_proof(lambda m: m.txn.vHash.__setitem__(-1, m.txn.vHash[-1] ^ 1)))
+        # Mutating the header makes the block unknown to the chain
+        assert_raises_rpc_error(-5, "Block not found in chain", self.nodes[0].verifytxoutproof, mutate_proof(lambda m: setattr(m.header, "nTime", m.header.nTime + 1)))
+        # Bogus transaction counts (zero, huge, off by one) fail validation
+        assert not self.nodes[0].verifytxoutproof(mutate_proof(lambda m: setattr(m.txn, "nTransactions", 0)))
+        assert not self.nodes[0].verifytxoutproof(mutate_proof(lambda m: setattr(m.txn, "nTransactions", 0xffffffff)))
+        assert not self.nodes[0].verifytxoutproof(mutate_proof(lambda m: setattr(m.txn, "nTransactions", m.txn.nTransactions + 1)))
+        # Truncated proofs fail deserialization
+        assert_raises_rpc_error(-1, "end of data", self.nodes[0].verifytxoutproof, proof[:-10])
+        # Bits or hashes left unconsumed by the tree traversal fail validation
+        assert not self.nodes[0].verifytxoutproof(mutate_proof(lambda m: m.txn.vBits.extend([False] * 8)))
+        assert not self.nodes[0].verifytxoutproof(mutate_proof(lambda m: m.txn.vHash.append(m.txn.vHash[-1])))
 
 if __name__ == '__main__':
     MerkleBlockTest(__file__).main()
