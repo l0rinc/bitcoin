@@ -101,3 +101,25 @@ exit=0
 **Confirmed and fixed:** conditional fuzz build exposed a UBSan-invalid empty-buffer write in `wallet_bdb_parser`; the guard is committed with this journal. No other build dead zone was confirmed in the tested IPC/wallet/ASMap matrix.
 
 Next queue: draw another eligible goal. Preserve `/data/my_storage/tmp/build-dead-zones-cycle20/` as scratch evidence, and revisit this matrix only with a different compiler, Cap'n Proto version, wallet/IPC feature combination, generated-file mismatch, or sanitizer result.
+
+## Cycle 74: Distinct Conditional-Target Matrix
+
+### Identity and exclusions
+
+- Cycle: `74`
+- Draw: `37`
+- Branch: `uber-cycle-74-build-dead-zones-20260728`
+- Gate HEAD: `ddde67072a`
+- Prior cell excluded: cycle 20's GCC `BUILD_FOR_FUZZING=ON`, `ENABLE_IPC=ON`, wallet-enabled `wallet_bdb_parser` empty-buffer UBSan defect, fixed in `bbca305738`.
+
+This re-entry does not repeat the wallet parser or GCC IPC fuzz build. It tests the remaining high-risk conditional zones: `ENABLE_WALLET=OFF`, `ENABLE_IPC=OFF` monolithic builds, test/bench registration under those flags, and generated/source-list parity when optional modules are absent.
+
+### Active hypothesis
+
+A feature-disabled configuration may compile only because an unrelated default target supplies a symbol or generated file, may leave a stale target in the build graph, or may omit a required test/bench/source path. The first pass will compare configuration summaries and target graphs, then execute the smallest meaningful build and runtime/registration controls in isolated build directories under `/data/my_storage/tmp/build-dead-zones-cycle74/`.
+
+### Required evidence
+
+Record each configure command and summary, source/target membership, generated files, build result, test/bench/fuzz registration, and runtime output. A source fix requires a clean failing configuration or runtime control, a minimal mutation or old-source reproduction, and a passing independent control after the fix. Do not treat a missing optional target as a defect unless the option contract and supported configuration require it.
+
+Status: active; no source hypothesis is confirmed yet.
