@@ -207,3 +207,55 @@ Cycle 27's full-key P2PK inference defect and cycle 51's x-only/taproot inferenc
 A nested descriptor or wrapper path may accept a public-key representation that its corresponding serializer or consumer cannot parse, may normalize equivalent keys inconsistently, or may leave caller-visible output partially populated after a malformed nested key fails. A finding requires a concrete malformed or noncanonical input, an independently established contract, and a round-trip/output-state reproducer; syntactic differences that are explicitly allowed by descriptor policy are not findings.
 
 Status: active; no source hypothesis is confirmed yet.
+
+## Cycle 75 Completion: Taproot compressed-key private lookup parity
+
+### Contract and discovery
+
+The nested parser map showed that `ParsePubkeyInner()` accepts full compressed public keys in `ParseScriptContext::P2TR`. `multi_a` and Tapscript then serialize those keys as 32-byte x-only pushes, so the key's parity is intentionally not part of the consumer script. `SigningProvider::GetKeyByXOnly()` already searches both parity key IDs. Before this cycle, `ConstPubkeyProvider` used `m_xonly` for both descriptor spelling and private-key lookup, so a full compressed key kept its spelling and incorrectly used only its parity-specific `CKeyID`.
+
+The public descriptor contract supports compressed public keys and x-only keys inside `tr()`, while BIP340 defines x-only keys by their curve x coordinate. The relevant source paths are `src/script/descriptor.cpp:337`, `src/script/descriptor.cpp:1964`, `src/script/signingprovider.h:186`, and the nested Miniscript `KeyParser` path beginning at `src/script/descriptor.cpp:2279`. The exact contract is: preserve the accepted full-key spelling for serialization, but use parity-insensitive x-only lookup whenever the key is consumed in Taproot.
+
+### Confirmed finding
+
+Using secret scalar `2`, the provider contained the even compressed public key while the descriptor used the odd compressed encoding for the same x-only point. These two descriptors expand to the same Tapscript:
+
+```text
+tr(<x-only internal key>,multi_a(1,<odd compressed key>))
+tr(<x-only internal key>,multi_a(1,<x-only key>))
+```
+
+Before the fix, the full compressed form reported `HavePrivateKeys() == false` and `ToPrivateString()` failed even though the equivalent x-only form succeeded. The same mismatch appeared through nested `and_v(v:multi_a(...),after(1))`. This was a confirmed local consumer/private-key discovery defect: a valid accepted Taproot descriptor could not discover the private key required for its parity-insensitive script key. A temporary restoration of the old implementation reproduced four failed assertions and exited with status 201:
+
+```text
+descriptor_tests/taproot_compressed_key_uses_xonly_private_key_lookup
+MUTATION_STATUS=201
+```
+
+### Fix
+
+`ConstPubkeyProvider` now stores separate flags for public descriptor spelling and private-key lookup. Full compressed keys parsed in P2TR retain `m_xonly == false` for stable serialization, but set `m_xonly_lookup == true` so `GetKeyByXOnly()` can find either parity. Existing x-only and WIF Taproot paths retain their previous behavior, and `Clone()` preserves both flags.
+
+The regression covers direct `multi_a`, x-only and full-key equivalence, NUMS internal keys, nested Miniscript, private-string conversion, private-key discovery, and identical expanded scripts. It uses an opposite-parity provider key so a parity-specific lookup cannot pass accidentally.
+
+### Validation
+
+- Normal Clang 19 build: `cmake --build build_unit_clang19 --target test_bitcoin -j2`; exit 0.
+- Focused normal regression: `build_unit_clang19/bin/test_bitcoin --run_test=descriptor_tests/taproot_compressed_key_uses_xonly_private_key_lookup --log_level=message`; exit 0.
+- Full normal `descriptor_tests`: 13 cases passed with no errors.
+- Full normal `miniscript_tests`: 3 cases passed with no errors.
+- Clang 19 TSan build: `cmake --build build_unit_tsan_clang19 --target test_bitcoin -j2`; 219/219 build steps passed.
+- Combined TSan descriptor and Miniscript suites: 16 cases passed with no errors.
+- Clang 19 ASan/UBSan libFuzzer build: `cmake --build build_fuzz_asan_clang19 --target fuzz -j2`; 173/173 build steps passed.
+- `FUZZ=descriptor_parse` over 10 deterministic malformed/valid corpus files: 11 runs, no sanitizer diagnostic.
+- `FUZZ=miniscript_string` over 5 deterministic malformed/valid corpus files: 6 runs, no sanitizer diagnostic.
+- Negative control: restored pre-fix lookup failed with 4 assertions and status 201; the fixed source was rebuilt and the focused regression passed again.
+- `git diff --check` passed. No source, fuzz, sanitizer, daemon, or profiling process remains running.
+
+### Dismissed and limitations
+
+No additional wrapper or FFI defect was found in the reviewed public-key paths. Full uncompressed keys remain disallowed in Taproot by the existing parser policy. MuSig aggregate-provider handling and external language bindings were mapped but were not changed because they have separate contracts and no independent failing reproducer in this cycle. The fuzz run was a deterministic smoke over the selected corpus, not a coverage-complete campaign.
+
+### Handoff
+
+Commit the source/test and journal update as one independent finding. Keep this exact parity case closed unless a new caller, serializer, wrapper, backend, or recurrence appears. The broader goal remains eligible for distinct malformed-input, API-wrapper, or release-version cells; the next uber cycle must re-check the gate and draw from the full catalog.
