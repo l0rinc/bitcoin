@@ -57,4 +57,4 @@ The normal libFuzzer `addrman` corpus replay was independently attempted with `-
 
 ### Status
 
-Confirmed and repaired in the current branch. The production behavior remains transport-network based; only the invalid postcondition and duplicated test/fuzzer relationship were corrected. The focused and full unit builds, fuzz-target rebuild, mutation control, and clean empty-corpus smoke passed. The large corpus replay was stopped at a documented resource boundary, and its unrelated serialization assertion is retained as a limitation.
+Confirmed and repaired in the current branch by `b2d858ae4e` (`addrman: match Select contract to transport network`). The production behavior remains transport-network based; only the invalid postcondition and duplicated test/fuzzer relationship were corrected. The focused and full unit builds, fuzz-target rebuild, mutation control, and clean empty-corpus smoke passed. The large corpus replay was stopped at a documented resource boundary, and its unrelated serialization assertion is retained as a limitation.
