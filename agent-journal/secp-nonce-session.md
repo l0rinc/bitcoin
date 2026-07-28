@@ -46,3 +46,40 @@ Primary surfaces: `musig_nonce_gen`, `musig_nonce_gen_counter`, `musig_nonce_pro
 - Source finding: `secp256k1_musig_nonce_gen` now validates the required public-nonce output before the all-zero session-random early return. The regression uses a null `pubnonce`, an all-zero 32-byte session-random buffer, valid key/session inputs, and requires one illegal callback.
 - Validation: old-source mutation failed at `_calls_to_callback == 1` with exit 134; fixed focused test passed; fixed full libsecp test binary passed 16 iterations/76.329 seconds; `git diff --check` passed.
 - Negative controls: no stale-public-output, nonce-consumption, parse, or post-failure publication defect was independently proven. Next run must recheck the gate, search this journal and history, and select a distinct catalog cell.
+
+## Cycle 72: Failure, Retry, and Binding State Cell
+
+### Identity and Gate
+
+- Cycle: `72`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `84`
+- Goal: `secp256k1 nonce, signing, Schnorr, and MuSig state-machine audit`
+- Slug: `secp-nonce-session`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goal TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Branch: `uber-cycle-72-secp-nonce-session-20260728`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- HEAD at cycle start: `480832aabf6e86a9750dd0a788cccc7f74d0b4ec`
+- `origin/master...HEAD` at the gate: `919 2`
+- Tracked/staged state at the gate: clean. Existing untracked agent artifacts and `test/cache/` were preserved.
+- No relevant daemon, test, fuzz, sanitizer, Valgrind, or profiling process was running at the gate.
+
+### Prior cells excluded
+
+Cycle 60 already fixed MuSig invalid-argument ordering for `musig_nonce_gen` when both `pubnonce` and all-zero session randomness were invalid. Earlier cells covered MuSig secret zeroization and ctime declassification. This cycle excludes those findings and instead targets the state left behind by failures after a valid object has already been created.
+
+### Hypotheses and scope
+
+1. `musig_nonce_gen`, `musig_nonce_agg`, or `musig_nonce_process` may leave a caller-seeded output object looking valid after a failure, allowing a retry path or ignored return value to reuse stale public/session state contrary to a documented output contract.
+2. `musig_partial_sign` may consume or retain its secret nonce inconsistently across wrong-order calls, malformed sessions, key mismatches, and invalid output arguments. The header explicitly promises nonce invalidation, so distinguish intentional security consumption from an accidental partial publication.
+3. `musig_partial_sig_agg` and `schnorrsig_sign_custom` may publish stale or nonzero output after a callback, parse, or session failure, or may produce a valid-looking result that is accepted by a later verification operation.
+4. Duplicate public keys, duplicate public nonces, infinity aggregate nonces, zero/overflow scalars, and mismatched keyagg/session/message objects may create a state transition that succeeds when the documented MuSig binding should reject it.
+
+Evidence must include exact pre/post bytes and return values, a valid end-to-end signing control, minimized malformed inputs, and an old-source or temporary mutation control for any claimed defect. A stale output without a stated API contract remains an inconclusive misuse observation, not a production finding.
+
+### Initial execution plan
+
+Build the standalone libsecp256k1 tests with Clang 19 and run the focused MuSig/Schnorr suites. Add a disposable C++ state-machine probe under `agent-journal/` using initialized sentinels and serialized round trips. Exercise valid two-party signing, failed nonce generation, malformed aggregate/session objects, wrong key/message bindings, repeated partial signing, invalid custom nonce callbacks, duplicate participants, and infinity nonce sums. Compare output bytes before and after every failure, verify that successful controls still produce BIP340-valid signatures, and apply temporary source mutations only to prove an oracle can detect a suspected contract violation.
