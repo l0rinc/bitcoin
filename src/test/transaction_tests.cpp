@@ -348,6 +348,25 @@ BOOST_AUTO_TEST_CASE(tx_no_inputs)
     BOOST_CHECK(state.GetRejectReason() == "bad-txns-vin-empty");
 }
 
+BOOST_AUTO_TEST_CASE(is_final_tx_locktime_threshold_boundary)
+{
+    CMutableTransaction mtx;
+    mtx.vin.emplace_back();
+    mtx.vin[0].nSequence = 0; // Make finality depend on nLockTime.
+
+    mtx.nLockTime = LOCKTIME_THRESHOLD;
+    const CTransaction threshold_time_lock{mtx};
+    // LOCKTIME_THRESHOLD is the first timestamp value, so height must not satisfy it.
+    BOOST_CHECK(!IsFinalTx(threshold_time_lock, /*nBlockHeight=*/LOCKTIME_THRESHOLD + 1, /*nBlockTime=*/0));
+    BOOST_CHECK(!IsFinalTx(threshold_time_lock, /*nBlockHeight=*/0, /*nBlockTime=*/LOCKTIME_THRESHOLD));
+    BOOST_CHECK( IsFinalTx(threshold_time_lock, /*nBlockHeight=*/0, /*nBlockTime=*/LOCKTIME_THRESHOLD + 1));
+
+    mtx.nLockTime = LOCKTIME_THRESHOLD - 1;
+    const CTransaction height_lock{mtx};
+    BOOST_CHECK( IsFinalTx(height_lock, /*nBlockHeight=*/LOCKTIME_THRESHOLD, /*nBlockTime=*/0));
+    BOOST_CHECK(!IsFinalTx(height_lock, /*nBlockHeight=*/0, /*nBlockTime=*/LOCKTIME_THRESHOLD + 1));
+}
+
 BOOST_AUTO_TEST_CASE(tx_oversized)
 {
     auto createTransaction =[](size_t payloadSize) {
