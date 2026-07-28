@@ -243,15 +243,17 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 69 | `shuf -i 0-98 -n 1` -> `27` | `error-path-state` (standalone `setlabel` RPC failure propagation) | confirmed; fixed | `SetAddressBook` returns false without publishing state after a database write failure, but `setlabel` discarded that result. A mock SQLite `NAME`-row fault preserved the old label and made the unpatched RPC return success; the fixed RPC raises `RPC_WALLET_ERROR`. Adjacent generation/import/enrichment callers remain contract-sensitive and are not assumed equivalent. See `error-path-state.md`. | `ca5f4d5279` (`wallet: report setlabel address-book write failures`) | Recheck the gate and draw cycle 70 from the full catalog |
 | 70 | `shuf -i 0-98 -n 1` -> `94` | `bindings-ffi-parity` (C++ kernel wrapper opaque pointer-array boundary) | confirmed; fixed | `btck::PrecomputedTransactionData` reinterpreted `TransactionOutput` objects as `const btck_TransactionOutput**`, relying on the current object layout instead of constructing the C API's documented opaque-pointer array. The explicit pointer bridge passed the focused and full kernel suites; restoring the old cast plus a temporary one-byte layout mutation made the two-output taproot verifier exit 139. See `bindings-ffi-parity.md`. | `0ab4d16796` (`kernel: bridge spent output handles explicitly`) | Recheck the gate and draw cycle 71 from the full catalog |
 | 71 | `shuf -i 0-98 -n 1` -> `53` | `statistical-timing` (ElligatorSwift XDH and Silent Payments secret callers) | dismissed; no new source defect | Clang 19 AUTO/OFF matched probes, module suites, MSan ctime, source review, and the intentional declassification-removal control found no new secret-dependent defect. The scan-only timing signal belongs to documented declassified public-output arithmetic, and the probe's fixed nonmatching output is not a valid payment-recognition oracle. See `statistical-timing.md`. | Journal/probe close snapshot; no source change justified | Recheck the gate and draw the next distinct goal |
-| 72 | `shuf -i 0-98 -n 1` -> `84` | `secp-nonce-session` (failure/retry and state-binding cell) | in progress; distinct state-machine cell | Cycle 60 fixed invalid-argument ordering. This run audits stale outputs, nonce consumption, malformed session/nonce binding, duplicate participants/nonces, infinity aggregation, and Schnorr callback failure with exact pre/post state and end-to-end signature oracles. See `secp-nonce-session.md`. | Start state committed; probe and source verdict pending | Complete cycle 72 evidence and then draw the next distinct goal |
+| 72 | `shuf -i 0-98 -n 1` -> `84` | `secp-nonce-session` (failure/retry and state-binding cell) | dismissed; no new source defect | The standalone state-machine probe passed valid signing, failure-state, nonce-consumption, malformed-binding, infinity, duplicate-key, and Schnorr callback controls under normal and ASan/UBSan-linked runs. MuSig/Schnorr module tests passed 4 iterations; the full libsecp256k1 test binary passed 16 iterations. Static contracts explain the observed deliberate nonce invalidation and output behavior. See `secp-nonce-session.md`. | Journal/probe close snapshot; no source change justified | Recheck the gate and draw the next distinct goal |
 
-## Cycle 72 Active State
+## Cycle 72 Completion
 
 - Gate: HEAD `480832aabf6e86a9750dd0a788cccc7f74d0b4ec`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `919 2`.
 - Branch: `uber-cycle-72-secp-nonce-session-20260728`.
 - Draw: `84` (`secp-nonce-session`).
 - Excluded prior cell: cycle 60's `musig_nonce_gen` validation-order defect for null `pubnonce` plus all-zero session randomness.
-- Current hypothesis: failures after object initialization may preserve stale reusable outputs or bind a nonce/session to the wrong key, message, aggregate cache, or duplicate/infinity input; Schnorr custom nonce failure may similarly publish an unsafe result. Documented deliberate nonce invalidation and unspecified failure outputs must be separated from real contract violations.
+- Verdict: dismissed for a new source defect. The exact pre/post probe, static contract review, normal and ASan/UBSan-linked probe runs, focused API tests, 4-iteration module matrix, and 16-iteration full libsecp256k1 suite found no stale-output, nonce-reuse, malformed-binding, duplicate-key, infinity, or custom-callback defect. No production source change was justified.
+- Evidence: probe `agent-journal/secp_nonce_cycle72_probe.cpp`; raw logs `/data/my_storage/tmp/secp-nonce-cycle72-*.log`; `git diff --check` passed.
+- No production, test, fuzz, sanitizer, daemon, or profiling process remains running.
 
 ## Cycle 71 Completion
 
@@ -275,13 +277,15 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 70 is complete. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: none; cycle 72 is complete. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 71 is active. It selected goal 53, `statistical-timing`, by `shuf -i 0-98 -n 1` -> `53` after the cycle-70 gate. The distinct scope is ElligatorSwift XDH and Silent Payments sender/recipient secret callers, with variable-time public-output operations excluded from the finding ledger. The exact experiment, ctime/dataflow review, raw traces, and next queue will be recorded in `statistical-timing.md`.
+Cycle 72 is complete. It selected goal 84, `secp-nonce-session`, by `shuf -i 0-98 -n 1` -> `84` after the cycle-71 gate. The distinct scope was MuSig/Schnorr failure, retry, nonce-consumption, malformed-binding, duplicate-key, infinity, and callback state. The probe and all relevant normal/sanitized test controls passed; no source defect was confirmed. The exact evidence and limitations are recorded in `secp-nonce-session.md`. The next run must re-check the gate and draw a distinct goal from the full catalog.
+
+Cycle 71 is complete. It selected goal 53, `statistical-timing`, by `shuf -i 0-98 -n 1` -> `53` after the cycle-70 gate. The distinct scope was ElligatorSwift XDH and Silent Payments sender/recipient secret callers, with variable-time public-output operations excluded from the finding ledger. The exact experiment, ctime/dataflow review, raw traces, and verdict are recorded in `statistical-timing.md`.
 
 Cycle 70 is complete. It selected goal 94, `bindings-ffi-parity`, by `shuf -i 0-98 -n 1` -> `94` after the cycle-69 gate. The distinct scope was the C/C++ `libbitcoinkernel` wrapper and its ownership, width, view, callback, and opaque-handle contracts. The confirmed defect passed `TransactionOutput` wrapper objects where the C API requires an array of opaque pointers; the explicit bridge is in `0ab4d16796`. The focused and full fixed suites passed, and the temporary layout mutation killed the old cast. The exact candidate ledger and limitations are in `bindings-ffi-parity.md`. The next run must re-check the gate and draw cycle 71 from the full catalog.
 
