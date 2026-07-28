@@ -225,6 +225,18 @@ bool IsExpectedPeerMessageDeserializationFailure(const std::exception& e) noexce
            what.find("Unknown transaction optional data") != std::string_view::npos;
 }
 
+bool ReadBlockLocator(DataStream& vRecv, CBlockLocator& locator, uint64_t& locator_size)
+{
+    int nVersion = CBlockLocator::DUMMY_VERSION;
+    vRecv >> nVersion;
+    locator_size = ReadCompactSize(vRecv);
+    if (locator_size > MAX_LOCATOR_SZ) return false;
+
+    locator.vHave.resize(locator_size);
+    for (uint256& hash : locator.vHave) vRecv >> hash;
+    return true;
+}
+
 /** Blocks that are in flight, and that are in the queue to be downloaded. */
 struct QueuedBlock {
     /** BlockIndex. We must have this since we only request blocks when we've already validated the header. */
@@ -4570,14 +4582,15 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
     if (msg_type == NetMsgType::GETBLOCKS) {
         CBlockLocator locator;
+        uint64_t locator_size;
         uint256 hashStop;
-        vRecv >> locator >> hashStop;
 
-        if (locator.vHave.size() > MAX_LOCATOR_SZ) {
-            LogDebug(BCLog::NET, "getblocks locator size %lld > %d, %s", locator.vHave.size(), MAX_LOCATOR_SZ, pfrom.DisconnectMsg());
+        if (!ReadBlockLocator(vRecv, locator, locator_size)) {
+            LogDebug(BCLog::NET, "getblocks locator size %u > %u, %s", static_cast<unsigned int>(locator_size), MAX_LOCATOR_SZ, pfrom.DisconnectMsg());
             pfrom.fDisconnect = true;
             return;
         }
+        vRecv >> hashStop;
 
         // We might have announced the currently-being-connected tip using a
         // compact block, which resulted in the peer sending a getblocks
@@ -4701,14 +4714,15 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
     if (msg_type == NetMsgType::GETHEADERS) {
         CBlockLocator locator;
+        uint64_t locator_size;
         uint256 hashStop;
-        vRecv >> locator >> hashStop;
 
-        if (locator.vHave.size() > MAX_LOCATOR_SZ) {
-            LogDebug(BCLog::NET, "getheaders locator size %lld > %d, %s", locator.vHave.size(), MAX_LOCATOR_SZ, pfrom.DisconnectMsg());
+        if (!ReadBlockLocator(vRecv, locator, locator_size)) {
+            LogDebug(BCLog::NET, "getheaders locator size %u > %u, %s", static_cast<unsigned int>(locator_size), MAX_LOCATOR_SZ, pfrom.DisconnectMsg());
             pfrom.fDisconnect = true;
             return;
         }
+        vRecv >> hashStop;
 
         if (m_chainman.m_blockman.LoadingBlocks()) {
             LogDebug(BCLog::NET, "Ignoring getheaders from peer=%d while importing/reindexing\n", pfrom.GetId());

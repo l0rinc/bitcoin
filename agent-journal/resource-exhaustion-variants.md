@@ -95,3 +95,14 @@ Audit attacker-influenced CPU, memory, disk, network, descriptor, queue, retry, 
 ## Cycle 82 evidence plan
 
 Start with history/advisory and current-code mining, then write an explicit equation for each candidate: attacker operations, bytes, allocations, queue entries, retries, and cleanup state. Prefer direct unit state models, deterministic socket shims, functional tests, fixed `RLIMIT`/cgroup limits, and scratch datadirs. Measure before/after queue length, RSS, CPU, disk, and cleanup; do not infer an unbounded condition from a single slow run. Preserve exact commands, raw output, minimized transcripts, and rejected hypotheses in this journal.
+
+## Cycle 82 confirmed finding
+
+### GETBLOCKS/GETHEADERS locator count checked after allocation
+
+- Trust boundary: an unauthenticated peer controls the payload of `getblocks` and `getheaders` messages. Both handlers previously deserialized `CBlockLocator` with the generic `VectorFormatter`, then compared `locator.vHave.size()` with the protocol limit `MAX_LOCATOR_SZ=101`.
+- Old path: `CBlockLocator` first reads the advertised CompactSize count. The generic formatter reserves in `MAX_VECTOR_ALLOCATE=5,000,000` byte batches before reading each `uint256`. The deterministic probe used count `MAX_SIZE / sizeof(uint256) = 1,048,576` with no hash bytes. The old source therefore reserved `156,250` hashes, about `5,000,000` bytes, before the first read failed; `ProcessMessages` caught that truncation exception without disconnecting the peer. A complete message under `MAX_PROTOCOL_MESSAGE_LENGTH=4,000,000` could instead make the old path read roughly 125,000 hashes before the later 101-entry check.
+- Independent failing-before evidence: `TMPDIR=/data/my_storage/tmp ./build_unit_clang19/bin/test_bitcoin --run_test=net_tests/oversized_locator_disconnects_before_hash_deserialization --log_level=message` ran both message types and failed both `node.fDisconnect` assertions on the unmodified source. The first attempt without `TMPDIR` was discarded because the root filesystem was full before fixture setup.
+- Fix: `ReadBlockLocator` reads the locator version and CompactSize count directly, rejects counts above `MAX_LOCATOR_SZ` before resizing or reading hashes, and preserves the existing explicit disconnect/log behavior for both handlers. Valid locators still deserialize their bounded hashes and `hashStop` through the normal path.
+- Passing evidence: `git diff --check`; `ninja -C build_unit_clang19 test_bitcoin -j2`; the focused regression passed for both message types; the complete normal `net_tests` suite passed 33 cases; the rebuilt Clang 19 TSan target passed the focused regression with no diagnostic.
+- Classification: confirmed local resource-exhaustion and parser-boundary defect. The input is remotely reachable, the old allocation is avoidable, the protocol's existing 101-entry rule is the intended contract, and the patch does not alter valid locator semantics.

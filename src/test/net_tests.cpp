@@ -2236,6 +2236,47 @@ BOOST_AUTO_TEST_CASE(cnode_copy_stats_overwrites_reused_output)
     BOOST_CHECK_EQUAL(stats.m_transport_type, TransportProtocolType::V1);
 }
 
+BOOST_AUTO_TEST_CASE(oversized_locator_disconnects_before_hash_deserialization)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+
+    for (const auto& msg_type : {std::string{NetMsgType::GETBLOCKS}, std::string{NetMsgType::GETHEADERS}}) {
+        const CAddress addr{Lookup("1.2.3.4", 8333, /*fAllowLookup=*/false).value(), NODE_NETWORK};
+        CNode node{/*id=*/0,
+                   /*sock=*/nullptr,
+                   /*addrIn=*/addr,
+                   /*nKeyedNetGroupIn=*/0,
+                   /*nLocalHostNonceIn=*/0,
+                   /*addrBindIn=*/CService{},
+                   /*addrNameIn=*/"",
+                   /*conn_type_in=*/ConnectionType::OUTBOUND_FULL_RELAY,
+                   /*inbound_onion=*/false,
+                   /*network_key=*/0};
+
+        connman.Handshake(node,
+                          /*successfully_connected=*/true,
+                          /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                          /*local_services=*/NODE_NETWORK,
+                          /*version=*/PROTOCOL_VERSION,
+                          /*relay_txs=*/true);
+        connman.FlushSendBuffer(node);
+
+        CSerializedNetMsg oversized_locator;
+        oversized_locator.m_type = msg_type;
+        VectorWriter writer{oversized_locator.data, 0};
+        writer << CBlockLocator::DUMMY_VERSION;
+        WriteCompactSize(writer, MAX_SIZE / sizeof(uint256));
+
+        BOOST_REQUIRE(connman.ReceiveMsgFrom(node, std::move(oversized_locator)));
+        node.fPauseSend = false;
+        BOOST_CHECK(!connman.ProcessMessagesOnce(node));
+        BOOST_CHECK(node.fDisconnect);
+
+        m_node.peerman->FinalizeNode(node);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(compactblock_announcement_read_failure_disconnects_peer)
 {
     LOCK(NetEventsInterface::g_msgproc_mutex);
