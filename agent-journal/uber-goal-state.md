@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 29 completed with two confirmed integer-boundary defects fixed: validation-cache MiB conversion wrap and mempool cluster-size argument/downstream overflow. Ready for the next draw.
+- Status: cycle 30 completed with one confirmed current-branch leftover fixed: overflowing `-prune` MiB conversion silently disabled pruning. Ready for the next draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -33,6 +33,10 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Current HEAD at cycle 29 gate: `97cb20252003ac2aff08969368f3302b7824c2af`
 - Current HEAD after cycle 29 validation-cache fix: `f91039eb5c`
 - Current HEAD after cycle 29 mempool-limit fix: `93fef76238`
+- Current HEAD at cycle 30 gate: `6ea89f6c40dd94b2e7c1524cd5573430f7e71072`
+- Cycle 30 gate base: merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` is `2 832`; tracked and staged state clean; no relevant process running.
+- Cycle 30 catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`; uber-protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Current HEAD after cycle 30 source fix: `5b2e4f5a63`.
 - Dirty state at initialization: only agent-owned catalog artifacts existed before authoritative files were added.
 
 ## Cycle Ledger
@@ -68,15 +72,18 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 27 | `shuf -i 0-98 -n 1` -> `15` | `public-object-validation` | confirmed; fixed | A syntactically shaped but off-curve compressed P2PK key was accepted by script inference as `pk(...)`, while descriptor parsing correctly rejected the same key as invalid. The failing-before round-trip test captured the exact parse error. Adding `IsFullyValid()` to `InferPubkey()` made inference fall back to `raw(...)`; the focused regression and normal/Clang ASan/LSan/UBSan descriptor suites passed. See `public-object-validation.md`. | `c125061aa4` (`descriptor: keep inferred invalid pubkeys parseable`) | Draw the next distinct goal; keep x-only/taproot inference as a separate unchecked validation cell |
 | 28 | `shuf -i 0-98 -n 1` -> `48` | `property-oracle-expansion` | dismissed; no confirmed finding | Audited transaction, block/header, Merkle, script sigop, and block-filter property surfaces. Existing fuzzers and vectors already supplied independent round-trip, mutation, failure-state, and metamorphic contracts. A temporary empty-transaction witness probe showed only invalid-domain ambiguity; `CheckTransaction` rejects the object with `bad-txns-vin-empty`. Normal script/sigop, block-filter, and transaction suites passed 29, 8, and 18 cases; ASan fuzz smokes passed 1000/323/300 runs for script ops/block filter/block header. See `property-oracle-expansion.md`. | Journal-only handoff; no source change justified | Draw a new eligible goal; revisit serialization only for an accepted-transaction boundary or new witness format, and script sigops only with an independent P2SH/witness reference |
 | 29 | `shuf -i 0-98 -n 1` -> `52` | `integer-overflow` (reopened on distinct cells) | confirmed; fixed two independent findings | `-maxsigcachesize=2^44` wrapped its `uint64_t` MiB product to zero and initialized two-element caches; `-limitclustersize` accepted negative/oversized values, then overflowed downstream `*40`/`*4` calculations and terminated with `SIGILL`. Focused before/after daemon probes and unit suites proved both paths. See `integer-overflow.md`. | `f91039eb5c` (`node: reject overflowing validation cache arguments`); `93fef76238` (`mempool: reject overflowing cluster size arguments`) | Draw from the full catalog; do not reopen validation-cache, cluster-size, or prior P2P buffer cells without new evidence |
+| 30 | `shuf -i 0-98 -n 1` -> `3` | `current-pr-leftovers` | confirmed; fixed | `-prune=17592186044416` wrapped the MiB-to-byte conversion to zero and started in non-prune mode; the repaired parser rejected it explicitly. The exact `2^44-1` boundary and `-prune=550` control remained valid. Focused node-init, blockmanager, validation-flush, and mempool suites plus rebuilt daemon/unit targets passed. See `current-pr-leftovers.md`. | `5b2e4f5a63` (`node: reject overflowing prune target arguments`) | Draw from the full catalog; keep debug-only `-dbbatchsize`/`-dbcrashratio` option-domain questions queued separately |
 
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none after cycle 28 handoff.
+- Active goals this cycle: none after cycle 30 handoff.
 - Reopened goals: `statistical-timing` (cycle 5).
 - Exhausted goals: none recorded yet.
 
 ## Handoff
+
+Cycle 30 used `/data/my_storage/tmp/current-pr-leftovers-prune-before-cycle30.ZWCHOn/`, `/data/my_storage/tmp/current-pr-leftovers-prune-after-cycle30.B8LZk1/`, `/data/my_storage/tmp/current-pr-leftovers-prune-valid-cycle30.f9SZEk/`, `/data/my_storage/tmp/current-pr-leftovers-prune-valid-after-cycle30.Ps6Bsd/`, and `/data/my_storage/tmp/current-pr-leftovers-prune-boundary-cycle30.AkQSL4/`. The exact selector was `shuf -i 0-98 -n 1`, which drew `3` (`current-pr-leftovers`). Before `5b2e4f5a63`, `-prune=17592186044416` reached `Done loading` and logged `Setting NODE_NETWORK in non-prune mode`; after the fix it exited status 1 with `-prune is too large (got 17592186044416 MiB)`. `-prune=550` reached `Done loading` and logged the 550 MiB target both before and after; `2^44-1` MiB also reached `Done loading` and logged the exact target. The focused prune test passed 1 assertion, the full node-init suite passed 3 cases/5 assertions, blockmanager passed 11/117, validation-flush passed 3/58,001, and mempool passed 24/423. `test_bitcoin` and `bitcoind` rebuilt successfully; `git diff --check` passed; no source, test, daemon, or build process remains running. The lower-priority debug-only `-dbbatchsize`/`-dbcrashratio` questions remain queued, not confirmed. The next run must re-check branch/base/HEAD, dirty state, processes, catalog hashes, existing journals, history, and review precedent before drawing again.
 
 Cycle 28 used `/data/my_storage/tmp/property-oracle-expansion-cycle28/` for dedicated empty fuzz corpora and raw smoke outputs. The exact selector was `shuf -i 0-98 -n 1`, which drew `48` (`property-oracle-expansion`). The audit found existing independent contracts for transaction serialization and hashes, block/header bytes, partial Merkle trees, script sigop accounting, and block filters. A temporary probe of default empty transaction serialization disproved the expected witness parse failure, but the object is outside the accepted transaction domain and `CheckTransaction` rejects it as `bad-txns-vin-empty`; the probe was removed and no source/test change was justified. Normal script/sigop, block-filter, and transaction suites passed 29, 8, and 18 cases. Clang ASan fuzz smokes completed 1000 `script_ops`, 323 `blockfilter`, and 300 `block_header` runs with no diagnostics. No source, test, fuzz, sanitizer, daemon, or profiling process remains running. The next run must re-check the worktree, branch, base/HEAD, remotes, dirty state, running jobs, this ledger, the catalog, existing findings, journals, relevant history, issues, pull requests, and review precedent before drawing. Record the exact selector command, random draw, selected slug, and cycle evidence here and in the selected per-goal journal.
 
