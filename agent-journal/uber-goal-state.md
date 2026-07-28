@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 69 in progress; goal 27 (`error-path-state`) confirmed that the standalone `setlabel` RPC discarded address-book write failure and reported success. The source/test fix is being independently validated. Cycle 68's `GETBLOCKTXN` assertion fix remains closed; adjacent `getnewaddress`, import-label, and transaction-enrichment paths are recorded as distinct contract-sensitive candidates rather than being changed by analogy.
+- Status: cycle 69 complete; goal 27 (`error-path-state`) confirmed and fixed the standalone `setlabel` RPC's discarded address-book write failure. Cycle 68's `GETBLOCKTXN` assertion fix remains closed; adjacent `getnewaddress`, import-label, and transaction-enrichment paths are recorded as distinct contract-sensitive candidates rather than being changed by analogy.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -234,25 +234,27 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 66 | `shuf -i 0-98 -n 1` -> `40` | `multi-agent-adjudication` (global relay queue and ForceRelay recipient transitions) | dismissed; no source change | Investigator A found a real observed late-recipient delivery gap; Investigator B found explicit original queue intent to clear work for future peers and no durable ForceRelay replay contract. Current-recipient, no-recipient, filter/fee/known, fuzzer, mutation, restored-control, and unit evidence support an intentional best-effort boundary. The broad ForceRelay documentation wording remains a future contract-review lead. See `multi-agent-adjudication.md`. | Journal-only handoff; no source change justified | Recheck the gate and draw cycle 67 from the full catalog |
 | 67 | `shuf -i 0-98 -n 1` -> `66` | `backport-correctness` (29.x #34370 Berkeley wallet file ownership and cleanup) | dismissed; no confirmed finding | `7475d134f6` and the 28.x rebased `29abedc97b` have identical patch-id and semantic source hunks. BDB-enabled v29.4 built successfully; focused wallet/database/filesystem tests and corrected `tool_wallet.py --legacy-wallet` passed. `wallet_migration.py` skipped because previous-release binaries were unavailable. See `backport-correctness.md`. | Journal-only handoff; no production source change justified | Recheck the gate and draw cycle 68 from the full catalog |
 | 68 | `shuf -i 0-98 -n 1` -> `2` | `assertion-invariant-audit` (release-reachable assumption and invariant cells) | confirmed; fixed | `GETBLOCKTXN` asserted that a recent block read could not fail, but local corruption/I/O/hash validation can make `ReadBlock` return false. A scratch block-header corruption probe killed the unpatched daemon; the fixed path logged the failure and disconnected only the peer. DifferenceFormatter/TransactionsRequest guards were independently covered by focused tests, mutation, and fuzz. The full compact-block functional suite passed. See `assertion-invariant-audit.md`. | `6fbcd16491` (`net: handle GETBLOCKTXN block read failures`) | Recheck the gate and draw cycle 69 from the full catalog |
-| 69 | `shuf -i 0-98 -n 1` -> `27` | `error-path-state` (standalone `setlabel` RPC failure propagation) | in progress; confirmed candidate | `SetAddressBook` returns false without publishing state after a database write failure, but `setlabel` discarded that result. A mock SQLite `NAME`-row fault preserved the old label and made the unpatched RPC return success; the fixed RPC raises `RPC_WALLET_ERROR`. Adjacent generation/import/enrichment callers remain contract-sensitive and are not assumed equivalent. See `error-path-state.md`. | Source/test changes are uncommitted pending final validation | Complete cycle 69 evidence and then draw the next distinct goal |
+| 69 | `shuf -i 0-98 -n 1` -> `27` | `error-path-state` (standalone `setlabel` RPC failure propagation) | confirmed; fixed | `SetAddressBook` returns false without publishing state after a database write failure, but `setlabel` discarded that result. A mock SQLite `NAME`-row fault preserved the old label and made the unpatched RPC return success; the fixed RPC raises `RPC_WALLET_ERROR`. Adjacent generation/import/enrichment callers remain contract-sensitive and are not assumed equivalent. See `error-path-state.md`. | `ca5f4d5279` (`wallet: report setlabel address-book write failures`) | Recheck the gate and draw cycle 70 from the full catalog |
 
-## Cycle 69 Active State
+## Cycle 69 Completion
 
-- Gate: HEAD `f9b2760a5fc00c588d4e4502bc026e7681d160bd`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `911 2`.
+- Gate: HEAD `f9b2760a5fc00c588d4e4502bc026e7681d160bd`; source-fix HEAD `ca5f4d5279`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence at gate `911 2`.
 - Branch: `uber-cycle-69-error-path-state-20260728`.
 - Draw: `27` (`error-path-state`).
-- Source change under validation: `src/wallet/rpc/addresses.cpp`; regression: `src/wallet/test/wallet_tests.cpp`.
+- Source/test: `src/wallet/rpc/addresses.cpp`, `src/wallet/test/wallet_tests.cpp`, and `agent-journal/error-path-state.md` in `ca5f4d5279`.
+- Verification: focused fixed regression passed; all 17 `wallet_tests` cases passed; the restored-old-source mutation failed with exit 201; wallet-enabled `wallet_labels.py` passed; `git diff --check` passed; no relevant process remains running.
+- Limitations: the fault is injected through mock SQLite and does not cover Berkeley DB or a power-loss/restart boundary. Adjacent label side effects remain separate contract-sensitive cells.
 
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: goal 27, `error-path-state`; cycle 69 is in progress. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: none; cycle 69 is closed. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 69 is active. It selected goal 27, `error-path-state`, by `shuf -i 0-98 -n 1` -> `27` after the cycle-68 gate. The distinct scope is public wallet error propagation around address-book writes. The standalone `setlabel` RPC discarded a false return from `SetAddressBook`, so a deterministic database failure was reported as success; the new source/test change is under final validation. The adjacent `getnewaddress`, import-label, and transaction-enrichment callers remain separate contract-sensitive follow-ups. The exact evidence and next queue will be recorded in `error-path-state.md` before the next draw.
+Cycle 69 is closed. It selected goal 27, `error-path-state`, by `shuf -i 0-98 -n 1` -> `27` after the cycle-68 gate. The standalone `setlabel` RPC discarded a false return from `SetAddressBook`, so a deterministic database failure was reported as success. Commit `ca5f4d5279` now raises `RPC_WALLET_ERROR`, with a mock-SQLite regression and wallet functional control. The focused test, all 17 wallet unit cases, restored-old-source mutation control, wallet-enabled `wallet_labels.py`, and diff checks passed. Adjacent `getnewaddress`, import-label, and transaction-enrichment callers remain separate contract-sensitive follow-ups. The exact evidence and limitations are in `error-path-state.md`; draw cycle 70 only after a fresh gate.
 
 Cycle 50 selected `exhaustive-algebraic` with `shuf -i 0-98 -n 1` -> `18`. The distinct cell defined `GCSFilter::MatchAny(Q) == OR Match(q)` over all 16 filter subsets and 16 query subsets of four one-byte elements, with checked encoded reconstruction as a second path. The disposable matrix passed 1,555 assertions; a temporary `return false` mutation failed at the singleton check with exit 201 and 606 failed assertions. After restoring source and removing the disposable test, the production block-filter suite passed 8 cases and 499 assertions. No source defect was justified. The exact evidence and limits are in `exhaustive-algebraic.md`; no process remains running. The next run must re-check the gate and draw another distinct goal.
 
