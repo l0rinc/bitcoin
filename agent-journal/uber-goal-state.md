@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 35 completed with the locking/threading hypotheses dismissed after static lock-order review, TSan network and scheduler suites, and a real fuzz-seed replay. Ready for the next draw.
+- Status: cycle 36 completed with the #35331 31.x backport batch dismissed after ancestry/patch review, release-tree builds, the complete v31.1 unit suite, targeted functional tests, and direct LevelDB compaction controls. Ready for the next draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -53,6 +53,9 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Current HEAD at cycle 35 gate: `722f659965ab807b7effc2b2dca20951ccf9d79f`.
 - Cycle 35 selector: `shuf -i 0-98 -n 1` drew `8` (`locking-threading`). The earlier cycle-16 `DumpAddresses()` persistence race was excluded; the selected cells were transaction/inventory/mempool lock nesting, V2 transport lock order, and production scheduler lifetime.
 - Cycle 35 verification: `m_tx_download_mutex` and `m_inv_to_send_mutex` retain their declared order before `m_mempool.cs`, with no nested reverse acquisition in production callers. V2 receive/send nesting matches its annotation, and normal scheduler shutdown joins before object destruction. TSan `net_tests` passed 31 cases and 135,024 assertions; TSan `scheduler_tests` passed 4 cases and 27 assertions; one real `process_message` seed passed the custom `process_messages` driver with no diagnostic. No source change was justified; see `locking-threading.md`.
+- Current HEAD at cycle 36 gate: `1162eaecac8dbfc69eab31c7229c231eb1fbfdae`.
+- Cycle 36 selector: `shuf -i 0-98 -n 1` drew `66` (`backport-correctness`). The earlier cycle-2 CVE-2024-52911 lifetime cell was excluded; this cycle selected the queued `#35331` 31.x backport batch.
+- Cycle 36 verification: `origin/31.x` v31.1 batch `efde6234` was compared against its source-side parent and current master, including all `OpenNetworkConnection` callers, private-broadcast proxy guards, settings write checks, MuSig empty-list validation, LevelDB seek-compaction tests, and asynchronous chainstate compaction locking/destruction. The clean release build completed 496 actions; focused unit suites passed 24/1,217,435, 17/144,457, and 1/57,996; the complete unit binary exited 0 with 734/740 cases passed, 1 warning, 5 skipped, and 26,275,230 assertions; both selected functional tests and the direct LevelDB `AutoCompact` controls passed. No source change was justified; see `backport-correctness.md`.
 - Dirty state at initialization: only agent-owned catalog artifacts existed before authoritative files were added.
 
 ## Cycle Ledger
@@ -94,6 +97,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 33 | `shuf -i 0-98 -n 1` -> `62` | `rejected-finding-resurrection` | dismissed again; no confirmed production defect | Reopened the cycle-22 `CoinStatsIndex::CustomAppend` partial-state cell. Current BaseIndex dispatch still enforces contiguous transitions or treats append failure as fatal; the subsidy mutation occurs before a non-persisting return and is destroyed during shutdown. Current index lifecycle tests passed. See `rejected-finding-resurrection.md`. | Journal-only handoff; no source change justified | Draw from the full catalog; do not reopen this CoinStats cell without a new append caller, persistence path, or nonfatal shutdown contract |
 | 34 | `shuf -i 0-98 -n 1` -> `50` | `fuzz-introspector` | confirmed; fixed coverage blocker | Empty `process_messages` corpus plus default `CoverageFuzz.cmake` invocation reduced the target to an empty-input initialization pass. Passing the existing bounded empty-corpus option restored actual fuzz executions in the targeted smoke. See `fuzz-introspector.md`. | `7d1a7bdda6` (`fuzz: run empty corpora during coverage collection`) | Draw from the full catalog; do not reopen this runner/coverage cell unless corpus policy or script wiring changes |
 | 35 | `shuf -i 0-98 -n 1` -> `8` | `locking-threading` | dismissed; no confirmed finding | Transaction/inventory/mempool lock scopes, V2 transport nesting, and scheduler shutdown lifetime were checked against annotations and callers. TSan `net_tests` and `scheduler_tests` passed; one real `process_message` seed passed the TSan custom fuzz driver. See `locking-threading.md`. | Journal-only handoff; no source change justified | Draw from the full catalog; exclude only the closed cycle-16 `DumpAddresses()` and `ForEachNode()` cells unless new evidence changes their contracts |
+| 36 | `shuf -i 0-98 -n 1` -> `66` | `backport-correctness` (reopened on the queued #35331 release-batch cell) | dismissed; no confirmed finding | The v31.1 backport batch preserved proxy, private-broadcast, settings, MuSig, LevelDB, and background-compaction contracts. The release build and complete unit suite passed; targeted functional and direct LevelDB compaction controls passed. See `backport-correctness.md`. | Journal-only handoff; no source change justified | Draw from the full catalog; if goal 66 repeats, choose 28.x/29.x/30.x or another release batch rather than reopening #35331 |
 
 ## Eligibility
 
