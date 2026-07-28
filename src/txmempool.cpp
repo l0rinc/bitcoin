@@ -129,16 +129,21 @@ void CTxMemPool::UpdateTransactionsFromBlock(const std::vector<Txid>& vHashesToU
         removeUnchecked(mapTx.iterator_to(entry), MemPoolRemovalReason::SIZELIMIT);
     }
 
-    for (const Txid& hash : vHashesToUpdate) {
-        txiter parent_it = mapTx.find(hash);
-        if (parent_it == mapTx.end()) continue;
-        auto child_it = mapNextTx.lower_bound(COutPoint(hash, 0));
-        for (; child_it != mapNextTx.end() && child_it->first->hash == hash; ++child_it) {
-            const txiter child_txiter{child_it->second};
-            Assume(child_txiter != mapTx.end());
-            if (child_txiter == parent_it) continue;
-            const auto ancestors{m_txgraph->GetAncestors(*child_txiter, TxGraph::Level::MAIN)};
-            Assume(std::ranges::find(ancestors, &*parent_it) != ancestors.end());
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        // Cross-check the repair above against the graph state: expensive
+        // (one GetAncestors walk per surviving child), so only run it where
+        // Assume aborts — matching the HasDescendants cross-check below.
+        for (const Txid& hash : vHashesToUpdate) {
+            txiter parent_it = mapTx.find(hash);
+            if (parent_it == mapTx.end()) continue;
+            auto child_it = mapNextTx.lower_bound(COutPoint(hash, 0));
+            for (; child_it != mapNextTx.end() && child_it->first->hash == hash; ++child_it) {
+                const txiter child_txiter{child_it->second};
+                Assume(child_txiter != mapTx.end());
+                if (child_txiter == parent_it) continue;
+                const auto ancestors{m_txgraph->GetAncestors(*child_txiter, TxGraph::Level::MAIN)};
+                Assume(std::ranges::find(ancestors, &*parent_it) != ancestors.end());
+            }
         }
     }
 }
