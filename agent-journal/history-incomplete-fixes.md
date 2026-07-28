@@ -1,5 +1,26 @@
 # Whole-history incomplete-fix and migration mining
 
+## Cycle 58: current output-contract follow-up cluster
+
+- Goal: mine the recent history of partial output/failure fixes for analogous current sites, while excluding the cycle-43 wallet migration write-return omission and the cycle-56 `dbwrapper` decode/output-on-failure fixes already independently verified.
+- Repository state at draw: branch `fuzz-contract-cluster-oracles-20260709`; base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; HEAD `75b1f55d251ea4cab3ebd827ece57eb6a8c41969`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; divergence from `origin/master` was `2 884`; tracked and staged state was clean, with only the known untracked agent artifacts. Catalog, uber-protocol, and goal TSV hashes matched the recorded values.
+- Selector: exact `shuf -i 0-98 -n 1` draw `32`, `history-incomplete-fixes`. The previous wallet-migration cell, direct database decode cell, and block-filter range-output cell are out of scope for this cycle.
+
+### Historical seed set
+
+- `4691fb15f0` moved `ProcessNewBlock`'s `new_block` publication after block-file persistence, because a write failure left a caller-visible success flag set.
+- `bb1070b55b`, `b14660d64e`, and `1bcf9f86dd` reset or preserve wallet lookup, transaction-index, and mining interface outputs across failure paths.
+- `738dbb50c7`, `4699d1c562`, `8ea2383ef2`, `7962a26adf`, and `9dd598ca72` established the same contract pattern for key, script, and address diagnostics: a reused output must describe the current call, including failure.
+- `bfc576a855`, `8570724e78`, `1cc215adb6`, and `b8487da6d0` extended the pattern to parser state, stream positions, cache identities, and rejected cache mutations. These are evidence seeds, not proof that every nearby function is defective.
+
+### Cycle hypotheses and scope
+
+1. A current block/index/database lookup still writes caller-owned output before a later fallible operation and leaves a stale or partial value on failure.
+2. A public mining, parser, or diagnostic interface has a historical output contract but an analogous wrapper still fails to reset or preserve its outputs.
+3. A recent fix covered only one variant of a stateful operation, leaving a sibling or alternate build/module path with a different failure contract.
+
+For each candidate I will trace the authoritative contract through callers, tests, blame, and the originating fix; use a pre-seeded output or state snapshot; inject the earliest realistic failure; and require a failing-before/passing-after regression or a proof that no later fallible write exists. A source change is justified only for a distinct confirmed omission. Otherwise the exact tested negative control and next history cell remain in this journal.
+
 ## Cycle 43: initial history sweep
 
 - Goal: mine historical partial fixes, follow-ups, reverted work, and migrations for omitted analogous sites on current code.

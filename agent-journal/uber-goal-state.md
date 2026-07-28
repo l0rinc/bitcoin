@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 57 complete; selected goal 7 (`resource-exhaustion-variants`) from the full catalog; cycle 58 is pending a fresh gate and selector draw.
+- Status: cycle 58 in progress; selected goal 32 (`history-incomplete-fixes`) from the full catalog after a fresh gate and selector draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -12,6 +12,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
 - HEAD at initialization: `1dcc2da988ee625fbc5d7d55eb6f894c1103ec52`
 - Current HEAD after cycle 16: `1926a4dbf612f3ce2fd43b61c0691360930a952f`
+- Cycle 58 gate: fetched `origin/master`; HEAD `75b1f55d251ea4cab3ebd827ece57eb6a8c41969`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 884`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
+- Cycle 58 selector: exact `shuf -i 0-98 -n 1` -> `32` (`history-incomplete-fixes`). Scope excludes the cycle-43 wallet migration write-return cell, cycle-56 database output-on-decode-failure cell, and cycle-57 compact-filter range-output/resource cell; this run mines the distinct current output-contract follow-up cluster.
 - Current HEAD after cycle 17: `ffda33a38f5fddab57e4618775d22ce31d8eda09`
 - Current HEAD after cycle 18: `55eaf087c189ae871878692fb20a90ac3533084d`
 - Current HEAD before cycle 19 journal handoff: `ec4401b816f132f2f35c1f2e64cf51e2046e8e32`
