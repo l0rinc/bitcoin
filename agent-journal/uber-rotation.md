@@ -56,7 +56,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 12 | static-analysis-true-positives | DONE | 2026-07-27 | CSA clean; 1 FP documented |
 | 13 | secret-lifetime-zeroization | DONE | 2026-07-27 | lattice complete, boundaries documented |
 | 14 | secret-control-flow | DONE | 2026-07-27 | BIP324 lattice complete |
-| 18 | exhaustive-algebraic | CYCLE-1 | 2026-07-27 | script round-trip gap closed (8e7513bb1c, mutation-verified); amount round-trip queued |
+| 18 | exhaustive-algebraic | CYCLE-2 | 2026-07-28 | script (8e7513bb1c) + Coin composition (4c27dad486) round-trips closed, both mutation-verified; fuzz-gap dismissed |
 | 19 | benchmark-integrity | CYCLE-1 | 2026-07-27 | prevector bench elision confirmed+fixed (138ef3c044); mutation-sweep queued |
 | 28 | weak-test-oracles | CYCLE-1 | 2026-07-27 | amount oracle mutation-hard (5/5 killed); survey dismissals; next battery queued |
 | 16 | api-misuse-resistance | CYCLE-1 | 2026-07-27 | kernel _at getters @pre doc fix (b6b48987a5); #33943 precedent journaled |
@@ -68,13 +68,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 21 | rebuild-recovery-profile | CYCLE-1 | 2026-07-28 | regtest reindex = 92% consistency checks; -checkblockindex=0 6.2x wall, proven |
 
 ## Next-up queue (severity-first)
-1. 18 — exhaustive-algebraic CYCLE-2 — NEXT (CTxOutCompressor composition + script_compression fuzz gap; resume, not restart)
-2. then re-rank: 19 bench mutation-sweep (c2), 22 (full-sync profile)
+1. 19 — benchmark-integrity CYCLE-2 — NEXT (bench mutation-sweep: streams_findbyte, obfuscation, lockedpool, gcs_filter; resume)
+2. then re-rank: 22 (full-sync profile), 61 c2 (validation_load_mempool oracle)
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c1), 19(c1), 28(c1), 16(c1), 61(c1), 30(c1), 31(c1), 29(c1), 17(c1), 21(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c1), 28(c1), 16(c1), 61(c1), 30(c1), 31(c1), 29(c1), 17(c1), 21(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #18 on branch
-audit/exhaustive-algebraic.
+full cross-backend differential in ~35s on this host. NEXT: #19 on branch
+audit/benchmark-integrity.
