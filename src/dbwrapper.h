@@ -22,6 +22,8 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 namespace leveldb {
 class Env;
@@ -79,6 +81,32 @@ namespace dbwrapper_private {
  * specific database.
  */
 const Obfuscation& GetObfuscation(const CDBWrapper&);
+
+template <typename T>
+T MakeDeserializeTarget(const T& existing)
+{
+    // Do not read caller state for trivially default-constructible outputs,
+    // which may be uninitialized scalars.
+    if constexpr (std::is_trivially_default_constructible_v<T>) {
+        return T{};
+    } else {
+        return T{existing};
+    }
+}
+
+template <typename T>
+void CommitDeserializedValue(T& target, T&& decoded)
+{
+    if constexpr (std::is_move_assignable_v<T>) {
+        target = std::move(decoded);
+    } else if constexpr (std::is_copy_assignable_v<T>) {
+        target = decoded;
+    } else {
+        // Some decoded database types intentionally delete assignment.
+        std::destroy_at(std::addressof(target));
+        std::construct_at(std::addressof(target), std::move(decoded));
+    }
+}
 }; // namespace dbwrapper_private
 
 bool DestroyDB(const std::string& path_str);
@@ -168,7 +196,9 @@ public:
         Assume(Valid());
         try {
             SpanReader ssKey{GetKeyImpl()};
-            ssKey >> key;
+            K decoded_key{dbwrapper_private::MakeDeserializeTarget(key)};
+            ssKey >> decoded_key;
+            dbwrapper_private::CommitDeserializedValue(key, std::move(decoded_key));
         } catch (const std::ios_base::failure&) {
             return false;
         }
@@ -182,7 +212,9 @@ public:
             ScopedDataStreamUsage scoped_scratch{m_scratch};
             m_scratch.write(GetValueImpl());
             dbwrapper_private::GetObfuscation(parent)(m_scratch);
-            m_scratch >> value;
+            V decoded_value{dbwrapper_private::MakeDeserializeTarget(value)};
+            m_scratch >> decoded_value;
+            dbwrapper_private::CommitDeserializedValue(value, std::move(decoded_value));
         } catch (const std::ios_base::failure&) {
             return false;
         }
@@ -234,7 +266,9 @@ public:
         try {
             std::span ssValue{MakeWritableByteSpan(*strValue)};
             m_obfuscation(ssValue);
-            SpanReader{ssValue} >> value;
+            V decoded_value{dbwrapper_private::MakeDeserializeTarget(value)};
+            SpanReader{ssValue} >> decoded_value;
+            dbwrapper_private::CommitDeserializedValue(value, std::move(decoded_value));
         } catch (const std::ios_base::failure&) {
             return false;
         }
