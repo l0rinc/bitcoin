@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 70 in progress; goal 94 (`bindings-ffi-parity`) selected a high-confidence C/C++ kernel-wrapper pointer-array contract mismatch. Cycle 69's `setlabel` RPC fix and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
+- Status: cycle 70 complete; goal 94 (`bindings-ffi-parity`) confirmed and fixed a C/C++ kernel-wrapper pointer-array contract mismatch. Cycle 69's `setlabel` RPC fix and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -12,6 +12,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
 - HEAD at initialization: `1dcc2da988ee625fbc5d7d55eb6f894c1103ec52`
 - Current HEAD after cycle 16: `1926a4dbf612f3ce2fd43b61c0691360930a952f`
+- Current cycle-70 source/test/journal HEAD: `0ab4d16796` (`kernel: bridge spent output handles explicitly`). The next state-only close commit records this cycle as complete.
 - Cycle 58 gate: fetched `origin/master`; HEAD `75b1f55d251ea4cab3ebd827ece57eb6a8c41969`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 884`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 58 selector: exact `shuf -i 0-98 -n 1` -> `32` (`history-incomplete-fixes`). Scope excludes the cycle-43 wallet migration write-return cell, cycle-56 database output-on-decode-failure cell, and cycle-57 compact-filter range-output/resource cell; this run mines the distinct current output-contract follow-up cluster.
 - Current HEAD after cycle 58 source/test fix: `3e4ec4e7ef0f216c09c10b1d577fc1517a043434` (`blockstorage: publish undo data after checksum verification`). `BlockManager::ReadBlockUndo` now publishes decoded undo data only after checksum verification; `blockmanager_readblockundo_preserves_output_on_checksum_failure` reproduced the old partial-output behavior and passed after the fix. The focused regression passed with 11 assertions, the full `blockmanager_tests` suite passed 12 cases and 128 assertions, `git diff --check` passed, and ASan was unavailable in the local build environment. No relevant process remains running.
@@ -235,25 +236,27 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 67 | `shuf -i 0-98 -n 1` -> `66` | `backport-correctness` (29.x #34370 Berkeley wallet file ownership and cleanup) | dismissed; no confirmed finding | `7475d134f6` and the 28.x rebased `29abedc97b` have identical patch-id and semantic source hunks. BDB-enabled v29.4 built successfully; focused wallet/database/filesystem tests and corrected `tool_wallet.py --legacy-wallet` passed. `wallet_migration.py` skipped because previous-release binaries were unavailable. See `backport-correctness.md`. | Journal-only handoff; no production source change justified | Recheck the gate and draw cycle 68 from the full catalog |
 | 68 | `shuf -i 0-98 -n 1` -> `2` | `assertion-invariant-audit` (release-reachable assumption and invariant cells) | confirmed; fixed | `GETBLOCKTXN` asserted that a recent block read could not fail, but local corruption/I/O/hash validation can make `ReadBlock` return false. A scratch block-header corruption probe killed the unpatched daemon; the fixed path logged the failure and disconnected only the peer. DifferenceFormatter/TransactionsRequest guards were independently covered by focused tests, mutation, and fuzz. The full compact-block functional suite passed. See `assertion-invariant-audit.md`. | `6fbcd16491` (`net: handle GETBLOCKTXN block read failures`) | Recheck the gate and draw cycle 69 from the full catalog |
 | 69 | `shuf -i 0-98 -n 1` -> `27` | `error-path-state` (standalone `setlabel` RPC failure propagation) | confirmed; fixed | `SetAddressBook` returns false without publishing state after a database write failure, but `setlabel` discarded that result. A mock SQLite `NAME`-row fault preserved the old label and made the unpatched RPC return success; the fixed RPC raises `RPC_WALLET_ERROR`. Adjacent generation/import/enrichment callers remain contract-sensitive and are not assumed equivalent. See `error-path-state.md`. | `ca5f4d5279` (`wallet: report setlabel address-book write failures`) | Recheck the gate and draw cycle 70 from the full catalog |
-| 70 | `shuf -i 0-98 -n 1` -> `94` | `bindings-ffi-parity` (C++ kernel wrapper opaque pointer-array boundary) | in progress; high-confidence candidate | `btck::PrecomputedTransactionData` reinterprets `TransactionOutput` objects as `const btck_TransactionOutput**`, while the C API indexes an array of opaque pointers. Existing tests pass an empty span only. A non-empty spent-output regression and pre-fix control are in progress. See `bindings-ffi-parity.md`. | Source/test uncommitted | Complete cycle 70 evidence and then draw the next distinct goal |
+| 70 | `shuf -i 0-98 -n 1` -> `94` | `bindings-ffi-parity` (C++ kernel wrapper opaque pointer-array boundary) | confirmed; fixed | `btck::PrecomputedTransactionData` reinterpreted `TransactionOutput` objects as `const btck_TransactionOutput**`, relying on the current object layout instead of constructing the C API's documented opaque-pointer array. The explicit pointer bridge passed the focused and full kernel suites; restoring the old cast plus a temporary one-byte layout mutation made the two-output taproot verifier exit 139. See `bindings-ffi-parity.md`. | `0ab4d16796` (`kernel: bridge spent output handles explicitly`) | Recheck the gate and draw cycle 71 from the full catalog |
 
-## Cycle 70 Active State
+## Cycle 70 Completion
 
 - Gate: HEAD `3fac7b6827c9a45d91d299ad717276b5539c0572`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 914`.
 - Branch: `uber-cycle-70-bindings-ffi-parity-20260728`.
 - Draw: `94` (`bindings-ffi-parity`).
-- Source/test under investigation: `src/kernel/bitcoinkernel_wrapper.h`, `src/test/kernel/test_kernel.cpp`.
+- Source/test/journal commit: `0ab4d16796` (`kernel: bridge spent output handles explicitly`).
+- Verification: isolated Clang 19 RelWithDebInfo kernel build; focused precomputed-data run passed with seed 7042; full 19-case `test_kernel` run passed with seed 7043; old-cast plus temporary layout mutation caused `btck_script_verify_tests` to exit 139 with seed 7044; restored fixed code passed the affected suite with seed 7045.
+- No production or test process remains running. The temporary layout mutation and all other negative-control edits were restored.
 
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: goal 94, `bindings-ffi-parity`; cycle 70 is in progress. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: none; cycle 70 is complete. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 70 is active. It selected goal 94, `bindings-ffi-parity`, by `shuf -i 0-98 -n 1` -> `94` after the cycle-69 gate. The distinct scope is the C/C++ `libbitcoinkernel` wrapper and its ownership, width, view, callback, and opaque-handle contracts. The first candidate is a non-empty `TransactionOutput` span being passed as a C array of opaque pointers in `PrecomputedTransactionData`; existing tests exercise only empty spent-output spans. The exact candidate ledger and pre-fix/fixed verification will be recorded in `bindings-ffi-parity.md` before the next draw.
+Cycle 70 is complete. It selected goal 94, `bindings-ffi-parity`, by `shuf -i 0-98 -n 1` -> `94` after the cycle-69 gate. The distinct scope was the C/C++ `libbitcoinkernel` wrapper and its ownership, width, view, callback, and opaque-handle contracts. The confirmed defect passed `TransactionOutput` wrapper objects where the C API requires an array of opaque pointers; the explicit bridge is in `0ab4d16796`. The focused and full fixed suites passed, and the temporary layout mutation killed the old cast. The exact candidate ledger and limitations are in `bindings-ffi-parity.md`. The next run must re-check the gate and draw cycle 71 from the full catalog.
 
 Cycle 50 selected `exhaustive-algebraic` with `shuf -i 0-98 -n 1` -> `18`. The distinct cell defined `GCSFilter::MatchAny(Q) == OR Match(q)` over all 16 filter subsets and 16 query subsets of four one-byte elements, with checked encoded reconstruction as a second path. The disposable matrix passed 1,555 assertions; a temporary `return false` mutation failed at the singleton check with exit 201 and 606 failed assertions. After restoring source and removing the disposable test, the production block-filter suite passed 8 cases and 499 assertions. No source defect was justified. The exact evidence and limits are in `exhaustive-algebraic.md`; no process remains running. The next run must re-check the gate and draw another distinct goal.
 
