@@ -182,3 +182,28 @@ The pre-fix failure, post-fix focused result, normal full-suite result, and sani
 ### Handoff
 
 Reopen this goal for the x-only/taproot cell, descriptor inference inside nested script contexts, public-key wrapper/binding parity, or a new malformed-input recurrence. Start by searching this journal and commit `c125061aa4` so the P2PK off-curve recurrence is not rediscovered. The next uber-goal cycle must re-check branch, base/HEAD, dirty state, processes, this ledger, the catalog, existing journals, history, issues, pull requests, and review precedent before drawing a distinct eligible goal.
+
+## Cycle 75: nested public-key parse/serialize and wrapper parity
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `15`
+- Slug: `public-object-validation`
+- Branch: `uber-cycle-75-public-object-validation-20260728`
+- Gate HEAD: `df9c8d76c7ad57713c656e25a503c4b7b7d01440`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Corrected goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The cycle-74 gate passed; tracked source was clean apart from the known journal/catalog artifacts, and no relevant process was running.
+
+### Excluded cells and active scope
+
+Cycle 27's full-key P2PK inference defect and cycle 51's x-only/taproot inference defect are excluded, as are the already-reviewed PSBT, key-I/O, DER, and direct descriptor parser cells. This cycle targets nested `multi_a`/multisig/miniscript public-key parse and serialize paths plus C++ wrapper/output parity. The first pass will compare parser acceptance, descriptor serialization, script reconstruction, failure-state outputs, and any public wrapper or binding that exposes the same objects.
+
+### Active hypothesis
+
+A nested descriptor or wrapper path may accept a public-key representation that its corresponding serializer or consumer cannot parse, may normalize equivalent keys inconsistently, or may leave caller-visible output partially populated after a malformed nested key fails. A finding requires a concrete malformed or noncanonical input, an independently established contract, and a round-trip/output-state reproducer; syntactic differences that are explicitly allowed by descriptor policy are not findings.
+
+Status: active; no source hypothesis is confirmed yet.
