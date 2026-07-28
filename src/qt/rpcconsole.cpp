@@ -1223,6 +1223,16 @@ void RPCConsole::updateDetailWidget()
         ui->peerAddrProcessed->setText(QString::number(stats->nodeStateStats.m_addr_processed));
         ui->peerAddrRateLimited->setText(QString::number(stats->nodeStateStats.m_addr_rate_limited));
         ui->peerRelayTxes->setText(stats->nodeStateStats.m_relay_txs ? ts.yes : ts.no);
+    } else {
+        ui->timeoffset->setText(ts.na);
+        ui->peerServices->setText(ts.na);
+        ui->peerSyncHeight->setText(ts.na);
+        ui->peerCommonHeight->setText(ts.na);
+        ui->peerPingWait->setText(ts.na);
+        ui->peerAddrRelayEnabled->setText(ts.na);
+        ui->peerAddrProcessed->setText(ts.na);
+        ui->peerAddrRateLimited->setText(ts.na);
+        ui->peerRelayTxes->setText(ts.na);
     }
 
     ui->hidePeersDetailButton->setIcon(platformStyle->SingleColorIcon(QStringLiteral(":/icons/remove")));

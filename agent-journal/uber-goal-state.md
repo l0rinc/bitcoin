@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 36 completed with the #35331 31.x backport batch dismissed after ancestry/patch review, release-tree builds, the complete v31.1 unit suite, targeted functional tests, and direct LevelDB compaction controls. Ready for the next draw.
+- Status: cycle 37 completed with the rejected-finding resurrection campaign confirming and fixing stale Qt peer-state labels when `GetNodeStateStats()` is unavailable. Ready for the next draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -56,6 +56,9 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Current HEAD at cycle 36 gate: `1162eaecac8dbfc69eab31c7229c231eb1fbfdae`.
 - Cycle 36 selector: `shuf -i 0-98 -n 1` drew `66` (`backport-correctness`). The earlier cycle-2 CVE-2024-52911 lifetime cell was excluded; this cycle selected the queued `#35331` 31.x backport batch.
 - Cycle 36 verification: `origin/31.x` v31.1 batch `efde6234` was compared against its source-side parent and current master, including all `OpenNetworkConnection` callers, private-broadcast proxy guards, settings write checks, MuSig empty-list validation, LevelDB seek-compaction tests, and asynchronous chainstate compaction locking/destruction. The clean release build completed 496 actions; focused unit suites passed 24/1,217,435, 17/144,457, and 1/57,996; the complete unit binary exited 0 with 734/740 cases passed, 1 warning, 5 skipped, and 26,275,230 assertions; both selected functional tests and the direct LevelDB `AutoCompact` controls passed. No source change was justified; see `backport-correctness.md`.
+- Current HEAD at cycle 37 gate: `ebe09a67153fe09ba67b03b0cc49f01fa84e2381`.
+- Cycle 37 selector: `shuf -i 0-98 -n 1` drew `62` (`rejected-finding-resurrection`). The cycle-33 CoinStats cell was excluded; the distinct cell attacked `GetNodeStateStats()` false results through the Qt peer-detail refresh path.
+- Cycle 37 verification: `NodeImpl::getNodesStats()` can leave state statistics unavailable when `cs_main` is busy, and `dataChanged` immediately refreshes the selected peer details. The old Qt false path left nine state-only labels unchanged, preserving stale values after a true-to-false refresh. The new `ts.na` clearing branch is built and tested by the Qt 6 suite: AppTests 3, OptionTests 6, URITests 3, and RPCNestedTests 3 all passed. The focused `get_node_state_stats_overwrites_reused_output` control passed 1 case/4 assertions and `git diff --check` passed. No direct GUI fixture currently covers the lock-busy transition; see `rejected-finding-resurrection.md`.
 - Dirty state at initialization: only agent-owned catalog artifacts existed before authoritative files were added.
 
 ## Cycle Ledger
@@ -98,11 +101,12 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 34 | `shuf -i 0-98 -n 1` -> `50` | `fuzz-introspector` | confirmed; fixed coverage blocker | Empty `process_messages` corpus plus default `CoverageFuzz.cmake` invocation reduced the target to an empty-input initialization pass. Passing the existing bounded empty-corpus option restored actual fuzz executions in the targeted smoke. See `fuzz-introspector.md`. | `7d1a7bdda6` (`fuzz: run empty corpora during coverage collection`) | Draw from the full catalog; do not reopen this runner/coverage cell unless corpus policy or script wiring changes |
 | 35 | `shuf -i 0-98 -n 1` -> `8` | `locking-threading` | dismissed; no confirmed finding | Transaction/inventory/mempool lock scopes, V2 transport nesting, and scheduler shutdown lifetime were checked against annotations and callers. TSan `net_tests` and `scheduler_tests` passed; one real `process_message` seed passed the TSan custom fuzz driver. See `locking-threading.md`. | Journal-only handoff; no source change justified | Draw from the full catalog; exclude only the closed cycle-16 `DumpAddresses()` and `ForEachNode()` cells unless new evidence changes their contracts |
 | 36 | `shuf -i 0-98 -n 1` -> `66` | `backport-correctness` (reopened on the queued #35331 release-batch cell) | dismissed; no confirmed finding | The v31.1 backport batch preserved proxy, private-broadcast, settings, MuSig, LevelDB, and background-compaction contracts. The release build and complete unit suite passed; targeted functional and direct LevelDB compaction controls passed. See `backport-correctness.md`. | Journal-only handoff; no source change justified | Draw from the full catalog; if goal 66 repeats, choose 28.x/29.x/30.x or another release batch rather than reopening #35331 |
+| 37 | `shuf -i 0-98 -n 1` -> `62` | `rejected-finding-resurrection` (distinct `GetNodeStateStats()`/Qt refresh cell) | confirmed; fixed | A busy `cs_main` made state statistics unavailable during a `dataChanged` refresh, but the Qt false path retained stale state-only labels from the previous successful refresh. The `ts.na` clearing branch built successfully; the full Qt test binary passed all 15 cases and the focused API reset control passed 1 case/4 assertions. See `rejected-finding-resurrection.md`. | Source/journal/state commit recorded after verification | Draw from the full catalog; exclude this fixed Qt stale-state cell and the closed CoinStats cell unless a new caller or contract appears |
 
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none after cycle 34 handoff.
+- Active goals this cycle: none after cycle 37 handoff.
 - Reopened goals: `statistical-timing` (cycle 5).
 - Exhausted goals: none recorded yet.
 
