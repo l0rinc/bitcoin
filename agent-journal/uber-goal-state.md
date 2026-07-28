@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 60 in progress; selected goal 84 (`secp-nonce-session`) from the full catalog after a fresh gate and selector draw.
+- Status: cycle 60 complete; cycle 61 pending a fresh gate and selector draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -20,6 +20,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 59 completion: no source defect found. The live MSan ctime baseline, regular libsecp256k1 tests, and exhaustive order-13 tests passed. Removing keypair public declassification, secnonce invalidation-status declassification, or invalid-session-randomness status declassification each produced a first-invalid-operation MSan trace; all temporary mutations were restored. Valgrind was unavailable, `git diff --check` passed, and no relevant process remains running.
 - Cycle 60 gate: fetched `origin/master`; HEAD `a064c61c3e77cbf08e9a68cd466f12cd50654ec3`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 889`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 60 selector: exact `shuf -i 0-98 -n 1` -> `84` (`secp-nonce-session`). Earlier MuSig ctime and secret-lifetime cells are closed. This run audits invalid-order, single-use, duplicate/replay, malformed-object, callback, and output-on-failure transitions, starting with MuSig public output state.
+- Cycle 60 completion: confirmed and fixed a MuSig API validation-ordering gap. `secp256k1_musig_nonce_gen` returned early for all-zero session randomness before validating required `pubnonce`, bypassing the illegal-argument callback when both were invalid. Removing the new precondition made `musig_api_tests` fail at `_calls_to_callback == 1` with exit 134; restoring it passed the focused test and the full libsecp test binary (16 iterations, 76.329 seconds, exit 0). See `secp-nonce-session.md`.
+- Current HEAD after cycle 60 source/test fix: `765e82e8ab` (`secp256k1: validate MuSig nonce output argument`). No relevant process remains running.
 - Current HEAD after cycle 17: `ffda33a38f5fddab57e4618775d22ce31d8eda09`
 - Current HEAD after cycle 18: `55eaf087c189ae871878692fb20a90ac3533084d`
 - Current HEAD before cycle 19 journal handoff: `ec4401b816f132f2f35c1f2e64cf51e2046e8e32`
@@ -200,17 +202,18 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 57 | `shuf -i 0-98 -n 1` -> `7` | `resource-exhaustion-variants` | inconclusive; no source change justified | GETDATA, GETBLOCKTXN, block inventory, address relay, compact-filter, mempool-response, and global relay-backlog paths were traced with explicit wire, queue, mempool, and indexed-state bounds. Block-filter and BIP37 functional tests, the send-queue contract test, block-filter unit/index tests, and the production block-filter fuzzer passed. See `resource-exhaustion-variants.md`. | Journal-only handoff; no source change justified | Cycle 58 is next |
 | 58 | `shuf -i 0-98 -n 1` -> `32` | `history-incomplete-fixes` (current output-contract follow-up) | confirmed; fixed | `BlockManager::ReadBlockUndo` deserialized into caller-owned output before validating the trailing checksum. A scratch undo file with one flipped checksum byte reproduced the old loss of a pre-seeded `CBlockUndo`; the fixed local decode/publish boundary preserved both output sizes. Focused block-manager regression passed with 11 assertions; full `blockmanager_tests` passed 12 cases and 128 assertions. See `history-incomplete-fixes.md`. | `3e4ec4e7ef0f216c09c10b1d577fc1517a043434` (`blockstorage: publish undo data after checksum verification`) | Recheck the gate and draw cycle 59 from the full catalog |
 | 59 | `shuf -i 0-98 -n 1` -> `45` | `constant-time-boundary` (MuSig session/keypair declassification cell) | dismissed; no new source defect | Static contract/dataflow review found session state public, secret nonce scalars retained as undefined, and only public metadata declassified. Three temporary source/harness mutations each failed with an MSan first-invalid trace; restored ctime, regular, and exhaustive tests passed. See `constant-time-boundary.md`. | Journal-only handoff; no source change justified | Recheck the gate and draw cycle 60 from the full catalog |
+| 60 | `shuf -i 0-98 -n 1` -> `84` | `secp-nonce-session` (MuSig invalid-argument ordering) | confirmed; fixed | `secp256k1_musig_nonce_gen` checked all-zero session randomness before required `pubnonce`, so two invalid arguments bypassed the illegal callback. The old-source mutation failed at `_calls_to_callback == 1` with exit 134; the fixed focused API test and full 16-iteration libsecp suite passed. See `secp-nonce-session.md`. | `765e82e8ab` (`secp256k1: validate MuSig nonce output argument`) | Recheck the gate and draw cycle 61 from the full catalog |
 
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 59 is closed and goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: none; cycle 60 is closed and goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 57 is complete on goal 7, `resource-exhaustion-variants`, selected by `shuf -i 0-98 -n 1` -> `7`. No source fix was justified. The cfilters and BIP35 response queues are the precise next hypotheses, with protocol-compatible continuation/refusal design still required before implementation. The next run must recheck branch/base/HEAD, dirty state, processes, catalog hashes, existing journals, history, and review precedent before drawing cycle 58.
+Cycle 60 is complete on goal 84, `secp-nonce-session`, selected by `shuf -i 0-98 -n 1` -> `84`. The MuSig nonce-generation API now validates its required public output before the all-zero session-random early return, with a regression proving the old callback bypass and fixed focused/full tests passing. The next run must recheck branch/base/HEAD, dirty state, processes, catalog hashes, existing journals, history, and review precedent before drawing cycle 61.
 
 Cycle 50 selected `exhaustive-algebraic` with `shuf -i 0-98 -n 1` -> `18`. The distinct cell defined `GCSFilter::MatchAny(Q) == OR Match(q)` over all 16 filter subsets and 16 query subsets of four one-byte elements, with checked encoded reconstruction as a second path. The disposable matrix passed 1,555 assertions; a temporary `return false` mutation failed at the singleton check with exit 201 and 606 failed assertions. After restoring source and removing the disposable test, the production block-filter suite passed 8 cases and 499 assertions. No source defect was justified. The exact evidence and limits are in `exhaustive-algebraic.md`; no process remains running. The next run must re-check the gate and draw another distinct goal.
 
