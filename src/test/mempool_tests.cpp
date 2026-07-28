@@ -2,8 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <common/args.h>
 #include <common/system.h>
 #include <key_io.h>
+#include <node/mempool_args.h>
 #include <node/mempool_persist.h>
 #include <policy/policy.h>
 #include <streams.h>
@@ -26,6 +28,35 @@
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
+
+BOOST_AUTO_TEST_CASE(MempoolLimitArgumentBounds)
+{
+    {
+        ArgsManager args;
+        args.ForceSetArg("-limitclustersize", "101");
+        kernel::MemPoolOptions options{};
+        BOOST_REQUIRE(ApplyArgsManOptions(args, ::Params(), options));
+        BOOST_CHECK_EQUAL(options.limits.cluster_size_vbytes, 101'000);
+    }
+    {
+        ArgsManager args;
+        args.ForceSetArg("-limitclustersize", "-1");
+        kernel::MemPoolOptions options{};
+        BOOST_CHECK(!ApplyArgsManOptions(args, ::Params(), options));
+    }
+    {
+        ArgsManager args;
+        args.ForceSetArg("-limitclustersize", "9223372036854776");
+        kernel::MemPoolOptions options{};
+        BOOST_CHECK(!ApplyArgsManOptions(args, ::Params(), options));
+    }
+    {
+        ArgsManager args;
+        args.ForceSetArg("-limitclustersize", "230584300921370");
+        kernel::MemPoolOptions options{};
+        BOOST_CHECK(!ApplyArgsManOptions(args, ::Params(), options));
+    }
+}
 
 static constexpr auto REMOVAL_REASON_DUMMY = MemPoolRemovalReason::REPLACED;
 
