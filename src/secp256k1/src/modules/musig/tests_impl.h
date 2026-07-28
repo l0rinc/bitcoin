@@ -279,6 +279,7 @@ static void musig_api_tests(void) {
     CHECK(secp256k1_musig_nonce_gen(CTX, &secnonce[0], &pubnonce[0], zeros132, sk[0], &pk[0], msg, &keyagg_cache, max64) == 0);
     CHECK(memcmp_and_randomize(session_secrand[0], zeros132, sizeof(session_secrand[0])) == 0);
     CHECK(memcmp_and_randomize(secnonce[0].data, zeros132, sizeof(secnonce[0].data)) == 0);
+    CHECK_ILLEGAL(CTX, secp256k1_musig_nonce_gen(CTX, &secnonce[0], NULL, zeros132, sk[0], &pk[0], msg, &keyagg_cache, max64));
 
     CHECK(secp256k1_musig_nonce_gen(CTX, &secnonce[0], &pubnonce[0], session_secrand[0], NULL, &pk[0], msg, &keyagg_cache, max64) == 1);
     CHECK(memcmp_and_randomize(session_secrand[0], zeros132, sizeof(session_secrand[0])) == 0);

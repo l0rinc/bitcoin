@@ -440,6 +440,7 @@ int secp256k1_musig_nonce_gen(const secp256k1_context* ctx, secp256k1_musig_secn
     VERIFY_CHECK(ctx != NULL);
     ARG_CHECK(secnonce != NULL);
     memset(secnonce, 0, sizeof(*secnonce));
+    ARG_CHECK(pubnonce != NULL);
     ARG_CHECK(session_secrand32 != NULL);
 
     /* Check in constant time that the session_secrand32 is not 0 as a
