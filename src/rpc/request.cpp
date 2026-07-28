@@ -9,6 +9,7 @@
 #include <logging.h>
 #include <random.h>
 #include <rpc/protocol.h>
+#include <support/allocators/secure.h>
 #include <util/check.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
@@ -109,7 +110,7 @@ AuthCookieResult GenerateAuthCookie(const std::optional<fs::perms>& cookie_perms
                                     std::string& pass)
 {
     const size_t COOKIE_SIZE = 32;
-    unsigned char rand_pwd[COOKIE_SIZE];
+    std::vector<unsigned char, secure_allocator<unsigned char>> rand_pwd(COOKIE_SIZE);
     GetRandBytes(rand_pwd);
     const std::string rand_pwd_hex{HexStr(rand_pwd)};
 
