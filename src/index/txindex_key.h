@@ -101,7 +101,7 @@ inline std::pair<uint8_t, uint256> LegacyTxKey(const Txid& txid)
     return {DB_TXINDEX, txid.ToUint256()};
 }
 
-constexpr int HASH_PREFIX_SIZE{4};
+constexpr int HASH_PREFIX_SIZE{5};
 using TxHashKeyPrefix = uint64_t;
 
 inline TxHashKeyPrefix CreateKeyPrefix(const SipHasher13UJ& hasher, const Txid& txid)

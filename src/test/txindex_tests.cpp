@@ -120,8 +120,8 @@ BOOST_AUTO_TEST_CASE(txindex_position_encoding)
 
     // Pin the full key encodings, including the type prefixes.
     BOOST_CHECK_EQUAL(HexStr(DataStream{} << txindex::BlockSeqKey{1}), "73000001");
-    BOOST_CHECK_EQUAL(HexStr(DataStream{} << txindex::DBKey{0x01020304, {1, 2}}),
-                      "7801020304000001000002");
+    BOOST_CHECK_EQUAL(HexStr(DataStream{} << txindex::DBKey{0x0102030405, {1, 2}}),
+                      "780102030405000001000002");
 
     BOOST_CHECK_EQUAL(txindex::BLOCK_HEADER_SIZE, GetSerializeSize(CBlockHeader{}));
 }
@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_CASE(txindex_hash_prefix)
         txindex::CreateKeyPrefix(
             SipHasher13UJ{0x0706050403020100ULL, 0x0F0E0D0C0B0A0908ULL},
             Txid{"1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"}),
-        0xc67d87b0ULL);
+        0xc67d87b08cULL);
 }
 
 BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
