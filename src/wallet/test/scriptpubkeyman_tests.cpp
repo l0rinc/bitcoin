@@ -32,6 +32,29 @@ static bool DatabaseHasKey(MockableSQLiteDatabase& database, const DataStream& k
     return present;
 }
 
+static std::optional<std::string> DatabaseReadString(MockableSQLiteDatabase& database, const DataStream& key)
+{
+    sqlite3_stmt* statement{nullptr};
+    if (sqlite3_prepare_v2(database.m_db, "SELECT value FROM main WHERE key = ?", -1, &statement, nullptr) !=
+        SQLITE_OK) {
+        return {};
+    }
+    const bool bound{sqlite3_bind_blob(statement, 1, static_cast<const void*>(key.data()), key.size(), SQLITE_TRANSIENT) ==
+                     SQLITE_OK};
+    const bool present{bound && sqlite3_step(statement) == SQLITE_ROW};
+    if (!present) {
+        sqlite3_finalize(statement);
+        return {};
+    }
+    SpanReader reader{std::span<const std::byte>{
+        static_cast<const std::byte*>(sqlite3_column_blob(statement, 0)),
+        static_cast<size_t>(sqlite3_column_bytes(statement, 0))}};
+    std::string value;
+    reader >> value;
+    sqlite3_finalize(statement);
+    return value;
+}
+
 BOOST_FIXTURE_TEST_SUITE(scriptpubkeyman_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(DescriptorScriptPubKeyManTests)
@@ -386,6 +409,47 @@ BOOST_AUTO_TEST_CASE(change_wallet_passphrase_write_failure_preserves_state)
     BOOST_CHECK(keystore.IsLocked());
     BOOST_CHECK(keystore.Unlock(old_passphrase));
     BOOST_CHECK(!keystore.Unlock(new_passphrase));
+}
+
+BOOST_AUTO_TEST_CASE(set_address_book_write_failure_preserves_state)
+{
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    const CKey key{GenerateRandomKey()};
+    const CTxDestination address{PKHash(key.GetPubKey())};
+    const std::string old_label{"old label"};
+    const std::string new_label{"new label"};
+    BOOST_REQUIRE(keystore.SetAddressBook(address, old_label, std::nullopt));
+
+    DataStream name_db_key;
+    name_db_key << std::make_pair(DBKeys::NAME, EncodeDestination(address));
+    DataStream purpose_db_key;
+    purpose_db_key << std::make_pair(DBKeys::PURPOSE, EncodeDestination(address));
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(keystore.GetDatabase());
+    const std::string trigger{
+        "CREATE TRIGGER fail_address_book_name BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{name_db_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    BOOST_CHECK(!keystore.SetAddressBook(address, new_label, AddressPurpose::SEND));
+    {
+        LOCK(keystore.cs_wallet);
+        BOOST_CHECK_EQUAL(keystore.m_address_book.at(address).GetLabel(), old_label);
+    }
+    BOOST_CHECK_EQUAL(DatabaseReadString(database, name_db_key).value_or(""), old_label);
+    BOOST_CHECK(!DatabaseHasKey(database, purpose_db_key));
+
+    const std::string purpose_trigger{
+        "CREATE TRIGGER fail_address_book_purpose BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{purpose_db_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, purpose_trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    BOOST_CHECK(!keystore.SetAddressBook(address, "purpose failure", AddressPurpose::RECEIVE));
+    {
+        LOCK(keystore.cs_wallet);
+        BOOST_CHECK_EQUAL(keystore.m_address_book.at(address).GetLabel(), old_label);
+    }
+    BOOST_CHECK_EQUAL(DatabaseReadString(database, name_db_key).value_or(""), old_label);
+    BOOST_CHECK(!DatabaseHasKey(database, purpose_db_key));
 }
 
 BOOST_AUTO_TEST_CASE(get_new_destination_self_expanding_xpub)

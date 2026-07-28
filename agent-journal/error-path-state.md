@@ -119,3 +119,57 @@ The earlier full-corpus attempt used two parallel workers in the repository chec
 ### Handoff
 
 No source change is justified. Cycle 22 is a journal-only dismissal: transaction-download failure edges remain covered, and the CoinStats mutation is behind an internal invariant violation that currently terminates index processing rather than returning a recoverable failure to a caller. The next cycle must run a fresh gate and draw another catalog goal, avoiding wallet passphrase handling, the immediate direct-fetch boundary cell, and already-closed generic P2P lifecycle surfaces unless new evidence changes their priority.
+
+## Cycle 39: address-book write failure state and transaction symmetry
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `27`
+- Selected slug: `error-path-state`
+- Timestamp: `2026-07-28T02:04:29Z`
+- Branch: `fuzz-contract-cluster-oracles-20260709`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- HEAD before this cycle: `0d2d85e181dbf9a37d4c7c5b603b02327b829ca0`
+- `origin/master...HEAD` after refresh: `2 845`
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+
+The cycle gate refreshed `origin/master`, confirmed the branch and tracked/staged state, checked that no relevant process was running, and searched the catalog, prior error-path cells, history, callers, tests, and review evidence. The earlier goal-27 cells covered wallet passphrase persistence and transaction-download/index transitions. This cycle selected the distinct address-book write path.
+
+### Candidate and contract
+
+Before the fix, `CWallet::SetAddressBookWithDB` changed `m_address_book` before calling `WalletBatch::WritePurpose` and `WriteName`. A failed write returned false but left the new label and purpose in memory. The ordinary `SetAddressBook` wrapper also created a batch without `TxnBegin`, so a successful purpose write could remain persisted when the later name write failed. The public `setlabel` RPC still ignores the bool return; that is a separate queued error-propagation candidate because this cycle's regression exercises the wallet API directly.
+
+The expected contract is all-or-nothing for the address-book operation: on either write failure, the complete prior in-memory record and all persisted address-book rows remain unchanged, with no change notification. On success, publication and notification occur after the database commit.
+
+### Independent reproduction
+
+The first regression version installed an SQLite `BEFORE INSERT` trigger for the exact `DBKeys::NAME` row, called `SetAddressBook` for an existing address, and checked the old label in memory and the database. Against the original implementation, the command
+
+```text
+build_unit_wallet_clang19/bin/test_bitcoin --run_test=scriptpubkeyman_tests/set_address_book_write_failure_preserves_state --log_level=all
+```
+
+exited 201. The write returned false and the database check retained `old label`, but the in-memory assertion failed with `[new label != old label]`. This is a deterministic SQLite fault, not a race or malformed-input artifact.
+
+The final regression covers both failure edges. It supplies an address purpose, injects a name-row abort after the purpose write, and then injects a purpose-row abort before the name write. Each path asserts the old label, old database name, and absence of the new purpose. The purpose-plus-name case also proves that the ordinary wrapper must use one transaction.
+
+### Fix
+
+`SetAddressBookWithDB` now stages a copy of the address-book record, performs both writes while holding the wallet lock, and publishes the staged record only after both writes succeed. It registers a transaction listener so publication and `NotifyAddressBookChanged` occur only on commit. `SetAddressBook` now runs the operation through `RunWithinTxn`, making purpose and name writes atomic and ensuring an aborted transaction does not publish staged state.
+
+### Verification
+
+- `git diff --check`: passed.
+- `cmake --build build_unit_wallet_clang19 --target test_bitcoin -j2`: passed after the fix.
+- `build_unit_wallet_clang19/bin/test_bitcoin --run_test=scriptpubkeyman_tests/set_address_book_write_failure_preserves_state --log_level=message`: passed 1 case with no errors.
+- `build_unit_wallet_clang19/bin/test_bitcoin --run_test=scriptpubkeyman_tests,wallet_tests,wallet_rpc_tests --log_level=message`: passed 35 cases with no errors.
+
+The test uses the mock SQLite backend and does not exercise Berkeley DB, an on-disk restart, or a commit failure after all statements have succeeded. The `setlabel` RPC's ignored false return remains a separate confirmed code-path lead for a later cycle or follow-up commit; no RPC fault-injection harness was added here.
+
+### Verdict and handoff
+
+- Confirmed and fixed: address-book writes could return failure while exposing a new in-memory record, and purpose/name writes could persist asymmetrically.
+- Related queued lead: `src/wallet/rpc/addresses.cpp` ignores `SetAddressBook` failure and can report RPC success after the wallet operation fails. Keep it distinct from the transaction/state fix.
+- Next queue: perform a fresh gate and draw another eligible catalog goal. Do not reopen this address-book cell unless a new backend, restart, commit-failure, or RPC-level reproduction supplies independent evidence.
