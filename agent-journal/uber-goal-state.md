@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 70 complete; goal 94 (`bindings-ffi-parity`) confirmed and fixed a C/C++ kernel-wrapper pointer-array contract mismatch. Cycle 69's `setlabel` RPC fix and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
+- Status: cycle 71 in progress; goal 53 (`statistical-timing`) selected a distinct ElligatorSwift XDH and Silent Payments secret-caller timing/dataflow cell. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -13,6 +13,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - HEAD at initialization: `1dcc2da988ee625fbc5d7d55eb6f894c1103ec52`
 - Current HEAD after cycle 16: `1926a4dbf612f3ce2fd43b61c0691360930a952f`
 - Current cycle-70 source/test/journal HEAD: `0ab4d16796` (`kernel: bridge spent output handles explicitly`). The next state-only close commit records this cycle as complete.
+- Cycle 71 gate: fetched `origin/master`; HEAD `9eb6b4ad1b66f030f0019b759d0c8017993cf63b`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 917`; tracked/staged state clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
+- Cycle 71 selector: exact `shuf -i 0-98 -n 1` -> `53` (`statistical-timing`). Cycles 1, 44, and 46 timing cells are excluded; this run targets the remaining ElligatorSwift XDH and Silent Payments secret-bearing callers.
 - Cycle 58 gate: fetched `origin/master`; HEAD `75b1f55d251ea4cab3ebd827ece57eb6a8c41969`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 884`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 58 selector: exact `shuf -i 0-98 -n 1` -> `32` (`history-incomplete-fixes`). Scope excludes the cycle-43 wallet migration write-return cell, cycle-56 database output-on-decode-failure cell, and cycle-57 compact-filter range-output/resource cell; this run mines the distinct current output-contract follow-up cluster.
 - Current HEAD after cycle 58 source/test fix: `3e4ec4e7ef0f216c09c10b1d577fc1517a043434` (`blockstorage: publish undo data after checksum verification`). `BlockManager::ReadBlockUndo` now publishes decoded undo data only after checksum verification; `blockmanager_readblockundo_preserves_output_on_checksum_failure` reproduced the old partial-output behavior and passed after the fix. The focused regression passed with 11 assertions, the full `blockmanager_tests` suite passed 12 cases and 128 assertions, `git diff --check` passed, and ASan was unavailable in the local build environment. No relevant process remains running.
@@ -237,6 +239,15 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 68 | `shuf -i 0-98 -n 1` -> `2` | `assertion-invariant-audit` (release-reachable assumption and invariant cells) | confirmed; fixed | `GETBLOCKTXN` asserted that a recent block read could not fail, but local corruption/I/O/hash validation can make `ReadBlock` return false. A scratch block-header corruption probe killed the unpatched daemon; the fixed path logged the failure and disconnected only the peer. DifferenceFormatter/TransactionsRequest guards were independently covered by focused tests, mutation, and fuzz. The full compact-block functional suite passed. See `assertion-invariant-audit.md`. | `6fbcd16491` (`net: handle GETBLOCKTXN block read failures`) | Recheck the gate and draw cycle 69 from the full catalog |
 | 69 | `shuf -i 0-98 -n 1` -> `27` | `error-path-state` (standalone `setlabel` RPC failure propagation) | confirmed; fixed | `SetAddressBook` returns false without publishing state after a database write failure, but `setlabel` discarded that result. A mock SQLite `NAME`-row fault preserved the old label and made the unpatched RPC return success; the fixed RPC raises `RPC_WALLET_ERROR`. Adjacent generation/import/enrichment callers remain contract-sensitive and are not assumed equivalent. See `error-path-state.md`. | `ca5f4d5279` (`wallet: report setlabel address-book write failures`) | Recheck the gate and draw cycle 70 from the full catalog |
 | 70 | `shuf -i 0-98 -n 1` -> `94` | `bindings-ffi-parity` (C++ kernel wrapper opaque pointer-array boundary) | confirmed; fixed | `btck::PrecomputedTransactionData` reinterpreted `TransactionOutput` objects as `const btck_TransactionOutput**`, relying on the current object layout instead of constructing the C API's documented opaque-pointer array. The explicit pointer bridge passed the focused and full kernel suites; restoring the old cast plus a temporary one-byte layout mutation made the two-output taproot verifier exit 139. See `bindings-ffi-parity.md`. | `0ab4d16796` (`kernel: bridge spent output handles explicitly`) | Recheck the gate and draw cycle 71 from the full catalog |
+| 71 | `shuf -i 0-98 -n 1` -> `53` | `statistical-timing` (ElligatorSwift XDH and Silent Payments secret callers) | in progress; distinct timing/dataflow cell | Prior timing cells covered basic keygen/signing, ECDH/Schnorr/MuSig, and GCC/backend/optimization variants. This cycle measures remaining secret-bearing module callers, separates variable-time public-output paths, and seeks ctime/MSan or source-level evidence before any finding is fixed. See `statistical-timing.md`. | Source/probe not yet committed | Complete cycle 71 evidence and then draw the next distinct goal |
+
+## Cycle 71 Active State
+
+- Gate: HEAD `9eb6b4ad1b66f030f0019b759d0c8017993cf63b`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 917`.
+- Branch: `uber-cycle-71-statistical-timing-20260728`.
+- Draw: `53` (`statistical-timing`).
+- Excluded prior cells: cycles 1 and 5 basic Clang timing screens, cycle 44 ECDH/Schnorr/MuSig caller and MuSig ctime boundary, and cycle 46 GCC/backend/optimization timing matrix.
+- Current hypothesis: ElligatorSwift XDH and Silent Payments sender/recipient secret inputs may have a compiler/backend-specific timing or undeclared secret-data control-flow path not covered by prior probes. Encode/decode are variable-time by API contract and are not candidates.
 
 ## Cycle 70 Completion
 
@@ -255,6 +266,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Exhausted goals: none recorded yet.
 
 ## Handoff
+
+Cycle 71 is active. It selected goal 53, `statistical-timing`, by `shuf -i 0-98 -n 1` -> `53` after the cycle-70 gate. The distinct scope is ElligatorSwift XDH and Silent Payments sender/recipient secret callers, with variable-time public-output operations excluded from the finding ledger. The exact experiment, ctime/dataflow review, raw traces, and next queue will be recorded in `statistical-timing.md`.
 
 Cycle 70 is complete. It selected goal 94, `bindings-ffi-parity`, by `shuf -i 0-98 -n 1` -> `94` after the cycle-69 gate. The distinct scope was the C/C++ `libbitcoinkernel` wrapper and its ownership, width, view, callback, and opaque-handle contracts. The confirmed defect passed `TransactionOutput` wrapper objects where the C API requires an array of opaque pointers; the explicit bridge is in `0ab4d16796`. The focused and full fixed suites passed, and the temporary layout mutation killed the old cast. The exact candidate ledger and limitations are in `bindings-ffi-parity.md`. The next run must re-check the gate and draw cycle 71 from the full catalog.
 
