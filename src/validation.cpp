@@ -253,7 +253,9 @@ std::optional<LockPoints> CalculateLockPointsAtTip(
     }
 
     // tip->GetAncestor(max_input_height) should never return a nullptr
-    // because max_input_height is always less than the tip height.
+    // because max_input_height never exceeds the tip height: confirmed
+    // inputs were mined at or below the tip, and mempool inputs (assigned
+    // next_tip height, i.e. tip+1, above) are excluded from the maximum.
     // It would, however, be a bad bug to continue execution, since a
     // LockPoints object with the maxInputBlock member set to nullptr
     // signifies no relative lock time.
