@@ -174,8 +174,6 @@ static constexpr auto OUTBOUND_INVENTORY_BROADCAST_INTERVAL{2s};
 static constexpr double OUTBOUND_INVENTORY_BUCKET_MULTIPLIER{Ticks<SecondsDouble>(INBOUND_INVENTORY_BROADCAST_INTERVAL) / Ticks<SecondsDouble>(OUTBOUND_INVENTORY_BROADCAST_INTERVAL)};
 /** Delay between checking inventory bucket and backlog */
 static constexpr auto INVENTORY_BUCKET_CHECK_DELAY{100ms};
-/** Empty backlog target capacity */
-static constexpr size_t INVENTORY_BUCKET_BACKLOG_CAPACITY{300};
 /** Delay between inventory bucket backlog heartbeat log entries */
 static constexpr auto INVENTORY_BUCKET_BACKLOG_HEARTBEAT{2000ms};
 /** Minimum backlog to trigger heartbeat log entries */
@@ -531,7 +529,8 @@ struct TxToSend {
 
 struct InvToSendBucket {
     const double count_floor{0};
-    std::vector<Wtxid> backlog;
+    /** Unique wtxids waiting for relay tokens. */
+    std::set<Wtxid> backlog;
     util::TokenBucket<NodeClock> size_bucket;
     util::TokenBucket<NodeClock> count_bucket;
 
@@ -2400,7 +2399,11 @@ std::vector<TxToSend> InvToSendBucket::TakeForProcessing(CTxMemPool& mempool)
 
     std::vector<TxToSend> best;
 
-    auto itervec = mempool.ExtractBestByMiningScoreWithTopology(backlog, n_to_take);
+    // Keep the backlog unique while retaining the mempool helper's mining-order selection.
+    std::vector<Wtxid> wtxids{backlog.begin(), backlog.end()};
+    backlog.clear();
+    auto itervec = mempool.ExtractBestByMiningScoreWithTopology(wtxids, n_to_take);
+    backlog.insert(wtxids.begin(), wtxids.end());
     bool tokens_left = true;
     for (auto txiter : itervec) {
         auto& wtxid = txiter->GetTx().GetWitnessHash();
@@ -2414,15 +2417,8 @@ std::vector<TxToSend> InvToSendBucket::TakeForProcessing(CTxMemPool& mempool)
                 tokens_left = false;
             }
         } else {
-            backlog.push_back(wtxid);
+            backlog.insert(wtxid);
         }
-    }
-
-    // if the backlog is now empty, consider shrinking it if it's oversized
-    if (backlog.empty() && backlog.capacity() > INVENTORY_BUCKET_BACKLOG_CAPACITY) {
-        std::vector<Wtxid> dummy;
-        dummy.reserve(INVENTORY_BUCKET_BACKLOG_CAPACITY);
-        dummy.swap(backlog);
     }
 
     return best;
@@ -2573,8 +2569,8 @@ void PeerManagerImpl::InitiateTxBroadcastToAll(const Wtxid& wtxid)
 {
     {
         LOCK(m_inv_to_send_mutex);
-        m_inbound_inv_bucket.backlog.push_back(wtxid);
-        m_outbound_inv_bucket.backlog.push_back(wtxid);
+        m_inbound_inv_bucket.backlog.insert(wtxid);
+        m_outbound_inv_bucket.backlog.insert(wtxid);
     }
     ProcessInvBacklog(NodeClock::now(), /*backlog_bumped=*/true);
 }
