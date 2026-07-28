@@ -369,8 +369,8 @@ def verify_shasums_signature(
     # our threshold.
     good_trusted = [sig for sig in good if sig.trusted or sig.key in trusted_keys]
     good_untrusted = [sig for sig in good if sig not in good_trusted]
-    num_trusted = len(good_trusted)
-    log.info(f"got {num_trusted} trusted signatures")
+    num_trusted = len({sig.key for sig in good_trusted})
+    log.info(f"got {num_trusted} trusted signer keys")
 
     if num_trusted < min_good_sigs:
         log.info("Maybe you need to import "
