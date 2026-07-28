@@ -12,6 +12,11 @@ set(fuzz_test_runner test/fuzz/test_runner.py ${FUZZ_CORPORA_DIR})
 if(DEFINED JOBS)
   list(APPEND fuzz_test_runner -j ${JOBS})
 endif()
+# Keep targets with an empty corpus in the coverage run for a bounded interval.
+if(NOT DEFINED FUZZ_EMPTY_MIN_TIME)
+  set(FUZZ_EMPTY_MIN_TIME 60)
+endif()
+list(APPEND fuzz_test_runner --empty_min_time=${FUZZ_EMPTY_MIN_TIME})
 
 execute_process(
   COMMAND ${fuzz_test_runner} --loglevel DEBUG
