@@ -285,6 +285,22 @@ BOOST_FIXTURE_TEST_CASE(txindex_locator_upgrade, TestChain100Setup)
     BOOST_CHECK(stored_legacy_locator.vHave == legacy_locator.vHave);
 }
 
+BOOST_FIXTURE_TEST_CASE(txindex_block_mapping_restart, TestChain100Setup)
+{
+    {
+        TxIndex txindex(interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/false);
+        BOOST_REQUIRE(txindex.Init());
+        txindex.Sync();
+        txindex.Stop();
+    }
+
+    TxIndex txindex(interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/false);
+    BOOST_REQUIRE(txindex.Init());
+    txindex.Sync();
+    LookupTx(txindex, m_coinbase_txns.back()->GetHash());
+    txindex.Stop();
+}
+
 BOOST_FIXTURE_TEST_CASE(txindex_reorg_keeps_stale_entries, TestChain100Setup)
 {
     TxIndex txindex(interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/true);
