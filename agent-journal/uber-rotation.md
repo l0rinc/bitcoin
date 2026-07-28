@@ -61,7 +61,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 28 | weak-test-oracles | CYCLE-2 | 2026-07-28 | amount battery 5/5 killed; merkleblock battery 2 survivors fixed (50e9d14750), 1 equivalent |
 | 16 | api-misuse-resistance | CYCLE-1 | 2026-07-27 | kernel _at getters @pre doc fix (b6b48987a5); #33943 precedent journaled |
 | 61 | stateful-contract-fuzzing | CYCLE-2 | 2026-07-28 | sigcache oracle (a4ff67417e); c2 queue all already-covered; Assert-triage corrected |
-| 30 | security-logging | CYCLE-1 | 2026-07-27 | RPC method log injection fixed (19c7dc6233, fail-before/pass-after) |
+| 30 | security-logging | CYCLE-2 | 2026-07-28 | RPC method (19c7dc6233) + wallet-name (4c3829c9aa) log injection fixed; LogEscapeMessage \n-exemption journaled |
 | 31 | cross-layer-contracts | CYCLE-1 | 2026-07-27 | descriptors.md range off-by-one fixed (1f7f73b02e, regtest-proven) |
 | 29 | dead-stale-code | CYCLE-1 | 2026-07-27 | 3 sweeps clean; SAFE_CHARS_FILENAME parked inconclusive |
 | 17 | build-matrix-modules | CYCLE-1 | 2026-07-27 | option/CI inventory + manifest drift clean (no builds; disk) |
@@ -69,13 +69,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 22 | full-sync-ibd-profile | CYCLE-1 | 2026-07-28 | import replay = 85% consistency machinery; -checkblockindex=0 6x wall; obfuscation gotcha journaled |
 
 ## Next-up queue (severity-first)
-1. 30 — security-logging CYCLE-2 — NEXT (wallet label/descriptor strings in logs; resume)
-2. then re-rank: 61 c3 (medium-strength target deepening), 16 c2 (assert-precondition sweep)
+1. 16 — api-misuse-resistance CYCLE-2 — NEXT (bitcoinkernel assert-only precondition sweep; resume)
+2. then re-rank: 61 c3 (medium-strength target deepening), 31 c2 (assumeutxo contract table)
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c2), 28(c2), 16(c1), 61(c2), 30(c1), 31(c1), 29(c1), 17(c1), 21(c1), 22(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c2), 28(c2), 16(c1), 61(c2), 30(c2), 31(c1), 29(c1), 17(c1), 21(c1), 22(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #30 on branch
-audit/security-logging.
+full cross-backend differential in ~35s on this host. NEXT: #16 on branch
+audit/api-misuse.
