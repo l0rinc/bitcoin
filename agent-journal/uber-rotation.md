@@ -89,11 +89,20 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 1 | comment-code-contract | CYCLE-1 | 2026-07-28 | LockPoints bound comment wrong (b1c267c9f1); AddCoin/lock/nullptr-parent claims verified true |
 | 0 | continuous-bug-mining | CYCLE-2 | 2026-07-28 | TODO evidence sweep: 56 production items, 0 defects, 7 verified risk-map cells |
 | 60 | reviewer-preference-skill | CYCLE-1 | 2026-07-28 | l0rinc seam: 7 rules (R1-R7), held-out 2/3+1 refined; reviewer map n=5 |
+| 36 | cross-tool-analysis-matrix | CYCLE-2 | 2026-07-28 | clang-18 differential green; 4 clang-only warnings triaged (3 fuzz-only-helper, 1 test-annotation) |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=10304638172543270608 -> idx 16 (of 28) -> #60.
+   raw=9923708442630681006 -> idx 46 (of 64) -> #36.
+   POOL-REPAIR NOTE (2026-07-28): the incremental pools used from the
+   #75 draw onward carried stale CYCLE-2+ entries (4, 28, 61), and a
+   draw of #61(c3) over that 27-entry pool (raw=2149655188711527484,
+   idx 16) was DISCARDED. The pool was rebuilt from the ledger handoff
+   per the documented rule (pending + exactly-CYCLE-1, minus
+   EXHAUSTED/QUEUE-COMPLETE/deferred #72/#77, minus the just-cycled
+   campaign): 41 pending + 23 CYCLE-1 = 64 entries. Campaigns at
+   CYCLE-2+ are reachable via the re-rank queue, not the random pool.
 2. then re-rank: 21 c2 (tx-heavy reindex), #22 queue (fee-estimator
    UpdateMovingAverages per-block gating; tx-heavy import),
    #1 queue (net_processing/txmempool claim sweep, fork-added comments),
@@ -105,7 +114,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1,c2), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2,c3,QUEUE-COMPLETE), 19(EXHAUSTED), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3,c4), 29(c2), 17(c2,c3), 21(c1), 22(c1,c2), 1(c1), 36(c1), 37(c1), 39(c1), 43(c1), 45(c1), 47(c1), 51(c1), 59(c1), 60(c1), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1), 90(c1), 91(c1), 94(c1), 95(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1,c2), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2,c3,QUEUE-COMPLETE), 19(EXHAUSTED), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3,c4), 29(c2), 17(c2,c3), 21(c1), 22(c1,c2), 1(c1), 36(c1,c2), 37(c1), 39(c1), 43(c1), 45(c1), 47(c1), 51(c1), 59(c1), 60(c1), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1), 90(c1), 91(c1), 94(c1), 95(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
@@ -125,3 +134,8 @@ timestamps), so any per-tip-change work gated on !is_ibd runs for the
 whole sync — profile with -checkblockindex=0 AND a perf record, or the
 consistency machinery (5.7x wall) hides the real pipeline. This tree's
 bitcoind does not auto-create a missing -datadir; mkdir first.
+Cross-tool note (#36 c2): clang -Wunneeded-internal-declaration/
+-Wunneeded-member-function fires on every fork helper referenced only
+from a discarded `if constexpr (G_ABORT_ON_FAILED_ASSUME)` block —
+by design, NOT dead code; check the caller's guard before proposing
+removal. gcc has no equivalent warning and no thread-safety analysis.
