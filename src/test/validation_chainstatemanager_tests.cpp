@@ -1649,6 +1649,10 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
     BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=3"}).prevoutfetch_threads_num, 3);
     BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=100"}).prevoutfetch_threads_num, MAX_PREVOUTFETCH_THREADS);
     BOOST_CHECK(!get_opts({"-prevoutfetchthreads=-1"}));
+
+    BOOST_CHECK_EQUAL(get_valid_opts({"-maxsigcachesize=0"}).signature_cache_bytes, 0);
+    BOOST_CHECK_EQUAL(get_valid_opts({"-maxsigcachesize=33"}).signature_cache_bytes, 33_MiB / 2);
+    BOOST_CHECK(!get_opts({"-maxsigcachesize=17592186044416"}));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

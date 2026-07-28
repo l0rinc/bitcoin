@@ -13,6 +13,7 @@
 #include <uint256.h>
 #include <util/byte_units.h>
 #include <util/log.h>
+#include <util/overflow.h>
 #include <util/result.h>
 #include <util/strencodings.h>
 #include <util/translation.h>
@@ -20,6 +21,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <string>
 
 namespace node {
@@ -72,7 +74,12 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManage
         //    script execution cache create the minimum possible cache (2
         //    elements). Therefore, we can use 0 as a floor here.
         // 2. Multiply first, divide after to avoid integer truncation.
-        size_t clamped_size_each{size_t(std::max<int64_t>(*max_size, 0) * 1_MiB / 2)};
+        const auto max_size_bytes{CheckedMul<uint64_t>(static_cast<uint64_t>(std::max<int64_t>(*max_size, 0)), 1_MiB)};
+        const uint64_t max_size_each{max_size_bytes ? *max_size_bytes / 2 : 0};
+        if (!max_size_bytes || max_size_each > std::numeric_limits<size_t>::max()) {
+            return util::Error{Untranslated(strprintf("-maxsigcachesize is too large (got %d MiB)", *max_size))};
+        }
+        const size_t clamped_size_each{static_cast<size_t>(max_size_each)};
         opts.script_execution_cache_bytes = clamped_size_each;
         opts.signature_cache_bytes = clamped_size_each;
     }

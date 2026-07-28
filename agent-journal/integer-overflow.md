@@ -158,3 +158,94 @@ arithmetic or networking behavior was changed.
 - Before-fix log: `/data/my_storage/tmp/integer-overflow-implicit-run-continue2/run.log`
 - After-fix logs: `/data/my_storage/tmp/integer-overflow-repaired-run/run.log` and
   `/data/my_storage/tmp/integer-overflow-repaired-receive/run.log`
+
+## Cycle 29
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `52` (reopened on a distinct unchecked arithmetic surface)
+- Selected goal: `integer-overflow`
+- Date: 2026-07-28 UTC
+- Repository HEAD at gate: `97cb20252003ac2aff08969368f3302b7824c2af`
+- Branch: `fuzz-contract-cluster-oracles-20260709`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Ahead/behind at gate: `2 829`
+- Working tree at gate: no tracked or staged changes; only agent-owned journals,
+  catalog artifacts, and pre-existing `test/cache/` were untracked
+
+The random draw repeated goal 52, but cycle 10 already exhausted the P2P
+buffer-argument cell. This cycle therefore selected distinct cache-size and
+mempool-cluster-size cells from the same arithmetic campaign, with the earlier
+finding excluded from the hypothesis queue.
+
+### Cache-size conversion
+
+#### Scope and hypothesis
+
+`-maxsigcachesize` is a debug/test option whose input is documented in MiB.
+`ApplyArgsManOptions` read it as `int64_t`, multiplied the non-negative value
+by the `uint64_t` literal `1_MiB`, divided by two, and assigned the result to
+the `size_t` byte fields in `ChainstateManager::Options`. The hypothesis was
+that an accepted input at the `uint64_t` product boundary silently wrapped,
+rather than being rejected before cache construction.
+
+The exact boundary `17592186044416` (`2^44`) MiB makes the old product equal to
+`2^64` and therefore zero in unsigned arithmetic. The old code consequently
+configured both caches as zero bytes, which `CuckooCache::setup_bytes` treats as
+the minimum two-element cache. `GetIntArg` accepts this value because its
+return type is `int64_t`; no parser or option registration limit prevented the
+path.
+
+#### Before-fix evidence
+
+A temporary assertion in `validation_chainstatemanager_tests/chainstatemanager_args`
+passed on the old source with both cache byte fields equal to zero for
+`-maxsigcachesize=17592186044416`. A rebuilt normal daemon then reached
+`Done loading` and logged:
+
+```text
+Using 0 MiB out of 0 MiB requested for signature cache, able to store 2 elements
+Using 0 MiB out of 0 MiB requested for script execution cache, able to store 2 elements
+```
+
+The command used only a scratch regtest datadir:
+
+```text
+build_func_clang19/bin/bitcoind -regtest -datadir=/data/my_storage/tmp/integer-overflow-maxsigcache-before-cycle29b \
+  -listen=0 -server=0 -connect=0 -dnsseed=0 -discover=0 -natpmp=0 -daemon=0 \
+  -printtoconsole=1 -maxsigcachesize=17592186044416
+```
+
+#### Fix and verification
+
+The conversion now uses `CheckedMul<uint64_t>`, rejects products that do not
+fit, rejects a per-cache result that cannot fit `size_t`, and narrows only
+after those checks. Negative inputs retain the existing zero-floor behavior.
+The chainstate-manager test now covers zero, odd MiB splitting (`33_MiB / 2`),
+and the `2^44` overflow rejection.
+
+Evidence after the fix:
+
+```text
+cmake --build build_unit_clang19 --target test_bitcoin -j2
+build_unit_clang19/bin/test_bitcoin --run_test=validation_chainstatemanager_tests/chainstatemanager_args --report_level=short
+# 1 case, 40 assertions passed
+
+cmake --build build_func_clang19 --target bitcoind -j2
+build_func_clang19/bin/bitcoind ... -maxsigcachesize=17592186044416
+# status 1
+# Error: -maxsigcachesize is too large (got 17592186044416 MiB)
+
+build_func_clang19/bin/bitcoind ... -maxsigcachesize=33
+# reached Done loading; each cache logged 16 MiB and stored 540672 elements
+```
+
+`git diff --check` passed. The hypothesis is **confirmed and fixed**. The
+source change is limited to checked arithmetic, representability validation,
+and its option-contract test.
+
+### Next distinct cell
+
+The same draw then exposed `-limitclustersize`: its `kB * 1'000` assignment
+was unchecked, and the resulting value feeds signed `*40` and `*4` operations
+in `CTxMemPool`. A separate journal update and source commit records that
+finding after its verification.
