@@ -479,6 +479,7 @@ int secp256k1_musig_nonce_gen_counter(const secp256k1_context* ctx, secp256k1_mu
     VERIFY_CHECK(ret);
     ret = secp256k1_keypair_pub(ctx, &pubkey, keypair);
     VERIFY_CHECK(ret);
+    secp256k1_declassify(ctx, &pubkey, sizeof(pubkey));
 #ifndef VERIFY
     (void) ret;
 #endif
