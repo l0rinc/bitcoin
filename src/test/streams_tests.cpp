@@ -174,6 +174,20 @@ BOOST_AUTO_TEST_CASE(xor_file)
     }
 }
 
+BOOST_AUTO_TEST_CASE(autofile_empty_span_io)
+{
+    // Empty spans may have null data pointers; fread/fwrite must never see
+    // them (UBSan nonnull), and empty I/O is a no-op.
+    const fs::path path{m_args.GetDataDirBase() / "test_autofile_empty_span.bin"};
+    AutoFile file{fsbridge::fopen(path, "w+b")};
+    file.write({});
+    file.write_buffer({});
+    file.read({}); // void full-read overload: no exception on empty input
+    BOOST_CHECK_EQUAL(file.detail_fread({}), 0U);
+    file << std::span<const std::byte>{};
+    BOOST_CHECK_EQUAL(file.tell(), 0);
+}
+
 BOOST_AUTO_TEST_CASE(autofile_tell_after_close)
 {
     const fs::path path{m_args.GetDataDirBase() / "test_autofile_tell_after_close.bin"};
