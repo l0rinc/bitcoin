@@ -1,5 +1,34 @@
 # Backport Correctness Audit
 
+## Cycle 67
+
+### Draw and scope
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `66`
+- Selected goal: `backport-correctness` (Cherry-pick, backport, and release-branch correctness audit)
+- Worktree: `/data/my_storage/bitcoin`
+- Branch: `fuzz-contract-cluster-oracles-20260709`
+- Cycle gate HEAD: `f08d9749c2949a3ff6b91d87525d42486a483c36`
+- `origin/master`: `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` was `2 906` at the gate.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goal TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The tracked/staged state was clean with only known untracked agent artifacts; no relevant process was running.
+
+Cycle 36 audited the 31.x `#35331` batch, and cycle 66's earlier goal-66 audit covered the 31.x CVE-2024-52911 lifetime backport. This cycle excludes both cells and selects the distinct 29.x `#34370` wallet/Berkeley DB backport family, with the 28.x rebased form as an independent patch comparison.
+
+### Initial hypothesis
+
+The falsifiable hypothesis is that the 29.x `#34370` backport (`115172ceb8`, including `7475d134f6`) omitted a prerequisite or incorrectly adapted Berkeley wallet file ownership and cleanup rules. A later rebased commit (`29abedc97b`, `Rebased-From: 7475d134f6`) is present on `origin/28.x`; it will be compared for semantic drift rather than treated as proof by itself.
+
+The trust boundary is a legacy Berkeley wallet directory containing a single wallet database, BDB environment files, backup/lock files, and unrelated user files or subdirectories. The relevant contract is that migration, backup, and cleanup may remove only files proven to belong exclusively to the wallet, while preserving unrelated data and handling multi-database environments conservatively.
+
+### Status
+
+Cycle 67 is in progress. Candidate ancestry and source differences have been identified; independent release-tree execution and mutation-sensitive file-list tests remain to be completed. No production source has been changed.
+
 ## Cycle Identity
 
 - Draw command: `shuf -i 0-98 -n 1`
