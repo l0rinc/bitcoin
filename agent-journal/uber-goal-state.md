@@ -4,11 +4,11 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 79 complete; goal 80 (`fuzz-engine-differential`) found no new defect in the distinct current-HEAD `parse_numbers` engine comparison. libFuzzer, AFL++, and Honggfuzz all completed fixed-budget runs without crashes or hangs, cross-engine retained inputs passed Clang 19 ASan replay, and no production change was justified. Cycle 78 confirmed and fixed the TokenPipe EPIPE status-contract defect while the remaining MSan daemon runtime boundary was classified as an uninstrumented system dependency. Cycle 77's fresh relationship/state-domain cells found no new source defect. Cycle 76 confirmed and fixed a distinct compact-block announcement read-failure path. Cycle 75 fixed the nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
+- Status: cycle 80 in progress; goal 33 (`external-vulnerability-variants`) is mining official advisories and related-project fixes for independently applicable variants in the current Bitcoin Core and libsecp256k1 tree. Cycle 79's distinct `parse_numbers` engine comparison found no new defect. Cycle 78 confirmed and fixed the TokenPipe EPIPE status-contract defect while the remaining MSan daemon runtime boundary was classified as an uninstrumented system dependency. Cycle 77's fresh relationship/state-domain cells found no new source defect. Cycle 76 confirmed and fixed a distinct compact-block announcement read-failure path. Cycle 75 fixed the nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
-- Branch: `uber-cycle-79-fuzz-engine-differential-20260728`
+- Branch: `uber-cycle-80-external-vulnerability-variants-20260728`
 - Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
 - HEAD at initialization: `1dcc2da988ee625fbc5d7d55eb6f894c1103ec52`
 - Current HEAD after cycle 16: `1926a4dbf612f3ce2fd43b61c0691360930a952f`
@@ -21,11 +21,13 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Current cycle-78 source/test/probe/journal HEAD: `c28bbc9580` (`util: report broken token pipe as end-of-stream`).
 - Current cycle-79 start HEAD: `4230363290` (`journal: close sanitizer-analysis cycle 78`).
 - Current cycle-79 journal/state close HEAD before the close snapshot: `0635279aed` (`journal: start fuzz-engine cycle 79`); no production source change was made.
+- Current cycle-80 start HEAD: `d2379d8892` (`journal: close fuzz-engine cycle 79`).
 - Cycle 76 gate: HEAD `02e0a92ddc33af203f4204848eb6095312f052af`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 930`; tracked source clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 76 selector: initial `shuf -i 0-98 -n 1` -> `37` (`build-dead-zones`) was rejected as the just-closed cell; retry `shuf -i 0-98 -n 1` -> `26` (`cross-subsystem-bug-shapes`). Cycles 48 and 62's wallet-rescan and chainstate candidate-set cells are excluded; this cycle targets a distinct historical failure-publication or lifecycle-asymmetry shape.
 - Cycle 77 selector: exact `shuf -i 0-98 -n 1` -> `57` (`local-reasoning-domain`). Cycle 65's AddrMan `GetNetwork()`/`GetNetClass()` relationship and linked-IPv4 cells are excluded; this cycle targets a distinct local relationship or state-domain assumption.
 - Cycle 78 selector: initial `shuf -i 0-98 -n 1` -> `2` (`assertion-invariant-audit`) was rejected because cycle 68 closed that GETBLOCKTXN assertion cell; retry `shuf -i 0-98 -n 1` -> `36` (`sanitizer-analysis-matrix`) was accepted for the distinct queued MSan/instrumented-dependency, Valgrind, direct TokenPipe, new-warning, and new source/configuration cells.
 - Cycle 79 selector: exact `shuf -i 0-98 -n 1` -> `80` (`fuzz-engine-differential`). Cycle 8's `bech32_roundtrip` engine/corpus comparison is excluded; this cycle uses the distinct `parse_numbers` parser target and current-HEAD toolchain matrix.
+- Cycle 80 selector: exact `shuf -i 0-98 -n 1` -> `33` (`external-vulnerability-variants`). The current campaign mines authoritative advisory and related-project fix seeds; closed local cells are excluded unless a seed provides a distinct caller, trust boundary, or lifecycle path.
 - Cycle 74 gate: HEAD `ddde67072a`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 925`; tracked source clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 74 selector: exact `shuf -i 0-98 -n 1` -> `37` (`build-dead-zones`). Cycle 20's GCC `BUILD_FOR_FUZZING=ON`, `ENABLE_IPC=ON`, wallet-enabled parser/fuzz cell is excluded; this cycle targets wallet-off, IPC-off/monolithic, test/bench, and generated-source parity.
 - Cycle 74 close: current source/journal HEAD before the state-only close commit is `8063cae3aa`; no source change was justified. The wallet-off/IPC-off Clang, wallet-on/IPC-off Clang, wallet-off/IPC-on GCC, fuzz-only wallet-off Clang, and GUI wallet-off Clang matrices all configured and built as expected. Focused unit, IPC, Qt, target-registration, and `/data`-backed fuzz controls passed; the only negative results were a malformed full-root temp setup and the documented release-build fuzz refusal. See `build-dead-zones.md`.
@@ -270,6 +272,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 77 | `shuf -i 0-98 -n 1` -> `57` | `local-reasoning-domain` (relationship and state-domain follow-up) | dismissed; no source change | Four distinct cells were checked: P2P transport/public network identity, BaseIndex commit snapshot versus flushed chainstate, transaction-download peer/orphan ownership, and descriptor x-only/full-key identity. Existing contracts, lifecycle serialization, deterministic controls, and independent focused suites found no new reachable mismatch. See `local-reasoning-domain.md`. | Journal-only close snapshot; no source change justified | Recheck the gate and draw the next eligible goal |
 | 78 | initial `2` rejected; retry `shuf -i 0-98 -n 1` -> `36` | `sanitizer-analysis-matrix` (distinct tool/configuration reopen) | confirmed; fixed | Cycle 26's completed matrix was not repeated. A fresh MSan build exposed an uninstrumented libstdc++ runtime boundary; a libc++/MSan TokenPipe probe independently reproduced `TokenWrite()` returning `TS_ERR` for EPIPE, while the public contract and daemon signal policy require `TS_EOS`. The minimal mapping passed the normal 6-assertion regression, full 3,991-assertion utility suite, TSan, direct MSan probe, scan-build, and GCC analyzer controls. See `sanitizer-analysis-matrix.md`. | `c28bbc9580` (`util: report broken token pipe as end-of-stream`) | Recheck the gate and draw the next distinct goal |
 | 79 | `shuf -i 0-98 -n 1` -> `80` | `fuzz-engine-differential` (distinct parse_numbers engine comparison) | dismissed; no new source defect | Excluded cycle 8's completed `bech32_roundtrip` comparison. Current-head libFuzzer, AFL++, and Honggfuzz used the same 220-file corpus and 15-second controls; native metric differences were engine-specific, all retained outputs passed current Clang 19 ASan replay, and cross-engine transfer found no crash, hang, corpus corruption, or semantic mismatch. FuzzTest remained unavailable. See `fuzz-engine-differential.md`. | Journal/state-only close; no production source change justified | Recheck the gate and draw the next eligible goal |
+| 80 | `shuf -i 0-98 -n 1` -> `33` | `external-vulnerability-variants` (advisory and related-project fix variants) | in progress | Inventory authoritative advisory seeds, map preconditions into the current tree, independently verify applicability, and preserve report-ready evidence for remote-only issues. Closed local cells remain excluded without a distinct trust boundary or caller. See `external-vulnerability-variants.md`. | Start state pending | Complete the advisory-variant cycle and then draw the next eligible goal |
 
 ## Cycle 72 Completion
 
@@ -329,6 +332,15 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Verification: ASan replay passed 261 retained libFuzzer files, 249 AFL++ queue files, and 202 Honggfuzz `.cov` files. Cross-engine transfers passed: libFuzzer on AFL++ output (4,068 executions, 21 new units), AFL++ on Honggfuzz output (38 new queue items), and Honggfuzz on AFL++ output at 15 seconds (4,202 iterations, 34 new units). A five-second Honggfuzz transfer stopped during dry-run and is excluded from metrics.
 - Tooling limitations: libFuzzer's default 2,048 MiB RSS guard rejected one `-runs=1` corpus-only control at 2,141 MiB; the same corpus passed with an explicit 8,192 MiB guard. Honggfuzz required Clang 19 and explicit build-tree runtime archives because its embedded `libhfcommon` archive was stale. Both are scratch environment results, not repository findings.
 - Evidence: `/data/my_storage/tmp/fuzz-engine-differential-cycle79/`, including fixed-budget logs, AFL stats, ASan replays, transfer runs, the initial-corpus manifest, and quarantined stale-build logs. `git diff --check` passed and no relevant process remains running.
+
+## Cycle 80 Active State
+
+- Gate: HEAD `d2379d8892369b0b465ac9b15797309e9ee70f5d`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 940`.
+- Branch: `uber-cycle-80-external-vulnerability-variants-20260728`.
+- Draw: `33` (`external-vulnerability-variants`).
+- Exclusions: closed TokenPipe, compact-block read-failure, Taproot compressed-key lookup, LevelDB ownership, `parse_numbers`, and other prior cells unless new advisory evidence identifies a distinct caller, precondition, trust boundary, or lifecycle path.
+- Campaign: retrieve authoritative Bitcoin Core and libsecp256k1 advisory history plus related-project fixes; pin source/version context; map each defect shape into this checkout; independently verify applicability before any patch.
+- Required evidence: source URL and identifier, affected versions and fix provenance, current-tree call/dataflow trace, deterministic reproducer or rigorous reachability proof, independent verification, and narrow/broad validation with explicit limitations.
 
 ## Cycle 77 Initial Active State
 
@@ -396,13 +408,15 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 79 is closed. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
-- Reopened goals: `sanitizer-analysis-matrix` cycle 78 is closed after the distinct TokenPipe finding; `statistical-timing` (cycle 5) remains reopened, with its GCC compiler/backend cell closed while database semantics remains open for distinct batch/recovery/sync/comparator cells.
+- Active goals this cycle: `external-vulnerability-variants` cycle 80 only. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Reopened goals: `external-vulnerability-variants` cycle 80; `sanitizer-analysis-matrix` cycle 78 is closed after the distinct TokenPipe finding; `statistical-timing` (cycle 5) remains reopened, with its GCC compiler/backend cell closed while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
 Cycle 79 is complete. The exact draw was `shuf -i 0-98 -n 1` -> `80`, `fuzz-engine-differential`. Cycle 8's `bech32_roundtrip` comparison was excluded; current-head builds used the distinct `parse_numbers` corpus. Native metric differences were classified as engine-specific, all retained inputs passed ASan replay, and no source change was justified. The next run must re-check the gate and draw a distinct eligible goal from the full catalog.
+
+Cycle 80 is active. The exact draw was `shuf -i 0-98 -n 1` -> `33`, `external-vulnerability-variants`, after the cycle-79 gate. The next handoff must preserve pinned advisory sources, affected-version and fix provenance, the applicability ledger, current-tree traces, independent verification, and any report-ready remote-only reproducer without treating external behavior as an oracle.
 
 Cycle 78 is complete. The initial draw was `2`, rejected because cycle 68 closed the GETBLOCKTXN assertion cell; the retry draw was `36`, `sanitizer-analysis-matrix`. The distinct TokenPipe EPIPE contract defect is fixed in `c28bbc9580`; the parent-control failure, normal/TSan/MSan/static validation, and MSan system-library limitation are recorded in `sanitizer-analysis-matrix.md`. The next run must re-check the gate and draw a distinct goal from the full catalog.
 
