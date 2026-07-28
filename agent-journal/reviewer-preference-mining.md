@@ -77,3 +77,61 @@ The first three held-out examples are independent of the primary review clusters
 Verdict: reusable technical review recipe confirmed; no production source change justified. The evidence supports contract-, lifecycle-, trust-boundary-, oracle-, and portability-driven review rules, with explicit contextual exceptions. The unauthenticated public API may omit comments or review edits, and merged history cannot establish what reviewers rejected. No test run was needed for this history-only campaign; exact source tips, API endpoints, local diffs, and held-out checks are recorded above. No process remains running.
 
 Next work should draw a distinct eligible goal and use this recipe when evaluating its review and history evidence. Do not reopen this campaign unless new review data, a different subsystem cluster, or a concrete recurrence changes the evidence.
+
+## Cycle 49: current-master contract and review-surface mining
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `60`
+- Slug: `reviewer-preference-mining`
+- Branch: `fuzz-contract-cluster-oracles-20260709`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- HEAD at the cycle gate: `bf28e1aa0e1aef9a9ae7ef05ef51c7aaa1e1600a`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` was `2 866`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Corrected actual-tab TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Gate: `git fetch origin master` passed; tracked and staged state was clean; only agent-owned journals/probes, `agent-goals/`, and existing `test/cache/` were untracked; no source, test, fuzz, sanitizer, daemon, or profiling process was running.
+
+The cycle-25 sample of this goal is closed and was not repeated. This cycle reopened only a distinct current-master evidence cell: post-cycle-25 merged PRs, current review comments, and held-out validation of a revised technical recipe. Review acceptance was treated as evidence of what survived review, not proof that every reviewer shares the same preference. Public unauthenticated API responses can omit hidden or line-level review context.
+
+### Fresh review evidence
+
+The primary sample was the set of changes merged after the old cycle-25 sample and their public review discussions:
+
+- [PR #35690](https://github.com/bitcoin/bitcoin/pull/35690), source `a8223bb4e62c8facd7e99eb05221c67cdcf0b52c`, merge `fe1cb6e40d7bae535c73e23c3bb1c7e6f14d644d`: `WalletError` deliberately has a generic display-only code and a specific `UnlockNeeded` code. The discussion rejected speculative `INVALID_DESCRIPTOR`, `INVALID_PARAMETER`, and `MISC_ERROR` expansion unless a caller can act differently. Reviewers also discussed validating parameters without duplicating the wallet implementation. This supports an actionable-code rule, not a preference for any particular enum names.
+- [PR #35736](https://github.com/bitcoin/bitcoin/pull/35736), source `7298281ba8dfb58e07121c74e64f07861ec21f5c`, merge `559d042ba2567a05e8d540c7d9d9a94c7d2973d2`: the `netmagic` command became the structured `getchainparams` command. Review discussion explicitly weighed removing fields with no current use against retaining a self-documenting, extensible object. The final output uses named nested objects and versioned fixture files, while the command rejects extra arguments.
+- [PR #35746](https://github.com/bitcoin/bitcoin/pull/35746), sources `a7e980af31b92f5a21be6b91bed353e65c5cf770` and `f3f302150b5fc115e0561dd639b9b389822999e9`, merge `a31c30290d4c86000601de665866f9015635f48f`: CI had overridden `BASE_BUILD_DIR`, bypassing the existing space/UTF-8 path test. The fix quotes every NSIS `File` input and forces the externally supplied build path to contain a space and non-ASCII symbols. A reviewer reproduced the old installer failure on Debian with the actual CI path, confirmed the fix, and recorded a range-diff after rebase.
+- [PR #35076](https://github.com/bitcoin/bitcoin/pull/35076), source `51ee8ca1683ce1ba9997d0ccf014a1986afceb93`, merge `afa5e46bbc6dd750bd71920b659162a945abf0ae`: the pruning warning was made actionable and consistent between CLI help and the Qt tooltip by naming both wallets and indexes and the required reindex consequence.
+- [PR #35775](https://github.com/bitcoin/bitcoin/pull/35775), source `2cb3bfa8df7cab0635be221af1c8754dbbaff335`, merge `290cb2f17ef6ba9198934bbaec53fa962a1dfa18`: a review caught that “everywhere” overstated a change scoped to Guix scripts and asked whether the linter should change only for a codebase-wide policy. The final wording narrowed the claim to the actual affected directory.
+
+The new evidence repeats the old contract/lifecycle/oracle emphasis but adds three separable rules: stable machine-readable interfaces should be driven by caller action; structured output should be minimal enough to defend while using an extensible shape for proven future-facing data; and build/CI tests must validate the externally injected paths and variables actually consumed by every downstream tool. Scope-accurate documentation is a cross-layer contract, not merely prose polish.
+
+### Reusable current-master recipe
+
+When reviewing a public interface, build or test change, apply this sequence:
+
+1. State the durable consumer contract before judging the diff. For an error code, name the caller action it enables; for structured output, identify each field's consumer or specification basis; for a build variable, trace its value from CI injection through scripts, generators, installers, and artifacts.
+2. Keep machine-readable taxonomies small. Use one generic code when the caller only displays the message, add a specific code only when a caller can recover, retry, unlock, choose another path, or otherwise behave differently, and preserve the detailed translated message separately. Avoid duplicating validation solely to manufacture finer categories.
+3. Prefer a stable, self-documenting output object over positional or opaque output, but do not add speculative fields without a current contract. Add per-variant fixtures for valid, conditional, and rejected forms, and test the negative argument/error contract.
+4. Test the real boundary that failed. If a build path comes from an environment override, make CI set that override to the adversarial value; exercise spaces, non-ASCII, quoting, globs, and rebase/merge changes through the final installer or artifact consumer. A test of the default variable is insufficient when CI replaces it.
+5. Keep user-facing claims aligned across every surface and scoped to the affected component. Check CLI help, GUI text, docs, release notes, and linter/policy rules together, and state the operational consequence rather than only the setting's mechanism.
+6. Re-run the recipe on an independent held-out change and classify each recovered rule as general, contextual, or not supported. Do not elevate a preferred spelling, helper, or reviewer identity into a project-wide rule.
+
+### Held-out validation
+
+The current tree supplied executable and static controls for the recipe:
+
+- `cmake -S . -B '/data/my_storage/tmp/cycle49-build-space_ ₿🧪_' -G Ninja -DBUILD_UTIL=ON -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_ZMQ=OFF` configured successfully. The isolated `cmake --build ... --target bitcoin-util -j2` completed all 132 actions despite the space and non-ASCII path.
+- The resulting binary's `getchainparams` output matched `test/functional/data/util/getchainparams-mainnet.json` and `getchainparams-regtest.json` byte-for-byte. `getchainparams extra_arg` returned status 1 and `getchainparams does not take arguments`. This validates a self-documenting structured output, conditional fields, exact fixtures, and a negative interface contract.
+- `git grep` on `origin/master` found only the two deliberately documented `WalletErrorCode` values, `GenericError` and `UnlockNeeded`; their comments state the display-only versus unlock-and-retry behavior. No speculative enum expansion or caller duplication was introduced by the scaffold commit.
+- `origin/master` contains the paired pruning strings in `src/init.cpp` and `src/qt/forms/optionsdialog.ui`, both naming wallets, indexes, synchronization, and reindexing. Existing `feature_index_prune.py`, `feature_pruning.py`, `wallet_assumeutxo.py`, and `wallet_migration.py` cover the operational consequences rather than only checking text.
+- `origin/master` contains the paired CI path override and quoted NSIS inputs. The local `makensis` executable is unavailable, so the final Windows installer invocation could not be rerun here; the CMake/path build and the public PR reproduction remain the available independent controls.
+- The `getchainparams` fixture, pruning documentation, and CI path checks are independent of the historical cycle-25 held-out commits. The extra-transaction-count state-machine change from `6aa5d8d948` remains excluded as a prior-cycle control, not counted as new evidence.
+
+### Verdict and handoff
+
+Verdict: **reusable technical review recipe confirmed; no new repository defect found on current HEAD**. The evidence is stronger than a reviewer-style collection because each rule maps to a caller contract, output schema, build boundary, or user-visible operational consequence, and the held-out controls reproduce those obligations. No production source change is warranted in this history/review cycle. The precise limitation is that unauthenticated API data cannot establish rejected comments exhaustively, and the NSIS deploy target could not run because `makensis` is unavailable. No process remains running.
+
+Next queue: draw another distinct eligible goal. Preserve this recipe under the fingerprint `actionable-interface-minimal-schema-boundary-realism` and do not reopen it unless new review evidence or a concrete recurrence changes the rule.
