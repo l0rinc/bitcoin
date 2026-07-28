@@ -85,12 +85,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 94 | bindings-ffi-parity | CYCLE-1 | 2026-07-28 | View/Range lifetime doc fix (0a6c377ddb, own branch) |
 | 95 | database-semantics-differential | CYCLE-1 | 2026-07-28 | leveldb exact sync (c784869048, own branch) |
 | 75 | build-throughput-cacheability | CYCLE-1 | 2026-07-28 | no-op 0.19s stable; generator cascade restat-bounded; fan-out leaf-only; warm 2.85s / cold 30.78s incremental |
+| 22 | full-sync-ibd-profile | CYCLE-2 | 2026-07-28 | two-node P2P IBD: bloom reset-per-tip 40.6% CPU, clean-flag fix c8f53e58d9 (-58% user); checks-on 17.0s vs 2.96s re-confirmed |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=5726162901932444281 -> idx 25 (of 32) -> #75.
-2. then re-rank: 21 c2 (tx-heavy reindex), 22 c2 (two-node P2P IBD),
+   raw=1670674105687797563 -> idx 6 (of 31) -> #22.
+2. then re-rank: 21 c2 (tx-heavy reindex), #22 queue (fee-estimator
+   UpdateMovingAverages per-block gating; tx-heavy import),
    #45 queue (passphrase rate-limiting semantics), #43 queue
    (-capturemessages lifecycle), #36 queue (clang-18 differential),
    #73 queue (handshake EOF sweep), #75 queue (clean-build wall,
@@ -98,7 +100,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2,c3,QUEUE-COMPLETE), 19(EXHAUSTED), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3,c4), 29(c2), 17(c2,c3), 21(c1), 22(c1), 36(c1), 37(c1), 39(c1), 43(c1), 45(c1), 47(c1), 51(c1), 59(c1), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1), 90(c1), 91(c1), 94(c1), 95(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2,c3,QUEUE-COMPLETE), 19(EXHAUSTED), 28(c2), 16(c2), 61(c3), 30(c3), 31(c3,c4), 29(c2), 17(c2,c3), 21(c1), 22(c1,c2), 36(c1), 37(c1), 39(c1), 43(c1), 45(c1), 47(c1), 51(c1), 59(c1), 65(c1), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1), 90(c1), 91(c1), 94(c1), 95(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
@@ -112,3 +114,9 @@ touch + `ninja -n` + `touch -d` mtime restore (dry-run always includes
 the 14-edge build-info cascade — subtract it, it restats away on real
 runs). ccache-warm timings are NOT compile costs — use CCACHE_DISABLE=1
 for cold numbers.
+IBD-profile note (#22 c2): on regtest the IsInitialBlockDownload latch
+flips false after the FIRST connected block (minwork=0 + fresh
+timestamps), so any per-tip-change work gated on !is_ibd runs for the
+whole sync — profile with -checkblockindex=0 AND a perf record, or the
+consistency machinery (5.7x wall) hides the real pipeline. This tree's
+bitcoind does not auto-create a missing -datadir; mkdir first.
