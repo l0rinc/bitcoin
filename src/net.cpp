@@ -2453,6 +2453,11 @@ void CConnman::ThreadDNSAddressSeed()
 
 void CConnman::DumpAddresses()
 {
+    // SerializeFileDB uses a temporary filename and a final rename; periodic and shutdown dumps
+    // must not overlap or an older snapshot can replace a newer one.
+    static Mutex dump_mutex;
+    LOCK(dump_mutex);
+
     const auto start{SteadyClock::now()};
 
     DumpPeerAddresses(::gArgs, addrman);
