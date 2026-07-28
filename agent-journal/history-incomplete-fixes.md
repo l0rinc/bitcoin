@@ -30,6 +30,12 @@ For each candidate I will trace the authoritative contract through callers, test
 - Verification: `git diff --check`; `cmake --build build_unit_clang19 --target test_bitcoin -j4`; focused block-manager regression passed with 11 assertions; full `blockmanager_tests` passed with 12 cases and 128 assertions. The old-source mutation was independently observed before the production edit.
 - Impact and limits: this prevents stale/partial caller output after a failed local undo-file read. It does not make corrupted undo data valid, alter the on-disk format, change recovery policy, or claim a remote trigger; callers still fail and report the underlying corruption.
 
+### Cycle 58 completion and handoff
+
+- Source/test commit: `3e4ec4e7ef0f216c09c10b1d577fc1517a043434`, authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- Verification completed after the commit: `git diff --check`; `cmake --build build_unit_clang19 --target test_bitcoin -j4`; the focused checksum-failure regression with 11 assertions; the full `blockmanager_tests` suite with 12 cases and 128 assertions. ASan was unavailable in the local build environment. No source, test, daemon, fuzz, sanitizer, or profiling process remains running.
+- Cycle verdict: confirmed and fixed. The next run must draw a fresh goal from `0..98`, search the full history and current risk map before selecting a distinct hypothesis, and avoid reopening this undo-output cell unless a new caller, backend, recovery mode, or recurrence provides independent evidence.
+
 ## Cycle 43: initial history sweep
 
 - Goal: mine historical partial fixes, follow-ups, reverted work, and migrations for omitted analogous sites on current code.
