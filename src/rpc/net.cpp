@@ -659,7 +659,7 @@ static RPCMethod getnetworkinfo()
                         }},
                         {RPCResult::Type::BOOL, "localrelay", "true if transaction relay is requested from peers"},
                         {RPCResult::Type::NUM, "timeoffset", "the time offset"},
-                        {RPCResult::Type::NUM, "tx_send_rate", "configured target for maximum number of transactions per second to send to inbound peers"},
+                        {RPCResult::Type::NUM, "tx_send_rate", "configured target for maximum number of transactions per second to send to peers"},
                         {RPCResult::Type::OBJ_DYN, "inv_buckets", "", {
                           {RPCResult::Type::OBJ, "inbound/outbound", "connection direction",
                             {

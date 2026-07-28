@@ -241,7 +241,10 @@ class NetTest(BitcoinTestFramework):
             assert_net_servicesnames(int(info["localservices"], 0x10), info["localservicesnames"])
 
         # Check dynamically generated networks list in getnetworkinfo help output.
-        assert "(ipv4, ipv6, onion, i2p, cjdns)" in self.nodes[0].help("getnetworkinfo")
+        network_info_help = self.nodes[0].help("getnetworkinfo")
+        assert "(ipv4, ipv6, onion, i2p, cjdns)" in network_info_help
+        assert "configured target for maximum number of transactions per second to send to peers" in network_info_help
+        assert "configured target for maximum number of transactions per second to inbound peers" not in network_info_help
 
     def test_addnode_getaddednodeinfo(self):
         self.log.info("Test addnode and getaddednodeinfo")
