@@ -71,3 +71,49 @@ Runtime controls on current HEAD:
 ## Handoff
 
 No source change was made. Raw source/history evidence is in the commands recorded above; current unit artifacts are under the existing `build_unit_clang19` tree. The next cycle must run a fresh gate, draw a distinct eligible catalog goal, and should not reopen this CoinStats cell unless a new append caller, restart/persistence path, or nonfatal shutdown behavior appears.
+
+## Cycle 37 Selection and Gate
+
+- Selected index: `62`
+- Selected slug: `rejected-finding-resurrection`
+- Selected title: `Rejected-finding resurrection and assumption attack`
+- Selector: `shuf -i 0-98 -n 1`
+- Cycle gate HEAD: `ebe09a67153fe09ba67b03b0cc49f01fa84e2381`
+- Gate origin/master: `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Gate merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Gate divergence: `origin/master...HEAD = 2 843`
+- Gate state: tracked and staged files clean; agent/catalog artifacts and `test/cache/` remain untracked and were preserved; no relevant process was running.
+
+## Cycle 37 Distinct Cell
+
+The cycle-33 CoinStats `CustomAppend()` mismatch cell was excluded. The distinct reopened cell was the deferred `GetNodeStateStats()` failure contract from `error-path-state.md`, attacked through the Qt peer-detail caller and its changed refresh path.
+
+### Hypothesis
+
+When node-state statistics become unavailable after a previous successful refresh, `RPCConsole::updateDetailWidget()` may leave the old state-only values visible instead of representing the unavailable state. The trust boundary is a local node-state/GUI synchronization boundary: `TRY_LOCK(::cs_main, lockMain)` can legitimately fail, and peer selection/data refresh can invoke the UI update while the same peer remains selected.
+
+### Evidence and Reproduction
+
+- `NodeImpl::getNodesStats()` initializes each tuple with `fNodeStateStatsAvailable=false` and default `CNodeStateStats`, then assigns the real state only when `cs_main` is acquired. A busy `cs_main` therefore produces a valid node row whose state statistics are unavailable.
+- `PeerTableModel::refresh()` emits `dataChanged` after rebuilding the rows. `RPCConsole` connects that signal directly to `updateDetailWidget()`, so an unavailable refresh updates the selected peer detail pane without requiring a selection change.
+- Before this cycle, `updateDetailWidget()` assigned `timeoffset`, services, sync/common height, ping wait, address relay/accounting, and relay-transaction fields only inside `if (stats->fNodeStateStatsAvailable)`. The false path performed no writes. Qt labels retain their previous text, so a true-to-false refresh left the prior peer-state values visible while the adjacent general fields had already been refreshed.
+- `git show 1b0db7b984 -- src/qt/rpcconsole.cpp` and line history show that the peer-detail implementation has had explicit unavailable-state handling in its history, while the current nine-field false path has no equivalent clearing behavior. The current comment only explains why the fetch can fail; it does not establish that stale values are an acceptable display contract.
+- The minimal deterministic state transition is: select a peer, run one successful refresh to populate all nine fields, make `cs_main` unavailable for the next `getNodesStats()` call, emit `dataChanged`, and call `updateDetailWidget()` for the unchanged selection. The old code retains all nine old strings; the new `else` branch assigns `ts.na` to each state-only field.
+
+### Fix
+
+`src/qt/rpcconsole.cpp` now explicitly assigns `ts.na` to all nine node-state-only labels when `fNodeStateStatsAvailable` is false: time offset, services, sync height, common height, ping wait, address relay enabled, addresses processed, addresses rate limited, and relay transactions. This is the smallest caller-side fix and preserves the intentional `GetNodeStateStats()` false result.
+
+### Verification
+
+- Configured a clean Qt 6 build at `/data/my_storage/tmp/build-gui-cycle37` with `BUILD_GUI=ON`, `BUILD_GUI_TESTS=ON`, `BUILD_TESTS=ON`, wallet/IPC/ZMQ/USDT disabled, and Debug type; configuration succeeded.
+- `cmake --build /data/my_storage/tmp/build-gui-cycle37 --target bitcoin-qt test_bitcoin-qt -j2` completed all 453 Ninja actions and linked both targets.
+- `QT_QPA_PLATFORM=minimal /data/my_storage/tmp/build-gui-cycle37/bin/test_bitcoin-qt --log_level=message --report_level=short` passed AppTests (3), OptionTests (6), URITests (3), and RPCNestedTests (3); all tests passed with no failures, skips, or blacklisted cases.
+- `build_unit_clang19/bin/test_bitcoin --run_test=net_tests/get_node_state_stats_overwrites_reused_output --log_level=message --report_level=short` passed 1 case and 4 assertions, preserving the adjacent API reset contract.
+- `git diff --check` passed.
+
+There is no existing Qt test that constructs a selected peer and forces the `TRY_LOCK` false path, so this cycle does not claim a direct widget-level regression test. The state-flow proof is deterministic from the production caller chain, and the current Qt suite provides build/application regression coverage. A future GUI-test expansion can exercise the exact lock-busy transition if the test harness gains a controllable peer-state fixture.
+
+## Cycle 37 Verdict and Handoff
+
+**Confirmed and fixed.** The API-level false result remains intentional; the resurrected defect was stale user-visible state in the Qt caller. The source fix and this cycle's journal/state handoff are committed together. The next cycle must run a fresh gate, exclude this fixed Qt state-refresh cell, draw another goal from the validated catalog, and continue the risk-map loop.
