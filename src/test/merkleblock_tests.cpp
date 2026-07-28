@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <merkleblock.h>
+#include <streams.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <uint256.h>
@@ -113,6 +114,52 @@ BOOST_AUTO_TEST_CASE(merkleblock_construct_from_txids_not_found)
     BOOST_CHECK_EQUAL(merkleBlock.txn.ExtractMatches(vMatched, vIndex).GetHex(), block.hashMerkleRoot.GetHex());
     BOOST_CHECK_EQUAL(vMatched.size(), 0U);
     BOOST_CHECK_EQUAL(vIndex.size(), 0U);
+}
+
+/**
+ * A partial merkle tree whose sibling branches are identical must be
+ * rejected: the transaction hashes covered by sibling branches must each be
+ * unique (duplicate-txid merkle ambiguity, CVE-2012-2459 lineage). Extraction
+ * happens on attacker-controlled trees from the P2P merkleblock message.
+ */
+BOOST_AUTO_TEST_CASE(merkleblock_reject_duplicate_branch_hashes)
+{
+    // Minimal case: 2-tx tree with identical txids (vBits = {1,1,1},
+    // vHash = {txid, txid}); left == right at the root.
+    const Txid txid{Txid::FromUint256(uint256::ONE)};
+    CPartialMerkleTree dup_leaves{{txid, txid}, {true, true}};
+    std::vector<Txid> vMatched;
+    std::vector<unsigned int> vIndex;
+    BOOST_CHECK(dup_leaves.ExtractMatches(vMatched, vIndex).IsNull());
+
+    // 4-tx tree with duplicated inner subtrees [A,B] | [A,B]: left == right
+    // at the inner node, one level below the root.
+    const Txid tx_a{Txid::FromUint256(uint256::ONE)};
+    const Txid tx_b{Txid::FromUint256(uint256::ZERO)};
+    CPartialMerkleTree dup_subtrees{{tx_a, tx_b, tx_a, tx_b}, {true, true, true, true}};
+    BOOST_CHECK(dup_subtrees.ExtractMatches(vMatched, vIndex).IsNull());
+}
+
+/**
+ * A partial merkle tree must not carry more bits than its traversal consumes
+ * (beyond the byte-serialization padding): trailing bits past the first
+ * unused byte indicate a malformed tree and must be rejected.
+ */
+BOOST_AUTO_TEST_CASE(merkleblock_reject_trailing_bits_beyond_padding)
+{
+    // Valid 2-tx tree: root descends, left leaf matched, right leaf stored.
+    // vBits = [1,1,0] (3 bits, 1 byte), vHash = [hash_x, hash_y].
+    const uint256 hash_x{"74d681e0e03bafa802c8aa084379aa98d9fcd632ddc2ed9782b586ec87451f20"};
+    const uint256 hash_y{"f9fc751cb7dc372406a9f8d738d5e6f8f63bab71986a39cf36ee70ee17036d07"};
+    DataStream stream{};
+    stream << uint32_t{2};
+    stream << std::vector<uint256>{hash_x, hash_y};
+    stream << std::vector<unsigned char>{0x03, 0x00}; // 16 bits: valid 3 + a whole trailing byte
+    CPartialMerkleTree tree;
+    stream >> tree;
+    std::vector<Txid> vMatched;
+    std::vector<unsigned int> vIndex;
+    BOOST_CHECK(tree.ExtractMatches(vMatched, vIndex).IsNull());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
