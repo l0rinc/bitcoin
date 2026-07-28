@@ -49,6 +49,17 @@ The boundary matrix will enumerate compact exponents around 0, 1, 2, 3, 4, 31, 3
 - Run the focused unit suite and relevant proof-of-work tests in `build_unit_clang19`, with a stable `TMPDIR`; preserve raw logs under `/data/my_storage/tmp/`.
 - Temporarily mutate one canonicalization branch and one oracle assertion to prove the matrix detects both a production result error and a weak test. Restore all disposable source before committing.
 
-### Status
+### Evidence and verdict
 
-Cycle opened; no verdict or source change yet. The current implementation uses `CeilDiv(bits(), 8u)` for the compact exponent and has no property test tying arbitrary compact inputs to their decoded-value canonical form. The next handoff records the full boundary matrix, the first failing operation if any, and the exact limits of the checked domain.
+- A disposable `boost::multiprecision::cpp_int` oracle checked 902 compact encodings: exponents 0 through 40, 11 mantissas around zero, truncation, sign, and overflow thresholds, and both sign-bit states. It independently decoded the value modulo 256 bits, checked the documented sign/overflow flags, and checked canonical reparse. A second value matrix covered exponents 3 through 32, five high-mantissa states around `0x00800000`, and four low tails, for 600 additional generated values. The matrix passed 7,515 assertions.
+- The matrix also documented a deliberate invalid-input edge: an encoding with an exponent beyond the 256-bit storage width can report `negative=true` from its nonzero compact mantissa while its decoded 256-bit value is zero. Canonical `GetCompact` correctly drops that sign because compact negative zero is not representable; the test expected this only for zero decoded values.
+- The restored focused matrix passed 1 case and 7,515 assertions. The complete `arith_uint256_tests` suite passed 14 cases and 18,255 assertions. The proof-of-work suite passed 17 cases and 1,085 assertions. Raw logs are `/data/my_storage/tmp/exhaustive-algebraic-cycle64-boundary3.log`, `/data/my_storage/tmp/exhaustive-algebraic-cycle64-arith.log`, and `/data/my_storage/tmp/exhaustive-algebraic-cycle64-pow2.log`.
+- A temporary sign-carry mutation changed the `0x00800000` check in `GetCompact`; the focused matrix terminated at the existing mantissa assertion in `src/arith_uint256.cpp:212`. A temporary decoder-shift mutation changed the small-exponent shift; the focused matrix terminated with status 132. Both mutations were restored. Raw controls are `/data/my_storage/tmp/exhaustive-algebraic-cycle64-mutation.log` and `/data/my_storage/tmp/exhaustive-algebraic-cycle64-mutation2b.log`.
+- The Clang 19 ASan/UBSan libFuzzer `integer` target completed 1,000 fixed-seed runs with no diagnostic, and `pow` completed 250 fixed-seed runs with no diagnostic. Logs are `/data/my_storage/tmp/exhaustive-algebraic-cycle64-fuzz-integer.log` and `/data/my_storage/tmp/exhaustive-algebraic-cycle64-fuzz-pow.log`.
+- The first proof-of-work invocation used a nonexistent `TMPDIR` and failed in the test fixture before exercising the target; creating the directory and rerunning passed. No source or durable test change was justified. `git diff --check` passed and no relevant process remains running.
+
+### Limits and handoff
+
+No source defect was confirmed. The compact decoder agrees with the independent bounded arithmetic oracle, canonical re-encoding is stable, and the proof-of-work consumer preserves its existing contracts. The matrix did not exhaust all 2^23 mantissas or every arbitrary 256-bit value, and libFuzzer smoke runs started from empty corpora; existing unit/fuzz coverage remains the evidence outside those domains.
+
+Next queue: draw a fresh goal after rechecking the gate. Do not reopen this compact cell without a new consensus vector, cross-implementation divergence, compiler/architecture result, or production regression.
