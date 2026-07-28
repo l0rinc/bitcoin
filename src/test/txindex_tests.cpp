@@ -285,6 +285,28 @@ BOOST_FIXTURE_TEST_CASE(txindex_locator_upgrade, TestChain100Setup)
     BOOST_CHECK(stored_legacy_locator.vHave == legacy_locator.vHave);
 }
 
+BOOST_FIXTURE_TEST_CASE(txindex_sequence_restart, TestChain100Setup)
+{
+    uint32_t expected_seq;
+    {
+        TxIndex txindex(interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/false);
+        BOOST_REQUIRE(txindex.Init());
+        txindex.Sync();
+        BOOST_REQUIRE(TxIndexTest::GetDB(txindex).Read(txindex::DB_NEXT_BLOCK_SEQ, expected_seq));
+        txindex.Stop();
+    }
+
+    const CBlock block{CreateAndProcessBlock({}, CScript() << OP_TRUE)};
+    TxIndex txindex(interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/false);
+    BOOST_REQUIRE(txindex.Init());
+    txindex.Sync();
+
+    uint32_t block_seq;
+    BOOST_REQUIRE(TxIndexTest::GetDB(txindex).Read(txindex::BlockHashKey{block.GetHash()}, block_seq));
+    BOOST_CHECK_EQUAL(block_seq, expected_seq);
+    txindex.Stop();
+}
+
 BOOST_FIXTURE_TEST_CASE(txindex_reorg_keeps_stale_entries, TestChain100Setup)
 {
     TxIndex txindex(interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/true);

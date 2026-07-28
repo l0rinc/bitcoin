@@ -68,6 +68,9 @@ public:
     /// Whether the database contains any legacy ('t' + txid) entries.
     const bool m_has_legacy;
 
+    /// Sequence number to assign to the next newly indexed block.
+    uint32_t m_next_block_seq{0};
+
     CBlockLocator ReadBestBlock() const override;
     void WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator) override;
 
@@ -91,7 +94,9 @@ TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool has_legacy
     BaseIndex::DB(TxIndexDBPath(), n_cache_size, f_memory, f_wipe, /*f_obfuscate=*/false, /*f_bloom=*/has_legacy),
     m_hasher{ReadOrCreateTxidHasher(*this)},
     m_has_legacy{has_legacy}
-{}
+{
+    Read(txindex::DB_NEXT_BLOCK_SEQ, m_next_block_seq);
+}
 
 CBlockLocator TxIndex::DB::ReadBestBlock() const
 {
@@ -110,11 +115,9 @@ void TxIndex::DB::WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator)
 
 void TxIndex::DB::WriteTxs(const interfaces::BlockInfo& block)
 {
-    uint32_t block_seq{0};
-    Read(txindex::DB_NEXT_BLOCK_SEQ, block_seq);
-
     // A block that reconnects after a reorg keeps its original sequence number.
     // No reorgs have occurred if sequence == block.height - 1, so we can skip the check.
+    const uint32_t block_seq{m_next_block_seq};
     if (block_seq != uint32_t(block.height - 1) && Exists(txindex::BlockHashKey{block.hash})) return;
 
     CDBBatch batch(*this);
@@ -129,6 +132,7 @@ void TxIndex::DB::WriteTxs(const interfaces::BlockInfo& block)
         tx_offset_in_block += tx->ComputeTotalSize();
     }
     WriteBatch(batch);
+    m_next_block_seq = block_seq + 1;
 }
 
 TxIndex::TxIndex(std::unique_ptr<interfaces::Chain> chain, size_t n_cache_size, bool f_memory, bool f_wipe)
