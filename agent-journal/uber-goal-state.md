@@ -11,6 +11,14 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - `build_unit_clang19` and `build_unit_tsan_clang19` rebuilt `test_bitcoin`; both `psbt_tests` runs passed all 10 cases. No relevant process remains running.
 - Current branch: `uber-cycle-81-serialization-untrusted-input-20260728`; current HEAD: `1a1a51aa96873c8fd8715b5a2b9b74a7e550a65f`. A state-only close snapshot and the next exact random selector remain to be recorded.
 
+## Cycle 82 Active State
+
+- Selector: exact `shuf -i 0-98 -n 1` -> `7` (`resource-exhaustion-variants`).
+- Branch: `uber-cycle-82-resource-exhaustion-variants-20260728`.
+- Start HEAD: `d86caff0a23f0ba042ced945520dffb1ee224164`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `2 945`.
+- Scope: distinct CPU/memory/disk/network/descriptor/queue/retry/retained-state variants at P2P, RPC/REST, wallet, persistence, and parser boundaries. Cycle 57's cfilters/BIP35 response-watermark cells and prior relay-backlog, integer-option, and receive-buffer cells are excluded without new evidence.
+- Gate: catalog/protocol/TSV hashes match; known untracked artifacts are preserved; no relevant process is running. Cycle 82 journal: `agent-journal/resource-exhaustion-variants.md`.
+
 - Status: cycle 81 in progress; goal 6 (`serialization-untrusted-input`) is tracing untrusted byte lengths, counts, encodings, casts, loops, and failure-state mutation across network, RPC, object, wallet, database, and fuzz boundaries. Cycle 80 found no new current-tree advisory variant; A1-A4 were dismissed after source/history tracing and focused suites, while A6 and A7 were already fixed upstream with current regression evidence. The missing previous-release migration binaries and native 32-bit execution are recorded limitations, not passes. Cycle 79's distinct `parse_numbers` engine comparison found no new defect. Cycle 78 confirmed and fixed the TokenPipe EPIPE status-contract defect while the remaining MSan daemon runtime boundary was classified as an uninstrumented system dependency. Cycle 77's fresh relationship/state-domain cells found no new source defect. Cycle 76 confirmed and fixed a distinct compact-block announcement read-failure path. Cycle 75 fixed the nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`

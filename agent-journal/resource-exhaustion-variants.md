@@ -72,3 +72,26 @@ The prior ledger already closes the exact duplicate global relay-backlog cell: c
 ## Handoff
 
 Cycle 57 conclusion: no source fix is justified. The cfilters and BIP35 response loops are bounded by local indexed/mempool state but can exceed the soft send watermark; both require a protocol-compatible continuation or refusal design before changing behavior. The next cycle should begin with the BIP35 response-queue hypothesis, then inspect analogous multi-message response paths and historical backpressure decisions. Preserve the exact command/output ledger above and do not rerun the removed measurement probe as a product test.
+
+## Cycle 82 start
+
+- Selected by the uber loop: exact `shuf -i 0-98 -n 1` -> `7` (`resource-exhaustion-variants`). This is a re-selection of the goal, so cycle 57's cfilters and BIP35 response-watermark cells are excluded unless a new caller, bound, or failure mode is independently demonstrated.
+- Branch: `uber-cycle-82-resource-exhaustion-variants-20260728`.
+- Cycle-start HEAD: `d86caff0a23f0ba042ced945520dffb1ee224164` (`journal: close serialization input cycle 81`).
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `origin/master...HEAD` is `2 945`.
+- Gate: tracked source was clean after the cycle-81 source and journal commits; known untracked agent artifacts and `test/cache` are preserved and excluded. Catalog/protocol/TSV hashes match the recorded values. No relevant process is running.
+
+## Cycle 82 scope and exclusions
+
+Audit attacker-influenced CPU, memory, disk, network, descriptor, queue, retry, and retained-state costs at P2P, RPC/REST, wallet, persistence, and parser boundaries. A source finding requires a realistic low-limit reproducer or an explicit violated resource/accounting bound; a large but already bounded operation is only a lead. Do not repeat cycle 57's `getcfilters` 1,000-filter response loop, BIP35 mempool snapshot watermark, global relay backlog, integer-domain option, or previously fixed receive-buffer cells without distinct evidence.
+
+## Cycle 82 hypotheses
+
+1. A multi-message P2P response path may snapshot or enqueue a bounded request's full result before checking the peer's send watermark, with a deterministic slow-peer schedule that demonstrates retained bytes beyond the intended bound.
+2. A public REST/RPC endpoint may parse or construct a large bounded object before applying its endpoint-specific limit, causing avoidable allocation or CPU amplification for a low-cost request.
+3. A disconnect, permission, retry, or restart transition may leave request-derived queues, descriptors, or temporary storage retained after the initiating peer or caller is gone.
+4. Historical DoS fixes may have analogous current paths in a different protocol or persistence subsystem; each candidate must have a distinct source-to-sink trace and a separate minimized reproducer.
+
+## Cycle 82 evidence plan
+
+Start with history/advisory and current-code mining, then write an explicit equation for each candidate: attacker operations, bytes, allocations, queue entries, retries, and cleanup state. Prefer direct unit state models, deterministic socket shims, functional tests, fixed `RLIMIT`/cgroup limits, and scratch datadirs. Measure before/after queue length, RSS, CPU, disk, and cleanup; do not infer an unbounded condition from a single slow run. Preserve exact commands, raw output, minimized transcripts, and rejected hypotheses in this journal.
