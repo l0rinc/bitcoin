@@ -1641,6 +1641,10 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
     BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=100"}).prevoutfetch_threads_num, MAX_PREVOUTFETCH_THREADS);
     BOOST_CHECK(!get_opts({"-prevoutfetchthreads=-1"}));
 
+    BOOST_CHECK_EQUAL(get_valid_opts({"-dbbatchsize=0"}).coins_view.batch_write_bytes, 0);
+    BOOST_CHECK_EQUAL(get_valid_opts({"-dbbatchsize=1"}).coins_view.batch_write_bytes, 1);
+    BOOST_CHECK(!get_opts({"-dbbatchsize=-1"}));
+
     BOOST_CHECK_EQUAL(get_valid_opts({"-dbcrashratio=0"}).coins_view.simulate_crash_ratio, 0);
     BOOST_CHECK_EQUAL(get_valid_opts({"-dbcrashratio=24"}).coins_view.simulate_crash_ratio, 24);
     BOOST_CHECK(!get_opts({"-dbcrashratio=-1"}));

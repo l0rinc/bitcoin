@@ -14,7 +14,12 @@
 namespace node {
 util::Result<void> ReadCoinsViewArgs(const ArgsManager& args, CoinsViewOptions& options)
 {
-    if (auto value = args.GetIntArg("-dbbatchsize")) options.batch_write_bytes = *value;
+    if (auto value = args.GetIntArg("-dbbatchsize")) {
+        if (*value < 0) {
+            return util::Error{Untranslated(strprintf("-dbbatchsize must be non-negative (got %d bytes)", *value))};
+        }
+        options.batch_write_bytes = static_cast<uint64_t>(*value);
+    }
     if (auto value = args.GetIntArg("-dbcrashratio")) {
         if (*value < 0) {
             return util::Error{Untranslated(strprintf("-dbcrashratio must be non-negative (got %d)", *value))};
