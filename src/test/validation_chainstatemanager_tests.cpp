@@ -12,6 +12,7 @@
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
 #include <primitives/block.h>
+#include <script/interpreter.h>
 #include <primitives/transaction.h>
 #include <random.h>
 #include <rpc/blockchain.h>
@@ -1671,6 +1672,67 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
     BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=3"}).prevoutfetch_threads_num, 3);
     BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=100"}).prevoutfetch_threads_num, MAX_PREVOUTFETCH_THREADS);
     BOOST_CHECK(!get_opts({"-prevoutfetchthreads=-1"}));
+}
+
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_disconnect_restores_coins_exactly, TestChain100Setup)
+{
+    Chainstate& active_chainstate{Assert(m_node.chainman)->ActiveChainstate()};
+    // CCoinsViewCache cursors are disabled in this tree (cursor tests
+    // document the unsupported error), so flush and iterate the DB cursor.
+    const auto all_coins{[](Chainstate& cs) {
+        LOCK(::cs_main);
+        cs.ForceFlushStateToDisk();
+        std::vector<std::pair<COutPoint, Coin>> ret;
+        for (std::unique_ptr<CCoinsViewCursor> cursor{cs.CoinsDB().Cursor()}; cursor->Valid(); cursor->Next()) {
+            COutPoint key;
+            Coin coin;
+            Assert(cursor->GetKey(key));
+            Assert(cursor->GetValue(coin));
+            ret.emplace_back(key, coin);
+        }
+        return ret;
+    }};
+
+    // Make the first coinbase mature.
+    mineBlocks(1);
+
+    // Spend the first (now mature) coinbase in a new block.
+    const CScript p2pk{CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG};
+    CMutableTransaction spend;
+    spend.vin.emplace_back(COutPoint{m_coinbase_txns[0]->GetHash(), 0});
+    spend.vout.emplace_back(m_coinbase_txns[0]->vout[0].nValue - 1000, p2pk);
+    const uint256 sighash{SignatureHash(m_coinbase_txns[0]->vout[0].scriptPubKey, spend, 0, SIGHASH_ALL, 0, SigVersion::BASE)};
+    std::vector<unsigned char> sig;
+    BOOST_REQUIRE(coinbaseKey.Sign(sighash, sig));
+    sig.push_back(static_cast<unsigned char>(SIGHASH_ALL));
+    spend.vin[0].scriptSig = CScript() << ToByteVector(sig);
+
+    const auto before{all_coins(active_chainstate)};
+    const uint256 tip_before{WITH_LOCK(::cs_main, return active_chainstate.m_chain.Tip()->GetBlockHash())};
+
+    const CBlock block{CreateAndProcessBlock({spend}, p2pk)};
+    BOOST_CHECK(WITH_LOCK(::cs_main, return active_chainstate.m_chain.Tip()->GetBlockHash()) == block.GetHash());
+
+    BlockValidationState state;
+    DisconnectedBlockTransactions disconnectpool{MAX_DISCONNECTED_TX_POOL_BYTES};
+    {
+        LOCK2(::cs_main, Assert(m_node.mempool)->cs);
+        BOOST_CHECK(active_chainstate.DisconnectTip(state, &disconnectpool));
+        BOOST_CHECK(state.IsValid());
+        // Drain the disconnectpool, or its destructor asserts on non-empty
+        // (MaybeUpdateMempoolForReorg is protected; this test discards the txs).
+        disconnectpool.clear();
+    }
+
+    // The undo must restore the exact pre-connect UTXO set, not just the tip.
+    BOOST_CHECK(WITH_LOCK(::cs_main, return active_chainstate.m_chain.Tip()->GetBlockHash()) == tip_before);
+    const auto after{all_coins(active_chainstate)};
+    const auto same_coin{[](const std::pair<COutPoint, Coin>& a, const std::pair<COutPoint, Coin>& b) {
+        return a.first == b.first && a.second.out == b.second.out &&
+               a.second.fCoinBase == b.second.fCoinBase && a.second.nHeight == b.second.nHeight;
+    }};
+    BOOST_CHECK_EQUAL(before.size(), after.size());
+    BOOST_CHECK(std::equal(before.begin(), before.end(), after.begin(), after.end(), same_coin));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
