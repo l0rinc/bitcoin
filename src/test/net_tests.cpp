@@ -23,6 +23,7 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
+#include <util/fs.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <validation.h>
@@ -2233,6 +2234,59 @@ BOOST_AUTO_TEST_CASE(cnode_copy_stats_overwrites_reused_output)
     BOOST_CHECK_EQUAL(stats.m_mapped_as, 0);
     BOOST_CHECK(stats.m_session_id.empty());
     BOOST_CHECK_EQUAL(stats.m_transport_type, TransportProtocolType::V1);
+}
+
+BOOST_AUTO_TEST_CASE(compactblock_announcement_read_failure_disconnects_peer)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+
+    const CAddress addr{Lookup("1.2.3.4", 8333, /*fAllowLookup=*/false).value(), NODE_NETWORK};
+    CNode node{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/addr,
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/"",
+               /*conn_type_in=*/ConnectionType::OUTBOUND_FULL_RELAY,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+
+    connman.Handshake(node,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                      /*local_services=*/NODE_NETWORK,
+                      /*version=*/PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+    connman.FlushSendBuffer(node);
+
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(node, NetMsg::Make(NetMsgType::SENDCMPCT,
+                                                            /*high_bandwidth=*/uint8_t{1},
+                                                            /*version=*/uint64_t{CMPCTBLOCKS_VERSION})));
+    node.fPauseSend = false;
+    BOOST_REQUIRE(!connman.ProcessMessagesOnce(node));
+
+    const CBlockIndex* genesis{nullptr};
+    FlatFilePos genesis_pos{};
+    {
+        LOCK(cs_main);
+        genesis = m_node.chainman->ActiveChain().Genesis();
+        BOOST_REQUIRE(genesis != nullptr);
+        genesis_pos = genesis->GetBlockPos();
+    }
+    BOOST_REQUIRE(!genesis_pos.IsNull());
+
+    m_node.validation_signals->RegisterValidationInterface(m_node.peerman.get());
+    m_node.validation_signals->UpdatedBlockTip(genesis, /*pindexFork=*/nullptr, /*fInitialDownload=*/false);
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    m_node.validation_signals->UnregisterValidationInterface(m_node.peerman.get());
+    BOOST_REQUIRE(fs::remove(m_node.chainman->m_blockman.GetBlockPosFilename(genesis_pos)));
+
+    BOOST_CHECK(m_node.peerman->SendMessages(node));
+    BOOST_CHECK(node.fDisconnect);
+
+    m_node.peerman->FinalizeNode(node);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
