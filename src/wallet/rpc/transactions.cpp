@@ -861,14 +861,14 @@ RPCMethod rescanblockchain()
     if (!pwallet) return UniValue::VNULL;
     CWallet& wallet{*pwallet};
 
-    // Make sure the results are valid at least up to the most recent block
-    // the user could have gotten from another RPC command prior to now
-    wallet.BlockUntilSyncedToCurrentChain();
-
     WalletRescanReserver reserver(*pwallet);
     if (!reserver.reserve(/*with_passphrase=*/true)) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Wallet is currently rescanning. Abort existing rescan or wait.");
     }
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    wallet.BlockUntilSyncedToCurrentChain();
 
     int start_height = 0;
     std::optional<int> stop_height;
