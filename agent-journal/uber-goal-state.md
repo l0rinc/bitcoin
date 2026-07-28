@@ -110,11 +110,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 2 | assertion-invariant-audit | CYCLE-1 | 2026-07-28 | fork production Assumes all construction-tautologies; cache-overflow fix verified; no input-validation-by-assert |
 | 65 | contributor-branch-radar | CYCLE-2 | 2026-07-28 | perf seam: CheckBlock dup-check 1.85x branch locally absent (equivalence plausible), prevector-36 + serialization seeds recorded |
 | 79 | fuzz-corpus-stewardship | CYCLE-1 | 2026-07-28 | cross-seed transfer +39-55% on 3 P2P siblings; merge-minimize -36% size zero-loss |
+| 10 | fuzz-target-gaps | CYCLE-2 | 2026-07-28 | load_wallet harness delivered (fd74c4a7c2); bring-up crash = harness-oracle bug, production clean |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=4007249998758158245 -> idx 28 (of 51) -> #79.
+   raw=4438550641115630626 -> idx 0 (of 61) -> #10.
+   SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
+   (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
+   validation/indexes/storage); wallet/IPC/GUI/RPC only to prove
+   reachability of an in-scope core defect.
    POOL-REPAIR NOTE (2026-07-28): the incremental pools used from the
    #75 draw onward carried stale CYCLE-2+ entries (4, 28, 61), and a
    draw of #61(c3) over that 27-entry pool (raw=2149655188711527484,
@@ -144,7 +149,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
-7(c1), 2(c1), 9(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
+7(c1), 2(c1), 9(c1,c2), 10(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1), 21(c1,c2), 43(c1), 45(c1), 47(c1,c2), 51(c1), 59(c1), 60(c1),
 61(c1,c2,c3), 65(c1,c2), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1),
