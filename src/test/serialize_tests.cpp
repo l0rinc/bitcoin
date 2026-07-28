@@ -532,4 +532,64 @@ BOOST_AUTO_TEST_CASE(with_params_derived)
                                     "0f\x02XY");
 }
 
+BOOST_AUTO_TEST_CASE(compactsize_exhaustive_boundaries)
+{
+    // Boundary round-trips with encoded-length class verification.
+    // range_check=false: this battery targets canonicality, not the
+    // MAX_SIZE (0x02000000) vector-length limit, which is exercised
+    // separately at the end of this case.
+    auto check_roundtrip = [](uint64_t n, size_t len) {
+        DataStream ss{};
+        WriteCompactSize(ss, n);
+        BOOST_CHECK_EQUAL(ss.size(), len);
+        DataStream rd{ss};
+        BOOST_CHECK_EQUAL(ReadCompactSize(rd, /*range_check=*/false), n);
+        BOOST_CHECK(rd.empty());
+    };
+    for (uint64_t n{0}; n <= 260; ++n) check_roundtrip(n, n < 253 ? 1 : 3);
+    for (uint64_t n : {0xFFFEULL, 0xFFFFULL, 0x10000ULL, 0x10001ULL}) {
+        check_roundtrip(n, n <= 0xFFFF ? 3 : 5);
+    }
+    for (uint64_t n : {0xFFFFFFFEULL, 0xFFFFFFFFULL, 0x100000000ULL, 0x100000001ULL}) {
+        check_roundtrip(n, n <= 0xFFFFFFFF ? 5 : 9);
+    }
+    check_roundtrip(0x7FFFFFFFFFFFFFFFULL, 9);
+    check_roundtrip(0xFFFFFFFFFFFFFFFFULL, 9);
+
+    // EXHAUSTIVE non-canonical 253-form: every value < 253 must throw.
+    for (uint64_t n{0}; n < 253; ++n) {
+        DataStream ss{};
+        ser_writedata8(ss, 253);
+        ser_writedata16(ss, (uint16_t)n);
+        BOOST_CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
+    }
+    // Sampled non-canonical 254-form: values < 0x10000 must throw.
+    for (uint64_t n : {0ULL, 1ULL, 252ULL, 253ULL, 254ULL, 0xFEFFULL, 0xFFFDULL, 0xFFFFULL}) {
+        DataStream ss{};
+        ser_writedata8(ss, 254);
+        ser_writedata32(ss, (uint32_t)n);
+        BOOST_CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
+    }
+    // Sampled non-canonical 255-form: values < 0x100000000 must throw.
+    for (uint64_t n : {0ULL, 0xFFFFULL, 0x10000ULL, 0xFFFFFFFEULL, 0xFFFFFFFFULL}) {
+        DataStream ss{};
+        ser_writedata8(ss, 255);
+        ser_writedata64(ss, n);
+        BOOST_CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
+    }
+
+    // The default range_check enforces the MAX_SIZE limit on both sides:
+    // MAX_SIZE itself parses, MAX_SIZE+1 throws "size too large".
+    {
+        DataStream ss{};
+        WriteCompactSize(ss, MAX_SIZE);
+        BOOST_CHECK_EQUAL(ReadCompactSize(ss), MAX_SIZE);
+        DataStream ss2{};
+        WriteCompactSize(ss2, MAX_SIZE + 1);
+        BOOST_CHECK_EXCEPTION(ReadCompactSize(ss2), std::ios_base::failure, [](const std::ios_base::failure& ex) {
+            return std::string_view{ex.what()}.find("size too large") != std::string_view::npos;
+        });
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
