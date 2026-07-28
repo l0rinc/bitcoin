@@ -1628,4 +1628,59 @@ BOOST_AUTO_TEST_CASE(infer_descriptor_taproot_off_curve_leaf_roundtrips)
     BOOST_CHECK_EQUAL(parsed[0]->ToString(), descriptor);
 }
 
+BOOST_AUTO_TEST_CASE(taproot_compressed_key_uses_xonly_private_key_lookup)
+{
+    const auto secret{ParseHex("0000000000000000000000000000000000000000000000000000000000000002")};
+    CKey key;
+    key.Set(secret.begin(), secret.end(), /*fCompressedIn=*/true);
+    const CPubKey even_pubkey{key.GetPubKey()};
+    const XOnlyPubKey xonly{even_pubkey};
+    const CPubKey odd_pubkey{xonly.GetCPubKeys().at(1)};
+    const std::string internal_key{HexStr(xonly)};
+
+    const std::string compressed_desc{"tr(" + internal_key + ",multi_a(1," + HexStr(odd_pubkey) + "))"};
+    const std::string xonly_desc{"tr(" + internal_key + ",multi_a(1," + HexStr(xonly) + "))"};
+    const std::string nums_desc{"tr(" + HexStr(XOnlyPubKey::NUMS_H) + ",multi_a(1," + HexStr(odd_pubkey) + "))"};
+    const std::string miniscript_compressed_desc{"tr(" + internal_key + ",and_v(v:multi_a(1," + HexStr(odd_pubkey) + "),after(1)))"};
+    const std::string miniscript_xonly_desc{"tr(" + internal_key + ",and_v(v:multi_a(1," + HexStr(xonly) + "),after(1)))"};
+    const std::string miniscript_nums_desc{"tr(" + HexStr(XOnlyPubKey::NUMS_H) + ",and_v(v:multi_a(1," + HexStr(odd_pubkey) + "),after(1)))"};
+    FlatSigningProvider parsed_provider;
+    std::string error;
+    const auto compressed{Parse(compressed_desc, parsed_provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_MESSAGE(compressed.size() == 1, error);
+    error.clear();
+    const auto xonly_parsed{Parse(xonly_desc, parsed_provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_MESSAGE(xonly_parsed.size() == 1, error);
+    error.clear();
+    const auto nums_parsed{Parse(nums_desc, parsed_provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_MESSAGE(nums_parsed.size() == 1, error);
+    error.clear();
+    const auto miniscript_compressed{Parse(miniscript_compressed_desc, parsed_provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_MESSAGE(miniscript_compressed.size() == 1, error);
+    error.clear();
+    const auto miniscript_xonly{Parse(miniscript_xonly_desc, parsed_provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_MESSAGE(miniscript_xonly.size() == 1, error);
+    error.clear();
+    const auto miniscript_nums{Parse(miniscript_nums_desc, parsed_provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_MESSAGE(miniscript_nums.size() == 1, error);
+
+    FlatSigningProvider signing_provider;
+    signing_provider.keys.emplace(even_pubkey.GetID(), key);
+    BOOST_CHECK(xonly_parsed[0]->HavePrivateKeys(signing_provider));
+    BOOST_CHECK(xonly_parsed[0]->ToPrivateString(signing_provider, error));
+    BOOST_CHECK(compressed[0]->HavePrivateKeys(signing_provider));
+    BOOST_CHECK(compressed[0]->ToPrivateString(signing_provider, error));
+    BOOST_CHECK(nums_parsed[0]->ToPrivateString(signing_provider, error));
+    BOOST_CHECK(miniscript_compressed[0]->HavePrivateKeys(signing_provider));
+    BOOST_CHECK(miniscript_xonly[0]->HavePrivateKeys(signing_provider));
+    BOOST_CHECK(miniscript_nums[0]->ToPrivateString(signing_provider, error));
+
+    std::vector<CScript> compressed_scripts, xonly_scripts;
+    FlatSigningProvider compressed_expansion, xonly_expansion;
+    BOOST_REQUIRE(compressed[0]->Expand(0, DUMMY_SIGNING_PROVIDER, compressed_scripts, compressed_expansion));
+    BOOST_REQUIRE(xonly_parsed[0]->Expand(0, DUMMY_SIGNING_PROVIDER, xonly_scripts, xonly_expansion));
+    BOOST_CHECK_EQUAL(compressed_scripts.size(), 1U);
+    BOOST_CHECK(compressed_scripts == xonly_scripts);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

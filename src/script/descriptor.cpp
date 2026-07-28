@@ -327,18 +327,23 @@ public:
 class ConstPubkeyProvider final : public PubkeyProvider
 {
     CPubKey m_pubkey;
+    // Full compressed keys in Taproot retain their spelling but use x-only lookup.
     bool m_xonly;
+    bool m_xonly_lookup;
 
     std::optional<CKey> GetPrivKey(const SigningProvider& arg) const
     {
         CKey key;
-        if (!(m_xonly ? arg.GetKeyByXOnly(XOnlyPubKey(m_pubkey), key) :
+        if (!(m_xonly_lookup ? arg.GetKeyByXOnly(XOnlyPubKey(m_pubkey), key) :
                         arg.GetKey(m_pubkey.GetID(), key))) return std::nullopt;
         return key;
     }
 
 public:
-    ConstPubkeyProvider(uint32_t exp_index, const CPubKey& pubkey, bool xonly) : PubkeyProvider(exp_index), m_pubkey(pubkey), m_xonly(xonly) {}
+    ConstPubkeyProvider(uint32_t exp_index, const CPubKey& pubkey, bool xonly)
+        : PubkeyProvider(exp_index), m_pubkey(pubkey), m_xonly(xonly), m_xonly_lookup(xonly) {}
+    ConstPubkeyProvider(uint32_t exp_index, const CPubKey& pubkey, bool xonly, bool xonly_lookup)
+        : PubkeyProvider(exp_index), m_pubkey(pubkey), m_xonly(xonly), m_xonly_lookup(xonly_lookup) {}
     std::optional<CPubKey> GetPubKey(int pos, const SigningProvider&, FlatSigningProvider& out, const DescriptorCache* read_cache = nullptr, DescriptorCache* write_cache = nullptr) const override
     {
         KeyOriginInfo info;
@@ -383,7 +388,7 @@ public:
     }
     std::unique_ptr<PubkeyProvider> Clone() const override
     {
-        return std::make_unique<ConstPubkeyProvider>(m_expr_index, m_pubkey, m_xonly);
+        return std::make_unique<ConstPubkeyProvider>(m_expr_index, m_pubkey, m_xonly, m_xonly_lookup);
     }
     bool CanSelfExpand() const final { return true; }
 };
@@ -1959,7 +1964,7 @@ std::vector<std::unique_ptr<PubkeyProvider>> ParsePubkeyInner(uint32_t& key_exp_
             }
             if (pubkey.IsFullyValid()) {
                 if (permit_uncompressed || pubkey.IsCompressed()) {
-                    ret.emplace_back(std::make_unique<ConstPubkeyProvider>(key_exp_index, pubkey, false));
+                    ret.emplace_back(std::make_unique<ConstPubkeyProvider>(key_exp_index, pubkey, false, ctx == ParseScriptContext::P2TR));
                     ++key_exp_index;
                     return ret;
                 } else {
