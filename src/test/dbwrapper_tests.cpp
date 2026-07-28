@@ -3,6 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <dbwrapper.h>
+#include <leveldb/env.h>
+#include <leveldb/helpers/memenv/memenv.h>
 #include <test/util/common.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
@@ -10,6 +12,7 @@
 #include <util/byte_units.h>
 #include <util/string.h>
 
+#include <atomic>
 #include <cstddef>
 #include <memory>
 #include <ranges>
@@ -21,6 +24,47 @@
 #include <boost/test/unit_test.hpp>
 
 using util::ToString;
+
+namespace {
+
+class IteratorReadErrorEnv final : public leveldb::EnvWrapper
+{
+    class FailingRandomAccessFile final : public leveldb::RandomAccessFile
+    {
+        IteratorReadErrorEnv& m_env;
+        leveldb::RandomAccessFile* m_file;
+
+    public:
+        FailingRandomAccessFile(IteratorReadErrorEnv& env, leveldb::RandomAccessFile* file) : m_env{env}, m_file{file} {}
+        ~FailingRandomAccessFile() override { delete m_file; }
+
+        leveldb::Status Read(uint64_t offset, size_t n, leveldb::Slice* result, char* scratch) const override
+        {
+            if (m_env.m_fail_reads) {
+                return leveldb::Status::Corruption("injected iterator read failure");
+            }
+            return m_file->Read(offset, n, result, scratch);
+        }
+
+        std::string GetName() const override { return m_file->GetName(); }
+    };
+
+    std::atomic_bool m_fail_reads{false};
+
+public:
+    explicit IteratorReadErrorEnv(leveldb::Env* base) : EnvWrapper{base} {}
+
+    void FailReads() { m_fail_reads.store(true, std::memory_order_release); }
+
+    leveldb::Status NewRandomAccessFile(const std::string& filename, leveldb::RandomAccessFile** result) override
+    {
+        const leveldb::Status status{target()->NewRandomAccessFile(filename, result)};
+        if (status.ok()) *result = new FailingRandomAccessFile{*this, *result};
+        return status;
+    }
+};
+
+} // namespace
 
 BOOST_FIXTURE_TEST_SUITE(dbwrapper_tests, BasicTestingSetup)
 
@@ -265,6 +309,24 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
         BOOST_CHECK(!it->GetValue(exhausted_value));
         BOOST_CHECK_EQUAL(exhausted_value, uint256::ONE);
     }
+}
+
+BOOST_AUTO_TEST_CASE(dbwrapper_iterator_read_error)
+{
+    const auto memenv{std::unique_ptr<leveldb::Env>{leveldb::NewMemEnv(leveldb::Env::Default())}};
+    IteratorReadErrorEnv error_env{memenv.get()};
+
+    CDBWrapper dbw{{.path = "dbwrapper_iterator_read_error",
+                    .cache_bytes = 1_MiB,
+                    .testing_env = &error_env}};
+    constexpr uint8_t key{'k'};
+    dbw.Write(key, uint8_t{0x01});
+    dbw.CompactFull();
+    error_env.FailReads();
+
+    const std::unique_ptr<CDBIterator> it{dbw.NewIterator()};
+    it->SeekToFirst();
+    BOOST_CHECK_THROW(it->Valid(), dbwrapper_error);
 }
 
 // Test that we do not obfuscation if there is existing data.

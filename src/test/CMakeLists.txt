@@ -142,6 +142,10 @@ add_executable(test_bitcoin
   versionbits_tests.cpp
 )
 
+target_include_directories(test_bitcoin PRIVATE
+  ${PROJECT_SOURCE_DIR}/src/leveldb/include
+)
+
 include(TargetDataSources)
 target_json_data_sources(test_bitcoin
   data/base58_encode_decode.json
