@@ -57,7 +57,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 13 | secret-lifetime-zeroization | DONE | 2026-07-27 | lattice complete, boundaries documented |
 | 14 | secret-control-flow | DONE | 2026-07-27 | BIP324 lattice complete |
 | 18 | exhaustive-algebraic | CYCLE-2 | 2026-07-28 | script (8e7513bb1c) + Coin composition (4c27dad486) round-trips closed, both mutation-verified; fuzz-gap dismissed |
-| 19 | benchmark-integrity | CYCLE-2 | 2026-07-28 | prevector fix (138ef3c044); mutation-sweep all sensitive (FindByte 148->259 proven) |
+| 19 | benchmark-integrity | CYCLE-3 | 2026-07-28 | prevector fix (138ef3c044); mutation-sweep + units/batching + timed-region all honest; queue exhausted |
 | 28 | weak-test-oracles | CYCLE-2 | 2026-07-28 | amount battery 5/5 killed; merkleblock battery 2 survivors fixed (50e9d14750), 1 equivalent |
 | 16 | api-misuse-resistance | CYCLE-2 | 2026-07-28 | 5+7 kernel C API @pre doc fixes (b6b48987a5, 8b0e92b4a2); #33943 precedent journaled |
 | 61 | stateful-contract-fuzzing | CYCLE-3 | 2026-07-28 | sigcache oracle (a4ff67417e); c2/c3 assessments all already-strong; triage guidance updated |
@@ -67,13 +67,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 17 | build-matrix-modules | CYCLE-2 | 2026-07-28 | option/CI inventory + manifest drift + guard sweep all clean (no builds; disk) |
 
 ## Next-up queue (severity-first)
-1. 19 — benchmark-integrity CYCLE-3 — NEXT (bench units/batching claims; resume)
-2. then re-rank: 31 c3 (gettxoutsetinfo hash_type), 21 c2 (tx-heavy reindex)
+1. 31 — cross-layer-contracts CYCLE-3 — NEXT (gettxoutsetinfo hash_type option names across layers; resume)
+2. then re-rank: 21 c2 (tx-heavy reindex), 18 c3 (CTxOutUndo round-trip)
 
 ## Handoff
 Updated after every rotation. Current: #86, #88, #87, #82, #83, #84,
-5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c2), 28(c2), 16(c2), 61(c3), 30(c3), 31(c2), 29(c2), 17(c2), 21(c1), 22(c1) DONE.
+5/52, 62, 56, 96, 20, 0(c1), 4(c1,c2), 8, 15, 6(c1), 27, 7(c1), 3, 9(c1), 11, 12, 13, 14, 18(c2), 19(c3), 28(c2), 16(c2), 61(c3), 30(c3), 31(c2), 29(c2), 17(c2), 21(c1), 22(c1) DONE.
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
-full cross-backend differential in ~35s on this host. NEXT: #19 on branch
-audit/benchmark-integrity.
+full cross-backend differential in ~35s on this host. NEXT: #31 on branch
+audit/cross-layer-contracts.
