@@ -78,3 +78,39 @@ Confirmed: the wrapper exposed a secret MuSig session-randomness buffer with an 
 1. Audit the local `secp256k1_keypair` in MuSig partial signing, which carries secret key material through multiple failure returns.
 2. Revisit compiler-visible cleanse evidence and existing ctime/checkmem coverage after the current source findings.
 3. Continue with secret copies in adjacent signing, wallet, and callback paths only after searching this journal and history for duplicates.
+
+## Cycle 42: MuSig partial-signing keypair storage
+
+Status: confirmed and fixed in the current worktree; the focused build/tests pass and the broad unit suite has unrelated environment/configuration failures.
+
+### Hypothesis
+
+`CreateMuSig2PartialSig` creates a `secp256k1_keypair` after receiving a valid private key and then performs multiple aggregate, parse, tweak, session, signing, verification, and serialization operations. The keypair contains the private key and public key, but the raw local object has no cleanup on any of the many `std::nullopt` returns.
+
+### Evidence
+
+The public contract in `src/secp256k1/include/secp256k1_extrakeys.h` defines `secp256k1_keypair` as an opaque, copyable 96-byte structure holding a secret and public key. The implementation in `src/secp256k1/src/modules/extrakeys/main_impl.h` serializes the secret scalar into `keypair->data[0..31]` and the public key into the remaining bytes. `secp256k1_keypair_create` zeroes the structure only for an invalid creation result; it does not own or cleanse caller storage after a successful creation.
+
+In the pre-change wrapper, `src/musig.cpp:167-168` put that object in ordinary function storage. The first subsequent failure can occur in aggregate-key validation, pubnonce lookup/size/parse, nonce aggregation, tweak application, session creation, partial signing, signature verification, or serialization. The function is reachable from `src/script/sign.cpp` for MuSig2 partial signing. The module already uses `make_secure_unique<secp256k1_musig_secnonce>()`, and `KeyPair` in `src/key.h` uses the same secure allocator for an equivalent 96-byte keypair representation.
+
+### Change
+
+Changed the local object to `make_secure_unique<secp256k1_keypair>()` and passed `keypair.get()` to the unchanged libsecp APIs. `SecureUniqueDeleter` invokes the existing allocator cleanup over all 96 bytes when the function returns, including every failure path. No C API, signature result, nonce invalidation order, or public behavior changes.
+
+### Verification
+
+- `git diff --check`: passed.
+- `cmake --build build_unit_clang19 --target test_bitcoin -j2`: passed; rebuilt `src/musig.cpp` and linked `bin/test_bitcoin`.
+- `build_unit_clang19/bin/test_bitcoin --run_test=key_tests,bip328_tests`: passed; 16 selected test cases, `*** No errors detected`.
+- `build_unit_clang19/bin/test_bitcoin`: completed with exit code 201 after running 1190 cases. The failures were outside this change: `MempoolCheckSaturatingFeeDiagram` reported `9999 != -9223372036854765808`; a block-write test hit a `/tmp` filesystem setup error; and the configured build lacks external-signing support for an external-signer wallet test. The focused tests and compile gate remained green.
+- Earlier in this cycle, `build_unit_clang19/src/secp256k1/bin/tests` passed with exit code 0 after 76.758 seconds; no libsecp source was changed by this finding.
+
+### Verdict and limits
+
+Confirmed: MuSig partial signing retained a private-key-bearing C structure in ordinary storage across numerous failure edges. Secure ownership is already the repository pattern for both CKey material and the equivalent KeyPair abstraction. This audit does not expand to every public or non-secret libsecp temporary; it targets the wrapper-owned keypair lifetime.
+
+### Updated next queue
+
+1. Revisit compiler-visible cleanse evidence and existing ctime/checkmem coverage for the three fixed buffers.
+2. Audit secret copies in adjacent signing, wallet, and callback paths, searching this journal and history first.
+3. Re-rank the remaining secret-lifetime surfaces using sanitizer, assembly, and call-path evidence rather than broad pattern matching.
