@@ -32,6 +32,7 @@
 #include <wallet/test/wallet_test_fixture.h>
 
 #include <boost/test/unit_test.hpp>
+#include <sqlite3.h>
 #include <univalue.h>
 
 using node::MAX_BLOCKFILE_SIZE;
@@ -84,6 +85,60 @@ BOOST_FIXTURE_TEST_CASE(wallet_interface_missing_tx_outputs, WalletTestingSetup)
     BOOST_CHECK(payment_requests.empty());
     BOOST_CHECK(!in_mempool);
     BOOST_CHECK_EQUAL(num_blocks, 0);
+}
+
+BOOST_FIXTURE_TEST_CASE(migration_transaction_write_failure_is_reported, WalletTestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    const CKey key{GenerateRandomKey()};
+    const CScript script{GetScriptForDestination(PKHash(key.GetPubKey()))};
+    CTransactionRef tx;
+    std::optional<MigrationData> data;
+
+    {
+        LOCK(wallet.cs_wallet);
+        auto* legacy_spkm = wallet.GetOrCreateLegacyDataSPKM();
+        BOOST_REQUIRE(legacy_spkm);
+        BOOST_REQUIRE(legacy_spkm->AddKey(key));
+
+        bilingual_str error;
+        data = wallet.GetDescriptorsForLegacy(error);
+        BOOST_REQUIRE(data);
+
+        // ApplyMigrationData replaces the legacy SPKM. Point the test wallet's cache at the
+        // descriptors that will be installed so RefreshAllTXOs does not retain a stale legacy pointer.
+        for (const auto& desc_spkm : data->desc_spkms) {
+            std::set<CScript> scripts;
+            for (const auto& migrated_script : desc_spkm->GetScriptPubKeys()) scripts.insert(migrated_script);
+            wallet.CacheNewScriptPubKeys(scripts, desc_spkm.get());
+        }
+
+        CMutableTransaction mutable_tx;
+        mutable_tx.vout.emplace_back(0, script);
+        tx = MakeTransactionRef(mutable_tx);
+        auto [it, inserted] = wallet.mapWallet.try_emplace(tx->GetHash(), tx, TxStateInactive{});
+        BOOST_REQUIRE(inserted);
+        it->second.nTimeReceived = 1;
+        it->second.nTimeSmart = 1;
+        it->second.nOrderPos = 0;
+        it->second.m_it_wtxOrdered = wallet.wtxOrdered.emplace(it->second.nOrderPos, &it->second);
+    }
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+    DataStream tx_db_key;
+    tx_db_key << std::make_pair(DBKeys::TX, tx->GetHash());
+    const std::string trigger{
+        "CREATE TRIGGER fail_migration_tx_write BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{tx_db_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    {
+        LOCK(wallet.cs_wallet);
+        WalletBatch batch{wallet.GetDatabase()};
+        BOOST_REQUIRE(batch.TxnBegin());
+        BOOST_CHECK(!wallet.ApplyMigrationData(batch, *data));
+        BOOST_REQUIRE(batch.TxnAbort());
+    }
 }
 
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)

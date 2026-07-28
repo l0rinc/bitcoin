@@ -4056,7 +4056,9 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
         // Copy the next tx order pos to the watchonly wallet
         LOCK(data.watchonly_wallet->cs_wallet);
         data.watchonly_wallet->nOrderPosNext = nOrderPosNext;
-        watchonly_batch->WriteOrderPosNext(data.watchonly_wallet->nOrderPosNext);
+        if (!watchonly_batch->WriteOrderPosNext(data.watchonly_wallet->nOrderPosNext)) {
+            return util::Error{strprintf(_("Error: Unable to write transaction order position for wallet %s"), data.watchonly_wallet->GetName())};
+        }
         // Write the locator record. An empty locator is valid and triggers rescan on load.
         if (!watchonly_batch->WriteBestBlock(best_block_locator)) {
             return util::Error{_("Error: Unable to write watchonly wallet best block locator record")};
@@ -4089,7 +4091,9 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
                 })) {
                     return util::Error{strprintf(_("Error: Could not add watchonly tx %s to watchonly wallet"), wtx->GetHash().GetHex())};
                 }
-                watchonly_batch->WriteTx(data.watchonly_wallet->mapWallet.at(hash));
+                if (!watchonly_batch->WriteTx(data.watchonly_wallet->mapWallet.at(hash))) {
+                    return util::Error{strprintf(_("Error: Unable to write transaction %s to wallet %s"), hash.GetHex(), data.watchonly_wallet->GetName())};
+                }
                 // Mark as to remove from the migrated wallet only if it does not also belong to it
                 if (!is_mine) {
                     txids_to_delete.push_back(hash);
@@ -4102,7 +4106,9 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
             return util::Error{strprintf(_("Error: Transaction %s in wallet cannot be identified to belong to migrated wallets"), wtx->GetHash().GetHex())};
         }
         // Rewrite the transaction so that anything that may have changed about it in memory also persists to disk
-        local_wallet_batch.WriteTx(*wtx);
+        if (!local_wallet_batch.WriteTx(*wtx)) {
+            return util::Error{strprintf(_("Error: Unable to write transaction %s"), wtx->GetHash().GetHex())};
+        }
     }
 
     // Do the removes
@@ -4120,12 +4126,13 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
     // Write address book entry to disk
     auto func_store_addr = [](WalletBatch& batch, const CTxDestination& dest, const CAddressBookData& entry) {
         auto address{EncodeDestination(dest)};
-        if (entry.purpose) batch.WritePurpose(address, PurposeToString(*entry.purpose));
-        if (entry.label) batch.WriteName(address, *entry.label);
+        if (entry.purpose && !batch.WritePurpose(address, PurposeToString(*entry.purpose))) return false;
+        if (entry.label && !batch.WriteName(address, *entry.label)) return false;
         for (const auto& [id, request] : entry.receive_requests) {
-            batch.WriteAddressReceiveRequest(dest, id, request);
+            if (!batch.WriteAddressReceiveRequest(dest, id, request)) return false;
         }
-        if (entry.previously_spent) batch.WriteAddressPreviouslySpent(dest, true);
+        if (entry.previously_spent && !batch.WriteAddressPreviouslySpent(dest, true)) return false;
+        return true;
     };
 
     // Check the address book data in the same way we did for transactions
@@ -4141,7 +4148,9 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
 
             // Copy the entire address book entry
             wallet->m_address_book[dest] = record;
-            func_store_addr(*batch, dest, record);
+            if (!func_store_addr(*batch, dest, record)) {
+                return util::Error{strprintf(_("Error: Unable to write address book data to wallet %s"), wallet->GetName())};
+            }
 
             copied = true;
             // Only delete 'receive' records that are no longer part of the original wallet
