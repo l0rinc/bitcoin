@@ -122,7 +122,7 @@ static std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const
                 items.emplace_back(input.prevout, pos);
             }
         }
-        pos.nTxOffset += ::GetSerializeSize(TX_WITH_WITNESS(*tx));
+        pos.nTxOffset += tx->ComputeTotalSize();
     }
 
     return items;
