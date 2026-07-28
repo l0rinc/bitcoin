@@ -115,3 +115,11 @@ The `-prune` leftover is **confirmed and fixed**. The cycle-29 argument-validati
 - Fix: validate `-dbbatchsize` as non-negative before casting to `uint64_t`, while retaining zero as a valid debug value for flushing at every positive-sized batch. The existing result-returning `ReadCoinsViewArgs()` path reports the error before chainstate construction.
 - Regression: `chainstatemanager_args` now checks `0`, `1`, and `-1`; after rebuilding the focused test passed 1 case and 51 assertions. The invalid daemon command returns `Error: -dbbatchsize must be non-negative (got -1 bytes)` before opening the scratch chainstate.
 - Verdict: **confirmed and fixed**. This is a separate self-contained commit from the crash-ratio fix, authored by `Lőrinc <pap.lorinc@gmail.com>`. No generated files or build-list changes are needed.
+
+## Cycle 32 Broad Verification
+
+- `cmake --build build_unit_clang19 --target test_bitcoin -j2` and `cmake --build build_func_clang19 --target bitcoind -j2` passed after the two fixes.
+- `validation_chainstatemanager_tests/chainstatemanager_args` passed 1 case and 51 assertions after both fixes; the full `validation_chainstatemanager_tests` suite passed 22 cases and 2079 assertions.
+- The combined `validation_chainstatemanager_tests,validation_flush_tests,mempool_tests` run passed 49 cases and 60,503 assertions.
+- The existing `feature_dbcrash.py` functional attempt was made with an isolated tmpdir and fixed port seed, but failed before selected database write paths with `StopIteration` in `MiniWallet.get_utxo()` while preparing its first 1000-output transfer after coinbase-maturity generation. The test framework cleaned all four dangling nodes; no product assertion or `-dbbatchsize`/`-dbcrashratio` path was reached. This is recorded as a harness/setup blocker, not as a regression from these changes.
+- `git diff --check` passed and no test, daemon, build, or fuzz process remains running. The functional artifacts remain under `/data/my_storage/tmp/current-pr-leftovers-feature-dbcrash-cycle32` for handoff.
