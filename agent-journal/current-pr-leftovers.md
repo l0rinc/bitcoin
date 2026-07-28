@@ -82,7 +82,7 @@ Search each current commit for analogous sites, stale names, partial migrations,
 - Repaired normal control: `-prune=550` in `/data/my_storage/tmp/current-pr-leftovers-prune-valid-after-cycle30.Ps6Bsd` reached `init message: Done loading` and logged `Prune configured to target 550 MiB on disk for block and undo files.`
 - Boundary control: `-prune=17592186044415` (`2^44-1` MiB) reached `Done loading` and logged the exact target in `/data/my_storage/tmp/current-pr-leftovers-prune-boundary-cycle30.AkQSL4`; `-prune=17592186044416` is the first overflowing value. The boundary daemon was terminated and the process gate is clean.
 - Broader validation: `blockmanager_tests` passed 11 cases/117 assertions; `validation_flush_tests` passed 3 cases/58,001 assertions; `mempool_tests` passed 24 cases/423 assertions. `cmake --build build_unit_clang19 --target test_bitcoin -j2` and `cmake --build build_func_clang19 --target bitcoind -j2` both passed. `git diff --check` passed.
-- Commit discipline: commit the source fix, focused regression, and this journal as one self-sufficient change authored by `Lőrinc <pap.lorinc@gmail.com>`. No generated files or build-list changes are required. Keep the user-owned untracked `test/cache/` and catalog artifacts untouched.
+- Commit discipline: commit `5b2e4f5a63` (`node: reject overflowing prune target arguments`) as one self-sufficient change authored by `Lőrinc <pap.lorinc@gmail.com>`, containing the source fix, focused regression, and this journal. No generated files or build-list changes were required. The user-owned untracked `test/cache/` and catalog artifacts remain untouched.
 
 ## Cycle 30 Verdict and Next Queue
 
