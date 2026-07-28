@@ -148,12 +148,17 @@ BOOST_FIXTURE_TEST_CASE(logging_LogPrintMacros, LogSetup)
     LogInfo("foo8: %s", "bar8");
     LogWarning("foo9: %s", "bar9");
     LogError("foo10: %s", "bar10");
+    LogWarning("foo11\nbar11");
+    LogWarning(util::log::ALLOW_NEWLINES, "foo12\nbar12");
     std::vector<std::string> log_lines{ReadDebugLogLines()};
     std::vector<std::string> expected = {
         "[net] foo7: bar7",
         "foo8: bar8",
         "[warning] foo9: bar9",
         "[error] foo10: bar10",
+        R"([warning] foo11\x0abar11)",
+        "[warning] foo12",
+        "bar12",
     };
     BOOST_CHECK_EQUAL_COLLECTIONS(log_lines.begin(), log_lines.end(), expected.begin(), expected.end());
 }

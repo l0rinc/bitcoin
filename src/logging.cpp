@@ -327,25 +327,26 @@ std::string BCLog::Logger::LogTimestampStr(SystemClock::time_point now, std::chr
 }
 
 namespace BCLog {
-    /** Belts and suspenders: make sure outgoing log messages don't contain
-     * potentially suspicious characters, such as terminal control codes.
-     *
-     * This escapes control characters except newline ('\n') in C syntax.
-     * It escapes instead of removes them to still allow for troubleshooting
-     * issues where they accidentally end up in strings.
-     */
-    std::string LogEscapeMessage(std::string_view str) {
-        std::string ret;
-        for (char ch_in : str) {
-            uint8_t ch = (uint8_t)ch_in;
-            if ((ch >= 32 || ch == '\n') && ch != '\x7f') {
-                ret += ch_in;
-            } else {
-                ret += strprintf("\\x%02x", ch);
-            }
+/** Belts and suspenders: make sure outgoing log messages don't contain
+ * potentially suspicious characters, such as terminal control codes.
+ *
+ * This escapes control characters in C syntax.
+ * It escapes instead of removes them to still allow for troubleshooting
+ * issues where they accidentally end up in strings.
+ */
+std::string LogEscapeMessage(std::string_view str, bool allow_newlines)
+{
+    std::string ret;
+    for (char ch_in : str) {
+        uint8_t ch = (uint8_t)ch_in;
+        if ((ch >= 32 || (allow_newlines && ch == '\n')) && ch != '\x7f') {
+            ret += ch_in;
+        } else {
+            ret += strprintf("\\x%02x", ch);
         }
-        return ret;
     }
+    return ret;
+}
 } // namespace BCLog
 
 std::string BCLog::Logger::GetLogPrefix(BCLog::LogFlags category, BCLog::Level level) const
@@ -425,9 +426,10 @@ std::string BCLog::Logger::Format(const util::log::Entry& entry) const
     }
 
     result += GetLogPrefix(static_cast<LogFlags>(entry.category), entry.level);
-    result += LogEscapeMessage(entry.message);
-
-    if (!result.ends_with('\n')) result += '\n';
+    std::string_view message{entry.message};
+    if (message.ends_with('\n')) message.remove_suffix(1);
+    result += LogEscapeMessage(message, entry.allow_newlines);
+    result += '\n';
     return result;
 }
 

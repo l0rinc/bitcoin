@@ -27,15 +27,21 @@ static std::string FormatException(const std::exception* pex, std::string_view t
 #endif
     if (pex)
         return strprintf(
-            "EXCEPTION: %s       \n%s       \n%s in %s       \n", typeid(*pex).name(), pex->what(), pszModule, thread_name);
+            "EXCEPTION: %s       \n%s       \n%s in %s       \n",
+            BCLog::LogEscapeMessage(typeid(*pex).name()),
+            BCLog::LogEscapeMessage(pex->what()),
+            BCLog::LogEscapeMessage(pszModule),
+            BCLog::LogEscapeMessage(thread_name));
     else
         return strprintf(
-            "UNKNOWN EXCEPTION       \n%s in %s       \n", pszModule, thread_name);
+            "UNKNOWN EXCEPTION       \n%s in %s       \n",
+            BCLog::LogEscapeMessage(pszModule),
+            BCLog::LogEscapeMessage(thread_name));
 }
 
 void PrintExceptionContinue(const std::exception* pex, std::string_view thread_name)
 {
     std::string message = FormatException(pex, thread_name);
-    LogWarning("\n\n************************\n%s", message);
+    LogWarning(util::log::ALLOW_NEWLINES, "\n\n************************\n%s", message);
     tfm::format(std::cerr, "\n\n************************\n%s\n", message);
 }

@@ -49,6 +49,13 @@ struct NoRateLimitTag {
 };
 inline constexpr NoRateLimitTag NO_RATE_LIMIT{};
 
+//! Structure and constant for explicitly allowing newlines in a log message.
+//! Callers must escape any untrusted fields before opting in.
+struct AllowNewlinesTag {
+    explicit AllowNewlinesTag() = default;
+};
+inline constexpr AllowNewlinesTag ALLOW_NEWLINES{};
+
 enum class Level {
     Trace = 0, // High-volume or detailed logging for development/debugging
     Debug,     // Reasonably noisy logging, but still usable in production
@@ -61,6 +68,7 @@ struct Entry {
     Category category;
     Level level;
     bool should_ratelimit{false}; //!< Hint for consumers if this entry should be ratelimited
+    bool allow_newlines{false};   //!< Whether newlines in the message should be preserved
     SystemClock::time_point timestamp{SystemClock::now()};
     std::chrono::seconds mocktime{GetMockTime()};
     std::string thread_name{util::ThreadGetInternalName()};
@@ -80,7 +88,7 @@ bool ShouldTraceLog(Category category);
 void Log(Entry entry);
 
 template <typename... Args>
-inline void LogPrintFormatInternal_(SourceLocation&& source_loc, BCLog::LogFlags flag, util::log::Level level, bool should_ratelimit, util::ConstevalFormatString<sizeof...(Args)> fmt, const Args&... args)
+inline void LogPrintFormatInternal_(SourceLocation&& source_loc, BCLog::LogFlags flag, util::log::Level level, bool should_ratelimit, bool allow_newlines, util::ConstevalFormatString<sizeof...(Args)> fmt, const Args&... args)
 {
     std::string log_msg;
     try {
@@ -92,6 +100,7 @@ inline void LogPrintFormatInternal_(SourceLocation&& source_loc, BCLog::LogFlags
         .category = flag,
         .level = level,
         .should_ratelimit = should_ratelimit,
+        .allow_newlines = allow_newlines,
         .source_loc = std::move(source_loc),
         .message = std::move(log_msg)});
 }
@@ -99,19 +108,34 @@ inline void LogPrintFormatInternal_(SourceLocation&& source_loc, BCLog::LogFlags
 template <typename... Args>
 inline void LogPrintFormatInternal(SourceLocation&& source_loc, BCLog::LogFlags flag, util::log::Level level, util::ConstevalFormatString<sizeof...(Args)> fmt, const Args&... args)
 {
-    return LogPrintFormatInternal_(std::move(source_loc), flag, level, /*should_ratelimit=*/true, fmt, args...);
+    return LogPrintFormatInternal_(std::move(source_loc), flag, level, /*should_ratelimit=*/true, /*allow_newlines=*/false, fmt, args...);
 }
 
 template <typename... Args>
 inline void LogPrintFormatInternal(SourceLocation&& source_loc, BCLog::LogFlags flag, util::log::Level level, util::log::NoRateLimitTag, util::ConstevalFormatString<sizeof...(Args)> fmt, const Args&... args)
 {
-    return LogPrintFormatInternal_(std::move(source_loc), flag, level, /*should_ratelimit=*/false, fmt, args...);
+    return LogPrintFormatInternal_(std::move(source_loc), flag, level, /*should_ratelimit=*/false, /*allow_newlines=*/false, fmt, args...);
+}
+
+template <typename... Args>
+inline void LogPrintFormatInternal(SourceLocation&& source_loc, BCLog::LogFlags flag, util::log::Level level, util::log::AllowNewlinesTag, util::ConstevalFormatString<sizeof...(Args)> fmt, const Args&... args)
+{
+    return LogPrintFormatInternal_(std::move(source_loc), flag, level, /*should_ratelimit=*/true, /*allow_newlines=*/true, fmt, args...);
+}
+
+template <typename... Args>
+inline void LogPrintFormatInternal(SourceLocation&& source_loc, BCLog::LogFlags flag, util::log::Level level, util::log::NoRateLimitTag, util::log::AllowNewlinesTag, util::ConstevalFormatString<sizeof...(Args)> fmt, const Args&... args)
+{
+    return LogPrintFormatInternal_(std::move(source_loc), flag, level, /*should_ratelimit=*/false, /*allow_newlines=*/true, fmt, args...);
 }
 } // namespace util::log
 
 namespace BCLog {
 //! Alias for compatibility. Prefer util::log::Level over BCLog::Level in new code.
 using Level = util::log::Level;
+
+//! Escape control characters in log messages, optionally preserving newlines.
+std::string LogEscapeMessage(std::string_view str, bool allow_newlines = false);
 } // namespace BCLog
 
 // Allow __func__ to be used in any context without warnings:
