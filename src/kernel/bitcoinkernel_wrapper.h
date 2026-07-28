@@ -241,6 +241,9 @@ concept IndexedContainer = requires(const Container& c, SizeFunc size_func, GetF
     { std::invoke(get_func, c, i) }; // Return type is deduced
 };
 
+//! Lazy index-based view over a container owned by another btck object.
+//! The Range and its Iterators are non-owning: like the Views they yield,
+//! they are only valid while the owning object is alive.
 template <typename Container, auto SizeFunc, auto GetFunc>
     requires IndexedContainer<Container, decltype(SizeFunc), decltype(GetFunc)>
 class Range
@@ -320,6 +323,10 @@ std::vector<std::byte> write_bytes(const T* object, int (*to_bytes)(const T*, bt
     return bytes;
 }
 
+//! Non-owning view of an object owned by another btck handle or view.
+//! Like the underlying C API objects it mirrors (e.g. the values returned by
+//! the *_at getters), a View is only valid while the object it was obtained
+//! from is alive; using it after the owner's destruction is undefined.
 template <typename CType>
 class View
 {
