@@ -123,6 +123,10 @@ private:
     std::vector<uint64_t> data;
     unsigned int nTweak;
     int nHashFuncs;
+    /* True while `data` is known to be all-zero (construction and every
+     * reset(); cleared by any insert()). Lets reset() skip the zero-fill
+     * when there is nothing to erase; the resulting state is identical. */
+    bool m_all_zero{true};
 
     void SanityCheck() const;
 };

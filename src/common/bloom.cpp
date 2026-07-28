@@ -221,6 +221,7 @@ static inline uint32_t RollingBloomHash(unsigned int nHashNum, uint32_t nTweak, 
 void CRollingBloomFilter::insert(std::span<const unsigned char> vKey)
 {
     SanityCheck();
+    m_all_zero = false;
     if (nEntriesThisGeneration == nEntriesPerGeneration) {
         nEntriesThisGeneration = 0;
         nGeneration++;
@@ -272,7 +273,10 @@ void CRollingBloomFilter::reset()
     nTweak = FastRandomContext().rand<unsigned int>();
     nEntriesThisGeneration = 0;
     nGeneration = 1;
-    std::fill(data.begin(), data.end(), 0);
+    if (!m_all_zero) {
+        std::fill(data.begin(), data.end(), 0);
+        m_all_zero = true;
+    }
     if constexpr (G_ABORT_ON_FAILED_ASSUME) {
         Assume(std::all_of(data.begin(), data.end(), [](uint64_t value) { return value == 0; }));
     }
