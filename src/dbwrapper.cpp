@@ -136,10 +136,10 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
              options->max_open_files, default_open_files);
 }
 
-static leveldb::Options GetOptions(size_t nCacheSize, bool bloom_filter)
+static leveldb::Options GetOptions(size_t nCacheSize, bool bloom_filter, std::optional<size_t> block_cache_bytes)
 {
     leveldb::Options options;
-    options.block_cache = leveldb::NewLRUCache(nCacheSize / 2);
+    options.block_cache = leveldb::NewLRUCache(block_cache_bytes.value_or(nCacheSize / 2));
     options.write_buffer_size = nCacheSize / 4; // up to two write buffers may be held in memory simultaneously
     options.filter_policy = bloom_filter ? leveldb::NewBloomFilterPolicy(10) : nullptr;
     options.compression = leveldb::kNoCompression;
@@ -249,7 +249,8 @@ CDBWrapper::CDBWrapper(const DBParams& params)
     DBContext().iteroptions.verify_checksums = true;
     DBContext().iteroptions.fill_cache = false;
     DBContext().syncoptions.sync = true;
-    DBContext().options = GetOptions(params.cache_bytes, params.bloom_filter);
+    DBContext().options = GetOptions(params.cache_bytes, params.bloom_filter, params.block_cache_bytes);
+    if (params.write_buffer_bytes) DBContext().options.write_buffer_size = *params.write_buffer_bytes;
     DBContext().options.create_if_missing = true;
     DBContext().options.max_file_size = params.max_file_size;
     assert(!(params.testing_env && params.memory_only));

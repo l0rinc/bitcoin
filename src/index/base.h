@@ -65,7 +65,9 @@ protected:
     {
     public:
         DB(const fs::path& path, size_t n_cache_size,
-           bool f_memory = false, bool f_wipe = false, bool f_obfuscate = false, bool f_bloom = true);
+           bool f_memory = false, bool f_wipe = false, bool f_obfuscate = false, bool f_bloom = true,
+           std::optional<size_t> block_cache_bytes = std::nullopt,
+           std::optional<size_t> write_buffer_bytes = std::nullopt);
         virtual ~DB() = default;
 
         /// Read block locator of the chain that the index is in sync with.
