@@ -147,3 +147,71 @@ Validation:
 ## Verdict and Handoff
 
 **Confirmed and fixed:** MuSig counter nonce generation failed the independent MSan constant-time boundary check when its opaque keypair was treated as secret. **Timing-only result:** inconclusive; the release probes found no stable class-dependent timing effect. The source fix and ctime regression are ready for one self-contained commit authored as `Lőrinc <pap.lorinc@gmail.com>`. Valgrind, dudect, GCC, non-x86 execution, LTO, and a full functional suite remain unavailable or out of scope in this environment. Reopen this goal only for one of those distinct evidence cells or a new secret-bearing caller.
+
+## Cycle 46: GCC Compiler, Backend, and Optimization Cell
+
+- Cycle: `46`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `53`
+- Goal: statistical timing-side-channel campaign
+- Distinct cell: GCC compiler/backend and `-O3` optimization coverage for ECDH, Schnorr signing, and MuSig counter nonce generation. The cycle-44 MuSig ctime declassification cell is closed and was not repeated.
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- HEAD at cycle start: `9de78654c41bb74a06769c8822f8a777a3b7bfd6`
+- Branch: `fuzz-contract-cluster-oracles-20260709`
+- Entry divergence: `origin/master...HEAD = 2 862`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goal TSV SHA-256: `ee094e408ea668c95129c7a9902d4878e9c303bf9e28e1a481c5af46114725bf`
+- Tracked and staged state was clean at entry. Existing untracked agent artifacts and `test/cache` were preserved. No relevant test, daemon, fuzz, sanitizer, Valgrind, or profiling process was running.
+
+### Hypothesis and Contract
+
+GCC optimization or the x86_64 assembly/portable backend could expose a secret-class timing difference in the fixed-window scalar paths despite the earlier Clang release screen. The relevant public callers were `secp256k1_ecdh`, `secp256k1_schnorrsig_sign32`, and `secp256k1_musig_nonce_gen_counter`; the same-key MuSig operation was a null control. The source contract remains that secret scalar selection and multiplication are fixed-window/conditional-move operations, while input validation and explicitly declassified public values may branch.
+
+The local tool inventory was GCC 12.2.0, Clang 14 plus the existing Clang 19 installation, CMake 3.25.1, and Ninja 1.11.1. Valgrind, dudect, QEMU, and cross GCC toolchains were unavailable. The GCC 13.1 constant-time regression documented in `src/secp256k1/CHANGELOG.md` was treated as a reason to test the compiler matrix, not as an oracle that the current code was vulnerable.
+
+### Builds and Measurement
+
+The preserved `agent-journal/statistical_timing_cycle44_probe.cpp` was compiled against isolated shared libraries. Each probe used CPU affinity, deterministic class scheduling, randomized context blinding, three repetitions, 4,000 samples per class, 16 API calls per sample, raw `CLOCK_MONOTONIC_RAW` traces, and key modes `0` (`1` versus `0x7f...7f`) and `1` (`1` versus `2`). The exact output files are:
+
+- `/data/my_storage/tmp/statistical-timing-cycle46-gcc-auto/raw-mode0.log`
+- `/data/my_storage/tmp/statistical-timing-cycle46-gcc-auto/raw-mode1.log`
+- `/data/my_storage/tmp/statistical-timing-cycle46-gcc-off/raw-mode0.log`
+- `/data/my_storage/tmp/statistical-timing-cycle46-gcc-off/raw-mode1.log`
+- `/data/my_storage/tmp/statistical-timing-cycle46-gcc-o3-auto/raw-mode0.log`
+- `/data/my_storage/tmp/statistical-timing-cycle46-gcc-o3-auto/raw-mode1.log`
+- `/data/my_storage/tmp/statistical-timing-cycle46-gcc-o3-off/raw-mode0.log`
+- `/data/my_storage/tmp/statistical-timing-cycle46-gcc-o3-off/raw-mode1.log`
+
+Release builds used GCC `-O2` with `SECP256K1_ASM=AUTO` and `OFF`. Separate Debug-configured builds set `CMAKE_C_FLAGS_DEBUG=-O3`, again with assembly `AUTO` and `OFF`; CMake reported the expected `-O3` compile option. The probe was pinned to CPU 2 or 3 and executed one build at a time to avoid deliberate cross-run contention.
+
+| Build | Key mode | Welch t range over 12 API/repetition samples | Maximum absolute t |
+|---|---:|---:|---:|
+| GCC `-O2`, AUTO | 0 | `-0.498 .. 1.267` | `1.267` |
+| GCC `-O2`, AUTO | 1 | `-0.609 .. 0.315` | `0.609` |
+| GCC `-O2`, OFF | 0 | `-0.459 .. 1.141` | `1.141` |
+| GCC `-O2`, OFF | 1 | `-1.120 .. 0.413` | `1.120` |
+| GCC `-O3`, AUTO | 0 | `-1.055 .. 1.025` | `1.055` |
+| GCC `-O3`, AUTO | 1 | `-0.646 .. 0.664` | `0.664` |
+| GCC `-O3`, OFF | 0 | `-1.125 .. 0.486` | `1.125` |
+| GCC `-O3`, OFF | 1 | `-0.764 .. 0.624` | `0.764` |
+
+Directions changed between repetitions and backend/optimization variants. Medians and 95th percentiles tracked across classes, and the deterministic sink was identical for every paired build/class run: `229` for mode 0 and `164` for mode 1. No run failed an API result check.
+
+The optimized object was also inspected with `objdump`. `secp256k1_ecmult_const.part.0` had the same `0x9fa` text size in both GCC `-O2` builds and sizes `0x1115` (AUTO) and `0x1067` (OFF) in the GCC `-O3` builds. The disassembly retained the call into the fixed-window multiplication routine and its loop structure; the visible conditional branches were around public validation, callbacks, and loop/control mechanics. This is corroborating code review, not a proof of constant time.
+
+### Independent Correctness Validation
+
+Both GCC `-O2` test builds were configured and rebuilt with `SECP256K1_BUILD_TESTS=ON`, assembly `AUTO` or `OFF`, and exhaustive/benchmark/ctime tests disabled because the latter tools are unavailable. With seed `0123456789abcdef`, `--iterations=1`, and `--jobs=2`, all four binaries passed:
+
+- GCC AUTO `tests`: exit `0`, 18.589 seconds.
+- GCC AUTO `noverify_tests`: exit `0`, 9.588 seconds.
+- GCC OFF `tests`: exit `0`, 18.875 seconds.
+- GCC OFF `noverify_tests`: exit `0`, 9.500 seconds.
+
+The CMake builds, probe executions, official tests, and `git diff --check` completed without a source or test failure. No production source or test change was justified.
+
+### Verdict and Handoff
+
+**Inconclusive; no confirmed timing finding.** The compiler/backend/optimization cell produced no stable class separation, output divergence, or source-level secret-dependent branch evidence. Passing statistics remain limited evidence and do not replace dudect or ctime/Valgrind analysis. Valgrind, dudect, GCC 13+, LTO, non-x86 execution, and full ctime coverage remain unavailable. The next eligible timing work is only a genuinely new tool, compiler, architecture, or secret-bearing caller cell; otherwise draw the next catalog goal. Raw traces and build trees are retained under `/data/my_storage/tmp/statistical-timing-cycle46-*`.
