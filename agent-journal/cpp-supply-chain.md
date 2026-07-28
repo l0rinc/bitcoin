@@ -87,3 +87,47 @@ Fix the threshold count to `len({sig.key for sig in good_trusted})` while retain
 
 1. Run the release verifier integration tests when network and keyserver state are available, including JSON output and explicit trusted-key modes.
 2. Continue the supply-chain inventory across compiler/tool downloads, generated inputs, license gates, and release signing manifests without repeating these threshold findings.
+
+## Cycle 63 Reopen: Toolchain, Dependency, and Provenance Gates
+
+### Identity and Gate
+
+- Cycle: `63`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `59`
+- Goal: `C/C++ supply-chain and security-gate audit`
+- Slug: `cpp-supply-chain`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Branch: `fuzz-contract-cluster-oracles-20260709`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- HEAD at cycle start: `70caa034b9aa598e10bfd5091f2e6358f843a610`
+- `origin/master...HEAD` at the gate: `2 896`
+- Tracked/staged state at the gate: clean. Existing untracked agent-goal files, journals, probes, and `test/cache/` were preserved.
+- `goals.tsv` validation: `validated_rows=99 total_lines=100 status=ok`
+- No relevant test, fuzz, sanitizer, daemon, or profiling process was running at the gate.
+
+### Closed Surface and Scope
+
+The cycle-41 verify-binaries findings are closed: trusted-signature thresholds and duplicate trusted signer packets must not be rediscovered. This reopen covers compiler and build-tool downloads, package-cache reuse, source/archive provenance, generated inputs, license gates, and whether a security-relevant check is performed before the artifact it protects can influence a build or release.
+
+### Hypotheses
+
+1. A download/cache path may trust an existing artifact or generated input without revalidating its hash, URL identity, or provenance at the point of use.
+2. A compiler/tool bootstrap path may accept a mutable or unpinned input, or may record metadata without binding it to the bytes actually consumed.
+3. A license or vendored-source gate may cover only a subset of generated/optional files, creating a false assurance rather than a defect.
+4. A candidate may be intentional because the authenticated boundary is enforced by Guix, depends, CI, or an upstream package manager outside this repository; distinguish that from an omitted local check.
+
+### Evidence Log
+
+- Pending: inventory compiler/tool acquisition, dependency-cache reuse, generated-source inputs, and license/provenance checks; then select one concrete trust-boundary hypothesis and verify it independently.
+
+### Verdict
+
+- Pending.
+
+### Handoff
+
+- Pending completion. Record exact source URLs/commits/hashes, cache and verification order, negative controls, reproducible evidence, and the next unchecked supply-chain cell.
