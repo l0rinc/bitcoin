@@ -92,3 +92,80 @@ The code fix and this journal must be committed together. Next cycle should
 re-check the fresh base and dirty state, then draw a new goal without repeating
 the closed hypotheses. Preserve the full-suite failure details as residual
 environment/test evidence rather than attributing them to this change.
+
+# Cycle 35: locking, threading, and scheduler audit
+
+## Selection and gate
+
+- Goal index: 8, `locking-threading`, selected with `shuf -i 0-98 -n 1`.
+- This is a distinct follow-up cell from cycle 16: the earlier `DumpAddresses()`
+  persistence race is closed and was not reopened. The cycle-35 scope was
+  transaction-download/inventory versus mempool locking, V2 transport lock
+  nesting, and scheduler callback lifetime.
+- Gate HEAD: `722f659965ab807b7effc2b2dca20951ccf9d79f`.
+- Fresh upstream base: `origin/master` at
+  `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`.
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence was
+  `origin/master...HEAD = 2 841`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Corrected catalog validation reported `validated_rows=100 total_lines=100`.
+- Tracked/staged state was clean at the gate; existing agent artifacts and
+  `test/cache/` were preserved. No relevant test, fuzz, sanitizer, daemon, or
+  build process remained after verification.
+
+## Scope and static evidence
+
+The current declarations put `m_tx_download_mutex` and
+`m_inv_to_send_mutex` before `m_mempool.cs`. `ProcessInvBacklog()` follows the
+declared inventory-to-mempool order, but releases the mempool lock before it
+gets the peer snapshot and per-peer inventory locks. `ProcessValidTx()` holds
+the transaction-download lock while calling short-lived mempool accessors and
+does not retain `m_mempool.cs` across `InitiateTxBroadcastToAll()`. The INV/TX
+message paths use `cs_main -> m_tx_download_mutex`, and no production path
+held `m_mempool.cs` while acquiring either transaction-download or global
+inventory state. The apparent reverse edge was therefore a non-nested sequence,
+not a lock cycle.
+
+V2 transport annotations and implementations agree: receive processing may
+take `m_recv_mutex` before `m_send_mutex`, while send-only and receive-only
+operations take one side. Socket I/O takes the short `m_sock_mutex` scope and
+does not retain it while transport callbacks process bytes. `ForEachNode()` and
+reconnection handling retained their already documented orders and were not
+reopened as cycle-16 hypotheses.
+
+Scheduler inspection confirmed that production shutdown stops connman before
+stopping the scheduler, and the scheduler joins its service thread before
+`PeerManagerImpl` or `CConnman` are destroyed. The test-only callback that calls
+`scheduler.stop()` runs on a thread that is not registered as the scheduler's
+service thread; it is not evidence of a production self-join path.
+
+## Independent runtime evidence
+
+- Rebuilt `build_unit_tsan_clang19/bin/test_bitcoin` with TSan, lock-order
+  diagnostics, and `-Wthread-safety` after CMake regeneration.
+- `build_unit_tsan_clang19/bin/test_bitcoin --run_test=net_tests --log_level=message --report_level=short` passed 31 enabled cases and 135,024/135,024 assertions; 1,159 cases were skipped.
+- With the repository TSan suppressions and `halt_on_error=1`,
+  `build_unit_tsan_clang19/bin/test_bitcoin --run_test=scheduler_tests --log_level=message --report_level=short` passed 4 enabled cases and 27/27 assertions; 1,186 cases were skipped.
+- The custom fuzz driver was invoked with one existing
+  `process_message` corpus seed:
+  `TSAN_OPTIONS='suppressions=/data/my_storage/bitcoin/test/sanitizer_suppressions/tsan:halt_on_error=1:second_deadlock_stack=1' FUZZ=process_messages build_fuzz_tsan_clang19/bin/fuzz /data/my_storage/tmp/qa-assets/fuzz_corpora/process_message/af3035aea427dc17f1f45866ad8c1641a13e8b81`
+  and returned `process_messages: succeeded against 1 files in 0s.` with no
+  TSan report.
+- An earlier attempt using `-runs=100` was classified as a harness invocation
+  error: this build's `src/test/fuzz/fuzz.cpp` accepts files/directories or
+  stdin, so the flag was treated as an input path. It did not exercise the
+  target and is not a product finding.
+- `git diff --check` passed. No race, deadlock, lock-order, or lifetime defect
+  was reproduced.
+
+## Verdict and handoff
+
+The transaction/mempool, V2 transport, and production scheduler-lifetime
+hypotheses are dismissed for this cycle. No source change is justified. The
+remaining locking risk map prioritizes lock contracts around callback-owned
+peer state, test-only scheduler lifecycle assumptions, and platform-specific
+socket shutdown schedules, while excluding the closed `DumpAddresses()` and
+`ForEachNode()` cells. The next cycle must re-check branch/base/HEAD, dirty
+state, processes, catalog hashes, journals, history, and review precedent,
+then draw a new goal from the full validated catalog.
