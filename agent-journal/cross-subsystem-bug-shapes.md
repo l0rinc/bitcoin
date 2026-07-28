@@ -32,12 +32,17 @@ For every candidate, record the seed fix, structural features, callers, trust bo
 
 ## Evidence Log
 
-- Pending: select a seed defect shape from history, build a semantic site ledger, and verify the highest-risk analogous path.
+- Historical seed: `b0ce659a98` (`validation: readd redownloaded block candidates`) fixes a shared-object mutation bug in `ChainstateManager::ReceivedBlockTransactions`. `nSequenceId` is part of `CBlockIndexWorkComparator`, while each chainstate owns a separate ordered candidate set. The fix removes a block from every chainstate before changing the shared sequence id and re-adds it through each chainstate's candidate policy.
+- Analogous site reviewed: `Chainstate::PreciousBlock` removes and reinserts its target only in the active chainstate while changing the same shared `nSequenceId`. The source shape is real, but it is not enough to justify a fix without a reachable second candidate set.
+- Candidate-set contract: `TryAddBlockIndexCandidate` adds a block to a historical chainstate only when it is on that chainstate's `TargetBlock` path. In `SetupSnapshot`, the background chainstate targets the snapshot base at height 110, while the active snapshot tip is at height 210. `PreciousBlock` returns before mutating sequence ids when the requested block has less chain work than the active tip. Therefore a block eligible for active `PreciousBlock` cannot simultaneously be a valid background candidate in this snapshot configuration.
+- Controlled regression attempt: two same-work children of the active snapshot tip were added with `ReceivedBlockTransactions`. The active candidate set contained them, but the background set correctly contained neither (`count == 0` before `PreciousBlock`). Making the test pass required manually injecting invalid background membership, which would test a broken invariant rather than production reachability. The initial pointer-based attempt also produced misleading counts because the test retained pre-lookup pointers; it was discarded rather than treated as evidence.
+- Negative controls: `bc3db5ef52` restart publication, `997c034412` cursor/cache locking, `6aa5d8d948` compact-block transaction accounting, `c3d9446762` checkqueue completion, `7e19ce200b`/`5311b15727` descriptor PSBT verification, and the cycle-48 wallet reservation ordering were reviewed as distinct seed families. Their analogous current paths were either already covered by the originating fix or had different contracts and no independently reachable omission.
+- Verification commands: `git grep -n 'setBlockIndexCandidates' -- src/validation.cpp src/test`; `TMPDIR=/data/my_storage/tmp cmake --build build_unit_clang19 --target test_bitcoin -j4`; and the disposable filtered `validation_chainstatemanager_tests/precious_block_preserves_background_candidate_order` run. The latter was removed after the reachability proof; the worktree returned to tracked/staged cleanliness, and `git diff --check` passed. No production file was changed.
 
 ## Verdict
 
-- Pending.
+- Dismissed: the historical structural resemblance is real, but the suspected `PreciousBlock` cross-chainstate corruption is unreachable under the current chainstate candidate-set contract. No source or regression commit is justified. Preserve the seed and the failed-but-invalid test model so a future change to snapshot target semantics reopens this cell with a valid reproducer.
 
 ## Handoff
 
-- Pending completion. Record seed provenance, candidate paths, reachability evidence, exact test commands, and the next distinct bug-shape cell.
+- Cycle closed without a source commit. Next run must recheck the gate, draw a fresh full-catalog selector, and choose a distinct unchecked defect shape. Reopen this cell only if a caller can make the same block a valid candidate in both chainstates without violating `TargetBlock` or active-chain work rules.
