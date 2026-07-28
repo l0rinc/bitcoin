@@ -73,3 +73,74 @@ lingered; the in-tree CSVs are verbatim copies of the BIP repo files
 
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 2 (2026-07-28): BIP173/350 bech32(m) vector chain — no drift, three-layer mapping complete
+
+Base: cf949ccfea (journal commit for #47 cycle-2 on
+audit/build-ci-parity-c2; ledger-lineage anchor audit/resurrection @
+5d0155254c). Branch: audit/spec-drift-c2 (c1 journal carried in the
+carry commit). Start state: clean (untracked scratch only).
+
+### Draw
+Random draw over the 62-goal repaired pool (40 pending + 22 CYCLE-1;
+#47 excluded as just-cycled): raw=13968128799102658417, seed masked to
+63 bits (4744756762247882609), index 33 -> #81.
+STATE REPAIR: #81 cycle-1 (0f6c2640b7, BIP324/RFC8439 byte-exact)
+lived on audit/spec-vector-drift but had NO row in the linear ledger;
+recorded retroactively in this cycle's ledger update. The pool treated
+#81 as pending; the draw is honored as cycle 2.
+
+### Version pinning / provenance
+bitcoin/bips master fetched 2026-07-28 via raw.githubusercontent.com:
+bip-0173.mediawiki (415 lines), bip-0350.mediawiki (334 lines).
+Vectors extracted from <tt> markup; test-side strings extracted from
+src/test/bech32_tests.cpp literals.
+
+### Comparison (mechanical)
+1. Valid bech32 (7: A12UEL5L, a12uel5l, an83...bio1tt5tgs,
+   abcdef1qpzry9x8gf2tvdw0s3jn54khce6mua7lmqqqxw, 11qq...c8247j,
+   split1...2y9e3w, ?1ezyfcl): exact match in
+   bech32_testvectors_valid, incl. encode-decode re-derivation and
+   LocateErrors checks in the test body.
+2. Valid bech32m (7): exact match in bech32m_testvectors_valid.
+3. Invalid lists: ALL BIP173 invalid strings present in
+   bech32_testvectors_invalid — the control-character cases appear
+   escaped (" 1nwldj5", "\x7f""1axkwrx", "\x80""1eym55h",
+   "de1lg7wt\xff", " 1xj0phk", "\x7f""1g6xzxy", "\x80""1vctc34");
+   a naive regex extraction misses these (extraction artifact, now
+   documented). BIP350 invalid segwit-address vectors live in the
+   correct deeper layers: key_io_invalid.json (bc1gmk9yu etc.) and
+   test/functional/rpc_validateaddress.py (bc1pw5dgrnzv,
+   bc1rw5uspcuh, ...).
+4. Test-side extras (not in BIPs): A12uEL5L/a12UEL5L (mixed-case
+   invalid — BIP rule, locally added cases), two mutated checksummed
+   variants (abcdef1qpzrz9x8..., abcdef1l7aum6echk45nj2...), and two
+   test1zg69... strings (LocateErrors/bech32m-invalid additions).
+   All are deliberate ADDITIONS consistent with BIP rules, not drift.
+5. Segwit ADDRESS vectors (BC1QW508..., tb1...) are not in
+   bech32_tests.cpp by design; verified present in
+   rpc_validateaddress.py.
+
+### Verdict
+DISMISSED: no spec/vector drift for BIP173/350 across the three test
+layers (unit bech32, key_io JSON, functional validateaddress).
+Provenance intact; additions are rule-consistent and localized.
+
+### Exact commands
+- curl raw.githubusercontent.com/bitcoin/bips/master/bip-01{73,50}.mediawiki
+- python3: <tt> extraction + literal extraction + set diffs
+  (initial regex under-extracted table-fragment noise; corrected to
+  <tt> markup + escape-aware membership checks)
+- grep: control-char escapes in bech32_tests.cpp; segwit vectors in
+  key_io_invalid.json / rpc_validateaddress.py
+
+### Limitations / queue
+- segwit_addr.py (functional framework) is a code PORT of the BIP
+  reference implementation, not vectors; port-drift not diffed this
+  cycle — queued.
+- BIP32 (hd001..hd00N), BIP143/341 sighash, base58, and Wycheproof
+  cells unclaimed.
+- bkb-mcp not available; primary links recorded inline above.
+
+## Rotation note
+Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
