@@ -249,3 +249,81 @@ The same draw then exposed `-limitclustersize`: its `kB * 1'000` assignment
 was unchecked, and the resulting value feeds signed `*40` and `*4` operations
 in `CTxMemPool`. A separate journal update and source commit records that
 finding after its verification.
+
+### Mempool cluster-size conversion
+
+#### Scope and hypothesis
+
+`-limitclustersize` is documented in kilobytes and is registered as a
+debug/test option. The local `ApplyArgsManOptions` helper assigned
+`*vkb * 1'000` directly to the signed `cluster_size_vbytes` field. The
+resulting field is then multiplied by 40 in `CTxMemPool::Flatten` and by the
+witness scale factor in the graph constructor. The hypothesis was that a
+negative or saturated positive option could reach those downstream arithmetic
+operations and trigger an invalid limit or a failed `Assume`, instead of
+producing a parameter error.
+
+History confirms that this option was intentionally left without a fixed
+resource cap when the old 16,384 MiB cap was removed in commit `b370164b31`,
+because it is DEBUG_ONLY and the project has a terminating `std::new_handler`.
+That rationale does not cover arithmetic values that cannot be represented.
+
+#### Before-fix evidence
+
+The first direct daemon probe used a scratch regtest datadir and the saturated
+positive value `9223372036854776` kB, which is just above
+`INT64_MAX / 1'000`:
+
+```text
+build_func_clang19/bin/bitcoind -regtest -datadir=/data/my_storage/tmp/integer-overflow-limitclustersize-before-cycle29 \
+  -listen=0 -server=0 -connect=0 -dnsseed=0 -discover=0 -natpmp=0 \
+  -daemon=0 -printtoconsole=1 -maxmempool=5 \
+  -limitclustersize=9223372036854776
+# status 132, SIGILL, empty log
+```
+
+A negative `-limitclustersize=-1` was also accepted by the old parser and
+stored a negative virtual-byte limit. A second boundary isolates the later
+constructor calculation: `230584300921370` kB fits `kB * 1'000`, but exceeds
+`floor(INT64_MAX / 40 / 1'000)`. With the largest representable mempool size,
+the old daemon again terminated with status 132 and `SIGILL` before startup
+completed.
+
+#### Fix and verification
+
+The argument helper now returns `util::Result<void>`, rejects negative values,
+and rejects values above the largest kB input that keeps the constructor's
+`*40` signed calculation representable. It also retains a `CheckedMul` guard
+at the first conversion. The focused mempool test covers a valid `101` kB
+value, `-1`, the initial product boundary, and the downstream `*40` boundary.
+
+Evidence after the fix:
+
+```text
+cmake --build build_unit_clang19 --target test_bitcoin -j2
+build_unit_clang19/bin/test_bitcoin --run_test=mempool_tests/MempoolLimitArgumentBounds --report_level=short
+# 1 case, 5 assertions passed
+
+build_unit_clang19/bin/test_bitcoin --run_test=mempool_tests --report_level=short
+# 24 cases, 423 assertions passed
+
+cmake --build build_func_clang19 --target bitcoind -j2
+build_func_clang19/bin/bitcoind ... -limitclustersize=9223372036854776
+# status 1; Error: -limitclustersize is too large (got 9223372036854776 kB)
+build_func_clang19/bin/bitcoind ... -limitclustersize=230584300921370
+# status 1; Error: -limitclustersize is too large (got 230584300921370 kB)
+```
+
+`git diff --check` passed and no daemon or test process remains. The hypothesis
+is **confirmed and fixed**. The source change is limited to the argument
+contract and its focused test; ordinary cluster-size behavior remains
+unchanged.
+
+### Cycle verdict and next queue
+
+Cycle 29 produced two independent confirmed arithmetic findings and no
+remaining tracked changes for the selected goal after the second commit. The
+next arithmetic queue includes cache-size paths and amount/fee conversions not
+covered by the P2P buffer, validation-cache, or cluster-size fixes. The next
+uber cycle must draw again from the full catalog rather than reopening these
+cells without new evidence.

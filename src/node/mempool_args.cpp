@@ -21,6 +21,7 @@
 #include <util/translation.h>
 
 #include <chrono>
+#include <limits>
 #include <memory>
 
 using common::AmountErrMsg;
@@ -29,17 +30,34 @@ using kernel::MemPoolOptions;
 
 //! Maximum mempool size on 32-bit systems.
 static constexpr int MAX_32BIT_MEMPOOL_MB{500};
+// The mempool constructor multiplies this value by 40 when checking the
+// minimum -maxmempool size, so keep that calculation representable.
+static constexpr int64_t MAX_CLUSTER_SIZE_LIMIT_KVB{std::numeric_limits<int64_t>::max() / 40 / 1'000};
 
 namespace {
-void ApplyArgsManOptions(const ArgsManager& argsman, MemPoolLimits& mempool_limits)
+util::Result<void> ApplyArgsManOptions(const ArgsManager& argsman, MemPoolLimits& mempool_limits)
 {
     mempool_limits.cluster_count = argsman.GetIntArg("-limitclustercount", mempool_limits.cluster_count);
 
-    if (auto vkb = argsman.GetIntArg("-limitclustersize")) mempool_limits.cluster_size_vbytes = *vkb * 1'000;
+    if (auto vkb = argsman.GetIntArg("-limitclustersize")) {
+        if (*vkb < 0) {
+            return util::Error{Untranslated(strprintf("-limitclustersize must be non-negative (got %d kB)", *vkb))};
+        }
+        if (*vkb > MAX_CLUSTER_SIZE_LIMIT_KVB) {
+            return util::Error{Untranslated(strprintf("-limitclustersize is too large (got %d kB)", *vkb))};
+        }
+        const auto cluster_size_vbytes{CheckedMul(*vkb, int64_t{1'000})};
+        if (!cluster_size_vbytes) {
+            return util::Error{Untranslated(strprintf("-limitclustersize is too large (got %d kB)", *vkb))};
+        }
+        mempool_limits.cluster_size_vbytes = *cluster_size_vbytes;
+    }
 
     mempool_limits.ancestor_count = argsman.GetIntArg("-limitancestorcount", mempool_limits.ancestor_count);
 
     mempool_limits.descendant_count = argsman.GetIntArg("-limitdescendantcount", mempool_limits.descendant_count);
+
+    return {};
 }
 }
 
@@ -110,7 +128,7 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& argsman, const CChainP
 
     mempool_opts.persist_v1_dat = argsman.GetBoolArg("-persistmempoolv1", mempool_opts.persist_v1_dat);
 
-    ApplyArgsManOptions(argsman, mempool_opts.limits);
+    if (auto result{ApplyArgsManOptions(argsman, mempool_opts.limits)}; !result) return result;
 
     if (mempool_opts.limits.cluster_count > MAX_CLUSTER_COUNT_LIMIT) {
         return util::Error{Untranslated(strprintf("limitclustercount must be less than or equal to %d", MAX_CLUSTER_COUNT_LIMIT))};
