@@ -31,10 +31,16 @@
 #include <util/tokenbucket.h>
 #include <util/vecdeque.h>
 #include <util/vector.h>
+#ifndef WIN32
+#include <util/tokenpipe.h>
+#endif
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#ifndef WIN32
+#include <csignal>
+#endif
 #include <cstdint>
 #include <cstring>
 #include <deque>
@@ -150,6 +156,40 @@ BOOST_AUTO_TEST_CASE(util_check)
     const int nine{*Assert(std::optional<int>{9})};
     BOOST_CHECK_EQUAL(9, nine);
 }
+
+#ifndef WIN32
+BOOST_AUTO_TEST_CASE(tokenpipe_end_of_stream)
+{
+    const auto previous_sigpipe_handler = std::signal(SIGPIPE, SIG_IGN);
+
+    auto pipe = TokenPipe::Make();
+    BOOST_CHECK(pipe);
+    if (!pipe) {
+        std::signal(SIGPIPE, previous_sigpipe_handler);
+        return;
+    }
+    TokenPipeEnd reader = pipe->TakeReadEnd();
+    TokenPipeEnd writer = pipe->TakeWriteEnd();
+    BOOST_CHECK_EQUAL(writer.TokenWrite(0xa5), 0);
+    BOOST_CHECK_EQUAL(reader.TokenRead(), 0xa5);
+    writer.Close();
+    BOOST_CHECK_EQUAL(reader.TokenRead(), TokenPipeEnd::TS_EOS);
+    reader.Close();
+
+    auto broken_pipe = TokenPipe::Make();
+    BOOST_CHECK(broken_pipe);
+    if (!broken_pipe) {
+        std::signal(SIGPIPE, previous_sigpipe_handler);
+        return;
+    }
+    TokenPipeEnd broken_reader = broken_pipe->TakeReadEnd();
+    TokenPipeEnd broken_writer = broken_pipe->TakeWriteEnd();
+    broken_reader.Close();
+    BOOST_CHECK_EQUAL(broken_writer.TokenWrite(0xa5), TokenPipeEnd::TS_EOS);
+
+    std::signal(SIGPIPE, previous_sigpipe_handler);
+}
+#endif
 
 BOOST_AUTO_TEST_CASE(util_criticalsection)
 {
