@@ -51,20 +51,6 @@ SipHasher13UJ ReadOrCreateTxidHasher(CDBWrapper& db)
     }
     return SipHasher13UJ{salt.first, salt.second};
 }
-
-std::vector<uint256> ReadBlockHashesBySequence(CDBWrapper& db)
-{
-    std::vector<uint256> block_hashes;
-    std::unique_ptr<CDBIterator> it{db.NewIterator()};
-    txindex::BlockSeqKey key;
-    for (it->Seek(key); it->Valid() && it->GetKey(key); it->Next()) {
-        uint256 block_hash;
-        if (!it->GetValue(block_hash)) break;
-        if (block_hashes.size() <= key.block_seq) block_hashes.resize(key.block_seq + 1);
-        block_hashes[key.block_seq] = block_hash;
-    }
-    return block_hashes;
-}
 } // namespace
 
 /** Access to the txindex database (indexes/txindex/) */
@@ -74,7 +60,7 @@ public:
     explicit DB(size_t n_cache_size, bool f_memory = false, bool f_wipe = false);
 
     /// Write a block of transaction positions to the DB.
-    void WriteTxs(const interfaces::BlockInfo& block) EXCLUSIVE_LOCKS_REQUIRED(!m_block_hashes_mutex);
+    void WriteTxs(const interfaces::BlockInfo& block);
 
     /// Used to hash the txid to compute the prefix.
     const SipHasher13UJ m_hasher;
@@ -82,22 +68,11 @@ public:
     /// Whether the database contains any legacy ('t' + txid) entries.
     const bool m_has_legacy;
 
-    /// Return the block hash assigned to a sequence number.
-    std::optional<uint256> GetBlockHash(uint32_t block_seq) const EXCLUSIVE_LOCKS_REQUIRED(!m_block_hashes_mutex)
-    {
-        LOCK(m_block_hashes_mutex);
-        if (block_seq >= m_block_hashes.size() || m_block_hashes[block_seq].IsNull()) return std::nullopt;
-        return m_block_hashes[block_seq];
-    }
-
     CBlockLocator ReadBestBlock() const override;
     void WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator) override;
 
 private:
     DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool has_legacy);
-
-    mutable Mutex m_block_hashes_mutex;
-    std::vector<uint256> m_block_hashes GUARDED_BY(m_block_hashes_mutex);
 };
 
 static fs::path TxIndexDBPath() { return gArgs.GetDataDirNet() / "indexes" / "txindex"; }
@@ -115,8 +90,7 @@ TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe) :
 TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool has_legacy) :
     BaseIndex::DB(TxIndexDBPath(), n_cache_size, f_memory, f_wipe, /*f_obfuscate=*/false, /*f_bloom=*/has_legacy),
     m_hasher{ReadOrCreateTxidHasher(*this)},
-    m_has_legacy{has_legacy},
-    m_block_hashes{ReadBlockHashesBySequence(*this)}
+    m_has_legacy{has_legacy}
 {}
 
 CBlockLocator TxIndex::DB::ReadBestBlock() const
@@ -154,12 +128,7 @@ void TxIndex::DB::WriteTxs(const interfaces::BlockInfo& block)
         batch.Write(key, txindex::EMPTY_VALUE);
         tx_offset_in_block += tx->ComputeTotalSize();
     }
-    {
-        LOCK(m_block_hashes_mutex);
-        WriteBatch(batch);
-        if (m_block_hashes.size() <= block_seq) m_block_hashes.resize(block_seq + 1);
-        m_block_hashes[block_seq] = block.hash;
-    }
+    WriteBatch(batch);
 }
 
 TxIndex::TxIndex(std::unique_ptr<interfaces::Chain> chain, size_t n_cache_size, bool f_memory, bool f_wipe)
@@ -202,20 +171,20 @@ std::optional<TxIndex::TxIndexResult> TxIndex::FindHashedTx(const Txid& tx_hash)
         const txindex::TxHashKeyPrefix prefix{txindex::CreateKeyPrefix(m_db->m_hasher, tx_hash)};
         txindex::DBKey key{prefix, {}};
         for (it->Seek(key); it->Valid() && it->GetKey(key) && key.hash_prefix == prefix; it->Next()) {
-            const std::optional<uint256> candidate_block_hash{m_db->GetBlockHash(key.pos.block_seq)};
-            if (!candidate_block_hash) {
+            uint256 candidate_block_hash;
+            if (!m_db->Read(txindex::BlockSeqKey{key.pos.block_seq}, candidate_block_hash)) {
                 LogError("Block sequence %u not found for txid %s", key.pos.block_seq, tx_hash.ToString());
                 continue;
             }
             LOCK(cs_main);
-            const CBlockIndex* block_index{m_chainstate->m_blockman.LookupBlockIndex(*candidate_block_hash)};
+            const CBlockIndex* block_index{m_chainstate->m_blockman.LookupBlockIndex(candidate_block_hash)};
             if (!block_index) {
-                LogError("Block index entry %s not found for txid %s", candidate_block_hash->ToString(), tx_hash.ToString());
+                LogError("Block index entry %s not found for txid %s", candidate_block_hash.ToString(), tx_hash.ToString());
                 continue;
             }
             if (!(block_index->nStatus & BLOCK_HAVE_DATA)) continue;
             const FlatFilePos tx_position{block_index->nFile, block_index->nDataPos + key.pos.tx_offset_in_block};
-            candidates.emplace_back(tx_position, *candidate_block_hash, key.pos.block_seq, m_chainstate->m_chain.Contains(*block_index));
+            candidates.emplace_back(tx_position, candidate_block_hash, key.pos.block_seq, m_chainstate->m_chain.Contains(*block_index));
         }
     }
 
