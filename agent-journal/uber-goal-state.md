@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 34 completed with the Fuzz Introspector coverage-path blocker confirmed and fixed in `CoverageFuzz.cmake`. Ready for the next draw.
+- Status: cycle 35 completed with the locking/threading hypotheses dismissed after static lock-order review, TSan network and scheduler suites, and a real fuzz-seed replay. Ready for the next draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -50,6 +50,9 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 34 selector: `shuf -i 0-98 -n 1` drew `50` (`fuzz-introspector`). The primary candidate was the high-risk `process_messages` P2P state-machine target with an empty current QA corpus.
 - Cycle 34 verification: the 229-target registry, source call chain, Clang object sizes, corpus inventory, runner behavior, CI history, and libFuzzer counters were audited. Default coverage replay used `-runs=1` and reached only `cov 11470` in two empty-input executions; `--empty_min_time=2` reached `cov 11482` in 161 executions. `CoverageFuzz.cmake` now passes a configurable `FUZZ_EMPTY_MIN_TIME` defaulting to 60 seconds. CMake regeneration, the fuzz target build, Python syntax, diff checks, and targeted runner controls passed. See `fuzz-introspector.md`.
 - Current HEAD after cycle 34 coverage-path fix: `7d1a7bdda64c861fdacfb18309cbc80611d097b6`.
+- Current HEAD at cycle 35 gate: `722f659965ab807b7effc2b2dca20951ccf9d79f`.
+- Cycle 35 selector: `shuf -i 0-98 -n 1` drew `8` (`locking-threading`). The earlier cycle-16 `DumpAddresses()` persistence race was excluded; the selected cells were transaction/inventory/mempool lock nesting, V2 transport lock order, and production scheduler lifetime.
+- Cycle 35 verification: `m_tx_download_mutex` and `m_inv_to_send_mutex` retain their declared order before `m_mempool.cs`, with no nested reverse acquisition in production callers. V2 receive/send nesting matches its annotation, and normal scheduler shutdown joins before object destruction. TSan `net_tests` passed 31 cases and 135,024 assertions; TSan `scheduler_tests` passed 4 cases and 27 assertions; one real `process_message` seed passed the custom `process_messages` driver with no diagnostic. No source change was justified; see `locking-threading.md`.
 - Dirty state at initialization: only agent-owned catalog artifacts existed before authoritative files were added.
 
 ## Cycle Ledger
@@ -90,6 +93,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 32 | first draw `48` ineligible; rerun `shuf -i 0-98 -n 1` -> `3` | `current-pr-leftovers` (reopened on queued debug-option cells) | confirmed; fixed two independent findings | Negative `-dbcrashratio` reached `FastRandomContext::randrange` during chainstate replay and aborted status 134; negative `-dbbatchsize` narrowed to `UINT64_MAX` and suppressed partial batches. Repaired commands return explicit errors. Focused arguments passed 51 assertions; full chainstate/flush/mempool suites passed 49 cases/60,503 assertions. See `current-pr-leftovers.md`. | `ddbbb0aadb` (`node: validate chainstate debug arguments`); `5754033019` (`node: reject negative database batch sizes`) | Draw from the full catalog; do not reopen these two debug-option domains without new parser or database lifecycle evidence |
 | 33 | `shuf -i 0-98 -n 1` -> `62` | `rejected-finding-resurrection` | dismissed again; no confirmed production defect | Reopened the cycle-22 `CoinStatsIndex::CustomAppend` partial-state cell. Current BaseIndex dispatch still enforces contiguous transitions or treats append failure as fatal; the subsidy mutation occurs before a non-persisting return and is destroyed during shutdown. Current index lifecycle tests passed. See `rejected-finding-resurrection.md`. | Journal-only handoff; no source change justified | Draw from the full catalog; do not reopen this CoinStats cell without a new append caller, persistence path, or nonfatal shutdown contract |
 | 34 | `shuf -i 0-98 -n 1` -> `50` | `fuzz-introspector` | confirmed; fixed coverage blocker | Empty `process_messages` corpus plus default `CoverageFuzz.cmake` invocation reduced the target to an empty-input initialization pass. Passing the existing bounded empty-corpus option restored actual fuzz executions in the targeted smoke. See `fuzz-introspector.md`. | `7d1a7bdda6` (`fuzz: run empty corpora during coverage collection`) | Draw from the full catalog; do not reopen this runner/coverage cell unless corpus policy or script wiring changes |
+| 35 | `shuf -i 0-98 -n 1` -> `8` | `locking-threading` | dismissed; no confirmed finding | Transaction/inventory/mempool lock scopes, V2 transport nesting, and scheduler shutdown lifetime were checked against annotations and callers. TSan `net_tests` and `scheduler_tests` passed; one real `process_message` seed passed the TSan custom fuzz driver. See `locking-threading.md`. | Journal-only handoff; no source change justified | Draw from the full catalog; exclude only the closed cycle-16 `DumpAddresses()` and `ForEachNode()` cells unless new evidence changes their contracts |
 
 ## Eligibility
 
