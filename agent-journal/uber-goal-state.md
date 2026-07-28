@@ -243,7 +243,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 69 | `shuf -i 0-98 -n 1` -> `27` | `error-path-state` (standalone `setlabel` RPC failure propagation) | confirmed; fixed | `SetAddressBook` returns false without publishing state after a database write failure, but `setlabel` discarded that result. A mock SQLite `NAME`-row fault preserved the old label and made the unpatched RPC return success; the fixed RPC raises `RPC_WALLET_ERROR`. Adjacent generation/import/enrichment callers remain contract-sensitive and are not assumed equivalent. See `error-path-state.md`. | `ca5f4d5279` (`wallet: report setlabel address-book write failures`) | Recheck the gate and draw cycle 70 from the full catalog |
 | 70 | `shuf -i 0-98 -n 1` -> `94` | `bindings-ffi-parity` (C++ kernel wrapper opaque pointer-array boundary) | confirmed; fixed | `btck::PrecomputedTransactionData` reinterpreted `TransactionOutput` objects as `const btck_TransactionOutput**`, relying on the current object layout instead of constructing the C API's documented opaque-pointer array. The explicit pointer bridge passed the focused and full kernel suites; restoring the old cast plus a temporary one-byte layout mutation made the two-output taproot verifier exit 139. See `bindings-ffi-parity.md`. | `0ab4d16796` (`kernel: bridge spent output handles explicitly`) | Recheck the gate and draw cycle 71 from the full catalog |
 | 71 | `shuf -i 0-98 -n 1` -> `53` | `statistical-timing` (ElligatorSwift XDH and Silent Payments secret callers) | dismissed; no new source defect | Clang 19 AUTO/OFF matched probes, module suites, MSan ctime, source review, and the intentional declassification-removal control found no new secret-dependent defect. The scan-only timing signal belongs to documented declassified public-output arithmetic, and the probe's fixed nonmatching output is not a valid payment-recognition oracle. See `statistical-timing.md`. | Journal/probe close snapshot; no source change justified | Recheck the gate and draw the next distinct goal |
-| 72 | `shuf -i 0-98 -n 1` -> `84` | `secp-nonce-session` (failure/retry and state-binding cell) | dismissed; no new source defect | The standalone state-machine probe passed valid signing, failure-state, nonce-consumption, malformed-binding, infinity, duplicate-key, and Schnorr callback controls under normal and ASan/UBSan-linked runs. MuSig/Schnorr module tests passed 4 iterations; the full libsecp256k1 test binary passed 16 iterations. Static contracts explain the observed deliberate nonce invalidation and output behavior. See `secp-nonce-session.md`. | Journal/probe close snapshot; no source change justified | Recheck the gate and draw the next distinct goal |
+| 72 | `shuf -i 0-98 -n 1` -> `84` | `secp-nonce-session` (failure/retry and state-binding cell) | dismissed; no new source defect | The standalone state-machine probe passed valid signing, failure-state, nonce-consumption, malformed-binding, infinity, duplicate-key, and Schnorr callback controls under normal and ASan/UBSan-linked runs. MuSig/Schnorr module tests passed 4 iterations; the full libsecp256k1 test binary passed 16 iterations. Static contracts explain the observed deliberate nonce invalidation and output behavior. See `secp-nonce-session.md`. | Journal/probe close snapshot; no source change justified | Start cycle 73 from the next draw |
+| 73 | `shuf -i 0-98 -n 1` -> `54` | `raai-resource-leaks` (constructor/error/cancellation ownership cell) | in progress; distinct RAII/resource cell | Audit sockets, files/mappings, database iterators/transactions, callback registrations, threads, and secure allocations for leak, double-release, dangling-owner, and cleanup asymmetry across constructors, moves, errors, cancellation, and shutdown. See `raai-resource-leaks.md`. | Start state pending | Complete cycle 73 evidence and then draw the next distinct goal |
 
 ## Cycle 72 Completion
 
@@ -254,6 +255,14 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Verdict: dismissed for a new source defect. The exact pre/post probe, static contract review, normal and ASan/UBSan-linked probe runs, focused API tests, 4-iteration module matrix, and 16-iteration full libsecp256k1 suite found no stale-output, nonce-reuse, malformed-binding, duplicate-key, infinity, or custom-callback defect. No production source change was justified.
 - Evidence: probe `agent-journal/secp_nonce_cycle72_probe.cpp`; raw logs `/data/my_storage/tmp/secp-nonce-cycle72-*.log`; `git diff --check` passed.
 - No production, test, fuzz, sanitizer, daemon, or profiling process remains running.
+
+## Cycle 73 Active State
+
+- Gate: HEAD `4935b3908795d5e2196fbf2b91c667790776cffa`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 921`.
+- Branch: `uber-cycle-73-raii-resource-leaks-20260728`.
+- Draw: `54` (`raai-resource-leaks`).
+- Current hypothesis: a manually owned resource may escape cleanup on construction, move, error, callback, cancellation, or shutdown paths, or a smart-pointer transfer may leave a dangling or duplicated owner.
+- Required evidence: a distinct reachable resource path, exact acquire/release accounting or sanitizer trace, and a focused regression oracle before any source commit.
 
 ## Cycle 71 Completion
 
@@ -282,6 +291,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Exhausted goals: none recorded yet.
 
 ## Handoff
+
+Cycle 73 is active. It selected goal 54, `raai-resource-leaks`, by `shuf -i 0-98 -n 1` -> `54` after the cycle-72 gate. The distinct scope is constructor/error/cancellation ownership across sockets, files/mappings, database iterators/transactions, callback registrations, threads, and secure allocations. The exact resource ledger, verification, and next queue will be recorded in `raai-resource-leaks.md`.
 
 Cycle 72 is complete. It selected goal 84, `secp-nonce-session`, by `shuf -i 0-98 -n 1` -> `84` after the cycle-71 gate. The distinct scope was MuSig/Schnorr failure, retry, nonce-consumption, malformed-binding, duplicate-key, infinity, and callback state. The probe and all relevant normal/sanitized test controls passed; no source defect was confirmed. The exact evidence and limitations are recorded in `secp-nonce-session.md`. The next run must re-check the gate and draw a distinct goal from the full catalog.
 
