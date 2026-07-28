@@ -140,8 +140,21 @@ The cycle-41 verify-binaries findings are closed: trusted-signature thresholds a
 
 ### Verdict
 
-- Pending source validation and independent regression replay.
+**Confirmed and fixed.** An existing Guix source or detached-signature archive was trusted solely because its cache path existed; the build extracted it before any comparison with the repository that was supposed to supply it. The shared verifier now compares the cached bytes with a fresh `git archive` digest and fails closed on mismatch.
+
+### Fix
+
+- Added `contrib/guix/libexec/archive.sh:create_or_verify_git_archive`, which creates missing archives and compares existing archives against `git archive --format=tar.gz --prefix=... HEAD` before returning success.
+- `setup.sh` uses the verifier for the Bitcoin source archive; `codesign.sh` uses it for the detached-signature archive. The check covers both build-input paths without changing archive contents or output naming.
+- Commit: `2ac7b583af3a8935962d75b8125fd1c67675268b` (`guix: verify cached Git archives before extraction`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
+
+### Validation
+
+- The post-fix source replay seeded the cache from `HEAD^`; `setup.sh` returned status `1` with `does not match HEAD`. A cache generated from current `HEAD` returned status `0`. Appending one byte to that archive returned status `1` with the same mismatch diagnostic.
+- The detached-signature helper accepted an archive generated from current `HEAD` and rejected one generated from `HEAD^` with status `1`.
+- `bash -n contrib/guix/libexec/archive.sh contrib/guix/libexec/setup.sh contrib/guix/libexec/codesign.sh`, `git diff --check`, and `python3 test/lint/lint-shell.py` passed; the shell lint command explicitly skipped because `shellcheck` is not installed.
+- `guix` is unavailable, so a full containerized Guix build and external substitute verification were not run. The regression invokes the production archive setup/helper path without requiring the Guix daemon. No relevant process remains running.
 
 ### Handoff
 
-- Pending completion. The selected fix must bind both source and detached-signature archive bytes to their repository `HEAD` before extraction, then continue with dependency/tool and license-gate controls.
+- Continue the full catalog loop. Keep the fixed archive-integrity cell closed; the next `cpp-supply-chain` draw, if repeated, must select a distinct dependency/tool pin, generated-input, license, or substitute-provenance surface. Preserve the Guix-unavailable limitation and the exact post-fix probe directory `/data/my_storage/tmp/cpp-supply-chain-postcommit-probe-1785254451337294661/`.
