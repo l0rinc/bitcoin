@@ -215,3 +215,28 @@ The CMake builds, probe executions, official tests, and `git diff --check` compl
 ### Verdict and Handoff
 
 **Inconclusive; no confirmed timing finding.** The compiler/backend/optimization cell produced no stable class separation, output divergence, or source-level secret-dependent branch evidence. Passing statistics remain limited evidence and do not replace dudect or ctime/Valgrind analysis. Valgrind, dudect, GCC 13+, LTO, non-x86 execution, and full ctime coverage remain unavailable. The next eligible timing work is only a genuinely new tool, compiler, architecture, or secret-bearing caller cell; otherwise draw the next catalog goal. Raw traces and build trees are retained under `/data/my_storage/tmp/statistical-timing-cycle46-*`.
+
+## Cycle 71: ElligatorSwift XDH and Silent Payments caller cell
+
+- Cycle: `71`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `53`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- HEAD at cycle start: `9eb6b4ad1b66f030f0019b759d0c8017993cf63b`
+- Branch: `uber-cycle-71-statistical-timing-20260728`
+- Entry divergence: `origin/master...HEAD = 2 917`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goal TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Tracked and staged state was clean at entry except known untracked agent artifacts and `test/cache`; no relevant daemon, test, fuzz, sanitizer, Valgrind, or profiling process was running.
+
+### Distinct scope and contract
+
+Cycles 1 and 5 screened `ec_pubkey_create`/ECDSA under Clang; cycle 44 screened ECDH, Schnorr, and MuSig callers and found the separate MuSig ctime declassification defect; cycle 46 screened GCC `-O2`/`-O3` and x86_64 assembly/portable variants. This cycle therefore targets module callers not covered by those timing experiments: `secp256k1_ellswift_xdh`, `secp256k1_silentpayments_sender_create_outputs`, `secp256k1_silentpayments_recipient_label_create`, and `secp256k1_silentpayments_recipient_scan_outputs`.
+
+The ElligatorSwift header promises constant time in `seckey32` for XDH and in `seckey32`/`auxrnd32` for `ellswift_create`; it explicitly labels encode/decode variable-time, so encode/decode are excluded. Silent Payments ctime coverage marks scan and input secrets undefined while public keys, summaries, and outputs are defined. The measurement result alone cannot prove a secret leak because some paths deliberately declassify validity or derived public output; a candidate requires a stable differential result plus source/ctime/MSan evidence.
+
+### Initial execution plan
+
+Build current source with Clang 19 at Release `-O2`, x86_64 assembly `AUTO` and `OFF`, enabling ElligatorSwift, extra keys, MuSig, Schnorr, and Silent Payments. Use a deterministic CPU-pinned paired probe with two valid scalar classes, randomized class order, fixed public peers/recipients, raw monotonic timing, medians/percentiles, Welch statistics, and a same-input control where the secret class is held constant. Preserve raw traces and exact build/toolchain metadata. Run the official module tests and the available ctime/MSan target or document why it cannot run.
