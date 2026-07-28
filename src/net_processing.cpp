@@ -3219,15 +3219,24 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, Peer& peer,
         // If we were in the middle of headers sync, receiving an empty headers
         // message suggests that the peer suddenly has nothing to give us
         // (perhaps it reorged to our chain). Clear download state for this peer.
-        LOCK(peer.m_headers_sync_mutex);
-        if (peer.m_headers_sync) {
-            peer.m_headers_sync.reset(nullptr);
-            LOCK(m_headers_presync_mutex);
-            m_headers_presync_stats.erase(pfrom.GetId());
+        {
+            LOCK(peer.m_headers_sync_mutex);
+            if (peer.m_headers_sync) {
+                peer.m_headers_sync.reset(nullptr);
+                LOCK(m_headers_presync_mutex);
+                m_headers_presync_stats.erase(pfrom.GetId());
+            }
         }
-        // A headers message with no headers cannot be an announcement, so assume
-        // it is a response to our last getheaders request, if there is one.
-        peer.m_last_getheaders_timestamp = {};
+
+        LOCK(cs_main);
+        CNodeState& state{*Assert(State(pfrom.GetId()))};
+        if (state.fSyncStarted && IsBestHeaderStale()) {
+            ReleaseHeadersSyncSlot(state, peer);
+        } else {
+            // A headers message with no headers cannot be an announcement, so assume
+            // it is a response to our last getheaders request, if there is one.
+            peer.m_last_getheaders_timestamp = {};
+        }
         return;
     }
 
