@@ -197,6 +197,20 @@ The test uses the mock SQLite backend and does not exercise Berkeley DB, an on-d
 | `AddToWalletIfInvolvingMe` address-book enrichment | A failure to add a restored receive address could leave transaction accounting metadata incomplete. | The write is explicitly secondary enrichment performed before the transaction write, and callers do not expose a partial transaction result. No direct user-visible invariant or restart inconsistency was reproduced in this cycle. | Deferred; best-effort boundary |
 | `ImportDescriptor` label application | Ignoring a label failure may report an import error after descriptor state has already changed. | Import labels are optional metadata and the operation can add descriptors/cache state before applying them. Returning a late error would create a larger partial-import contract; current code and history provide no rollback promise. | Deferred; requires an import transaction contract |
 
-### Work in progress
+### Verification
 
-The source/test changes currently make `setlabel` derive its purpose once, check `SetAddressBook`, and raise `RPC_WALLET_ERROR` with `Failed to set address label` on failure. The focused regression uses `MockableSQLiteDatabase`, an exact serialized `DBKeys::NAME` trigger, a pre-existing label, and a direct RPC request; it also checks that the old in-memory label remains visible.
+The source/test changes make `setlabel` derive its purpose once, check `SetAddressBook`, and raise `RPC_WALLET_ERROR` with `Failed to set address label` on failure. The focused regression uses `MockableSQLiteDatabase`, an exact serialized `DBKeys::NAME` trigger, a pre-existing label, and a direct RPC request; it also checks that the old in-memory label remains visible.
+
+- `cmake --build build_unit_clang19 --target test_bitcoin -j2`: passed.
+- `TMPDIR=/data/my_storage/tmp/error-path-state-cycle69-unit-final build_unit_clang19/bin/test_bitcoin --run_test=wallet_tests/setlabel_write_failure_is_reported --catch_system_error=no --log_level=test_suite --random=6931 -- -testdatadir=/data/my_storage/tmp/error-path-state-cycle69-testdata-final`: one case passed, `*** No errors detected`.
+- `TMPDIR=/data/my_storage/tmp/error-path-state-cycle69-wallet-suite-final build_unit_clang19/bin/test_bitcoin --run_test=wallet_tests --catch_system_error=no --log_level=message --random=6932 -- -testdatadir=/data/my_storage/tmp/error-path-state-cycle69-wallet-suite-testdata`: all 17 cases passed, `*** No errors detected`.
+- A source mutation restoring the discarded `SetAddressBook` return rebuilt successfully, then the same focused test with seed `6922` exited `201` because `raised` was false. Restoring the fix and rebuilding returned the test to passing. This is an independent oracle-sensitivity check.
+- Wallet-enabled `build_unit_wallet_clang19/bin/bitcoind` rebuilt successfully. `wallet_labels.py` passed with `--randomseed=6927` and a fresh scratch temporary directory. The wallet-disabled functional build was skipped because `ENABLE_WALLET=OFF`.
+- `git diff --check`: passed.
+
+### Verdict and handoff
+
+- Confirmed and fixed: a database failure in the standalone `setlabel` operation was silently converted into RPC success. The wallet layer preserved the prior record, but the caller falsely reported that the requested label had been applied.
+- Deferred: `getnewaddress`, `ImportDescriptor`, and incoming-transaction address-book enrichment treat labels as secondary metadata and have different partial-state/lifecycle contracts. They require a typed error or transaction design before any propagation change; this cycle did not change them.
+- Limitation: the regression uses the mock SQLite backend and does not exercise Berkeley DB or a power-loss/restart between the database failure and RPC return. The fixed path relies on the already-tested transactional `SetAddressBook` contract.
+- Next queue: commit the source/test finding and close this cycle, then run a fresh gate and draw another distinct catalog goal. Do not reopen the cycle-39 address-book publication fix without new backend or restart evidence.

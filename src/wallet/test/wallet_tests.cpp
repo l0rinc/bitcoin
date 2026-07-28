@@ -141,6 +141,49 @@ BOOST_FIXTURE_TEST_CASE(migration_transaction_write_failure_is_reported, WalletT
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(setlabel_write_failure_is_reported, WalletTestingSetup)
+{
+    WalletContext& context{*Assert(m_wallet_loader->context())};
+    auto wallet = TestCreateWallet(CreateMockableWalletDatabase(), context, WALLET_FLAG_DESCRIPTORS);
+    BOOST_REQUIRE(AddWallet(context, wallet));
+    const CTxDestination address{PKHash(GenerateRandomKey().GetPubKey())};
+    const std::string old_label{"old label"};
+    const std::string new_label{"new label"};
+    BOOST_REQUIRE(wallet->SetAddressBook(address, old_label, std::nullopt));
+
+    DataStream name_db_key;
+    name_db_key << std::make_pair(DBKeys::NAME, EncodeDestination(address));
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet->GetDatabase());
+    const std::string trigger{
+        "CREATE TRIGGER fail_setlabel_name BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{name_db_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    JSONRPCRequest request;
+    request.context = &context;
+    request.strMethod = "setlabel";
+    request.params = UniValue(UniValue::VARR);
+    request.params.push_back(EncodeDestination(address));
+    request.params.push_back(new_label);
+    if (RPCIsInWarmup(nullptr)) SetRPCWarmupFinished();
+
+    bool raised{false};
+    try {
+        tableRPC.execute(request);
+    } catch (const UniValue& error) {
+        raised = true;
+        BOOST_CHECK_EQUAL(error["code"].getInt<int>(), RPC_WALLET_ERROR);
+        BOOST_CHECK_EQUAL(error["message"].get_str(), "Failed to set address label");
+    }
+    BOOST_CHECK(raised);
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_CHECK_EQUAL(wallet->m_address_book.at(address).GetLabel(), old_label);
+    }
+    BOOST_REQUIRE(RemoveWallet(context, wallet, std::nullopt));
+    WaitForDeleteWallet(std::move(wallet));
+}
+
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {
     CMutableTransaction mtx;
