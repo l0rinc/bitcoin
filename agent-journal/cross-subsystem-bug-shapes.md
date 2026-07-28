@@ -68,3 +68,34 @@ For every candidate, record the seed fix, structural features, callers, trust bo
 Cycle 48's wallet-rescan reservation ordering and cycle 62's chainstate candidate-set mutation are closed and excluded. This cycle mines a different historical defect shape: a failure or lifecycle event may publish state in one subsystem while an analogous caller, cache, index, queue, or wrapper publishes the same conceptual state before validation, after a dropped return, or without symmetric rollback/cleanup.
 
 Start with recent source fixes and review rationale, extract structural features independent of symbol names, then search analogous wallet, persistence, P2P, descriptor, and index paths. A candidate is only reportable when its trust boundary, intended contract, reachable caller, and failure schedule are independently established. Status: active; no source finding claimed yet.
+
+### Candidate 1: `dumptxoutset` temporary snapshot rename
+
+Historical seed `0654511e1b` fixed settings-file publication after stream write/close failures. The first analogue was `dumptxoutset` in `src/rpc/blockchain.cpp:3181`, which calls `fs::rename(temppath, path)` without an explicit error-code check after creating a temporary UTXO snapshot. The apparent shape was: produce a durable artifact, publish it by rename, and return a success object.
+
+The contract was checked against `std::filesystem`: the overload used by `fs::rename` throws `std::filesystem::filesystem_error` on failure. This is materially different from the settings path's boolean `RenameOver` contract. A current-source daemon was run on a scratch regtest datadir with 110 generated blocks. An `LD_PRELOAD` probe intercepted rename calls whose source ended in `.incomplete` and returned `EIO`. The command was:
+
+```text
+LD_PRELOAD=/data/my_storage/tmp/cross-subsystem-cycle76/librename_failure.so build_func_clang19/bin/bitcoind -regtest -datadir=/data/my_storage/tmp/cross-subsystem-cycle76/node -daemon -listen=0 -discover=0 -dnsseed=0 -rpcuser=cycle76 -rpcpassword=cycle76 -fallbackfee=0.0001
+build_cli_clang19/bin/bitcoin-cli -regtest -datadir=/data/my_storage/tmp/cross-subsystem-cycle76/node -rpcuser=cycle76 -rpcpassword=cycle76 dumptxoutset rename-failure.dat latest
+```
+
+The RPC returned status 1 with `filesystem error: cannot rename: Input/output error`, and the final output path did not exist. The probe source is `agent-journal/rename_failure_preload.c`; the temporary node and shared object are outside the repository under `/data/my_storage/tmp/cross-subsystem-cycle76/`. This is dismissed: the exception is already converted to an RPC error, and adding a redundant explicit check would not improve the publication contract. The daemon was stopped and no process remains.
+
+### Candidate 2: fee metadata on alternate package failure edges
+
+Historical seed `e4ba0726dc` fixed a package precheck path that constructed a plain `MempoolAcceptResult::Failure` for `TX_RECONSIDERABLE`, dropping the effective feerate and fee-calculation wtxids required by the result contract. The current `MempoolAcceptResult` failure constructor now has an `Assume` rejecting that state, so every call site was checked rather than relying on the constructor alone.
+
+The audit covered all `MempoolAcceptResult::Failure` call sites in `src/validation.cpp`. The remaining precheck and replacement paths branch to `FeeFailure` for `TX_RECONSIDERABLE`; max-feerate, ephemeral-spend, policy-script, and consensus-script paths assign non-reconsiderable states before constructing `Failure`. `SubmitPackage`'s consensus-script failure is explicitly an impossible postcondition after policy checks and is classified as package error. Package-level TRUC/RBF/cluster failures either return no per-transaction result or use a package policy state. The existing result-shape checks in `src/test/util/txmempool.cpp` and `src/test/txpackage_tests.cpp` enforce the same distinction.
+
+Verdict: dismissed. No second reachable source path can produce a metadata-less `TX_RECONSIDERABLE` result on the current tree, so a duplicate fix or test would add no evidence. The analogous contract remains covered by the historical regression and constructor assumption.
+
+### Candidate 3: compact-block announcement after a block read failure
+
+Historical seed `6fbcd16491` changed the `GETBLOCKTXN` handler from `assert(ret)` to a logged peer disconnect after `ReadBlock` fails, because pruning is not the only failure mode: corruption, truncation, and ordinary I/O errors remain possible after releasing `cs_main`. The same conceptual operation exists in `PeerManagerImpl::SendMessages` at `src/net_processing.cpp:6346`: when a high-bandwidth peer has one queued header announcement and no cached compact block, the node reads the block and still executes `assert(ret)`.
+
+This is a distinct caller path with the same block-storage trust boundary. It is reachable after a peer handshake and `SENDCMPCT(1, 2)`, `UpdatedBlockTip()` queues a single active-chain block for header relay, and the cached recent compact block does not match. A deterministic regression now uses the on-disk genesis block, queues its announcement, removes the corresponding block file, and calls `SendMessages`. The production fix checks `ReadBlock`, logs the failure, marks the peer for disconnect, and returns before compact-block construction instead of asserting.
+
+The focused test passed on the restored fix. A deliberate mutation replacing the new guard with `assert(ret);` aborted with status 134 and the expected `Assertion 'ret' failed` diagnostic. The restored fix then passed the focused normal test and the full 32-case `net_tests` suite. A Clang 19 TSan build passed, followed by the focused regression and full 32-case `net_tests` suite under `TSAN_OPTIONS=halt_on_error=1:exitcode=99`, with no diagnostics.
+
+Verdict: confirmed and fixed. The historical `GETBLOCKTXN` regression is an independent control for the same failure class; this caller had the same unhandled storage failure and now has a regression oracle.

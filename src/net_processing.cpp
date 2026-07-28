@@ -6344,7 +6344,11 @@ bool PeerManagerImpl::SendMessages(CNode& node)
                     } else {
                         CBlock block;
                         const bool ret{m_chainman.m_blockman.ReadBlock(block, *pBestIndex)};
-                        assert(ret);
+                        if (!ret) {
+                            LogError("Cannot load block from disk, %s", node.DisconnectMsg());
+                            node.fDisconnect = true;
+                            return true;
+                        }
                         CBlockHeaderAndShortTxIDs cmpctblock{block, m_rng.rand64()};
                         MakeAndPushMessage(node, NetMsgType::CMPCTBLOCK, cmpctblock);
                     }
