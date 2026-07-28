@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 62 in progress; selected goal 26 (`cross-subsystem-bug-shapes`) from the full catalog after a fresh gate and selector draw.
+- Status: cycle 62 complete; goal 26 (`cross-subsystem-bug-shapes`) was selected from the full catalog, investigated, and dismissed on reachability grounds. Cycle 63 is pending a fresh gate and selector draw.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -28,6 +28,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 61 artifacts: `/data/my_storage/tmp/full-sync-ibd-profile-cycle61/` contains the release-like build, source/sink datadirs, raw `perf stat` outputs, and a 54,683,552-byte DWARF call-stack profile with zero lost samples. No relevant process remains running.
 - Cycle 62 gate: fetched `origin/master`; HEAD `387f5a122f1c85655253cd35b47d49140317e8a9`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 894`; tracked/staged state clean with only known untracked agent artifacts; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 62 selector: exact `shuf -i 0-98 -n 1` -> `26` (`cross-subsystem-bug-shapes`). The cycle-48 wallet-rescan reservation-ordering cell is closed; this run must mine a distinct structural fix shape and prove an analogous reachable site.
+- Cycle 62 completion: dismissed. The `b0ce659a98` shared-candidate mutation fix was compared with `Chainstate::PreciousBlock`, but a block eligible for active reprioritization cannot be a valid background candidate under the current historical `TargetBlock` contract. The controlled active-child setup showed background candidate counts of zero before reprioritization; injecting membership would violate the production invariant. No source change was made. See `cross-subsystem-bug-shapes.md`; `git diff --check` passed and no relevant process remains running.
 - Current HEAD after cycle 17: `ffda33a38f5fddab57e4618775d22ce31d8eda09`
 - Current HEAD after cycle 18: `55eaf087c189ae871878692fb20a90ac3533084d`
 - Current HEAD before cycle 19 journal handoff: `ec4401b816f132f2f35c1f2e64cf51e2046e8e32`
@@ -210,17 +211,18 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 59 | `shuf -i 0-98 -n 1` -> `45` | `constant-time-boundary` (MuSig session/keypair declassification cell) | dismissed; no new source defect | Static contract/dataflow review found session state public, secret nonce scalars retained as undefined, and only public metadata declassified. Three temporary source/harness mutations each failed with an MSan first-invalid trace; restored ctime, regular, and exhaustive tests passed. See `constant-time-boundary.md`. | Journal-only handoff; no source change justified | Recheck the gate and draw cycle 60 from the full catalog |
 | 60 | `shuf -i 0-98 -n 1` -> `84` | `secp-nonce-session` (MuSig invalid-argument ordering) | confirmed; fixed | `secp256k1_musig_nonce_gen` checked all-zero session randomness before required `pubnonce`, so two invalid arguments bypassed the illegal callback. The old-source mutation failed at `_calls_to_callback == 1` with exit 134; the fixed focused API test and full 16-iteration libsecp suite passed. See `secp-nonce-session.md`. | `765e82e8ab` (`secp256k1: validate MuSig nonce output argument`) | Recheck the gate and draw cycle 61 from the full catalog |
 | 61 | `shuf -i 0-98 -n 1` -> `22` | `full-sync-ibd-profile` (local-peer IBD and debug-check attribution) | dismissed; no source defect | Five fresh sinks reached the expected 20,000-block/20,001-transaction tip. Default regtest consistency checks dominated the call-stack profile; `-checkblockindex=100` and `=0` controls reproduced the documented frequency effect. 16/64/256 MB cache timings were non-monotonic within noise. See `full-sync-ibd-profile.md`. | Journal-only handoff; no source change justified | Recheck the gate and draw cycle 62 from the full catalog |
+| 62 | `shuf -i 0-98 -n 1` -> `26` | `cross-subsystem-bug-shapes` (shared candidate-set mutation) | dismissed; no reachable source defect | The `b0ce659a98` fix shape resembles `PreciousBlock` because both mutate shared `nSequenceId` values used by ordered candidate sets. However, the historical chainstate's `TargetBlock` contract excludes active snapshot descendants, and `PreciousBlock` ignores lower-work blocks; a valid block cannot be in both sets in the tested configuration. The controlled active-child setup showed background counts of zero before mutation. A temporary source/test model was discarded after this reachability check. See `cross-subsystem-bug-shapes.md`. | Journal-only handoff; no source change justified | Recheck the gate and draw cycle 63 from the full catalog |
 
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: `cross-subsystem-bug-shapes` (cycle 62); goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: none; cycle 62 closed with no source change. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
 
-Cycle 61 is complete on goal 22, `full-sync-ibd-profile`, selected by `shuf -i 0-98 -n 1` -> `22`. The local-peer IBD matrix established a reproducible chainstate baseline and isolated the intentional regtest `CheckBlockIndex` cost; no production source change was justified. The next run must recheck branch/base/HEAD, dirty state, processes, catalog hashes, existing journals, history, and review precedent before drawing cycle 62.
+Cycle 62 is complete on goal 26, `cross-subsystem-bug-shapes`, selected by `shuf -i 0-98 -n 1` -> `26`. The historical shared-candidate mutation shape was audited against snapshot candidate eligibility and found unreachable for `PreciousBlock`; no production source change was justified. The next run must recheck branch/base/HEAD, dirty state, processes, catalog hashes, existing journals, history, and review precedent before drawing cycle 63.
 
 Cycle 50 selected `exhaustive-algebraic` with `shuf -i 0-98 -n 1` -> `18`. The distinct cell defined `GCSFilter::MatchAny(Q) == OR Match(q)` over all 16 filter subsets and 16 query subsets of four one-byte elements, with checked encoded reconstruction as a second path. The disposable matrix passed 1,555 assertions; a temporary `return false` mutation failed at the singleton check with exit 201 and 606 failed assertions. After restoring source and removing the disposable test, the production block-filter suite passed 8 cases and 499 assertions. No source defect was justified. The exact evidence and limits are in `exhaustive-algebraic.md`; no process remains running. The next run must re-check the gate and draw another distinct goal.
 
