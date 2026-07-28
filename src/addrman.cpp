@@ -1206,7 +1206,7 @@ std::pair<CAddress, NodeSeconds> AddrManImpl::Select(bool new_only, const std::u
     Check();
     auto addrRet = Select_(new_only, networks);
     if (addrRet.first.IsValid()) {
-        if (!networks.empty()) Assume(networks.contains(addrRet.first.GetNetClass()));
+        if (!networks.empty()) Assume(networks.contains(addrRet.first.GetNetwork()));
         const auto it_addr{mapAddr.find(addrRet.first)};
         if (Assume(it_addr != mapAddr.end())) {
             const auto it_info{mapInfo.find(it_addr->second)};

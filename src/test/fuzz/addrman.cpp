@@ -309,7 +309,7 @@ FUZZ_TARGET(addrman, .init = initialize_addrman)
     }()};
     const auto selected{const_addr_man.Select(new_only, nets)};
     if (selected.first.IsValid()) {
-        if (!nets.empty()) assert(nets.contains(selected.first.GetNetClass()));
+        if (!nets.empty()) assert(nets.contains(selected.first.GetNetwork()));
         if (new_only) {
             const auto new_entries{const_addr_man.GetEntries(/*from_tried=*/false)};
             assert(std::any_of(new_entries.begin(), new_entries.end(), [&](const auto& entry) {

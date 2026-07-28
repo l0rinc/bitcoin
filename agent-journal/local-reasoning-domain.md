@@ -36,6 +36,25 @@ The falsifiable hypothesis is that a valid, routable linked-IPv4 address, such a
 - The per-network-count change (`d35595a78a`) and network-selected `Select` change (`6b229284fd`) count/filter with `GetNetwork()`.
 - The multi-network change (`829becd990`) preserved that `GetNetwork()` filter, while later contract checks added a `GetNetClass()` postcondition. This is the primary suspected cross-layer drift.
 
+### Contract result
+
+The suspected product-wide classifier mismatch is intentional and must remain split:
+
+- `Size(network)` and `Select(network)` use `GetNetwork()`, the transport-level network used by reachable-network and `-onlynet` logic.
+- `GetAddr(network)` uses `GetNetClass()`, the legacy public address-list classification. A linked IPv4 address is therefore included by `GetAddr(NET_IPV4)` even though its transport network is `NET_IPV6`.
+
+The current-branch defect was the postcondition added by the earlier AddrMan contract campaign: `AddrManImpl::Select()` asserted `GetNetClass()` against a selection performed with `GetNetwork()`. The same wrong relationship was duplicated in the AddrMan deterministic test oracle and fuzzer oracle.
+
+### Before and after evidence
+
+The disposable `addrman_linked_ipv4_network_contracts` test exercised four valid, routable forms: RFC6145, RFC6052, RFC3964, and RFC4380. Each had `GetNetwork()==NET_IPV6` and `GetNetClass()==NET_IPV4`.
+
+- Clean pre-fix build: the test first showed `Size(NET_IPV4)==0`, `Size(NET_IPV6)==4`, and `Select({NET_IPV4})` empty while `GetAddr(NET_IPV4)` returned all four. Calling `Select({NET_IPV6})` then aborted at `src/addrman.cpp:1208` because the postcondition required `GetNetClass()==NET_IPV6`.
+- Repair: changed only the `Select` postcondition and the matching deterministic/fuzzer oracles from `GetNetClass()` to `GetNetwork()`. The focused test passed 29 assertions; the full AddrMan suite passed 28 cases and 14,346 assertions.
+- Mutation: temporarily restored the old `GetNetClass()` postcondition. The focused test again aborted at `src/addrman.cpp:1208` with exit 134. The mutation was restored.
+
+The normal libFuzzer `addrman` corpus replay was independently attempted with `-runs=1000 -seed=6501`; it stopped at execution 117 on an existing `AssertSerializationRoundTrip` assertion at `src/test/fuzz/addrman.cpp:206`, before this classifier path was established. That result is preserved as a separate fuzz-oracle limitation, not attributed to this fix. A companion `addrman_serdeser` replay with `-runs=500 -seed=6502` reached 732 executions at about one execution per second without a diagnostic, then was interrupted after roughly ten minutes at the execution boundary; libFuzzer reported 1,837 MiB peak RSS. An empty-corpus `addrman` smoke with `-runs=100 -seed=6503` completed cleanly, adding three units at about 50 executions per second with 1,850 MiB peak RSS. The interrupted corpus replay is inconclusive only for that large corpus, while the focused unit, full AddrMan suite, mutation, and empty-corpus smoke provide the selected-path evidence.
+
 ### Status
 
-Investigation in progress. No source change has been made in this cycle.
+Confirmed and repaired in the current branch. The production behavior remains transport-network based; only the invalid postcondition and duplicated test/fuzzer relationship were corrected. The focused and full unit builds, fuzz-target rebuild, mutation control, and clean empty-corpus smoke passed. The large corpus replay was stopped at a documented resource boundary, and its unrelated serialization assertion is retained as a limitation.

@@ -420,7 +420,7 @@ BOOST_AUTO_TEST_CASE(addrman_select_result_contracts)
         }()};
         const auto selected{addrman->Select(new_only, networks)};
         if (selected.first.IsValid()) {
-            if (!networks.empty()) BOOST_CHECK(networks.contains(selected.first.GetNetClass()));
+            if (!networks.empty()) BOOST_CHECK(networks.contains(selected.first.GetNetwork()));
             if (new_only) {
                 const auto new_entries{addrman->GetEntries(/*from_tried=*/false)};
                 BOOST_CHECK(std::any_of(new_entries.begin(), new_entries.end(), [&](const auto& entry) {
@@ -1407,6 +1407,46 @@ BOOST_AUTO_TEST_CASE(addrman_size)
     BOOST_CHECK_EQUAL(addrman->Size(/*net=*/std::nullopt, /*in_new=*/true), 2U);
     BOOST_CHECK_EQUAL(addrman->Size(/*net=*/std::nullopt, /*in_new=*/false), 1U);
     CheckGetEntriesContracts(*addrman);
+}
+
+BOOST_AUTO_TEST_CASE(addrman_linked_ipv4_network_contracts)
+{
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    const CNetAddr source = ResolveIP("252.2.2.2");
+
+    // These valid IPv6 encodings carry an IPv4 address and are classified as IPv4
+    // by the public address APIs, even though their underlying address network is IPv6.
+    const std::vector<CAddress> linked_ipv4{
+        CAddress{ResolveService("::FFFF:0:102:304", 8333), NODE_NONE}, // RFC6145
+        CAddress{ResolveService("64:FF9B::102:304", 8333), NODE_NONE}, // RFC6052
+        CAddress{ResolveService("2002:102:304:9999:9999:9999:9999:9999", 8333), NODE_NONE}, // RFC3964
+        CAddress{ResolveService("2001:0:9999:9999:9999:9999:FEFD:FCFB", 8333), NODE_NONE}, // RFC4380
+    };
+
+    for (const CAddress& addr : linked_ipv4) {
+        BOOST_REQUIRE(addr.IsRoutable());
+        BOOST_CHECK_EQUAL(addr.GetNetwork(), NET_IPV6);
+        BOOST_CHECK_EQUAL(addr.GetNetClass(), NET_IPV4);
+    }
+    BOOST_REQUIRE(addrman->Add(linked_ipv4, source));
+
+    // Size() and Select() use the transport network, while GetAddr() uses the
+    // public network class for its legacy address-list filtering.
+    BOOST_CHECK_EQUAL(addrman->Size(NET_IPV4), 0U);
+    BOOST_CHECK_EQUAL(addrman->Size(NET_IPV6), linked_ipv4.size());
+
+    const auto ipv4_addresses{addrman->GetAddr(/*max_addresses=*/0, /*max_pct=*/0, NET_IPV4, /*filtered=*/false)};
+    BOOST_CHECK_EQUAL(ipv4_addresses.size(), linked_ipv4.size());
+    for (const CAddress& addr : ipv4_addresses) {
+        BOOST_CHECK_EQUAL(addr.GetNetClass(), NET_IPV4);
+    }
+    BOOST_CHECK(addrman->GetAddr(/*max_addresses=*/0, /*max_pct=*/0, NET_IPV6, /*filtered=*/false).empty());
+
+    BOOST_CHECK(!addrman->Select(/*new_only=*/false, {NET_IPV4}).first.IsValid());
+
+    const auto selected{addrman->Select(/*new_only=*/false, {NET_IPV6}).first};
+    BOOST_CHECK(std::find(linked_ipv4.begin(), linked_ipv4.end(), selected) != linked_ipv4.end());
+    BOOST_CHECK_EQUAL(selected.GetNetwork(), NET_IPV6);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
