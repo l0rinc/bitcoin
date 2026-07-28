@@ -2517,41 +2517,56 @@ bool CWallet::SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& add
     bool fUpdated = false;
     bool is_mine;
     std::optional<AddressPurpose> purpose;
+    CAddressBookData record;
     {
         LOCK(cs_wallet);
         std::map<CTxDestination, CAddressBookData>::iterator mi = m_address_book.find(address);
         fUpdated = mi != m_address_book.end() && !mi->second.IsChange();
 
-        CAddressBookData& record = mi != m_address_book.end() ? mi->second : m_address_book[address];
+        if (mi != m_address_book.end()) record = mi->second;
         record.SetLabel(strName);
         is_mine = IsMine(address);
         if (new_purpose) { /* update purpose only if requested */
             record.purpose = new_purpose;
         }
         purpose = record.purpose;
+
+        const std::string& encoded_dest = EncodeDestination(address);
+        if (new_purpose && !batch.WritePurpose(encoded_dest, PurposeToString(*new_purpose))) {
+            WalletLogPrintf("Error: fail to write address book 'purpose' entry\n");
+            return false;
+        }
+        if (!batch.WriteName(encoded_dest, strName)) {
+            WalletLogPrintf("Error: fail to write address book 'name' entry\n");
+            return false;
+        }
     }
 
-    const std::string& encoded_dest = EncodeDestination(address);
-    if (new_purpose && !batch.WritePurpose(encoded_dest, PurposeToString(*new_purpose))) {
-        WalletLogPrintf("Error: fail to write address book 'purpose' entry\n");
-        return false;
-    }
-    if (!batch.WriteName(encoded_dest, strName)) {
-        WalletLogPrintf("Error: fail to write address book 'name' entry\n");
-        return false;
-    }
+    // Publish and notify only after the database transaction commits.
+    auto update_in_memory = [this, address, strName, is_mine, purpose, fUpdated, record = std::move(record)]() mutable {
+        {
+            LOCK(cs_wallet);
+            m_address_book[address] = std::move(record);
+        }
 
-    // In very old wallets, address purpose may not be recorded so we derive it from IsMine
-    NotifyAddressBookChanged(address, strName, is_mine,
-                             purpose.value_or(is_mine ? AddressPurpose::RECEIVE : AddressPurpose::SEND),
-                             (fUpdated ? CT_UPDATED : CT_NEW));
+        // In very old wallets, address purpose may not be recorded so we derive it from IsMine
+        NotifyAddressBookChanged(address, strName, is_mine,
+                                 purpose.value_or(is_mine ? AddressPurpose::RECEIVE : AddressPurpose::SEND),
+                                 (fUpdated ? CT_UPDATED : CT_NEW));
+    };
+    if (batch.HasActiveTxn()) {
+        batch.RegisterTxnListener({.on_commit=std::move(update_in_memory), .on_abort={}});
+    } else {
+        update_in_memory();
+    }
     return true;
 }
 
 bool CWallet::SetAddressBook(const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& purpose)
 {
-    WalletBatch batch(GetDatabase());
-    return SetAddressBookWithDB(batch, address, strName, purpose);
+    return RunWithinTxn(GetDatabase(), "address book entry update", [&](WalletBatch& batch) {
+        return SetAddressBookWithDB(batch, address, strName, purpose);
+    });
 }
 
 bool CWallet::DelAddressBook(const CTxDestination& address)
