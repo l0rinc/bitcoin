@@ -11,6 +11,15 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - The focused normal regression failed on the unmodified source and passed after the fix for both message types. The normal Clang 19 `net_tests` suite passed 33 cases. The rebuilt Clang 19 TSan target passed the focused regression without diagnostics. `git diff --check` passed.
 - Current branch: `uber-cycle-82-resource-exhaustion-variants-20260728`; current HEAD: `1e0091464ceb4c13c2b5d33eaedbefc0b6d57452`. `origin/master...HEAD` is `2 947`; no relevant process remains running. The next exact random selector is pending.
 
+## Cycle 83 Active State
+
+- Selector: exact `shuf -i 0-98 -n 1` -> `11` (`sanitizer-valgrind`).
+- Branch: `uber-cycle-83-sanitizer-valgrind-20260728`.
+- Start HEAD: `acc8a0388d`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Scope: fresh ASan, UBSan, TSan, MSan, LeakSanitizer, Valgrind/Memcheck, sanitized fuzz, recovery, and suppression/exclusion cells. Closed TokenPipe, prior sanitizer-matrix, LevelDB leak, compact-block read-failure, PSBT, and locator cells are excluded without distinct evidence.
+- Journal: `agent-journal/sanitizer-valgrind.md`. Scratch root: `/data/my_storage/tmp` because `/` is full.
+- Status: cycle 83 is active; first action is sanitizer configuration/history inventory and isolated tool availability checks.
+
 ## Cycle 82 Completion
 
 - Selected by exact `shuf -i 0-98 -n 1` -> `7` (`resource-exhaustion-variants`), excluding cycle 57's cfilters/BIP35 response-watermark cells and previously closed relay-backlog, integer-option, and receive-buffer cells.
