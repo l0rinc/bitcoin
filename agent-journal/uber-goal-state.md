@@ -4,6 +4,13 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
+## Latest authoritative checkpoint
+
+- Cycle 81 is complete. Goal 6 (`serialization-untrusted-input`) confirmed and fixed a PSBT Taproot BIP32 keypath field-boundary/resource-validation defect in source/test commit `1a1a51aa96873c8fd8715b5a2b9b74a7e550a65f`, authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- The fix bounds both input and output Taproot BIP32 keypath values with a `SpanReader` and checks the nested leaf-hash count before set insertion. The two regressions prove the old parser consumed 32 bytes from the following map entry and the fixed parser leaves all 36 bytes unread.
+- `build_unit_clang19` and `build_unit_tsan_clang19` rebuilt `test_bitcoin`; both `psbt_tests` runs passed all 10 cases. No relevant process remains running.
+- Current branch: `uber-cycle-81-serialization-untrusted-input-20260728`; current HEAD: `1a1a51aa96873c8fd8715b5a2b9b74a7e550a65f`. A state-only close snapshot and the next exact random selector remain to be recorded.
+
 - Status: cycle 81 in progress; goal 6 (`serialization-untrusted-input`) is tracing untrusted byte lengths, counts, encodings, casts, loops, and failure-state mutation across network, RPC, object, wallet, database, and fuzz boundaries. Cycle 80 found no new current-tree advisory variant; A1-A4 were dismissed after source/history tracing and focused suites, while A6 and A7 were already fixed upstream with current regression evidence. The missing previous-release migration binaries and native 32-bit execution are recorded limitations, not passes. Cycle 79's distinct `parse_numbers` engine comparison found no new defect. Cycle 78 confirmed and fixed the TokenPipe EPIPE status-contract defect while the remaining MSan daemon runtime boundary was classified as an uninstrumented system dependency. Cycle 77's fresh relationship/state-domain cells found no new source defect. Cycle 76 confirmed and fixed a distinct compact-block announcement read-failure path. Cycle 75 fixed the nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
