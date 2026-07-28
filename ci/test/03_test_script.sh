@@ -77,6 +77,12 @@ elif [ "$RUN_UNIT_TESTS" = "true" ]; then
   if [ ! -d "$DIR_UNIT_TEST_DATA" ]; then
     mkdir -p "$DIR_UNIT_TEST_DATA"
     ${CI_RETRY_EXE} curl --location --fail https://github.com/bitcoin-core/qa-assets/raw/main/unit_test_data/script_assets_test.json -o "${DIR_UNIT_TEST_DATA}/script_assets_test.json"
+    # The download carries test vectors with expected verdicts; verify its
+    # integrity instead of trusting the mutable raw/main reference, so a
+    # substituted or corrupted file fails fast instead of silently
+    # weakening the script test suite. The pinned sha256 must be updated
+    # when the upstream asset legitimately changes.
+    echo "cd789a58ec45916e1721cdd14e82ca4c93100959f1cef4e229b22e3bf539f095  ${DIR_UNIT_TEST_DATA}/script_assets_test.json" | sha256sum --check
   fi
 fi
 
