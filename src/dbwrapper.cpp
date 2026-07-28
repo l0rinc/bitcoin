@@ -252,7 +252,6 @@ CDBWrapper::CDBWrapper(const DBParams& params)
     DBContext().options = GetOptions(params.cache_bytes, params.bloom_filter);
     DBContext().options.create_if_missing = true;
     DBContext().options.max_file_size = params.max_file_size;
-    if (params.block_size) DBContext().options.block_size = *params.block_size;
     assert(!(params.testing_env && params.memory_only));
     if (params.testing_env) {
         DBContext().options.env = params.testing_env;
