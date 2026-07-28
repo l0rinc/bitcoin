@@ -5,6 +5,9 @@
 export LC_ALL=C.UTF-8
 set -o errexit -o pipefail
 
+# shellcheck source=archive.sh
+source "$(dirname "${BASH_SOURCE[0]}")/archive.sh"
+
 # Environment variables for determinism
 export TAR_OPTIONS="--owner=0 --group=0 --numeric-owner --mtime='@${SOURCE_DATE_EPOCH}' --sort=name"
 export TZ=UTC
@@ -54,11 +57,8 @@ git_head_version() {
 
 CODESIGNATURE_GIT_ARCHIVE="${DIST_ARCHIVE_BASE}/${DISTNAME}-codesignatures-$(git_head_version "$DETACHED_SIGS_REPO").tar.gz"
 
-# Create the codesignature tarball if not already there
-if [ ! -e "$CODESIGNATURE_GIT_ARCHIVE" ]; then
-    mkdir -p "$(dirname "$CODESIGNATURE_GIT_ARCHIVE")"
-    git -C "$DETACHED_SIGS_REPO" archive --output="$CODESIGNATURE_GIT_ARCHIVE" HEAD
-fi
+# Create the codesignature tarball or verify a cached one before it is used.
+create_or_verify_git_archive "$DETACHED_SIGS_REPO" "" "$CODESIGNATURE_GIT_ARCHIVE"
 
 mkdir -p "$OUTDIR"
 
