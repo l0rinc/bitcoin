@@ -1604,4 +1604,28 @@ BOOST_AUTO_TEST_CASE(infer_descriptor_off_curve_pubkey_falls_back_to_raw)
     BOOST_CHECK_EQUAL(parsed[0]->ToString(), descriptor);
 }
 
+BOOST_AUTO_TEST_CASE(infer_descriptor_taproot_off_curve_leaf_roundtrips)
+{
+    const std::vector<unsigned char> invalid_xonly(32, 0);
+    const CScript leaf{CScript{} << invalid_xonly << OP_CHECKSIG};
+
+    TaprootBuilder builder;
+    builder.Add(0, leaf, TAPROOT_LEAF_TAPSCRIPT);
+    builder.Finalize(XOnlyPubKey::NUMS_H);
+
+    FlatSigningProvider provider;
+    provider.tr_trees[builder.GetOutput()] = builder;
+    const CScript script{GetScriptForDestination(builder.GetOutput())};
+    const auto inferred{InferDescriptor(script, provider)};
+    BOOST_REQUIRE_MESSAGE(inferred, "taproot output was not inferred");
+    const std::string descriptor{inferred->ToString()};
+    BOOST_CHECK_EQUAL(descriptor.rfind("rawtr(", 0), 0U);
+
+    FlatSigningProvider parsed_provider;
+    std::string error;
+    const auto parsed{Parse(descriptor, parsed_provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_MESSAGE(!parsed.empty(), descriptor + ": " + error);
+    BOOST_CHECK_EQUAL(parsed[0]->ToString(), descriptor);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
