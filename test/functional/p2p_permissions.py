@@ -9,8 +9,9 @@ Test that permissions are correctly calculated and applied
 
 from test_framework.messages import (
     SEQUENCE_FINAL,
+    msg_tx,
 )
-from test_framework.p2p import P2PDataStore
+from test_framework.p2p import P2PDataStore, P2PInterface
 from test_framework.test_node import ErrorMatch
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -106,7 +107,7 @@ class P2PPermissionsTests(BitcoinTestFramework):
         # A test framework p2p connection is needed to send the raw transaction directly. If a full node was used, it could only
         # rebroadcast via the inv-getdata mechanism. However, even for forcerelay connections, a full node would
         # currently not request a txid that is already in the mempool.
-        self.restart_node(1, extra_args=["-whitelist=forcerelay@127.0.0.1"])
+        self.restart_node(1, extra_args=["-whitelist=forcerelay@127.0.0.1", "-txsendrate=1"])
         p2p_rebroadcast_wallet = self.nodes[1].add_p2p_connection(P2PDataStore())
 
         self.log.debug("Send a tx from the wallet initially")
@@ -121,6 +122,18 @@ class P2PPermissionsTests(BitcoinTestFramework):
         with self.nodes[1].assert_debug_log(["Force relaying tx {} (wtxid={}) from peer=0".format(txid, tx.wtxid_hex)]):
             p2p_rebroadcast_wallet.send_txs_and_test([tx], self.nodes[1])
             self.wait_until(lambda: txid in self.nodes[0].getrawmempool())
+
+        relay_recipient = self.nodes[1].add_p2p_connection(P2PInterface())
+        relay_recipient.sync_with_ping()
+        # Batch duplicate force-relay messages before the recipient's trickle cycle. The sender
+        # already knows the transaction, while the passive recipient remains eligible and unknown.
+        # Once the 30-token bucket is exhausted, duplicates must coalesce into one backlog entry.
+        for _ in range(35):
+            p2p_rebroadcast_wallet.send_without_ping(msg_tx(tx))
+        p2p_rebroadcast_wallet.sync_with_ping()
+        inbound_bucket = self.nodes[1].getnetworkinfo()["inv_buckets"]["inbound"]
+        self.log.info("Repeated force-relay bucket: %s", inbound_bucket)
+        assert_equal(inbound_bucket["backlog"], 1)
 
         self.log.debug("Check that node[1] will not send an invalid tx to node[0]")
         tx.vout[0].nValue += 1

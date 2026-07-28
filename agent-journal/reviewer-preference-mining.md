@@ -78,6 +78,102 @@ Verdict: reusable technical review recipe confirmed; no production source change
 
 Next work should draw a distinct eligible goal and use this recipe when evaluating its review and history evidence. Do not reopen this campaign unless new review data, a different subsystem cluster, or a concrete recurrence changes the evidence.
 
+## Cycle 54: global relay backlog bounds and duplicate suppression
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `60`
+- Slug: `reviewer-preference-mining`
+- Branch: `fuzz-contract-cluster-oracles-20260709`
+- Gate HEAD before the cycle-start journal commit: `2ca370710135304b0472ffe62bfea9ebfc1ad5d9`
+- Cycle-start journal commit: `322dc980edcec9531099fc16ced3c4899256041c`
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` was `2 874` at the gate.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Corrected actual-tab TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+
+The cycle-25 and cycle-49 reviewer samples were excluded. This cycle selected a new evidence cell: PR `#34628` and the global transaction relay backlog's duplicate, lifetime, and memory-bound behavior. The tracked tree was clean apart from the known agent-owned untracked paths and no relevant process was running at the gate.
+
+### New review evidence
+
+The primary source was [PR #34628](https://github.com/bitcoin/bitcoin/pull/34628), merged as `b33a7fcd7bd896da7175a28802bac9ca53fa238d` from head `349c72ee00a06581aa8cddaced6377c49a81d511` onto base `c8459b6bdcdf077f1e7aba0ec2cb806cd0907457`. Public review comments and the merged diff were queried through the unauthenticated GitHub API with commands equivalent to:
+
+```text
+curl -fsSL 'https://api.github.com/repos/bitcoin/bitcoin/pulls/34628'
+curl -fsSL 'https://api.github.com/repos/bitcoin/bitcoin/pulls/34628/comments?per_page=100'
+curl -fsSL 'https://api.github.com/repos/bitcoin/bitcoin/issues/34628/comments?per_page=100'
+```
+
+The fresh reviewer signals were technically specific:
+
+- A reviewer raised that repeated transactions from a `forcerelay` peer could trigger repeated global relay entries and exhaust memory because the entries were not deduplicated at insertion time.
+- The PR discussion moved the backlog and per-peer pending inventory toward `std::set` in response to duplicate concerns, while also weighing locality, node allocation overhead, capacity retention, and performance.
+- A proposed `unordered_set` performance comparison was later characterized by its author as bespoke and unrepresentative. Another reviewer noted that mempool lookups dominate the relevant path, so microbenchmarks of isolated set operations were insufficient evidence.
+- The final review accepted the separation between global rate limiting and per-peer privacy trickling, and accepted a set-based structure when duplicate suppression was required. This establishes a contextual rule: queue bounds and duplicate semantics outrank an isolated container benchmark when an untrusted path can enqueue repeated identities.
+
+### Contract trace and independent reproduction
+
+The current production path before the fix was:
+
+1. `ProcessMessage()` accepts a transaction from a peer with `ForceRelay` permission and, when the transaction is already in the mempool, calls `InitiateTxBroadcastToAll(wtxid)` for every duplicate message.
+2. `InitiateTxBroadcastToAll()` unconditionally appended the wtxid to both global backlog vectors and immediately called `ProcessInvBacklog()`.
+3. `InvToSendBucket::avail()` required positive count and size tokens. Once the count bucket was exhausted, `ProcessInvBacklog()` returned before calling the mempool extractor, so its later duplicate-skipping logic could not run.
+4. The old `ExtractBestByMiningScoreWithTopology()` path therefore deduplicated only after the backlog had already retained every repeated entry.
+
+The existing rate tests did not cover this timing: they submit distinct transactions, and the existing fuzz assertions mostly exercise duplicate calls after known filters or while tokens are available. A temporary extension of `test/functional/p2p_permissions.py` used the existing force-relay topology, `-txsendrate=1`, a passive eligible P2P recipient, and 35 identical raw transaction messages batched before a trickle cycle. On the unmodified source, the live RPC telemetry reported:
+
+```text
+Repeated force-relay bucket: {'backlog': 4, 'count_tok': -0.9791048369999943, ...}
+```
+
+The earlier unbatched controls reported zero backlog because the recipient's send cycle marked the transaction known and correctly refunded later attempts; those controls were retained as diagnostics, not evidence against the batched condition. The batched run is the independent failing-before regression: the same wtxid occupied four pending vector slots after the count budget was exhausted.
+
+The minimal fix changes each global backlog to `std::set<Wtxid>`, inserts at the two enqueue sites, and converts the unique set to a temporary vector only while reusing the existing mempool mining-order extractor. Remaining wtxids and over-budget selected entries are reinserted into the set. The obsolete vector-capacity shrink constant and logic were removed because the set releases its node entries when cleared. The same regression then reported:
+
+```text
+Repeated force-relay bucket: {'backlog': 1, 'count_tok': -0.9792265090000002, ...}
+```
+
+The one remaining entry is the unique transaction waiting for refill; repeated messages no longer increase retained state. The per-peer queue and trickle behavior remain separate and continue to deduplicate during downstream extraction.
+
+### Reusable review recipe
+
+Fingerprint: `resource-bound-backlog-duplicate-suppression-retention-telemetry`.
+
+When reviewing a rate-limited or delayed queue fed by a remotely reachable path:
+
+1. Trace every enqueue caller, including exceptional permissions and retry/rebroadcast paths. State whether the queue is supposed to contain events or unique identities.
+2. Check duplicate suppression at insertion, at token admission, at extraction, and at final delivery. Downstream deduplication does not bound memory while an upstream budget is unavailable.
+3. Use a passive recipient and frozen or controlled timing to separate queue growth from known-filter changes. Record live backlog, token, queue, and memory telemetry rather than inferring bounds from constants.
+4. Treat isolated hash/set benchmark claims as supporting evidence only. Reproduce the production workload, include retained-capacity behavior, and document the locality and allocation tradeoff of the chosen bound-preserving structure.
+5. Preserve the architectural split between global fairness/rate limiting and per-peer privacy trickling. Fix the earliest unbounded state without collapsing those independent contracts.
+
+This is a general resource-bound review rule with a contextual choice of `std::set` versus another unique container. The exact container must still be justified by the queue's ordering, adversarial key behavior, memory retention, and workload measurements.
+
+### Validation
+
+- `cmake --build build_func_clang19 --target bitcoind -j2` passed.
+- `cmake --build build_unit_clang19 --target test_bitcoin -j2` passed.
+- `cmake --build build_fuzz_libfuzzer_clang19 --target fuzz -j2` passed.
+- `cmake --build build_fuzz_asan_clang19 --target fuzz -j2` passed.
+- `build_unit_clang19/bin/test_bitcoin --run_test=util_tests/token_bucket* --catch_system_error=no --report_level=short` passed 12 cases and 36 assertions.
+- `build_unit_clang19/bin/test_bitcoin --run_test=mempool_tests/MempoolExtractBestByMiningScoreWithTopology --catch_system_error=no --report_level=short` passed 1 case and 11 assertions.
+- `p2p_permissions.py` passed with the batched force-relay regression and all permission checks.
+- `p2p_tx_relay_rate_limit.py`, `p2p_tx_relay_rate_limit_known.py`, `p2p_tx_relay_rate_limit_outbound.py`, and `p2p_tx_relay_rate_limit_size.py` each passed.
+- Normal `FUZZ=process_messages` completed 1,000 runs with exit 0, coverage `11516`, feature count `13509`, and peak RSS about 1,584 MiB.
+- Clang ASan/UBSan `FUZZ=process_messages` completed 500 runs with exit 0, coverage `36269`, feature count `41749`, and peak RSS about 1,588 MiB.
+- `git diff --check` passed.
+
+The first combined Boost filter attempt matched no cases because the comma-filter syntax was invalid; rerunning the two filters separately passed. The first regular fuzz attempt used a not-yet-created `TMPDIR` and failed before target execution; rerunning with an existing scratch directory passed. These are harness command corrections, not product failures. No source, test, daemon, fuzz, sanitizer, or profiling process remains running.
+
+### Verdict and handoff
+
+Verdict: **confirmed and fixed**. The review concern exposed a real remotely reachable memory-retention defect in the merged global relay implementation. The source/test fix is self-contained, preserves the existing relay contracts, and is ready as one independent commit with this journal section.
+
+Next work must draw a distinct eligible goal after recording the source commit and cycle state. Do not reopen this relay cell unless a new caller, alternative container/backend, or recurrence shows a remaining unbounded path.
+
 ## Cycle 49: current-master contract and review-surface mining
 
 ### Selection and gate
