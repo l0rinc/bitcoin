@@ -127,6 +127,12 @@ public:
         m_modified_fee = SaturatingAdd(m_modified_fee, fee_diff);
     }
 
+    // Set the modified fee from the aggregate prioritisation delta.
+    void SetModifiedFee(CAmount modified_fee) const
+    {
+        m_modified_fee = modified_fee;
+    }
+
     // Update the LockPoints after a reorg
     void UpdateLockPoints(const LockPoints& lp) const
     {

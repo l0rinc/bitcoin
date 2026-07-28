@@ -12,6 +12,7 @@
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <limits>
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
@@ -498,6 +499,40 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
     pool.GetTransactionAncestry(td->GetHash(), ancestors, descendants);
     BOOST_CHECK_EQUAL(ancestors, 4ULL);
     BOOST_CHECK_EQUAL(descendants, 4ULL);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolPrioritisationSaturationRoundTrip)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    TestMemPoolEntryHelper entry;
+    const CTransactionRef tx = make_tx({10 * COIN});
+    constexpr CAmount BASE_FEE{1000};
+    constexpr CAmount MAX_DELTA{std::numeric_limits<CAmount>::max()};
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(BASE_FEE).FromTx(tx));
+    }
+
+    pool.PrioritiseTransaction(tx->GetHash(), MAX_DELTA);
+    pool.PrioritiseTransaction(tx->GetHash(), -MAX_DELTA);
+
+    {
+        LOCK(pool.cs);
+        const auto* current = pool.GetEntry(tx->GetHash());
+        BOOST_REQUIRE(current != nullptr);
+        BOOST_CHECK_EQUAL(current->GetModifiedFee(), BASE_FEE);
+        BOOST_CHECK(pool.mapDeltas.find(tx->GetHash()) == pool.mapDeltas.end());
+    }
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        pool.removeRecursive(*tx, REMOVAL_REASON_DUMMY);
+        TryAddToMempool(pool, entry.Fee(BASE_FEE).FromTx(tx));
+        const auto* current = pool.GetEntry(tx->GetHash());
+        BOOST_REQUIRE(current != nullptr);
+        BOOST_CHECK_EQUAL(current->GetModifiedFee(), BASE_FEE);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(MempoolUnbroadcastMemoryAccounting)
