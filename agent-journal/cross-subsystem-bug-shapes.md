@@ -46,3 +46,25 @@ For every candidate, record the seed fix, structural features, callers, trust bo
 ## Handoff
 
 - Cycle closed without a source commit. Next run must recheck the gate, draw a fresh full-catalog selector, and choose a distinct unchecked defect shape. Reopen this cell only if a caller can make the same block a valid candidate in both chainstates without violating `TargetBlock` or active-chain work rules.
+
+## Cycle 76: cross-subsystem failure-publication and lifecycle asymmetry
+
+### Selection and gate
+
+- Initial selector: `shuf -i 0-98 -n 1` -> `37` (`build-dead-zones`); rejected because cycle 74 closed the same configuration cell with no changed code, tool, or assumption.
+- Retry selector: `shuf -i 0-98 -n 1` -> `26` (`cross-subsystem-bug-shapes`).
+- Branch: `uber-cycle-76-cross-subsystem-bug-shapes-20260728`.
+- Gate HEAD: `02e0a92ddc33af203f4204848eb6095312f052af`.
+- Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Divergence: `origin/master...HEAD` was `2 930`.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Tracked source was clean; known untracked agent artifacts and `test/cache/` were preserved. No relevant test, fuzz, sanitizer, daemon, or profiling process was running.
+
+### Excluded cells and active hypothesis
+
+Cycle 48's wallet-rescan reservation ordering and cycle 62's chainstate candidate-set mutation are closed and excluded. This cycle mines a different historical defect shape: a failure or lifecycle event may publish state in one subsystem while an analogous caller, cache, index, queue, or wrapper publishes the same conceptual state before validation, after a dropped return, or without symmetric rollback/cleanup.
+
+Start with recent source fixes and review rationale, extract structural features independent of symbol names, then search analogous wallet, persistence, P2P, descriptor, and index paths. A candidate is only reportable when its trust boundary, intended contract, reachable caller, and failure schedule are independently established. Status: active; no source finding claimed yet.
