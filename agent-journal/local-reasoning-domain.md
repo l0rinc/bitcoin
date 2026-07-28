@@ -92,3 +92,43 @@ Inventory local assumptions where a helper's result is combined with a related v
 For each candidate, record the local domain, related values, invariant, caller path, and failure consequence. Compare implementation, callers, tests, documentation, blame, and historical rationale. Build a deterministic fixture or model that exercises the smallest valid and invalid relationship pairs. Require a failing-before contract oracle, a restored passing result, and an independent mutation, alternate implementation, sanitizer trace, or exhaustive boundary check before changing production code. Dismiss candidates where the apparent mismatch is an intentional domain boundary and preserve the exact reason and next unchecked cell.
 
 Status: active; no source finding claimed yet.
+
+### Cycle 77 candidate review and evidence
+
+#### Candidate 1: P2P transport identity versus public network class
+
+This was used as a scope guard rather than a reopening of cycle 65. `CNode::ConnectedThroughNetwork()` intentionally reports the peer's connected network, including the inbound-onion override, while `m_network_conn_counts` and `MultipleManualOrFullOutboundConns()` use `CNetAddr::GetNetwork()` for transport-level outbound-slot accounting. The current comments in `src/net.h`, the linked-IPv4 AddrMan regression from cycle 65, and the callers of both helpers support the split. No new caller was found that combines the two identities without an explicit privacy or transport purpose. The cycle-77 `net_tests` run passed 32 cases and 132,878 assertions.
+
+Verdict: dismissed as an intentional domain boundary; the linked-IPv4 and AddrMan cell remains closed.
+
+#### Candidate 2: BaseIndex commit snapshot versus flushed chainstate
+
+The apparent relationship gap is the second load of `m_best_block_index` in `BaseIndex::Commit()`: the first load is checked against `GetLastFlushedBlock()`, while the later load supplies the locator hash. The relevant invariant is that `CustomCommit()` and locator publication must describe the same index tip and must not be ahead of durable chainstate.
+
+The caller/lifecycle trace does not make the two loads independently mutable in supported operation. `BaseIndex::Sync()` keeps `m_synced` false until its final commit and the locked tip check complete. After synchronization, `BlockConnected()` and `ChainStateFlushed()` are delivered through the per-subscriber validation queue; `CValidationInterface` documents that each callback completes before the next callback for that subscriber, and `ValidationSignalsImpl::Iterate()` enforces that serialization. `CustomCommit()` implementations do not update `m_best_block_index`; `BlockConnected()` publishes it only after processing, and `ChainStateFlushed()` checks the locator is on the current best chain before calling `Commit()`.
+
+The isolated `baseindex_tests,blockfilterindex_tests,coinstatsindex_tests` run passed 3 cases and 26 assertions. No production-reachable interleaving can invalidate the first tip check without violating the callback contract, so adding a lock or replacing the second load would be speculative and could obscure the existing lifecycle invariant.
+
+Verdict: dismissed; retain as a future candidate only if index commits become callable concurrently or a new callback path bypasses the validation queue.
+
+#### Candidate 3: transaction-download peer ownership and orphan state
+
+The relationship under test is `(transaction hash, peer)` ownership across `TxRequestTracker`, `TxOrphanage`, and `TxDownloadManagerImpl`. `ReceivedNotFound()` is called from the `NOTFOUND` message path while the `CNode` is still live; stale responses are harmless because `ReceivedResponse()` searches the exact `(peer, hash)` pair and does nothing when it no longer exists. `ReceivedTx()` explicitly handles a missing peer before touching request state. On teardown, `DisconnectedPeer()` removes orphan announcements and request-tracker entries before erasing the peer record, and `CheckIsEmpty()` verifies all per-peer and global counters.
+
+The focused `txdownload_tests` run passed 14 cases and 605 assertions. The full `net_tests` run passed 32 cases and 132,878 assertions. Existing duplicate-connect, disconnected-orphan, multi-announcer, and multi-entry-NOTFOUND controls cover the valid/invalid state transitions; no stale peer-to-transaction relationship was reproduced.
+
+Verdict: dismissed; no source change justified.
+
+#### Candidate 4: descriptor spelling, x-only script identity, and private-key ownership
+
+The downstream relationship after the cycle-75 Taproot fix was checked independently: a full compressed key in a Taproot descriptor retains its textual parity spelling, script construction normalizes it to x-only bytes, and private-key lookup uses `SigningProvider::GetKeyByXOnly()`, which checks both parity-derived `CKeyID` values. `ExpandPrivate()`, wallet signing-provider assembly, and backup/migration consumers all use the resulting full public-key identity for key storage while Taproot signing uses x-only lookup. No consumer was found that requires the descriptor's full-key spelling to equal the script's x-only identity.
+
+The isolated `descriptor_tests` run passed 13 cases and 30,437 assertions, including the compressed-key, opposite-parity, NUMS, nested `multi_a`, and Miniscript controls. This confirms the downstream relationship but does not reopen or modify the cycle-75 source cell.
+
+Verdict: dismissed as a verified continuation of the already fixed Taproot identity boundary.
+
+#### Cycle result
+
+No new source, test, or documentation defect was confirmed. `git diff --check` passed. The first combined test invocation failed because its explicitly supplied `TMPDIR` directory had not been created and the multi-suite invocation then hit duplicate global argument registration; this was a command setup error, not a product result. The isolated reruns used `/data/my_storage/tmp/local-reasoning-cycle77-tests/{net,txdownload,descriptor,index}` and passed. No relevant process remained running. The next unchecked relationship cell should come from a fresh catalog draw and should not reopen AddrMan linked-IPv4, BaseIndex callback serialization, txdownload peer cleanup, or the cycle-75 Taproot key-lookup fix without new evidence.
+
+Status: dismissed; journal-only close, no source change justified.
