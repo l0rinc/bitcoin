@@ -4,16 +4,18 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 75 complete; goal 15 (`public-object-validation`) found and fixed a nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
+- Status: cycle 76 in progress; goal 26 (`cross-subsystem-bug-shapes`) is reopened for a distinct failure-publication/lifecycle asymmetry cell. Cycle 75 fixed the nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
-- Branch: `uber-cycle-75-public-object-validation-20260728`
+- Branch: `uber-cycle-76-cross-subsystem-bug-shapes-20260728`
 - Base: `origin/master` at `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
 - HEAD at initialization: `1dcc2da988ee625fbc5d7d55eb6f894c1103ec52`
 - Current HEAD after cycle 16: `1926a4dbf612f3ce2fd43b61c0691360930a952f`
 - Current cycle-73 source/test/journal HEAD: `548d8cc8f8` (`dbwrapper: clean up resources on constructor failure`). The next state-only close commit records this cycle as complete.
 - Current cycle-75 source/test/journal HEAD: `d02e22867b` (`descriptor: use x-only lookup for Taproot compressed keys`).
+- Cycle 76 gate: HEAD `02e0a92ddc33af203f4204848eb6095312f052af`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 930`; tracked source clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
+- Cycle 76 selector: initial `shuf -i 0-98 -n 1` -> `37` (`build-dead-zones`) was rejected as the just-closed cell; retry `shuf -i 0-98 -n 1` -> `26` (`cross-subsystem-bug-shapes`). Cycles 48 and 62's wallet-rescan and chainstate candidate-set cells are excluded; this cycle targets a distinct historical failure-publication or lifecycle-asymmetry shape.
 - Cycle 74 gate: HEAD `ddde67072a`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 925`; tracked source clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 74 selector: exact `shuf -i 0-98 -n 1` -> `37` (`build-dead-zones`). Cycle 20's GCC `BUILD_FOR_FUZZING=ON`, `ENABLE_IPC=ON`, wallet-enabled parser/fuzz cell is excluded; this cycle targets wallet-off, IPC-off/monolithic, test/bench, and generated-source parity.
 - Cycle 74 close: current source/journal HEAD before the state-only close commit is `8063cae3aa`; no source change was justified. The wallet-off/IPC-off Clang, wallet-on/IPC-off Clang, wallet-off/IPC-on GCC, fuzz-only wallet-off Clang, and GUI wallet-off Clang matrices all configured and built as expected. Focused unit, IPC, Qt, target-registration, and `/data`-backed fuzz controls passed; the only negative results were a malformed full-root temp setup and the documented release-build fuzz refusal. See `build-dead-zones.md`.
@@ -254,6 +256,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 73 | `shuf -i 0-98 -n 1` -> `54` | `raai-resource-leaks` (constructor/error/cancellation ownership cell) | confirmed; fixed | `CDBWrapper` leaked LevelDB cache, filter policy, logger, and related allocations when construction threw before its destructor became active. `LevelDBContext` now owns idempotent cleanup, `GetOptions()` is exception-safe, and the focused normal/ASan/LSan suites plus standalone negative control prove the change. The broader dependent suite was blocked by a full root filesystem. See `raai-resource-leaks.md`. | `548d8cc8f8` source/test/probe/journal; `e8db2906f7` close snapshot | Recheck the gate and draw the next distinct goal |
 | 74 | `shuf -i 0-98 -n 1` -> `37` | `build-dead-zones` (wallet-off, IPC-off/monolithic, test/bench, and generated-source matrix) | dismissed; no new source defect | Excluded cycle 20's GCC wallet-parser/IPC fuzz cell. Five isolated configuration families matched their effective option contracts: wallet-off/on monolithic, wallet-off IPC-on, fuzz-only wallet-off, and GUI wallet-off. Target graphs, generated headers, test/bench/fuzz registries, focused unit/IPC/Qt tests, and `/data`-backed fuzz smokes passed. See `build-dead-zones.md`. | Journal-only close; no source change justified | Draw the next eligible goal |
 | 75 | `shuf -i 0-98 -n 1` -> `15` | `public-object-validation` (nested descriptor keys and wrapper/output parity) | confirmed; fixed | Full compressed keys in P2TR expanded as x-only script keys but `ConstPubkeyProvider` looked up only the parity-specific key ID. The separate lookup flag preserves descriptor spelling while using `GetKeyByXOnly()`; direct/nested Miniscript, opposite-parity, NUMS, and script-equivalence regression controls passed. See `public-object-validation.md`. | `d02e22867b` (`descriptor: use x-only lookup for Taproot compressed keys`) | Recheck the gate and draw the next eligible goal |
+| 76 | initial `37` rejected; retry `shuf -i 0-98 -n 1` -> `26` | `cross-subsystem-bug-shapes` (failure-publication and lifecycle asymmetry) | in progress; distinct re-entry | Exclude cycle 48's wallet-rescan reservation ordering and cycle 62's chainstate candidate-set mutation. Mine a new historical structural shape and prove or dismiss an analogous reachable caller across wallet, persistence, P2P, descriptor, or index code. See `cross-subsystem-bug-shapes.md`. | Start state pending | Complete the distinct cross-subsystem cell and then draw the next eligible goal |
 
 ## Cycle 72 Completion
 
@@ -283,6 +286,15 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Verdict: dismissed for a new source defect. Wallet-off/on monolithic Clang builds completed 651/716 steps; wallet-off IPC-on GCC completed 709; wallet-off fuzz-only Clang completed 452; and wallet-off GUI Clang completed 452. The effective target graph matched the option guards, including absent wallet targets, IPC stub/real library selection, fuzz-only target suppression, and Qt wallet exclusion.
 - Validation: wallet-off/on focused DB/network/wallet suites passed; IPC tests passed 2 cases and 44 assertions; all four offscreen Qt groups passed 15 cases; fuzz-only `process_messages` and `tx_in` smokes passed with `/data` scratch state; wallet and IPC registration matched feature flags. Release-like fuzz binaries refused execution as documented. The first malformed test invocation used a missing `TMPDIR` under a full root filesystem and was discarded, then corrected.
 - Evidence: `/data/my_storage/tmp/build-dead-zones-cycle74/`; `git diff --check` and process cleanup remain required before the state-only close commit.
+
+## Cycle 76 Active State
+
+- Gate: HEAD `02e0a92ddc33af203f4204848eb6095312f052af`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 930`.
+- Branch: `uber-cycle-76-cross-subsystem-bug-shapes-20260728`.
+- Draw: initial `37` rejected as the closed cycle-74 build-dead-zones cell; retry `26` (`cross-subsystem-bug-shapes`).
+- Excluded prior cells: cycle 48's wallet-rescan reservation ordering and cycle 62's chainstate candidate-set mutation.
+- Current hypothesis: a historical failure-publication or lifecycle fix may have corrected one subsystem while an analogous caller still publishes state before validation, drops a failure return, or lacks symmetric rollback/cleanup.
+- Required evidence: historical seed and contract, structural analogue, reachable trust boundary, deterministic failure schedule or proof of unreachability, and independent normal/sanitized/mutation validation before any source change.
 
 ## Cycle 75 Completion
 
@@ -317,11 +329,13 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 75 is closed. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: `cross-subsystem-bug-shapes` cycle 76 only. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
+
+Cycle 76 is active. The initial `shuf -i 0-98 -n 1` draw was `37` and was rejected because cycle 74 had just closed that build-dead-zones cell; the retry draw was `26`, `cross-subsystem-bug-shapes`. It excludes cycles 48 and 62's wallet-rescan and chainstate candidate-set cells and targets a distinct failure-publication or lifecycle asymmetry shape. The exact scope and gate are recorded in `cross-subsystem-bug-shapes.md`; the next handoff must record the historical seed, analogous callers, and independent verdict.
 
 Cycle 75 is complete. It selected goal 15, `public-object-validation`, by `shuf -i 0-98 -n 1` -> `15` after the cycle-74 gate. The confirmed Taproot compressed-key lookup mismatch is fixed in `d02e22867b`; the exact candidate ledger, mutation, corpus, validation, and limitations are recorded in `public-object-validation.md`. The next run must re-check the gate and draw a distinct goal from the full catalog.
 
