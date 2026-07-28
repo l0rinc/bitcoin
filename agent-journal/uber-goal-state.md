@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Status: cycle 76 complete; goal 26 (`cross-subsystem-bug-shapes`) confirmed and fixed a distinct compact-block announcement read-failure path. Cycle 75 fixed the nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
+- Status: cycle 77 in progress; goal 57 (`local-reasoning-domain`) is auditing a fresh relationship/state-domain cell after cycle 65's AddrMan classifier fix. Cycle 76 confirmed and fixed a distinct compact-block announcement read-failure path. Cycle 75 fixed the nested Taproot compressed-key private-lookup mismatch. Cycle 74 found no new source defect in the conditional-build matrix. Cycle 73 confirmed and fixed a reachable LevelDB ownership leak during `CDBWrapper` construction failure. Cycle 72's secp nonce/state cell and cycle 71's timing cell found no new source defect and remain closed. Cycle 70's kernel-wrapper pointer-array fix, cycle 69's `setlabel` RPC fix, and cycle 68's `GETBLOCKTXN` assertion fix remain closed.
 - Catalog: `agent-journal/reusable-continuous-agent-goals.md`
 - Uber goal: `agent-journal/uber-goal.md`
 - Worktree: `/data/my_storage/bitcoin`
@@ -15,8 +15,10 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Current cycle-73 source/test/journal HEAD: `548d8cc8f8` (`dbwrapper: clean up resources on constructor failure`). The next state-only close commit records this cycle as complete.
 - Current cycle-75 source/test/journal HEAD: `d02e22867b` (`descriptor: use x-only lookup for Taproot compressed keys`).
 - Current cycle-76 source/test/journal HEAD: `ddbb88ed12` (`net: disconnect on compact block announcement read failure`).
+- Current cycle-77 start HEAD: `76a2240168` (`journal: close cross-subsystem bug-shapes cycle 76`).
 - Cycle 76 gate: HEAD `02e0a92ddc33af203f4204848eb6095312f052af`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 930`; tracked source clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 76 selector: initial `shuf -i 0-98 -n 1` -> `37` (`build-dead-zones`) was rejected as the just-closed cell; retry `shuf -i 0-98 -n 1` -> `26` (`cross-subsystem-bug-shapes`). Cycles 48 and 62's wallet-rescan and chainstate candidate-set cells are excluded; this cycle targets a distinct historical failure-publication or lifecycle-asymmetry shape.
+- Cycle 77 selector: exact `shuf -i 0-98 -n 1` -> `57` (`local-reasoning-domain`). Cycle 65's AddrMan `GetNetwork()`/`GetNetClass()` relationship and linked-IPv4 cells are excluded; this cycle targets a distinct local relationship or state-domain assumption.
 - Cycle 74 gate: HEAD `ddde67072a`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 925`; tracked source clean except known untracked agent artifacts and `test/cache`; catalog/protocol/TSV hashes matched; no relevant process was running.
 - Cycle 74 selector: exact `shuf -i 0-98 -n 1` -> `37` (`build-dead-zones`). Cycle 20's GCC `BUILD_FOR_FUZZING=ON`, `ENABLE_IPC=ON`, wallet-enabled parser/fuzz cell is excluded; this cycle targets wallet-off, IPC-off/monolithic, test/bench, and generated-source parity.
 - Cycle 74 close: current source/journal HEAD before the state-only close commit is `8063cae3aa`; no source change was justified. The wallet-off/IPC-off Clang, wallet-on/IPC-off Clang, wallet-off/IPC-on GCC, fuzz-only wallet-off Clang, and GUI wallet-off Clang matrices all configured and built as expected. Focused unit, IPC, Qt, target-registration, and `/data`-backed fuzz controls passed; the only negative results were a malformed full-root temp setup and the documented release-build fuzz refusal. See `build-dead-zones.md`.
@@ -258,6 +260,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 74 | `shuf -i 0-98 -n 1` -> `37` | `build-dead-zones` (wallet-off, IPC-off/monolithic, test/bench, and generated-source matrix) | dismissed; no new source defect | Excluded cycle 20's GCC wallet-parser/IPC fuzz cell. Five isolated configuration families matched their effective option contracts: wallet-off/on monolithic, wallet-off IPC-on, fuzz-only wallet-off, and GUI wallet-off. Target graphs, generated headers, test/bench/fuzz registries, focused unit/IPC/Qt tests, and `/data`-backed fuzz smokes passed. See `build-dead-zones.md`. | Journal-only close; no source change justified | Draw the next eligible goal |
 | 75 | `shuf -i 0-98 -n 1` -> `15` | `public-object-validation` (nested descriptor keys and wrapper/output parity) | confirmed; fixed | Full compressed keys in P2TR expanded as x-only script keys but `ConstPubkeyProvider` looked up only the parity-specific key ID. The separate lookup flag preserves descriptor spelling while using `GetKeyByXOnly()`; direct/nested Miniscript, opposite-parity, NUMS, and script-equivalence regression controls passed. See `public-object-validation.md`. | `d02e22867b` (`descriptor: use x-only lookup for Taproot compressed keys`) | Recheck the gate and draw the next eligible goal |
 | 76 | initial `37` rejected; retry `shuf -i 0-98 -n 1` -> `26` | `cross-subsystem-bug-shapes` (failure-publication and lifecycle asymmetry) | confirmed; fixed | The compact-block announcement path asserted after `ReadBlock` failed, so a reachable disk corruption/truncation/I/O failure could abort the node. The fix logs the failure, marks the peer for disconnect, and returns before compact-block publication. Candidate 1 (`dumptxoutset` rename) was dismissed because the throwing filesystem API already propagates an RPC error; candidate 2 (package fee metadata) was dismissed after all call sites were classified. The focused regression, old-source assertion mutation, full normal `net_tests`, and full TSan `net_tests` passed as documented in `cross-subsystem-bug-shapes.md`. | `ddbb88ed12` (`net: disconnect on compact block announcement read failure`) | Recheck the gate and draw the next eligible goal |
+| 77 | `shuf -i 0-98 -n 1` -> `57` | `local-reasoning-domain` (relationship and state-domain follow-up) | in progress | Exclude cycle 65's AddrMan classifier/linked-IPv4 relationship and cycles 48 and 76's closed cells. Inventory local assumptions that combine related identities, snapshots, ownership domains, queues, or lifecycle state; prove or dismiss a distinct reachable contract gap. See `local-reasoning-domain.md`. | Start state pending | Complete the fresh relationship-domain cell and then draw the next eligible goal |
 
 ## Cycle 72 Completion
 
@@ -287,6 +290,15 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Verdict: dismissed for a new source defect. Wallet-off/on monolithic Clang builds completed 651/716 steps; wallet-off IPC-on GCC completed 709; wallet-off fuzz-only Clang completed 452; and wallet-off GUI Clang completed 452. The effective target graph matched the option guards, including absent wallet targets, IPC stub/real library selection, fuzz-only target suppression, and Qt wallet exclusion.
 - Validation: wallet-off/on focused DB/network/wallet suites passed; IPC tests passed 2 cases and 44 assertions; all four offscreen Qt groups passed 15 cases; fuzz-only `process_messages` and `tx_in` smokes passed with `/data` scratch state; wallet and IPC registration matched feature flags. Release-like fuzz binaries refused execution as documented. The first malformed test invocation used a missing `TMPDIR` under a full root filesystem and was discarded, then corrected.
 - Evidence: `/data/my_storage/tmp/build-dead-zones-cycle74/`; `git diff --check` and process cleanup remain required before the state-only close commit.
+
+## Cycle 77 Active State
+
+- Gate: HEAD `76a22401689d56e337474da9003114b013e6fbd6`; `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `2 933`.
+- Branch: `uber-cycle-77-local-reasoning-domain-20260728`.
+- Draw: `57` (`local-reasoning-domain`).
+- Excluded prior cells: cycle 65's AddrMan `GetNetwork()`/`GetNetClass()` and linked-IPv4 relationship, cycle 48's wallet-rescan reservation ordering, and cycle 76's compact-block read-failure publication path.
+- Current hypothesis: a helper may combine values from different identity, snapshot, ownership, queue, or lifecycle domains without proving their relationship, causing a reachable omission, miscount, stale publication, or invalid state transition.
+- Required evidence: explicit domain/invariant, callers and trust boundary, deterministic valid/invalid relationship pairs, and independent normal/mutation/sanitizer/reference validation before any source change.
 
 ## Cycle 76 Completion
 
@@ -335,11 +347,13 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 ## Eligibility
 
 - Pending goals: `0..98`, subject to the catalog validation and current risk map.
-- Active goals this cycle: none; cycle 76 is closed. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
+- Active goals this cycle: `local-reasoning-domain` cycle 77 only. Goal 7's response-amplification cells remain inconclusive rather than exhausted.
 - Reopened goals: `statistical-timing` (cycle 5); its GCC compiler/backend cell is closed, while database semantics remains open for distinct batch/recovery/sync/comparator cells.
 - Exhausted goals: none recorded yet.
 
 ## Handoff
+
+Cycle 77 is active. The exact draw was `shuf -i 0-98 -n 1` -> `57`, `local-reasoning-domain`, after the cycle-76 gate. It excludes cycle 65's AddrMan classifier and linked-IPv4 relationship cells, plus cycles 48 and 76's closed findings. The next handoff must record the explicit local domain/invariant, caller relationship, deterministic falsification, and independent verdict in `local-reasoning-domain.md`.
 
 Cycle 76 is complete. The initial `shuf -i 0-98 -n 1` draw was `37` and was rejected because cycle 74 had just closed that build-dead-zones cell; the retry draw was `26`, `cross-subsystem-bug-shapes`. It excluded cycles 48 and 62's wallet-rescan and chainstate candidate-set cells. The compact-block announcement read-failure assertion was confirmed and fixed in `ddbb88ed12`; candidates involving `dumptxoutset` rename and package fee metadata were dismissed. The focused regression, old-source mutation, full normal `net_tests`, and full TSan `net_tests` evidence are recorded in `cross-subsystem-bug-shapes.md`. The next run must re-check the gate and draw a distinct goal.
 
