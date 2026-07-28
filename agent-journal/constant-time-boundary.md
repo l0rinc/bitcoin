@@ -30,15 +30,21 @@ For each candidate I will trace the public header contract, declassification hel
 
 ## Cycle 59 Evidence Log
 
-- Pending: code/dataflow inventory and independent checkmem execution.
+- Static inventory: `secp256k1_musig_session` is explicitly public in `secp256k1_musig.h`; `secp256k1_musig_session_load` therefore has no secret boundary to declassify. `secp256k1_musig_secnonce` keeps both scalar nonces secret, while `secp256k1_musig_secnonce_invalidate` declassifies only the four-byte magic and the 64-byte public-key encoding after its constant-time wipe. `secp256k1_musig_secnonce_load` declassifies only `is_zero`, the documented invalidation status used by `ARG_CHECK`, not either nonce scalar.
+- The nonce generator declassifies `ret` only before branching on an all-zero `session_secrand32` invalid-input condition. After that boundary, secret-derived validity is used only by constant-time `memczero` and returned to the caller. `secp256k1_keypair_load` declassifies the public half of the opaque keypair immediately before `secp256k1_pubkey_load` performs its argument check; `secp256k1_keypair_seckey_load` declassifies only its public validity result. `secp256k1_musig_nonce_gen_counter` separately declassifies the public key copied out of a keypair before passing it to the nonce generator, as fixed and tested in cycle 44.
+- Live baseline: rebuilding `/data/my_storage/tmp/constant-time-boundary-cycle40-msan-1` and running `MSAN_OPTIONS=halt_on_error=1:exit_code=86:report_umrs=1 .../bin/ctime_tests` exited successfully with no diagnostic. `cmake --build build_unit_wallet_clang19 --target tests exhaustive_tests -j2` passed; `build_unit_wallet_clang19/src/secp256k1/bin/tests` completed silently with `iterations = 16`, `jobs = 0`, and exit 0; `exhaustive_tests` exited 0. `git diff --check` passed and the tracked tree had no modifications.
+- Independent mutation 1: removing `secp256k1_declassify(ctx, pubkey, sizeof(*pubkey))` from `secp256k1_keypair_load` and rerunning the MSan ctime binary failed at `secp256k1_pubkey_load` (`secp256k1.c:261`) through `keypair_load` and `keypair_xonly_tweak_add`. Restoring the line returned ctime to success.
+- Independent mutation 2: removing `secp256k1_declassify(ctx, &is_zero, sizeof(is_zero))` from `secp256k1_musig_secnonce_load` failed at the `is_zero` check (`session_impl.h:63`) through `secp256k1_musig_partial_sign`. Restoring the line returned ctime to success.
+- Independent mutation 3: removing the nonce-generator `ret` declassification and temporarily adding a ctime call with a secret-marked all-zero session random buffer failed at the invalid-input branch (`session_impl.h:451`). Restoring both the production line and temporary control returned ctime to success. This confirms the branch is an invalid-input status boundary, not an accidental exposure of nonce material.
+- Valgrind is unavailable locally. The current evidence is a source-level taint/dataflow proof, three first-invalid-operation MSan mutations, a restored MSan baseline, regular secp tests, and exhaustive order-13 coverage.
 
 ## Cycle 59 Verdict
 
-- Pending.
+- Dismissed for a new defect; no source change justified. The selected MuSig/keypair cells have explicit, minimal declassification boundaries and each tested mutation fails at the expected public validation branch. The previous EllSwift cell and cycle-44 counter-public-key repair remain closed negative controls.
 
 ## Cycle 59 Handoff
 
-- Pending completion; leave the exact commands, tool availability, verifier results, and next distinct boundary cell here.
+- Close with a journal-only handoff authored as `Lőrinc <pap.lorinc@gmail.com>`. The next selector must draw a fresh goal from `0..98`; do not reopen this cycle's cells without a new caller, compiler/backend, architecture, Valgrind/dudect, or changed API-contract signal.
 
 ---
 
