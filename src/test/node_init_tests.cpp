@@ -72,4 +72,15 @@ BOOST_AUTO_TEST_CASE(init_rejects_out_of_range_buffer_arguments)
     BOOST_CHECK(!AppInitParameterInteraction(*m_node.args));
 }
 
+BOOST_AUTO_TEST_CASE(init_rejects_overflowing_prune_argument)
+{
+    LogInstance().DisconnectTestLogger();
+    m_node.args->ForceSetArg("-server", "0");
+    m_node.args->ForceSetArg("-listen", "0");
+    m_node.args->ForceSetArg("-listenonion", "0");
+    m_node.args->ForceSetArg("-prune", "17592186044416");
+
+    BOOST_CHECK(!AppInitParameterInteraction(*m_node.args));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
