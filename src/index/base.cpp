@@ -65,7 +65,7 @@ CBlockLocator GetLocator(interfaces::Chain& chain, const uint256& block_hash)
     return locator;
 }
 
-BaseIndex::DB::DB(const fs::path& path, size_t n_cache_size, bool f_memory, bool f_wipe, bool f_obfuscate, bool f_bloom, std::optional<size_t> block_cache_bytes, std::optional<size_t> write_buffer_bytes) :
+BaseIndex::DB::DB(const fs::path& path, size_t n_cache_size, bool f_memory, bool f_wipe, bool f_obfuscate, bool f_bloom) :
     CDBWrapper{DBParams{
         .path = path,
         .cache_bytes = n_cache_size,
@@ -73,9 +73,7 @@ BaseIndex::DB::DB(const fs::path& path, size_t n_cache_size, bool f_memory, bool
         .wipe_data = f_wipe,
         .obfuscate = f_obfuscate,
         .bloom_filter = f_bloom,
-        .options = [] { DBOptions options; node::ReadDatabaseArgs(gArgs, options); return options; }(),
-        .block_cache_bytes = block_cache_bytes,
-        .write_buffer_bytes = write_buffer_bytes}}
+        .options = [] { DBOptions options; node::ReadDatabaseArgs(gArgs, options); return options; }()}}
 {}
 
 CBlockLocator BaseIndex::DB::ReadBestBlock() const

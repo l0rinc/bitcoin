@@ -60,10 +60,6 @@ struct DBParams {
     //! Maximum LevelDB SST file size. Larger values reduce the frequency
     //! of compactions but increase their duration.
     size_t max_file_size = DBWRAPPER_MAX_FILE_SIZE;
-    //! Override the LevelDB block-cache capacity.
-    std::optional<size_t> block_cache_bytes;
-    //! Override the LevelDB write-buffer capacity.
-    std::optional<size_t> write_buffer_bytes;
 };
 
 class dbwrapper_error : public std::runtime_error
