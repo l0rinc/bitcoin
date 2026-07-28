@@ -87,3 +87,21 @@ Search each current commit for analogous sites, stale names, partial migrations,
 ## Cycle 30 Verdict and Next Queue
 
 The `-prune` leftover is **confirmed and fixed**. The cycle-29 argument-validation pattern had not been propagated to the block-manager parser, and the clean daemon control demonstrated a user-visible mode inversion. The remaining debug-only `-dbbatchsize` unsigned assignment and `-dbcrashratio` signed domain are separate lower-priority option-contract hypotheses; they were not treated as confirmed without an independent failure contract and are queued for a future goal draw. No stale names, generated-file omissions, build-list omissions, or unresolved applicable review objections remain in the cycle-29 stack.
+
+## Cycle 32 Selection and Gate
+
+- The first selector draw was `48` (`property-oracle-expansion`), but that goal's transaction/block/filter property cell was already closed in cycle 28. It was recorded as an ineligible same-cell repeat rather than reopened without new evidence.
+- Rerunning the exact selector `shuf -i 0-98 -n 1` produced `3`, `current-pr-leftovers`, for the distinct debug-option cells explicitly queued by cycle 30.
+- Gate HEAD: `b601d20988ba73564a51e079f95b61c8f033ed44`; merge-base with `origin/master`: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD = 2 835`; tracked and staged state clean; no relevant process running. Catalog, prompt, protocol, and TSV validation hashes are recorded in `uber-goal-state.md`.
+- Scope excludes the already-fixed `-prune`, `-maxsigcachesize`, and `-limitclustersize` findings. The first unchecked hypothesis is the signed domain of `-dbcrashratio`; `-dbbatchsize` remains a separate follow-up.
+
+## Cycle 32 Candidate 1: Negative `-dbcrashratio` Reaches `randrange`
+
+- Hypothesis: `ReadCoinsViewArgs()` copies any parsed signed integer into `CoinsViewOptions::simulate_crash_ratio` without checking its sign or the destination `int` range. A negative value reaches `FastRandomContext::randrange`, whose contract requires `range > 0`, allowing a debug build to abort during a chainstate write/replay.
+- Trust boundary: local command-line/config input enters `src/node/coins_view_args.cpp`, is stored in the chainstate options, and is later used by `CCoinsViewDB::BatchWrite()` after a partial LevelDB batch.
+- Contract: `-dbcrashratio=0` disables simulation; a positive value means a `1/ratio` exit probability. Negative values and values outside the `int` representation are not valid ratios and must be rejected before chainstate initialization.
+- Before-fix setup: a scratch regtest daemon was started with `-dbcrashratio=-1 -dbbatchsize=1`, mined one block to create a replayable partial flush, then was restarted in the same scratch datadir with `-debug=coindb`. The restart reached `[coindb] Writing partial batch of 0.00 MiB` and exited status 134 with `random.h:257 ... Assertion `range > 0' failed.` The raw debug log is `/data/my_storage/tmp/current-pr-leftovers-dbcrash-cycle32.pMxtsM/regtest/debug.log`; no daemon remained.
+- Independent mechanism proof: `FastRandomContext::randrange(int)` calls `Assume(range > 0)` before deriving `maxval`; `ReadCoinsViewArgs()` previously accepted `-1` and the chainstate path called `rng.randrange(m_options.simulate_crash_ratio)` when the nonzero ratio was used. This is a direct invalid-domain path, not a timing-only or theoretical concern.
+- Fix: `ReadCoinsViewArgs()` now returns `util::Result<void>`, rejects negative ratios, rejects values above `std::numeric_limits<int>::max()`, and casts only after validation. `ApplyArgsManOptions()` propagates the result before chainstate construction.
+- Regression: `validation_chainstatemanager_tests/chainstatemanager_args` now checks `0`, `24`, `-1`, and `2147483648`; the rebuilt focused test passed 1 case and 46 assertions. The rebuilt `bitcoind` rejects the original scratch command before opening chainstate with `Error: -dbcrashratio must be non-negative (got -1)`, and rejects the upper-domain case with `Error: -dbcrashratio is too large (got 2147483648)`.
+- Verdict: **confirmed and fixed**. The smallest self-contained change is committed separately as `node: validate chainstate debug arguments` by `Lőrinc <pap.lorinc@gmail.com>`. The negative `-dbbatchsize` narrowing remains an independent candidate and is not covered by this commit.

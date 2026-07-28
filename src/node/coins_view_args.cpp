@@ -6,11 +6,24 @@
 
 #include <common/args.h>
 #include <txdb.h>
+#include <tinyformat.h>
+#include <util/translation.h>
+
+#include <limits>
 
 namespace node {
-void ReadCoinsViewArgs(const ArgsManager& args, CoinsViewOptions& options)
+util::Result<void> ReadCoinsViewArgs(const ArgsManager& args, CoinsViewOptions& options)
 {
     if (auto value = args.GetIntArg("-dbbatchsize")) options.batch_write_bytes = *value;
-    if (auto value = args.GetIntArg("-dbcrashratio")) options.simulate_crash_ratio = *value;
+    if (auto value = args.GetIntArg("-dbcrashratio")) {
+        if (*value < 0) {
+            return util::Error{Untranslated(strprintf("-dbcrashratio must be non-negative (got %d)", *value))};
+        }
+        if (*value > std::numeric_limits<int>::max()) {
+            return util::Error{Untranslated(strprintf("-dbcrashratio is too large (got %d)", *value))};
+        }
+        options.simulate_crash_ratio = static_cast<int>(*value);
+    }
+    return {};
 }
 } // namespace node
