@@ -4,18 +4,18 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Cycle 87 is active on goal 94 (`bindings-ffi-parity`). The first exact draw was `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`) and was rejected as the just-closed campaign; the exact reroll was `shuf -i 0-98 -n 1` -> `94`. Cycle 86 on goal 25 (`performance-regression-bisect`) closed inconclusively with no source patch.
-- Current branch: `uber-cycle-86-performance-regression-bisect-20260729`; start HEAD is `1d1db50f3f`; `origin/master...HEAD` is `2 959`; merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
-- No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
+- Cycle 87 is complete on goal 94 (`bindings-ffi-parity`). The first exact draw was `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`) and was rejected as the just-closed campaign; the exact reroll was `shuf -i 0-98 -n 1` -> `94`.
+- Confirmed finding commit: `215c89a391` (`tracing: preserve mempool replacement kind`). The BCC mempool demo now consumes and displays the documented eighth `mempool:replaced` argument.
+- No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits. The next exact selector is pending.
 
 ## Latest authoritative checkpoint
 
-- Cycle 87 is active on goal 94 (`bindings-ffi-parity`), after rejecting the exact draw `71` and accepting reroll `94`. The dedicated branch is `uber-cycle-87-bindings-ffi-parity-20260729`; start HEAD is `a38b4da22fcb0df5411bfd2e023be4cee9689278`, `origin/master...HEAD` is `2 961`, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Cycle 87 is complete on goal 94 (`bindings-ffi-parity`), after rejecting the exact draw `71` and accepting reroll `94`. The dedicated branch is `uber-cycle-87-bindings-ffi-parity-20260729`; cycle-start HEAD is `a38b4da22fcb0df5411bfd2e023be4cee9689278`, close HEAD is `215c89a391`, `origin/master...HEAD` is `2 963`, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
 - Cycle 85 is complete on goal 63 (`loupe-pipeline`) with source/fix commit `468e4ef6fd` and close snapshot `1d1db50f3f`; its fail-closed release-verifier evidence is recorded in `agent-journal/loupe-pipeline.md`.
 - Cycle 84 is complete with confirmed commit `89b320fe37` and close snapshot `eb9a35d139`; its deterministic failed-start lifecycle evidence is recorded in `agent-journal/deterministic-simulation.md`.
-- Cycle 87 journal: `agent-journal/bindings-ffi-parity.md`. Scope is native/wrapper contract parity across widths, ownership, lifetimes, callbacks, errors, secrets, flags, and malformed inputs; no relevant process remains running.
+- Cycle 87 journal: `agent-journal/bindings-ffi-parity.md`. The source-level contract and history confirmed that `contrib/tracing/mempool_monitor.py` dropped the eighth replacement-kind field; the fix and limitations are recorded there. Live BCC execution was unavailable because `bcc` is not installed, and the functional runner could not start because `test/functional/config.ini` is absent. No relevant process remains running.
 
-## Cycle 87 Active State
+## Cycle 87 Completion
 
 - Initial draw: exact `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`), rejected as the just-closed campaign with no new schedule evidence.
 - Accepted reroll: exact `shuf -i 0-98 -n 1` -> `94` (`bindings-ffi-parity`).
@@ -23,7 +23,10 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Start HEAD: `a38b4da22fcb0df5411bfd2e023be4cee9689278`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `2 961`.
 - Scope: compare maintained language wrappers and FFI boundaries with native C/C++ declarations, including ABI widths, ownership/lifetime, callbacks, error mapping, buffers, secret cleanup, flags, and malformed input.
 - Journal: `agent-journal/bindings-ffi-parity.md`; scratch root `/data/my_storage/tmp`.
-- Status: cycle 87 is active; first action is inventory of shipped bindings, generated declarations, public headers, package/build targets, and wrapper tests.
+- Confirmed finding: `contrib/tracing/mempool_monitor.py` omitted the eighth `mempool:replaced` argument, `replaced_by_transaction`, after commit `5736d1ddacc4` made the tracepoint distinguish transaction IDs from package hashes. Package RBF makes the ambiguity reachable. The demo now mirrors the documented/functional event layout and renders `transaction` or `package` before the replacement hash.
+- Source/journal commit: `215c89a391` (`tracing: preserve mempool replacement kind`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- Validation: `python3 -m py_compile contrib/tracing/mempool_monitor.py` and `git diff --check` passed. The functional runner was attempted but stopped before test setup because `test/functional/../config.ini` is absent. `python3 -c 'import bcc'` reported `ModuleNotFoundError`, so live BCC validation remains an explicit environment limitation.
+- No relevant process remains running. The next run must re-check the gate, worktree, process state, catalog/protocol/TSV hashes, existing journals, history, and review precedent before drawing a distinct eligible goal.
 
 ## Cycle 86 Completion
 
