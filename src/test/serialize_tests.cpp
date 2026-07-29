@@ -532,6 +532,67 @@ BOOST_AUTO_TEST_CASE(with_params_derived)
                                     "0f\x02XY");
 }
 
+BOOST_AUTO_TEST_CASE(varints_overflow_rejection)
+{
+    // ReadVarInt<I> must reject encodings that overflow I with
+    // "ReadVarInt(): size too large" at BOTH guards (serialize.h:
+    // pre-shift n > max>>7, and post-shift n == max with a
+    // continuation bit). Every rejecting case below is paired with a
+    // positive control that must parse exactly.
+    auto throws_toolarge = [](const std::vector<uint8_t>& bytes, auto tag) {
+        using I = decltype(tag);
+        DataStream ss{};
+        ss << std::span{bytes};
+        I v{0};
+        BOOST_CHECK_EXCEPTION(ss >> VARINT(v), std::ios_base::failure,
+            [](const std::ios_base::failure& ex) {
+                return std::string_view{ex.what()}.find("size too large") != std::string_view::npos;
+            });
+    };
+    auto parses_to = [](const std::vector<uint8_t>& bytes, auto tag, uint64_t want) {
+        using I = decltype(tag);
+        DataStream ss{};
+        ss << std::span{bytes};
+        I v{0};
+        ss >> VARINT(v);
+        BOOST_CHECK_EQUAL(uint64_t(v), want);
+        BOOST_CHECK(ss.empty());
+    };
+
+    // uint8_t (max 0xFF, max>>7 == 1)
+    parses_to({0x80, 0x7F}, uint8_t{0}, 0xFF);       // legal max
+    throws_toolarge({0x81, 0x7F}, uint8_t{0});       // 256, pre-shift guard
+    throws_toolarge({0x80, 0x80, 0x7F}, uint8_t{0}); // 3-byte form, pre-shift guard
+    throws_toolarge({0x80, 0xFF}, uint8_t{0});       // post-shift == max with continuation
+
+    // uint16_t (max 0xFFFF, max>>7 == 511)
+    parses_to({0x82, 0xFE, 0x7F}, uint16_t{0}, 0xFFFF); // legal max
+    throws_toolarge({0x83, 0xFF, 0x7F}, uint16_t{0});   // pre-shift guard
+    throws_toolarge({0x82, 0xFE, 0xFF}, uint16_t{0});   // post-shift == max with continuation
+
+    // uint32_t (max 0xFFFFFFFF)
+    parses_to({0x8E, 0xFE, 0xFE, 0xFE, 0x7F}, uint32_t{0}, 0xFFFFFFFFULL); // legal max
+    throws_toolarge({0x8F, 0xFE, 0xFE, 0xFE, 0x7F}, uint32_t{0});          // 2^32, pre-shift guard
+    throws_toolarge({0x8E, 0xFE, 0xFE, 0xFE, 0xFF}, uint32_t{0});          // post-shift == max with continuation
+
+    // uint64_t (max 2^64-1): an 11th byte always overflows.
+    parses_to({0x80, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0x7F}, uint64_t{0}, 0xFFFFFFFFFFFFFFFFULL); // legal max
+    throws_toolarge({0x80, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0x7F}, uint64_t{0});           // pre-shift guard
+    throws_toolarge({0x80, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFF}, uint64_t{0});                 // post-shift == max with continuation
+
+    // Signed mode must reject overflow too (same guards via the signed formatter's unsigned path).
+    {
+        const std::vector<uint8_t> bytes{0x8F, 0xFE, 0xFE, 0xFE, 0x7F};
+        DataStream ss{};
+        ss << std::span{bytes};
+        int32_t v{0};
+        BOOST_CHECK_EXCEPTION(ss >> VARINT_MODE(v, VarIntMode::NONNEGATIVE_SIGNED), std::ios_base::failure,
+            [](const std::ios_base::failure& ex) {
+                return std::string_view{ex.what()}.find("size too large") != std::string_view::npos;
+            });
+    }
+}
+
 BOOST_AUTO_TEST_CASE(compactsize_exhaustive_boundaries)
 {
     // Boundary round-trips with encoded-length class verification.
