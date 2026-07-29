@@ -71,6 +71,14 @@ CONFIRMED+FIXED | b1e55802f6 (#58 c2) | in lineage (direct) |
 rpc_psbt.py green (all six RPCs, diagnostics asserted) | 7th copy
 in wallet/rpc/spend.cpp:1637 queued.
 
+F12 | reorg-repair cross-check ran ungated in production | mempool
+perf | fork-added verification loop without abort-only gate |
+~32% of ComplexMemPool on reorg-heavy paths | CONFIRMED+FIXED |
+83f9989a68 (#23 c1) | BACKPORTED as 93c29aac55 (#23 c2) |
+mempool_tests green; ComplexMemPool 268.5 -> 184.7 ms/op at HEAD
+(stale-binary 278.5 control exposed + resolved) | done; queue:
+EvictionProtection*/ConnectBlockAll profiles.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |

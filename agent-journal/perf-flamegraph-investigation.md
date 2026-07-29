@@ -101,3 +101,50 @@ correctness, not cost.
 
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 2 (2026-07-29): c1 stack backport + independent re-verification (−32% confirmed at HEAD)
+
+### Draw
+Random draw over the 11-goal eligible pool (10 pending + 1 CYCLE-1,
+#40 excluded as just-cycled): raw=5886040343995211851, index 0 ->
+#23. Ledger had NO row; audit/perf-flamegraph holds a complete c1
+(fix 83f9989a68 + journal 23cad7b1b0, 2026-07-28) stranded
+off-lineage — the #66 problem again. Branch: audit/perf-flamegraph-c2
+from e83ffe70a8 (#40 c1 bookkeeping).
+
+### Backport
+Cherry-picks: fix as 93c29aac55, journal as f356018b10
+(uber-rotation.md conflict resolved ours; c1 row restored in
+uber-goal-state.md).
+
+### Verification at HEAD
+- cmake --build build-before --target test_bitcoin clean;
+  test_bitcoin --run_test=mempool_tests -> No errors detected
+  (includes UpdateTransactionsFromBlockRestoresChildAncestry).
+- ComplexMemPool bench at HEAD: FIRST run measured 278.5 ms/op —
+  ~baseline, because I had only rebuilt test_bitcoin and ran a STALE
+  bench_bitcoin binary (process lesson: rebuild the exact binary
+  whose behavior you measure). After --target bench_bitcoin rebuild:
+  184.7 ms/op (ins/op 607.9M -> 444.1M, -27%), matching c1's
+  repaired 181.4 median within ~1.8% (build/noise drift) and
+  refuting the stale 278.5. Effect confirmed: ~-32% vs the
+  268.5 baseline.
+
+### Verdict
+c1 fix verified in lineage: the gate compiles to zero code in this
+Release-with-asserts build (G_ABORT_ON_FAILED_ASSUME false), the
+oracle stays active in fuzz/abort builds, and the measured cost
+disappears. No new defect work this cycle (backport + independent
+re-verification is the bounded cell; the c1 queue's heavier profile
+cells — EvictionProtection*/ConnectBlockAll captures,
+CompareMainTransactions hypotheses — carry forward).
+
+### Exact commands
+- git cherry-pick 83f9989a68 23cad7b1b0 -> 93c29aac55, f356018b10
+- test_bitcoin --run_test=mempool_tests
+- bench_bitcoin --filter=ComplexMemPool --min-time=2000 (stale:
+  278.5; rebuilt: 184.7 ms/op)
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
