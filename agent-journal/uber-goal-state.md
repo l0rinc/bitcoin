@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Cycle 91 is complete on goal 58 (`exact-helper-reuse`), selected by exact `shuf -i 0-98 -n 1` -> `58` after Cycle 90 closed goal 69. The dedicated branch is `uber-cycle-91-exact-helper-reuse-20260729`; source/test/goal-journal commit `993c9681b7` adds and adopts `CBlock::ComputeTotalSize()` for the shared witness-inclusive block-size contract. The next selector draw is pending.
+- Cycle 92 is active on goal 81 (`spec-vector-drift`), selected by exact `shuf -i 0-98 -n 1` -> `81` after Cycle 91 closed goal 58. The dedicated branch is `uber-cycle-92-spec-vector-drift-20260729`; the existing BIP340 vector audit in the preserved goal journal is excluded, and this cycle starts with BIP341/342, MuSig, and transport-vector drift candidates.
 - No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
 
 ## Latest authoritative checkpoint
@@ -13,6 +13,17 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 89 distinct scope: status/result/exception APIs that mutate shared objects, caches, files, transactions, indexes, or retry state before returning failure. Earlier goal-27 wallet passphrase, transaction-download/index, address-book publication, and `setlabel` RPC cells are excluded unless new backend, restart, or caller evidence changes their priority. The initial mining `BlockTemplate::submitSolution` hypothesis was dismissed because the functional IPC contract intentionally exposes the rejected reconstructed block through `getBlock()` and supports a valid retry on the same template.
 - Cycle 90 is complete on goal 69 (`backend-differential`). The dedicated branch is `uber-cycle-90-backend-differential-20260729`; start HEAD was `89b836342154f71d5d4427dc13864702170eec42`, `origin/master` is `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`, merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `2 968` (`origin/master...HEAD`). Catalog, protocol, and TSV hashes match the recorded values. The gate and final `git diff --check` passed; no relevant Bitcoin Core process was running. Prior goal-69 evidence covered x86_64 Clang API parity with ECDH disabled; this cycle covered ECDH plus Release compiler/backend configuration parity.
 - Cycle 91 is complete on goal 58 (`exact-helper-reuse`). The dedicated branch is `uber-cycle-91-exact-helper-reuse-20260729`; start HEAD was `10e39ef493a79dae58c7839b891805710986e169`, source/test/goal-journal close HEAD is `993c9681b7`, `origin/master` is `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`, merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `2 969` (`origin/master...HEAD`). Catalog, protocol, and TSV hashes match the recorded values. The gate and final `git diff --check` passed; no relevant process remains running. The prior goal-58 transaction total-size helper cell and commit `8ff6f9dd27` were excluded. This cycle confirmed four production consumers duplicated the witness-inclusive block-size expression and replaced them with `CBlock::ComputeTotalSize()`; independent direct serializer expressions remain in tests and fuzzers.
+- Cycle 92 is active on goal 81 (`spec-vector-drift`). The dedicated branch is `uber-cycle-92-spec-vector-drift-20260729`; start HEAD is `ceca2378b0aeb0906f57d70bf2fbacae576ac0ea`, `origin/master` is `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`, merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence is `2 971` (`origin/master...HEAD`). Catalog, protocol, and TSV hashes match the recorded values. The gate passed `git diff --check`; no relevant Bitcoin Core, test, fuzz, sanitizer, or benchmark process was running. The preserved `spec-vector-drift.md` already closes a prior BIP340 vector comparison; this cycle's distinct scope is BIP341/342, MuSig, transport, and formal-model/vector families not covered by that record.
+
+## Cycle 92 Active Scope
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `81` (`spec-vector-drift`).
+- Branch: `uber-cycle-92-spec-vector-drift-20260729`.
+- Start HEAD: `ceca2378b0aeb0906f57d70bf2fbacae576ac0ea`; `origin/master`: `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `2 971` (`origin/master...HEAD`).
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- The tracked gate passed `git diff --check`; known untracked artifacts, including the prior `spec-vector-drift.md`, remain preserved and excluded from cycle commits. The first hypothesis family is Taproot BIP341/342 specification and vector parity, followed by MuSig/BIP327 and BIP324 vectors if no distinct defect is confirmed.
 
 ## Cycle 91 Completion
 
