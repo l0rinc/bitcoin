@@ -71,3 +71,59 @@ was unexamined and is now closed. No defect to fix.
 
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 2 (2026-07-29): walletpassphrase online-attempt semantics — KDF-only throttle (0.10s/attempt measured), no lockout, by design
+
+### Draw
+Random draw over the 40-goal pool (23 pending + 17 CYCLE-1; #105
+excluded as just-cycled): raw=13832910584231443478, seed masked to 63
+bits (4609538547376667670), index 30 -> #45. Queued item from c1:
+"walletpassphrase online-attempt rate limiting / lockout semantics".
+Base: d145133bd3 (journal commit for #105 cycle-1 on
+audit/autopsy-recurrence; ledger-lineage anchor audit/resurrection @
+5d0155254c). Branch: audit/constant-time-c2.
+
+### Semantics map (code)
+- Attempt path: walletpassphrase RPC (encrypt.cpp:50-70) ->
+  CWallet::Unlock (wallet.cpp:615) -> DecryptMasterKey per master key
+  -> CCrypter::Decrypt (AES-256-CBC of the master key).
+- Cost per attempt: the KDF, BytesToKeySHA512AES with
+  DEFAULT_DERIVE_ITERATIONS = 25000 (crypter.h:46-48, "just under 0.1
+  seconds on a 1.86 GHz Pentium M"). Stored rounds come from the
+  wallet DB at encryption time.
+- No attempt counter, no lockout, no escalating delay anywhere
+  (grep over crypter.cpp/rpc/encrypt.cpp: none exist).
+- Wrong-passphrase detection = decrypt failure; no oracle beyond the
+  claimant's own key (c1's no-Vaudenay point).
+
+### Measurement (isolated scratch wallet)
+regtest node, encryptwallet, three wrong-passphrase RPC attempts:
+0.10s / 0.10s / 0.10s wall each (RPC overhead ~1ms of it). ~10
+attempts/s/connection maximum on this host.
+
+### Verdict
+- DISMISSED: online-attempt semantics are the documented design —
+  unbounded attempts throttled only by the per-attempt KDF cost
+  (~0.1s measured, matching the in-code comment). The operative
+  defense is passphrase strength against the OFFLINE attack (stolen
+  wallet.dat), and 25000 SHA512-AES rounds is the whole margin;
+  online lockout would add account-lockout DoS surface for no
+  security gain at this throttle.
+- The c1 queue item is fully answered; no code change warranted.
+
+### Exact commands
+- greps/seds: encrypt.cpp:50-70, wallet.cpp:615-632, crypter.cpp:41-108,
+  crypter.h:46-48
+- timed RPC attempts on an encrypted scratch wallet (/tmp/btc45_w,
+  removed after)
+
+### Limitations / queue
+- The 25000-rounds constant is static at encryption; wallets created
+  on slower hosts carry the same rounds — not a defect, documented.
+- Cookie/RPC auth declassification (username-enumeration shapes in
+  auth error paths) remains queued from c1.
+- #53 c1 already empirically closed the AES-CBC padding timing cell
+  (Welch t 1.53/1.69/-1.14) — cross-linked, not repeated.
+
+## Rotation note
+Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
