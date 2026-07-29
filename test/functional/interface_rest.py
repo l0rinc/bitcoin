@@ -221,6 +221,13 @@ class RESTTest (BitcoinTestFramework):
         long_uri = '/'.join([f'{txid}-{n_}' for n_ in range(15)])
         self.test_rest_request(f"/getutxos/checkmempool/{long_uri}", http_method='POST', status=200)
 
+        # An oversized binary request must be rejected from its count before the
+        # generic vector deserializer allocates a multi-megabyte batch.
+        oversized_binary_request = bytes.fromhex('fe40420f00')  # one million outpoints, no entries
+        response = self.test_rest_request('/getutxos', http_method='POST', req_type=ReqType.BIN,
+                                          body=oversized_binary_request, status=400, ret_type=RetType.BYTES)
+        assert_equal(response.decode().strip(), 'Error: max outpoints exceeded (max: 15)')
+
         self.generate(self.nodes[0], 1)  # generate block to not affect upcoming tests
 
         self.log.info("Test the /block, /blockhashbyheight, /headers, and /blockfilterheaders URIs")

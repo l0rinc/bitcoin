@@ -967,9 +967,12 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
                 DataStream oss{};
                 oss << strRequestMutable;
                 oss >> fCheckMemPool;
-                oss >> vOutPoints;
+                oss >> LIMITED_VECTOR(vOutPoints, MAX_GETUTXOS_OUTPOINTS);
             }
-        } catch (const std::ios_base::failure&) {
+        } catch (const std::ios_base::failure& e) {
+            if (std::string_view{e.what()}.starts_with("Vector length limit exceeded")) {
+                return RESTERR(req, HTTP_BAD_REQUEST, strprintf("Error: max outpoints exceeded (max: %d)", MAX_GETUTXOS_OUTPOINTS));
+            }
             // abort in case of unreadable binary data
             return RESTERR(req, HTTP_BAD_REQUEST, "Parse error");
         }
