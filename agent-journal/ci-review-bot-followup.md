@@ -122,3 +122,52 @@ accurate in both checked cases (leak location; assert site).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-07-29): coverage-delta endpoint (corecheck.dev) analyzed — real oracle source; flags regressions on upstream 35744
+
+### Draw
+Re-rank draw over the rebuilt 2-cell queue:
+raw=3639072378229674997, index 1 -> #42 (third cycle; c1/c2 queue
+cell "coverage-delta endpoint"). Branch: audit/ci-review-bot-c3
+from 0b552321a2 (#51 c3 bookkeeping).
+
+### Endpoint analysis
+DrahtBot's "Code Coverage & Benchmarks" boilerplate links to
+corecheck.dev/bitcoin/bitcoin/pulls/<n>, which provides per-PR:
+coverage deltas (uncovered-new, lost-master, newly-covered,
+included-code) and benchmark comparisons with significance flags.
+Sampled 35744 (the fork author's coins cursor/resize PR):
+- Coverage: "No coverage data" (pending).
+- Benchmarks, significant: ComplexMemPool +15.58% slower,
+  OrphanageEraseForBlock +13.11%, OrphanageEraseForPeer +33.33%,
+  OrphanageSinglePeerEviction +11.14%, FindByte +4.60%.
+
+### Assessment
+- The endpoint is a REAL oracle source: it flagged measurable
+  regressions on the sampled PR with per-bench significance.
+- The flagged regressions belong to the upstream shared-lock PR,
+  not to this tree (the fork carries the different, lock-only fix
+  e049f064e1; unaffected). The information is still useful for the
+  fork author's radar: 35744 now has a TSan failure (#42 c1) AND
+  CI benchmark regressions (+15.6%/+33%) — his PR is in trouble on
+  two independent axes.
+- No action for this tree.
+
+### Verdict
+DISMISSED for the tree; the endpoint is recorded as an oracle
+source (per-PR coverage+bench deltas) and the 35744 numbers are
+recorded as upstream-watch data.
+
+### Exact commands
+- api.github.com/issues/35744/comments (boilerplate body)
+- fetch corecheck.dev/bitcoin/bitcoin/pulls/35744
+
+### Limitations / queue
+- Single-PR sample; a periodic corecheck sweep of the fork-
+  relevant PR set is the natural cron-sized follow-up.
+- The benchmark environment (corecheck's CI hosts) differs from
+  this host — deltas are directional, not absolute.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
