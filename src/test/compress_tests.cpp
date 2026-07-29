@@ -192,4 +192,39 @@ BOOST_AUTO_TEST_CASE(compress_p2pk_scripts_not_on_curve)
     BOOST_CHECK(uncompressed_script.empty());
 }
 
+BOOST_AUTO_TEST_CASE(script_compression_malformed_stream_arms)
+{
+    // Overly long script id (beyond MAX_SCRIPT_SIZE): the record degrades to
+    // OP_RETURN and the oversized body is skipped, not allocated.
+    {
+        DataStream ss{};
+        ss << VARINT(uint64_t{MAX_SCRIPT_SIZE + 6 + 1}); // nSize; 6 = nSpecialScripts
+        const std::vector<unsigned char> junk(MAX_SCRIPT_SIZE + 1, 0xAA);
+        ss << std::span{junk};
+        CScript script;
+        ss >> Using<ScriptCompression>(script);
+        BOOST_CHECK(script == (CScript() << OP_RETURN));
+        BOOST_CHECK(ss.empty());
+    }
+
+    // The same oversized id with a truncated stream: ignore() must throw
+    // end-of-data rather than silently accept.
+    {
+        DataStream ss{};
+        ss << VARINT(uint64_t{MAX_SCRIPT_SIZE + 6 + 1});
+        ss << std::vector<unsigned char>(5, 0xAA);
+        CScript script;
+        BOOST_CHECK_THROW(ss >> Using<ScriptCompression>(script), std::ios_base::failure);
+    }
+
+    // Truncated special-script body: the fixed-size read must throw.
+    {
+        DataStream ss{};
+        ss << VARINT(uint64_t{0}); // P2PKH special script id: needs a 20-byte body
+        ss << std::vector<unsigned char>(5, 0x01);
+        CScript script;
+        BOOST_CHECK_THROW(ss >> Using<ScriptCompression>(script), std::ios_base::failure);
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
