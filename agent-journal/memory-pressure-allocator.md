@@ -81,3 +81,56 @@ No production commit is justified. This cycle is a journal-only handoff. Do not 
 4. Audit `DynamicMemoryUsage()` implementations for omitted retained capacity or double-counted ownership, using a temporary mutation or independent recomputation oracle before considering a source fix.
 
 Raw fuzz and test output was retained in the tool transcript; the scratch directory is `/data/my_storage/tmp/cycle53-prevector-oom`. The next cycle must repeat the branch/base/dirty/process/catalog gate, select a fresh goal with `shuf -i 0-98 -n 1`, and continue immediately.
+
+## Cycle 88 start
+
+- Goal: `74`, `memory-pressure-allocator`.
+- Branch: `uber-cycle-88-memory-pressure-allocator-20260729`.
+- Selector: exact `shuf -i 0-98 -n 1` -> `74`.
+- Cycle-start HEAD: `0ab48d44a6e17500b05bf76a781254451192f65e`; `origin/master` is
+  `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base is
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` is
+  `2 964`.
+- Catalog/protocol/manifest hashes match the prior gate. No relevant process is
+  running. Known unrelated untracked agent/user artifacts and `test/cache/`
+  remain outside this cycle.
+- Prior Cycle 53's `prevector` allocation/OOM cell is closed and excluded.
+
+### Scope and contract
+
+This cycle audits retained network receive/send buffers and their memory
+accounting under a local, deterministic peer workload. The target is not a
+generic maximum-RSS comparison: establish the ownership and lifetime of each
+buffer, the configured per-peer/global bounds, the pause/disconnect behavior,
+and the relationship between `GetMemoryUsage()` or equivalent counters and
+actual retained allocations.
+
+Use scratch datadirs and a loopback-only harness. Exercise fragmented and
+coalesced messages, duplicate/stalled peers, partial writes, backpressure,
+disconnect/reconnect, and shutdown while bytes are queued. Record exact input
+sizes, peer counts, queue limits, process RSS/heap counters, queue/accounting
+values, and cleanup after each phase. Do not use public peers or an existing
+datadir.
+
+### Initial queue
+
+1. Trace `CNode`/transport send and receive buffers, `CConnman` limits, pause
+   thresholds, and `GetMemoryUsage()` callers. Identify whether capacity,
+   queued payloads, allocator slack, and shared ownership are counted once.
+2. Run a fixed local P2P transcript with fragmented headers/payloads, stalled
+   readers/writers, duplicates, reconnects, and forced disconnects. Compare
+   per-peer and global counters with an independent byte ledger and RSS/heap
+   samples at each schedule point.
+3. Repeat with multiple peers and the smallest message/queue limits that
+   amplify any mismatch. Separate expected kernel socket buffers and fuzzer/
+   harness memory from Bitcoin-owned retained state.
+4. If a mismatch remains, inject the smallest relevant code mutation or use a
+   recomputation oracle, then prove before/after behavior and cleanup. Do not
+   change a bound or accounting formula based only on allocator noise.
+
+Required evidence for a source finding: a deterministic sequence and exact
+source-to-sink trace, an independent retained-byte or state oracle, a
+failing-before/passing-after regression or equivalent mutation result, and
+narrow/broad validation. If no source finding is justified, record the
+measured limits, rejected hypotheses, raw artifact paths, and next unchecked
+queue cell.
