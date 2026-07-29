@@ -171,6 +171,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 34 | uncovered-code-classification | CYCLE-1 (retro) | 2026-07-28 | merkleblock 81->86/86 unit lines (32d5d1dcc4, row restored); backported 068152320f (union with F2 tests) |
 | 34 | uncovered-code-classification | CYCLE-2 | 2026-07-29 | backport green at HEAD; blockstorage guards have dedicated tests; MoneyRange asserts unreachable by construction (compressor throws) |
 | 106 | semantic-twin-inconsistency | CYCLE-1 | 2026-07-29 | hex-decode twin map: tx/PSBT strict-by-design (proven), block/header/proof benign-lax; dismissed, no contract violated |
+| 70 | compiler-optimization-differential | CYCLE-1 | 2026-07-29 | LTO+Wodr build green, zero ODR warnings, full unit suite green under LTO binary |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -192,6 +193,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    raw=2944374403711530272 -> idx 2 (of 10) -> #42.
    raw=2032011409874351500 -> idx 1 (of 9) -> #34.
    raw=4582464614074250662 -> idx 6 (of 8) -> #106.
+   raw=726564917869240643 -> idx 4 (of 7) -> #70.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -228,7 +230,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 Cycles done (random-pool state): 0(c1,c2), 1(c1,c2), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1), 9(c1,c2), 10(c1,c2), 7(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2), 36(c1,c2), 23(c1,c2),
 37(c1), 39(c1,c2), 40(c1), 42(c1), 21(c1,c2), 43(c1,c2), 45(c1,c2), 47(c1,c2), 49(c1), 50(c1), 48(c1), 51(c1), 53(c1), 55(c1), 57(c1), 58(c1,c2), 59(c1,c2), 60(c1,c2),
-61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1),
+61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 70(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1),
 76(c1,c2), 80(c1), 81(c1,c2), 90(c1,c2), 91(c1,c2), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 101(c1,c2), 103(c1), 104(c1), 105(c1), 106(c1), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
