@@ -136,11 +136,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 109 | whole-feature-public-path | CYCLE-1 | 2026-07-29 | compact-block relay mapped; all boundaries guarded incl. wrong-vs-malicious split |
 | 66 | backport-correctness | CYCLE-2 | 2026-07-29 | 5 out-of-lineage fixes backported+verified (e15c4025e5, 84a3913096, 508d9edfca, 75c0616c24, b73b7c5d39) |
 | 39 | generated-artifact-determinism | CYCLE-2 | 2026-07-29 | full JSON sweep 60/60 byte-identical (9 tree + 51 univalue) |
+| 37 | build-dead-zones | CYCLE-2 | 2026-07-29 | config-dead zones clean: ZMQ/USDT/chainstate-util all properly gated |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=5387637136342518518 -> idx 27 (of 37) -> #39.
+   raw=1786609377964331090 -> idx 26 (of 36) -> #37.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
