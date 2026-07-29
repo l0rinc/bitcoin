@@ -4,26 +4,28 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Cycle 88 is active on goal 74 (`memory-pressure-allocator`), selected by exact `shuf -i 0-98 -n 1` -> `74` after Cycle 87 closed goal 94.
-- Current branch: `uber-cycle-88-memory-pressure-allocator-20260729`; start HEAD is `0ab48d44a6e17500b05bf76a781254451192f65e`; `origin/master...HEAD` is `2 964`; merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
-- No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
+- Cycle 88 is complete on goal 74 (`memory-pressure-allocator`), selected by exact `shuf -i 0-98 -n 1` -> `74` after Cycle 87 closed goal 94.
+- No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits. The next exact selector is pending.
 
 ## Latest authoritative checkpoint
 
-- Cycle 88 is active on goal 74 (`memory-pressure-allocator`). The dedicated branch is `uber-cycle-88-memory-pressure-allocator-20260729`; cycle-start HEAD is `0ab48d44a6e17500b05bf76a781254451192f65e`, `origin/master...HEAD` is `2 965` after the cycle-start journal commit, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Cycle 88 is complete on goal 74 (`memory-pressure-allocator`). The dedicated branch is `uber-cycle-88-memory-pressure-allocator-20260729`; cycle-start HEAD is `0ab48d44a6e17500b05bf76a781254451192f65e`, close snapshot follows the cycle-start journal commit, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
 - Cycle 87 is complete on goal 94 (`bindings-ffi-parity`), after rejecting the exact draw `71` and accepting reroll `94`. Its confirmed source commit is `215c89a391` and its close snapshot is `0ab48d44a6`.
 - Cycle 85 is complete on goal 63 (`loupe-pipeline`) with source/fix commit `468e4ef6fd` and close snapshot `1d1db50f3f`; its fail-closed release-verifier evidence is recorded in `agent-journal/loupe-pipeline.md`.
 - Cycle 84 is complete with confirmed commit `89b320fe37` and close snapshot `eb9a35d139`; its deterministic failed-start lifecycle evidence is recorded in `agent-journal/deterministic-simulation.md`.
 - Cycle 87 journal: `agent-journal/bindings-ffi-parity.md`. The source-level contract and history confirmed that `contrib/tracing/mempool_monitor.py` dropped the eighth replacement-kind field; the fix and limitations are recorded there. Live BCC execution was unavailable because `bcc` is not installed, and the functional runner could not start because `test/functional/config.ini` is absent. No relevant process remains running.
 
-## Cycle 88 Active State
+## Cycle 88 Completion
 
 - Exact selector: `shuf -i 0-98 -n 1` -> `74` (`memory-pressure-allocator`).
 - Branch: `uber-cycle-88-memory-pressure-allocator-20260729`.
 - Start HEAD: `0ab48d44a6e17500b05bf76a781254451192f65e`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `2 964`.
 - Journal: `agent-journal/memory-pressure-allocator.md`; scratch root `/data/my_storage/tmp`.
 - Distinct scope: network receive/send queue ownership, configured bounds, pause/disconnect behavior, accounting versus retained bytes, fragmented/stalled/duplicate/reconnect schedules, and cleanup. Cycle 53's prevector OOM policy cell is excluded.
-- Status: cycle 88 is active; first action is to map the transport buffers and accounting contract, then run a fixed loopback workload with independent byte and RSS/heap measurements.
+- Status: cycle 88 is complete with a journal-only handoff. The transport and process-queue contracts were mapped first; the independent layout probe then checked the suspected receive-accounting mismatch.
+- Verdict: no source defect was confirmed. V1/V2 partial buffers have explicit protocol and reserve-ahead bounds; the receive flood threshold applies to the completed process queue by historical design. The suspected `CNetMessage`/list-node accounting mismatch matched exactly on the current 64-bit host for 0, 1, 65,536, and 1,048,576-byte payloads. The 32-bit compile control was unavailable because the multilib headers are missing.
+- Evidence and rejected hypotheses: `agent-journal/memory-pressure-allocator.md` records the source lines, history commits, exact probe output, limits, and the next queue. The temporary probe was deleted; no production or test source changed.
+- Next queue: mempool/package admission and eviction accounting; chainstate/index cache retention through resize/rebuild/flush; then independent audits of `DynamicMemoryUsage()` ownership and capacity accounting.
 
 ## Cycle 87 Completion
 
