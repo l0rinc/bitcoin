@@ -4,10 +4,25 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Cycle 88 is complete on goal 74 (`memory-pressure-allocator`), selected by exact `shuf -i 0-98 -n 1` -> `74` after Cycle 87 closed goal 94.
-- No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits. The next exact selector is pending.
+- Cycle 89 is complete on goal 27 (`error-path-state`), selected by exact `shuf -i 0-98 -n 1` -> `27` after Cycle 88 closed goal 74. Its source/test/journal commit is `600afa95995f5aaa50c23b6b6c2f940dc61674bb`; the close snapshot is this state update.
+- No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
 
 ## Latest authoritative checkpoint
+
+- Cycle 89 is complete on goal 27 (`error-path-state`). The dedicated branch is `uber-cycle-89-error-path-state-20260729`; start HEAD was `e005d70cebd00aa20a4d8c8ac73ad9e5720530f7`, source/test/journal close HEAD is `600afa95995f5aaa50c23b6b6c2f940dc61674bb`, `origin/master` is `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`, merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `2 966` (`origin/master...HEAD`). Catalog, protocol, and TSV hashes match the recorded values. The gate and final `git diff --check` passed; no relevant Bitcoin Core process was running.
+- Cycle 89 distinct scope: status/result/exception APIs that mutate shared objects, caches, files, transactions, indexes, or retry state before returning failure. Earlier goal-27 wallet passphrase, transaction-download/index, address-book publication, and `setlabel` RPC cells are excluded unless new backend, restart, or caller evidence changes their priority. The initial mining `BlockTemplate::submitSolution` hypothesis was dismissed because the functional IPC contract intentionally exposes the rejected reconstructed block through `getBlock()` and supports a valid retry on the same template.
+
+## Cycle 89 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `27` (`error-path-state`).
+- Branch: `uber-cycle-89-error-path-state-20260729`.
+- Distinct scope: failure edges that mutate shared wallet state before database writes complete, excluding the earlier goal-27 wallet passphrase, transaction/index, address-book publication, and `setlabel` cells.
+- Confirmed finding: `CWallet::SetAddressPreviouslySpent` changed `m_address_book[dest].previously_spent` before `DESTDATA/used` persistence. A failed write could therefore leave runtime and durable spent state inconsistent; the symmetric erase path had the reverse ordering risk.
+- Fix: write the marker first, then publish in memory after a standalone success or active-transaction commit. Failed writes, aborts, and failed commits do not publish state.
+- Source/test/journal commit: `600afa95995f5aaa50c23b6b6c2f940dc61674bb` (`wallet: publish spent state after successful write`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- Validation: final `test_bitcoin` build passed; the pre-fix source control exited `201` on seed `8901` with `!wallet.IsAddressPreviouslySpent(destination)` failing; the fixed focused test exited `0`; the fixed `wallet_tests` suite ran 18 cases with no errors; `git diff --check` passed.
+- Limitation: the regression uses Mockable SQLite and does not separately inject `used=false` erase failure, Berkeley DB behavior, or power-loss/restart. The source path covers both boolean directions and active transaction callbacks. The caller still treats this secondary marker as best-effort; multi-input atomicity or fail-closed policy remains a distinct queued question.
+- Next selector draw is pending. The next run must perform a fresh gate and choose a distinct catalog goal, rerolling only if the draw is the just-closed campaign without new evidence.
 
 - Cycle 88 is complete on goal 74 (`memory-pressure-allocator`). The dedicated branch is `uber-cycle-88-memory-pressure-allocator-20260729`; cycle-start HEAD is `0ab48d44a6e17500b05bf76a781254451192f65e`, close snapshot follows the cycle-start journal commit, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
 - Cycle 87 is complete on goal 94 (`bindings-ffi-parity`), after rejecting the exact draw `71` and accepting reroll `94`. Its confirmed source commit is `215c89a391` and its close snapshot is `0ab48d44a6`.

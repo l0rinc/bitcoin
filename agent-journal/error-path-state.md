@@ -262,5 +262,5 @@ The regression uses `MockableSQLiteDatabase`, an exact serialized `DBKeys::DESTD
 
 - Confirmed and fixed: failed spent-marker persistence no longer mutates the in-memory address-book record first.
 - The caller still ignores the boolean because this marker is secondary wallet metadata; a future cycle may separately assess whether multi-input marker updates need an explicit transaction or fail-closed policy. That is outside this focused state-publication fix.
-- Source/test/journal commit: pending the close commit; record its exact hash in the uber-goal state snapshot.
+- Source/test/journal commit: `600afa95995f5aaa50c23b6b6c2f940dc61674bb` (`wallet: publish spent state after successful write`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
 - Next queue: close this cycle, run a fresh gate, and draw another distinct catalog goal. Do not reopen the earlier goal-27 wallet passphrase, transaction/index, address-book publication, or `setlabel` cells without new backend, restart, commit-failure, or caller evidence.
