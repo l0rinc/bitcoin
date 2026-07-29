@@ -409,6 +409,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    #50 c9.
    RE-RANK draw 70 (2 cells): raw=193349491238106314 -> idx 0 ->
    #49 c8 (txindex migration assessed SOUND).
+   RE-RANK draw 71 (1 cell, singleton): #65 c7. Queue consumed;
+   next draw rebuilds.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -445,7 +447,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 Cycles done (random-pool state): 0(c1,c2), 1(c1,c2,c3), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1), 9(c1,c2,c3,c4,c5), 10(c1,c2,c3), 7(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4), 35(c1,c2), 36(c1,c2), 23(c1,c2,c3,c4), 25(c1,c2,c3),
 37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3,c4), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3), 47(c1,c2), 48(c1,c2), 49(c1,c2,c3,c4,c5,c6,c7,c8), 50(c1,c2,c3,c4,c5,c6,c7,c8,c9), 53(c1), 55(c1), 57(c1), 58(c1,c2,c3), 59(c1,c2), 60(c1,c2,c3,c4,c5,c6,c7), 24(c1,c2,c3,c4,c5),
-61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2,c3,c4,c5,c6), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 70(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1,c2,c3,c4),
+61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2,c3,c4,c5,c6,c7), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 70(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1,c2,c3,c4),
 76(c1,c2,c3), 80(c1,c2,c3,c4,c5,c6,c7,c8), 81(c1,c2), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4), 99(c1), 100(c1), 101(c1,c2,c3), 102(c1,c2), 103(c1), 104(c1), 105(c1), 106(c1,c2,c3), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
