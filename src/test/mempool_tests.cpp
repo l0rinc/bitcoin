@@ -20,6 +20,7 @@
 #include <limits>
 #include <map>
 #include <set>
+#include <utility>
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
@@ -1168,6 +1169,118 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1ConflictingPartialImportMetadata, TestChain100S
     BOOST_CHECK(destination.GetUnbroadcastTxs().empty());
 
     BOOST_REQUIRE(fs::remove(dump_path));
+}
+
+BOOST_FIXTURE_TEST_CASE(MempoolV1DependencyOrdering, TestChain100Setup)
+{
+    mineBlocks(1);
+
+    const CKey parent_key = GenerateRandomKey();
+    const CScript parent_destination = GetScriptForDestination(PKHash(parent_key.GetPubKey()));
+    const CTransactionRef parent = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns[0], 0, 0, coinbaseKey, parent_destination, 49 * COIN, false));
+
+    const CKey child_key = GenerateRandomKey();
+    const CScript child_destination = GetScriptForDestination(PKHash(child_key.GetPubKey()));
+    const CTransactionRef child = MakeTransactionRef(CreateValidMempoolTransaction(
+        parent, 0, 101, parent_key, child_destination, 48 * COIN, false));
+
+    const CTransactionRef independent = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns[1], 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+
+    const int64_t now = TicksSinceEpoch<std::chrono::seconds>(NodeClock::now());
+    const fs::path child_first_path = m_path_root / "mempool-v1-child-first.dat";
+    const fs::path parent_first_path = m_path_root / "mempool-v1-parent-first.dat";
+    const auto write_dump = [&](const fs::path& path, bool parent_first) {
+        DataStream dump;
+        dump << uint64_t{1} << uint64_t{3};
+        const std::vector<std::pair<CTransactionRef, CAmount>> records = parent_first
+            ? std::vector<std::pair<CTransactionRef, CAmount>>{{parent, 1000}, {child, 2000}, {independent, 3000}}
+            : std::vector<std::pair<CTransactionRef, CAmount>>{{child, 2000}, {parent, 1000}, {independent, 3000}};
+        for (const auto& [tx, delta] : records) {
+            dump << TX_WITH_WITNESS(*tx) << now << int64_t{delta};
+        }
+        dump << std::map<Txid, CAmount>{}
+             << std::set<Txid>{parent->GetHash(), child->GetHash(), independent->GetHash()};
+        std::ofstream file{path.std_path(), std::ios::binary};
+        file.write(reinterpret_cast<const char*>(dump.data()), dump.size());
+        file.close();
+        BOOST_REQUIRE(file.good());
+    };
+    const auto check_state = [&](bool child_present) {
+        CTxMemPool& destination = *Assert(m_node.mempool);
+        BOOST_REQUIRE_EQUAL(destination.size(), child_present ? 3U : 2U);
+        BOOST_CHECK(destination.exists(parent->GetHash()));
+        BOOST_CHECK(destination.exists(independent->GetHash()));
+        BOOST_CHECK_EQUAL(destination.exists(child->GetHash()), child_present);
+        if (child_present) {
+            BOOST_CHECK_EQUAL(destination.info(child->GetHash()).nFeeDelta, 2000);
+        }
+        BOOST_CHECK_EQUAL(destination.info(parent->GetHash()).nFeeDelta, 1000);
+        BOOST_CHECK_EQUAL(destination.info(independent->GetHash()).nFeeDelta, 3000);
+
+        const auto deltas = destination.GetPrioritisedTransactions();
+        BOOST_REQUIRE_EQUAL(deltas.size(), 3U);
+        for (const auto& delta : deltas) {
+            if (delta.txid == parent->GetHash()) {
+                BOOST_CHECK(delta.in_mempool);
+                BOOST_CHECK_EQUAL(delta.delta, 1000);
+            } else if (delta.txid == child->GetHash()) {
+                BOOST_CHECK_EQUAL(delta.in_mempool, child_present);
+                BOOST_CHECK_EQUAL(delta.delta, 2000);
+            } else if (delta.txid == independent->GetHash()) {
+                BOOST_CHECK(delta.in_mempool);
+                BOOST_CHECK_EQUAL(delta.delta, 3000);
+            } else {
+                BOOST_FAIL("unexpected prioritization entry");
+            }
+        }
+        const std::set<Txid> expected_unbroadcast = child_present
+            ? std::set<Txid>{parent->GetHash(), child->GetHash(), independent->GetHash()}
+            : std::set<Txid>{parent->GetHash(), independent->GetHash()};
+        BOOST_CHECK(destination.GetUnbroadcastTxs() == expected_unbroadcast);
+    };
+
+    write_dump(child_first_path, false);
+    CTxMemPool& destination = *Assert(m_node.mempool);
+    BOOST_REQUIRE(node::LoadMempool(destination, child_first_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = true,
+    }));
+    check_state(false);
+
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.removeRecursive(CTransaction(*parent), REMOVAL_REASON_DUMMY);
+        destination.removeRecursive(CTransaction(*independent), REMOVAL_REASON_DUMMY);
+        destination.ClearPrioritisation(parent->GetHash());
+        destination.ClearPrioritisation(child->GetHash());
+        destination.ClearPrioritisation(independent->GetHash());
+    }
+    BOOST_REQUIRE_EQUAL(destination.size(), 0U);
+    BOOST_REQUIRE(destination.GetPrioritisedTransactions().empty());
+    BOOST_REQUIRE(destination.GetUnbroadcastTxs().empty());
+
+    write_dump(parent_first_path, true);
+    BOOST_REQUIRE(node::LoadMempool(destination, parent_first_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = true,
+    }));
+    check_state(true);
+
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.removeRecursive(CTransaction(*parent), REMOVAL_REASON_DUMMY);
+        destination.removeRecursive(CTransaction(*independent), REMOVAL_REASON_DUMMY);
+        destination.ClearPrioritisation(parent->GetHash());
+        destination.ClearPrioritisation(child->GetHash());
+        destination.ClearPrioritisation(independent->GetHash());
+    }
+    BOOST_CHECK_EQUAL(destination.size(), 0U);
+    BOOST_REQUIRE(fs::remove(child_first_path));
+    BOOST_REQUIRE(fs::remove(parent_first_path));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
