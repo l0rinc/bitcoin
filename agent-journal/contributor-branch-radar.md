@@ -551,3 +551,28 @@ are already answered in-code).
 ## Rotation note
 Nine cycles; the top in-scope seed is assessed and closed.
 Radar returns to periodic scanning.
+
+## Cycle 10 (2026-07-29): knots fixes-line re-scan — still quiet (same tip and tag)
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=15737651929817465930, masked 6514279892962690122, index 0
+(of 2) -> #65 (tenth cycle; periodic knots scan). Branch:
+audit/contributor-radar-c10 from d4752cd265 (#80 c11 journal tip).
+
+### Result
+knots/29.x-knotsfixes tip unchanged (d941a2618b); latest tag
+unchanged (v29.3.knots20260508). No new fixes topics since c5/c7.
+
+### Verdict
+Nothing to assess. Radar cell closed.
+
+### Exact commands
+- git fetch --depth=40 knots 29.x-knots 29.x-knotsfixes;
+  git log -3 knots/29.x-knotsfixes; git ls-remote --tags knots
+
+### Limitations / queue
+- Next radar interval: l0rinc + knots re-scan.
+
+## Rotation note
+Ten cycles; radar quiet.
