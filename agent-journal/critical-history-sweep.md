@@ -262,3 +262,112 @@ remaining campaign surface is the commit-range walk (campaign-focus:
 ## Rotation note
 Three cycles; advisory surface closed. Not exhausted (commit-range /
 fork-delta walk opened as the c4 queue).
+
+## Cycle 4 (2026-07-29): fork-delta critical-defect pass over validation.cpp — prune-assumevalid cache/flush mechanisms SOUND; lineage/master divergence discovered
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=9203260543596453984, index 0 (of 2) -> #49 (fourth cycle; c3
+queue cell "fork-delta critical-defect pass, validation.cpp first").
+Branch: audit/critical-history-c4 from ac7dca6ed8 (#50 c5 journal
+tip). AUDIT TARGET REF: `master` (b08815bbb5), NOT the worktree —
+see the divergence note; all master code reads are ref-based
+(git show master:...).
+
+### LINEAGE DIVERGENCE (important for future cycles)
+merge-base(cycle-lineage, master) = a8823c0996. master carries 34
+commits the lineage lacks — the ENTIRE prune-assumevalid series
+(1d90c0ddcb..b08815bbb5). The ledger lineage has 1071 own commits
+(cycle journals/fixes on the older tree); build-before was built
+from the lineage (34ef575632). Any cycle testing prune-assumevalid
+BEHAVIOR must build from master, not from the lineage worktree.
+The origin/master..master delta (validation.cpp: 10 commits, all
+prune-assumevalid/prevout-pool) exists only on master.
+
+### Mechanism 1: eligibility-boundary cache (0fa6f4829e + b51dc6955a) — SOUND
+Hypothesis: the cached CanUsePruneAssumeValid boundary can go stale
+across a best-header change or runtime condition change, marking a
+block script-skip-eligible that upstream would verify.
+Falsified by construction (master:src/validation.cpp:2344-2372):
+- Cache key is the m_best_header POINTER; any best-header change
+  (incl. reorg) forces recompute under the new header.
+- All other conditions are init-time-const (prune_assumevalid
+  option, IsPruneMode, assumevalid hash) or re-evaluated per call
+  (IsInitialBlockDownload outside the cache).
+- Membership is a TRUE ancestor test: eligibility_tip->GetAncestor(
+  block.nHeight) == &block — identity comparison along the real
+  chain, not height-only; CBlockIndex ancestry is immutable.
+- Boundary derivation: LCA(assumevalid, best_header) walked down
+  while work-time <= 2 weeks — same predicate as the uncached path
+  (ASSUMEVALID_MIN_WORK_SECONDS hoist is value-identical).
+- b51dc6955a's decision reuse: computed in ConnectTip for the same
+  pindexNew under held cs_main; no interleaving possible.
+
+### Mechanism 2: stripped-block cache side index (b67edf0cac + 6eb57cf954) — SOUND
+Hypothesis: the hash map and the CBlockIndex* side index can
+diverge (stale membership -> null deref or unbounded growth).
+Falsified (master):
+- Single erase helper EraseCachedPruneAssumeValidBlock
+  (validation.cpp:2405-2411) erases BOTH containers (index
+  unconditionally, map conditionally with byte accounting); the
+  only 2 erase call sites (ConnectTip failure :3200, success :3241)
+  route through it; no .clear()/raw .erase anywhere else.
+- Insert site (AcceptBlock :4573-4582) emplaces map + inserts
+  index together; overwrite path adjusts byte accounting first.
+- m_prune_assumevalid_block_cache_bytes: Assume(>= old) on both
+  subtract paths; blocks are shared_ptr<const CBlock> (immutable),
+  so RecursiveDynamicUsage can't drift between insert and erase.
+
+### Mechanism 3: relaxed prune flush (9ada3f46b7) — SOUND (accepted relaxation)
+Hypothesis: skipping the forced coins write on prune events breaks
+crash recovery (index/files/coins ordering).
+Analysis: ordering invariant "block index (with cleared HAVE_DATA)
+persisted BEFORE files are unlinked" is kept via
+should_write_files = should_write || fFlushForPrune. Guards:
+first-prune anchoring coins write while CoinsDB().GetBestBlock()
+is null; LoadGenesisBlock genesis rewrite for the anchor-crash
+window; IsInitialBlockDownload latch restores standard coupling
+permanently post-IBD; manual pruning and historical role excluded.
+The relaxed invariant (coins may lag pruned files during IBD with
+the option on) is EXPLICIT and documented (b08815bbb5); the
+accepted consequence is redownload/possibly -reindex in the tail,
+surfaced in the ReplayBlocks message. Not a consensus or
+corruption defect; liveness trade-off by design.
+
+### Dispositioned by class (not deep-dived this cycle)
+- 0d72be5374 (100-minute chainstate writes): flush-cadence policy;
+  larger crash-redownload window, accepted design.
+- a681a7e674 / 6eb57cf954 (request-count / cache-byte caps):
+  liveness bounds, not safety.
+- fccdc098d3 / b3b0d49aad / 67cad6779e (CoinsViewOverlay thread
+  pool + same-block-spend filter): correctness hinges on parallel
+  coin reads being identical to the sequential path — QUEUED as the
+  c5 cell (needs a differential experiment, not a read).
+
+### Verdict
+DISMISSED for the deep-dived mechanisms: no reachable critical
+defect (consensus divergence, invalid acceptance, corruption,
+crash) in the prune-assumevalid cache/flush machinery on master.
+The feature's riskiest surface remaining is the prevout-pool
+read-equivalence — queued.
+
+### Exact commands
+- git log --oneline origin/master..master -- src/validation.cpp
+- git show 0fa6f4829e b51dc6955a b67edf0cac 9ada3f46b7
+- git show master:src/validation.cpp (ref-based reads :2344-2415,
+  :3164-3241, :3966, :4560-4590); git grep on master for all
+  container mutation sites
+
+### Limitations / queue for cycle 5
+- Prevout-pool read-equivalence differential (parallel overlay vs
+  sequential base view over a tx-heavy chain) — c5 cell.
+- The other fork-delta file (net_processing.cpp, 670 changed
+  lines) unpassed — c6 cell.
+- Reads are static; no dynamic crash-injection of the relaxed
+  flush was attempted (the author's own functional test
+  9365dbc6d9 covers the behavior shape).
+
+## Rotation note
+Four cycles; validation.cpp delta passed (3 deep, rest
+dispositioned). Not exhausted (prevout-pool differential,
+net_processing delta).
