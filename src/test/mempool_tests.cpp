@@ -1408,4 +1408,129 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1BranchingDependencyOrdering, TestChain100Setup)
     BOOST_REQUIRE(fs::remove(parent_first_path));
 }
 
+BOOST_FIXTURE_TEST_CASE(MempoolV1AllOrphansDependencyOrdering, TestChain100Setup)
+{
+    mineBlocks(1);
+
+    const CKey parent_key = GenerateRandomKey();
+    const CScript parent_destination = GetScriptForDestination(PKHash(parent_key.GetPubKey()));
+    const CTransactionRef parent = MakeTransactionRef(CreateValidMempoolTransaction(
+        std::vector<CTransactionRef>{m_coinbase_txns[0]},
+        std::vector<COutPoint>{COutPoint{m_coinbase_txns[0]->GetHash(), 0}},
+        0,
+        std::vector<CKey>{coinbaseKey},
+        std::vector<CTxOut>{{24 * COIN, parent_destination}, {24 * COIN, parent_destination}},
+        false));
+
+    const CKey child_one_key = GenerateRandomKey();
+    const CKey child_two_key = GenerateRandomKey();
+    const CTransactionRef child_one = MakeTransactionRef(CreateValidMempoolTransaction(
+        parent, 0, 101, parent_key, GetScriptForDestination(PKHash(child_one_key.GetPubKey())), 23 * COIN, false));
+    const CTransactionRef child_two = MakeTransactionRef(CreateValidMempoolTransaction(
+        parent, 1, 101, parent_key, GetScriptForDestination(PKHash(child_two_key.GetPubKey())), 23 * COIN, false));
+    const CTransactionRef independent = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns[1], 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+
+    const int64_t now = TicksSinceEpoch<std::chrono::seconds>(NodeClock::now());
+    const fs::path orphan_first_path = m_path_root / "mempool-v1-all-orphans.dat";
+    const fs::path parent_first_path = m_path_root / "mempool-v1-all-orphans-parent-first.dat";
+    const auto write_dump = [&](const fs::path& path, bool parent_first) {
+        DataStream dump;
+        dump << uint64_t{1} << uint64_t{4};
+        const std::vector<std::pair<CTransactionRef, CAmount>> records = parent_first
+            ? std::vector<std::pair<CTransactionRef, CAmount>>{{parent, 1000}, {child_one, 2000}, {child_two, 3000}, {independent, 4000}}
+            : std::vector<std::pair<CTransactionRef, CAmount>>{{child_one, 2000}, {independent, 4000}, {child_two, 3000}, {parent, 1000}};
+        for (const auto& [tx, delta] : records) {
+            dump << TX_WITH_WITNESS(*tx) << now << int64_t{delta};
+        }
+        dump << std::map<Txid, CAmount>{}
+             << std::set<Txid>{parent->GetHash(), child_one->GetHash(), child_two->GetHash(), independent->GetHash()};
+        std::ofstream file{path.std_path(), std::ios::binary};
+        file.write(reinterpret_cast<const char*>(dump.data()), dump.size());
+        file.close();
+        BOOST_REQUIRE(file.good());
+    };
+    const auto check_state = [&](bool children_present) {
+        CTxMemPool& destination = *Assert(m_node.mempool);
+        BOOST_REQUIRE_EQUAL(destination.size(), children_present ? 4U : 2U);
+        BOOST_CHECK(destination.exists(parent->GetHash()));
+        BOOST_CHECK(destination.exists(independent->GetHash()));
+        BOOST_CHECK_EQUAL(destination.exists(child_one->GetHash()), children_present);
+        BOOST_CHECK_EQUAL(destination.exists(child_two->GetHash()), children_present);
+        BOOST_CHECK_EQUAL(destination.info(parent->GetHash()).nFeeDelta, 1000);
+        BOOST_CHECK_EQUAL(destination.info(independent->GetHash()).nFeeDelta, 4000);
+        if (children_present) {
+            BOOST_CHECK_EQUAL(destination.info(child_one->GetHash()).nFeeDelta, 2000);
+            BOOST_CHECK_EQUAL(destination.info(child_two->GetHash()).nFeeDelta, 3000);
+        }
+
+        const auto deltas = destination.GetPrioritisedTransactions();
+        BOOST_REQUIRE_EQUAL(deltas.size(), 4U);
+        for (const auto& delta : deltas) {
+            if (delta.txid == parent->GetHash()) {
+                BOOST_CHECK(delta.in_mempool);
+                BOOST_CHECK_EQUAL(delta.delta, 1000);
+            } else if (delta.txid == child_one->GetHash()) {
+                BOOST_CHECK_EQUAL(delta.in_mempool, children_present);
+                BOOST_CHECK_EQUAL(delta.delta, 2000);
+            } else if (delta.txid == child_two->GetHash()) {
+                BOOST_CHECK_EQUAL(delta.in_mempool, children_present);
+                BOOST_CHECK_EQUAL(delta.delta, 3000);
+            } else if (delta.txid == independent->GetHash()) {
+                BOOST_CHECK(delta.in_mempool);
+                BOOST_CHECK_EQUAL(delta.delta, 4000);
+            } else {
+                BOOST_FAIL("unexpected prioritization entry");
+            }
+        }
+        const std::set<Txid> expected_unbroadcast = children_present
+            ? std::set<Txid>{parent->GetHash(), child_one->GetHash(), child_two->GetHash(), independent->GetHash()}
+            : std::set<Txid>{parent->GetHash(), independent->GetHash()};
+        BOOST_CHECK(destination.GetUnbroadcastTxs() == expected_unbroadcast);
+    };
+
+    write_dump(orphan_first_path, false);
+    CTxMemPool& destination = *Assert(m_node.mempool);
+    BOOST_REQUIRE(node::LoadMempool(destination, orphan_first_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = true,
+    }));
+    check_state(false);
+
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.removeRecursive(CTransaction(*parent), REMOVAL_REASON_DUMMY);
+        destination.removeRecursive(CTransaction(*independent), REMOVAL_REASON_DUMMY);
+        destination.ClearPrioritisation(parent->GetHash());
+        destination.ClearPrioritisation(child_one->GetHash());
+        destination.ClearPrioritisation(child_two->GetHash());
+        destination.ClearPrioritisation(independent->GetHash());
+    }
+    BOOST_REQUIRE_EQUAL(destination.size(), 0U);
+    BOOST_REQUIRE(destination.GetPrioritisedTransactions().empty());
+    BOOST_REQUIRE(destination.GetUnbroadcastTxs().empty());
+
+    write_dump(parent_first_path, true);
+    BOOST_REQUIRE(node::LoadMempool(destination, parent_first_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = true,
+    }));
+    check_state(true);
+
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.removeRecursive(CTransaction(*parent), REMOVAL_REASON_DUMMY);
+        destination.removeRecursive(CTransaction(*independent), REMOVAL_REASON_DUMMY);
+        destination.ClearPrioritisation(parent->GetHash());
+        destination.ClearPrioritisation(child_one->GetHash());
+        destination.ClearPrioritisation(child_two->GetHash());
+        destination.ClearPrioritisation(independent->GetHash());
+    }
+    BOOST_CHECK_EQUAL(destination.size(), 0U);
+    BOOST_REQUIRE(fs::remove(orphan_first_path));
+    BOOST_REQUIRE(fs::remove(parent_first_path));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
