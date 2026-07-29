@@ -173,6 +173,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 106 | semantic-twin-inconsistency | CYCLE-1 | 2026-07-29 | hex-decode twin map: tx/PSBT strict-by-design (proven), block/header/proof benign-lax; dismissed, no contract violated |
 | 70 | compiler-optimization-differential | CYCLE-1 | 2026-07-29 | LTO+Wodr build green, zero ODR warnings, full unit suite green under LTO binary |
 | 44 | secret-copy-optimization | CYCLE-1 | 2026-07-29 | key paths secure-container-clean; memory_cleanse elision-resistant at -O3 -flto (2 disassembly probes) |
+| 25 | performance-regression-bisect | CYCLE-1 (retro) | 2026-07-28 | +2.4% MemPoolAddTransactions bisected to 3ae78dbd25 (row restored) |
+| 25 | performance-regression-bisect | CYCLE-2 | 2026-07-29 | regression persists at HEAD (250.75 ms/op); consumer split caps feerate-only fix upside (2/4 need bitsets); journal-only |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -196,6 +198,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    raw=4582464614074250662 -> idx 6 (of 8) -> #106.
    raw=726564917869240643 -> idx 4 (of 7) -> #70.
    raw=4945649014858672681 -> idx 1 (of 6) -> #44.
+   raw=3460624873609219110 -> idx 0 (of 5) -> #25.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -230,7 +233,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 0(c1,c2), 1(c1,c2), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1), 9(c1,c2), 10(c1,c2), 7(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
-28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2), 36(c1,c2), 23(c1,c2),
+28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2), 36(c1,c2), 23(c1,c2), 25(c1,c2),
 37(c1), 39(c1,c2), 40(c1), 42(c1), 44(c1), 21(c1,c2), 43(c1,c2), 45(c1,c2), 47(c1,c2), 49(c1), 50(c1), 48(c1), 51(c1), 53(c1), 55(c1), 57(c1), 58(c1,c2), 59(c1,c2), 60(c1,c2),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 70(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1),
 76(c1,c2), 80(c1), 81(c1,c2), 90(c1,c2), 91(c1,c2), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 101(c1,c2), 103(c1), 104(c1), 105(c1), 106(c1), 107(c1), 108(c1), 109(c1).
