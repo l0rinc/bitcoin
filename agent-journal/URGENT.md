@@ -16,7 +16,8 @@ independently verified.
   isolated RPC-verified 136-byte seed 528 -> 2857 edges. Inlining
   artifacts separated per #9 c2 discipline.
 - Branch/commit: audit/public-characterization @ d086164661 (fix +
-  journal public-characterization-fix.md). Archive: this cycle's pick.
+  journal public-characterization-fix.md). Archived on
+  agent/all-findings @ 6890fc43f0 (+bookkeeping 199fc03af4).
 - Next: grep other fuzz targets for the same single-mode document
   pattern; #50 c2 SigningProvider-bearing target for SignPSBTInput.
 
