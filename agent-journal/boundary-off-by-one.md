@@ -100,3 +100,51 @@ Additional controls: `git diff --check` passed; no daemon, functional test, unit
 Verdict: **confirmed and fixed**. The old comparison admitted one extra fetchable block and could issue a partial direct-fetch request for an exactly over-limit chain. The final patch is limited to `src/net_processing.cpp` plus its functional regression coverage. No unrelated source changes are included.
 
 Next unchecked boundary cells: direct-fetch paths with mixed `BLOCK_HAVE_DATA` and witness-service eligibility; `MAX_BLOCKS_IN_TRANSIT_PER_PEER` interactions with pre-existing in-flight capacity; CompactSize `MAX_SIZE-1/MAX_SIZE/MAX_SIZE+1` behavior at non-vector call sites; and block/file offset limits under 32-bit-relevant arithmetic. Recheck this journal and the uber state before selecting a duplicate hypothesis.
+
+## Cycle 102 start
+
+- Goal draw: catalog index 5, `boundary-off-by-one` (exact selector: `shuf -i 0-98 -n 1` -> `5`).
+- Branch: `uber-cycle-102-boundary-off-by-one-20260729`.
+- Base at cycle start: `f10f8b67d3ae63a443768b91269297a4a4d1841e`.
+- `origin/master`: `87bc4c74c4dff3e5e25abc294934a02f28027a45`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence from the merge-base: 34 local commits and 993 remote commits.
+- Gate: tracked/index clean, `git diff --check` passed, catalog/prompt/TSV hashes unchanged, and the pre-existing `test_bitcoin` process under PID 777094 was left untouched.
+- Reused-surface exclusions: CompactSize canonical/max, direct-fetch block limits, transaction-download caps, wallet coin enumeration, tx-graph cluster limits, and the Cycle 21 direct-fetch fix are not selected again.
+- New scope: inclusive request cardinalities, filter/index file-size and position limits, block-file offsets, and adjacent persistence boundaries not covered by the prior cells.
+
+### Initial hypothesis: compact-filter exact maximum
+
+`PrepareBlockFilterRequest()` checks `stop_height - start_height >= max_height_diff` while the requested range is inclusive, with item count `stop_height - start_height + 1`. The constants document maximum counts of 1000 filters and 2000 filter headers. The current functional test builds a chain through height 1000 and requests heights 1 through 1000, receiving 1000 filters; the same predicate rejects a 1001-item range. The exact-maximum hypothesis is therefore dismissed, pending no source change: the apparent subtraction is intentional because the comparison is against the inclusive range distance.
+
+The next unchecked cell is filter-index file growth and offset arithmetic in `src/index/blockfilterindex.cpp`, followed by block-file position checks if no independent failure is found.
+
+## Cycle 102 result
+
+### Boundary ledger
+
+| Surface | Below / exact / above check | Verdict |
+| --- | --- | --- |
+| Compact-filter and filter-header requests | 999 / 1000 / 1001 filters; the existing functional test requests heights 1 through 1000 and receives 1000 | Dismissed: `stop_height - start_height >= max_height_diff` rejects the 1001-item inclusive range and accepts the documented maximum. |
+| Filter flat files | `pos.nPos + data_size` below, exactly at, and above `MAX_FLTR_FILE_SIZE` | Dismissed: strict `>` permits an exact fill and rotates only when the next record would exceed 16 MiB; the sum is widened by `uint64_t data_size`. |
+| `FlatFileSeq::Allocate()` | exact chunk boundary and one byte beyond | Dismissed: `CeilDiv(pos.nPos + add_size, m_chunk_size)` uses `size_t` arithmetic, and the existing flat-file tests cover allocation and finalization. |
+| Block flat files | exact `MAX_BLOCKFILE_SIZE` transition and oversized fast-prune block | Dismissed: `FindNextBlockPos()` rolls before `nSize + nAddSize >= max_blockfile_size`; the test-only oversized-block case raises the temporary limit before the assertion, preventing the historical infinite loop. |
+| Berkeley wallet page scan | `last_page == 0`, ordinary inclusive final page, and theoretical `UINT32_MAX` wrap | No actionable finding: the inclusive loop correctly checks the final page; the wrap requires a valid approximately 16 TiB file with all page LSNs reset, beyond a practical deterministic reproducer for this cycle. |
+
+### Verification
+
+The first build attempt failed before compilation because the configured ccache symlink `/root/.cache/ccache` points to a missing directory. Re-running with `CCACHE_DIR=/data/my_storage/tmp/cycle102-ccache` built the existing `test_bitcoin` target successfully. The first block-filter test invocation also failed at fixture setup because its `TMPDIR` did not exist; that runner was interrupted after it hung in the failed fixture, then rerun with the created scratch directory.
+
+Successful commands:
+
+```text
+CCACHE_DIR=/data/my_storage/tmp/cycle102-ccache cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j4
+TMPDIR=/data/my_storage/tmp/cycle102-boundary-test /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=blockfilter_index_tests --log_level=test_suite
+TMPDIR=/data/my_storage/tmp/cycle102-boundary-test /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=blockmanager_tests --log_level=test_suite
+TMPDIR=/data/my_storage/tmp/cycle102-boundary-test /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=flatfile_tests --log_level=test_suite
+```
+
+The three focused suites completed with `*** No errors detected`. `git diff --check` passed. No production or test source was changed in this cycle; only this journal section was added. No independent source defect, failing-before oracle, or safe minimal patch was established, so no finding commit was created.
+
+### Verdict and next queue
+
+Verdict: **dismissed/inconclusive with no source change**. The compact-filter hypothesis was conclusively dismissed by the inclusive cardinality calculation and a passing exact-boundary test. Storage and page-scan concerns were inspected and tested, but the only remaining theoretical wrap is not sufficiently reachable to justify a patch. Next cells: height-loop overflow at impossible integer endpoints, checkpoint vector cardinality at exact interval boundaries, and unreviewed count/offset contracts outside the excluded direct-fetch, CompactSize, wallet-count, and transaction-graph surfaces. Re-read this cycle before selecting a new hypothesis.
