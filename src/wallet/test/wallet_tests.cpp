@@ -184,6 +184,49 @@ BOOST_FIXTURE_TEST_CASE(setlabel_write_failure_is_reported, WalletTestingSetup)
     WaitForDeleteWallet(std::move(wallet));
 }
 
+BOOST_FIXTURE_TEST_CASE(previously_spent_write_failure_preserves_state, WalletTestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    const CKey key{GenerateRandomKey()};
+    BOOST_REQUIRE(CreateDescriptor(wallet, "combo(" + EncodeSecret(key) + ")", /*success=*/true));
+    {
+        LOCK(wallet.cs_wallet);
+        wallet.SetWalletFlag(WALLET_FLAG_AVOID_REUSE);
+    }
+
+    const CTxDestination destination{PKHash(key.GetPubKey())};
+
+    CMutableTransaction funding;
+    funding.vout.emplace_back(50 * COIN, GetScriptForDestination(destination));
+    const CTransactionRef funding_ref{MakeTransactionRef(funding)};
+    BOOST_REQUIRE(wallet.AddToWallet(funding_ref, TxStateInactive{}));
+
+    DataStream used_db_key;
+    used_db_key << std::make_pair(DBKeys::DESTDATA,
+                                  std::make_pair(EncodeDestination(destination), std::string{"used"}));
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+    const std::string trigger{
+        "CREATE TRIGGER fail_previously_spent BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{used_db_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    CMutableTransaction spend;
+    spend.vin.emplace_back(funding_ref->GetHash(), 0);
+    spend.vout.emplace_back(49 * COIN, GetScriptForDestination(destination));
+    BOOST_REQUIRE(wallet.AddToWallet(MakeTransactionRef(spend), TxStateInactive{}));
+
+    {
+        LOCK(wallet.cs_wallet);
+        BOOST_CHECK(!wallet.IsAddressPreviouslySpent(destination));
+    }
+
+    sqlite3_stmt* statement{nullptr};
+    BOOST_REQUIRE_EQUAL(sqlite3_prepare_v2(database.m_db, "SELECT 1 FROM main WHERE key = ?", -1, &statement, nullptr), SQLITE_OK);
+    BOOST_REQUIRE_EQUAL(sqlite3_bind_blob(statement, 1, used_db_key.data(), used_db_key.size(), SQLITE_STATIC), SQLITE_OK);
+    BOOST_CHECK_EQUAL(sqlite3_step(statement), SQLITE_DONE);
+    BOOST_REQUIRE_EQUAL(sqlite3_finalize(statement), SQLITE_OK);
+}
+
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {
     CMutableTransaction mtx;
