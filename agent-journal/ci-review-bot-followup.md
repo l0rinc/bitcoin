@@ -70,3 +70,55 @@ PRs clean of actionable bot reports.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): wider DrahtBot sweep (15 PRs) — 7 flagged, none implicating this tree
+
+### Draw
+Re-rank draw over the rebuilt 4-cell queue:
+raw=8478006373347410799, index 3 -> #42 (second cycle; c1 queue
+cell "wider DrahtBot sweep repo-wide"). Branch:
+audit/ci-review-bot-c2 from 9c48365efe (#95 c3 bookkeeping).
+
+### Method
+GitHub search `type:pr commenter:DrahtBot updated:>2026-07-20`
+(15 PRs), then per-PR comment fetch filtering "CI tasks failed"
+markers + LLM reason lines.
+
+### Findings (7 flagged)
+- 34566, 35354: "test ancestor commits" — rebase hygiene, not
+  code defects.
+- 35735 (Add state to HTTPRequest): ASan/LSan/UBSan — memory leaks
+  in httpserver_tests (test 251). In the PR's OWN new state code;
+  not in-tree.
+- 35793 (BIP54): macOS native — bip54_tests assertion failure in
+  CExtKey::SetSeed (seed.size() outside 16-64) from the PR's own
+  fixture. The IN-TREE assert fired correctly (working as
+  designed); the fixture bug is the PR's.
+- 35084 (ipc nonunix): FreeBSD Cross — platform cross-build, PR
+  domain (deprioritized).
+- 35768 (wallet): lint. 35751 (validation parallel prevout
+  fetching in TestBlockValidity): iwyu. Both trivial; 35751 noted
+  as fork-adjacent (overlaps the fork's own -prevoutfetchthreads
+  feature — author's radar territory).
+
+### Verdict
+DISMISSED for this tree: no bot-flagged failure implicates in-tree
+code; the two sanitizer/assert failures are PR-owned, and one of
+them (35793) actually demonstrates the in-tree assertion working
+as designed. Bot-signal hygiene: DrahtBot's LLM reason lines were
+accurate in both checked cases (leak location; assert site).
+
+### Exact commands
+- api.github.com search/issues commenter:DrahtBot
+- issues/{15 PRs}/comments filtered for CI-failure markers
+
+### Limitations / queue
+- 15-PR window (2026-07-20+); older flags stale by definition.
+- Coverage-delta endpoint (boilerplate comments' links) still
+  unanalyzed (c1 queue).
+- 35751's overlap with the fork's prevoutfetchthreads: watch for
+  the author's own coordination, no local action.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
