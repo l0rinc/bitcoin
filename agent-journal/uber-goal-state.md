@@ -150,6 +150,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 99 | clean-room-reimplementation | CYCLE-1 | 2026-07-29 | CompactSize clean-room differential: 804 cases, 0 mismatches |
 | 38 | failure-cleanup-crash-safety | CYCLE-1 (retro) | 2026-07-28 | EncryptWallet mkey rollback fix (9894fb8b6c, row restored) |
 | 38 | failure-cleanup-crash-safety | CYCLE-2 | 2026-07-29 | txindex interrupted-build: empty-block build uninterruptible (~3s); resume mechanics present |
+| 55 | alternative-implementation-diff | CYCLE-1 | 2026-07-29 | noble-secp256k1 ECDSA differential: 2019/2019+5/5 RFC6979 vectors match |
 | 107 | conformance-test-transplant | CYCLE-1 | 2026-07-29 | RFC 4231 case 5 transplanted (0d36c6cd80); all 7 cases both hashes |
 
 ## Next-up queue
@@ -193,7 +194,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
 7(c1), 2(c1), 9(c1,c2), 10(c1,c2), 7(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
-37(c1), 39(c1,c2), 21(c1,c2), 43(c1), 45(c1,c2), 47(c1,c2), 50(c1), 48(c1), 51(c1), 53(c1), 57(c1), 59(c1,c2), 60(c1),
+37(c1), 39(c1,c2), 21(c1,c2), 43(c1), 45(c1,c2), 47(c1,c2), 50(c1), 48(c1), 51(c1), 53(c1), 55(c1), 57(c1), 59(c1,c2), 60(c1),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1),
 76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 103(c1), 104(c1), 105(c1), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
