@@ -76,3 +76,57 @@ compactsize_exhaustive_boundaries)
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): CompactSize 254-class exhaustive battery — 130k+ cases, guard-weakening mutant killed 61440x
+
+### Draw
+Re-rank draw over the rebuilt 6-cell queue:
+raw=4934760897020020062, index 0 -> #48 (second cycle; c1 queue
+"254/255-form sampling widened; independent-deserializer
+differential"). Branch: audit/property-oracle-c2 from 80cad73b35
+(#35 c2 bookkeeping).
+
+### Change (test-only)
+serialize_tests.cpp: compactsize_254form_exhaustive —
+- EXHAUSTIVE canonical 0xFD-form: all 65283 values [253, 0xFFFF]
+  encode at 3 bytes and round-trip exactly.
+- EXHAUSTIVE non-canonical 0xFE-form: all 65536 values [0, 0xFFFF]
+  presented in 0xFE form must throw (upgrades c1's 8-sample arm to
+  the full domain).
+- 0xFE-form boundary acceptance: [0x10000, 0x100FF] at 5 bytes
+  (256 cases; first draft wrongly used the 0xFF-class boundary —
+  caught by the 9!=5 failure, fixed and recorded).
+
+### Verification
+- serialize_tests green (all cases incl. c1's battery).
+- Mutation: weaken the 254-guard (0x10000 -> 0x1000) ->
+  61440 failures ("exception expected but not raised" for every
+  wrongly-accepted non-canonical in [0x1000, 0xFFFF]); restored,
+  re-ran green. Note: BOOST_CHECK_EXCEPTION failures print
+  "exception ... expected but not raised", not "has failed" — a
+  grep-pattern trap recorded for future greps.
+- Independent-deserializer differential cell: already delivered by
+  #99 c1 (804-case clean-room differential, 0 mismatches) —
+  cross-referenced, not repeated.
+
+### Verdict
+CONFIRMED oracle extension: the 254 class now has exhaustive
+accept-and-reject coverage with a guard-weakening mutant killed
+61440-fold. No production defect.
+
+### Exact commands
+- cmake --build build-before -j4 --target test_bitcoin
+- test_bitcoin --run_test=serialize_tests[/
+  compactsize_254form_exhaustive]
+- mutation: serialize.h:351 guard weaken -> 61440 failures ->
+  revert (backup /tmp/serialize_h.bak)
+
+### Limitations / queue
+- 0xFF-class (9-byte) acceptance is boundary-sampled (c1) not
+  exhaustive (2^32+ values — infeasible).
+- GetSizeOfCompactSize exhaustiveness across classes: implicitly
+  covered by the round-trips (WriteCompactSize length asserts).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
