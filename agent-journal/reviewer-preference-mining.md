@@ -231,3 +231,77 @@ The current tree supplied executable and static controls for the recipe:
 Verdict: **reusable technical review recipe confirmed; no new repository defect found on current HEAD**. The evidence is stronger than a reviewer-style collection because each rule maps to a caller contract, output schema, build boundary, or user-visible operational consequence, and the held-out controls reproduce those obligations. No production source change is warranted in this history/review cycle. The precise limitation is that unauthenticated API data cannot establish rejected comments exhaustively, and the NSIS deploy target could not run because `makensis` is unavailable. No process remains running.
 
 Next queue: draw another distinct eligible goal. Preserve this recipe under the fingerprint `actionable-interface-minimal-schema-boundary-realism` and do not reopen it unless new review evidence or a concrete recurrence changes the rule.
+
+## Cycle 93: current review recipe and held-out contract
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `60`
+- Slug: `reviewer-preference-mining`
+- Branch: `uber-cycle-93-reviewer-preference-mining-20260729`
+- Start HEAD: `e17065f2351dfa70e3b71a999db842cc19370931`
+- `origin/master`: `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `2 974` (`origin/master...HEAD`)
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The draw was distinct from the just-closed goal 81, so no reroll was made. The tracked gate passed; preserved untracked artifacts were excluded from staging and no relevant process was running.
+
+This cycle excluded the Cycle 25 and Cycle 49 reviewer-mining cells, the prior `#35727` block-encoding sample, and any previously harvested review thread. It mined newer public review records and then applied the resulting recipe to held-out PR `#35783`. Unauthenticated GitHub API data is incomplete evidence: it exposes public issue, review, and line-comment records but cannot prove that no hidden or omitted comment existed.
+
+### Fresh review evidence
+
+The API responses were fetched directly from the public GitHub endpoints. The response hashes below make the evidence replayable without treating a mutable web page as an implicit source:
+
+- [PR #33014](https://github.com/bitcoin/bitcoin/pull/33014), `rpc: Fix internal bug in descriptorprocesspsbt when encountering invalid signatures`: metadata `3d173175c7617820bef428395037e5518cb8efd36450e0c24c268a12019ce9b5`; reviews `46c416ced5330f2e75d8a793091e985215c5e193b78d68932b6db4f481de670e`; issue comments `530e359856afdf54175202a28da83db06d9842f090dc84895142d103aa0a433b`; review comments `69cef44f1d963bc7569cb878b555907fa51c60146d816acaa253c2406bfcba72`; source `7e19ce200b2e65770907a818b02e4ec3da9c5374`, merge `5311b15727f2f282274472184185423e441abd85`.
+- [PR #35664](https://github.com/bitcoin/bitcoin/pull/35664), `test: add CLTV and CHECK(MULTI)SIGVERIFY failure-path vectors to script_tests.json`: metadata `c31a017ae8824d0d54315e6cf7ad76aea2101061462f477f355fa51d22706fe8`; reviews `e086f2d5e475dbcd2d4f74e5a430fcaa990137feeb39f27958c6b264f0b5631d`; issue comments `932c41529b779b92cf055779e2e2ac63f9bb8eea7c5d8166ee10574fe61560a4`; review comments `797c424bff77327d94605418ca792bd0e724d46386514118166351ab8bcce8b9`; source `c4068cf37b6674417c77ce1f295b51dd49a57e81`, merge `774d11c58f221294950f05ac4d249e19583e4b7b`.
+- [PR #35490](https://github.com/bitcoin/bitcoin/pull/35490), `test: cover unused mempool space in coins cache limit`: metadata `b975f2fc366e4789f2db54f920535f681b2d0c187809efd56a025d9f2474954d`; reviews `ecdd9ff6b027d4bf48860554b31b8f2c8d9f377837057c370e613a87035ba1c2`; issue comments `e3537dacfba2b39a6c2588954d5c8ba032aad2b117d6825226242f2ae24282b9`; review comments `bbe6dcfff5760c121e1c7fb97598d81c442594509356a47666f2311e83748de1`; source `5d57f2cefee2acec3c8e11d6b1d5b5fe97e6cfe7`, merge `b36c2d78a3ad4940e1d5eb466b0e6650b1001ee3`.
+
+The review evidence supports these technical rules:
+
+1. For a public RPC regression, trace the exact downstream invariant and assert the observable output. In #33014, reviewers required a functional `rpc_psbt.py` regression, rejected a whole-witness bit flip that could corrupt framing or sighash data, and preferred mutating bytes inside the actual signature. They also distinguished `PSBTInputSignedAndVerified` from signature presence and required the RPC boundary to report a recoverable failure rather than turn an invalid public input into a fatal assertion.
+2. For branch-specific vectors, prove that each fixture reaches the intended branch. In #35664, the CLTV values were explained by type-check, numeric-bound, five-byte numeric, and final-sequence paths. Negative-zero and a non-minimal five-byte consensus case were useful follow-ups, but the latter required a different transaction and remained outside the focused change. Consensus behavior must remain distinct from standardness policy.
+3. Extend the natural existing test lifecycle instead of adding a duplicate setup loop. In #35490, reviewers requested that the unused-space case live in the existing `getcoinscachesizestate` lifecycle, assert the exact related states, and use `uint64_t` for limits and counters because the test contract must remain valid on 32-bit systems. The PR description and code were expected to remain synchronized after the state model changed.
+4. Classify review preferences as general only when the mechanism recurs across independent evidence. The first rule is a public-interface and regression-oracle contract; the second is a vector-isolation and consensus-scope contract; the third is a test-harness, portability, and diff-shape contract. Naming a reviewer preference without the underlying technical reason is not a reusable recipe.
+
+### Reusable recipe
+
+For a held-out change, apply the following checklist:
+
+- State the authoritative consumer and exact invariant before evaluating the patch.
+- Make malformed input change only the intended field, preserve valid framing, and assert externally visible result and state.
+- For every negative or boundary vector, document why preceding checks pass and the target check fails; record consensus versus policy scope separately.
+- Add coverage to the existing production-like harness, assert exact neighboring states, and use portable integer widths for limits and accounting.
+- Keep the diff and description aligned with the final scope; isolate unrelated cleanup and treat a good follow-up as a queue item, not silent scope expansion.
+- Seek independent evidence from review rationale, source/history contracts, and a behavioral test. Do not elevate a single accepted style choice into a project-wide rule.
+
+Fingerprint: `invariant-isolation-natural-harness-portable-accounting-scope-accurate-review`.
+
+### Held-out application: PR #35783
+
+The held-out sample was [PR #35783](https://github.com/bitcoin/bitcoin/pull/35783), `chainparams: remove my testnet3 seed`, not used to derive the recipe. Its response hashes are metadata `984c886e4be5ef64e2e0711186aec495a906d5dec0965e21bdc20424bd444de1`, reviews `471f6d0baec03155dbff3dd75c21da636bca09e6e66fd460002b33e2da0a1b5a`, issue comments `cc88564c27306605faf768ac776f44332535b9af61888e69a1119bda676af3f5`, and review comments `ace810d7e2cbb4f8c40ce09dc8e191ae466adb4e1a7d49c59f2215b411d38b05`. Source is `7295b8be704a406cf8875641aa9066e071323093`; merge is `610dd320d1a80838fdf30ed1cb2e6ae1ec717f74`.
+
+The review asked why the patch removed one testnet3 seed rather than all testnet3 seeds. The maintainer clarified that this change removed one contributor's seed and that complete testnet3 removal was a separate issue (`#31975`). The exact patch removed the same seed from `src/kernel/chainparams.cpp` and `test/functional/data/util/getchainparams-testnet.json`. Applying the recipe found no stale current reference: `git grep -n -i -E 'testnet3|vSeeds|seed.testnet' -- src test doc contrib` showed four intentional remaining testnet3 seeds and no current `seed.testnet.bitcoin.sprovoost.nl.` reference outside historical release material. The source and fixture therefore stayed aligned, and the broader testnet3 migration remained correctly out of scope.
+
+Runtime validation used the clean CMake/Ninja build in `/data/my_storage/tmp/cycle93-build`, configured with GCC 12.2.0 `RelWithDebInfo`, `BUILD_TESTS=ON`, `BUILD_UTIL=ON`, and `WITH_ZMQ=OFF`:
+
+- The 549-action clean build of `bitcoin-util` and `test_bitcoin` passed.
+- `bitcoin-util getchainparams` matched all five checked-in fixtures exactly: `main`, `test`, `testnet4`, `signet`, and `regtest` each returned `exact`.
+- Unsupported extra arguments were rejected with status 1; valid `-chain=test`, `testnet4`, `regtest`, and `signet` invocations returned status 0.
+- Focused `chain_tests,util_tests` passed 85 cases.
+- The full fixed unit binary passed 1,208 cases with `*** No errors detected`.
+
+### Independent local oracle finding
+
+The held-out validation also exposed a pre-existing local test defect in `src/test/mempool_tests.cpp:1545`, introduced by local commit `0f01007bfe` (`mempool: handle saturated fee diagram checks`). Before the correction, the complete unit suite had one failure in `MempoolCheckSaturatingFeeDiagram`: it expected `std::numeric_limits<CAmount>::min() + fee`, while the implementation's saturating accumulation correctly produced `9999`. The independent transaction and max-prioritised child follow the minimum-saturated parent cluster, so the expected final fee is `10'000 - 1`. The focused test failed before the edit and passed after it; the fixed mempool suite passed 24 cases and the full suite passed 1,208 cases. The change is test-only and does not alter production behavior.
+
+### Validation, limitations, and verdict
+
+- Fix rebuild: `CCACHE_DISABLE=1 cmake --build /data/my_storage/tmp/cycle93-build --target test_bitcoin -j2` passed five actions.
+- Focused and broad tests passed as listed above; `git diff --check` passed.
+- Valgrind was unavailable in the configured environment. The build emitted two unrelated pre-existing warnings in `src/test/httpserver_tests.cpp` and `src/test/util_tests.cpp`; neither was changed.
+- Online review evidence is public and unauthenticated, so omitted private context cannot be ruled out. The held-out command validation covered the source/fixture contract and direct unit paths; it did not require the unavailable functional configuration.
+
+Verdict: **reusable technical review recipe confirmed; one independent test-only oracle defect confirmed and fixed**. The reviewer recipe is supported by three fresh evidence families and survived a held-out chain-parameter change. Source/test/journal commit: `3dc9c0b006ad5523c2e86c79672726a3f34324bb` (`test: correct saturated mempool diagram oracle`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
+
+Next queue: draw another distinct eligible goal. Do not reopen this cell unless new review evidence, a recurrence of the saturated fee oracle, or a separate consumer/harness boundary changes its priority.
