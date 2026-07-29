@@ -74,6 +74,18 @@ independently verified.
 - Next: widen record classes (crypted keys, ACTIVE*SPK, BESTBLOCK);
   descriptor/TX semantic apply-vs-reject oracle.
 
+## ✅ ReadVarInt overflow-rejection oracle (delivered 083afedbf1)
+- Mechanism: both ReadVarInt overflow guards were test-blind —
+  deletion mutants survived the full suite (undo-data VARINT parsing
+  is consensus-adjacent via CTxUndo).
+- Evidence: mutation sweep M1 killed / M2 M3 survived; battery added
+  (both guards x uint8/16/32/64 + legal-max controls + signed mode);
+  M2/M3 then killed; repaired green.
+- Branch/commits: audit/mutation-testing @ 083afedbf1, journal
+  a2c5cf8935; archive c0bd287a31 + 726959bae1.
+- Next: WriteVarInt per-line sweep; CTxUndo consumer-side fuzzed
+  VARINT fields.
+
 ## ✅ Fee-estimator zero-state per-block waste (fixed 675011ba86)
 - Mechanism: processBlock swept all estimator buckets every connected
   block with no IBD gate; with zero tracked state (all of IBD for a
