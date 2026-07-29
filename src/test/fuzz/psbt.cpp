@@ -246,6 +246,12 @@ FUZZ_TARGET(psbt, .init = initialize_psbt)
         CScript ms_script;
         ms_script << OP_2 << keys[0].GetPubKey() << keys[1].GetPubKey() << unknown << OP_3 << OP_CHECKMULTISIG;
         provider.scripts.emplace(CScriptID(ms_script), ms_script);
+        // A second 2-of-3 script with only keys[0] owned, so the threshold
+        // is unmet and the partial-signature/missing-info arms are reached.
+        const CPubKey unknown2{ParseHex("02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337")};
+        CScript ms_partial;
+        ms_partial << OP_2 << keys[0].GetPubKey() << unknown << unknown2 << OP_3 << OP_CHECKMULTISIG;
+        provider.scripts.emplace(CScriptID(ms_partial), ms_partial);
     }
     PartiallySignedTransaction psbt_sign = psbt;
     const std::optional<PrecomputedTransactionData> txdata{PrecomputePSBTData(psbt_sign)};
