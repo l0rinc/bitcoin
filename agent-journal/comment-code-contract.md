@@ -114,3 +114,107 @@ partition.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): net_processing.cpp strong-claim audit — 9 claims verified, 0 wrong
+
+### Draw
+Random draw over the 20-goal eligible pool (14 pending + 6 CYCLE-1,
+#101 excluded as just-cycled): raw=817997966924375334, index 14 ->
+#1 (second cycle; c1 queue cell "net_processing.cpp (46 hits)"
+chosen; 52 raw must/never/always hits in this tree, ~40 after
+log/error filtering). Branch: audit/comment-contract-c2 from
+2d46265680 (#101 c1 bookkeeping; lineage anchor audit/resurrection @
+5d0155254c). Start state: tracked-clean.
+
+### Deep claim 1 — :4414-4416 (getblocktxn prune read) — TRUE
+Claim: within-MAX_BLOCKTXN_DEPTH block "cannot get pruned after we
+release cs_main above, so this read should never fail" (assert(ret)).
+Verification: MAX_BLOCKTXN_DEPTH=10 (net_processing.cpp:142);
+pruning only deletes blocks deeper than MIN_BLOCKS_TO_KEEP=288
+(validation.h:76) below tip at flush time. For the requested block
+(height >= tip0-10) to become prunable, >=278 blocks must connect
+AND a flush must complete between the cs_main release (:4409) and
+ReadBlock (:4413) — physically impossible in that window (block
+connection is orders of magnitude slower). The only remaining
+ReadBlock failure mode is disk corruption, outside the comment's
+claim. Claim accurate.
+
+### Deep claim 2 — :4977-4979 (GETADDR SetupAddressRelay) — TRUE
+Claim: "Since this must be an inbound connection, SetupAddressRelay
+will never fail." Assume(SetupAddressRelay(...)). Verification:
+SetupAddressRelay (:5765-5795) fails only for IsBlockOnlyConn or
+IsFeelerConn; the :4972 early return drops !IsInboundConn(), and
+IsInboundConn() is true ONLY for ConnectionType::INBOUND
+(net.h:852-854) — BLOCK_RELAY, FEELER, MANUAL, ADDR_FETCH, and the
+fork's PRIVATE_BROADCAST (net.h:865, outbound class) are all
+excluded. Both failure branches unreachable past the guard. TRUE.
+
+### Deep claim 3 — :5697 (block-relay-only tx rejection) — TRUE
+Claim: "block-relay-only peers may never send txs to us."
+Verification: RejectIncomingTxs (:5695-5703) returns true for
+IsBlockOnlyConn; enforcement at every tx ingress: VERSION
+reconciliation offer disconnects (:4099-4104), wtxidrelay/INV paths
+ignore via reject_tx_invs (:4176), TX message processing returns
+early (:4516). "may never send" = never accepted; comment describes
+our acceptance policy accurately. TRUE.
+
+### Deep claim 4 — :3913-3924 (tx-inventory-empty at VERSION) — TRUE
+Claim: m_tx_inventory_to_send must be empty and m_next_inv_send_time
+0s at VERSION completion, else handshake-time txs would be
+advertised immediately, leaking arrival time to a spy. Verification:
+message ordering rejects any non-VERSION message while
+pfrom.nVersion==0 (:3884-3888), so no INV/TX processing can precede
+VERSION; m_tx_inventory_to_send is filled only by PushTxInventory
+(INV/TX processing or relay from other peers under the same
+g_msgproc_mutex that serializes ProcessMessage) and reconciliation
+(Erlay) requires sendtxrcncl negotiation, gated between VERSION and
+VERACK (:4085). m_next_inv_send_time is first set in SendMessages
+after fSuccessfullyConnected (post-VERACK). Both conjuncts hold by
+construction + Assume. TRUE.
+
+### Deep claim 5 — :4378-4381 (getblocktxn differential encoding) — TRUE
+Claim: "indexes must be strictly increasing; DifferenceFormatter
+should guarantee this property during deserialization."
+Verification: DifferenceFormatter::Unser (blockencodings.h:39-45)
+accumulates m_shift and emits v=m_shift then increments, so
+successive outputs strictly increase by construction; the overflow
+guard throws on wrap. The same Assume loop also lives inside
+BlockTransactionsRequest::SERIALIZE_METHODS
+(blockencodings.h:57-59), so the invariant is enforced twice
+(serializer + net_processing loop). Redundant but consistent;
+"merely improvable" duplication, not a defect. TRUE.
+
+### Spot checks (all TRUE)
+- :368/:383 "must correlate" (m_addr_known <-> m_addr_relay_enabled):
+  single writer for both (:5785 exchange, :5789 init under the same
+  condition); false-path Assumes at :5771-5772 machine-enforce.
+- :1717 FinalizeNode refcount caution matches shared_ptr semantics
+  (RemovePeer returns PeerRef; deferred destruction possible).
+- :1311 -blocksonly never requests HB compact mode: sole HB-marking
+  function returns early on ignore_incoming_txs (:1314).
+- :2514-2517 merkleblock "MUST always provide at least what the
+  remote peer needs": vMatchedTxn loop sends every match (:2518-2519).
+
+### Exact commands
+- grep -nE '\b(must|never|always)\b' src/net_processing.cpp (52 hits)
+- sed/Read at :1305-1320, :1710-1728, :2495-2550, :360-392,
+  :3870-3894, :3900-3930, :4095-4114, :4370-4434, :4955-4994,
+  :5690-5724, :5765-5795
+- cross-refs: net.h:852-870 (IsInboundConn/PRIVATE_BROADCAST class),
+  validation.h:76 (MIN_BLOCKS_TO_KEEP), blockencodings.h:26-60
+  (DifferenceFormatter + serializer-side Assume),
+  writer grep for m_addr_relay_enabled/m_addr_known
+
+### Verdict
+DISMISSED (no defect): all 9 audited strong claims in
+net_processing.cpp are accurate; 3 of them carry machine-enforced
+Assumes matching the prose. No code or comment change warranted;
+journal-only cycle.
+
+### Limitations / queue for cycle 3
+- ~30 lower-stakes net_processing hits not deep-verified
+  (ping/pong heuristics, eviction prose, send-side scheduling).
+- txmempool.cpp cell from c1 still untouched.
+- validation.cpp ~30 c1 leftovers still open.
+- Fork-added comment pass (PRIVATE_BROADCAST prose is new here;
+  worth a dedicated sweep under the c1 queue item).

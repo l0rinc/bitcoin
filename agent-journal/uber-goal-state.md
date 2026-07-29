@@ -153,6 +153,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 55 | alternative-implementation-diff | CYCLE-1 | 2026-07-29 | noble-secp256k1 ECDSA differential: 2019/2019+5/5 RFC6979 vectors match |
 | 107 | conformance-test-transplant | CYCLE-1 | 2026-07-29 | RFC 4231 case 5 transplanted (0d36c6cd80); all 7 cases both hashes |
 | 101 | public-characterization-fix | CYCLE-1 | 2026-07-29 | PSBT fuzz hybrid consumption fix (d086164661): 9 starvation-gated functions covered, control re-lists all 9, iso seed 528->2857 edges |
+| 1 | comment-code-contract | CYCLE-2 | 2026-07-29 | net_processing strong claims: 9/9 verified TRUE (prune-read, SetupAddressRelay, diff-encoding, tx-inventory-empty); no defect |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -160,6 +161,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    raw=6086368032283125981 -> idx 18 (of 27) -> #107.
    raw=6091627946289443426 -> idx 24 (of 26) -> #75.
    raw=10440797539259245241 -> idx 12 (of 21) -> #101.
+   raw=817997966924375334 -> idx 14 (of 20) -> #1.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -193,7 +195,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 20, 26, 27, 33, 52,
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
-Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
+Cycles done (random-pool state): 0(c1,c2), 1(c1,c2), 4(c1,c2), 6(c1),
 7(c1), 2(c1), 9(c1,c2), 10(c1,c2), 7(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1,c2), 21(c1,c2), 43(c1), 45(c1,c2), 47(c1,c2), 50(c1), 48(c1), 51(c1), 53(c1), 55(c1), 57(c1), 59(c1,c2), 60(c1),
