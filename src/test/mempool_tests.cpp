@@ -6,6 +6,7 @@
 #include <addresstype.h>
 #include <node/mempool_persist.h>
 #include <policy/policy.h>
+#include <streams.h>
 #include <test/util/time.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
@@ -15,7 +16,10 @@
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <fstream>
 #include <limits>
+#include <map>
+#include <set>
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
@@ -604,6 +608,69 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1SignedDeltaExtremes, TestChain100Setup)
     }
     const auto destination_info = destination.info(tx->GetHash());
     BOOST_CHECK_EQUAL(source_modified_fee, destination_info.fee + destination_info.nFeeDelta);
+
+    BOOST_REQUIRE(fs::remove(dump_path));
+}
+
+BOOST_FIXTURE_TEST_CASE(MempoolV1DuplicateTransactionRecords, TestChain100Setup)
+{
+    const CTransactionRef tx = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns.front(), 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+    const fs::path dump_path = m_path_root / "mempool-v1-duplicate-records.dat";
+    const int64_t now = TicksSinceEpoch<std::chrono::seconds>(NodeClock::now());
+
+    DataStream dump;
+    dump << uint64_t{1} << uint64_t{2};
+    dump << TX_WITH_WITNESS(*tx) << now << int64_t{1000};
+    dump << TX_WITH_WITNESS(*tx) << now << int64_t{2000};
+    dump << std::map<Txid, CAmount>{} << std::set<Txid>{};
+
+    std::ofstream file{dump_path.std_path(), std::ios::binary};
+    file.write(reinterpret_cast<const char*>(dump.data()), dump.size());
+    file.close();
+    BOOST_REQUIRE(file.good());
+
+    CTxMemPool& destination = *Assert(m_node.mempool);
+    BOOST_REQUIRE(node::LoadMempool(destination, dump_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = false,
+    }));
+    const auto tx_info = destination.info(tx->GetHash());
+    BOOST_REQUIRE_EQUAL(destination.size(), 1U);
+    BOOST_CHECK_EQUAL(tx_info.nFeeDelta, 1000);
+
+    DataStream existing_dump;
+    existing_dump << uint64_t{1} << uint64_t{1};
+    existing_dump << TX_WITH_WITNESS(*tx) << now << int64_t{4000};
+    existing_dump << std::map<Txid, CAmount>{} << std::set<Txid>{};
+    std::ofstream existing_file{dump_path.std_path(), std::ios::binary};
+    existing_file.write(reinterpret_cast<const char*>(existing_dump.data()), existing_dump.size());
+    existing_file.close();
+    BOOST_REQUIRE(existing_file.good());
+
+    BOOST_REQUIRE(node::LoadMempool(destination, dump_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = false,
+    }));
+    BOOST_CHECK_EQUAL(destination.info(tx->GetHash()).nFeeDelta, 5000);
+
+    DataStream trailing_map_dump;
+    trailing_map_dump << uint64_t{1} << uint64_t{1};
+    trailing_map_dump << TX_WITH_WITNESS(*tx) << now << int64_t{1000};
+    trailing_map_dump << std::map<Txid, CAmount>{{tx->GetHash(), 2000}} << std::set<Txid>{};
+    std::ofstream trailing_map_file{dump_path.std_path(), std::ios::binary};
+    trailing_map_file.write(reinterpret_cast<const char*>(trailing_map_dump.data()), trailing_map_dump.size());
+    trailing_map_file.close();
+    BOOST_REQUIRE(trailing_map_file.good());
+
+    BOOST_REQUIRE(node::LoadMempool(destination, dump_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = false,
+    }));
+    BOOST_CHECK_EQUAL(destination.info(tx->GetHash()).nFeeDelta, 6000);
 
     BOOST_REQUIRE(fs::remove(dump_path));
 }

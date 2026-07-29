@@ -74,6 +74,7 @@ bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active
         uint64_t total_txns_to_load;
         file >> total_txns_to_load;
         uint64_t txns_tried = 0;
+        std::set<Txid> loaded_txids;
         LogInfo("Loading %u mempool transactions from file...\n", total_txns_to_load);
         int next_tenth_to_report = 0;
         while (txns_tried < total_txns_to_load) {
@@ -91,13 +92,16 @@ bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active
             file >> TX_WITH_WITNESS(tx);
             file >> nTime;
             file >> nFeeDelta;
+            const bool duplicate_record{!loaded_txids.insert(tx->GetHash()).second};
 
             if (opts.use_current_time) {
                 nTime = TicksSinceEpoch<std::chrono::seconds>(now);
             }
 
             CAmount amountdelta = nFeeDelta;
-            if (amountdelta && opts.apply_fee_delta_priority) {
+            // A mempool dump has one fee-delta record per transaction. Ignore
+            // repeated records so malformed files cannot apply priority twice.
+            if (amountdelta && opts.apply_fee_delta_priority && !duplicate_record) {
                 pool.PrioritiseTransaction(tx->GetHash(), amountdelta);
             }
             if (nTime > TicksSinceEpoch<std::chrono::seconds>(now - pool.m_opts.expiry)) {
@@ -127,7 +131,9 @@ bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active
 
         if (opts.apply_fee_delta_priority) {
             for (const auto& i : mapDeltas) {
-                pool.PrioritiseTransaction(i.first, i.second);
+                if (!loaded_txids.contains(i.first)) {
+                    pool.PrioritiseTransaction(i.first, i.second);
+                }
             }
         }
 
