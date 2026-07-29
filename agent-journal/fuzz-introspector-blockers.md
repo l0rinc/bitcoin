@@ -525,3 +525,80 @@ leaves — provider extension, not a seed shape).
 ## Rotation note
 Seven cycles; the seed family is complete through keypath taproot.
 Not exhausted (script-path harness extension).
+
+## Cycle 8 (2026-07-29): taproot SCRIPT-PATH arm — harness extension (FlatSigningProvider + fixed-2G tree) + seed; wit_items=3 proof
+
+### Draw
+Re-rank draw over the remaining 3-cell queue:
+raw=13781584894610127864, masked 4558212857755352056, index 1
+(of 3) -> #50 (eighth cycle; c7 queue cell "script-path harness
+extension"). Branch: audit/introspector-blockers-c8 from
+351b676c47 (#24 c5 journal tip).
+
+### Mechanism analysis
+The c2-era harness used FillableSigningProvider — the wallet
+keystore class, which has NO taproot tree storage and no
+GetTaprootSpendData override: script-path is structurally
+unreachable with it. FlatSigningProvider carries the public
+tr_trees map. Two-arm subtlety: with internal key = a provider
+key, SignTaproot's keypath branch (sign.cpp:602-604) wins FIRST
+and the script-path loop never runs — so the registered tree's
+internal key must be UNOWNED. Fixed choice: internal = x-only of
+2G (02c6047f94...9ee5 — a constant valid point, private key never
+consumed); leaf = xonly(keys[1]) OP_CHECKSIG. Keypath unsignable,
+script-path forced.
+
+### Harness extension (this cycle's buildable change, 22+/2-)
+Provider switched to FlatSigningProvider (keys + pubkeys maps
+populated for the two consumed keys — lookup-equivalent for all
+prior arms), plus tr_trees registration of the fixed-2G tree when
+both keys are valid, plus <script/interpreter.h> for
+TAPROOT_LEAF_TAPSCRIPT.
+
+### Seed
+/tmp/psbt_v2_trsp_seed (223 B, sha256
+bdbb7b37430a2f021c98b70df7137a734dce30f6809a182d4e89dc72ecc87111):
+[151 B PSBTv2 doc: funding tx pays 50000 to
+5120c91c51656cd53945885bc870c63863b0c50cbb9ca6cc16c7c463ac722
+0f5d040 (taproot_construct(2G-xonly, [xonly(K2) OP_CHECKSIG]) —
+matches the C++ builder byte-for-byte); witness_utxo-only input;
+49000 OP_TRUE output] + c4 trailer. Constructor /tmp/btc50_trsp.py.
+
+### Signing proof (two independent verifiers)
+1. In-target trace (temporary instrumentation, reverted):
+   sign_err=7(OK) verified=1 final_wit=1 wit_items=3 — the
+   3-element witness [schnorr sig, leaf script, control block] is
+   definitive for the SCRIPT-PATH arm (keypath witness has 1
+   item). First attempt with internal=K proved the keypath-wins
+   subtlety (wit analysis drove the 2G redesign).
+2. Public RPC: descriptor tr(2G-xonly-hex, pk(WIF(K2))) wallet;
+   walletprocesspsbt complete=True; finalizepsbt complete=True
+   (0200000000010193a088a0... — prevout matches the funding tx).
+
+### Final-code control
+200-run corpus over the 6-seed family (v0, v2, 2-in, wit, tr,
+trsp) clean; family re-verified on the Flat provider (all prior
+arms still verified=1).
+
+### Exact commands
+- python3 /tmp/btc50_trsp.py (taproot_construct tree)
+- python3 /tmp/btc50_corrsp_v2.py --configfile=... (CORRSP-SIGN-OK)
+- FUZZ=psbt build_fuzz/bin/fuzz -runs=2 /tmp/psbt_v2_trsp_seed
+  (wit_items=3 trace); -runs=200 /tmp/psbt_c5_corpus (final)
+
+### Verdict
+CONFIRMED deliverable: every SignPSBTInput signing arm reachable
+via a key-holding provider is now driven — P2PKH, multi-key,
+P2WPKH, P2TR keypath, P2TR script-path — each with two
+independent verifiers. The psbt signing-section coverage program
+is COMPLETE at the provider-boundary.
+
+### Limitations / queue
+- Deeper trees (multi-leaf, hidden branches) and MuSig2 fields:
+  harness can grow leaves by the same pattern; PSBT-level musig
+  fields are #80's territory.
+- qa-assets corpus-dir import still queued.
+
+## Rotation note
+Eight cycles; script-path cell closed. The campaign's remaining
+cell is the corpus import; further arms need new PSBT features.
