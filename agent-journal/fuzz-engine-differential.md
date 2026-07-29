@@ -393,3 +393,54 @@ and clean.
 ## Rotation note
 Seven cycles; MuSig2 field family closed. Not exhausted (taproot
 parse fields).
+
+## Cycle 8 (2026-07-29): taproot PSBT parse fields seeded (TAP_LEAF_SCRIPT 0x15, TAP_MERKLE_ROOT 0x18) — differential clean
+
+### Draw
+Re-rank draw over the rebuilt 4-cell queue:
+raw=6181926257477540249, index 1 (of 4) -> #80 (eighth cycle; c7
+queue cell "TAP_LEAF_SCRIPT / TAP_MERKLE_ROOT"). Branch:
+audit/fuzz-engine-c8 from c281f89a2b (#65 c6 journal tip).
+
+### Seed (257 B)
+/tmp/psbt_v2_tap_seed (sha256
+18aa84003d96dee7ba966e306ebe879df56383729f7e5a10f0810e37e7f08340):
+the #50 c8 script-path doc (witness_utxo pays the fixed-2G tree)
+plus, on input 0:
+- 0x15 TAP_LEAF_SCRIPT, key = type + 33-byte control block
+  (0xc1 = 0xc0|negflag(1) + 2G internal; key 34 B satisfies
+  >=34 and (len-2)%32==0 per psbt.h:815-818), value = leaf script
+  (push32 xonly(K2) OP_CHECKSIG) + 0xc0 leaf version
+- 0x18 TAP_MERKLE_ROOT, key = type only, value = the tree's
+  merkle root fa7263102846...d852
+
+### Verifications
+- decodepsbt: accepted; input lists taproot_scripts (1 leaf),
+  taproot_merkle_root=fa726310...d852 (matches constructor),
+  witness_utxo present.
+- Differential (400 cases; tap seed 1/3 of the mix with
+  c6-musig/rich-v2/minimal-v2/v0): TALLY A=0 B=0 C=160 D=134
+  E=105 R=1. Production never over-accepts; 105 round-trip-equal
+  accepts (positive control); one hostile-count case contained by
+  the 4-GiB guard (R=1, same class as c6's R=3).
+
+### Verdict
+DISMISSED (clean): the taproot parse-field surface (leaf script
+control-block validation, merkle root) is differential-clean.
+With #50 c8's signing-side coverage, the taproot PSBT surface is
+now covered on both the parse and signing dimensions.
+
+### Exact commands
+- python3 seed constructor (taproot_construct reuse from #50 c8)
+- python3 /tmp/btc80_dec2.py --configfile=... (DECODE-OK)
+- python3 /tmp/btc80_diff_c8.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc80_c8 (TALLY above)
+
+### Limitations / queue
+- Remaining taproot parse fields (TAP_KEY_SIG 0x13, TAP_SCRIPT_SIG
+  0x14, TAP_BIP32_DERIVATION 0x16, TAP_INTERNAL_KEY 0x17) unseeded
+  — the tail of the family; next cell if redrawn.
+
+## Rotation note
+Eight cycles; taproot leaf/merkle fields closed. Not exhausted
+(remaining tap fields).
