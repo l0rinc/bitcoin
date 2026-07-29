@@ -209,3 +209,45 @@ structural oracle, exactly as designed.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-29): PSBTv2 differential — v2 paths clean too (A=0/400 mixed corpus)
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=1166893013096824274, index 4 -> #80 (fourth cycle; c1 queue
+cell "PSBTv2 seeds — version-2 paths the v0 seeds never reach").
+Branch: audit/fuzz-engine-c4 from 0676a2142d (#91 c4 bookkeeping).
+
+### Seed construction (RPC-verified)
+Hand-built 87-byte PSBTv2 (BIP370 globals: TX_VERSION=2,
+INPUT_COUNT=1, OUTPUT_COUNT=1, VERSION=2; 1 input with zero
+prevout + 1 OP_TRUE output). decodepsbt accepts it (inputs 1,
+outputs 1). Seed preserved at /tmp/psbt_v2_seed.
+
+### Differential (c1 harness, mixed corpus: 300 v2 + 100 v0 cases)
+TALLY: A=0 B=0 C=124 D=168 E=107 R=1.
+- A=0: production never over-accepts, v2 paths included.
+- E=107: double-accepted with round-trip equality (v2 seed among
+  them — positive control).
+- C=124: Python-lax classes (same as c1: no EOF check, short
+  reads, canonicality). B=0: canonical agreement on double-accepts.
+- R=1: one hostile-count case contained by the 4 GiB guard.
+
+### Verdict
+DISMISSED: the PSBTv2 parser surface is differential-clean like
+v0; no divergence in either direction beyond the reference's known
+laxness.
+
+### Exact commands
+- seed constructor (python struct + ser_compact_size; in journal
+  history); python3 /tmp/btc80_diff.py (patched corpus mix)
+  --configfile=build-before/test/config.ini --tmpdir=/tmp/btc80
+
+### Limitations / queue
+- v2-specific FIELDS (taproot keypaths, tx modifiable flags) not
+  deeply seeded (the seed is minimal); a richer v2 corpus is the
+  next depth step if a cycle lands here.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
