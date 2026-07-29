@@ -505,3 +505,54 @@ structured field families (base, taproot, musig2) are now covered.
 ## Rotation note
 Nine cycles; taproot input fields closed. Not exhausted (output
 fields).
+
+## Cycle 10 (2026-07-29): output-side taproot PSBT fields seeded (OUT_TAP_INTERNAL_KEY/TREE/BIP32_DERIVATION) — differential clean
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=16381284910993384311, masked 7157912874138608503, index 1
+(of 2) -> #65 c9; THIS cycle: singleton -> #80 (tenth cycle; c9
+queue cell "output-side taproot fields"). Branch:
+audit/fuzz-engine-c10 from 00e592044c (#65 c9 journal tip).
+
+### Seed (298 B, sha256
+9d6c51a28f96b1443c0fdcdcd373160c2cecd5072ca5fbc02bcf2e9624a96beb)
+The trsp doc's output map extended with:
+- 0x05 OUT_TAP_INTERNAL_KEY: raw 32 B (2G internal)
+- 0x06 OUT_TAP_TREE: per-leaf tuple [depth=0, leaf_ver=0xc0,
+  CompactSize(35)+script] — RAW content (the handler vector-reads
+  tree_v itself; the c9 double-prefix lesson applied — first
+  attempt with an inner CompactSize was rejected "end of data",
+  fixed by removing it)
+- 0x07+xonly OUT_TAP_BIP32_DERIVATION: CompactSize(1)+leaf_hash+
+  fingerprint (same raw framing as input-side 0x16)
+
+### Verifications
+- decodepsbt: output lists taproot_internal_key, taproot_tree,
+  taproot_bip32_derivs (+ amount/script).
+- Differential (400 cases; tapout 1/3 of the mix): TALLY
+  A=0 B=0 C=173 D=144 E=82 R=1. Production never over-accepts;
+  82 round-trip-equal accepts (positive control); one
+  guard-contained hostile count (R=1).
+
+### Verdict
+DISMISSED (clean): the output-side taproot parse family is
+differential-clean. ALL PSBTv2 structured field families are now
+seeded and clean: base fields (v0/v2), input taproot (0x13-0x18),
+input musig2 (0x1a-0x1c), output taproot (0x05-0x07).
+
+### Exact commands
+- python3 seed constructor (raw tree tuple)
+- python3 /tmp/btc80_dec4.py --configfile=... (DECODE-OK)
+- python3 /tmp/btc80_diff_c10.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc80_c10 (TALLY above)
+
+### Limitations / queue
+- The PSBT parse surface is now fully seeded at the structured
+  level; remaining differential depth is cross-field SEMANTICS
+  (e.g., merkle root consistency with leaf scripts) — a different
+  experiment class if a cycle lands here.
+
+## Rotation note
+Ten cycles; all structured PSBT field families closed. #80
+quiets until new fields or a semantics cell is drawn.
