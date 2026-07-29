@@ -251,3 +251,59 @@ laxness.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 5 (2026-07-29): rich PSBTv2 corpus — taproot keypath differential clean (A=0); the seed taught me BIP371's value layout twice
+
+### Draw
+Re-rank draw over the rebuilt 2-cell queue:
+raw=6241307819045081386, index 0 -> #80 (fifth cycle; c4 queue
+cell "richer v2 corpus — taproot keypaths, tx modifiable flags").
+Branch: audit/fuzz-engine-c5 from 139d4571e5 (#65 c4 bookkeeping).
+
+### Seed construction saga (recorded honestly — 6 iterations)
+The 299-byte rich v2 seed (TX_VERSION=2, counts, TX_MODIFIABLE=3;
+input with prevout/sequence/TAP_INTERNAL_KEY/TAP_BIP32_DERIVATION;
+output with amount/P2TR-script/TAP_INTERNAL_KEY/TAP_BIP32) failed
+decodepsbt 5 times before acceptance:
+1. TAP_INTERNAL_KEY written under TAP_KEY_SIG's id (0x13 vs 0x17).
+2. TAP_BIP32 under MUSIG2's id (0x1a vs 0x16).
+3. Pubkey in the keypath VALUE (BIP371 puts the x-only pubkey in
+   the KEY, 33 bytes total incl. type).
+4. Compact 33-byte pubkey instead of x-only 32-byte (key must be
+   33 incl. type byte).
+5. Extra inner CompactSize before the leaf-hashes set: the parser
+   (psbt.h:833-851) reads the outer value length, then the set
+   count; my inner 0x0d was read as count=13 hashes -> 416 bytes ->
+   end of data. Correct value: [count][hashes][fingerprint][path],
+   no inner length. The Python framework parser accepted the
+   malformed doc (its keypath handling is lax) — the C++ parser's
+   exact expectation was the teacher (matches the campaign's
+   Python-lax theme).
+
+### Verification
+- decodepsbt ACCEPTED with taproot_bip32_derivs +
+  taproot_internal_key on both input and output.
+- Differential (c1 harness, 400 mixed cases: 50% rich-v2, 25%
+  minimal-v2, 25% v0): TALLY A=0 B=0 C=147 D=134 E=115 R=4.
+  Production never over-accepts; the four hostile-count cases
+  (keypath hash sets / path vectors — the new allocation class the
+  richer fields add) contained by the 4 GiB guard.
+- Seed preserved: /tmp/psbt_v2_rich_seed.
+
+### Verdict
+DISMISSED (clean): the rich v2 surface is differential-clean; the
+keypath allocation classes are guard-contained.
+
+### Exact commands
+- python3 seed constructor (6 iterations recorded above)
+- python3 /tmp/btc80_diff.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc80
+
+### Limitations / queue
+- MuSig2 fields (0x1a-0x1c) unseeded — next depth step if a cycle
+  lands here.
+- TAP_LEAF_SCRIPT/TAP_MERKLE_ROOT paths unseeded.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
