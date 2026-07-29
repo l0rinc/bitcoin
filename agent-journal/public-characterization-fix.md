@@ -165,3 +165,65 @@ target for SignPSBTInput/UpdatePSBTOutput) under that campaign.
   unreachable by design (target never signs); covering them needs a
   SigningProvider-bearing target — out of scope, queued as a possible
   #50 c2 follow-up.
+
+## Cycle 2 (2026-07-29): truncation-gate sibling sweep — class is clean; psbt was the sole member
+
+### Draw
+Random draw over the 19-goal eligible pool (14 pending + 5 CYCLE-1,
+#43 excluded as just-cycled): raw=6188991159828561970, index 18 ->
+#101 (second cycle; c1 queue cell "grep other fuzz targets for the
+same single-mode document pattern"). Branch:
+audit/public-characterization-c2 from dc72b5940f (#43 c2
+bookkeeping). Start state: tracked-clean.
+
+### Hypothesis
+Other fuzz targets pass ConsumeRandomLengthString() into a
+full-document deserializer, leaving valid long documents unreachable
+(same gate class as the psbt target fixed in c1).
+
+### Sweep (all uses, mechanism-level classification)
+No-arg uses (3): psbt.cpp (FIXED c1), banman.cpp:114, script.cpp:211.
+Bounded-arg uses (10): base_encode_decode.cpp:64/106 (100),
+bech32.cpp:69 (limit+1), block_index.cpp:217 (100),
+connman.cpp:155/224 (64, MESSAGE_TYPE_SIZE),
+crypto_hkdf_hmac_sha256_l32.cpp:21/26 (1024, 128),
+http_request.cpp:64/179 (16).
+Classification rule: the backslash-escape terminator only gates
+VALID whole documents when (a) the consumer is a full-document
+parser AND (b) valid documents can contain the 0x5c+non-0x5c pair.
+- banman.cpp:114: string is written as a deliberately CORRUPTED
+  banlist.json — arbitrary content is the purpose; a valid escape-
+  free JSON contains no 0x5c and arrives whole. NO GATE.
+- script.cpp:211: DecodeDestination — base58/bech32 alphabets
+  exclude 0x5c; valid destinations arrive whole. NO GATE.
+- All 10 bounded uses: consumers are codecs whose valid alphabets
+  exclude 0x5c (base64/base58/bech32/hex), length-capped ASCII
+  tokens (HTTP names/values, net msg type), or arbitrary salt/info
+  bytes (HKDF — content-agnostic). NO GATE.
+
+### Executable confirmation (build_fuzz, -print_coverage=1, 2000
+runs, empty corpus)
+- FUZZ=script: no UNCOVERED_FUNC for DecodeDestination/
+  EncodeDestination — consumer covered, no gate.
+- FUZZ=banman: no UNCOVERED_FUNC for the load path; loop-body
+  functions (Ban 0/5, IsBanned 0/25+0/17, ClearBanned 0/17,
+  AssertBanTransition 0/41) uncovered ONLY because an empty corpus
+  yields ConsumeBool()==false at LIMITED_WHILE entry — an
+  empty-corpus artifact unrelated to the truncation class (grown
+  qa-assets corpora enter the loop trivially).
+
+### Verdict
+DISMISSED: the truncation-gate class has no siblings; the psbt
+target (c1) was the sole member. No fix needed anywhere else. The
+alphabet-membership rule above is the reusable classifier for
+future ConsumeRandomLengthString additions (review gate: if a new
+target feeds it to a binary-document parser, apply the c1 hybrid).
+
+### Limitations / queue
+- The remaining PSBT coverage gap (SignPSBTInput 0/127,
+  UpdatePSBTOutput 0/43, PSBTInputSignedAndVerified 0/111) needs a
+  SigningProvider-bearing target; script_sign.cpp:130 already builds
+  a FillableSigningProvider and is the natural pattern source.
+  Queued to #50's next cycle (fuzz-blockers owns new-harness work).
+- banman empty-corpus loop starvation noted for the record; not a
+  defect (seed corpora cover it).
