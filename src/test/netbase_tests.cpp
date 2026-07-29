@@ -232,6 +232,18 @@ BOOST_AUTO_TEST_CASE(netbase_networks)
     BOOST_CHECK(CreateInternal("foo.com").GetNetwork() == NET_INTERNAL);
 }
 
+BOOST_AUTO_TEST_CASE(dynsock_wait_does_not_take_ownership_of_stack_socket)
+{
+    auto pipes{std::make_shared<DynSock::Pipes>()};
+    DynSock sock{pipes};
+    const uint8_t byte{0x01};
+    pipes->recv.PushBytes(&byte, sizeof(byte));
+
+    Sock::Event occurred{0};
+    BOOST_REQUIRE(sock.Wait(0ms, Sock::RecvEvent, &occurred));
+    BOOST_CHECK((occurred & Sock::RecvEvent) != 0);
+}
+
 BOOST_AUTO_TEST_CASE(netbase_properties)
 {
 
