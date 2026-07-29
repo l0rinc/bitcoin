@@ -171,3 +171,52 @@ recorded as upstream-watch data.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-29): corecheck sweep — deltas are noise-shaped (same magnitudes on unrelated PRs); c3's regression reading corrected
+
+### Draw
+Re-rank draw (last of the rebuilt 2-cell queue; singleton): #42
+(fourth cycle; c3 queue "periodic corecheck sweep"). Branch:
+audit/ci-review-bot-c4 from c6dd950cd3 (#80 c5 bookkeeping).
+
+### Sweep result (15 fork-relevant open PRs, corecheck.dev)
+- 35620 (leveldb block-cache knob): only WalletBalanceWatch -8.82%
+  (noise-level, unrelated) — benchmarks clean.
+- 35818 (bloom sizing — UNRELATED to mempool): ComplexMemPool
+  +13.85%, OrphanageEraseForBlock +13.52%, OrphanageEraseForPeer
+  +31.19%, BlockFilterIndexSync +10.25%.
+- (35744 from c3: ComplexMemPool +15.58%, OrphanageEraseForPeer
+  +33.33%.)
+
+### The critical observation
+A BLOOM-SIZING PR cannot plausibly affect mempool/orphanage
+benchmarks — yet it shows the same +10-33% deltas in the same
+benchmarks as 35744. The deltas must be CI benchmark drift/noise
+(shared-runner variance of the mempool benchmarks at +-10-35%),
+not PR-caused effects. c3's reading of the 35744 deltas as PR
+regressions is CORRECTED here: the bench numbers are noise-shaped
+and can't carry regression weight on their own. The 35744 TSan
+failure (#42 c1) stands as the real signal.
+
+### Verdict
+- Corecheck coverage/bench endpoints remain useful ORACLES for
+  coverage deltas (deterministic) — but their benchmark deltas
+  need a baseline-drift control before treating a +-10-35% mempool
+  delta as evidence. Recorded as method guidance.
+- The author's own bench measurements remain the authoritative
+  perf evidence for his branches (this rotation's A/B protocol).
+
+### Exact commands
+- corecheck.dev/bitcoin/bitcoin/pulls/{35620,35818} (FetchURL
+  extraction); raw-curl sweep over 15 PRs (structure note: the
+  raw HTML needs the FetchURL-style extraction, not regex)
+
+### Limitations / queue
+- Only 3 PRs deeply read (35620/35818/35744); the rest showed no
+  significant rows or pending coverage.
+- A true noise floor would need repeated per-PR runs (corecheck
+  doesn't publish variance).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
