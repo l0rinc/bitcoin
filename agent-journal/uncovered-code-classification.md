@@ -135,3 +135,58 @@ asserts would add nothing (they are unreachable by construction).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-07-29): ScriptCompression malformed-stream arms — 3 arms closed, mutation-verified
+
+### Draw
+Re-rank draw over the rebuilt 9-cell queue (after #23 c3):
+raw=523542359493460158, index 6 -> #34 (third cycle; c2 queue cell
+"compressor.cpp decompress paths under corruption"). Branch:
+audit/uncovered-code-c3 from 54e0d54ef8 (#23 c3 bookkeeping).
+
+### Cell
+ScriptCompression::Unser (compressor.h:81-101) has three
+corruption arms with no oracle: (a) nSize beyond MAX_SCRIPT_SIZE
+degrades to OP_RETURN + ignore (upstream-intended: corrupt record
+becomes unspendable, never a 4GB allocation); (b) the same
+oversized id on a truncated stream must throw (SpanReader::ignore
+end-of-data); (c) truncated special-script body must throw.
+DecompressScript's invalid-pubkey and bad-id arms were already
+covered (compress_tests.cpp:160-192); the VARINT reader overflow
+arms are O2's battery.
+
+### Change (test-only)
+compress_tests.cpp: new script_compression_malformed_stream_arms
+with the three arms (OP_RETURN substitution + full consumption;
+truncated-oversized throws; truncated-special throws).
+Harness lesson: `ss << junk` writes a CompactSize length prefix —
+raw bytes need `ss << std::span{junk}` (the first draft failed
+ss.empty() by exactly the 3-byte prefix).
+
+### Verification
+- compress_tests green (8 cases).
+- Mutation: dropping the MAX_SCRIPT_SIZE guard (if(false)) makes
+  arm 1 fail exactly at the OP_RETURN check (unguarded path
+  resized to 10001 bytes); restored, re-ran green.
+
+### Verdict
+CONFIRMED oracle delivered (3 previously-unpinned arms,
+mutation-verified). No production defect: all three paths were
+already safe-by-construction (bounded reads, throw-on-short) —
+this closes the coverage classification.
+
+### Exact commands
+- cmake --build build-before -j4 --target test_bitcoin
+- test_bitcoin --run_test=compress_tests[/
+  script_compression_malformed_stream_arms]
+- mutation: compressor.h guard drop -> :206 failure -> revert
+
+### Limitations / queue
+- DecompressScript special types 0x02/0x03 (compressed-pubkey
+  bodies) get no distinct malformed arm (fixed 32-byte read; the
+  truncated-special arm covers the class).
+- dbwrapper record-boundary reads (c2 queue) still open.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
