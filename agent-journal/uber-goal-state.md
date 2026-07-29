@@ -120,11 +120,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 78 | translation-validation | CYCLE-1 | 2026-07-28 | Assume-erasure contract validated at binary: fork hardening zero-cost in release |
 | 100 | sink-reverse-reachability | CYCLE-1 | 2026-07-28 | bloom ctor div-by-zero test-only latent; empty-filter guarded (CVE-2013-5700 present) |
 | 7 | resource-exhaustion-variants | CYCLE-2 | 2026-07-29 | UTXO-scan/resize race: fixed in-tree (e049f064e1 unique-lock cursor); upstream master verified still racy |
+| 94 | bindings-ffi-parity | CYCLE-2 | 2026-07-29 | enum mapping static_assert tables (073d543f26), reorder tripwire fires at :268 |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=1683310221613486475 -> idx 35 (of 52) -> #7.
+   raw=3778131996815310646 -> idx 49 (of 51) -> #94.
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
    validation/indexes/storage); wallet/IPC/GUI/RPC only to prove
@@ -162,7 +163,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1), 21(c1,c2), 43(c1), 45(c1), 47(c1,c2), 48(c1), 51(c1), 59(c1), 60(c1),
 61(c1,c2,c3), 63(c1), 65(c1,c2), 66(c1), 67(c1), 68(c1), 71(c1), 73(c1), 75(c1),
-76(c1,c2), 81(c1,c2), 90(c1), 91(c1), 92(c1), 94(c1), 95(c1), 100(c1).
+76(c1,c2), 81(c1,c2), 90(c1), 91(c1), 92(c1), 94(c1,c2), 95(c1), 100(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
