@@ -2915,13 +2915,22 @@ bool CWallet::SetAddressPreviouslySpent(WalletBatch& batch, const CTxDestination
     if (std::get_if<CNoDestination>(&dest))
         return false;
 
-    if (!used) {
-        if (auto* data{common::FindKey(m_address_book, dest)}) data->previously_spent = false;
-        return batch.WriteAddressPreviouslySpent(dest, false);
-    }
+    if (!batch.WriteAddressPreviouslySpent(dest, used)) return false;
 
-    LoadAddressPreviouslySpent(dest);
-    return batch.WriteAddressPreviouslySpent(dest, true);
+    auto update_in_memory = [this, dest, used] {
+        AssertLockHeld(cs_wallet);
+        if (used) {
+            LoadAddressPreviouslySpent(dest);
+        } else if (auto* data{common::FindKey(m_address_book, dest)}) {
+            data->previously_spent = false;
+        }
+    };
+    if (batch.HasActiveTxn()) {
+        batch.RegisterTxnListener({.on_commit=std::move(update_in_memory), .on_abort={}});
+    } else {
+        update_in_memory();
+    }
+    return true;
 }
 
 void CWallet::LoadAddressPreviouslySpent(const CTxDestination& dest)

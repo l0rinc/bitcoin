@@ -215,3 +215,52 @@ The source/test changes make `setlabel` derive its purpose once, check `SetAddre
 - Limitation: the regression uses the mock SQLite backend and does not exercise Berkeley DB or a power-loss/restart between the database failure and RPC return. The fixed path relies on the already-tested transactional `SetAddressBook` contract.
 - Source/test commit: `ca5f4d5279` (`wallet: report setlabel address-book write failures`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
 - Next queue: close this cycle, then run a fresh gate and draw another distinct catalog goal. Do not reopen the cycle-39 address-book publication fix without new backend or restart evidence.
+
+## Cycle 89: temporary-wallet and public failure-state audit
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `27`
+- Selected slug: `error-path-state`
+- Branch: `uber-cycle-89-error-path-state-20260729`
+- HEAD at gate: `e005d70cebd00aa20a4d8c8ac73ad9e5720530f7`
+- `origin/master` at gate: `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `2 966`
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The tracked worktree passed `git diff --check`; known unrelated untracked agent artifacts remain preserved and excluded from cycle commits. No relevant Bitcoin Core, test, fuzz, sanitizer, or benchmark process was running at the gate.
+
+This cycle excludes the earlier goal-27 wallet passphrase, transaction-download/index, address-book publication, and `setlabel` RPC cells. It also excludes the already-documented descriptor PSBT invalid-signature path and the `submitSolution` template mutation: current functional coverage explicitly treats a rejected reconstructed block as inspectable state and then retries a valid solution on the same template. The new evidence queue is temporary-wallet export/reopen behavior, public wallet rescan reservation failure, and adjacent status-returning lifecycle paths introduced or changed in recent history.
+
+### Candidate ledger
+
+| Surface | Hypothesis | Verdict |
+|---|---|---|
+| `BlockTemplateImpl::submitSolution` | A rejected solution leaves a mutated template that should have been rolled back. | Dismissed: `interface_ipc_mining.py` explicitly checks that the rejected reconstructed block is visible through `getBlock()` and then retries a valid solution on the same template. |
+| Temporary wallet export | A failed backup or intermediate-wallet write leaks partial state into the source wallet or leaves a failed destination behind. | Dismissed: export uses an in-memory intermediate wallet, a cleanup handler for the destination, and sets success only after the backup completes. |
+| `CWallet::SetAddressPreviouslySpent` | The `used` metadata write can fail after `m_address_book` has been changed, leaving runtime and durable spent state inconsistent. | Confirmed and fixed. |
+
+### Confirmed finding
+
+`SetAddressPreviouslySpent` updated `m_address_book[dest].previously_spent` before calling `WalletBatch::WriteAddressPreviouslySpent`. On a failed insert, the caller continued adding the transaction while the runtime address was marked spent and the `DESTDATA/used` row was absent. The `used=false` erase path had the symmetric ordering defect: an erase failure could leave the runtime value false while the durable row remained true. The path is reachable through `CWallet::SetSpentKeyState` from `AddToWallet` when `WALLET_FLAG_AVOID_REUSE` is set.
+
+The fix writes the database record first. It publishes the in-memory value only after a standalone write succeeds, or from an `on_commit` listener when the caller supplied an active database transaction. Abort and failed-commit callbacks do not publish state. This preserves the existing best-effort secondary-metadata contract while preventing a failed write from creating a false runtime/durable split.
+
+### Verification
+
+- Final build: `CCACHE_DIR=/data/my_storage/tmp/ccache-cycle89 cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j2`: passed and linked `bin/test_bitcoin`.
+- Independent pre-fix control: the old source rebuilt successfully; the focused command with `--random=8901` exited `201` and reported `check !wallet.IsAddressPreviouslySpent(destination) has failed` at `wallet_tests.cpp:220`.
+- Fixed focused regression: the same command and seed exited `0` with `*** No errors detected`.
+- Fixed wallet suite: `--run_test=wallet_tests --catch_system_error=no --log_level=message --random=8902` ran 18 cases and exited `0` with `*** No errors detected`.
+- `git diff --check`: passed after the final source/test edits.
+
+The regression uses `MockableSQLiteDatabase`, an exact serialized `DBKeys::DESTDATA`/`used` trigger, and a query that asserts the failed marker is absent. It does not separately inject the symmetric `used=false` erase failure, Berkeley DB behavior, or a power-loss/restart boundary; the source change covers both boolean directions and active-transaction commit/abort behavior.
+
+### Verdict and handoff
+
+- Confirmed and fixed: failed spent-marker persistence no longer mutates the in-memory address-book record first.
+- The caller still ignores the boolean because this marker is secondary wallet metadata; a future cycle may separately assess whether multi-input marker updates need an explicit transaction or fail-closed policy. That is outside this focused state-publication fix.
+- Source/test/journal commit: pending the close commit; record its exact hash in the uber-goal state snapshot.
+- Next queue: close this cycle, run a fresh gate, and draw another distinct catalog goal. Do not reopen the earlier goal-27 wallet passphrase, transaction/index, address-book publication, or `setlabel` cells without new backend, restart, commit-failure, or caller evidence.
