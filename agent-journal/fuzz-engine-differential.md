@@ -556,3 +556,64 @@ input musig2 (0x1a-0x1c), output taproot (0x05-0x07).
 ## Rotation note
 Ten cycles; all structured PSBT field families closed. #80
 quiets until new fields or a semantics cell is drawn.
+
+## Cycle 11 (2026-07-29): cross-field semantics — inconsistent TAP_MERKLE_ROOT accepted by parser, IGNORED by wallet (identical final tx)
+
+### Draw
+Re-rank draw over the rebuilt 3-cell queue:
+raw=16639617182922783380, masked 7416245146068007572, index 0
+(of 3) -> #80 (eleventh cycle; c10 queue cell "cross-field
+semantics"). Branch: audit/fuzz-engine-c11 from 4cd712e403
+(#80 c10 journal tip).
+
+### Hypothesis
+A PSBT whose TAP_MERKLE_ROOT contradicts its leaf script +
+control block + witness_utxo spk might be parser-rejected — or,
+if accepted, might mislead a signer into signing for the wrong
+tree.
+
+### Experiment
+Seed: the c8 tap doc with 0x18 replaced by a DIFFERENT tree's
+merkle root (leaf modified to xo2 OP_DROP OP_TRUE; root
+13026d35... vs real fa726310...). Two checks:
+1. decodepsbt: ACCEPTED with the contradictory field listed
+   (taproot_merkle_root=13026d35...). The parser performs NO
+   cross-field consistency validation for taproot fields.
+   (Construction note: the framework deserializer maps 1-byte
+   keys to ints — appending with a bytes key created a genuine
+   DUPLICATE-KEY document that the C++ parser correctly REJECTED
+   ("Duplicate Key, input key 18 already provided") — a nice
+   incidental parser-oracle confirmation.)
+2. Wallet signing (tr(2G, pk(K2)) descriptor): walletprocesspsbt
+   complete=True; finalizepsbt complete=True with tx
+   0200000000010193a088a02906e266... — BYTE-IDENTICAL to the
+   consistent doc's finalization. The wallet builds the witness
+   from provider-side tree data and IGNORES the PSBT merkle-root
+   field entirely.
+
+### Verdict
+DISMISSED (semantics understood, no exploit path): the field is
+an informational BIP371 verification aid. A misleading root
+cannot redirect a signature — the witness's control block comes
+from the provider's builder, and consensus VerifyScript is the
+final arbiter for any real tree/spk mismatch. Bitcoin Core's
+signing path does not trust the field. Parser acceptance is
+BIP-conformant (no parse-time consistency requirement).
+
+### Exact commands
+- python3 bad-root constructor (duplicate-key incident included)
+- python3 /tmp/btc80_dec5.py --configfile=... (DECODE-OK with
+  bad root)
+- python3 /tmp/btc50_corrbad.py --configfile=... (BADROOT-RESULT:
+  wallet accepted, identical final tx)
+
+### Limitations / queue
+- Other signer implementations might verify the field (a strict
+  BIP371 verifier would reject the doc); only Core's path was
+  tested.
+- Remaining cross-field class: musig2 nonce/sig vs participant
+  key consistency — same informational shape; low value.
+
+## Rotation note
+Eleven cycles; semantics cell closed with behavioral evidence.
+#80 quiets pending new fields/signals.
