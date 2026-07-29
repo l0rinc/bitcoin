@@ -5,6 +5,21 @@ change. Legend: 🚨 Critical | 🔴 High | 🟠 Medium/correctness-data-loss
 risk | 🟡 promising-unverified | ⚪ blocked/inconclusive | ✅ fixed +
 independently verified.
 
+## ✅ PSBT fuzz harness truncation gate (fixed d086164661, #101 c1)
+- Mechanism: psbt fuzz target fed ConsumeRandomLengthString() into
+  DecodeRawPSBT; the backslash-escape convention truncated any document
+  containing 0x5c+non-0x5c, so whole valid PSBTs never decoded and the
+  per-input/output half of the target was unreachable.
+- Evidence: hybrid consumption (ConsumeBool-selected
+  RandomLength/RemainingBytes) — 9 starved functions (483 edges)
+  covered AFTER, all 9 UNCOVERED again in the old-corpus CONTROL,
+  isolated RPC-verified 136-byte seed 528 -> 2857 edges. Inlining
+  artifacts separated per #9 c2 discipline.
+- Branch/commit: audit/public-characterization @ d086164661 (fix +
+  journal public-characterization-fix.md). Archive: this cycle's pick.
+- Next: grep other fuzz targets for the same single-mode document
+  pattern; #50 c2 SigningProvider-bearing target for SignPSBTInput.
+
 ## ✅ Rolling-bloom reset-per-tip-change CPU storm (fixed c8f53e58d9)
 - Mechanism: TxDownloadManagerImpl::ActiveTipChange reset two ~863 KiB
   rolling bloom filters per accepted block once the regtest IBD latch
@@ -56,7 +71,8 @@ independently verified.
   253-form rejection (253/253) + MAX_SIZE both sides; injected
   mutation (serialize.h:345 <253 -> <252) killed; restore green.
 - Branch/commits: audit/property-oracle @ 8b7d8ac878, journal
-  e9020948c7; archive: next cycle's pick onto agent/all-findings.
+  e9020948c7; archived on agent/all-findings (content-verified
+  2026-07-29).
 - Next: 254/255-form sampling widened; independent-deserializer
   differential (functional framework) in a c2.
 
@@ -99,7 +115,7 @@ independently verified.
   :231-262.
 - Branch/commits: fix in lineage (e049f064e1 + unit test + resize
   fuzz target); journal resource-exhaustion-variants.md c2;
-  archive: this cycle's pick.
+  archived on agent/all-findings (hash-present e049f064e1).
 - Next: track l0rinc's upstream PR 35744 (shared-lock refinement)
   landing; nothing to do locally.
 
@@ -116,7 +132,7 @@ independently verified.
   unsafe by the verifier (failAvg-without-firstRecordedHeight and
   Read() restore cases).
 - Branch/commits: audit/loupe-pipeline @ 675011ba86; journal #63;
-  archive: next pick onto agent/all-findings.
+  archived on agent/all-findings (content-verified 2026-07-29).
 - Next: nothing local; candidate upstream perf note.
 
 ---
