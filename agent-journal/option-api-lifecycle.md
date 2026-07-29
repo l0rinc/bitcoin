@@ -167,3 +167,54 @@ pre-replacement; the first post-replacement inbound message threw at
 - If ever upstreamed: a one-line try/catch + LogWarning around both
   CaptureMessage call sites is the obvious candidate patch; NOT
   applied locally (upstream-design question).
+
+## Cycle 3 (2026-07-29): -v2transport settings.json lifecycle — honored, persisted, CLI-overridable (all three proven)
+
+### Draw
+Re-rank draw over the rebuilt 8-cell queue:
+raw=6417013600593057308, index 4 -> #43 (third cycle; c1 queue cell
+"-v2transport restart persistence (settings.json round-trip)").
+Branch: audit/option-lifecycle-c3 from 9e1ed9a2b5 (#106 c3
+bookkeeping).
+
+### Mechanism (read)
+common/init.cpp:98-114 reads settings.json at startup
+(ReadSettingsFile) then normalizes it back (WriteSettingsFile);
+args precedence: command line > settings.json > defaults
+(common/args.cpp). DEFAULT_V2_TRANSPORT=true (net.h:101).
+
+### Experiment (functional, /tmp/btc43_v2settings.py)
+Observable: the NODE_P2P_V2 service bit (1<<11) in the node's own
+version message (unambiguous — the framework's v2 attempt falls
+back to v1 silently, so a handshake-success probe can't
+distinguish; recorded as a probe-design lesson).
+- settings.json {"v2transport": false}: node advertises
+  NODE_P2P_V2=false (v1 works); startup write-back PRESERVES the
+  manual entry (not clobbered).
+- Restart: still false (persistence round-trip).
+- -v2transport=1 on the command line over the same settings.json:
+  advertises true (CLI precedence).
+"Tests successful" end to end.
+
+### Verdict
+DISMISSED: the -v2transport lifecycle is convention-faithful at
+every stage (settings honored, normalized-but-preserved, restart-
+stable, CLI-overridable). No defect.
+
+### Exact commands
+- python3 /tmp/btc43_v2settings.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc43v
+- reads: common/init.cpp:98-114, net.h:101, init.cpp:598/1015,
+  test_node.py:713-733
+
+### Limitations / queue
+- -nosettings behavior (settings ignored entirely) not exercised
+  (trivial by code read).
+- GUI rw_settings write paths are qt-only (out of scope).
+- Campaign cells remaining: none queued beyond this; lifecycle
+  surface of the tracked options is now covered (-prevoutfetchthreads
+  c1, -capturemessages c2, -v2transport c3).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
