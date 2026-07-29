@@ -144,3 +144,20 @@ R14. Public setters validate at the boundary, not downstream
 - 35818 (attempted): no human review yet — unscoreable; carries a
   DrahtBot CI flag on 32-bit ARM (bloom_create_invalid_false_
   positive_rate std::fetestexcept) — recorded under L1's watch.
+
+## Maintainer merge-rationale class (mined 2026-07-29, #60 c5)
+
+M1. Merges are terse but honest about review depth: "light ACK
+  <sha>" (achow101, 35215) — the merge message carries the actual
+  confidence level; "light" is a signal, not a formality.
+M2. Pull descriptions must be self-contained: referencing another
+  PR's graph/data is not enough — "a pull description should bring
+  context" (maflcko, 35200, objecting to a graph copied from a
+  different PR).
+M3. Post-merge lifecycle is maintainer-handled: backports to
+  stable branches tracked by the merger (fanquake: "Backported to
+  30.x in #35452 / 29.x in #35450", 35465).
+M4. Process hygiene: don't hide useful information (fanquake, 35200:
+  on in-place edits shrinking discussion content — "All it does is
+  hide useful information"). Review routing: maintainers cc relevant
+  experts (fanquake -> davidgumberg, 35670).
