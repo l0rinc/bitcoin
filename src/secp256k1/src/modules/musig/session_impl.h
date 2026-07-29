@@ -193,6 +193,10 @@ int secp256k1_musig_pubnonce_parse(const secp256k1_context* ctx, secp256k1_musig
     ARG_CHECK(nonce != NULL);
     ARG_CHECK(in66 != NULL);
 
+    /* Ensure that using the nonce fails if parsing fails and the caller does
+     * not check the return value. */
+    memset(nonce, 0, sizeof(*nonce));
+
     for (i = 0; i < 2; i++) {
         if (!secp256k1_eckey_pubkey_parse(&ges[i], &in66[33*i], 33)) {
             return 0;
@@ -231,6 +235,10 @@ int secp256k1_musig_aggnonce_parse(const secp256k1_context* ctx, secp256k1_musig
     VERIFY_CHECK(ctx != NULL);
     ARG_CHECK(nonce != NULL);
     ARG_CHECK(in66 != NULL);
+
+    /* Ensure that using the nonce fails if parsing fails and the caller does
+     * not check the return value. */
+    memset(nonce, 0, sizeof(*nonce));
 
     for (i = 0; i < 2; i++) {
         if (!secp256k1_musig_ge_parse_ext(&ges[i], &in66[33*i])) {
