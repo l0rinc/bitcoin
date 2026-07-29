@@ -15,6 +15,11 @@ A2 | /tmp/btc101_seed/ (+ psbt_*_whole 0x00-mode-byte re-points) |
 A3 | /tmp/btc101_iso/psbt_1in_whole | #101 c1 isolation seed (528 ->
   2857 edges) | same | REFERENCE | high | FUZZ=psbt .../fuzz -runs=0
   -print_final_stats=1 /tmp/btc101_iso
+A3b | /tmp/psbt_corr_seed (+doc, WIF) | #50 c3 correlated signing
+  seed (PSBT spending P2PKH(K) UTXO; layout replay-verified;
+  walletprocesspsbt complete=True via public RPC) | PSBT signing |
+  ACTIVE corpus (complete-arm driver) | high | FUZZ=psbt .../fuzz
+  -runs=N /tmp/btc50_corr_corpus
 A4 | /tmp/lw_crash_flags_seed | #10 c2 (fd74c4a7c2) load_wallet
   bring-up crash = harness-oracle bug | wallet-db records |
   PRESERVED negative result | high | FUZZ=load_wallet .../fuzz

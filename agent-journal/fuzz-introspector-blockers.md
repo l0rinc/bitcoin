@@ -126,3 +126,62 @@ production PSBT code untouched; master-relative severity none.
 One bounded cycle complete; the re-rank queue from the pool-empty
 note is now fully consumed (all 8 cells done). Next draws rebuild
 the queue from journal queues/URGENT/next-up.
+
+## Cycle 3 (2026-07-29): key-script-correlated PSBT signing seed — layout replay-verified, RPC signability proven
+
+### Draw
+Re-rank draw over the rebuilt 4-cell queue:
+raw=6465375341789668838, index 2 -> #50 (third cycle; c2 queue
+cell "key-script-correlated seed"). Branch:
+audit/introspector-blockers-c3 from d068762887 (#80 c4
+bookkeeping).
+
+### Seed design (matches the harness consumption exactly)
+233 bytes: [163B PSBT v0: unsigned spend of a P2PKH(K)-funded
+outpoint + non_witness_utxo] [0x5c 0x00 terminator] [K 32B]
+[junk K2 32B] [key2-comp=1, key1-comp=1, merge-mode=0(whole),
+doc1-mode=1(random-length)]. The terminator makes doc1 parse as
+exactly the PSBT; front-consumed bytes then land the provider key
+exactly on K (layout replay: doc1 == PSBT byte-exact, key1 == K,
+compressed=1, all bytes consumed).
+
+### Verifications
+- Public API signability: decodepsbt valid; descriptor wallet
+  (pkh(descsum_create(WIF)), active=False) -> walletprocesspsbt
+  complete=True; finalizepsbt complete=True with signed tx hex
+  (0200000001 43cccd...). "Tests successful". Harness path:
+  uses_wallet=True needed (framework default False ->
+  -disablewallet); importprivkey is legacy-only (descriptor
+  wallets -> importdescriptors + descsum checksum + active=False
+  for non-ranged; all recorded as framework lessons).
+- Fuzz harness: FUZZ=psbt .../fuzz -runs=500 over the correlated
+  corpus: clean.
+- Layout replay (python simulation of the target's consumption):
+  doc1 == PSBT byte-exact; key1 == K; terminator consumed; tail
+  bools land in the right order.
+
+### Verdict
+CONFIRMED deliverable: a corpus seed that drives the
+SignPSBTInput complete arm (sign + PSBTInputSignedAndVerified
+with a real signature) — the depth step queued in c2. The seed's
+signing property is proven by the public RPC; the harness layout
+by byte-exact replay; coverage deltas are doc-structure-dependent
+(so not the metric here). Seed preserved: /tmp/psbt_corr_seed
+(+doc at /tmp/psbt_corr_seed_doc, WIF at /tmp/corr_wif.txt).
+
+### Exact commands
+- python3 seed constructor (ECKey pubkey, hash160, fund/spend/
+  PSBT assembly; 0x5c-pair absence checked)
+- python3 /tmp/btc50_corr.py (RPC proof)
+- FUZZ=psbt build_fuzz/bin/fuzz -runs=500 /tmp/btc50_corr_corpus
+- python3 layout replay (this journal's method section)
+
+### Limitations / queue
+- PSBTv2 correlated variant not built (same construction with v2
+  globals).
+- A corpus-directory layout (many correlated variants) is the
+  natural qa-assets-style follow-up.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
