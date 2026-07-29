@@ -983,4 +983,115 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1SignedPartialImportMetadata, TestChain100Setup)
     BOOST_REQUIRE(fs::remove(dump_path));
 }
 
+BOOST_FIXTURE_TEST_CASE(MempoolV1SignedPartialImportDumpReload, TestChain100Setup)
+{
+    mineBlocks(1);
+    const CTransactionRef tx_before = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns[0], 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+    const CTransactionRef tx_after = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns[1], 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+    CMutableTransaction invalid_mutable;
+    invalid_mutable.vin.resize(1);
+    invalid_mutable.vin[0].prevout.SetNull();
+    invalid_mutable.vout.emplace_back(1 * COIN, CScript() << OP_TRUE);
+    const CTransactionRef invalid_tx = MakeTransactionRef(invalid_mutable);
+    const Txid absent_txid = Txid::FromUint256(uint256{45});
+
+    const fs::path import_path = m_path_root / "mempool-v1-signed-partial-import-roundtrip.dat";
+    const fs::path roundtrip_path = m_path_root / "mempool-signed-partial-import-roundtrip.dat";
+    const int64_t now = TicksSinceEpoch<std::chrono::seconds>(NodeClock::now());
+    DataStream dump;
+    dump << uint64_t{1} << uint64_t{3};
+    dump << TX_WITH_WITNESS(*tx_before) << now << int64_t{-1000};
+    dump << TX_WITH_WITNESS(*invalid_tx) << now << int64_t{-2000};
+    dump << TX_WITH_WITNESS(*tx_after) << now << int64_t{-3000};
+    dump << std::map<Txid, CAmount>{
+               {tx_before->GetHash(), -1100},
+               {invalid_tx->GetHash(), -2200},
+               {tx_after->GetHash(), -3300},
+               {absent_txid, -4400}}
+         << std::set<Txid>{tx_before->GetHash(), invalid_tx->GetHash(), tx_after->GetHash(), absent_txid};
+
+    std::ofstream file{import_path.std_path(), std::ios::binary};
+    file.write(reinterpret_cast<const char*>(dump.data()), dump.size());
+    file.close();
+    BOOST_REQUIRE(file.good());
+
+    CTxMemPool& destination = *Assert(m_node.mempool);
+    BOOST_REQUIRE(node::LoadMempool(destination, import_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = true,
+    }));
+    BOOST_REQUIRE_EQUAL(destination.size(), 2U);
+    BOOST_CHECK(destination.exists(tx_before->GetHash()));
+    BOOST_CHECK(destination.exists(tx_after->GetHash()));
+    BOOST_CHECK(!destination.exists(invalid_tx->GetHash()));
+
+    BOOST_REQUIRE(node::DumpMempool(destination, roundtrip_path, fsbridge::fopen, true));
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.removeRecursive(CTransaction(*tx_before), REMOVAL_REASON_DUMMY);
+        destination.removeRecursive(CTransaction(*tx_after), REMOVAL_REASON_DUMMY);
+        destination.ClearPrioritisation(tx_before->GetHash());
+        destination.ClearPrioritisation(tx_after->GetHash());
+        destination.ClearPrioritisation(invalid_tx->GetHash());
+        destination.ClearPrioritisation(absent_txid);
+    }
+    BOOST_CHECK_EQUAL(destination.size(), 0U);
+    BOOST_CHECK(destination.GetPrioritisedTransactions().empty());
+    BOOST_CHECK(destination.GetUnbroadcastTxs().empty());
+
+    BOOST_REQUIRE(node::LoadMempool(destination, roundtrip_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = true,
+    }));
+    BOOST_REQUIRE_EQUAL(destination.size(), 2U);
+    BOOST_CHECK(destination.exists(tx_before->GetHash()));
+    BOOST_CHECK(destination.exists(tx_after->GetHash()));
+    BOOST_CHECK(!destination.exists(invalid_tx->GetHash()));
+    BOOST_CHECK_EQUAL(destination.info(tx_before->GetHash()).nFeeDelta, -1000);
+    BOOST_CHECK_EQUAL(destination.info(tx_after->GetHash()).nFeeDelta, -3000);
+
+    const auto roundtrip_deltas = destination.GetPrioritisedTransactions();
+    BOOST_REQUIRE_EQUAL(roundtrip_deltas.size(), 4U);
+    for (const auto& delta : roundtrip_deltas) {
+        if (delta.txid == tx_before->GetHash()) {
+            BOOST_CHECK(delta.in_mempool);
+            BOOST_CHECK_EQUAL(delta.delta, -1000);
+        } else if (delta.txid == invalid_tx->GetHash()) {
+            BOOST_CHECK(!delta.in_mempool);
+            BOOST_CHECK_EQUAL(delta.delta, -2000);
+        } else if (delta.txid == tx_after->GetHash()) {
+            BOOST_CHECK(delta.in_mempool);
+            BOOST_CHECK_EQUAL(delta.delta, -3000);
+        } else if (delta.txid == absent_txid) {
+            BOOST_CHECK(!delta.in_mempool);
+            BOOST_CHECK_EQUAL(delta.delta, -4400);
+        } else {
+            BOOST_FAIL("unexpected prioritization entry");
+        }
+    }
+
+    const std::set<Txid> expected_unbroadcast{tx_before->GetHash(), tx_after->GetHash()};
+    BOOST_CHECK(destination.GetUnbroadcastTxs() == expected_unbroadcast);
+
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.removeRecursive(CTransaction(*tx_before), REMOVAL_REASON_DUMMY);
+        destination.removeRecursive(CTransaction(*tx_after), REMOVAL_REASON_DUMMY);
+        destination.ClearPrioritisation(tx_before->GetHash());
+        destination.ClearPrioritisation(tx_after->GetHash());
+        destination.ClearPrioritisation(invalid_tx->GetHash());
+        destination.ClearPrioritisation(absent_txid);
+    }
+    BOOST_CHECK_EQUAL(destination.size(), 0U);
+    BOOST_CHECK(destination.GetPrioritisedTransactions().empty());
+    BOOST_CHECK(destination.GetUnbroadcastTxs().empty());
+
+    BOOST_REQUIRE(fs::remove(import_path));
+    BOOST_REQUIRE(fs::remove(roundtrip_path));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
