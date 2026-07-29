@@ -318,3 +318,43 @@ not a defect.
 ## Rotation note
 Five cycles; process_messages import closed. Campaign #9's cells
 now need fresh coverage signals.
+
+## Cycle 6 (2026-07-29): qa-assets psbt sibling-target imports — all three clean on the fork's targets
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=5487700768165387789, index 4 (of 5) -> #9 (sixth cycle; the
+sibling-target import cell). Branch: audit/hit-frequency-c6 from
+7304d57169 (#80 c9 journal tip).
+
+### Results (sparse-fetch recipe from c3)
+- psbt_base64_decode (2090 seeds): 2103 runs, cov=5556 ft=28360,
+  clean.
+- psbt_input_deserialize (1467 seeds): 1468 runs, cov=4387
+  ft=23175, clean.
+- psbt_output_deserialize (736 seeds): 737 runs, cov=2846
+  ft=16086, clean.
+All three targets exist in the fork's build with upstream-lineage
+semantics; no fork-added arms to miss (the fork's PSBT work is in
+the main `psbt` target, covered by the #50 family).
+
+### Verdict
+CONFIRMED (import compatibility): the sibling corpora run clean
+and drive their targets; nothing fork-specific uncovered or
+broken. The psbt target family (main + 3 siblings) is fully
+covered between qa-assets (decode/deserialize paths) and the #50
+family (signing arms).
+
+### Exact commands
+- sparse-fetch fuzz_corpora/{psbt_base64_decode,
+  psbt_input_deserialize, psbt_output_deserialize}
+- FUZZ=<t> build_fuzz/bin/fuzz -runs=<n> <corpus> (numbers above)
+
+### Limitations / queue
+- Union-merge coverage (family + upstream psbt) not re-measured
+  (marginal; both directions already recorded separately).
+- Campaign #9's remaining cells need fresh coverage signals
+  (new targets or new fork arms).
+
+## Rotation note
+Six cycles; sibling imports closed. #9 quiet until new signals.
