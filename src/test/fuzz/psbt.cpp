@@ -34,7 +34,15 @@ std::vector<uint8_t> SerializePSBT(const PartiallySignedTransaction& psbt)
 }
 } // namespace
 
-FUZZ_TARGET(psbt)
+void initialize_psbt()
+{
+    // The signing pass exercises SignPSBTInput/PSBTInputSignedAndVerified,
+    // which need an initialized secp256k1 context (the target previously did
+    // no ECC work and had no init).
+    static ECC_Context ecc_context{};
+}
+
+FUZZ_TARGET(psbt, .init = initialize_psbt)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
