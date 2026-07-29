@@ -70,3 +70,59 @@ backwards — decodepsbt caught it; corrected and RPC-verified.)
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): SigningProvider-bearing signing section — 3 signing functions now covered (+191 edges on the iso seed)
+
+### Draw
+Re-rank draw (last of the 8 open CYCLE-2+ cells; singleton after
+draws 1-7): #50 c2, queued from #101 c1 ("needs a
+SigningProvider-bearing target") and #101 c2 ("script_sign.cpp:130
+is the natural pattern source"). Branch:
+audit/introspector-blockers-c2 from 9a07355c19 (#75 c3
+bookkeeping).
+
+### Hypothesis
+A provider-driven signing section in the psbt fuzz target (pattern
+from script_sign.cpp) covers the three functions the c1 fix could
+not reach: SignPSBTInput (127 edges), UpdatePSBTOutput (43),
+PSBTInputSignedAndVerified (111) — closed without a new target.
+
+### Change (test-only)
+psbt fuzz target: added a signing pass after the existing
+round-trip/merge checks — FillableSigningProvider with up to 2
+fuzz-consumed keys (ConsumePrivateKey), PrecomputePSBTData, then
+per-input SignPSBTInput + PSBTInputSignedAndVerified and per-output
+UpdatePSBTOutput on a fresh mutable copy (psbt_sign). Includes:
+common/types.h (PSBTFillOptions), key.h, script/signingprovider.h,
+test/fuzz/util.h (ConsumePrivateKey).
+
+### Evidence (build_fuzz, same corpus as #101 c1)
+- make -C build_fuzz -j4 fuzz: clean.
+- FUZZ=psbt ... -runs=3000 -print_coverage=1 /tmp/btc101_seed:
+  ZERO UNCOVERED_FUNC matches for SignPSBTInput /
+  UpdatePSBTOutput / PSBTInputSignedAndVerified (all three were
+  listed at 0/127, 0/43, 0/111 in #101 c1's AFTER measurement);
+  no crash, exit 0.
+- Isolation acceptance chain on psbt_1in_whole (-runs=0):
+  528 (truncated harness) -> 2857 (hybrid fix, #101 c1) ->
+  3048 edges (this change, +191).
+- 2000-run corpus total: cov 3475 ft 5057.
+
+### Verdict
+CONFIRMED oracle extension: the signing-family coverage gap queued
+in #101 is closed with a target-local section (no new harness);
+coverage table is the regression evidence. Test-only change;
+production PSBT code untouched; master-relative severity none.
+
+### Limitations / queue
+- Keys are random, not matched to the PSBT's scripts, so actual
+  signature production is rare — the signing MACHINERY is covered,
+  deep successful-sign paths (complete=true arms) are not
+  guaranteed. A key-script-correlated seed (e.g. derived from the
+  provider's keys) is the next depth step if a cycle lands here.
+- PSBTv2 signing paths (v2-only fields) not specifically seeded.
+
+## Rotation note
+One bounded cycle complete; the re-rank queue from the pool-empty
+note is now fully consumed (all 8 cells done). Next draws rebuild
+the queue from journal queues/URGENT/next-up.

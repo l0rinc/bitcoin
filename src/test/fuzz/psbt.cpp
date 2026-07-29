@@ -2,13 +2,17 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <common/types.h>
+#include <key.h>
 #include <node/psbt.h>
 #include <psbt.h>
 #include <pubkey.h>
 #include <script/script.h>
+#include <script/signingprovider.h>
 #include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
+#include <test/fuzz/util.h>
 #include <test/util/random.h>
 #include <util/check.h>
 
@@ -198,4 +202,24 @@ FUZZ_TARGET(psbt)
     psbt_mut.unknown.insert(psbt_merge.unknown.begin(), psbt_merge.unknown.end());
 
     RemoveUnnecessaryTransactions(psbt_mut);
+
+    // Signing pass: exercise the provider-driven signing and output-update
+    // paths with fuzz-constructed keys (whole documents reach this only via
+    // the hybrid consumption above).
+    FillableSigningProvider provider;
+    for (int i = 0; i < 2; ++i) {
+        CKey key{ConsumePrivateKey(fuzzed_data_provider)};
+        if (key.IsValid()) provider.AddKey(key);
+    }
+    PartiallySignedTransaction psbt_sign = psbt;
+    const std::optional<PrecomputedTransactionData> txdata{PrecomputePSBTData(psbt_sign)};
+    const common::PSBTFillOptions fill_options;
+    for (size_t i = 0; i < psbt_sign.inputs.size(); ++i) {
+        SignatureData sigdata;
+        (void)SignPSBTInput(provider, psbt_sign, i, txdata ? &*txdata : nullptr, fill_options, &sigdata);
+        (void)PSBTInputSignedAndVerified(psbt_sign, i, txdata ? &*txdata : nullptr);
+    }
+    for (size_t i = 0; i < psbt_sign.outputs.size(); ++i) {
+        (void)UpdatePSBTOutput(provider, psbt_sign, i);
+    }
 }
