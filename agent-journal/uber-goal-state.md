@@ -6,19 +6,20 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Latest authoritative checkpoint
 
-- Cycle 82 is complete. Goal 7 (`resource-exhaustion-variants`) confirmed and fixed a remotely reachable P2P locator allocation/parse-boundary defect in source/test/journal commit `1e0091464ceb4c13c2b5d33eaedbefc0b6d57452`, authored as `Lőrinc <pap.lorinc@gmail.com>`.
-- The old `getblocks` and `getheaders` handlers deserialized a generic locator vector before applying `MAX_LOCATOR_SZ=101`; the regression's advertised count of `1,048,576` triggered the generic formatter's first 5,000,000-byte reservation before the truncated hash read failed. The fix checks the count before resizing or reading hashes and preserves explicit disconnect behavior.
-- The focused normal regression failed on the unmodified source and passed after the fix for both message types. The normal Clang 19 `net_tests` suite passed 33 cases. The rebuilt Clang 19 TSan target passed the focused regression without diagnostics. `git diff --check` passed.
-- Current branch: `uber-cycle-82-resource-exhaustion-variants-20260728`; current HEAD: `1e0091464ceb4c13c2b5d33eaedbefc0b6d57452`. `origin/master...HEAD` is `2 947`; no relevant process remains running. The next exact random selector is pending.
+- Cycle 83 is complete. Goal 11 (`sanitizer-valgrind`) found no confirmed current Bitcoin Core or libsecp256k1 source defect and made no production source change.
+- Current ASan/UBSan/LSan fuzz reruns for `process_messages`, `validation_block_reorg`, and `dbwrapper_threaded` exited 0 for 16 executions each with no sanitizer report. The fresh standalone TSan corpus runner and fresh TSan+libFuzzer build covered parser, database, P2P private-broadcast, and reorg targets without reports; a suppression-free TSan replay also passed.
+- A bounded Clang 19 MSan libsecp256k1 run covered all 16 modules in 176.119 seconds with no report. The longer default 16-iteration MSan run was explicitly inconclusive and interrupted after 14:28. Valgrind is unavailable, and no full Bitcoin Core MSan build or local `qa-assets` corpus exists.
+- The only negative ASan results were default libFuzzer RSS-limit failures during fixture setup; reruns with an explicit 4096 MiB limit passed. The exact commands, seeds, outputs, exclusions, and scratch log paths are in `agent-journal/sanitizer-valgrind.md`.
+- Current branch: `uber-cycle-83-sanitizer-valgrind-20260728`; current HEAD before the close snapshot: `f8ca766f4b`. `origin/master...HEAD` is `2 948`; no relevant process remains running. The next exact random selector is pending.
 
-## Cycle 83 Active State
+## Cycle 83 Completion
 
 - Selector: exact `shuf -i 0-98 -n 1` -> `11` (`sanitizer-valgrind`).
 - Branch: `uber-cycle-83-sanitizer-valgrind-20260728`.
 - Start HEAD: `acc8a0388d`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
 - Scope: fresh ASan, UBSan, TSan, MSan, LeakSanitizer, Valgrind/Memcheck, sanitized fuzz, recovery, and suppression/exclusion cells. Closed TokenPipe, prior sanitizer-matrix, LevelDB leak, compact-block read-failure, PSBT, and locator cells are excluded without distinct evidence.
 - Journal: `agent-journal/sanitizer-valgrind.md`. Scratch root: `/data/my_storage/tmp` because `/` is full.
-- Status: cycle 83 is active; first action is sanitizer configuration/history inventory and isolated tool availability checks.
+- Status: cycle 83 is complete with a journal-only close; no source patch or regression test was justified.
 
 ## Cycle 82 Completion
 
