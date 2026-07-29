@@ -731,3 +731,73 @@ keypath, P2TR script-path, P2WSH multisig.
 ## Rotation note
 Ten cycles; multisig cell closed. The signing-arm map is
 complete; remaining cells need new PSBT/script features.
+
+## Cycle 11 (2026-07-29): CHECKMULTISIG partial-completion arm — sign_err=INCOMPLETE, partial_sigs=1, missing_sigs=2; two verifiers
+
+### Draw
+Re-rank draw over the rebuilt 3-cell queue:
+raw=15220363497701843503, masked 5996991460847067695, index 2
+(of 3) -> #50 (eleventh cycle; c10 queue cell "threshold-unmet
+partial arm"). Branch: audit/introspector-blockers-c11 from
+5c524489da (#65 c8 journal tip).
+
+### Mechanism
+The c10 full-threshold script can't reach the partial arm (the
+provider always meets 2-of-3 with both fuzz keys). The harness
+now ALSO registers a second 2-of-3 script with only keys[0]
+owned (unknown1 024d4b... from c10's scan; unknown2 02531fe6...
+= pubkey(0x03*32), also 0x5c-clean). The partial doc pays that
+script's P2WSH; the provider signs with keys[0] only -> 1 of 2
+required -> incomplete.
+
+### Harness extension (this cycle's buildable change, +8 lines)
+Second provider.scripts registration (ms_partial:
+OP_2 pk(keys[0]) pk(unknown1) pk(unknown2) OP_3 CHECKMULTISIG).
+
+### Seed (331 B, sha256
+301ea6527c464b004cada9e313ca6942515d0711189ea8e25fc2384aaede0390)
+same construction as c10's, script = 2-of-3 with only K owned;
+witness_utxo + explicit PSBT_IN_WITNESS_SCRIPT.
+
+### Signing proof (two independent verifiers)
+1. In-target trace (temporary instrumentation, reverted):
+   sign_err=5 (INCOMPLETE) verified=0 partial_sigs=1
+   miss_sigs=2 miss_pubs=0 final_wit=0 — exactly the partial
+   shape: K's sig stored in input.partial_sigs, both unowned keys
+   reported missing via out_sigdata (psbt.cpp:759-764 — the
+   missing-info fields the fuzz target's out_sigdata DOES
+   receive). Full-doc control on the same build: sign_err=7
+   verified=1 partial_sigs=0 miss_sigs=1 (the unowned third key,
+   correctly reported but unneeded).
+2. Public RPC: wsh(multi(2, WIF(K), 024d4b..., 02531f...))
+   descriptor wallet -> walletprocesspsbt complete=False, result
+   carries exactly 1 partial_signature — matches the in-target
+   trace.
+
+### Final-code control
+250-run corpus over the 8-seed family (v0, v2, 2-in, wit, tr,
+trsp, ms, msp) clean; prints reverted.
+
+### Exact commands
+- python3 constructor (inline, /tmp/psbt_v2_msp_{doc,seed})
+- python3 /tmp/btc50_corrmsp_v2.py --configfile=...
+  (CORRMSP-PARTIAL-OK)
+- FUZZ=psbt build_fuzz/bin/fuzz -runs=2 /tmp/psbt_v2_msp_seed
+  (trace); -runs=250 /tmp/psbt_c5_corpus (final)
+
+### Verdict
+CONFIRMED deliverable: the partial-completion arm is driven —
+SignPSBTInput now has every outcome class covered by the family:
+OK (complete), OK (early, anyone-can-spend), INCOMPLETE (partial
+multisig), plus the field-level gates (MISSING_INPUTS etc. from
+the differential campaigns).
+
+### Limitations / queue
+- The remaining SignPSBTInput gate arms (SIGHASH_MISMATCH,
+  non_witness_utxo hash mismatch -> MISSING_INPUTS) are
+  seed-constructible — next depth cell if a cycle lands here.
+- qa-assets import path stands from c9.
+
+## Rotation note
+Eleven cycles; partial arm closed. The signing-outcome map is
+complete through INCOMPLETE.
