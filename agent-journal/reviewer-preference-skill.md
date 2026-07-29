@@ -481,3 +481,34 @@ adjudication angle in reviews/reviewer-rules.md.
 ## Rotation note
 Seven cycles; generality cell closed. Not exhausted (template-
 failure watch).
+
+## Cycle 8 (2026-07-29): template-failure watch — newest merges show only known dynamics
+
+### Draw
+Re-rank singleton (last queue cell): #60 (eighth cycle; the
+standing template-failure watch). Branch: audit/reviewer-skill-c8
+from cc277a625b (#65 c10 journal tip).
+
+### Sample (2026-07-29 newest merges)
+- 35753 (kernel null-mempool chainstate deletion): zero line-level
+  comments; single achow101 "ACK <sha>" (M1 terse-with-depth).
+- 35787 (empty addnode values): CI-error report (unrelated,
+  infra-class), author self-updates title/description — no review
+  objections of any novel class.
+- Nothing observed that the R1-R15/M1-M5 template fails to
+  predict; no new rule mined.
+
+### Verdict
+Watch quiet: the template still covers the observed seam
+behavior. No update needed.
+
+### Exact commands
+- api.github.com search is:merged (8 newest);
+  issues/35753|35787/comments; pulls/35753/comments
+
+### Limitations / queue
+- Watch continues passively; a template-failure (an objection
+  shape the rules don't predict) is itself the next cell.
+
+## Rotation note
+Eight cycles; watch quiet.
