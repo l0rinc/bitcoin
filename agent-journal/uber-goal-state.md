@@ -4,6 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
+- Cycle 97 is complete on goal 57 (`local-reasoning-domain`), selected by exact `shuf -i 0-98 -n 1` -> `57` after Cycle 96 closed goal 49. The dedicated branch is `uber-cycle-97-local-reasoning-domain-20260729`; start HEAD was `9031d02ee52aff27ca3fc7636ee8d0ce7923dc7a`, and the finding commit is `c8d90a1f37` (`wallet: roll back replacement metadata on write failure`), authored as `Lőrinc <pap.lorinc@gmail.com>`. The fresh gate kept `origin/master` at `9b38d077f894d27ea76413b1db1cb040e25dc296`, with merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b` and start divergence `29 984`. `CWallet::MarkReplaced` published replacement metadata and a refreshed state before a transaction-row write succeeded; a SQLite trigger reproduced the failed-write inconsistency, and the fix restores both fields on failure. The focused before/after control, 22 wallet-related cases, and complete 1,210-case unit suite provide evidence. The detailed ledger is `agent-journal/local-reasoning-domain.md`; the close snapshot is this journal/state commit. The next run must perform a fresh gate and exact selector draw.
 - Cycle 96 is complete on goal 49 (`critical-history-must-fix`), selected by exact `shuf -i 0-98 -n 1` -> `49` after Cycle 95 closed goal 84. The dedicated branch is `uber-cycle-96-critical-whole-history-20260729`; start HEAD was `0fd60c504baa6dee79663866a06042b0a3bad996`. The fresh gate kept `origin/master` at `9b38d077f894d27ea76413b1db1cb040e25dc296`, with merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b` and start divergence `29 983`. Historical critical/security seeds were compared with current bounds, failure contracts, persistence ordering, and network state. The oversized `NOTFOUND` vector late-filtering path and wallet fee arithmetic were dismissed as bounded or already protected; no source fix was justified. The detailed ledger is `agent-journal/critical-history-must-fix.md`; the close snapshot is this journal/state commit. The next run must perform a fresh gate and exact selector draw.
 - Cycle 95 is complete on goal 84 (`secp-nonce-session`), selected by exact `shuf -i 0-98 -n 1` -> `84` after Cycle 94 closed goal 56. The dedicated branch is `uber-cycle-95-secp-nonce-session-20260729`; start HEAD was `beedbcc175bd90e749a7ee9d444687ec7b6167b4`. The fresh gate kept `origin/master` at `9b38d077f894d27ea76413b1db1cb040e25dc296`, with merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b` and start divergence `29 980`. This cycle audited nonce, signing, Schnorr, MuSig, extrakeys, and ECDH state transitions; the completed Cycle 94 stale-PR cursor fix and prior secp vector/backend cells remain excluded.
 
@@ -13,6 +14,17 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
 
 ## Cycle 95 Completion
+
+## Cycle 97 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `57` (`local-reasoning-domain`); no reroll was needed because it was distinct from the just-closed goal 49.
+- Branch: `uber-cycle-97-local-reasoning-domain-20260729`.
+- Start HEAD: `9031d02ee52aff27ca3fc7636ee8d0ce7923dc7a`; base `origin/master` `9b38d077f894d27ea76413b1db1cb040e25dc296`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `29 984`.
+- Distinct scope: local domain and relationship assumptions across persistence, wallet, P2P/mempool, ownership, snapshots, and lifecycle. AddrMan linked-IPv4 classification, BaseIndex callback serialization, transaction-download peer cleanup, and Taproot x-only ownership were excluded from prior cycles.
+- Confirmed finding: `CWallet::MarkReplaced` mutated `m_replaced_by_txid` and could mutate `m_state` before `WalletBatch::WriteTx` succeeded. Since bumpfee commits the replacement before calling this best-effort marker update, a failed write could return false while the live wallet reported the old transaction as replaced. The fix snapshots `m_state` and restores both fields on write failure; `wallet_tests/replaced_write_failure_preserves_state` injects a transaction-row SQLite failure and checks the marker and prior state.
+- Source/test/journal finding commit: `c8d90a1f37` (`wallet: roll back replacement metadata on write failure`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- Validation: the old-source control exited 201 on the stale replacement-marker assertion; the repaired focused test passed; `wallet_tests,feebumper_tests,wallet_transaction_tests,walletdb_tests` passed 22 cases; the full `test_bitcoin` binary passed all 1,210 cases; the `test_bitcoin` rebuild and `git diff --check` passed. The trigger test exercises mock SQLite only and does not claim Berkeley DB or crash-restart coverage.
+- The detailed evidence, history, source-to-sink trace, limitations, and next exclusions are in `agent-journal/local-reasoning-domain.md`. No relevant process remains running; preserved untracked artifacts remain excluded. The next cycle must perform a fresh gate and exact selector draw.
 
 ## Cycle 96 Completion
 
