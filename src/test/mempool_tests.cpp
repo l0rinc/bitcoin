@@ -1094,4 +1094,80 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1SignedPartialImportDumpReload, TestChain100Setu
     BOOST_REQUIRE(fs::remove(roundtrip_path));
 }
 
+BOOST_FIXTURE_TEST_CASE(MempoolV1ConflictingPartialImportMetadata, TestChain100Setup)
+{
+    mineBlocks(1);
+    const CTransactionRef tx_before = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns[0], 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+    const CTransactionRef tx_after = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns[1], 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+    CMutableTransaction conflicting_mutable{*tx_before};
+    conflicting_mutable.vout[0].nValue -= 1;
+    const CTransactionRef conflicting_tx = MakeTransactionRef(conflicting_mutable);
+    BOOST_REQUIRE(conflicting_tx->GetHash() != tx_before->GetHash());
+    BOOST_REQUIRE(conflicting_tx->vin[0].prevout == tx_before->vin[0].prevout);
+
+    const fs::path dump_path = m_path_root / "mempool-v1-conflicting-partial-import-metadata.dat";
+    const int64_t now = TicksSinceEpoch<std::chrono::seconds>(NodeClock::now());
+    DataStream dump;
+    dump << uint64_t{1} << uint64_t{3};
+    dump << TX_WITH_WITNESS(*tx_before) << now << int64_t{4000};
+    dump << TX_WITH_WITNESS(*conflicting_tx) << now << int64_t{5000};
+    dump << TX_WITH_WITNESS(*tx_after) << now << int64_t{6000};
+    dump << std::map<Txid, CAmount>{}
+         << std::set<Txid>{tx_before->GetHash(), conflicting_tx->GetHash(), tx_after->GetHash()};
+
+    std::ofstream file{dump_path.std_path(), std::ios::binary};
+    file.write(reinterpret_cast<const char*>(dump.data()), dump.size());
+    file.close();
+    BOOST_REQUIRE(file.good());
+
+    CTxMemPool& destination = *Assert(m_node.mempool);
+    BOOST_REQUIRE(node::LoadMempool(destination, dump_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = true,
+    }));
+    BOOST_REQUIRE_EQUAL(destination.size(), 2U);
+    BOOST_CHECK(destination.exists(tx_before->GetHash()));
+    BOOST_CHECK(destination.exists(tx_after->GetHash()));
+    BOOST_CHECK(!destination.exists(conflicting_tx->GetHash()));
+    BOOST_CHECK_EQUAL(destination.info(tx_before->GetHash()).nFeeDelta, 4000);
+    BOOST_CHECK_EQUAL(destination.info(tx_after->GetHash()).nFeeDelta, 6000);
+
+    const auto deltas = destination.GetPrioritisedTransactions();
+    BOOST_REQUIRE_EQUAL(deltas.size(), 3U);
+    for (const auto& delta : deltas) {
+        if (delta.txid == tx_before->GetHash()) {
+            BOOST_CHECK(delta.in_mempool);
+            BOOST_CHECK_EQUAL(delta.delta, 4000);
+        } else if (delta.txid == conflicting_tx->GetHash()) {
+            BOOST_CHECK(!delta.in_mempool);
+            BOOST_CHECK_EQUAL(delta.delta, 5000);
+        } else if (delta.txid == tx_after->GetHash()) {
+            BOOST_CHECK(delta.in_mempool);
+            BOOST_CHECK_EQUAL(delta.delta, 6000);
+        } else {
+            BOOST_FAIL("unexpected prioritization entry");
+        }
+    }
+
+    const std::set<Txid> expected_unbroadcast{tx_before->GetHash(), tx_after->GetHash()};
+    BOOST_CHECK(destination.GetUnbroadcastTxs() == expected_unbroadcast);
+
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.removeRecursive(CTransaction(*tx_before), REMOVAL_REASON_DUMMY);
+        destination.removeRecursive(CTransaction(*tx_after), REMOVAL_REASON_DUMMY);
+        destination.ClearPrioritisation(tx_before->GetHash());
+        destination.ClearPrioritisation(conflicting_tx->GetHash());
+        destination.ClearPrioritisation(tx_after->GetHash());
+    }
+    BOOST_CHECK_EQUAL(destination.size(), 0U);
+    BOOST_CHECK(destination.GetPrioritisedTransactions().empty());
+    BOOST_CHECK(destination.GetUnbroadcastTxs().empty());
+
+    BOOST_REQUIRE(fs::remove(dump_path));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
