@@ -17,6 +17,11 @@ uint256 CBlockHeader::GetHash() const
     return (HashWriter{} << *this).GetHash();
 }
 
+unsigned int CBlock::ComputeTotalSize() const
+{
+    return ::GetSerializeSize(TX_WITH_WITNESS(*this));
+}
+
 std::string CBlock::ToString() const
 {
     std::stringstream s;

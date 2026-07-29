@@ -69,3 +69,68 @@ The proof is semantic rather than a failing regression: the helper body and the 
 ### Commit and handoff
 
 One independent source commit will contain only the two helper substitutions and this journal. It is authored as `Lőrinc <pap.lorinc@gmail.com>`. No production bug, consensus change, persistence-format change, or new runtime behavior was found. The next cycle must run a fresh gate and draw another distinct goal; do not reopen this exact offset expression unless the transaction-size contract or a new index backend changes.
+
+## Cycle 91: validation and failure-contract helper equivalence
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `58`
+- Selected slug: `exact-helper-reuse`
+- Branch: `uber-cycle-91-exact-helper-reuse-20260729`
+- HEAD at gate: `10e39ef493a79dae58c7839b891805710986e169`
+- `origin/master`: `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `2 969`
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The tracked worktree passed `git diff --check`; known unrelated untracked artifacts remain preserved and excluded from cycle commits. No relevant Bitcoin Core, test, fuzz, sanitizer, or benchmark process was running at the gate.
+
+This cycle excludes the prior `CTransaction::ComputeTotalSize()` reuse in `TxIndex` and `TxoSpenderIndex`, including commit `8ff6f9dd27`. The new queue searches status-returning validators, serialization/canonicalization, wallet/database error cleanup, networking limits, crypto wrappers, and test/fuzz helper pairs. A candidate must have identical input/output contract and a proof that reuse preserves behavior; constant-time, consensus, ownership, and performance boundaries are explicit rejection criteria.
+
+### Candidate: witness-inclusive block size
+
+The current tree had the same witness-inclusive block serialization-size contract in four production paths:
+
+| Path | Existing expression | Contract |
+|---|---|---|
+| `BlockManager::UpdateBlockInfo` | `GetSerializeSize(TX_WITH_WITNESS(block))` | Recover block-file metadata from a block already written to disk |
+| `BlockManager::WriteBlock` | `GetSerializeSize(TX_WITH_WITNESS(block))` | Reserve and write the exact serialized block payload |
+| `blockToJSON` | `GetSerializeSize(TX_WITH_WITNESS(block))` | Report the RPC `size` field |
+| `GetBlockWeight` | `GetSerializeSize(TX_WITH_WITNESS(block))` | Supply the total-size term of BIP141 block weight |
+
+The expressions were introduced and maintained independently (`064859bbad6`, `fa39f27a0f8`, `fa2bbc9e4cf`, and the original `3babbcb4878` validation helper). `CTransaction::ComputeTotalSize()` already establishes the project naming and contract for the same witness-inclusive serialization operation. `CBlock` had no equivalent named primitive, leaving future block serialization changes to update several call sites manually.
+
+The following alternatives were rejected:
+
+| Candidate | Verdict |
+|---|---|
+| Replace the four production expressions with a `CBlock::ComputeTotalSize()` helper | Confirmed; the input object, serialization mode, and unsigned-byte result are identical at every site |
+| Replace independent test/fuzz serializer expressions | Rejected; `src/test/block_tests.cpp`, `src/test/fuzz/block.cpp`, and validation tests should retain direct serialization oracles rather than test the helper through itself |
+| Replace no-witness size, transaction-input size, compact-block size, or block-weight arithmetic | Rejected; each has a distinct stripped/witness, input, compact-message, or BIP141 contract |
+| Add a shared block traversal or cache the result | Rejected; this cycle requires exact helper reuse only and does not justify new ownership, invalidation, or cache state |
+
+### Verification
+
+The helper body is exactly the former production expression:
+
+```cpp
+unsigned int CBlock::ComputeTotalSize() const
+{
+    return ::GetSerializeSize(TX_WITH_WITNESS(*this));
+}
+```
+
+The focused unit test compares the helper against an independent direct serialization calculation. It uses a non-null block and therefore also exercises the existing transaction-reference assertion contract. The existing fuzz and validation tests retain their direct serializer calculations as independent oracles.
+
+Validation on the modified tree:
+
+- `CCACHE_DISABLE=1 cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j4`: passed; all changed production and test translation units compiled and `test_bitcoin` linked. The initial cached build attempt was blocked only by a broken `/root/.cache/ccache` symlink; no compiler failure was hidden.
+- `/data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=block_tests --catch_system_error=no --log_level=test_suite`: 4 cases passed, including `block_total_size_matches_serialization`.
+- `/data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=validation_tests,validation_block_tests --catch_system_error=no --log_level=message`: 16 cases passed. One earlier parallel run exposed the existing timing-sensitive signal-ordering test; that case passed in isolation before the serial suite.
+- `/data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=blockmanager_tests,blockchain_tests --catch_system_error=no --log_level=message`: 20 cases passed.
+- `git diff --check`: passed.
+
+### Verdict and handoff
+
+Confirmed as a maintenance-contract finding and fixed in the working tree. The change does not alter serialized bytes, block weight, RPC values, or file positions; it gives one named implementation point to all four production consumers. The test-only direct expressions remain intentionally duplicated for oracle independence. One source/test/journal commit is pending, authored as `Lőrinc <pap.lorinc@gmail.com>`; after it passes the final gate, the next selector must draw a distinct catalog goal.
