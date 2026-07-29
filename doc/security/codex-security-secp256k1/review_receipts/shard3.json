@@ -1,0 +1,35 @@
+{
+  "assignedRange": {
+    "startRow": 111,
+    "endRow": 148,
+    "count": 38
+  },
+  "reviewedCount": 38,
+  "allFilesReviewed": true,
+  "firstFile": "src/modules/ecdh/Makefile.am.include",
+  "lastFile": "src/modules/silentpayments/vectors.h",
+  "unreviewableItems": [],
+  "surfaces": [
+    "ECDH scalar validation, point multiplication, hash callbacks, output behavior, and secret clearing",
+    "ElligatorSwift encoding, total decoding, XDH transcript and party binding, randomness, exceptional field inputs, and test vectors",
+    "x-only public key and keypair parsing, serialization, tweaks, invalid-object behavior, and secret-key handling",
+    "MuSig key aggregation, nonce generation/parsing/aggregation, session binding, one-shot secret nonces, partial signatures, and malicious participant inputs",
+    "recoverable ECDSA parsing, recovery identifiers, signing, conversion, recovery arithmetic, and edge vectors",
+    "BIP-340 nonce derivation, tagged hashes, custom nonce callbacks, signing, verification, variable message lengths, and exhaustive vectors",
+    "Silent Payments sender grouping, input-key sums, recipient labels, prevout summaries, output scanning, label callbacks, limits, and generated BIP-352 vectors"
+  ],
+  "riskAreas": [
+    "attacker-controlled encoded keys, nonces, signatures, transaction inputs, and outputs",
+    "transcript, session, aggregate-key, message, participant-order, and party-role binding",
+    "nonce reuse, invalidation, exceptional scalar handling, and explicit secret zeroization",
+    "array counts, integer bounds, nested scan complexity, callback work, and denial of service",
+    "invalid opaque objects versus ordinary serialized-input rejection",
+    "cryptographic correctness, canonical parsing, point-at-infinity handling, privacy, and fund-loss failure modes"
+  ],
+  "notes": [
+    "One discovery candidate was preserved for compact validation: transaction-shaped Silent Payments inputs can trigger up to 2,323 complete scans across every transaction output, with additional label-candidate elliptic-curve work and callbacks.",
+    "The repository benchmark explicitly constructs a 23,250-output worst-case scanning attack and reverses matching outputs to maximize work; discovery does not decide whether the protocol bound and realistic runtime make this acceptable.",
+    "No other plausible candidate crossed the resolved threat boundary. Extreme caller-selected counts outside transaction realism remain embedder-limited, trusted callbacks remain trusted, and forged opaque objects or invalid pointers are documented API-contract violations.",
+    "Static test/vector data were reviewed with their consuming tests and implementations; no unreviewable binary or generated item remained."
+  ]
+}

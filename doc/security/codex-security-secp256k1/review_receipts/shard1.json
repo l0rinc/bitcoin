@@ -1,0 +1,47 @@
+{
+  "assignedRanges": [
+    {
+      "startRow": 1,
+      "endRow": 64,
+      "count": 64
+    },
+    {
+      "startRow": 182,
+      "endRow": 188,
+      "count": 7
+    }
+  ],
+  "assignedCount": 71,
+  "reviewedCount": 71,
+  "allFilesReviewed": true,
+  "firstFile": ".gitattributes",
+  "lastFile": "tools/wycheproof_utils.py",
+  "unreviewableItems": [],
+  "surfaces": [
+    "repository metadata, release guidance, contribution policy, and public security policy",
+    "GitHub Actions workflows, composite actions, Docker images, package installation, caching, and log collection",
+    "CMake and Autotools configuration, compiler and linker options, feature selection, install/export metadata, and cross-compilation toolchains",
+    "lax DER signature and private-key import/export parsers",
+    "ElligatorSwift, MuSig2, safegcd, and release-process documentation",
+    "ECDH, ECDSA, ElligatorSwift, MuSig2, Schnorr, and Silent Payments examples and example randomness utilities",
+    "all public API headers, callback contracts, length/count contracts, nonce guidance, object lifetimes, and parser/serialization interfaces",
+    "Sage group proofs and constant-generation scripts",
+    "ABI/symbol checks and MuSig2, Silent Payments, and Wycheproof JSON-to-C vector generators"
+  ],
+  "riskAreas": [
+    "ordinary hostile serialized DER, keys, signatures, nonces, transaction data, and malformed length encodings",
+    "undefined behavior, pointer arithmetic, buffer bounds, integer and count handling, object lifetime, and cleanup",
+    "nonce uniqueness and transcript binding, secret output and clearing, domain separation, and verification requirements",
+    "shell expansion, subprocess arguments, build configuration injection, archive/install paths, and developer-host command execution",
+    "mutable or unpinned CI actions, containers, package repositories, formulae, and Python dependencies",
+    "external test-vector parsing, generated-C escaping, assertions, and supply-chain provenance",
+    "proof-script completeness, cryptographic constants, exceptional group points, and backend-selection correctness"
+  ],
+  "notes": [
+    "Three technically plausible discovery candidates were preserved for validation: malformed-DER out-of-object pointer construction, generated-C injection through unescaped external JSON comments, and explicit trust/install of a mutable third-party Homebrew HEAD.",
+    "The lax DER signature parser uses subtraction-based bounds checks; the distinct private-key parser uses pointer-addition checks and is the preserved candidate.",
+    "Shell eval and unquoted build variables in ci/ci.sh are fed by repository-controlled workflow configuration, and the run-in-docker command input has only static in-repository callers; no hostile source-to-sink path was preserved.",
+    "Examples print freshly generated demonstration values and may exit without full cleanup on failure, but no production secret asset or realistic hostile boundary was identified.",
+    "All assigned text files were reviewed from start to finish. No binary or generated item was unreviewable, and supporting workflow call sites were inspected only where needed to complete candidate paths."
+  ]
+}

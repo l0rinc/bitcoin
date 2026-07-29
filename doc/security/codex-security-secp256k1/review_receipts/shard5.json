@@ -1,0 +1,39 @@
+{
+  "shard": 5,
+  "assigned": {
+    "startRow": 177,
+    "endRow": 181,
+    "count": 5
+  },
+  "reviewedCount": 5,
+  "allFilesReviewed": true,
+  "first": "src/wycheproof/WYCHEPROOF_COPYING",
+  "last": "src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.json",
+  "generatedOrUnreviewable": {
+    "generatedFiles": [
+      "src/wycheproof/ecdh_secp256k1_test.h",
+      "src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.h"
+    ],
+    "structuredImportedFiles": [
+      "src/wycheproof/ecdh_secp256k1_test.json",
+      "src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.json"
+    ],
+    "unreviewableFiles": []
+  },
+  "surfaces": [
+    "Wycheproof corpus provenance and licensing",
+    "JSON schema and result/flag interpretation",
+    "JSON-to-C generation and embedded comment/data boundaries",
+    "generated array offsets, lengths, and expected-result fields",
+    "ECDSA and ECDH test-harness consumption"
+  ],
+  "riskAreas": [
+    "loss or misclassification of adversarial cryptographic regression vectors",
+    "generated C injection or malformed generated arrays",
+    "out-of-bounds vector slicing in test code",
+    "test-harness omissions that could mask invalid-key or signature acceptance"
+  ],
+  "candidateCount": 0,
+  "gaps": [],
+  "notes": "Reviewed all five assigned files completely. WYCHEPROOF_COPYING identifies pinned upstream commits and the Apache-2.0 terms. Both JSON corpora parsed in full with declared counts and uniform current schemas: 752 ECDH cases and 463 ECDSA cases. The repository generators reproduced both committed headers byte-for-byte. The generated headers contain 503 ECDH and 463 ECDSA rows; every array slice is in bounds, current comment strings cannot terminate their generated C comments, ECDH accepted cases have 32-byte in-range secret scalars and 32-byte shared outputs, and ECDSA keys are 65-byte uncompressed points. The ECDH generator's 249 omitted cases concern ASN.1 or encoded curve-parameter behavior outside libsecp256k1's raw serialized-point API, while retained invalid-point cases exercise that API. The consuming harness hashes full messages, strictly parses DER signatures, verifies the expected Bitcoin low-S result, rejects invalid ECDH points before multiplication, and compares all successful ECDH x-coordinate outputs. No plausible security candidate was identified."
+}

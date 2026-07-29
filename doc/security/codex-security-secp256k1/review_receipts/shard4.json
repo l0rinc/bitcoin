@@ -1,0 +1,44 @@
+{
+  "shard": 4,
+  "assignedRange": {
+    "startRow": 149,
+    "endRow": 176,
+    "count": 28
+  },
+  "reviewedCount": 28,
+  "allFilesReviewed": true,
+  "firstFile": "src/precompute_ecmult.c",
+  "lastFile": "src/util_local_visibility.h",
+  "unreviewableItems": [],
+  "surfacesChecked": [
+    "EC multiplication and generator precomputation programs and generated tables",
+    "4x64, 8x32, and exhaustive-low scalar backends",
+    "scratch allocation, checkpoint, rollback, and destruction",
+    "context creation, cloning, randomization, callback configuration, and destruction",
+    "public ECDSA parsing, serialization, normalization, signing, and verification",
+    "public secret-key and public-key parsing, serialization, creation, tweaking, negation, combination, comparison, and sorting",
+    "SHA-256 override plumbing, self-test, RFC6979 nonce generation, and test RNG support",
+    "ordinary, randomized, edge-case, Wycheproof, and exhaustive test evidence",
+    "test framework and low-level memory, byte-order, declassification, and constant-time utilities"
+  ],
+  "riskAreasChecked": [
+    "hostile serialized key, signature, message, and tweak handling",
+    "pointer, length, count, allocation-size, and object-lifetime safety",
+    "callback and opaque-context trust boundaries",
+    "scalar reduction, multiplication, inversion, splitting, and backend equivalence",
+    "secret-dependent branches and memory access",
+    "secret and failure-output clearing",
+    "precomputed-table integrity and consumption",
+    "scratch-space arithmetic and rollback invariants",
+    "negative controls for documented API-contract violations and test-only code"
+  ],
+  "candidateCount": 0,
+  "gaps": [],
+  "notes": [
+    "Reviewed every assigned file from start to finish. The two large generated precomputation sources were additionally checked line-by-line for table structure: 16,384 and 1,760 data entries respectively, each with exactly sixteen valid storage limbs; their consuming tests independently check on-curve membership, table progression, generators, and cross-algorithm multiplication results.",
+    "Closed the scratch-header addition as a negative control: src/scratch_impl.h:13-22 does not guard base_alloc + size against size_t wrap, but both the allocator and its secp256k1.c wrapper are static, and repository-wide call-site search found only tests, exhaustive tests, and a benchmark using fixed or internally bounded sizes. The public scratch-space API has been removed, so no hostile serialized input or supported public caller reaches an attacker-controlled size.",
+    "Closed scalar_mul_shift_var bounds as a negative control: both production backends rely on VERIFY_CHECK for the shift domain, but the functions are static and their only production call sites pass the compile-time constant 384.",
+    "Public parsing and mutation paths reject malformed serialized data and clear failure outputs as tested. Invalid pointers, undersized fixed buffers, overlapping or forged opaque objects, and caller-installed callbacks remain documented trusted programming-contract boundaries under the scan policy.",
+    "No raw-candidates artifact was created because no technically plausible source-to-sink candidate crossed the resolved threat boundary."
+  ]
+}
