@@ -308,3 +308,75 @@ WIF /tmp/corr_wif.txt. Pre-fix file copy /tmp/psbt_fixed.cpp.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted (multi-input correlated docs, taproot/witness variants).
+
+## Cycle 5 (2026-07-29): 2-input PSBTv2 correlated seed — BOTH provider keys drive their own complete sign arms (K and K2)
+
+### Draw
+Re-rank draw over the remaining 3-cell queue:
+raw=15284566479080594961, masked to 63 bits 6061194442225819153,
+index 1 (of 3) -> #50 (fifth cycle; c4 queue cell "multi-input
+multi-key correlated docs"). Branch:
+audit/introspector-blockers-c5 from 1341c7ac93 (#65 c5 journal tip).
+
+### Hypothesis
+A PSBTv2 doc with 2 inputs funded by P2PKH(K) and P2PKH(K2)
+respectively drives SignPSBTInput's complete arm TWICE in one fuzz
+run — once per provider key (c4's K2 was junk padding).
+
+### Seed (extends c4's corrected layout)
+/tmp/psbt_v2_2in_seed (471 B, sha256
+233858af13b1a4573f3ba7462251ed76b3d157063f3b47a89e4169bf0e7e4e28):
+[399 B PSBTv2 doc: one funding tx (119 B) with vout0=P2PKH(K),
+vout1=P2PKH(K2) at 50000 sat each; spend inputs reference (txid,0)
+and (txid,1), each carrying the SAME funding tx as
+non_witness_utxo; one OP_TRUE output at 99000 sat]
+[0x5c 0x00][0x5c 0x00][K 32B][K2 32B][key2-comp,key1-comp,
+merge-mode,doc1-mode = 1,1,1,1].
+Constructor: /tmp/btc50_2in.py (framework PSBTMap serializer).
+Doc has no 0x5c+non-0x5c pair; front 467 + 4 end bools = 471 = file
+size (all consumed).
+K = 0x01*32 -> spk 76a91479b000887626b294a914501a4cd226b58b23598388ac
+K2 = 0x07*32 -> spk 76a914a3c6b1ee4a49d9f2af3b3802974744fba924164a88ac
+
+### Signing proof (two independent verifiers)
+1. In-target trace (temporary per-input instrumentation, reverted):
+   SIGDBG input=0 kid=1 hit=1 sign_err=7(OK) verified=1 final_ss=106
+   SIGDBG input=1 kid=1 hit=1 sign_err=7(OK) verified=1 final_ss=106
+   Both inputs: provider key hit, SignPSBTInput OK (sig_complete),
+   PSBTInputSignedAndVerified=1 under the consensus script
+   interpreter, 106-byte final scriptSig each.
+2. Public RPC (independent path): descriptor wallet with BOTH
+   pkh(descsum_create(WIF)) descriptors (active=False);
+   walletprocesspsbt complete=True; finalizepsbt complete=True
+   (020000000249c97d7a... — both prevouts of the shared funding tx).
+   Script /tmp/btc50_corr2_v2.py.
+
+### Post-restore verification (final code)
+FUZZ=psbt build_fuzz/bin/fuzz -runs=300 over
+{2in-seed, c4 v2 seed, c4 v0 seed}: clean; target restored byte-
+identical to the c4 fix commit (git diff empty).
+
+### Exact commands
+- python3 /tmp/btc50_2in.py (constructor; prints pubkeys/spks/shas)
+- python3 /tmp/btc50_corr2_v2.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc50_2in_rpc (CORR2-SIGN-OK)
+- instrumented: cmake --build build_fuzz --target fuzz; FUZZ=psbt
+  .../fuzz -runs=2 /tmp/psbt_v2_2in_seed (trace above)
+- final: -runs=300 /tmp/psbt_c5_corpus (clean)
+
+### Verdict
+CONFIRMED deliverable: the correlated-seed family now covers the
+multi-key arm — a single fuzz input drives two independent complete
+sign+verify cycles with two distinct fuzz-consumed keys. The c4
+"K2 is junk" depth gap is closed.
+
+### Limitations / queue
+- Taproot/witness (v0/v1) correlated variants still open — next
+  depth cell (P2WPKH needs witness_utxo semantics and the
+  require_witness_sig path; P2TR needs schnorr keys and the
+  PSBT_IN_TAP_* fields).
+- qa-assets-style corpus-dir import still queued from c3.
+
+## Rotation note
+Five cycles; multi-key cell closed. Not exhausted (witness/taproot
+variants).
