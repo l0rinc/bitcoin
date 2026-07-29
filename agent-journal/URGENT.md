@@ -45,16 +45,14 @@ independently verified.
 - Next: upstream-watch — if bitcoin/bitcoin updates qrencode.mk, take
   theirs. No local divergence warranted (hash is the trust anchor).
 
-## 🟡 l0rinc CheckBlock dup-input optimization (1.85x claim) unadopted
-- Mechanism: CVE-2018-17144 dup-prevout check via std::set for every
-  tx incl. coinbases; branch restructures to skip coinbase/1-input,
-  direct-compare 2-input, sorted-vector 3+.
-- Evidence: branch commits f3cc8fd27d/c379975b5a/532176cd27 (bench
-  335.9->181.9us); local tx_check.cpp:41-45 still set-based.
-  Equivalence PLAUSIBLE (1-input null-check arm unverified).
-- Branch: journal-only, contributor-branch-radar.md c2.
-- Next: fork author's adoption decision (his own upstream work);
-  verify the 1-input null-check placement before any adoption.
+## ~~🟡 l0rinc CheckBlock dup-input optimization (1.85x claim)~~ RESOLVED
+Resolved 2026-07-29 (#40 c1): equivalence PROVEN — two independent
+agents (prover/breaker) + adjudicator spot-checks; complete case
+partition shows accept/reject AND diagnosis identical in every arm
+(1-input null arm vacuously safe by the IsCoinBase definition,
+transaction.h:342-345). Adoption remains the fork author's decision
+(his upstream work); no local action. See
+agent-journal/multi-agent-adjudication.md c1.
 
 ## ✅ LockPoints max_input_height bound comment (fixed b1c267c9f1)
 - Mechanism: comment claimed "always less than tip height"; CPFP

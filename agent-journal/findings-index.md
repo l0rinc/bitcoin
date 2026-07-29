@@ -143,10 +143,11 @@ reproducible-builds.md c2 | upstream .mk identical; take upstream's
 fix when it lands.
 
 L4 | l0rinc CheckBlock dup-check optimization | consensus/perf |
-std::set per-tx dup check | perf only | UNADOPTED SEED | branch
-f3cc8fd27d lineage, 1.85x CheckBlockBench claim; equivalence
-plausible (1-input null arm unverified) | journal
-contributor-branch-radar.md c2 | fork author's decision.
+std::set per-tx dup check | perf only | RESOLVED-EQUIVALENT | branch
+f3cc8fd27d lineage, 1.85x CheckBlockBench claim; equivalence PROVEN
+(#40 c1: prover+breaker agents converge, complete case partition,
+1-input null arm vacuously safe via IsCoinBase definition) | journal
+multi-agent-adjudication.md c1 | fork author's adoption decision.
 
 ## Recurrence/dedup notes
 
