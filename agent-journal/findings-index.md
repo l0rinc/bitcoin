@@ -209,7 +209,9 @@ multi-agent-adjudication.md c1 | fork author's adoption decision.
 1. ~~Merge/re-cherry-pick F1, F2, F3, F7, F9~~ DONE 2026-07-29 (#66 c2).
 2. #22 c3: ClearCurrent gating? (verifier said skip; low value).
 3. #65 c3: rocksdb/leveldb knob branch batch.
-4. #9 c3: qa-assets selective import per target.
+4. ~~#9 c3: qa-assets selective import per target~~ DONE 2026-07-29
+   (#9 c3: psbt corpus covers all but the key-requiring
+   sign-complete arm; correlated seeds remain necessary).
 5. ~~#24 c2: UTXO-GROWING chain (fan-out) write amplification~~ DONE
    2026-07-29 (#24 c2: linear ~1.8x ex-logs; no superlinear growth).
    Next cell if redrawn: pruning-mode undo retention/blk rotation.

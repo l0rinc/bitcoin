@@ -159,3 +159,72 @@ grep-fallback logic as evidence).
 - Corpus/dict kept in /tmp/btc9_* (scratch, small); the -dict recipe
   (28 padded NetMsgType strings) is reusable for any P2P message
   target.
+
+## Cycle 3 (2026-07-29): qa-assets psbt corpus import — covers everything EXCEPT the key-requiring sign-complete arm; correlated seeds remain necessary
+
+### Draw
+Re-rank singleton (last queue cell; findings-index resume point
+"qa-assets selective import per target"): #9 (third cycle).
+Branch: audit/hit-frequency-c3 from 3e3f49d25b (#24 c3 journal
+tip). Import: git clone --depth=1 --filter=blob:none --sparse +
+sparse-checkout fuzz_corpora/psbt (7773 seeds, 55 MB, removed
+after; recipe recorded).
+
+### Hypothesis
+qa-assets' psbt seed corpus (upstream-fuzzer-built) leaves the
+SignPSBTInput ProduceSignature-complete arm for KEY-REQUIRING
+scripts uncovered — the provider-key-correlation gap the #50
+family was built to close.
+
+### Experiment (temporary instrumentation, reverted after)
+Per-input counters over the full corpus
+(FUZZ=psbt .../fuzz -runs=7773, three instrumented passes):
+- 923/8776 seed runs reach the signing section; 1956 input-attempts.
+- ok=77, verified=71 — DECOMPOSED:
+  * pre-signed in the seed (PSBTInputSigned): 18 OK / 12 verified
+    (fuzz-built final scripts; some P2SH with redeem data).
+  * NOT pre-signed but early-OK: 59/59 — ALL with push-only /
+    anyone-can-spend / P2WSH-of-empty-script spks (prefix histogram
+    has ZERO 76a914/0014/a914/0020/5120 key-requiring templates).
+- Mechanism of the 59: PSBTInputSignedAndVerified (psbt.cpp:558-590)
+  does NOT require final data — it runs VerifyScript on whatever
+  final fields exist (possibly empty); a truthy anyone-can-spend
+  script verifies with an EMPTY scriptSig, so the early-OK arm
+  (psbt.cpp:662) fires with no signing at all.
+- KEY-REQUIRING ProduceSignature completions: 0 (the fuzz-consumed
+  provider keys never match a seed's spk hash — 2^-160 lottery).
+
+### Control
+The #50 correlated family (v0/v2/2-input/P2WPKH seeds) drives the
+complete arm with the provider key on every run (in-target trace +
+RPC verifier, #50 c4-c6) — the arm the qa-assets corpus cannot
+reach.
+
+### Verdict
+CONFIRMED (hypothesis): qa-assets import is complementary, NOT a
+substitute — it covers decode/merge/analyze/finalize and the
+anyone-can-spend early-OK arm, but the key-requiring
+sign-complete arm needs correlated seeds. Characterization
+recorded (not a defect): PSBTInputSignedAndVerified returns true
+for final-data-less anyone-can-spend inputs — name-vs-behavior
+subtlety, upstream-identical, semantically defensible (the empty
+scriptSig IS the valid final state there).
+
+### Exact commands
+- git clone --depth=1 --filter=blob:none --sparse
+  https://github.com/bitcoin-core/qa-assets /tmp/qa-assets;
+  git -C /tmp/qa-assets sparse-checkout set fuzz_corpora/psbt
+- three instrumented builds (SIGCOUNT/SIGVER/SIGFRESH variants),
+  FUZZ=psbt build_fuzz/bin/fuzz -runs=7773 <corpus>
+- restore: git checkout -- src/test/fuzz/psbt.cpp; rebuild;
+  -runs=100 /tmp/psbt_c5_corpus clean; git diff empty
+
+### Limitations / queue
+- Only the psbt target imported; other targets per the same recipe
+  when a coverage question lands there.
+- The 923/8776 reach rate includes the hybrid-consumption mode
+  split; the corpus was built for upstream's single-mode target.
+
+## Rotation note
+Three cycles; qa-assets psbt cell closed with a mechanism-level
+answer. Not exhausted (other targets).
