@@ -279,3 +279,61 @@ against it and extend when new evidence lands.
 ## Rotation note
 Three cycles; the core deliverable is done. Campaign remains open
 for held-out validation of the template itself.
+
+## Cycle 4 (2026-07-29): template held-out validation on PR 35205 — 3/3 blind predictions confirmed; R14 added
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=2955923148731138849, index 4 -> #60 (fourth cycle; c3 queue
+cell "validate the template against a NEW held-out PR").
+Branch: audit/reviewer-skill-c4 from 1f59a145d6 (#48 c2
+bookkeeping).
+
+### Held-out selection
+PR 35818 (bloom sizing) was the first candidate — but it has ZERO
+human comments (2 DrahtBot posts only), unscoreable; its DrahtBot
+CI flag (32-bit ARM, bloom_create_invalid_false_positive_rate
+std::fetestexcept) is recorded under L1's watch. Replacement:
+PR 35205 (kernel,node dbcache setter + defaults, 9 issue + 32
+line-level comments, unmined in c1-c2).
+
+### Blind predictions (recorded before fetching)
+- P1: goal-vs-achievement or contract-precision demand (R7/R6).
+- P2: >=1 concrete diff/suggestion from a reviewer (R11).
+- P3: style feedback only with convention anchors or non-blocking
+  labels (R9/R13).
+
+### Result — 3/3 confirmed (2 strong)
+- P1: maflcko "I don't understand this pull request? What is the
+  point of splitting this header up further?" -> author DROPPED the
+  split commit — the R7 dynamic verbatim (unclear-goal elements get
+  cut). Plus sedited's contract-precision question (DEFAULT_KERNEL_
+  CACHE decoupling) and w0xlt's setter-boundary demand (R14).
+- P2: w0xlt's diff suggestion blocks (stale includes; test
+  strengthening in <details>), stringintech's iwyu CI links.
+- P3: "Nit: alphabetical ordering", "micro-nit", "nit: can be
+  ignored or left for a follow-up" (author's decline accepted);
+  copyright-year point cited the convention PR 24539 explicitly —
+  R9's anchor shape verbatim.
+
+### Rule addition
+R14: public setters validate at the boundary, not downstream
+(w0xlt: setter accepting 0/1 that abort later in chainstate —
+should reject at the setter). Encoded into reviews/reviewer-rules.md
+with the held-out record.
+
+### Verdict
+The template predicted the KIND of every material demand on a blind
+PR; the reusable skill is validated. Campaign's core deliverable
+closed (skill + validation).
+
+### Exact commands
+- api.github.com repos/bitcoin/bitcoin/{issues,pulls}/{35818,35205}
+  /comments; search/issues author:l0rinc created:>2026-03-01
+
+### Limitations / queue
+- Maintainer merge-rationale comments still unmined.
+- Second author seam for generality (c3 queue) still open.
+
+## Rotation note
+Four cycles; core deliverable validated. Rotating.
