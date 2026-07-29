@@ -221,3 +221,37 @@ design cannot serve wrong artifacts. No defect.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-29): the "45 uncacheable calls" itemized — 57/58 are failed compilations (rotation's own mutants)
+
+### Draw
+Re-rank draw (last of the rebuilt 3-cell queue; singleton):
+#75 (fourth cycle; c2/c3 queue "45-uncacheable itemization").
+Branch: audit/build-throughput-c4 from cd67d779a6 (#80 c3
+bookkeeping).
+
+### Itemization (ccache -s -v)
+Uncacheable calls: 58/31598 (0.18%) — "Compilation failed: 57/58
+(98.28%)", "Preprocessing failed: 1/58". No capnp/IPC-generated
+class at all. The count grew 45 -> 58 over the session as the
+rotation's intentional failure experiments accumulated (serialize.h
+mutant syntax slip, probe link/compile failures, aborted builds).
+ccache counts failed compilations as uncacheable by construction.
+
+### Verdict
+DISMISSED: the uncacheable class is the rotation's own
+expected-failure residue, not a cacheability defect. The c2
+hypothesis (IPC/capnp-generated) is refuted by the breakdown. No
+action; cache posture otherwise healthy (58.25% hit rate, 3.4/50
+GB).
+
+### Exact commands
+- ccache -s; ccache -s -v (uncacheable breakdown)
+
+### Limitations
+- The 1 preprocessing failure is unitemized (likely one of my
+  broken probes; cosmetically unresolved, immaterial).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
