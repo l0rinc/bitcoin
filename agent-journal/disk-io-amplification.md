@@ -241,3 +241,61 @@ floor) deferred by scale with the floor code-verified.
 
 ## Rotation note
 Three cycles; pruning cell closed. Not exhausted (flush cadence).
+
+## Cycle 4 (2026-07-29): dbcache flush cadence isolation — scantxoutset flushes every block in a MiniWallet harness; dbcache size irrelevant under per-block scans
+
+### Draw
+Re-rank singleton (last queue cell): #24 (fourth cycle; c1 queue
+cell "dbcache flush cadence isolation"). Branch:
+audit/disk-io-c4 from 6ae07306cb (#50 c7 journal tip).
+
+### Experiment
+Same 400-block fan-out chain (64k unspendable G-point outputs,
+seeded random.seed(0x24) for txid determinism per #49 c5) on two
+arms: -dbcache=450 (default) vs -dbcache=4 (pressure).
+Oracle: flush-mode histogram from debug.log + final muhash +
+wall time.
+
+### Results
+- IDENTICAL flush profiles on both arms: 405 FORCE_SYNC +
+  2 FORCE_FLUSH; ZERO periodic flushes; ZERO "cache full" events.
+- IDENTICAL outcomes: muhash a6f0dd3eff64cb46657585d0fc4e1e2abe5
+  2e4d6ae43a5e2f12bdaa18a1a805e, txouts=64510, wall 538s vs 533s.
+- Flush correctness across 405 forced flushes: confirmed (identical
+  final UTXO set).
+
+### Mechanism (the isolation answer)
+MiniWallet.generate() rescans utxos after EVERY block; rescan calls
+scantxoutset; scantxoutset does ForceFlushStateToDisk(false)
+(rpc/blockchain.cpp:2446, flushing the coins cache before taking
+the cursor). So a rescan-per-block harness forces a full coins-
+cache flush per block; the cache never accumulates and -dbcache
+size is irrelevant in this regime. Periodic flushes (50-70min
+lineage interval) never fire in a 9-minute run; pressure flushes
+never fire because each block flushes first.
+
+### Verdict
+DISMISSED (cadence question answered): in rescan-driving harnesses
+the flush cadence is dominated by scantxoutset-driven FORCE_SYNC,
+not by the dbcache size or the periodic schedule. Flush-state
+correctness over 405 cycles confirmed identical. The scantxoutset
+flush behavior is upstream code (adjacent to the 🔴 resize-race
+item's lock region — noted as context, no new issue: the flush is
+taken under cs_main BEFORE the cursor lock, the ordering the
+e049f064e1 fix relies on).
+
+### Exact commands
+- python3 /tmp/btc24_fanout2.py 450 c450; ... 4 c4 (seeded variant
+  of the c2 script; RESULT lines above)
+- flush histogram: grep "Writing chainstate" debug.log |
+  grep -oE "flush mode=.*" | sort | uniq -c
+- rpc/blockchain.cpp:2430-2448 (scantxoutset flush site)
+
+### Limitations / queue
+- Pressure-flush dynamics (large=1/critical=1) need a no-rescan
+  harness (custom utxo tracking without scantxoutset) — queued if
+  a cycle lands here.
+- #24's remaining cells: none open beyond this queue.
+
+## Rotation note
+Four cycles; cadence cell closed. #24 queue-empty.
