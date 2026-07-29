@@ -299,3 +299,60 @@ e049f064e1 fix relies on).
 
 ## Rotation note
 Four cycles; cadence cell closed. #24 queue-empty.
+
+## Cycle 5 (2026-07-29): cache-pressure flush dynamics — LARGE-tier flushes fire once the coins+mempool budget is actually clamped; state identical
+
+### Draw
+Re-rank draw over the remaining 4-cell queue:
+raw=18394428872774206570, masked 9171056835919430762, index 2
+(of 4) -> #24 (fifth cycle; c4 queue cell "pressure-flush with a
+no-rescan harness"). Branch: audit/disk-io-c5 from ebf762be45
+(#9 c5 journal tip).
+
+### Harness (the c4 masking removed)
+No-rescan fan-out: generatetodescriptor directly, manual utxo
+list, direct sendrawtransaction — no scantxoutset, so no per-block
+forced flush. Side observation: removing the rescan also cut the
+400-block wall time 538s -> 38s (the per-block scantxoutset cost
+~90% of the c4 runtime).
+
+### Budget composition (why naive -dbcache=4 never pressures)
+GetCoinsCacheSizeState (validation.cpp:2720-2737): nTotalSpace =
+max_coins_cache_size_bytes + max(mempool_max - mempool_usage, 0)
+— the coins cache borrows the mempool's headroom. With default
+maxmempool=300, dbcache=4 gives ~304 MB effective budget: 400 and
+800-block runs (64k/128k UTXOs) showed ZERO pressure flushes.
+Clamping -maxmempool=5 as well (~9 MB budget) fires them.
+
+### Results (800 blocks, 128,910 UTXOs, seeded-deterministic)
+- control (-dbcache=450 -maxmempool=300): 2 FORCE_SYNC only.
+- pressure (-dbcache=4 -maxmempool=5): 2 FORCE_SYNC + 3 PERIODIC
+  flushes with large=1 (fCacheLarge: cache within 10%/10MiB of the
+  budget — the "flush early while idle" tier; no critical tier
+  reached).
+- IDENTICAL outcomes: muhash 03201ac1cc1ee264757e13e1e2040c09a5
+  472f2709d6292b4176689ca41800c1, txouts=128910, wall 76s both.
+  Pressure flushing at this scale costs no measurable wall time.
+
+### Verdict
+DISMISSED: flush-pressure dynamics are correct and cheap; the
+budget-composition rule (coins cache borrows mempool headroom) is
+the missing piece for any future cache-pressure experiment.
+Flush cadence never affects final state (three independent A/Bs
+this campaign: c4 rescan regime, c5 no-rescan both budgets).
+
+### Exact commands
+- python3 /tmp/btc24_norescan.py 450 nr850b 800 300; ... 4 nr84b
+  800 5 (seed 0x25; RESULT lines above)
+- validation.cpp:2712-2737 (budget), :2800-2805 (LARGE/CRITICAL
+  gates), :3036/:3133 (IF_NEEDED per-block call sites)
+
+### Limitations / queue
+- The CRITICAL tier (IF_NEEDED per-block, "must write now") still
+  not directly observed — needs a single-block jump over the
+  budget (huge tx flood), queued nicety.
+- #24's cells: write composition, UTXO-growth, pruning, flush
+  cadence+pressure all closed. QUEUE-EMPTY.
+
+## Rotation note
+Five cycles; pressure cell closed. Campaign queue-empty.
