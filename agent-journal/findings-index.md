@@ -16,18 +16,18 @@ HEAD's tree, with the carrying hash where known.
 
 F1 | prevector zero-fill read | core container | OOB/UB read in
 zero-filled resize | low | CONFIRMED+FIXED | 138ef3c044 (#19 c1) |
-audit/benchmark-integrity branch | NOT in lineage | unit test in
-commit | merge or re-cherry-pick into main lineage.
+MERGED into lineage as e15c4025e5 (#66 c2 backport) | bench
+compile verified | done.
 
 F2 | merkleblock weak oracles (2 survivors) | p2p/consensus test |
 test-oracle gap | low (test-only) | CONFIRMED+FIXED | 50e9d14750
-(#28 c2) | audit/weak-test-oracles | NOT in lineage | mutation
-battery in commit | same.
+(#28 c2) | MERGED as 84a3913096 (#66 c2) | merkleblock_tests
+green in lineage | done.
 
 F3 | AutoFile empty-span fwrite UB | streams | UB (nonnull at size 0)
 | trivial severity, fuzz-only trigger | CONFIRMED+FIXED | 22aa75a2eb
-(#36 c1) + streams_tests regression | audit/cross-tool | NOT in
-lineage | UBSan re-run zero reports | same.
+(#36 c1) + streams_tests regression | MERGED as 508d9edfca
+(#66 c2) | streams_tests green in lineage | done.
 
 F4 | rolling-bloom reset-per-tip CPU storm | p2p/net-processing |
 perf (reset per block post-latch) | low, test-net IBD | CONFIRMED+
@@ -46,8 +46,8 @@ b1c267c9f1 (#1 c1) | in lineage (direct) | comment-only | done.
 
 F7 | View/Range lifetime doc gap (kernel wrapper) | FFI docs |
 documented-C-contract weakened by omission | doc-only | CONFIRMED+
-FIXED | 0a6c377ddb (#94 c1) | audit/bindings-ffi | NOT in lineage |
-test_kernel green | merge or re-cherry-pick.
+FIXED | 0a6c377ddb (#94 c1) | MERGED as 75c0616c24 (#66 c2) |
+test_kernel green in lineage | done.
 
 F8 | gettxoutsetinfo use_index for arbitrary blocks | RPC/coins |
 wrong-data contract (index only valid at tip) | low | CONFIRMED+
@@ -57,8 +57,7 @@ done.
 
 F9 | CI script_assets sha256 pin | supply-chain/CI | unpinned
 download | low | CONFIRMED+FIXED | 4124803dff (#59 c1) |
-audit/supply-chain-gates | NOT in lineage | pin diff | merge or
-re-cherry-pick.
+MERGED as b73b7c5d39 (#66 c2) | bash -n verified | done.
 
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
@@ -121,11 +120,10 @@ contributor-branch-radar.md c2 | fork author's decision.
 - The #66 problem is the governing dedup fact: confirmed fixes live
   on per-campaign side branches and only reach the ledger lineage
   when a later branch forks after them (or via archive copies). F1,
-  F2, F3, F7, F9 are currently NOT in the ledger lineage's tree
-  (verified by merge-base + content grep 2026-07-29); everything else
-  is present. Merging or re-cherry-picking those five is the single
-  highest-value hygiene action; do not re-fix them (they exist and
-  are tested).
+  F2, F3, F7, F9 were MERGED into the ledger lineage on 2026-07-29
+  (#66 c2 backport: e15c4025e5, 84a3913096, 508d9edfca, 75c0616c24,
+  b73b7c5d39; build+tests verified). All confirmed fixes are now in
+  the lineage.
 - Semantic duplicates deliberately not re-reported: bloom-empty-filter
   (CVE-2013-5700, guarded), CheckBlockIndex cost (#21/#22 — profiled,
   documented in code at validation.cpp:6280), bloom reset storm (F4
@@ -137,7 +135,7 @@ contributor-branch-radar.md c2 | fork author's decision.
   #76 c2).
 
 ## Resume points (highest first)
-1. Merge/re-cherry-pick F1, F2, F3, F7, F9 into the main lineage.
+1. ~~Merge/re-cherry-pick F1, F2, F3, F7, F9~~ DONE 2026-07-29 (#66 c2).
 2. #22 c3: ClearCurrent gating? (verifier said skip; low value).
 3. #65 c3: rocksdb/leveldb knob branch batch.
 4. #9 c3: qa-assets selective import per target.
