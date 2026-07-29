@@ -55,6 +55,7 @@ struct replaced_event
   u8    replacement_hash[HASH_LENGTH];
   s32   replacement_vsize;
   s64   replacement_fee;
+  bool  replaced_by_transaction;
 };
 
 // BPF perf buffer to push the data to user space.
@@ -113,6 +114,7 @@ int trace_replaced(struct pt_regs *ctx) {
   bpf_probe_read_user(&replaced.replacement_hash, sizeof(replaced.replacement_hash), phash_replacement);
   bpf_usdt_readarg(6, ctx, &replaced.replacement_vsize);
   bpf_usdt_readarg(7, ctx, &replaced.replacement_fee);
+  bpf_usdt_readarg(8, ctx, &replaced.replaced_by_transaction);
 
   replaced_events.perf_submit(ctx, &replaced, sizeof(replaced));
   return 0;
@@ -352,12 +354,13 @@ class Dashboard:
             )
 
         if type_ == "replaced":
+            replacement_kind = "transaction" if data.replaced_by_transaction else "package"
             return (
                 f"{ts} replaced {bytes(data.replaced_hash)[::-1].hex()}"
                 f" with feerate {data.replaced_fee/data.replaced_vsize:.2f} sat/vB"
                 f" received {ts_dt.timestamp()-data.replaced_entry_time:.1f} seconds ago"
                 f" ({data.replaced_fee} sat, {data.replaced_vsize} vbytes)"
-                f" with {bytes(data.replacement_hash)[::-1].hex()}"
+                f" with {replacement_kind} {bytes(data.replacement_hash)[::-1].hex()}"
                 f" with feerate {data.replacement_fee/data.replacement_vsize:.2f} sat/vB"
                 f" ({data.replacement_fee} sat, {data.replacement_vsize} vbytes)"
             )
