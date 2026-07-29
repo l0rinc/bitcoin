@@ -130,3 +130,65 @@ accept-and-reject coverage with a guard-weakening mutant killed
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): WriteVarInt per-line sweep — coverage already complete; M1 mutation killed by the existing suite
+
+### Draw
+Re-rank draw over the 3-cell queue after a degenerate radar cell
+(draw 72 raw=16888814550837975994 masked idx 2 -> #65 c8
+DISCARDED: re-scan minutes after c6/c7's quiet sweeps has zero
+information content; the draw is recorded and the cell deferred
+to the next radar interval):
+draw 73, raw=14363064615506178869, masked 5139692578651403061,
+index 1 (of 2) -> #35 (second cycle; URGENT oracle-item queue
+"WriteVarInt per-line sweep"). Branch: audit/property-oracle-c2
+from f316e0e016 (#65 c7 journal tip).
+
+### Sweep (serialize.h:429-446 WriteVarInt + :415-422 GetVarIntSize)
+Branches and their killers in the EXISTING suite
+(test/serialize_tests.cpp):
+1. custom decrement `n = (n >> 7) - 1` (the non-LEB128 quirk):
+   exact-encoding checks :141-156 (0x80->"8000", 0xffffffff,
+   i64max, u64max all decrement-sensitive) + the 0..99999
+   round-trip loop.
+2. continuation bit `len ? 0x80 : 0x00`: every multi-byte exact
+   check.
+3. boundary `n <= 0x7F`: the "7f"/"8000" pair.
+4. buffer bound `tmp[CeilDiv(bits,7)]`: u64max exact check at
+   :156 (10-byte "80fefefefefefefefe7f" — the 10-byte arm is
+   ALREADY covered; my initial gap hypothesis was wrong, line
+   :156 exists).
+5. GetVarIntSize consistency: size == ss.size() asserts in the
+   loop (:115-118).
+
+### Mutation proof (failing-before / passing-after)
+M1: drop the decrement from BOTH write-side sites (serialize.h
+:420 GetVarIntSize and :438 WriteVarInt — a self-consistent
+mutant that only the canonical encodings + read-side catch).
+Result: serialize_tests fails comprehensively — exact checks at
+:154-156 (8fffffff7f != 8efefefe7f etc.) AND 99,985 round-trip
+failures. Restored (backup /tmp/serialize_h.bak): suite green,
+git diff empty.
+
+### Verdict
+DISMISSED (coverage complete): every WriteVarInt line is pinned
+by exact encodings or round-trips; the write side needs no new
+oracle. The c1 read-side battery plus this write-side sweep
+closes the VarInt family.
+
+### Exact commands
+- sed mutation (backup first) + cmake --build build-before
+  --target test_bitcoin + --run_test=serialize_tests (mutant
+  output above; restored output "No errors detected")
+- python3 reference encode/decode of the quirk (verified
+  u64max -> 80fefefefefefefefe7f etc. before checking coverage)
+
+### Limitations / queue
+- M4 (buffer shrink) needs ASan to be meaningful; the integer
+  fuzz target covers VarInt continuously under ASan.
+- CTxUndo consumer-side fuzzed VARINT fields (the other c1 next)
+  remains queued.
+
+## Rotation note
+Two cycles; VarInt write side closed. Not exhausted (CTxUndo
+consumer side).
