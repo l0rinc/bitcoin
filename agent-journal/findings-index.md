@@ -210,7 +210,9 @@ multi-agent-adjudication.md c1 | fork author's adoption decision.
 2. #22 c3: ClearCurrent gating? (verifier said skip; low value).
 3. #65 c3: rocksdb/leveldb knob branch batch.
 4. #9 c3: qa-assets selective import per target.
-5. #24 c2: UTXO-GROWING chain (fan-out) write amplification.
+5. ~~#24 c2: UTXO-GROWING chain (fan-out) write amplification~~ DONE
+   2026-07-29 (#24 c2: linear ~1.8x ex-logs; no superlinear growth).
+   Next cell if redrawn: pruning-mode undo retention/blk rotation.
 
 ## Replay log
 - 2026-07-29: ancestry/content verification above (merge-base +
