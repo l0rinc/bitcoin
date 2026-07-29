@@ -86,6 +86,23 @@ independently verified.
 - Next: WriteVarInt per-line sweep; CTxUndo consumer-side fuzzed
   VARINT fields.
 
+## 🔴 UTXO-scan/resize race — upstream master (fixed in-tree e049f064e1)
+- Mechanism: gettxoutsetinfo/scantxoutset create a LevelDB cursor
+  under cs_main then scan unlocked; assumeutxo ResizeCache resets
+  m_db mid-scan → iterator use-after-free → LevelDB abort
+  (VersionSet dtor assert).
+- Public trigger: authorized/local RPC during snapshot activation or
+  cache rebalance — availability kill, not consensus.
+- Evidence: upstream master raw fetch today has no cursor lock; the
+  fork's clean-master reproducer aborted (commit message e049f064e1);
+  tree holds a UniqueLock for cursor lifetime — verified in txdb.cpp
+  :231-262.
+- Branch/commits: fix in lineage (e049f064e1 + unit test + resize
+  fuzz target); journal resource-exhaustion-variants.md c2;
+  archive: this cycle's pick.
+- Next: track l0rinc's upstream PR 35744 (shared-lock refinement)
+  landing; nothing to do locally.
+
 ## ✅ Fee-estimator zero-state per-block waste (fixed 675011ba86)
 - Mechanism: processBlock swept all estimator buckets every connected
   block with no IBD gate; with zero tracked state (all of IBD for a
