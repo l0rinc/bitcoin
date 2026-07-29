@@ -801,3 +801,51 @@ the differential campaigns).
 ## Rotation note
 Eleven cycles; partial arm closed. The signing-outcome map is
 complete through INCOMPLETE.
+
+## Cycle 12 (2026-07-29): gate arms — SIGHASH_MISMATCH driven (two verifiers); hash-mismatch MISSING_INPUTS is decoder-pre-rejected
+
+### Draw
+Re-rank singleton (last queue cell): #50 (twelfth cycle; c11
+queue cell "gate arms"). Branch: audit/introspector-blockers-c12
+from 25afe70922 (#35 c4 journal tip).
+
+### SIGHASH_MISMATCH — CONFIRMED (two verifiers)
+Seed: the v2 P2PKH doc + PSBT_IN_SIGHASH_TYPE=2 (SIGHASH_NONE)
+vs the default SIGHASH_ALL.
+1. In-target: sign_err=1 (SIGHASH_MISMATCH).
+2. Public RPC: walletprocesspsbt rejects with "Specified sighash
+   value does not match value stored in PSBT (-22)".
+
+### Hash-mismatch MISSING_INPUTS — decoder pre-rejection (mechanism)
+Seed: v2 doc with one byte flipped in the non_witness_utxo tx.
+decodepsbt REJECTS at parse: "Non-witness UTXO does not match
+outpoint hash" — the SignPSBTInput hash-mismatch gate
+(psbt.cpp:680-682) is unreachable via any byte-parsed PSBT; it
+serves only programmatically-constructed PSBTs (FillPSBT and
+in-process callers), not the fuzz target's input class.
+
+### Final-code control
+250-run family corpus clean; print reverted.
+
+### Exact commands
+- python3 variant constructors (/tmp/psbt_v2_gate_sighash_seed,
+  /tmp/psbt_v2_gate_badprev_seed)
+- FUZZ=psbt build_fuzz/bin/fuzz -runs=1 <seeds> (sign_err=1)
+- python3 /tmp/btc50_corrg_v2.py /tmp/btc80_dec6.py
+  --configfile=... (RPC error text; decoder rejection text)
+
+### Verdict
+CONFIRMED for SIGHASH_MISMATCH; CHARACTERIZED for the
+hash-mismatch arm (pre-rejection boundary recorded). All
+SignPSBTInput outcome classes are now covered: OK, early-OK,
+INCOMPLETE, SIGHASH_MISMATCH, plus MISSING_INPUTS-classified
+unavailability (decoder-side).
+
+### Limitations / queue
+- The programmatic MISSING_INPUTS arm would need a C++ unit-style
+  driver (construct the PSBT in-process, not parse it) — out of
+  the fuzz target's input model; noted, not a defect.
+
+## Rotation note
+Twelve cycles; the outcome-class map is complete. #50 quiets
+pending new signing features.
