@@ -4,20 +4,28 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
+- Cycle 85 (`loupe-pipeline`) is complete with confirmed commit `468e4ef6fdf68c566f31e6a8c4cd0d39004baec3`; the next action is to draw a fresh eligible goal with exact `shuf -i 0-98 -n 1` after this close snapshot.
+- Current branch: `uber-cycle-85-loupe-pipeline-20260729`; current HEAD before this state close is `468e4ef6fd`; `origin/master...HEAD` is `2 958`; merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
+
 ## Latest authoritative checkpoint
 
-- Cycle 85 is active on goal 63 (`loupe-pipeline`), selected by exact `shuf -i 0-98 -n 1` -> `63`. The dedicated branch is `uber-cycle-85-loupe-pipeline-20260729`; start HEAD is `eb9a35d13935d67f56d0a967eca598dfe648bae9`, `origin/master...HEAD` is `2 956`, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Cycle 85 is complete on goal 63 (`loupe-pipeline`), selected by exact `shuf -i 0-98 -n 1` -> `63`. The dedicated branch is `uber-cycle-85-loupe-pipeline-20260729`; start HEAD is `eb9a35d13935d67f56d0a967eca598dfe648bae9`, source/fix HEAD is `468e4ef6fdf68c566f31e6a8c4cd0d39004baec3`, `origin/master...HEAD` is `2 958`, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
 - Cycle 84 is complete with confirmed commit `89b320fe37` and close snapshot `eb9a35d139`; its deterministic failed-start lifecycle evidence is recorded in `agent-journal/deterministic-simulation.md`.
-- Cycle 85 journal: `agent-journal/loupe-pipeline.md`. Scope is discovery/verification/fixing/reporting separation, receipts, leases, deduplication, and report reproducibility. No relevant process remains running.
+- Cycle 85 journal: `agent-journal/loupe-pipeline.md`. The round-two scout candidate `verify-commits-ancestry-error-success` was independently reproduced: a missing Git object returned verifier status 0 because status 128 was treated as a normal non-ancestor result. Both trusted-root checks now fail closed for statuses above 1; `contrib/verify-commits/test.py` covers statuses 0, 1, and 128 plus the real missing-revision path. No relevant process remains running.
 
-## Cycle 85 Active State
+## Cycle 85 Completion
 
 - Selector: exact `shuf -i 0-98 -n 1` -> `63` (`loupe-pipeline`).
 - Branch: `uber-cycle-85-loupe-pipeline-20260729`.
 - Start HEAD: `eb9a35d139`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `2 956`.
 - Scope: separate scout, verifier, fixer, and reporter stages with leases, PoCs, applicability checks, semantic/hash deduplication, and final review evidence.
 - Journal: `agent-journal/loupe-pipeline.md`; scratch root `/data/my_storage/tmp`.
-- Status: cycle 85 is active; first action is inventory of existing finding ledgers, receipts, leases, deduplication, and report artifacts.
+- Confirmed finding: `contrib/verify-commits/verify-commits.py` treated every nonzero `git merge-base --is-ancestor` status as “predates the trusted root,” so an invalid/missing revision could return status 0 before signature or tree verification. The trusted-root and trusted-SHA512-root checks now accept only statuses 0 and 1; operational errors exit 1.
+- Scout evidence: `doc/security/codex-security-bitcoin-round2/shard_00.jsonl` and `overview.md` rows 11 and 83-98. Deduplication found no earlier journal finding or separate fingerprint for this path/bug shape.
+- Source/test/journal commit: `468e4ef6fdf68c566f31e6a8c4cd0d39004baec3` (`contrib: fail closed on verify-commits ancestry errors`), authored and committed as `Lőrinc <pap.lorinc@gmail.com>`.
+- Validation: `python3 contrib/verify-commits/test.py` passed 3 tests; `python3 -m py_compile contrib/verify-commits/verify-commits.py contrib/verify-commits/test.py` passed; the fixed missing-revision command returned status 1; `git diff --check` passed. `test/lint/lint-files.py` reported five pre-existing unrelated shebang-permission failures and `lint-python.py` skipped for missing `lief`; neither was masked or changed.
+- Limitation: practical impact depends on an invalid/unresolved candidate ref or incomplete Git object database reaching the release/CI verifier; it is not a remote P2P finding. The next cycle must recheck the gate, then draw a distinct goal.
 
 ## Previous authoritative checkpoint (superseded)
 
@@ -358,6 +366,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 82 | `shuf -i 0-98 -n 1` -> `7` | `resource-exhaustion-variants` (oversized locator count) | confirmed; fixed | `getblocks`/`getheaders` accepted a huge CompactSize locator count into generic vector deserialization before the later 101-entry policy check, reserving about 5 MiB. `ReadBlockLocator` now rejects the count first; normal, TSan, and focused regressions passed. See `resource-exhaustion-variants.md`. | `1e0091464c` (`net: reject oversized locators before deserialization`) | Draw the next eligible goal |
 | 83 | `shuf -i 0-98 -n 1` -> `11` | `sanitizer-valgrind` | dismissed; no new source defect | ASan/UBSan, standalone and libFuzzer TSan, suppression-free TSan, and bounded standalone MSan coverage found no current source diagnostic. Valgrind was unavailable and the unbounded MSan suite was stopped at a real resource boundary; see `sanitizer-valgrind.md`. | `c79c8b401b` journal-only close | Draw the next eligible goal |
 | 84 | `shuf -i 0-98 -n 1` -> `71` | `deterministic-simulation` (failed `CConnman::Start` lifecycle) | confirmed; fixed | The public start path rejected conflicting outgoing options only after creating network thread handles. The old-source focused regression failed at `!threads_started`; moving the guard before startup made it pass, and full `net_tests` passed 34 cases and 150,899 assertions. See `deterministic-simulation.md`. | `89b320fe37` (`net: reject conflicting start options before threads`) | Initialize cycle 85 goal 63 |
+| 85 | `shuf -i 0-98 -n 1` -> `63` | `loupe-pipeline` (`verify-commits` ancestry error) | confirmed; fixed | The round-two scout's missing-object reproducer returned verifier status 0 because Git status 128 was treated as a normal non-ancestor result. Both ancestry checks now fail closed; the standalone regression covers statuses 0, 1, 128 and the real missing-revision path. See `loupe-pipeline.md`. | `468e4ef6fd` (`contrib: fail closed on verify-commits ancestry errors`) | Draw the next eligible goal after the close snapshot |
 
 ## Cycle 84 Completion
 
