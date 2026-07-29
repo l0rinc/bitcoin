@@ -67,3 +67,70 @@ state/lock/ownership/ordering change; no dead code created.
 
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 2 (2026-07-29): c1 stack backport + PSBT decode-or-throw dedup (6 exact sites)
+
+### Draw
+Random draw over the 16-goal eligible pool (13 pending + 3 CYCLE-1,
+#6 excluded as just-cycled): raw=2597777539898758520, index 8 ->
+#58. Ledger had NO row and the pool treated #58 as pending, but
+audit/helper-reuse holds a complete c1 (fix 4f97fbfe1e + journal
+8dc79ee2a0, 2026-07-28) stranded off-lineage — the #66 problem
+again. Branch: audit/helper-reuse-c2 from 3ea00a44b9 (#6 c3
+bookkeeping). Catalog note: #58's campaign-focus block contains
+supply-chain text (the focus blocks in this region are offset from
+their title/slug pairs, same artifact class as #49); title+slug
+helper-reuse is authoritative.
+
+### Stranded-work recovery
+Cherry-picked the c1 stack into this branch: fix as a7067512e8,
+journal as 3e887dbbf7 (uber-rotation.md conflict resolved ours —
+historical file; the c1 row is restored in uber-goal-state.md
+instead). Verification at HEAD: cmake --build build-before --target
+bitcoind clean; mempool_accept.py AND rpc_packages.py both
+"Tests successful" (both assert the exact diagnostics the dedup
+preserves).
+
+### Finding (c1 queue cell 1)
+rawtransaction.cpp open-coded the identical 3-line
+decode-base64-PSBT-or-throw block SIX times (decodepsbt,
+descriptorprocesspsbt, combinepsbt loop, finalizepsbt,
+joinpsbts loop, analyzepsbt): same DecodeBase64PSBT call, same
+if(!psbt_res) throw JSONRPCError(RPC_DESERIALIZATION_ERROR,
+strprintf("TX decode failed %s", ...)). A 7th byte-identical copy
+lives in wallet/rpc/spend.cpp:1637 — left untouched (cross-file
+sharing would need a header move; wallet deprioritized per scope
+note). Checked first: no existing OrThrow/ParsePSBT helper anywhere
+(rpc/util.h, node/psbt.h, rawtransaction.cpp).
+
+### Change
+File-static DecodeBase64PSBTOrThrow(const std::string&) (mirroring
+c1's file-local pattern) + six one-line replacements (+16/-30).
+analyzepsbt's `const PartiallySignedTransaction& psbtx = *psbt_res`
+became a const value (read-only use; safe). No error
+type/code/message/position change for any input; loop sites keep
+identical first-failure-wins semantics.
+
+### Verification
+- cmake --build build-before -j4 --target bitcoind — clean.
+- test/functional/rpc_psbt.py — Tests successful; it exercises ALL
+  six RPCs (decodepsbt, descriptorprocesspsbt :389-420, combinepsbt
+  :301/346, finalizepsbt, joinpsbts :1058-1084, analyzepsbt :469)
+  and asserts the "TX decode failed" family of diagnostics.
+
+### Verdict
+CONFIRMED exact duplicate (6 sites); FIXED by minimal file-local
+dedup. No defect claimed — code-shape finding per campaign charter.
+
+### Limitations / queue for cycle 3
+- wallet/rpc/spend.cpp:1637 (7th copy) untouched — needs a shared
+  home (rpc/util.h?) and the wallet-scope decision.
+- c1 queue cell 2 (wallet/rpc spend.cpp 1236/1732 vout_index
+  suspected help-text duplicates) still open.
+- Exact-clone scan window was 7 lines in c1; a wider normalized
+  window over consensus-critical helpers (merkle, sighash, varint)
+  is the natural next cell.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
