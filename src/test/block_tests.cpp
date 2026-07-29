@@ -121,4 +121,10 @@ BOOST_AUTO_TEST_CASE(block_helpers_reject_null_tx_refs)
     BOOST_CHECK_THROW(stream << TX_WITH_WITNESS(block), NonFatalCheckError);
 }
 
+BOOST_AUTO_TEST_CASE(block_total_size_matches_serialization)
+{
+    const CBlock block{MakeNonNullBlock()};
+    BOOST_CHECK_EQUAL(block.ComputeTotalSize(), GetSerializeSize(TX_WITH_WITNESS(block)));
+}
+
 BOOST_AUTO_TEST_SUITE_END()

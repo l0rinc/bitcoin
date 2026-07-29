@@ -108,6 +108,9 @@ public:
         READWRITE(AsBase<CBlockHeader>(obj), obj.vtx);
     }
 
+    /** Calculate the total block size in bytes, including witness data. */
+    unsigned int ComputeTotalSize() const;
+
     void SetNull()
     {
         CBlockHeader::SetNull();

@@ -136,7 +136,7 @@ static inline int32_t GetTransactionWeight(const CTransaction& tx)
 }
 static inline int64_t GetBlockWeight(const CBlock& block)
 {
-    return ::GetSerializeSize(TX_NO_WITNESS(block)) * (WITNESS_SCALE_FACTOR - 1) + ::GetSerializeSize(TX_WITH_WITNESS(block));
+    return ::GetSerializeSize(TX_NO_WITNESS(block)) * (WITNESS_SCALE_FACTOR - 1) + block.ComputeTotalSize();
 }
 static inline int64_t GetTransactionInputWeight(const CTxIn& txin)
 {

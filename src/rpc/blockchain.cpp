@@ -218,7 +218,7 @@ UniValue blockToJSON(BlockManager& blockman, const CBlock& block, const CBlockIn
     CHECK_NONFATAL(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
 
     result.pushKV("strippedsize", ::GetSerializeSize(TX_NO_WITNESS(block)));
-    result.pushKV("size", ::GetSerializeSize(TX_WITH_WITNESS(block)));
+    result.pushKV("size", block.ComputeTotalSize());
     result.pushKV("weight", ::GetBlockWeight(block));
 
     result.pushKV("coinbase_tx", coinbaseTxToJSON(*block.vtx[0]));
