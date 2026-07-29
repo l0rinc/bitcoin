@@ -6,6 +6,21 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Latest authoritative checkpoint
 
+- Cycle 85 is active on goal 63 (`loupe-pipeline`), selected by exact `shuf -i 0-98 -n 1` -> `63`. The dedicated branch is `uber-cycle-85-loupe-pipeline-20260729`; start HEAD is `eb9a35d13935d67f56d0a967eca598dfe648bae9`, `origin/master...HEAD` is `2 956`, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Cycle 84 is complete with confirmed commit `89b320fe37` and close snapshot `eb9a35d139`; its deterministic failed-start lifecycle evidence is recorded in `agent-journal/deterministic-simulation.md`.
+- Cycle 85 journal: `agent-journal/loupe-pipeline.md`. Scope is discovery/verification/fixing/reporting separation, receipts, leases, deduplication, and report reproducibility. No relevant process remains running.
+
+## Cycle 85 Active State
+
+- Selector: exact `shuf -i 0-98 -n 1` -> `63` (`loupe-pipeline`).
+- Branch: `uber-cycle-85-loupe-pipeline-20260729`.
+- Start HEAD: `eb9a35d139`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `2 956`.
+- Scope: separate scout, verifier, fixer, and reporter stages with leases, PoCs, applicability checks, semantic/hash deduplication, and final review evidence.
+- Journal: `agent-journal/loupe-pipeline.md`; scratch root `/data/my_storage/tmp`.
+- Status: cycle 85 is active; first action is inventory of existing finding ledgers, receipts, leases, deduplication, and report artifacts.
+
+## Previous authoritative checkpoint (superseded)
+
 - Cycle 84 (`deterministic-simulation`) is complete with confirmed finding commit `89b320fe3709b3d96d91a5a596fae40f3d71e0a5` (`net: reject conflicting start options before threads`). The invalid public `CConnman::Start` option combination now returns before any network thread or other startup side effect; the before/after regression and full `net_tests` evidence are recorded in `agent-journal/deterministic-simulation.md`.
 - The next selector draw is cycle 85: exact `shuf -i 0-98 -n 1` -> `63` (`loupe-pipeline`). Its branch and start snapshot are pending initialization below. Current branch HEAD is `89b320fe3709b3d96d91a5a596fae40f3d71e0a5`; `origin/master...HEAD` is `2 955`; merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
 - No relevant process remains running. Unrelated tracked commits and untracked files were preserved.
