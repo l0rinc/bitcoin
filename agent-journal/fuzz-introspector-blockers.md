@@ -602,3 +602,55 @@ is COMPLETE at the provider-boundary.
 ## Rotation note
 Eight cycles; script-path cell closed. The campaign's remaining
 cell is the corpus import; further arms need new PSBT features.
+
+## Cycle 9 (2026-07-29): qa-assets-style corpus-dir import — 8-seed family dir merge-validated
+
+### Draw
+Re-rank draw over the remaining 3-cell queue:
+raw=2479466053413897937, index 1 (of 3) -> #50 (ninth cycle; the
+c3-carried cell "qa-assets-style corpus import"). Branch:
+audit/introspector-blockers-c9 from 449a7fda9c (#80 c8 journal
+tip).
+
+### Corpus dir (the deliverable)
+/tmp/psbt_family_corpus/ — 8 files, each with recorded sha256 in
+the c4-c8 journals:
+- psbt_corr_seed (v0 P2PKH; byte-identical to crash-821b — the
+  pre-ECC-init SEGV reproducer, kept as the regression seed)
+- psbt_v2_corr_seed (v2 P2PKH)
+- psbt_v2_2in_seed (2-input multi-key)
+- psbt_v2_wit_seed (P2WPKH require_witness_sig)
+- psbt_v2_tr_seed (P2TR raw keypath)
+- psbt_v2_trsp_seed (P2TR script-path, fixed-2G tree)
+- crash-821b... (dup of psbt_corr_seed; merge dedups it)
+- crash-ccfd... (6 B artifact from the c4 crash session,
+  provenance uncertain, kept for the record)
+
+### Validation
+- libFuzzer merge: FUZZ=psbt .../fuzz -merge=1 /tmp/psbt_merge_out
+  /tmp/psbt_family_corpus -> "MERGE-OUTER: successful in 1
+  attempt(s)", 8 in / 7 out (byte-dup deduped), cov=11449 edges,
+  ft=18864. The dir is a well-formed corpus for qa-assets import.
+- The family's distinct value vs the upstream psbt corpus is the
+  #9 c3 measurement: upstream drives only anyone-can-spend and
+  early-OK arms; this dir drives every key-requiring complete arm
+  (P2PKH, multi-key, P2WPKH, P2TR keypath, P2TR script-path).
+
+### Verdict
+CONFIRMED deliverable: the corpus-dir layout is complete and
+merge-validated; contents, shas, and merge output recorded. The
+import path to qa-assets is now mechanical (copy + PR).
+
+### Exact commands
+- cp seeds + crash artifacts to /tmp/psbt_family_corpus;
+  sha256sum (recorded above)
+- FUZZ=psbt build_fuzz/bin/fuzz -merge=1 /tmp/psbt_merge_out
+  /tmp/psbt_family_corpus (output above)
+
+### Limitations / queue
+- The dir lives in /tmp scratch (disk policy); import = copy.
+- 200-run stability over the dir already green (c8 final control).
+
+## Rotation note
+Nine cycles; the long-carried import cell is closed. #50's
+remaining cells need new PSBT features or harness depth.
