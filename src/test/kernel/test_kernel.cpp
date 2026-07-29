@@ -4,6 +4,7 @@
 
 #include <kernel/bitcoinkernel.h>
 #include <kernel/bitcoinkernel_wrapper.h>
+#include <streams.h>
 #include <util/fs.h>
 
 #define BOOST_TEST_MODULE Bitcoin Kernel Test Suite
@@ -831,6 +832,40 @@ std::unique_ptr<ChainMan> create_chainman(TestDirectory& test_directory,
 
     auto chainman{std::make_unique<ChainMan>(context, chainman_opts)};
     return chainman;
+}
+
+BOOST_AUTO_TEST_CASE(btck_import_blocks_null_path_lengths)
+{
+    auto test_directory{TestDirectory{"import_blocks_null_lens_bitcoin_kernel"}};
+
+    // Call the documented C API directly with NUL-terminated paths.
+    auto* context_options{btck_context_options_create()};
+    auto* chain_params{btck_chain_parameters_create(btck_ChainType_REGTEST)};
+    btck_context_options_set_chainparams(context_options, chain_params);
+    auto* context{btck_context_create(context_options)};
+    BOOST_REQUIRE(context);
+    auto data_dir{PathToString(test_directory.m_directory)};
+    auto blocks_dir{PathToString(test_directory.m_directory / "blocks")};
+    auto* options{btck_chainstate_manager_options_create(context, data_dir.c_str(), data_dir.size(), blocks_dir.c_str(), blocks_dir.size())};
+    BOOST_REQUIRE(options);
+    btck_chainstate_manager_options_update_block_tree_db_in_memory(options, 1);
+    btck_chainstate_manager_options_update_chainstate_db_in_memory(options, 1);
+    auto* chainman{btck_chainstate_manager_create(options)};
+    BOOST_REQUIRE(chainman);
+
+    auto empty_blk{test_directory.m_directory / "empty_blk.dat"};
+    {
+        AutoFile file{fsbridge::fopen(empty_blk, "wb")};
+        BOOST_REQUIRE(!file.IsNull());
+    }
+    const char* paths[]{empty_blk.c_str()};
+    BOOST_CHECK_EQUAL(btck_chainstate_manager_import_blocks(chainman, paths, nullptr, 1), 0);
+
+    btck_chainstate_manager_destroy(chainman);
+    btck_chainstate_manager_options_destroy(options);
+    btck_context_destroy(context);
+    btck_context_options_destroy(context_options);
+    btck_chain_parameters_destroy(chain_params);
 }
 
 void chainman_reindex_test(TestDirectory& test_directory)
