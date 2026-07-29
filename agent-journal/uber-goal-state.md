@@ -167,6 +167,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 40 | multi-agent-adjudication | CYCLE-1 | 2026-07-29 | L4 RESOLVED: dup-check equivalence proven (prover+breaker converge, adjudicator verified); 1-input arm vacuously safe |
 | 23 | perf-flamegraph-investigation | CYCLE-1 (retro) | 2026-07-28 | reorg-repair cross-check gated (83f9989a68, row restored); backported 93c29aac55 |
 | 23 | perf-flamegraph-investigation | CYCLE-2 | 2026-07-29 | backport verified at HEAD: mempool_tests green, ComplexMemPool 184.7 ms/op (matches c1 repaired 181.4; stale-binary 278.5 scare resolved by rebuild) |
+| 42 | ci-review-bot-followup | CYCLE-1 | 2026-07-29 | DrahtBot TSan on upstream 35744 = unmerged shared-lock rework; tree not exposed (UniqueLock fix e049f064e1, resize-cursor test green) |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -185,6 +186,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    raw=4139937993477073163 -> idx 12 (of 13) -> #60.
    raw=8140190821735971651 -> idx 3 (of 12) -> #40.
    raw=5886040343995211851 -> idx 0 (of 11) -> #23.
+   raw=2944374403711530272 -> idx 2 (of 10) -> #42.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -220,7 +222,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 96, 97, 98.
 Cycles done (random-pool state): 0(c1,c2), 1(c1,c2), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1), 9(c1,c2), 10(c1,c2), 7(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2), 23(c1,c2),
-37(c1), 39(c1,c2), 40(c1), 21(c1,c2), 43(c1,c2), 45(c1,c2), 47(c1,c2), 49(c1), 50(c1), 48(c1), 51(c1), 53(c1), 55(c1), 57(c1), 58(c1,c2), 59(c1,c2), 60(c1,c2),
+37(c1), 39(c1,c2), 40(c1), 42(c1), 21(c1,c2), 43(c1,c2), 45(c1,c2), 47(c1,c2), 49(c1), 50(c1), 48(c1), 51(c1), 53(c1), 55(c1), 57(c1), 58(c1,c2), 59(c1,c2), 60(c1,c2),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1),
 76(c1,c2), 80(c1), 81(c1,c2), 90(c1,c2), 91(c1,c2), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 101(c1,c2), 103(c1), 104(c1), 105(c1), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with

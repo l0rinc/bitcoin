@@ -115,8 +115,11 @@ agent-journal/multi-agent-adjudication.md c1.
 - Branch/commits: fix in lineage (e049f064e1 + unit test + resize
   fuzz target); journal resource-exhaustion-variants.md c2;
   archived on agent/all-findings (hash-present e049f064e1).
-- Next: track l0rinc's upstream PR 35744 (shared-lock refinement)
-  landing; nothing to do locally.
+- Next: watch upstream 35744 (open, head 38b84769608a; DrahtBot
+  flagged a TSan pthread_cond_destroy race in its shared-lock
+  rework 2026-07-28 — that shape cannot exist in-tree: zero
+  condvar/shared_mutex in txdb, resize-cursor test green at HEAD
+  per #42 c1). Nothing to do locally.
 
 ## ✅ Fee-estimator zero-state per-block waste (fixed 675011ba86)
 - Mechanism: processBlock swept all estimator buckets every connected
