@@ -210,6 +210,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 75 | build-throughput-cacheability | CYCLE-4 | 2026-07-29 | 45-uncacheable itemized: 57/58 = failed compilations (rotation's own mutants); IPC/capnp hypothesis refuted |
 | 95 | database-semantics-differential | CYCLE-4 | 2026-07-29 | durability differential: kill -9 mid-reindex, both engines recover identical tip, zero corruption |
 | 102 | durable-suspicion-replay | CYCLE-2 | 2026-07-29 | A5 capturemessages abort replayed on v28.2 binary: same msghand exception abort (behavior-verified, second verifier form) |
+| 91 | compiler-binary-hardening | CYCLE-4 | 2026-07-29 | ELF census 7/7 binaries: PIE+NX+full RELRO+canary uniform, zero divergence; BTI note absent (c1 toolchain finding) |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -302,6 +303,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    -> idx 0 -> #95 c4.
    RE-RANK draw 30 (7 cells): raw=2757803267336390011 -> idx 4 ->
    #102 c2.
+   RE-RANK draw 31 (6 cells): raw=5848245164434789317 -> idx 3 ->
+   #91 c4.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -339,7 +342,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1,c2,c3), 4(c1,c2), 6(c1,c2,c3),7(
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4), 35(c1,c2), 36(c1,c2), 23(c1,c2,c3,c4), 25(c1,c2,c3),
 37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2), 44(c1,c2), 46(c1), 54(c1), 51(c1,c2), 21(c1,c2,c3), 43(c1,c2,c3), 45(c1,c2,c3), 47(c1,c2), 48(c1,c2), 49(c1,c2), 50(c1,c2), 53(c1), 55(c1), 57(c1), 58(c1,c2), 59(c1,c2), 60(c1,c2,c3,c4),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2,c3), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 70(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1,c2,c3,c4),
-76(c1,c2,c3), 80(c1,c2,c3), 81(c1,c2), 90(c1,c2), 91(c1,c2,c3), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4), 99(c1), 100(c1), 101(c1,c2), 102(c1,c2), 103(c1), 104(c1), 105(c1), 106(c1,c2,c3), 107(c1), 108(c1), 109(c1).
+76(c1,c2,c3), 80(c1,c2,c3), 81(c1,c2), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4), 99(c1), 100(c1), 101(c1,c2), 102(c1,c2), 103(c1), 104(c1), 105(c1), 106(c1,c2,c3), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
