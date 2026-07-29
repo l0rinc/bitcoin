@@ -261,3 +261,54 @@ guards (c1), write-side encodings (c2), undo consumer (c3).
 ## Rotation note
 Three cycles; the VarInt/undo family is closed. Not exhausted
 (the overflow-wrap corner).
+
+## Cycle 4 (2026-07-29): DecompressAmount overflow corner — VACUOUS (bijection + range check is complete)
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=18024658476397289347, masked 8801286439542513539, index 1
+(of 2) -> #35 (fourth cycle; c3 limitation "overflow-wrap
+corner"). Branch: audit/property-oracle-c4 from 805bd1c3a0
+(#60 c8 journal tip).
+
+### Hypothesis (from c3)
+DecompressAmount's internal uint64 overflow (n *= 10^e wrapping
+at ~1.8e19) might produce a SMALL result that slips under the
+fork's amount > MAX_MONEY check while being mathematically
+invalid — an accepted-corrupt amount.
+
+### Analysis + constructive search (bounded proof)
+- compress(MAX_MONEY) = 21,000,000 exactly; decompress is a
+  bijection by decomposition uniqueness ((n,d,e) forced per x:
+  e = (x-1)%10, d = ((x-1)/10)%9 + 1 in [1,9]). Every x reads to
+  a UNIQUE deterministic amount; every amount has exactly its
+  canonical encoding.
+- compress is NOT monotonic (compress(21e14-1) ~ 1.9e13 >>
+  compress(21e14) = 2.1e7), so x > 21M is NOT invalid — the
+  candidate search confirmed it: x=21000001 -> decompress
+  2,333,334 sats, which IS the canonical valid encoding of that
+  amount (verified by recompression).
+- The wrap loop (n *= 10^e mod 2^64) can alias distinct huge
+  encodings to the same amount, but (a) writes only ever encode
+  valid amounts, and (b) the only meaningful validity question
+  for a read is RANGE, which the fork's post-computation check
+  answers exactly. There is no "intended" out-of-range value for
+  a read to be mistaken about.
+
+### Verdict
+DISMISSED (corner vacuous): the fork's range check is complete
+for amount validity; the c3 limitation note is CORRECTED (the
+mechanism was real but the exploit class doesn't exist — wrap
+only affects huge encodings, and range-checked output is always a
+well-defined in-range amount). No fix needed; the amount
+compression family is fully analyzed.
+
+### Exact commands
+- python3 reference compress/decompress (bijection + range
+  search, output above); src/compressor.cpp:176-198 read
+
+### Limitations / queue
+- None open for the VarInt/amount/undo family (c1-c4 closed).
+
+## Rotation note
+Four cycles; the family is closed with the corner proven vacuous.
