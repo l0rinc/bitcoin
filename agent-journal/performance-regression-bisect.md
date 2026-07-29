@@ -141,3 +141,53 @@ correctness-sensitive saturation contract. NOT forced this cycle.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-07-29): txindex in-tree baseline with an IBD-ish tx-heavy workload (35531 lineage reference)
+
+### Draw
+Re-rank draw over a rebuilt 10-cell queue:
+raw=7506511565727394747, index 7 -> #25 (third cycle; c1 queue cell
+"txindex hashed-keys range (35531 lineage) with an IBD-ish
+workload"). Branch: audit/perf-bisect-c3 from ce2832dc3f (#50 c2
+bookkeeping).
+
+### Setup check
+The fork does NOT carry the hashed-keys txindex in-tree
+(src/index/txindex.cpp has no SipHash/prefix-key code; the design
+lives on l0rinc/txindex_optimization and upstream PR 35531, open).
+So the cell measures the IN-TREE baseline the design attacks.
+
+### Measurement (regtest, MiniWallet OP_TRUE chain, 410 blocks /
+~41.4k txs — the same harness as #21 c3)
+- Chain build: 68s (no signatures).
+- txindex catch-up from 0 to 410 with -txindex=1: 3.7s wall
+  (~11.2k txs/s indexed — same ballpark as the validation path
+  itself, ~11.3k txs/s from #21 c3).
+- Index size: ~1-3 MB (du -sm floor 1; 32-byte txid key + position
+  value per tx, upstream format).
+- Consistency: #38 c2's ~3s empty-block interrupt-build bound.
+
+### Verdict
+Journal-only baseline: in-tree txindex costs ~25-70 bytes/tx and
+runs at validation-path speed on this workload; the 35531 lineage
+(12-byte key + empty value, verified in reviews/2026-07-25-
+pr-35531-txindex-hashed-keys.md) targets a ~2.7x key shrink whose
+mainnet-scale effect (~66GB -> ~26GB per the review) regtest
+cannot validate. No defect; the baseline numbers are the durable
+yield for future comparisons.
+
+### Exact commands
+- /tmp/btc25_mw.py (chain build, OP_TRUE mode)
+- bitcoind -regtest -datadir=/tmp/btc25_mw -txindex=1; getindexinfo
+  gating; du -sm .../indexes/txindex
+
+### Limitations / queue
+- No A/B against the branch (its 2025 base would need a separate
+  build; the fork author's adoption/upstream-tracking decision).
+- Lookup-path cost (FindTx collision walk) unmeasured — natural
+  collisions are ~0 at 41k txs.
+- Scratch chain removed (/tmp/btc25_mw).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
