@@ -112,3 +112,62 @@ Deliverable is the reproducible profile/fan-out table above.
 - Docker/guix layer reuse: not inspected (no docker on host).
 - Functional-test build assumptions (test_runner cache dir
   test/cache/) untouched — pre-existing scratch, left alone.
+
+## Cycle 2 (2026-07-29): header-cost attribution via clang -ftime-trace on validation.cpp
+
+Base: 92458c9398 (journal commit for #59 cycle-2 on
+audit/supply-chain-c2; ledger-lineage anchor audit/resurrection @
+5d0155254c). Branch: audit/build-throughput-c2 (c1 journal carried).
+Start state: clean (untracked scratch only).
+
+### Draw
+Random draw over the 26-goal pool (13 pending + 13 CYCLE-1; #59
+excluded as just-cycled): raw=6091627946289443426, index 24 -> #75.
+Queued cell from c1: "header-cost (-ftime-report/-ftime-trace)".
+
+### Method
+clang++-18 with the build's exact validation.cpp command line
+(ccache stripped, gcc-only flags removed: -fno-extended-identifiers,
+-fstack-reuse=none), -ftime-trace=/tmp/btc75_trace, real compile
+(-fsyntax-only would suppress the trace): 24.91s wall, 30.34s
+source-attributed in the trace JSON.
+
+### Header cost ranking (validation.cpp frontend time)
+| header | ms | note |
+|---|---|---|
+| validation.h | 6097 | the TU's own template-heavy header, ~20% |
+| chain.h | 2503 | CBlockIndex inline |
+| params.h | 1463 | consensus params templates |
+| feerate.h | 1404 | policy flag header |
+| verify_flags.h | 1403 | policy flag header |
+| flatfile.h | 981 | blockstorage |
+| coins.h | 620 | |
+| arith_uint256.h | 583 | |
+| hashed_index.hpp | 573 | multi_index machinery |
+| strencodings.h | 542 | |
+The ranking is shape-consistent with the fan-out map from #75 c1
+(leaf headers broad, local header dominant for its own TU). No
+anomaly: nothing cheap-looking ranks above the owner's own header,
+and the two 1.4s policy-flag headers are the only mild surprise
+(worth a pass only if the same cost shows up in many TUs — not
+measured this cycle).
+
+### Verdict
+- DISMISSED: header costs are dominated by the TU's own template
+  surface; no broad-header pathology beyond the c1 map. The
+  -ftime-trace method is validated for future per-TU cost work.
+
+### Exact commands
+- ninja -C build-before -t commands | grep validation.cpp.o (exact
+  flags) -> sed ccache/gcc-only out, add -ftime-trace
+- python3 traceEvents['Source'].dur aggregation
+
+### Limitations / queue
+- Single TU (validation.cpp); a top-5-TU table (net_processing,
+  txmempool, blockstorage, wallet) would rank shared headers — queued.
+- Clean-build wall (ccache-warm fresh dir) still open from c1 queue.
+- gcc -ftime-report alternative cell (no per-header, per-pass only) —
+  clang's trace is the right tool, confirmed.
+
+## Rotation note
+Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
