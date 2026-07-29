@@ -89,6 +89,17 @@ persists over seeded FLAGS), 5k runs clean | in lineage via archive
 a8f5e2b503 | crash seed /tmp/lw_crash_flags_seed preserved | widen
 record classes.
 
+O6 | psbt fuzz hybrid document consumption | PSBT serialization |
+harness truncation gate (ConsumeRandomLengthString backslash-escape)
+starved whole valid documents | n/a (test infra) | DELIVERED |
+d086164661 (#101 c1): 9 starvation-gated functions (483 edges)
+covered AFTER, all 9 re-listed UNCOVERED in old-corpus CONTROL,
+isolated 136-byte valid seed 528 -> 2857 edges | on
+audit/public-characterization, archive pick this cycle | re-pointed
+seeds /tmp/btc101_seed/*_whole (0x00 mode byte) | grep other targets
+for single-mode document consumers; SigningProvider-bearing target
+for SignPSBTInput family.
+
 ## Latent / upstream-context items (not local defects)
 
 L1 | CBloomFilter ctor div-by-zero/log(0) | bloom | math UB at

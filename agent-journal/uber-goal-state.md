@@ -152,12 +152,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 38 | failure-cleanup-crash-safety | CYCLE-2 | 2026-07-29 | txindex interrupted-build: empty-block build uninterruptible (~3s); resume mechanics present |
 | 55 | alternative-implementation-diff | CYCLE-1 | 2026-07-29 | noble-secp256k1 ECDSA differential: 2019/2019+5/5 RFC6979 vectors match |
 | 107 | conformance-test-transplant | CYCLE-1 | 2026-07-29 | RFC 4231 case 5 transplanted (0d36c6cd80); all 7 cases both hashes |
+| 101 | public-characterization-fix | CYCLE-1 | 2026-07-29 | PSBT fuzz hybrid consumption fix (d086164661): 9 starvation-gated functions covered, control re-lists all 9, iso seed 528->2857 edges |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
    raw=6086368032283125981 -> idx 18 (of 27) -> #107.
    raw=6091627946289443426 -> idx 24 (of 26) -> #75.
+   raw=10440797539259245241 -> idx 12 (of 21) -> #101.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -196,7 +198,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1,c2), 21(c1,c2), 43(c1), 45(c1,c2), 47(c1,c2), 50(c1), 48(c1), 51(c1), 53(c1), 55(c1), 57(c1), 59(c1,c2), 60(c1),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1),
-76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 103(c1), 104(c1), 105(c1), 107(c1), 108(c1), 109(c1).
+76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 101(c1), 103(c1), 104(c1), 105(c1), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
