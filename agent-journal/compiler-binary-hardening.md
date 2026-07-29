@@ -160,3 +160,55 @@ hardened; upstream-matching option design.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-07-29): REDUCE_EXPORTS=ON shared kernel lib — export surface measured: 134 btck_ API + std weak symbols only
+
+### Draw
+Re-rank draw over a rebuilt 10-cell queue:
+raw=3025727333361852290, index 0 -> #91 (third cycle; c2 queue
+cell "REDUCE_EXPORTS=ON full build + nm -D of the .so"). Branch:
+audit/compiler-hardening-c3 from 1aa2c70cbf (#49 c2 bookkeeping).
+
+### Experiment
+cmake -B build-kernel-shr -G Ninja -DCMAKE_BUILD_TYPE=Release
+-DBUILD_KERNEL_LIB=ON -DBUILD_SHARED_LIBS=ON -DREDUCE_EXPORTS=ON;
+build bitcoinkernel -> lib/libbitcoinkernel.so (138 edges, exit 0).
+
+### Export surface (nm -D --defined-only, 387 total)
+- 134 T global: all btck_* API functions (the intended surface).
+- 51 V + 199 W weak: all std:: template/comdat runtime symbols
+  (once_flag, from_chars, string ops, exception helpers) — the
+  C++-ABI-mandated residue every C++ shared lib carries.
+- 3 u unique-global: std::__detail runtime symbols.
+- ZERO bitcoin-internal symbols (no validation/coins/txmempool
+  names), ZERO secp256k1 (subtree hidden, c2), ZERO leveldb.
+The c2 prediction (API-only + hidden internals with
+REDUCE_EXPORTS=ON) is CONFIRMED by direct measurement. The c2
+OFF-case (1431 exported internals in dev config) is thus exactly
+the dev/release asymmetry documented: Guix/release builds
+(REDUCE_EXPORTS=ON) get the tight surface.
+
+### .so hardening state
+- GNU_STACK RW (non-exec) + GNU_RELRO + BIND_NOW (full RELRO).
+- No GNU_PROPERTY program header -> no BTI note at .so level,
+  consistent with c1's crt-files-note-less finding (enforcement
+  toolchain-inactive).
+- Build dir deleted post-measurement (disk 100%).
+
+### Verdict
+Findings of fact, journal-only: the release-config export surface
+is tight by measurement; dev-config symbol visibility is a dev-only
+convenience, upstream-matching option design.
+
+### Exact commands
+- cmake configure/build (above); nm -D --defined-only | wc/awk
+  classification; readelf -lW/-dW for GNU_STACK/RELRO/FLAGS
+
+### Limitations / queue
+- bitcoind-qt / test binaries' ELF posture still uninspected.
+- The 3 unique-global std symbols are glibc++-version-specific
+  (harmless ABI plumbing).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
