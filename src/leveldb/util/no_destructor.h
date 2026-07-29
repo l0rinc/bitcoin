@@ -6,6 +6,7 @@
 #define STORAGE_LEVELDB_UTIL_NO_DESTRUCTOR_H_
 
 #include <cstddef>
+#include <new>
 #include <type_traits>
 #include <utility>
 
