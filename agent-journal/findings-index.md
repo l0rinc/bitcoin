@@ -130,6 +130,17 @@ into lineage 4b8fa7c937 (#6 c3), rpc_txoutproof.py green at HEAD |
 scratch probe /tmp/r6_txoutproof_probe.py | BIP37 serving side if
 bloom work resumes.
 
+O8 | psbt fuzz signing section | PSBT signing machinery |
+SignPSBTInput/UpdatePSBTOutput/PSBTInputSignedAndVerified
+unreachable (no SigningProvider in target) | n/a (test infra) |
+DELIVERED | psbt target signing pass: FillableSigningProvider +
+PrecomputePSBTData + per-input sign/verify + per-output update;
+iso seed chain 528 -> 2857 -> 3048 edges; 0 UNCOVERED_FUNC matches
+for all three at 3000 runs, no crash | #50 c2 on
+audit/introspector-blockers-c2 | /tmp/btc101_seed,
+/tmp/btc101_iso | key-script-correlated seeds for complete=true
+sign arms; PSBTv2 signing seeds.
+
 ## Latent / upstream-context items (not local defects)
 
 L1 | CBloomFilter ctor div-by-zero/log(0) | bloom | math UB at
