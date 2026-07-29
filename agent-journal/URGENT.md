@@ -21,6 +21,31 @@ independently verified.
 - Next: grep other fuzz targets for the same single-mode document
   pattern; #50 c2 SigningProvider-bearing target for SignPSBTInput.
 
+## ✅ psbt fuzz target missing ECC init — SEGV on first valid key (fixed, #50 c4)
+- Mechanism: the #50 c2 signing pass (08590b364d) made the psbt fuzz
+  target do ECC work but the target had no .init;
+  secp256k1_context_sign stays null and the FIRST valid fuzz key
+  crashes in FillableSigningProvider::AddKey -> CKey::GetPubKey ->
+  secp256k1_ec_pubkey_create(NULL, ...).
+- Evidence: failing-before (pre-fix HEAD target, ASan+UBSan):
+  key.cpp:198 null-pointer UBSan + ASan SEGV on 0x0 READ,
+  first-invalid frame secp256k1_ecmult_gen_context_is_built <-
+  ec_pubkey_create <- CKey::GetPubKey (key.cpp:198) <- AddKey
+  (signingprovider.h:323) <- psbt_fuzz_target. Passing-after: fixed
+  target clean on both correlated seeds + 500-run corpus (97 s);
+  PSBTv2 correlated seed drives SignPSBTInput to OK +
+  PSBTInputSignedAndVerified=1 (final_script_sig=106 B) with the
+  fuzz-provided key; independent RPC verifier (walletprocesspsbt /
+  finalizepsbt complete=True).
+- Reachability: decodable doc + >=64 front key bytes — only via the
+  hybrid whole-doc mode, hence invisible to truncation-mode corpora.
+  Test-infra only, fork-local.
+- Branch/commit: audit/introspector-blockers-c4 (this cycle);
+  journal fuzz-introspector-blockers.md c4. Archive: agent/all-findings
+  pick this cycle.
+- Next: multi-input multi-key correlated docs; taproot/witness
+  variants; qa-assets-style corpus-dir import.
+
 ## ✅ Rolling-bloom reset-per-tip-change CPU storm (fixed c8f53e58d9)
 - Mechanism: TxDownloadManagerImpl::ActiveTipChange reset two ~863 KiB
   rolling bloom filters per accepted block once the regtest IBD latch
@@ -44,15 +69,6 @@ independently verified.
 - Branch: journal-only, reproducible-builds.md c2.
 - Next: upstream-watch — if bitcoin/bitcoin updates qrencode.mk, take
   theirs. No local divergence warranted (hash is the trust anchor).
-
-## ~~🟡 l0rinc CheckBlock dup-input optimization (1.85x claim)~~ RESOLVED
-Resolved 2026-07-29 (#40 c1): equivalence PROVEN — two independent
-agents (prover/breaker) + adjudicator spot-checks; complete case
-partition shows accept/reject AND diagnosis identical in every arm
-(1-input null arm vacuously safe by the IsCoinBase definition,
-transaction.h:342-345). Adoption remains the fork author's decision
-(his upstream work); no local action. See
-agent-journal/multi-agent-adjudication.md c1.
 
 ## ✅ LockPoints max_input_height bound comment (fixed b1c267c9f1)
 - Mechanism: comment claimed "always less than tip height"; CPFP
@@ -138,7 +154,9 @@ agent-journal/multi-agent-adjudication.md c1.
 - Next: nothing local; candidate upstream perf note.
 
 ---
-Recently removed from this list (dismissed/closed): clang-18
+Recently removed from this list (dismissed/closed): l0rinc CheckBlock
+dup-input equivalence (PROVEN, #40 c1 — resolved, no local action);
+clang-18
 differential (green, #36 c2); net_processing sancov 0/23 alarm
 (inlining artifact, #9 c2); TODO sweep (0/56 defects, #0 c2);
 BIP173/350 vectors (no drift, #81 c2); install manifest parity
