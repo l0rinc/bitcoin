@@ -145,6 +145,7 @@ static void musig_api_tests(void) {
     const secp256k1_musig_pubnonce *invalid_pubnonce_ptr[1];
     secp256k1_musig_aggnonce aggnonce;
     unsigned char aggnonce_ser[66];
+    unsigned char invalid_aggnonce_ser[66];
     unsigned char msg[32];
     secp256k1_xonly_pubkey agg_pk;
     secp256k1_pubkey full_agg_pk;
@@ -174,6 +175,8 @@ static void musig_api_tests(void) {
     memset(&invalid_pk, 0, sizeof(invalid_pk));
     memset(&invalid_pubnonce, 0, sizeof(invalid_pubnonce));
     memset(&invalid_session, 0, sizeof(invalid_session));
+    memset(invalid_aggnonce_ser, 0, sizeof(invalid_aggnonce_ser));
+    invalid_aggnonce_ser[0] = 2;
 
     testrand256(msg);
     testrand256(tweak);
@@ -346,6 +349,7 @@ static void musig_api_tests(void) {
     CHECK_ILLEGAL(CTX, secp256k1_musig_pubnonce_parse(CTX, NULL, pubnonce_ser));
     CHECK_ILLEGAL(CTX, secp256k1_musig_pubnonce_parse(CTX, &pubnonce[0], NULL));
     CHECK(secp256k1_musig_pubnonce_parse(CTX, &pubnonce[0], zeros132) == 0);
+    CHECK(memcmp_and_randomize(pubnonce[0].data, zeros132, sizeof(pubnonce[0].data)) == 0);
     CHECK(secp256k1_musig_pubnonce_parse(CTX, &pubnonce[0], pubnonce_ser) == 1);
 
     {
@@ -392,6 +396,8 @@ static void musig_api_tests(void) {
     CHECK(secp256k1_musig_aggnonce_parse(CTX, &aggnonce, aggnonce_ser) == 1);
     CHECK_ILLEGAL(CTX, secp256k1_musig_aggnonce_parse(CTX, NULL, aggnonce_ser));
     CHECK_ILLEGAL(CTX, secp256k1_musig_aggnonce_parse(CTX, &aggnonce, NULL));
+    CHECK(secp256k1_musig_aggnonce_parse(CTX, &aggnonce, invalid_aggnonce_ser) == 0);
+    CHECK(memcmp_and_randomize(aggnonce.data, zeros132, sizeof(aggnonce.data)) == 0);
     CHECK(secp256k1_musig_aggnonce_parse(CTX, &aggnonce, zeros132) == 1);
     CHECK(secp256k1_musig_aggnonce_parse(CTX, &aggnonce, aggnonce_ser) == 1);
 
