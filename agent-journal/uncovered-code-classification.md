@@ -75,3 +75,63 @@ After closure: `Lines executed:100.00% of 86`, zero ##### markers.
 
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 2 (2026-07-29): c1 backport (union with F2) + two coverage cells dismissed
+
+### Draw
+Random draw over the 9-goal eligible pool (8 pending + 1 CYCLE-1,
+#42 excluded as just-cycled): raw=2032011409874351500, index 1 ->
+#34. Ledger had NO row; audit/uncovered-code holds a complete c1
+(32d5d1dcc4 + journal 4a9eef4b4b) stranded off-lineage. Branch:
+audit/uncovered-code-c2 from ba01969939 (#42 c1 bookkeeping).
+
+### Backport with semantic conflict resolution
+Cherry-pick of 32d5d1dcc4 CONFLICTED in merkleblock_tests.cpp: HEAD
+already carried F2's two tests (84a3913096, #66 c2 backport:
+duplicate-branch-hashes, trailing-bits-beyond-padding) and c1's
+commit added its own at the same anchor. Resolution: UNION, because
+the shapes are distinct, not duplicative — F2 covers identical-txid
+and duplicated-subtree cases; c1 adds traversal starvation
+(out-of-bits/out-of-hashes fBad arms), the crafted
+right-subtree-hash-equals-computed-left case (Hash(h,h)), and the
+bloom-filter match-all path (IsRelevantAndUpdate). Rebuilt;
+test_bitcoin --run_test=merkleblock_tests -> No errors detected.
+Journal cherry-picked as d794142ede (usual uber-rotation.md
+resolution).
+
+### Cell 1 (c1 queue): blockstorage corruption guards — COVERED, dismissed
+Both fork guards carry dedicated regression tests, present and green
+at HEAD: blockmanager_negative_last_block_file_rejected
+(blockmanager_tests.cpp:470) and
+blockmanager_permuted_disk_heights_rejected (:498); full
+blockmanager_tests suite -> No errors detected. No coverage gap.
+
+### Cell 2 (c1 queue): coins.cpp MoneyRange assert paths — GUARDED, dismissed
+The three assertion sites (coins.cpp:103 AddCoin, :164, :301
+BatchWrite; 61e8c5138d lineage) are caller-contract guards. The
+untrusted-input boundary — corrupt coins-DB records — cannot reach
+them with an invalid amount: AmountCompression::Unser throws
+"amount out of range" for any decompressed value > MAX_MONEY
+(compressor.h:115-117), so DB reads fail by exception before any
+invalid Coin exists (domain-enforced, per #98's audit). The fuzz
+targets enforce the contract at generation (commit message's
+coins_view* verification). No coverage gap; a death-test for the
+asserts would add nothing (they are unreachable by construction).
+
+### Exact commands
+- git cherry-pick 32d5d1dcc4 (conflict) -> union resolution ->
+  068152320f; git cherry-pick 4a9eef4b4b -> d794142ede
+- test_bitcoin --run_test=merkleblock_tests / blockmanager_tests
+- reads: compressor.h:102-118, coins.cpp:103/164/301,
+  blockmanager_tests.cpp:470/498
+
+### Limitations / queue for cycle 3
+- c1's method note stands: unit-suite scope only; functional/fuzz
+  coverage of merkleblock.cpp not merged into the 86/86 number.
+- Branch coverage (BitsToBytes padding Assume arms) still <100%.
+- New candidates: compressor.cpp decompress paths under corruption
+  (unit-level), dbwrapper record-boundary reads.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
