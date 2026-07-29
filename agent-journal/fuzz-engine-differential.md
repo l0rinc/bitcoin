@@ -95,3 +95,58 @@ upstream for zero production benefit; no security theater).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): raw-transaction parser differential — A=0/300; Python-lax divergences only
+
+### Draw
+Re-rank draw over the rebuilt 2-cell queue:
+raw=4732580478433972031, index 1 -> #80 (second cycle; c1 queue
+cell "CTransaction/CTxIn messages.py vs core"). Branch:
+audit/fuzz-engine-differential-c2 from e91bd7bdfa (#40 c2
+bookkeeping).
+
+### Method (c1 harness shape)
+Independent generator (python random, fixed seed 0x80) mutating 12
+real MiniWallet transactions (6 signed, both witness and stripped
+serializations): 300 cases across bit flips, truncations,
+extensions, insertions, deletions. C++ verdict via
+decoderawtransaction RPC (strict DecodeHexTx, full-consumption);
+Python verdict via CTransaction.deserialize + reserialize round-
+trip. Same classes as c1 (A/B/C/D/E/R), 4 GiB RLIMIT_AS, E>0
+positive control.
+
+### Result
+TALLY: A=0 B=0 C=240 D=1 E=59 R=0.
+- A=0: production never over-accepts vs the reference. Clean.
+- E=59, B=0: every double-accepted transaction reserializes
+  byte-identically in both implementations.
+- C=240: C++ rejects/Python accepts — the Python-lax class with
+  named mechanisms (no EOF/trailing check, BytesIO short reads
+  without error, no witness-marker strictness, no canonical
+  CompactSize enforcement). Expected and classified, as in c1.
+- D=1: both reject. R=0: no hostile-count blowups (guard held).
+
+### Harness note
+MiniWallet funding: exactly-101 blocks matures ONE coinbase; the
+seed loop needs 120 (the StopIteration failure shape from the first
+run; fixed).
+
+### Verdict
+DISMISSED: no parser divergence in the production direction for
+raw transactions either; the strictness asymmetry (C++ strict,
+Python lax) is uniform and upstream-matching.
+
+### Exact commands
+- python3 /tmp/btc80_txdiff.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc80t (deterministic, ~1 min)
+
+### Limitations / queue
+- decoderawtransaction is decode-only (no CheckTransaction); the
+  consensus-level acceptance differential (CheckBlock/AcceptToMemPool
+  on mutated txs) is a different, heavier cell — queued.
+- CTxIn/CTxOut standalone twins folded into this run (transaction
+  deserialization covers them).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
