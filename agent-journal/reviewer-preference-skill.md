@@ -137,3 +137,105 @@ even where the specific angle differed.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): line-level review-comment mining — R8-R13, held-out 2/3+1 again
+
+### Draw
+Random draw over the 13-goal eligible pool (11 pending + 2 CYCLE-1,
+#91 excluded as just-cycled): raw=4139937993477073163, index 12 ->
+#60 (second cycle; c1 queue cell "review-COMMENTS (line-level)
+endpoint — likely richer for code-level rules"). Branch:
+audit/reviewer-skill-c2 from 73b2e5cf74 (#91 c2 bookkeeping).
+Journal pulled forward from c51d41c8fc (c1).
+
+### Extraction set (same l0rinc seam, line-level endpoint)
+pulls/{35714,35744,35754}/comments — 25 line-level comments total
+(3 + 4 + 18). Hypothesis: line-level comments carry code-level rules
+not visible in issue-level discussion (R1-R7 were discussion-level).
+
+### New rules (trigger + question + evidence + class)
+
+R8. Partial pinning reads as check-list; pin the full attack surface
+  or don't pretend (maflcko, 35754). Trigger: integrity pins that
+  leave the real surface unpinned (pip deps unpinned while other
+  inputs pinned; container image pinned but apt picks latest;
+  action-hash not covering transitive actions).
+  Evidence: 01_install.sh:35, 00_setup_env_freebsd_cross.sh:10,
+  cache/restore action.yml:30 comments. Class: security/CI-specific.
+  Line-level sharpening of R6 (trust-model): R6 asks "state what you
+  trust"; R8 rejects pins whose coverage pretends more than it is.
+
+R9. Style nits are adjudicated by convention anchors, not taste
+  (maflcko, 35714). Trigger: readability nit on code shape
+  (&&-chains in conditions). Form: "violates [convention PR 35729]"
+  and the author's counter also cites the convention ("makes more
+  sense to test them in groups, see 35729#pullrequest...").
+  Class: general (process) — no bare-taste comments observed
+  anywhere in the 25.
+
+R10. Assert lock contracts at API boundaries (andrewtoth, 35744,
+  txdb.cpp:74 "Should we add AssertLockHeld(::cs_main); here?").
+  Trigger: function relies on a caller-held lock without asserting.
+  Class: concurrency-specific. Sibling of R5 (DEBUG_LOCKORDER
+  integration) — R5 is machinery, R10 is per-function assertion.
+  Matches this fork's AssertLockHeld/Assume house style.
+
+R11 (extended). Concrete patches over prose: reviewers attach
+  commitable diffs (andrewtoth's full diff in c1; willcl-ark's
+  uv.lock cherry-pick offer, 35754; davidgumberg's GitHub
+  suggestion-block .at() fix, 35670 held-out). Class: general
+  (collaboration norm) — and taking/adapting the patch is the
+  expected response.
+
+R12. Redundant runtime guards for type-proven invariants get
+  pushback — with the declaration cited (held-out 35670).
+  darosior perm-links the u32 declaration ("max_extra_txs is a u32,
+  so it can't be negative"); davidgumberg: keep the line minimal
+  "since otherwise we are relying on this clamp always existing".
+  Class: general (code-level). RECORDED TENSION with R2: Assume is
+  demanded for LOGIC invariants (flush-failure interrupt state),
+  while redundant guards for TYPE-proven facts are declined — the
+  line is prove-by-construction for types, machine-check for logic,
+  never dead-defend.
+
+R13. Non-blocking nits are self-labeled and declinable with a reason
+  (held-out 35670): "non-blocking-nit", "non-blocking-observation-
+  feel-free-to-disregard"; author decline accepted ("I prefer
+  leaving that as-is to simplify review"). Class: process/general.
+
+### Held-out validation (PR 35670, predictions recorded before fetch)
+- P1: >=1 machine-check/oracle demand (R2/R10 family) -> REFUTED as
+  stated: no Assume demand at line level; the correctness pressure
+  was the INVERSE (R12: remove redundant guards, cite the type).
+  Refined: the family is "invariants must be PROVEN, by type or by
+  oracle — not guarded blindly".
+- P2: >=1 concrete commitable patch from a reviewer -> CONFIRMED
+  (suggestion block .at(), davidgumberg).
+- P3: no convention-less taste nits -> CONFIRMED with refinement
+  (nits are self-labeled non-blocking and declinable, R13).
+Score: 2/3 confirmed, 1 refined — same shape as c1's held-out.
+
+### Reviewer map additions (line-level behavior)
+- maflcko: nit-with-convention-anchor style; attack-surface
+  completeness probes on CI/security PRs.
+- andrewtoth: per-function AssertLockHeld requests.
+- willcl-ark: offers cherry-pickable tooling patches (uv.lock).
+- davidgumberg: self-labels non-blocking nits; bounds-safety
+  suggestions (.at()).
+- darosior: type-level refutation with perm-linked declarations.
+
+### Exact commands
+- api.github.com/repos/bitcoin/bitcoin/pulls/{35714,35744,35754,
+  35670,35663}[/comments?per_page=100] (unauthenticated REST)
+
+### Limitations / queue for cycle 3
+- Single author-seam still (l0rinc); other high-volume authors
+  (maflcko's own PRs, theuni's build PRs) would test generality.
+- Maintainer merge-rationale comments not covered (c1 queue, still).
+- R1-R13 not yet encoded into reviews/ templates — the reusable
+  skill deliverable; now the highest-value next cell (the rule set
+  is stable across two held-outs).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
