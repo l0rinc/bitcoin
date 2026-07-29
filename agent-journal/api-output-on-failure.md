@@ -68,3 +68,59 @@ unreachable in-tree.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): import_blocks output-on-failure + callback reentrancy constraint — clean; one undocumented constraint verified
+
+### Draw
+Re-rank draw (last of the rebuilt 5-cell queue; singleton):
+#46 (second cycle; c1 queue cell "btck import_blocks and worker-
+thread callback reentrancy"). Branch: audit/api-output-c2 from
+7787a0ba76 (#42 c3 bookkeeping).
+
+### btck_chainstate_manager_import_blocks (bitcoinkernel.cpp:1207-1228)
+- Whole body under try/catch: -1 on exception, 0 on success; no
+  out-params written on failure. Clean.
+- Null path entries skipped silently (documented behavior);
+  lens-array-nullable contract honored (:1214-1216, the fork's own
+  doc-comment matches the header).
+- uint32_t loop var vs size_t len: cosmetic only (a >4B-entry
+  paths array is not a realistic input).
+
+### Callback reentrancy (the worker-thread cell)
+- The validation-interface callbacks (BlockConnected etc.) execute
+  INLINE on the validation thread with cs_main held: validation.cpp
+  :3468-3471 (inside ActivateBestChain's cs_main scope) ->
+  kernel::Notifications -> KernelNotifications::BlockConnected
+  (bitcoinkernel.cpp:408-415) calls the consumer's callback with
+  no thread handoff.
+- Consequence: a consumer callback that calls back into
+  btck_chainstate_manager_process_block / import_blocks from the
+  same thread deadlocks on non-recursive cs_main.
+- The constraint is REAL and UNDOCUMENTED both in this tree's
+  header and upstream master's (byte-compared: identical callback
+  type docs, no lock-state/reentrancy statement). The standard
+  validation-callback pattern (no reentry while cs_main is held)
+  applies but is unstated for C API consumers.
+
+### Verdict
+DISMISSED: import_blocks is output-on-failure clean; the callback
+reentrancy constraint is an upstream-identical documentation gap
+(WIP API), not a local defect. Journal-only; the gap is recorded
+for the upstream-watch file (the kernel docs' callback section
+should state the cs_main-held/no-reentry rule when the API
+stabilizes).
+
+### Exact commands
+- reads: bitcoinkernel.cpp:405-425/1207-1228,
+  validation.cpp:3455-3478, bitcoinkernel.h:360-450;
+  upstream master bitcoinkernel.h (raw fetch, same sections)
+
+### Limitations / queue
+- NotifyProgress/NotifyBlockTip lock states not individually
+  traced (same class).
+- KernelValidationInterface callbacks (pow_valid etc.) same inline
+  execution pattern (verified by the same wrapper code).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
