@@ -444,3 +444,64 @@ now covered on both the parse and signing dimensions.
 ## Rotation note
 Eight cycles; taproot leaf/merkle fields closed. Not exhausted
 (remaining tap fields).
+
+## Cycle 9 (2026-07-29): full taproot PSBT field family seeded (0x13/0x14/0x16/0x17) — differential clean; KV-framing lesson
+
+### Draw
+Re-rank singleton (last queue cell; draw 74): #80 (ninth cycle;
+c8 queue cell "remaining tap fields"). Branch:
+audit/fuzz-engine-c9 from dccdce083a (#35 c2 journal tip).
+
+### Seed (563 B, all seven taproot fields)
+/tmp/psbt_v2_tapfull_seed (sha256
+dda989c66bf42d327bae6c218397814205c0f40b2b0fd72be639b3d954e74571):
+the c8 tap doc plus 0x13 TAP_KEY_SIG (raw 64 B), 0x14
+TAP_SCRIPT_SIG (key = type+xonly+leaf_hash 65 B, raw 65 B value),
+0x17 TAP_INTERNAL_KEY (raw 32 B), 0x16 TAP_BIP32_DERIVATION (key
+= type+xonly 33 B; value = CompactSize(1) + leaf_hash + 4 B
+fingerprint + 0-step path = 37 B raw).
+
+### Framing lesson (the construction cost; reusable)
+The PSBT KV layer has NO separate value-length prefix of its own:
+each field handler reads the value from the shared stream in its
+OWN format, and the CompactSize the framework's PSBTMap.serialize
+writes IS the value-length the handler expects. So field values
+are RAW content — a second inner CompactSize is a DOUBLE prefix
+and breaks fields whose handler vector-reads (0x14 rejected with
+"longer than 65 bytes"). UnserializeFromVector-based fields
+(0x17/0x18) work raw because the outer length prefix doubles as
+the expected size. 0x16's custom reader consumes the outer length
+as its own value_len, then leaf-hash set + key origin. Verified
+empirically: raw64/raw65 accepted, prefixed rejected; the whole
+family decodes with all seven fields listed.
+
+### Verifications
+- decodepsbt: input lists taproot_key_path_sig,
+  taproot_script_path_sigs, taproot_scripts, taproot_merkle_root,
+  taproot_internal_key, taproot_bip32_derivs + witness_utxo.
+- Differential (400 cases; tapfull 1/3 of the mix): TALLY
+  A=0 B=0 C=150 D=144 E=106 R=0. Production never over-accepts;
+  106 round-trip-equal accepts (positive control).
+
+### Verdict
+DISMISSED (clean): the complete taproot PSBT parse-field family
+(0x13-0x18) is seeded and differential-clean. All PSBTv2
+structured field families (base, taproot, musig2) are now covered.
+
+### Exact commands
+- python3 seed constructor (framework PSBT parse + raw appends)
+- python3 /tmp/btc80_t14.py (framing variant test: raw ACCEPTED,
+  prefixed REJECTED)
+- python3 /tmp/btc80_dec3.py /tmp/btc80_diff_c9.py
+  --configfile=build-before/test/config.ini (DECODE-OK; TALLY)
+
+### Limitations / queue
+- Output-side taproot fields (PSBT_OUT_TAP_*) unseeded — the one
+  remaining parse family, next cell if redrawn.
+- #80's cells: differential methodology proven on three families;
+  further depth needs value-semantics (session logic), out of
+  parser scope.
+
+## Rotation note
+Nine cycles; taproot input fields closed. Not exhausted (output
+fields).
