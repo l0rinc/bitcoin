@@ -97,3 +97,41 @@ Build the standalone libsecp256k1 tests with Clang 19 and run the focused MuSig/
 
 - Cycle complete on branch `uber-cycle-72-secp-nonce-session-20260728`; no relevant process remains running.
 - Next run must re-check the gate, search this journal and prior cycle 60 evidence, and draw a distinct goal from the full catalog rather than reopening these closed state cells.
+
+## Cycle 95: Current nonce/session state cell
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `84`
+- Goal: `secp256k1 nonce, signing, Schnorr, and MuSig state-machine audit`
+- Slug: `secp-nonce-session`
+- Branch: `uber-cycle-95-secp-nonce-session-20260729`
+- Start HEAD: `beedbcc175bd90e749a7ee9d444687ec7b6167b4`
+- `origin/master`: `9b38d077f894d27ea76413b1db1cb040e25dc296`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `29 980` (`origin/master...HEAD`)
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber prompt SHA256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Gate: `git fetch origin master` passed; tracked worktree and index were clean; `git diff --check` passed; no relevant Bitcoin Core or libsecp test process was running. Existing untracked artifacts were preserved and are excluded from commits.
+
+### Scope ledger
+
+Audit nonce, signing, key-tweak, ECDH, extrakeys, Schnorr, and MuSig state machines in the vendored libsecp256k1 subtree. Prioritize secret reuse, state reuse, invalid ordering, duplicate participant/key handling, malformed or boundary scalars, callback failure, randomized-context behavior, and output-on-failure contracts.
+
+Exclude the completed secp field/scalar backend matrix, group/ecmult formula audit, BIP324 vector refresh, and already recorded secret-lifetime or timing cells unless a new state-machine path supplies independent evidence. Do not infer a defect from a different API's convention. Establish each module's documented contract from headers, tests, callers, history, and upstream review before changing behavior.
+
+### Working protocol
+
+For every candidate, record the exact API and module, state variables and valid transitions, secret/public classification, caller and trust boundary, relevant history or external report, and expected output/state after success and failure. Use production APIs through existing module tests or a minimal harness; avoid hand-built parallel models that do not exercise the implementation.
+
+Test valid sequences plus invalid order, reuse, duplicate participant/key, zero and overflow scalar, malformed serialization, cancellation, callback failure, randomized-context replay, and output-on-failure cases. Preserve minimal sequences and deterministic seeds. For a confirmed issue require a failing-before/passing-after test, minimized state sequence, first-invalid trace, or a rigorous contract proof; use two independent verifier forms for nonce, key, wallet, or remotely reachable impact when practical.
+
+Prefer one self-contained commit per finding, authored as `Lőrinc <pap.lorinc@gmail.com>`, with the journal update. Keep diffs minimal, test every commit alone, and do not weaken checks or hide failures with catches, narrower inputs, or assumptions. If no fix is justified, record the exact negative evidence and next distinct queue rather than manufacturing a change.
+
+### Initial queue
+
+1. Compare ECDSA and Schnorr signing output/error paths, including nonce callback failure and zero/invalid nonce handling.
+2. Trace MuSig nonce generation, commitment, aggregation, session initialization, partial signing, and repeated-use transitions.
+3. Audit extrakeys/tweak and ECDH state/output behavior after invalid keys, overflow tweaks, or callback failures.
+4. Compare module tests, `VERIFY`/checkmem behavior, and public headers for output-on-failure and single-use state guarantees.
+5. Search recent upstream history and PRs only after local state transitions identify a concrete contract gap.
