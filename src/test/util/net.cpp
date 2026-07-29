@@ -385,7 +385,9 @@ bool DynSock::Wait(std::chrono::milliseconds timeout,
                    Event* occurred) const
 {
     EventsPerSock ev;
-    ev.emplace(this, Events{requested});
+    // EventsPerSock owns its socket keys. Keep the stack-owned socket alive only for this call.
+    std::shared_ptr<const Sock> self{this, [](const Sock*) {}};
+    ev.emplace(std::move(self), Events{requested});
     const bool ret{WaitMany(timeout, ev)};
     if (occurred != nullptr) {
         *occurred = ev.begin()->second.occurred;
