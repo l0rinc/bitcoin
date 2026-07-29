@@ -49,6 +49,14 @@ With the ownership fix applied but the EOF check unchanged, the separate EOF reg
 
 ### Candidate B verdict: confirmed
 
+## Cycle 103 completion
+
+- Findings committed independently as `604ae6c294` (`test: avoid taking ownership of stack DynSock`) and `d272f68ea3` (`test: report DynSock EOF as readable`), both authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- Validation passed with `CCACHE_DIR=/data/my_storage/tmp/cycle103-ccache cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j4`. The full `netbase_tests` suite passed 27 cases. `net_tests/v2transport_test`, `net_tests/transport_v1_roundtrip_message_contract`, and `net_tests/transport_rejected_send_preserves_message` each passed; the two new `netbase_tests/dynsock*` regressions passed together; and `git diff --check` passed.
+- No local fuzz executable was available under the searched build roots, so transport fuzzing was not rerun in this cycle. The unrelated PID `777094` wallet test remained untouched.
+- Production `src/net.cpp` received no changes. Review of `CNode::ReceiveMsgBytes`, V1/V2 byte framing, `SocketHandlerConnected`, `SocketSendData`, `GenerateWaitSockets`, and `ShouldReconnectV1` did not yield another independently reproducible defect after excluding prior transport and lock-order findings.
+- Next unchecked queue: scripted `SocketHandlerConnected` short-write/EOF/error combinations; V2 partial-handshake `ShouldReconnectV1` and half-close schedules; and `GetBytesToSend`/`more` predictions during backpressure and queued-message handoff. Preserve the two shim fixes and do not repeat their now-indexed cells without new evidence.
+
 `DynSock::WaitMany()` now treats the `Pipe::GetBytes()` result as readiness whenever it is nonnegative. A positive result represents queued bytes and zero represents EOF, matching the production `poll`/`select` contract that a closed stream is readable. The focused pair
 
 ```text
