@@ -4,16 +4,26 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Cycle 86 is complete on goal 25 (`performance-regression-bisect`). The first exact draw was `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`) and was rejected as the just-closed campaign; the exact reroll was `shuf -i 0-98 -n 1` -> `25`. Its historical performance comparison was inconclusive and produced no source patch.
+- Cycle 87 is active on goal 94 (`bindings-ffi-parity`). The first exact draw was `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`) and was rejected as the just-closed campaign; the exact reroll was `shuf -i 0-98 -n 1` -> `94`. Cycle 86 on goal 25 (`performance-regression-bisect`) closed inconclusively with no source patch.
 - Current branch: `uber-cycle-86-performance-regression-bisect-20260729`; start HEAD is `1d1db50f3f`; `origin/master...HEAD` is `2 959`; merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
 - No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
 
 ## Latest authoritative checkpoint
 
-- Cycle 86 is complete on goal 25 (`performance-regression-bisect`), after rejecting the exact draw `71` and accepting reroll `25`. The dedicated branch is `uber-cycle-86-performance-regression-bisect-20260729`; start HEAD is `1d1db50f3f5fe1002c0701a7b1a8fe78ec9338aa`, `origin/master...HEAD` is `2 959`, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Cycle 87 is active on goal 94 (`bindings-ffi-parity`), after rejecting the exact draw `71` and accepting reroll `94`. The dedicated branch is `uber-cycle-87-bindings-ffi-parity-20260729`; start HEAD is `a38b4da22fcb0df5411bfd2e023be4cee9689278`, `origin/master...HEAD` is `2 961`, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
 - Cycle 85 is complete on goal 63 (`loupe-pipeline`) with source/fix commit `468e4ef6fd` and close snapshot `1d1db50f3f`; its fail-closed release-verifier evidence is recorded in `agent-journal/loupe-pipeline.md`.
 - Cycle 84 is complete with confirmed commit `89b320fe37` and close snapshot `eb9a35d139`; its deterministic failed-start lifecycle evidence is recorded in `agent-journal/deterministic-simulation.md`.
-- Cycle 86 journal: `agent-journal/performance-regression-bisect.md`. Scope was a stable, evidence-backed performance comparison and bisect with correctness controls; no relevant process remains running.
+- Cycle 87 journal: `agent-journal/bindings-ffi-parity.md`. Scope is native/wrapper contract parity across widths, ownership, lifetimes, callbacks, errors, secrets, flags, and malformed inputs; no relevant process remains running.
+
+## Cycle 87 Active State
+
+- Initial draw: exact `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`), rejected as the just-closed campaign with no new schedule evidence.
+- Accepted reroll: exact `shuf -i 0-98 -n 1` -> `94` (`bindings-ffi-parity`).
+- Branch: `uber-cycle-87-bindings-ffi-parity-20260729`.
+- Start HEAD: `a38b4da22fcb0df5411bfd2e023be4cee9689278`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `2 961`.
+- Scope: compare maintained language wrappers and FFI boundaries with native C/C++ declarations, including ABI widths, ownership/lifetime, callbacks, error mapping, buffers, secret cleanup, flags, and malformed input.
+- Journal: `agent-journal/bindings-ffi-parity.md`; scratch root `/data/my_storage/tmp`.
+- Status: cycle 87 is active; first action is inventory of shipped bindings, generated declarations, public headers, package/build targets, and wrapper tests.
 
 ## Cycle 86 Completion
 
