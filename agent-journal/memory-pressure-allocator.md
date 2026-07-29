@@ -134,3 +134,81 @@ failing-before/passing-after regression or equivalent mutation result, and
 narrow/broad validation. If no source finding is justified, record the
 measured limits, rejected hypotheses, raw artifact paths, and next unchecked
 queue cell.
+
+### Cycle 88 evidence and verdict
+
+The source and history audit covered `CNode::ReceiveMsgBytes`,
+`MarkReceivedMsgsForProcessing`, `PollMessage`, `GenerateWaitSockets`,
+`SocketHandlerConnected`, `CConnman::PushMessage`, `SocketSendData`,
+`V1Transport`, and `V2Transport`. The relevant ownership boundaries are:
+
+- V1 rejects payloads above `MAX_PROTOCOL_MESSAGE_LENGTH` (4,000,000 bytes)
+  before allocation. Its partial receive vector grows only to the received
+  bytes plus at most 256 KiB, capped at the message size.
+- V2 limits packet contents to the same protocol maximum plus its type
+  encoding, limits the handshake/garbage states to 4,111 bytes, and reserves
+  at most 256 KiB ahead of received packet data. Ciphertext and decoded
+  contents are not retained across more than one application packet; the
+  decoded buffer is cleared after extraction or rejection.
+- `-maxreceivebuffer` is applied to the completed-message process queue, not
+  to the transport's single partial packet. This is consistent with the
+  2016 process-queue design rationale in `c6e8a9bcff`, while the transport
+  hard caps address the separate per-connection deserialization allocation.
+  The help text's broad phrase "receive buffer" is imprecise, but history and
+  callers do not establish a changed user-facing contract, so no source or
+  documentation change is justified in this cycle.
+- The production socket reads at most 64 KiB before handing completed messages
+  to the process queue. A message can exceed the flood threshold by its own
+  bounded size, and a partial transport buffer is outside that threshold, but
+  neither path is unbounded or bypasses its corresponding pause/cap rule.
+- Send accounting includes queued serialized messages and the transport's
+  current send buffer. The omitted transport fields are fixed-size or bounded
+  handshake state by explicit design; the recent send-queue contract tests and
+  assertions cover the non-empty queue transition and are outside this new
+  receive-focused cell.
+
+The focused accounting hypothesis was that `CNetMessage::GetMemoryUsage()`
+double-counts its inline `DataStream` while `m_msg_process_queue_size` omits
+the owning `std::list` node, potentially allowing the configured flood limit
+to understate retained memory. A disposable layout probe compiled from the
+current headers and linked with `src/support/cleanse.cpp` reported:
+
+`sizeof_cnet_message=80`, `sizeof_datastream=32`,
+`malloc_usage_cnet_message=96`
+
+and, for payload sizes 0, 1, 65,536, and 1,048,576:
+
+`get_memory_usage_formula` = `list_node_and_payload` = respectively
+112, 144, 65,664, and 1,048,704 bytes.
+
+Thus the apparent nested-object overcount exactly compensates for the list
+node allocation on this supported 64-bit build, including vector allocation
+rounding. A 32-bit build was not available (`bits/c++config.h` is missing for
+`-m32`), so no portability claim is made. The probe object and source were
+temporary and are not retained. No deterministic runtime mismatch, cleanup
+failure, or bound bypass was demonstrated; no production commit is justified.
+
+Exact evidence commands included:
+
+- `git show d22a234ed2 -- src/net.cpp src/net.h`
+- `git show 297c888997 -- src/net.cpp`
+- `git show c6e8a9bcff -- src/net.cpp src/net.h`
+- `c++ -std=c++20 -O2 -Isrc ...; /data/my_storage/tmp/cycle88-memory/probe`
+- `c++ -m32 -std=c++20 -O2 -Isrc -c ...` (toolchain unavailable)
+
+Verdict: dismissed for current supported host and current contracts. This is
+a journal-only cycle close. Do not reopen the same receive-accounting cell
+unless a 32-bit/alternative-allocator result, a changed transport contract,
+or a concrete runtime retained-memory discrepancy supplies new evidence.
+
+### Cycle 88 next queue
+
+1. Stress mempool/package admission and eviction with fixed transaction
+   sequences, comparing peak RSS with `DynamicMemoryUsage()` and
+   `-maxmempool` while checking removal symmetry.
+2. Exercise chainstate and index cache resize/rebuild cycles with scratch
+   state, measuring allocator retention and post-flush release; exclude the
+   already-closed cache failure-propagation path.
+3. Audit `DynamicMemoryUsage()` implementations for omitted retained
+   capacity or double-counted ownership using an independent recomputation
+   oracle and a temporary mutation.
