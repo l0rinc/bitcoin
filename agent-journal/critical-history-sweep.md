@@ -546,3 +546,58 @@ evidence-backed, not assumed.
 ## Rotation note
 Five cycles; the prevout-pool dynamic cell is closed. #49's
 remaining surface: 0d72be5374 flush-cadence crash-injection (low).
+
+## Cycle 7 (2026-07-29): 100-minute chainstate writes — math/mechanism/test all consistent; no crash-injection needed
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=15543061168184443242, masked 6319689131329667434, index 4
+(of 5) -> #49 (seventh cycle; c6 queue cell "0d72be5374
+flush-cadence crash-injection"). Branch: audit/critical-history-c7
+from ddc46bce53 (#9 c3 journal tip). Ref-based reads on master.
+
+### Hypothesis
+The 100-minute write interval (0d72be5374) or its companion
+compaction-ratio retune breaks a bound: crash-recovery window,
+compaction frequency, or a stale constant elsewhere.
+
+### Checks (all green)
+- Interval mechanics (master:src/validation.cpp:2878, :2953-2955):
+  fPeriodicWrite fires on m_next_write; reschedule = now + 90min +
+  uniform(0,20min) — matches the 90/110 constants and the anti-
+  synchronization intent of the randomized window.
+- Compaction math (ShouldCompactChainstate, flush_ratio 320 -> 200):
+  frequency preserved: 320 x 60min = 13.3 days vs 200 x 100min =
+  13.9 days. The commit's one-in-a-million claim verified:
+  (199/200)^N = 1e-6 -> N = 2756 flushes = 191 days ~= "roughly
+  200-day" (honest).
+- Consumers: chainstate_write_tests.cpp carries its own 90/110
+  constants and probes the MIN-1min boundary (:42) — a stale-value
+  break would fail that test; it was updated with the change.
+- Relaxed-flush bound (c4's 9ada3f46b7 analysis): the periodic
+  write is independent of the relaxed prune path; the documented
+  redownload-window bound holds with 90-110min (the doc commit
+  b08815bbb5 cites "the regular periodic" write, no stale number).
+
+### Verdict
+DISMISSED: the flush-cadence change is consistent and covered.
+Dynamic crash-injection adds nothing beyond the static closure
+(interval mechanics + verified math + boundary test + c4's relaxed
+analysis); recorded as available if a future signal appears.
+
+### Exact commands
+- git show 0d72be5374 b08815bbb5; git grep master for
+  DATABASE_WRITE_INTERVAL / m_next_write (validation.cpp:98-99,
+  2878, 2953-2955; validation.h:899; test/chainstate_write_tests)
+- python3 one-in-a-million / frequency computations (above)
+
+### Limitations / queue
+- #49's remaining surface is thin: advisory table closed (c3),
+  validation+net_processing deltas passed (c4-c6), prevout-pool
+  differential clean (c5), flush cadence closed (c7). Next #49
+  cycles need a fresh signal (new fork commits) — mark the
+  campaign QUEUE-EMPTY after this cycle.
+
+## Rotation note
+Seven cycles; campaign queue-empty (see verdict). New fork commits
+reopen it.
