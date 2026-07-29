@@ -76,3 +76,64 @@ chainstatemanager_disconnect_restores_coins_exactly:
 
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 2 (2026-07-29): c1 oracle backport + multi-block undo composition oracle (negative-control-verified)
+
+### Draw
+Random draw over the 2-goal eligible pool (1 pending + 1 CYCLE-1,
+#54 excluded as just-cycled): raw=9209411641343266232, index 0 ->
+#54 first, then this draw's pool after #54: (1 pending + 1 CYCLE-1)
+-> #51 was drawn raw from the 2-entry pool after #54 c1 completed:
+raw=9209411641343266232 idx 0 (of 2) had drawn #54; the next draw
+for this cycle: pool {51} only — #51 selected deterministically as
+the sole remaining eligible entry (recorded for honesty: no RNG
+needed for a singleton). Branch: audit/differential-metamorphic-c2
+from ff86dea723 (#54 c1 bookkeeping). Ledger had NO c1 row; c1
+stack (47e5bf2f95 + c7156b5dc1) was stranded on
+audit/differential-metamorphic.
+
+### Backport
+Cherry-picks: oracle test as 4807d408fe, journal as 088af53250
+(usual uber-rotation.md resolution). Verified at HEAD:
+validation_chainstatemanager_tests green.
+
+### Cell (c1 queue): undo composition across multiple disconnects
+The c1 oracle proved disconnect restores the exact pre-connect UTXO
+set for ONE block. Distinct metamorphic domain: undo must COMPOSE —
+S2 -> S1 -> S0 with per-step identity. New test
+chainstatemanager_disconnect_composes_across_blocks: spend block,
+then a coinbase-only block, then two DisconnectTips with full-set
+comparison after each (the multi-block path exercises sequential
+undo application and the disconnectpool drain ordering).
+- Positive run: green (first attempt).
+- NEGATIVE CONTROL (oracle discrimination): temporarily asserted the
+  post-first-undo state equals the pre-connect state — failed
+  exactly as predicted ([101 != 102] size + element mismatch; S1
+  carries the spend block's coinbase + P2PK output), then reverted
+  to the correct assertion and re-ran green. The comparison
+  provably discriminates states.
+
+### Verdict
+CONFIRMED oracle delivered: undo correctness now pinned for both
+single-block and composed disconnects, mutation/discrimination-
+verified (c1's ApplyTxInUndo-skip mutation + this cycle's negative
+control). Test-only change; no production defect found.
+
+### Exact commands
+- cmake --build build-before -j4 --target test_bitcoin
+- test_bitcoin --run_test=validation_chainstatemanager_tests[/
+  chainstatemanager_disconnect_composes_across_blocks]
+- negative control: assertion swap -> 2 failures ([101 != 102]) ->
+  revert -> green
+
+### Limitations / queue
+- BIP30 duplicate-coinbase domain is UNCONSTRUCTABLE on regtest
+  (BIP34 active from genesis makes duplicate coinbase txids
+  impossible) — recorded; the fClean/overwrite arm rests on #1 c1's
+  Claim B code read + the cache-level undo tests.
+- Fee-diagram incremental-vs-recompute cell still queued (needs an
+  instrumentation hook).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
