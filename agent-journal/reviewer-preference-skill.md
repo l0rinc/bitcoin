@@ -436,3 +436,48 @@ encoded in reviews/reviewer-rules.md.
 ## Rotation note
 Six cycles; the open generality cell is closed. Not exhausted
 (third-seam tightening queued).
+
+## Cycle 7 (2026-07-29): third-seam generality test (achow101-authored 35269) — 4/4 in-kind; generality cell CLOSED
+
+### Draw
+Re-rank draw over the remaining 4-cell queue:
+raw=217606016431337542, index 2 (of 4) -> #60 (seventh cycle; c6
+queue cell "third author seam"). Branch: audit/reviewer-skill-c7
+from 2c8722508d (#49 c7 journal tip).
+
+### Method (same blind protocol as c6)
+Chose achow101-authored #35269 ("musig: Include pubnonce in session
+id") — the most security-relevant of his recent merges. 4 blind
+predictions recorded pre-fetch; issue + line-level comments then
+fetched via the public API.
+
+### Blind predictions vs observed
+- P1 threat-model/goal probe (R6/R7): CONFIRMED-in-kind, refined —
+  the seam's security review debates the RESPONSE to failure
+  (rkrux on assert-crash vs recoverable error for nonce reuse).
+- P2 encoding/type-level nit (R12-line): CONFIRMED — hasher field
+  ordering nit; declined with reason, accepted (R13 dynamic).
+- P3 test-to-claim (R1): arm already present in the PR; pressure
+  went to assertion-style consolidation (assert_equal(a,b,c)).
+- P4 convention nits (R9/R13): CONFIRMED verbatim — comment
+  placement adopted; "Will leave nits for a followup" accepted.
+- R11 verbatim: rkrux attaches commitable diffs throughout.
+
+### Verdict
+CONFIRMED: the template generalizes to a THIRD author seam
+(l0rinc, maflcko, achow101 — three independent seams). The c6
+generality cell is CLOSED; R6 extended with the failure-response
+adjudication angle in reviews/reviewer-rules.md.
+
+### Exact commands
+- curl api.github.com search author:achow101 is:merged;
+  .../issues/35269/comments; .../pulls/35269/comments
+
+### Limitations / queue
+- One PR per seam; the template is a prediction aid, not a proof.
+  Further cycles only on new-rule signals (a reviewer behavior the
+  template fails to predict — that failure itself is the queue).
+
+## Rotation note
+Seven cycles; generality cell closed. Not exhausted (template-
+failure watch).
