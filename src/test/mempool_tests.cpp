@@ -2939,4 +2939,64 @@ BOOST_FIXTURE_TEST_CASE(MempoolTruncatedUnbroadcastTxidTenBytesPreservesState, T
     BOOST_CHECK(destination.GetPrioritisedTransactions().empty());
 }
 
+BOOST_FIXTURE_TEST_CASE(MempoolTruncatedUnbroadcastTxidElevenBytesPreservesState, TestChain100Setup)
+{
+    const CTransactionRef existing = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns.front(), 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+    CTxMemPool& destination = *Assert(m_node.mempool);
+    TestMemPoolEntryHelper entry;
+    {
+        LOCK2(::cs_main, destination.cs);
+        TryAddToMempool(destination, entry.Fee(1000).Time(Now<NodeSeconds>()).FromTx(existing));
+    }
+    destination.PrioritiseTransaction(existing->GetHash(), 7000);
+    destination.AddUnbroadcastTx(existing->GetHash());
+
+    const auto check_existing_state = [&] {
+        BOOST_CHECK_EQUAL(destination.size(), 1U);
+        BOOST_CHECK(destination.exists(existing->GetHash()));
+        BOOST_CHECK_EQUAL(destination.info(existing->GetHash()).nFeeDelta, 7000);
+        BOOST_CHECK(destination.GetUnbroadcastTxs() == std::set<Txid>{existing->GetHash()});
+        const auto deltas = destination.GetPrioritisedTransactions();
+        BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+        BOOST_CHECK(deltas.front().in_mempool);
+        BOOST_CHECK_EQUAL(deltas.front().delta, 7000);
+    };
+
+    const fs::path dump_path = m_path_root / "mempool-v2-truncated-unbroadcast-txid-eleven-bytes.dat";
+    DataStream dump;
+    dump << uint64_t{2} << std::vector<std::byte>(Obfuscation::KEY_SIZE);
+    const std::vector<std::byte> transaction_count{std::byte{0}};
+    const std::vector<std::byte> map_count{std::byte{0}};
+    const std::vector<std::byte> truncated_set_count{std::byte{1}};
+    const std::vector<std::byte> truncated_set_entry(11, std::byte{0});
+    dump.write(transaction_count);
+    dump.write(map_count);
+    dump.write(truncated_set_count);
+    dump.write(truncated_set_entry);
+    {
+        std::ofstream file{dump_path.std_path(), std::ios::binary};
+        file.write(reinterpret_cast<const char*>(dump.data()), dump.size());
+        file.close();
+        BOOST_REQUIRE(file.good());
+    }
+    BOOST_REQUIRE(!node::LoadMempool(destination, dump_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = true,
+    }));
+    check_existing_state();
+
+    BOOST_REQUIRE(fs::remove(dump_path));
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.RemoveUnbroadcastTx(existing->GetHash());
+        destination.removeRecursive(CTransaction(*existing), REMOVAL_REASON_DUMMY);
+        destination.ClearPrioritisation(existing->GetHash());
+    }
+    BOOST_CHECK_EQUAL(destination.size(), 0U);
+    BOOST_CHECK(destination.GetUnbroadcastTxs().empty());
+    BOOST_CHECK(destination.GetPrioritisedTransactions().empty());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
