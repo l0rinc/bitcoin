@@ -195,7 +195,11 @@ multi-agent-adjudication.md c1 | fork author's adoption decision.
   (CVE-2013-5700, guarded), CheckBlockIndex cost (#21/#22 — profiled,
   documented in code at validation.cpp:6280), bloom reset storm (F4
   vs #61 c1's txdownload fuzz oracles — same family, already covered).
-- Negative results with replay value: net_processing sancov "0/23"
+- Negative results with replay value: 2024 remote-P2P advisory batch
+  (52915 inv-buffer / 52916 low-diff headers / 52919 addrman nIdCount /
+  52920 getdata spin) all mitigation-present on HEAD incl.
+  fork-interaction diff analysis; BIP70/SOCKS/UPnP cells dispositioned
+  absent/depends-only/far-past (#49 c3); net_processing sancov "0/23"
   (inlining artifact — replay must use per-line UNCOVERED_PC, #9 c2);
   clang -Wunneeded on G_ABORT_ON_FAILED_ASSUME helpers (by design,
   #36 c2); bloom ccache "uncacheable" (absolute -I key divergence,

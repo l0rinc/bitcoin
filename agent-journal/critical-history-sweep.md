@@ -163,3 +163,102 @@ queued, not swept this cycle.
 ## Rotation note
 Two cycles; the consensus/remote advisory surface is swept. Not
 marking exhausted (dependency cells remain).
+
+## Cycle 3 (2026-07-29): remote-P2P advisory batch — 4 markers verified on HEAD incl. fork-interaction; advisory table fully dispositioned
+
+### Draw
+Re-rank draw over the remaining 2-cell queue (60-c6, 49-c3):
+raw=471461078390554833, index 1 (of 2) -> #49 (third cycle; c2
+queue cell "dependency-adjacent advisories", widened to the 4
+remote-P2P entries the c2 lump deferred). Branch:
+audit/critical-history-c3 from 3066000db1 (#50 c4 journal tip).
+origin/master @ 7dea464d6b used as the upstream reference for
+fork-delta analysis.
+
+### Method
+Per marker: mechanism from the bitcoincore.org disclosure, fix-PR
+invariant, current-HEAD code read (not just version age), then
+`git diff origin/master..master` on the touched files for
+fork-interaction. Hypothesis per cell: "the fork's deltas bypass or
+reopen the upstream mitigation".
+
+### CVE-2024-52915 (inv-buffer blowup, <0.20.0, Medium) — COVERED
+Fix = PR 18962 (single GETHEADERS per INV). HEAD: INV handler caps
+vInv at MAX_INV_SZ (net_processing.cpp:4170, Misbehaving), the loop
+only records a best_block pointer, and at most ONE getheaders is
+sent after the loop (:4227-4244), additionally rate-gated by
+HEADERS_RESPONSE_TIME inside MaybeSendGetHeaders (:2888-2896). The
+per-item 50 MB send-buffer storm shape is structurally absent. Fork
+delta: PRIVATE_BROADCAST INV additions are outbound-only (:3635).
+
+### CVE-2024-52916 (low-difficulty headers OOM, 0.12-0.15, Medium) — COVERED
+HEAD: AcceptBlockHeader refuses AddToBlockIndex unless
+min_pow_checked (validation.cpp:4397-4401, BLOCK_HEADER_LOW_WORK),
+and storage happens only after the gate (:4401). min_pow_checked is
+set true only once the peer's HeadersSyncState reaches the
+work-validated phase (net_processing.cpp:4959; headerssync.h
+two-phase pre-sync present). Fork delta: `git diff origin/master..
+master -- src/validation.cpp | grep min_pow_checked` = 0 lines; the
+gate is upstream-inherited verbatim (origin/master:4245-4247).
+
+### CVE-2024-52919 (addrman nIdCount int overflow, <22.0, High) — COVERED
+Fix = PR 22387. HEAD: `using nid_type = int64_t` (addrman_impl.h:40);
+nIdCount is int64 — 2^63 insertions is physically unreachable, the
+2^32 assertion-crash shape is eliminated. Fork's addrman delta (9
+lines, addrman.cpp only) rewrites one ResolveCollisions_ arm (empty
+tried slot treated as no-longer-collision); it does not touch the id
+counter or its type.
+
+### CVE-2024-52920 (GETDATA CPU spin, <0.20.0, Low) — COVERED
+Fix = PR 18808. HEAD: ProcessGetData always advances the queue
+iterator and erases processed entries (net_processing.cpp:2592-2630);
+the unknown-type case is consumed with the block slot, and the code
+carries the advisory URL in a comment (:2623-2627). FORK-INTERACTION
+checked: the fork's private-broadcast GETDATA branch (:4273-4298) is
+MAX_INV_SZ-gated before entry, contains no loop, never touches
+m_getdata_requests, and disconnects+returns on any mismatch — it
+cannot reintroduce the non-progress shape. The standard path
+(:4300-4304) is upstream-identical; the fork's only ProcessGetData-
+area delta is the GetFetchFlags signature (request_without_witness).
+
+### Dependency/config-adjacent cells (from c2 queue) — DISPOSITIONED
+- CVE-2024-52918 (BIP70): component absent from tree (paymentrequest
+  removed) — inapplicable.
+- CVE-2015-20111 / CVE-2024-52917 (UPnP/miniupnpc): depends-package
+  only, no in-src code — out of scope per the campaign scope note.
+- CVE-2017-18350 (SOCKS5 buffer overflow): fixed v0.15.1-era; the
+  netbase SOCKS5 handshake has been rewritten since; far-past-era
+  marker only.
+
+### Verdict
+DISMISSED (advisory table complete): every remote-P2P advisory cell
+is mitigation-present on HEAD with fork-interaction analysis, and
+every dep/config cell is dispositioned. No missing must-fix found.
+The advisory-sweep interpretation of this campaign is now CLOSED;
+remaining campaign surface is the commit-range walk (campaign-focus:
+"progress from initial commit to HEAD in recorded ranges").
+
+### Exact commands
+- disclosures fetched: bitcoincore.org disclose-inv-buffer-blowup,
+  disclose-getdata-cpu, disclose-header-spam (search), disclose-cve-
+  2024-52919 (+ NVD cross-refs)
+- code: net_processing.cpp:4167-4246/2888-2896/2580-2649/4258-4306;
+  validation.cpp:4354-4407; addrman_impl.h:40,189; addrman.cpp:273-402
+- diffs: git diff origin/master..master -- src/{net_processing,
+  validation,addrman*}.cpp (hunk inventory; ProcessGetData body
+  untouched; min_pow_checked 0 delta lines)
+
+### Limitations / queue for cycle 4
+- Presence-by-code-read, not adversarial re-triggering (consistent
+  with c1/c2: upstream attacks are upstream-CI's job).
+- Commit-range walk not yet started: no checkpoints exist. Proposed
+  first range: the fork's own delta set (origin/master..master,
+  ~490+670 lines in validation/net_processing alone) IS the
+  highest-risk "history" for this tree — a per-file critical-defect
+  pass over the fork delta beats 2013-era archaeology for reachability.
+- c4 cell: fork-delta critical-defect pass (validation.cpp first,
+  then net_processing.cpp), one bounded file per cycle.
+
+## Rotation note
+Three cycles; advisory surface closed. Not exhausted (commit-range /
+fork-delta walk opened as the c4 queue).
