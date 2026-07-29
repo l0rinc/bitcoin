@@ -214,3 +214,50 @@ adoption decision by the fork author can cite it.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-29): rocksdb-brute assessment — bulk-fetch class subsumed by the fork's own prevout pool; branch is stale WIP
+
+### Draw
+Re-rank draw over the rebuilt 3-cell queue:
+raw=2099837013193560362, index 2 -> #65 (fourth cycle; c3 queue
+"rocksdb-brute bulk-ops — depends on the swap"). Branch:
+audit/contributor-radar-c4 from 62bd4923d2 (#58 c3 bookkeeping).
+
+### Branch shape (l0rinc/rocksdb-brute, Oct 2024, tip d2cd534521)
+Stack: engine swap (8d4e3fd666, supersedes #95's build-fix lineage)
++ bulk coin ops: inline HaveCoin/FetchCoin into HaveInputs
+(7bec5e7b5f), bulked HaveInputs (1c2427bcf1), optional getcoin
+(8420bd95bb), bulk spentness (83384a1ad2), bulked AddCoins
+(d896fda203), tuning (2cc6f0efc1 nCacheSize/parallelism),
+PreChecks input-existence (d2cd534521). TODOs left in the diff
+("TODO bulk", "TODO how can this not be inserted", "TODO ret ==
+cacheCoins.end()") — experimental WIP, not production-shaped.
+
+### Assessment
+- The bulk-fetch class (batch missing-input reads) is
+  ENGINE-INDEPENDENT (CCoinsViewCache level) — and largely
+  SUBSUMED by the fork's shipped -prevoutfetchthreads
+  (5bf1c32008, parallel prevout-fetch pool validated in #43 c1):
+  the same latency class, already productionized.
+- Distinct remnants: bulked AddCoins / write batching and the
+  spentness-in-bulk check — small deltas over the shipped pool,
+  on a stale (Oct 2024) base.
+- No local adoption (author's own work; rotation records).
+
+### Verdict
+Assessment complete, journal-only: rocksdb-brute is the WIP
+precursor of the shipped prevout-fetch class; nothing actionable
+beyond the author's own roadmap.
+
+### Exact commands
+- git log/show remotes/l0rinc/l0rinc/rocksdb-brute (12 commits,
+  stat + diff of 1c2427bcf1)
+
+### Limitations / queue
+- The rocksdb-swap line itself is covered by #95 c3/c4 (build,
+  reindex, durability).
+- knots remote still unscanned.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
