@@ -227,3 +227,80 @@ target feeds it to a binary-document parser, apply the c1 hybrid).
   Queued to #50's next cycle (fuzz-blockers owns new-harness work).
 - banman empty-corpus loop starvation noted for the record; not a
   defect (seed corpora cover it).
+
+## Cycle 3 (2026-07-29): truncation-gate re-sweep — c2's table was 13/65 uses; completed classification, verdict HOLDS (no new gate)
+
+### Draw
+Re-rank singleton (last queue cell, labeled 101-c2; actual next
+cycle is c3): #101. Branch: audit/public-characterization-c3 from
+cdb282919c (#49 c4 journal tip).
+
+### Hypothesis
+Uses of ConsumeRandomLengthString that c2's sweep table missed feed
+a full-document parser where valid documents can contain
+0x5c+non-0x5c — a live truncation-gate sibling.
+
+### Method
+Mechanical re-sweep: grep -rn "ConsumeRandomLengthString"
+src/test/fuzz/*.cpp on the CURRENT worktree (lineage) and
+git grep on master; diff against c2's 13-entry table; classify each
+missed use per c2's alphabet-membership rule (gate only when the
+consumer is a full-document parser AND valid documents can contain
+the pair).
+
+### Finding about c2 (record correction)
+The fuzz tree is byte-identical to c2's base except psbt.cpp
+(git diff dc72b5940f..HEAD -- src/test/fuzz = only the campaign's
+own 2 commits), yet the current grep finds ~65 uses across 21
+files vs c2's 13 across 9. c2's table omitted: kitchen_sink(2),
+locale(1), message(4), net_permissions(1), netbase_dns_lookup(1),
+rpc(7), socks5(3), string(4), strprintf(3), system(16),
+torcontrol(1), plus 6 further http_request sites and script:183
+(vector variant). The c2 VERDICT was stated too broadly ("all
+uses") for the table actually presented.
+
+### Classification of the missed uses (all NO GATE)
+- socks5: username/password/destination are protocol inputs to the
+  Socks5() handshake function, not documents parsed from the
+  string; truncated hostname == another hostname.
+- message: message text (arbitrary), base64 signature + address
+  (alphabets exclude 0x5c, same as script.cpp:211 already covered).
+- kitchen_sink / rpc: error-string oracles, RPC argument payloads
+  (arbitrary, or base64/hex/base32/base58-encoded — exclude 0x5c),
+  RPC command name (token).
+- http_request (6 more): header names/values, reply body,
+  content-length token — protocol fields, capped; truncation yields
+  different valid fields (consistent with c2's own 2-site verdict).
+- system(16): config network name, arg names/values — tokens.
+- strprintf(3): format string + args — content-agnostic.
+- locale(1): 5-char locale token. net_permissions(1): permission
+  spec alphabet (alnum + ,@.:) excludes backslash.
+  netbase_dns_lookup(1): DNS names exclude 0x5c.
+- torcontrol(1): tor reply lines (arbitrary by design).
+- script:183: ConsumeRandomLengthStringVector — witness stack
+  elements, arbitrary bytes.
+- Master's smaller set (~48 uses, same families): classification
+  transfers identically.
+
+### Verdict
+DISMISSED (class remains clean): no full-document parser among the
+~50 missed uses accepts 0x5c-bearing valid documents; psbt stays
+the sole class member. The c2 record is corrected: the table is now
+the complete ~65-use classification.
+
+### Exact commands
+- grep -rn "ConsumeRandomLengthString" src/test/fuzz/*.cpp
+- git grep -n "ConsumeRandomLengthString" master -- src/test/fuzz/*.cpp
+- git diff dc72b5940f..HEAD --stat -- src/test/fuzz/ (tree-identity
+  proof for the c2-completeness finding)
+
+### Limitations / queue
+- Review gate stands: any FUTURE target feeding
+  ConsumeRandomLengthString to a binary-document parser must take
+  the c1 hybrid (watch in review cycles).
+- #101's own queue is now empty; further cycles need a fresh
+  signal (new target, new parser class, or a delegated cell).
+
+## Rotation note
+Three cycles; truncation-gate class closed with a corrected,
+complete table. Queue-empty for this campaign.
