@@ -7,6 +7,7 @@
 #include <node/psbt.h>
 #include <psbt.h>
 #include <pubkey.h>
+#include <script/interpreter.h>
 #include <script/script.h>
 #include <script/signingprovider.h>
 #include <streams.h>
@@ -214,10 +215,29 @@ FUZZ_TARGET(psbt, .init = initialize_psbt)
     // Signing pass: exercise the provider-driven signing and output-update
     // paths with fuzz-constructed keys (whole documents reach this only via
     // the hybrid consumption above).
-    FillableSigningProvider provider;
+    FlatSigningProvider provider;
+    std::vector<CKey> keys;
     for (int i = 0; i < 2; ++i) {
         CKey key{ConsumePrivateKey(fuzzed_data_provider)};
-        if (key.IsValid()) provider.AddKey(key);
+        if (key.IsValid()) {
+            const CPubKey pubkey{key.GetPubKey()};
+            provider.keys.emplace(pubkey.GetID(), key);
+            provider.pubkeys.emplace(pubkey.GetID(), pubkey);
+            keys.push_back(key);
+        }
+    }
+    // Taproot script-path support: when both keys are valid, register a
+    // one-leaf tree (internal key = fixed 2G, NOT in the provider, so the
+    // keypath arm is unsignable; leaf = xonly(keys[1]) OP_CHECKSIG) so
+    // SignPSBTInput exercises the taproot script-path arm for tree outputs.
+    if (keys.size() == 2) {
+        TaprootBuilder tap_builder;
+        const XOnlyPubKey leaf_key{keys[1].GetPubKey()};
+        CScript tap_leaf;
+        tap_leaf << std::vector<unsigned char>(leaf_key.begin(), leaf_key.end()) << OP_CHECKSIG;
+        tap_builder.Add(/*depth=*/0, tap_leaf, TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
+        tap_builder.Finalize(XOnlyPubKey{CPubKey{ParseHex("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")}});
+        provider.tr_trees.emplace(tap_builder.GetOutput(), tap_builder);
     }
     PartiallySignedTransaction psbt_sign = psbt;
     const std::optional<PrecomputedTransactionData> txdata{PrecomputePSBTData(psbt_sign)};
