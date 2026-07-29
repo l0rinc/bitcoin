@@ -601,3 +601,72 @@ analysis); recorded as available if a future signal appears.
 ## Rotation note
 Seven cycles; campaign queue-empty (see verdict). New fork commits
 reopen it.
+
+## Cycle 8 (2026-07-29): txindex format-migration assessment (l0rinc/txindex_optimization) — migration design SOUND on static analysis
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=193349491238106314, index 0 (of 2) -> #49 (eighth cycle; the
+#65 c6 radar seed, reassigned here per the partial-migration
+mandate). Branch: audit/critical-history-c8 from f4f67ee04c
+(#50 c9 journal tip). Subject: Andrew Toth's txindex series
+(co-authored Wuille/l0rinc/Towns) at refs/remotes/l0rinc/
+txindex_optimization @ e2dc767418.
+
+### The series
+- 20d99d411a: 5-byte salted-SipHash key prefixes (replacing full
+  txid keys) + (block_seq, tx_offset) packed into the key; iterator
+  collision scan; legacy fallback.
+- 590cd56bf6: skip bloom filters + legacy lookups when the DB has
+  no 't' entries at open (m_has_legacy peek).
+- f8cbd6424f: full-block WriteTxs (stated non-functional refactor).
+- 15dae813cc: author tests for prefix collisions + legacy fallback.
+
+### Checks (all green)
+- Wrong-tx impossibility: every candidate from the collision scan
+  is deserialized and hash-verified before return
+  (FindHashedTx) — failure mode is false-NEGATIVE only, which
+  falls back to the legacy path when present.
+- Prefix-scan correctness: BlockTxPosition packs (block_seq,
+  tx_offset) as 3-byte BIG-ENDIAN (txindex_key.h) — lexicographic
+  iteration over the collision group is ordered and complete;
+  offset bounded by static assert vs MAX_BLOCK_SERIALIZED_SIZE;
+  seq bounded 16.7M blocks (~318 years, documented in the struct
+  comment).
+- Reorg semantics: reconnecting blocks keep their original
+  sequence (Exists(BlockHashKey) skip); candidates sort
+  active-chain-first then later-seq-first; a tx in two competing
+  branches resolves to the active branch; both-inactive is no
+  worse than legacy last-write-wins.
+- Legacy coexistence: m_has_legacy = !f_memory && !f_wipe &&
+  HasKeyStartingWith('t') at open; no other key type shares the
+  't' prefix ('x','s','h', named keys, 'B'); legacy fallback and
+  bloom fire exactly for databases that need them
+  (FindTx: `if (!result && m_db->m_has_legacy)`).
+- Bloom-skip safety: bloom consulted only by point reads; hashed
+  reads go through iterators (bypass bloom) — documented in the
+  constructor comment and verified against the read paths.
+- Downgrade story: acknowledged in the startup LogInfo (old
+  releases can't read the rebuilt index — user-facing, explicit).
+
+### Verdict
+DISMISSED (no defect): the migration design holds under the
+critical shapes — collisions, reorgs, mixed/old/new databases,
+downgrades. The author's collision+fallback tests cover the
+dynamic arms; no local experiment needed absent a concrete
+hypothesis (building the 367-commit-ahead branch is the
+escalation path if one emerges).
+
+### Exact commands
+- git log/show refs/remotes/l0rinc/txindex_optimization
+  (20d99d411a, 590cd56bf6, f8cbd6424f, 15dae813cc)
+- git show e2dc767418:src/index/txindex_key.h
+
+### Limitations / queue
+- Static only; the branch was not built (40-min escalation path).
+- The 's'/'h' point-read claim ("at most one per block against a
+  tiny keyspace") taken from the code comment, not measured.
+
+## Rotation note
+Eight cycles; the txindex radar seed is assessed and closed.
+#49 reopens on new fork commits.
