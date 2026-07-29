@@ -574,7 +574,7 @@ BOOST_AUTO_TEST_CASE(sha512_testvectors) {
 }
 
 BOOST_AUTO_TEST_CASE(hmac_sha256_testvectors) {
-    // test cases 1, 2, 3, 4, 6 and 7 of RFC 4231
+    // test cases 1, 2, 3, 4, 5, 6 and 7 of RFC 4231
     TestHMACSHA256("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
                    "4869205468657265",
                    "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7");
@@ -589,6 +589,12 @@ BOOST_AUTO_TEST_CASE(hmac_sha256_testvectors) {
                    "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
                    "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
                    "82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b");
+    // RFC 4231 case 5 ("Test With Truncation"): the RFC's expected value is
+    // truncated to 128 bits; Bitcoin's HMAC is untruncated, so verify the
+    // full output whose first 16 bytes are the RFC vector.
+    TestHMACSHA256("0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+                   "546573742057697468205472756e636174696f6e",
+                   "a3b6167473100ee06e0c796c2955552bfa6f7c0a6a8aef8b93f860aab0cd20c5");
     TestHMACSHA256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -627,7 +633,7 @@ BOOST_AUTO_TEST_CASE(hmac_sha256_testvectors) {
 }
 
 BOOST_AUTO_TEST_CASE(hmac_sha512_testvectors) {
-    // test cases 1, 2, 3, 4, 6 and 7 of RFC 4231
+    // test cases 1, 2, 3, 4, 5, 6 and 7 of RFC 4231
     TestHMACSHA512("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
                    "4869205468657265",
                    "87aa7cdea5ef619d4ff0b4241a1d6cb02379f4e2ce4ec2787ad0b30545e17cde"
@@ -646,6 +652,13 @@ BOOST_AUTO_TEST_CASE(hmac_sha512_testvectors) {
                    "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
                    "b0ba465637458c6990e5a8c5f61d4af7e576d97ff94b872de76f8050361ee3db"
                    "a91ca5c11aa25eb4d679275cc5788063a5f19741120c4f2de2adebeb10a298dd");
+    // RFC 4231 case 5 ("Test With Truncation"): the RFC's expected value is
+    // truncated to 128 bits; Bitcoin's HMAC is untruncated, so verify the
+    // full output whose first 16 bytes are the RFC vector.
+    TestHMACSHA512("0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+                   "546573742057697468205472756e636174696f6e",
+                   "415fad6271580a531d4179bc891d87a650188707922a4fbb36663a1eb16da008"
+                   "711c5b50ddd0fc235084eb9d3364a1454fb2ef67cd1d29fe6773068ea266e96b");
     TestHMACSHA512("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
