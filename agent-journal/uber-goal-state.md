@@ -217,6 +217,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 42 | ci-review-bot-followup | CYCLE-3 | 2026-07-29 | corecheck endpoint = real oracle; flags 35744 bench regressions (ComplexMemPool +15.6%, OrphanageEraseForPeer +33%) upstream-side |
 | 46 | api-output-on-failure | CYCLE-2 | 2026-07-29 | import_blocks clean; callback reentrancy constraint real (cs_main held, deadlock on reentry) but undocumented (upstream-identical) |
 | 21 | rebuild-recovery-profile | CYCLE-4 | 2026-07-29 | dbcache sensitivity: wall +60% at dbcache=4, user-CPU neutral (validation-bound); fork default sane |
+| 60 | reviewer-preference-skill | CYCLE-5 | 2026-07-29 | maintainer merge-rationale mined: M1-M4 (terse depth-honest ACKs, self-contained descriptions, lifecycle, no info-hiding) |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -323,6 +324,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    cells consumed again.
    RE-RANK draw 37 (rebuilt 6-cell queue): raw=1546480656633297830
    -> idx 2 -> #21 c4.
+   RE-RANK draw 38 (5 cells): raw=127326143727536095 -> idx 0 ->
+   #60 c5.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -358,7 +361,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 96, 97, 98.
 Cycles done (random-pool state): 0(c1,c2), 1(c1,c2,c3), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1), 9(c1,c2), 10(c1,c2), 7(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4), 35(c1,c2), 36(c1,c2), 23(c1,c2,c3,c4), 25(c1,c2,c3),
-37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 21(c1,c2,c3), 43(c1,c2,c3), 45(c1,c2,c3), 47(c1,c2), 48(c1,c2), 49(c1,c2), 50(c1,c2,c3), 53(c1), 55(c1), 57(c1), 58(c1,c2), 59(c1,c2), 60(c1,c2,c3,c4),
+37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3), 47(c1,c2), 48(c1,c2), 49(c1,c2), 50(c1,c2,c3), 53(c1), 55(c1), 57(c1), 58(c1,c2), 59(c1,c2), 60(c1,c2,c3,c4,c5),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2,c3), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 70(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1,c2,c3,c4),
 76(c1,c2,c3), 80(c1,c2,c3,c4), 81(c1,c2), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4), 99(c1), 100(c1), 101(c1,c2), 102(c1,c2), 103(c1), 104(c1), 105(c1), 106(c1,c2,c3), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with

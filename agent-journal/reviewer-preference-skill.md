@@ -337,3 +337,36 @@ closed (skill + validation).
 
 ## Rotation note
 Four cycles; core deliverable validated. Rotating.
+
+## Cycle 5 (2026-07-29): maintainer merge-rationale mined — M1-M4 added
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=127326143727536095, index 0 -> #60 (fifth cycle; c3/c4 queue
+cell "maintainer merge-rationale"). Branch:
+audit/reviewer-skill-c5 from 06215e998e (#21 c4 bookkeeping).
+
+### Mining set (8 recently merged l0rinc-seam PRs; last comments
+from fanquake/achow101/maflcko)
+- 35215 (SipHash coins keys): "light ACK <sha>" — honest depth.
+- 35465 (compact chainstate): backport lifecycle notes.
+- 35200 (dbcache warnings): process correction on in-place edits +
+  self-contained-description demand.
+- 35670 (compact block extra tx): expert-routing cc.
+
+### Rules added (M-class, template updated)
+M1 merge terseness with honest depth; M2 self-contained
+descriptions; M3 maintainer-handled backport lifecycle; M4 no
+information-hiding in PR hygiene (+ expert routing).
+
+### Verdict
+The reviewer-rules template now covers reviewers AND maintainers;
+the merge-rationale gap from c3 is closed. Journal-only.
+
+### Queue for cycle 6
+- Second author seam (maflcko's own PRs) for generality — the one
+  remaining open cell.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
