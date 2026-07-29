@@ -228,3 +228,54 @@ scriptSig IS the valid final state there).
 ## Rotation note
 Three cycles; qa-assets psbt cell closed with a mechanism-level
 answer. Not exhausted (other targets).
+
+## Cycle 4 (2026-07-29): qa-assets coins-target imports — compatible + clean; load_wallet has no upstream corpus
+
+### Draw
+Re-rank draw over the remaining 3-cell queue:
+raw=5635536915814007501, index 2 (of 3) -> #9 (fourth cycle; c3
+queue cell "other targets per the same recipe"). Branch:
+audit/hit-frequency-c4 from cea4a8c15f (#60 c7 journal tip).
+
+### Hypothesis
+The coins-family qa-assets corpora drive the fork's coins targets
+cleanly (the overlay target is upstream-lineage); fork-local
+targets (load_wallet, resize-cursor) have no importable corpus.
+
+### Results
+- fuzz_corpora/coins_view_overlay (3017 seeds, 18 MB): runs clean
+  on the fork's coins_view_overlay target (the prevout-pool
+  overlay target — same upstream lineage, #49 c5's subject).
+  cov=4308 ft=14885, 3028 runs, no crash.
+- fuzz_corpora/coins_view_db (4551 seeds, 66 MB): clean on
+  coins_view_db. cov=10706 ft=52270, 4554 runs, no crash.
+- fuzz_corpora has NO load_wallet corpus (wallet targets there are
+  bdb_parser / create_transaction / fees only) — the fork's
+  load_wallet record-application harness (#10 c2, widened at
+  ed5cc9281a) has no importable seeds; its widened record classes
+  (crypted keys, ACTIVE*SPK, BESTBLOCK) remain our own seeds' job.
+- coins_view_db_resize_cursor (fork-local target from the
+  UTXO-scan/resize race fix e049f064e1): no upstream corpus, as
+  expected for a fork-only target.
+
+### Verdict
+CONFIRMED (import compatibility): the upstream-lineage coins
+corpora run clean and drive the fork's targets; fork-only targets
+stay on locally-grown seeds. The c3 pattern holds directionally:
+qa-assets substitutes only where the target lineage is upstream's.
+
+### Exact commands
+- sparse-fetch recipe from c3 (clone --filter=blob:none --sparse,
+  sparse-checkout set fuzz_corpora/{coins_view_overlay,coins_view_db})
+- FUZZ=coins_view_overlay ... -runs=3017; FUZZ=coins_view_db ...
+  -runs=4551 (outputs above)
+
+### Limitations / queue
+- Coverage deltas vs scratch corpora not re-measured (c1's
+  baselines stand); the check here was compatibility + crash.
+- process_messages corpus import would duplicate c2's dictionary
+  work; skipped deliberately.
+
+## Rotation note
+Four cycles; coins-target import cell closed. Campaign #9's
+remaining cells need fresh coverage signals.
