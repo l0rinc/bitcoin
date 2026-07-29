@@ -307,3 +307,36 @@ keypath allocation classes are guard-contained.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 6 (2026-07-29): MuSig2 PSBT field seeding — differential clean; format-from-source worked first try
+
+### Draw
+Re-rank draw over the rebuilt 4-cell queue:
+raw=7792775892002329801, index 1 -> #80 (sixth cycle; c5 queue
+cell "MuSig2 fields unseeded"). Branch: audit/fuzz-engine-c6 from
+6a9c6b44af (#10 c3 bookkeeping).
+
+### Seed (229 bytes, first-try correct)
+v2 document with PSBT_IN_MUSIG2_PARTICIPANT_PUBKEYS (0x1a): key =
+type + 33-byte compressed aggregate pubkey; value = two
+concatenated 33-byte participant pubkeys. Format read from
+psbt.h:219-274 first (after the c5 keypath saga): no iteration
+needed. decodepsbt accepts (musig2_participant_pubkeys listed).
+
+### Differential (corpus: 25% each of musig/rich-v2/minimal-v2/v0)
+TALLY: A=0 B=0 C=159 D=138 E=100 R=3. Production never
+over-accepts; MuSig2 paths included; three hostile-count cases
+contained by the guard.
+
+### Verdict
+DISMISSED (clean): the MuSig2 participant-pubkey surface is
+differential-clean. Seed preserved: /tmp/psbt_v2_musig_seed.
+
+### Limitations / queue
+- MUSIG2_PUB_NONCE (0x1b) / PARTIAL_SIG (0x1c) with the 67/99-byte
+  key shape (part+agg [+leaf_hash]) unseeded — next depth step.
+- TAP_LEAF_SCRIPT / TAP_MERKLE_ROOT remain unseeded.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
