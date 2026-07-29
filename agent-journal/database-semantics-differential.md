@@ -192,3 +192,47 @@ no adoption decision (fork author's branch).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-29): durability differential — kill -9 mid-reindex, both engines recover to identical tip with zero corruption
+
+### Draw
+Re-rank draw over a rebuilt 8-cell queue:
+raw=138518960771160384, index 0 -> #95 (fourth cycle; c3 queue
+cell "durability/crash-consistency differential"). Branch:
+audit/db-semantics-c4 from 050d86133f (#75 c4 bookkeeping).
+
+### Method
+Same 410-block tx-heavy chain, fresh copy per engine, truncated
+debug.log, -reindex in foreground; wait for the first UpdateTip
+past height 100, then kill -9; restart normally (no -reindex) and
+wait for height=410. Compare restart tip hash + corruption lines.
+
+### Result
+- LevelDB: killed at height=227; restart -> tip 0f9188f13cb7b2c7
+  (the full 410 tip), corruption-lines=0.
+- RocksDB: killed at height=223; restart -> tip 0f9188f13cb7b2c7
+  (identical hash), corruption-lines=0.
+Both engines roll forward from the crash point to the identical
+final state. Crash-consistency parity CONFIRMED (matches #93 c1's
+LevelDB-only mid-flush result).
+
+### Verdict
+DISMISSED (clean): the RocksDB swap's durability behavior matches
+LevelDB's on this crash class. The engine-swap assessment suite is
+now complete: builds clean, reindexes correctly (identical tip),
+CPU parity, wall advantage, crash-consistency parity. All findings
+recorded for the fork author; no local defect.
+
+### Exact commands
+- /tmp/btc95_dur.sh (kill -9 protocol per engine)
+- artifacts removed post-run (worktree, datadirs)
+
+### Limitations / queue
+- Kill timing is load-point-random (height 223-227); a
+  write-flush-windowed kill (inside a batch commit) would need
+  instrumented timing — noted as the harder cell.
+- rocksdb-brute bulk-ops still unassessed (depends on the swap).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
