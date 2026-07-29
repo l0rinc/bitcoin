@@ -9,6 +9,7 @@
 #include <consensus/amount.h>
 #include <core_io.h>
 #include <key_io.h>
+#include <node/psbt.h>
 #include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <rpc/request.h>
@@ -19,9 +20,19 @@
 #include <univalue.h>
 #include <util/check.h>
 #include <util/rbf.h>
+#include <util/result.h>
 #include <util/string.h>
 #include <util/strencodings.h>
 #include <util/translation.h>
+
+PartiallySignedTransaction DecodeBase64PSBTOrThrow(const std::string& psbt_string)
+{
+    util::Result<PartiallySignedTransaction> psbt_res = DecodeBase64PSBT(psbt_string);
+    if (!psbt_res) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", util::ErrorString(psbt_res).original));
+    }
+    return *psbt_res;
+}
 
 void AddInputs(CMutableTransaction& rawTx, const UniValue& inputs_in, std::optional<bool> rbf)
 {

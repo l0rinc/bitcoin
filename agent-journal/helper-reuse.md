@@ -134,3 +134,51 @@ dedup. No defect claimed — code-shape finding per campaign charter.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-07-29): 7th copy deduplicated — DecodeBase64PSBTOrThrow moved to rpc/rawtransaction_util (shared home)
+
+### Draw
+Re-rank draw over the rebuilt 4-cell queue:
+raw=6707348440583223643, index 3 -> #58 (third cycle; c2 queue
+cell "spend.cpp:1637 (7th copy) — needs a shared home and the
+wallet-scope decision"). Branch: audit/helper-reuse-c3 from
+410b1340fc (#60 c5 bookkeeping).
+
+### Finding
+The shared home already exists: rpc/rawtransaction_util.h/.cpp —
+and BOTH files include it (rawtransaction.cpp:27, spend.cpp:12).
+So the c2 "cross-file sharing needs a header move" reduces to a
+function move with zero new dependencies.
+
+### Change
+- Moved DecodeBase64PSBTOrThrow from rawtransaction.cpp's
+  file-static to rpc/rawtransaction_util.{h,cpp} (verbatim body;
+  added psbt.h / node/psbt.h / util/result.h includes).
+- spend.cpp: replaced its 3-line copy with the shared call
+  (+1/-4 lines).
+- rawtransaction.cpp: file-static deleted (call sites unchanged).
+
+### Verification
+- cmake --build build-before --target bitcoind: clean.
+- rpc_psbt.py: Tests successful — covers the rawtransaction.cpp
+  sites AND the spend.cpp walletprocesspsbt site (rpc_psbt.py:796
+  asserts "TX decode failed" via walletprocesspsbt on rawtx).
+  Behavior preserved on both.
+
+### Verdict
+CONFIRMED exact duplicate (7th copy); FIXED by moving the helper
+to its existing shared header. No defect claimed — code-shape
+finding per campaign charter; minimal-diff, no new dependencies.
+
+### Exact commands
+- reads: rpc/rawtransaction_util.h/.cpp, spend.cpp:1630-1645
+- build + rpc_psbt.py run
+
+### Limitations / queue
+- qt/GUI PSBT decode sites (if any) unexamined (deprioritized).
+- The campaign's helper-dedup cells are now all closed (mempool
+  c1, PSBT c2+c3).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
