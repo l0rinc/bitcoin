@@ -170,3 +170,60 @@ One early combined test command used a non-existent `TMPDIR` and consequently re
 **Dismissed for a new source defect:** the distinct wallet-off, IPC-off/monolithic, IPC-on wallet-off, fuzz-only, and GUI wallet-off conditional matrix compiled and registered exactly the sources and targets required by the option contracts. Focused runtime controls passed, and the only negative results were the full-root temporary-directory setup and the documented release-build fuzz refusal. No production or test source change is justified.
 
 Evidence logs and build trees remain under `/data/my_storage/tmp/build-dead-zones-cycle74/`. The prior cycle-20 wallet-enabled GCC fuzz cell remains excluded. Future re-entry should use a different compiler/dependency version, sanitizer combination, generated-file perturbation, or feature interaction.
+
+## Cycle 101: Reduced-export visibility configuration
+
+### Identity and exclusions
+
+- Cycle: `101`
+- Draw: `37`
+- Branch: `uber-cycle-101-build-dead-zones-20260729`
+- Gate HEAD: `d6014b70e8a15b8c4e77111adcccbfc6fd0e363e`
+- `origin/master` at gate: `67998e15c8ddc5b84a4709a6485fd8dcfb9350d2`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `31 992`
+- Prior cells excluded: cycle 20's GCC wallet-enabled IPC fuzz target, cycle 74's wallet/IPC/GUI-off target matrix, and the wallet parser empty-buffer UBSan fix. Those cells do not test `REDUCE_EXPORTS` or reduced-visibility cross-target linkage.
+
+### Active hypothesis
+
+`REDUCE_EXPORTS=ON` changes C++ visibility and executable linker behavior. A feature combination that builds with default visibility may hide an inline or cross-library symbol needed by the wallet, crypto, IPC-stub, test, or generated-code paths. The first experiment will use GCC 12, wallet enabled, IPC disabled, GUI disabled, tests enabled, and embedded ASMap disabled, then build and run `test_bitcoin` in an isolated `/data` tree. The configuration summary, compile/link flags, exported-symbol surface, and runtime registration will be recorded.
+
+### Required evidence
+
+A source finding requires a clean failing configuration or runtime control, an independent old-source or flag-mutation reproduction, and a passing control after the smallest fix. A successful build is evidence only for the tested target graph; it does not establish shared-library, IPC-on, GUI, or alternate-toolchain parity. Preserve raw configure/build/test output and leave unresolved cells in the next queue.
+
+## Cycle 101 Verification
+
+### Reduced-export monolithic graph
+
+The first current-source configuration used GCC 12.2.0, `RelWithDebInfo`, `REDUCE_EXPORTS=ON`, `ENABLE_WALLET=ON`, `ENABLE_IPC=OFF`, `BUILD_GUI=OFF`, `BUILD_TESTS=ON`, `BUILD_BENCH=ON`, `BUILD_FUZZ_BINARY=ON`, `WITH_EMBEDDED_ASMAP=OFF`, `WITH_ZMQ=OFF`, `WITH_USDT=OFF`, and `WITH_CCACHE=OFF`. CMake applied `-fvisibility=hidden` and `-Wl,--exclude-libs,ALL`; the `-no_exported_symbols` probe was unavailable on GNU ld and was correctly omitted. The build completed all 716 Ninja steps and linked `test_bitcoin`, `bench_bitcoin`, and `fuzz`.
+
+The full command was:
+
+```text
+cmake --build /data/my_storage/tmp/cycle101-build-dead-zones/reduce-exports-gcc --target test_bitcoin bench_bitcoin fuzz -j4
+```
+
+The reduced-export `test_bitcoin` ran all 1,208 cases and exited 0 with `*** No errors detected`. The suite emitted the expected diagnostics from argument-boundary and injected filesystem-failure tests; none became a failed case. `bench_bitcoin --list` enumerated the benchmark registry. The reduced executable had 62 defined dynamic symbols versus 183 in the default `/data/my_storage/tmp/cycle89-build` test binary, confirming that the visibility option affected the produced binary rather than only the CMake summary.
+
+The RelWithDebInfo fuzz multiplexer compiled the wallet and P2P target sources, including `wallet_bdb_parser` and `process_messages`, but refused execution with the documented `Must compile with -DBUILD_FOR_FUZZING=ON or in Debug mode` guard. `PRINT_ALL_FUZZ_TARGETS_AND_ABORT=1` listed both targets, so this was classified as the expected release-build execution contract, not a hidden-target failure.
+
+### Reduced-export fuzz graph
+
+A second current-source configuration used GCC 12.2.0, `Debug`, `BUILD_FOR_FUZZING=ON`, `REDUCE_EXPORTS=ON`, wallet enabled, IPC disabled, GUI disabled, embedded ASMap/ZMQ/USDT disabled, and ccache disabled. CMake intentionally disabled all non-fuzz targets and retained wallet support; the reduced-export flags remained active. The fuzz target completed all 491 Ninja steps. These representative controls both exited 0:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle101-build-dead-zones/reduce-exports-fuzz-gcc-tmp FUZZ=wallet_bdb_parser .../bin/fuzz /dev/null
+wallet_bdb_parser: succeeded against 1 files in 0s.
+
+TMPDIR=/data/my_storage/tmp/cycle101-build-dead-zones/reduce-exports-fuzz-gcc-tmp FUZZ=process_messages .../bin/fuzz /dev/null
+process_messages: succeeded against 1 files in 0s.
+```
+
+### Reduced-export IPC graph
+
+The first tree was reconfigured with `ENABLE_IPC=ON` and `WITH_EXTERNAL_LIBMULTIPROCESS=OFF`, retaining wallet, tests, bench, fuzz registration, and `REDUCE_EXPORTS=ON`. Cap'n Proto schemas and generated proxy sources were rebuilt; the incremental `bitcoin-node` and IPC-enabled `test_bitcoin` build completed 203 steps. `ipc_tests` passed 2 cases with no errors, and `bitcoin-node --version` exited 0 with the expected `bitcoin-node` identity. The IPC target therefore has no current reduced-visibility link or startup failure in this GCC configuration.
+
+## Verdict and Handoff
+
+**Dismissed for a new source defect:** the current reduced-export monolithic, fuzz-only, and IPC-on graphs compiled and ran their relevant controls. No hidden symbol, missing generated source, target-registration, wallet/P2P fuzz, IPC linkage, or startup defect was confirmed. No production or test source change is justified.
+
+Evidence build trees and scratch state remain under `/data/my_storage/tmp/cycle101-build-dead-zones/`. Limitations are shared libraries, GUI/Qt, ZMQ/USDT, alternate compilers, cross-architectures, and the upstream `CMAKE_VISIBILITY_INLINES_HIDDEN` change now present on `origin/master` but not merged into this cycle branch. A future re-entry should select one of those cells or a generated-file/install/export mismatch rather than repeat reduced-export GCC coverage. The unrelated PID `777094` remained untouched.
