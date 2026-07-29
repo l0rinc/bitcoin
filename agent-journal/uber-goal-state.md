@@ -123,11 +123,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 94 | bindings-ffi-parity | CYCLE-2 | 2026-07-29 | enum mapping static_assert tables (073d543f26), reorder tripwire fires at :268 |
 | 64 | finding-dedup-recurrence | CYCLE-1 | 2026-07-29 | findings-index.md built; 5 fixes confirmed NOT in lineage (F1,F2,F3,F7,F9) |
 | 104 | analogical-vulnerability-translation | CYCLE-1 | 2026-07-29 | EMPTY-TRUTHINESS-FLIP fails on PartialMerkleTree (fail-closed + Assume contracts) |
+| 90 | historical-knowledge-recipes | CYCLE-2 | 2026-07-29 | R15-R22 added (sancov inlining, reindex gating, MiniWallet API, io sampling, mutant-first, pool mechanics, dict fuzzing, flag persistence) |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=16384824726432476915 -> idx 26 (of 49) -> #104.
+   raw=5999263811472034461 -> idx 45 (of 48) -> #90.
    HYGIENE (from #64 c1): merge or re-cherry-pick the 5 out-of-lineage
    fixes (138ef3c044, 50e9d14750, 22aa75a2eb, 0a6c377ddb, 4124803dff).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
@@ -167,7 +168,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1), 21(c1,c2), 43(c1), 45(c1), 47(c1,c2), 48(c1), 51(c1), 59(c1), 60(c1),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1), 67(c1), 68(c1), 71(c1), 73(c1), 75(c1),
-76(c1,c2), 81(c1,c2), 90(c1), 91(c1), 92(c1), 94(c1,c2), 95(c1), 100(c1), 104(c1).
+76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 94(c1,c2), 95(c1), 100(c1), 104(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
