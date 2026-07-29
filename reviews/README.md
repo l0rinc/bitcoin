@@ -14,5 +14,6 @@ Every review/finding produced in this workspace gets committed here. Chat output
 | 2026-07-24-buzz-mirror-assessment.md | Buzz mirror of bitcoin/bitcoin | git mirror ~1 day; PR/issue import ~1 week; no public repos in v1 |
 | 2026-07-27-pr-35820-chrono-literals.md | upstream PR 35820 (chrono literals for durations) | 🟢 clean — all 16 files value/type-equivalent; no defects |
 | 2026-07-27-pr-watch.md | twice-daily PR watch (new PRs 35821/35822, head changes 35531/35735, conflicts) | 🟢 no blockers; ⚠️ 3 file-overlap conflicts flagged (35744, 35531, 35820) |
+| reviewer-rules.md | durable reviewer rule map R1-R13 (campaign #60 c1-c2, l0rinc seam) | held-out validated 2x (35754, 35670); use as PR pre-submission checklist |
 
 Older committed records: `../PR-REVIEW-TOP200.md` (200 most active open PRs), `../MERGED-2000-REVIEW.md` (last 2000 merged commits), `../COMMIT-REVIEW-PR240.md` (Knots rebase 1907 commits).
