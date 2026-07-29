@@ -213,6 +213,16 @@ public:
      * variables with this state.
      */
     void Read(AutoFile& filein, size_t numBuckets);
+
+private:
+    /** True while every decayed average is exactly zero (no Record(),
+     *  no removeTx() failAvg bump, and no Read() has ever run on this
+     *  instance). Lets UpdateMovingAverages() skip the full bucket
+     *  sweep: decaying all-zero state is bit-identical to doing
+     *  nothing, so the skip changes no observable behavior. This is
+     *  the common case during IBD, when the estimator has seen no
+     *  mempool transactions. */
+    bool m_all_zero{true};
 };
 
 
@@ -259,6 +269,7 @@ void TxConfirmStats::Record(int blocksToConfirm, double feerate)
     // blocksToConfirm is 1-based
     if (blocksToConfirm < 1)
         return;
+    m_all_zero = false;
     int periodsToConfirm = (blocksToConfirm + scale - 1) / scale;
     unsigned int bucketindex = bucketMap.lower_bound(feerate)->second;
     for (size_t i = periodsToConfirm; i <= confAvg.size(); i++) {
@@ -270,6 +281,8 @@ void TxConfirmStats::Record(int blocksToConfirm, double feerate)
 
 void TxConfirmStats::UpdateMovingAverages()
 {
+    // Decaying an all-zero state is bit-identical to doing nothing.
+    if (m_all_zero) return;
     assert(confAvg.size() == failAvg.size());
     for (unsigned int j = 0; j < buckets.size(); j++) {
         for (unsigned int i = 0; i < confAvg.size(); i++) {
@@ -530,6 +543,11 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
     // to match the number of confirms and buckets
     resizeInMemoryCounters(numBuckets);
 
+    // The read state may carry nonzero averages (including failAvg with
+    // no recorded txs — see removeTx()); conservatively treat the
+    // estimator as dirty from here on.
+    m_all_zero = false;
+
     LogDebug(BCLog::ESTIMATEFEE, "Reading estimates: %u buckets counting confirms up to %u blocks\n",
              numBuckets, maxConfirms);
 }
@@ -572,6 +590,7 @@ void TxConfirmStats::removeTx(unsigned int entryHeight, unsigned int nBestSeenHe
     }
     if (!inBlock && (unsigned int)blocksAgo >= scale) { // Only counts as a failure if not confirmed for entire period
         assert(scale != 0);
+        m_all_zero = false;
         unsigned int periodsAgo = blocksAgo / scale;
         for (size_t i = 0; i < periodsAgo && i < failAvg.size(); i++) {
             failAvg[i][bucketindex]++;
