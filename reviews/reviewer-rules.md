@@ -131,6 +131,15 @@ R14. Public setters validate at the boundary, not downstream
   in node/chainstate.cpp — should the setter reject these?"
   (w0xlt, 35205 test_kernel.cpp:804). Class: API-robustness.
 
+R15. std::clamp only when lo<=hi is provable; else explicit max/min
+  Trigger: clamp-style bounds on values whose bounds can cross.
+  Form: "max/min was chosen exactly to avoid the potential ambiguity
+  of clamp for cases when the min isn't smaller than the max"
+  (l0rinc, 35616 caches.cpp:56; maflcko probing std::clamp and a
+  safe Clamp<MIN,MAX> template, both declined as not-worth-it).
+  Class: code-level, mechanism. Sibling of R12: the CONSTRUCTION
+  must carry the precondition, not a comment.
+
 ## Held-out validation record
 
 - 35754 (pre-encoding): 2/3 confirmed, 1 refined (R7).
@@ -144,6 +153,22 @@ R14. Public setters validate at the boundary, not downstream
 - 35818 (attempted): no human review yet — unscoreable; carries a
   DrahtBot CI flag on 32-bit ARM (bloom_create_invalid_false_
   positive_rate std::fetestexcept) — recorded under L1's watch.
+- 35616 (post-encoding, blind, SECOND AUTHOR SEAM — maflcko as
+  author): 3/4 confirmed-in-kind, 1 refined-away.
+  * goal-vs-cost challenge confirmed (sedited: "might we just remove
+    the index caches instead?" — R7 dynamic; angle refined: the
+    challenge proposes DELETION of the target, not a reproducer).
+  * type-level construction confirmed (R12-line; clamp-vs-max/min
+    precondition discussion -> R15 added; DrahtBot i686
+    -Werror=narrowing gate caught the one real instance — the
+    32-bit CI gate substitutes for a test-demand on pure refactors).
+  * convention-anchored nits confirmed verbatim (R9/R13: `auto`
+    nit declined citing clang-tidy modernize-use-auto; theStack
+    IWYU-nit `<cstdint>` adopted immediately, R11-adjacent).
+  * test-to-claim demand NOT observed (P4 refined): pure type-width
+    refactors draw no test-completeness demand in this seam; arch CI
+    is the substitute oracle.
+  Conclusion: the rule set generalizes to a second author seam.
 
 ## Maintainer merge-rationale class (mined 2026-07-29, #60 c5)
 
@@ -161,3 +186,15 @@ M4. Process hygiene: don't hide useful information (fanquake, 35200:
   on in-place edits shrinking discussion content — "All it does is
   hide useful information"). Review routing: maintainers cc relevant
   experts (fanquake -> davidgumberg, 35670).
+M5. Conflict choreography + outstanding-feedback precondition
+  (mined 2026-07-29, #60 c6, maflcko-author seam 35616)
+  When two pulls conflict, rebase the one that has to be force-pushed
+  anyway (has outstanding feedback), not the clean one — "it seems
+  less churn to rebase the one that has to be force pushed anyway,
+  than to force push both" (maflcko). Precondition before merging
+  anything: "it would be kind to address the feedback if all
+  reviewers are asking for it" — outstanding all-reviewer feedback
+  blocks, and the blocker is named explicitly (perm-link to the
+  outstanding comment). Merge rationale stays terse and directional
+  (sedited: "I think it is preferable to fix these types first, so
+  putting this in now").
