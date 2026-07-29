@@ -147,6 +147,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 59 | supply-chain-security-gates | CYCLE-2 | 2026-07-29 | workflow byte-identical to upstream (mutable tags, no permissions block); posture upstream-accepted |
 | 75 | build-throughput-cacheability | CYCLE-2 | 2026-07-29 | header-cost via -ftime-trace: validation.h 6.1s (20%), no anomaly |
 | 73 | network-state-machine | CYCLE-2 | 2026-07-29 | handshake EOF sweep: 7/7 v2 offsets + v1 partial close clean, zero half-open peers |
+| 99 | clean-room-reimplementation | CYCLE-1 | 2026-07-29 | CompactSize clean-room differential: 804 cases, 0 mismatches |
 | 107 | conformance-test-transplant | CYCLE-1 | 2026-07-29 | RFC 4231 case 5 transplanted (0d36c6cd80); all 7 cases both hashes |
 
 ## Next-up queue
@@ -192,7 +193,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1,c2), 21(c1,c2), 43(c1), 45(c1,c2), 47(c1,c2), 50(c1), 48(c1), 51(c1), 53(c1), 57(c1), 59(c1,c2), 60(c1),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1),
-76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 100(c1), 103(c1), 104(c1), 105(c1), 107(c1), 108(c1), 109(c1).
+76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 103(c1), 104(c1), 105(c1), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
