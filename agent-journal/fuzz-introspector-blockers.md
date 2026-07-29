@@ -380,3 +380,68 @@ sign+verify cycles with two distinct fuzz-consumed keys. The c4
 ## Rotation note
 Five cycles; multi-key cell closed. Not exhausted (witness/taproot
 variants).
+
+## Cycle 6 (2026-07-29): P2WPKH PSBTv2 correlated seed — require_witness_sig arm driven to a verified final witness
+
+### Draw
+Re-rank draw over the remaining 4-cell queue:
+raw=16460576047879496241, masked 7237204011024720433, index 1
+(of 4) -> #50 (sixth cycle; c5 queue cell "witness variants").
+Branch: audit/introspector-blockers-c6 from 0abe707222 (#49 c6
+journal tip).
+
+### Hypothesis
+A PSBTv2 doc whose input carries ONLY witness_utxo (P2WPKH(K))
+drives the require_witness_sig path (psbt.cpp:684-690, :743) that
+the P2PKH seeds structurally skip (non_witness_utxo sets
+require_witness_sig=false).
+
+### Seed (c4 layout, witness variant)
+/tmp/psbt_v2_wit_seed (211 B, sha256
+4e99ca4c108a1e8f6f234d0073aa4e349a56090e2b1a1985601259cd3479c45f):
+[139 B PSBTv2 doc: funding tx pays 50000 to
+001479b000887626b294a914501a4cd226b58b235983 (P2WPKH of
+K=0x01*32); spend input carries witness_utxo ONLY; 49000 OP_TRUE
+output] [0x5c 0x00][0x5c 0x00][K 32B][junk K2 32B][4 bools=1].
+Constructor /tmp/btc50_wit.py; no 0x5c-pair; front 207 + 4 = 211.
+
+### Signing proof (two independent verifiers)
+1. In-target trace (temporary instrumentation, reverted):
+   SIGDBG input=0 kid=0 hit=0 sign_err=7 verified=1 final_ss=0
+   final_wit=1 — the kid/hit probe misses BY DESIGN (P2WPKH
+   extracts as WITNESS_V0_KEYHASH, not PKHash; the probe is
+   P2PKH-specific). The authoritative outcomes: SignPSBTInput OK
+   (impossible under require_witness_sig unless a witness signature
+   was produced — psbt.cpp:743 returns INCOMPLETE otherwise),
+   PSBTInputSignedAndVerified=1 under the consensus interpreter,
+   final witness SET, scriptSig empty. The require_witness_sig arm
+   is confirmed driven.
+2. Public RPC: descriptor wallet wpkh(descsum_create(WIF))
+   active=False; walletprocesspsbt complete=True; finalizepsbt
+   complete=True with hex 020000000001010ca6b723... — the 0001
+   marker/flag proves witness data in the final tx.
+
+### Post-restore control
+200-run corpus over the 4-seed family (v0, v2, 2-input, wit)
+clean on the byte-identical restored target (git diff empty).
+
+### Exact commands
+- python3 /tmp/btc50_wit.py (constructor; prints spk/shas)
+- python3 /tmp/btc50_corrw_v2.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc50_wit_rpc (CORRW-SIGN-OK)
+- FUZZ=psbt build_fuzz/bin/fuzz -runs=2 /tmp/psbt_v2_wit_seed
+  (instrumented trace); -runs=200 /tmp/psbt_c5_corpus (final)
+
+### Verdict
+CONFIRMED deliverable: the correlated-seed family now covers the
+legacy-P2PKH, multi-key, and P2WPKH-require_witness_sig arms of
+SignPSBTInput, each with two independent verifiers.
+
+### Limitations / queue
+- P2TR remains open (schnorr keys + PSBT_IN_TAP_* fields; the
+  sighash DEFAULT vs ALL branch at psbt.cpp:700-712 is the
+  interesting untested arm there).
+- qa-assets corpus-dir import still queued.
+
+## Rotation note
+Six cycles; witness-v0 cell closed. Not exhausted (P2TR).
