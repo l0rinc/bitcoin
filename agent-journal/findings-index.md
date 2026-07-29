@@ -141,6 +141,20 @@ audit/introspector-blockers-c2 | /tmp/btc101_seed,
 /tmp/btc101_iso | key-script-correlated seeds for complete=true
 sign arms; PSBTv2 signing seeds.
 
+O9 | psbt fuzz ECC init + v2 correlated seed | PSBT signing machinery
+/ fuzz harness | missing .init -> null secp256k1_context_sign -> SEGV
+on first valid key in AddKey->GetPubKey; reachable only via hybrid
+whole-doc mode + >=64 key bytes | n/a (test infra) | CONFIRMED+FIXED |
+failing-before: UBSan key.cpp:198 null arg + ASan SEGV 0x0 READ
+(pre-fix target, /tmp/psbt_corr_seed); passing-after: fixed target
+clean on v0+v2 seeds + 500-run corpus; v2 seed drives SignPSBTInput
+OK + PSBTInputSignedAndVerified=1 (final_ss=106B) + independent RPC
+verifier complete=True | #50 c4 on audit/introspector-blockers-c4,
+archive pick this cycle | seeds /tmp/psbt_v2_corr_seed,
+/tmp/psbt_corr_seed (+/tmp/psbt_c4_artifacts), WIF /tmp/corr_wif.txt;
+c3 v0 seed layout corrected (single-terminator whole-mode merge ate
+the keys) | multi-input multi-key docs; taproot/witness variants.
+
 ## Latent / upstream-context items (not local defects)
 
 L1 | CBloomFilter ctor div-by-zero/log(0) | bloom | math UB at

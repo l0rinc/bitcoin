@@ -185,3 +185,126 @@ by byte-exact replay; coverage deltas are doc-structure-dependent
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-29): PSBTv2 correlated seed — drives the complete sign arm end-to-end; surfacing + fixing the missing ECC init (SEGV on first valid key)
+
+### Draw
+Re-rank draw over the rebuilt 3-cell queue (60-c6, 50-c4, 49-c3):
+raw=1016919037349801110, index 1 (of 3) -> #50 (fourth cycle; c3
+queue cell "PSBTv2 correlated variant"). Branch:
+audit/introspector-blockers-c4 from 2a9f35bcc6 (#80 c6 journal tip).
+
+### Hypothesis
+A PSBTv2 doc with a P2PKH(K)-funded non_witness_utxo and the
+harness-correlated key layout drives SignPSBTInput's complete arm in
+the psbt fuzz target (v2 globals path; c3 did v0).
+
+### Seed (corrected layout — see c3 correction below)
+/tmp/psbt_v2_corr_seed (257 B, sha256
+ea60e88a42cb2f227e475bc758d42a82355d3d605aad4e9d3cb249777147309d):
+[185 B PSBTv2 doc: unsigned spend of a P2PKH(K)-funded outpoint,
+non_witness_utxo present, K=0x01*32]
+[0x5c 0x00][0x5c 0x00] double terminator
+[K 32B][K2=0x07*32 32B][tail bools key2-comp=1, key1-comp=1,
+merge-mode=1, doc1-mode=1].
+doc1 parses as exactly the 185 B doc (doc contains no 0x5c-pair that
+would truncate — checked for both v0/v2 docs); merge parses empty;
+key1 lands exactly on K. Front bytes 185+2+2+32+32=253 + 4 end bools
+= 257 = file size: all consumed.
+
+### c3 layout correction (important)
+c3's v0 seed used a SINGLE terminator with merge-mode=0
+(ConsumeRemainingBytesAsString): the whole-mode merge string then ate
+the provider keys, so the provider never held K as seeded. c3's
+replay skipped merge consumption, so the flaw was invisible there;
+c3's RPC signability proof was independent of the harness layout and
+remains valid. Fixed BOTH seeds this cycle to the double-terminator
+layout (doc1-mode=1 random-length, merge-mode=1 random-length);
+corrected v0 seed = /tmp/psbt_corr_seed (235 B, sha256
+4da6bc8ca8feba91c2a51338ce1766950c702aa930ca6c8b6c2eded2b945e72a).
+
+### Defect found + fixed: psbt target had no ECC init
+- Mechanism: the signing pass (08590b364d, #50 c2) made the target do
+  ECC work, but the target had no .init; secp256k1_context_sign stays
+  null. The FIRST valid fuzz key crashes inside
+  FillableSigningProvider::AddKey -> CKey::GetPubKey ->
+  secp256k1_ec_pubkey_create(NULL, ...).
+- Reachability: needs a decodable doc AND >=64 front bytes for two
+  keys; only reachable via the hybrid whole-doc consumption
+  (d086164661) — random truncation-mode fuzzing essentially never
+  produces both, which is why the corpus campaigns stayed green.
+- Failing-before (build_fuzz, ASan+UBSan, pre-fix HEAD target,
+  FUZZ=psbt .../fuzz -runs=1 /tmp/psbt_corr_seed):
+  key.cpp:198:42 runtime error: null pointer passed as argument 1
+  which is declared to never be null; AddressSanitizer SEGV on
+  0x000000000000 READ; first-invalid frame
+  secp256k1_ecmult_gen_context_is_built (ecmult_gen_impl.h:23) <-
+  secp256k1_ec_pubkey_create (secp256k1.c:643) <- CKey::GetPubKey
+  (key.cpp:198) <- FillableSigningProvider::AddKey
+  (signingprovider.h:323) <- psbt_fuzz_target (psbt.cpp:212).
+- Fix (test-only, smallest): initialize_psbt() with a static
+  ECC_Context (idiom from bip324.cpp:21) + FUZZ_TARGET(psbt,
+  .init = initialize_psbt). 9 insertions, 1 deletion.
+- Passing-after (same build, fixed target): both corrected seeds
+  -runs=2 clean; both crash artifacts clean; 500-run corpus (v0+v2
+  seeds) clean in 97 s.
+- Severity: test-infra only (fuzz harness crash); no production,
+  consensus, or wallet impact. Fork-local: both enabling commits are
+  this campaign's.
+
+### Signing proof (two independent verifiers)
+1. In-target trace (temporary instrumentation, reverted after use):
+   provider.GetKey(ToKeyID(PKHash)) hit=1 for the utxo spk
+   76a91479b000887626b294a914501a4cd226b58b23598388ac;
+   SignPSBTInput returns PSBTError::OK (enum value 7) which per
+   psbt.cpp:766 requires sig_complete=true (the input is unsigned, so
+   the psbt.cpp:662 early-OK path is excluded);
+   PSBTInputSignedAndVerified=1 with final_script_sig=106 B — the
+   fuzz-key signature verifies against the utxo under the consensus
+   script interpreter. (Note: the fuzz target's out_sigdata shows
+   complete=0/partial=0 BY DESIGN — SignPSBTInput only copies the
+   missing-info fields to out_sigdata, psbt.cpp:759-764.)
+2. Public RPC (independent implementation path): descriptor wallet
+   pkh(descsum_create(WIF(K))) active=False; walletprocesspsbt on the
+   185 B v2 doc -> complete=True; finalizepsbt -> complete=True,
+   signed tx 020000000143cccd... (prevout 43cccd6a... matches the
+   doc). Script /tmp/btc50_corr_v2.py (v2 variant of c3's).
+
+### Exact commands
+- FUZZ=psbt build_fuzz/bin/fuzz -runs=2 /tmp/psbt_v2_corr_seed
+  /tmp/psbt_corr_seed  (final code: clean)
+- FUZZ=psbt build_fuzz/bin/fuzz -runs=500 /tmp/psbt_c4_corpus
+  (Done 500 runs in 97 second(s), clean)
+- python3 /tmp/btc50_corr_v2.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc50_v2rpc  (CORR-SIGN-OK)
+- failing-before: git checkout -- src/test/fuzz/psbt.cpp && rebuild
+  && FUZZ=psbt .../fuzz -runs=1 /tmp/psbt_corr_seed (SEGV above);
+  restored and rebuilt green after.
+
+### Verdict
+CONFIRMED deliverable + CONFIRMED harness defect: the PSBTv2
+correlated seed drives the complete sign arm end-to-end (sign +
+consensus-rule verify, two independent verifiers), and the campaign
+surfaced+fixed a real fork-local fuzz-harness crash (missing ECC
+init) with failing-before/passing-after evidence. Coverage is not
+the metric: the new ECC init's secp256k1 selftest covers ecdsa_sign
+at startup for any seed, so signing cannot be coverage-attributed —
+behavioral proof used instead.
+
+### Artifacts
+/tmp/psbt_c4_artifacts/: crash-821b... (= corrected v0 seed,
+byte-identical), crash-ccfd... (6 B artifact from the same session,
+provenance uncertain, clean post-fix), both corrected seeds. Replay
+helpers /tmp/btc50_corr.py (v0), /tmp/btc50_corr_v2.py (v2).
+WIF /tmp/corr_wif.txt. Pre-fix file copy /tmp/psbt_fixed.cpp.
+
+### Limitations / queue
+- Seeds live in /tmp scratch (disk-pressure policy); a corpus-dir
+  layout for qa-assets-style import remains queued from c3.
+- Second key K2 is junk (no second input consumes it); multi-input
+  multi-key correlated docs are the next depth step.
+- crash-ccfd provenance uncertain; kept for the record.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted (multi-input correlated docs, taproot/witness variants).
