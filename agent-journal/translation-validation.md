@@ -1,5 +1,61 @@
 # Translation Validation Journal
 
+## Cycle 108: optimized obfuscation transformation validation
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `78`
+- Slug: `translation-validation`
+- Branch: `uber-cycle-108-translation-validation-20260729`
+- Cycle start HEAD: `190301f93e36503fbfed4a21bcefa38ec7be09a1`
+- `origin/master` after the fresh gate: `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` was `40 1005`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Uber prompt SHA256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Fresh gate: `git fetch origin master` succeeded; tracked and index state were clean; `git diff --check` passed; the catalog hashes matched; PID `777094` and its Codex parent `725042` were present and preserved.
+
+### Scope and exclusions
+
+Goal 78 requires comparison of a bounded transformation across compiler/optimization variants, with source-domain and tool limitations kept explicit. Cycle 55 already covered SipHash across GCC/Clang, optimization levels, LTO, IR verification, and a fuzzer control. Cycle 105 covered broad GCC/Clang Release/IPO, manual Clang profile-use, deterministic utility outputs, and the full unit suite. Cycles 26, 44, 47, 69, 90, and 100 covered sanitizer/compiler matrices, timing/assembly, SHA256 dispatch, libsecp ECDH, and backend output parity. Those cells are excluded unless a new counterexample appears.
+
+The new cell is the optimized `Obfuscation::operator()` in `src/util/obfuscation.h`: it peels an unaligned prefix, promises alignment with `std::assume_aligned<8>`, applies an unrolled 8-word loop, and uses fixed-width `memcpy` for a bytewise XOR transform. The production contract is exact byte-for-byte equivalence to a simple reference for every key, starting address alignment, key offset, and target size; a second application with the same key/offset must restore the original bytes.
+
+### Hypotheses
+
+1. The optimized alignment peel or unrolled transformation diverges from the reference at a boundary involving zero/one/eight-byte sizes, offsets modulo eight, or buffers with nonzero base alignment.
+2. A compiler or LTO transformation changes the defined output or creates an alignment/aliasing diagnostic in a valid caller.
+3. Any apparent divergence is instead caused by an invalid `assume_aligned` precondition, a test oracle issue, or unsupported compiler behavior; no source change is made without a minimized, reproducible valid-domain counterexample.
+
+### Required evidence
+
+Preserve compiler versions, flags, target CPU, source and IR/assembly snippets, deterministic input digest, output digest, reference comparison count, sanitizer diagnostics, and exact commands. Alive2 is expected to be unavailable; LLVM `opt -passes=verify` will be treated only as structural IR validation. A source fix requires a failing-before/passing-after regression or an independent UB-free counterexample. A benchmark-only difference is not a finding.
+
+### Cycle 108 results
+
+Tool inventory found Clang 19.1.7, GCC 12.2.0, `opt-19`, `llvm-reduce-19`, and `llvm-mca-19`. Alive2 (`alive-tv`/`alive2`) was unavailable. The selected helper's optimization history includes the alignment-peel/unrolled-body change `248b6a27c3` and later fixed-width-key refactors; this is a new helper-level translation cell, not a repeat of the Cycle 55 SipHash probe.
+
+The direct reference probe was `/data/my_storage/tmp/cycle108-obfuscation-probe.cpp`. It generated four key classes (zero, all `ff`, alternating `aa/55`, and deterministic pseudo-random), every base offset 0 through 15, every target size 0 through 192, and every key offset 0 through 23. Each case compared `Obfuscation` to bytewise `original[i] ^ key[(key_offset + i) % 8]`, then applied the operation a second time to require exact round-trip restoration. The probe covered 296,448 cases and returned `cases=296448 checksum=4710587723396259903` for every successful build/run below:
+
+| Compiler | Modes | Result |
+| --- | --- | --- |
+| Clang 19.1.7 | `-O0`, `-O2`, `-O3`, `-Os`, `-O3 -flto=thin -fuse-ld=lld` | identical case count/checksum; exit 0 |
+| GCC 12.2.0 | `-O0`, `-O2`, `-O3`, `-Os`, `-O3 -flto` | identical case count/checksum; exit 0 |
+| Clang 19.1.7 | `-O2 -fsanitize=address,undefined -fno-omit-frame-pointer` | identical case count/checksum; no ASan/UBSan diagnostic |
+
+Clang 19 emitted the probe at `-O0` and `-O3` with `-S -emit-llvm -fno-inline`; `opt-19 -passes=verify -disable-output` accepted both modules. The O0/O3 modules were 5,281 and 4,759 lines respectively. The generated IR contains the expected `llvm.assume` alignment fact for the `std::assume_aligned<8>` result and fixed-width `llvm.memcpy` operations. This is structural IR validation, not an Alive2 refinement proof. No output, status, round-trip, or sanitizer divergence was found.
+
+#### Independent header defect
+
+The first self-contained translation unit, `/data/my_storage/tmp/cycle108-obfuscation-selfcontain.cpp`, included only `<util/obfuscation.h>` plus `<array>` and instantiated `Obfuscation`. Before the fix, both exact Clang 19 and GCC 12 `-O2` commands failed because `src/util/obfuscation.h` used `std::memcpy` at lines 67, 101, 110, and 112 without including `<cstring>`. The error was not a transitive project warning: the header could not be compiled as a direct translation unit.
+
+The smallest fix adds `<cstring>` in the standard include block. After the fix, the same direct Clang and GCC commands compiled and ran with exit 0. The rebuilt Clang 19 Release `test_bitcoin` target completed 185 Ninja steps. `streams_tests` passed all 27 cases; `streams_tests,dbwrapper_tests` passed all 41 cases; and the full unit binary passed all 1,123 cases with exit 0 and `*** No errors detected`. The existing compiler warnings and the test-only `DIR_UNIT_TEST_DATA` skip were unchanged.
+
+#### Verdict and limitations
+
+The optimized obfuscation transformation is consistent with its independent bytewise oracle across the tested compilers, optimization levels, LTO modes, alignments, sizes, offsets, and Clang sanitizers. The header self-containment defect is confirmed and fixed in the source commit for this cycle; no claim is made about non-x86 execution, other compiler versions, Alive2 refinement, or the validity of callers that violate the alignment precondition. The scratch probes and IR remain under `/data/my_storage/tmp/cycle108-*`; no scratch source is staged.
+
 ## Cycle 55: compiler-transformation validation and miscompile isolation
 
 ### Selection and gate

@@ -14,6 +14,7 @@
 #include <bit>
 #include <climits>
 #include <cstdint>
+#include <cstring>
 #include <ios>
 #include <memory>
 
