@@ -178,3 +178,70 @@ domination is an empty-chain/large-n artifact, not a general property
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-29): Taproot-OP_TRUE tx-mix reindex profile — tweak math IS the validation floor; per-tx cost ~25% below P2PK
+
+### Draw
+Re-rank draw over the 6 remaining CYCLE-2+ open cells:
+raw=3519535482585431460, index 0 -> #21 (third cycle; c2 queue cell
+"multi-input/SegWit/Taproot mixes change the EC/hash shares").
+Branch: audit/rebuild-recovery-c3 from f2a10ffe34 (#60 c3
+bookkeeping).
+
+### Experiment (c2 harness, adapted)
+Chain: 210 funding + 200 blocks x 100 P2TR anyone-can-spend txs
+(MiniWalletMode.ADDRESS_OP_TRUE, zero signatures — the anti-c2
+workload), 410 blocks / ~41.4k txs, built in 68s (no signing).
+Reindex-chainstate with /usr/bin/time + perf record -F 199 -g
+(corrected run; see harness incidents).
+Result: user CPU 3.68s (vs c2's 610-block/61k-tx P2PK chain at
+6.8s) -> 11,253 tx/s vs 8,970 tx/s, ~25% cheaper per tx.
+
+### Profile (303 samples, cycles:P)
+- secp256k1_gej_double 33.9+11.1+10.7+6.3 ~= 62%
+- secp256k1_fe_sqrt 24.4%
+  => ~86% EC math even with ZERO signature verification: every
+  P2TR input pays the tweaked-key recomputation (x-only lift =
+  fe_sqrt; tweak multiply = gej_double) before the OP_TRUE leaf
+  even matters. The taproot tweak is the per-input validation
+  FLOOR; c2's full-ECDSA profile differs only in the functions
+  ABOVE that floor.
+- sha512::Transform 12.6% — resolved via call graph: ProcRand /
+  SeedStrengthen RNG startup (kernel::Context init), one-time
+  startup cost, visible only because the whole reindex is ~4s.
+### Verdict
+DISMISSED (no defect): the tx-mix cost structure is explained —
+EC share is constant across mixes (~85%), function mix shifts
+(verify -> tweak), throughput +25% without sig checks. No
+optimization candidate: the tweak recomputation is consensus-
+required work per input (already minimal).
+
+### Harness incidents (all recorded; fixes applied)
+1. TestNode needs pre-created datadir/{stdout,stderr} (3 retries).
+2. PortSeed-derived rpc_port must match extra_args -rpcport (my
+   sed broke it; ECONNREFUSED for 60s).
+3. The c2 completion gate matched the COPIED chain log's own
+   height=410 (stale-log trap, documented in c2 but inherited by
+   my run.sh): bitcoind idled 33 min after finishing; the
+   /usr/bin/time stats were still valid (user CPU excludes idle).
+   Corrected run uses a wipe-line-scoped gate (height=410 AFTER
+   the 'Wiping LevelDB' line).
+4. perf record -p attached to the /usr/bin/time WRAPPER, not
+   bitcoind — first profile discarded; corrected run wraps
+   bitcoind in perf directly.
+
+### Exact commands / artifacts
+- /tmp/btc21c3_mw.py (chain build), /tmp/btc21c3_perf.sh
+  (wipe-aware perf run); /tmp/btc21c3.perf (profile)
+- perf report --stdio --no-children --percent-limit=1.5;
+  -g graph for sha512
+
+### Limitations / queue
+- 100% single-output OP_TRUE txs; real-world mixed scripts vary
+  the constant factors, not the floor structure.
+- Progress-series wall profile (c2 queue) and dbcache sensitivity
+  still open.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
