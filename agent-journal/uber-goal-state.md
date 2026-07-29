@@ -127,11 +127,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 71 | deterministic-simulation | CYCLE-2 | 2026-07-29 | crash-resume durability invariant delivered (6c6e7d9f87), 3k scans clean |
 | 32 | whole-history-leftovers | CYCLE-1 | 2026-07-29 | multiply-first percentage shape: no exploitable survivor (range/memory-bounded) |
 | 69 | backend-differential | CYCLE-1 | 2026-07-29 | secp wide-multiply int128-vs-int64 differential: 4/4 suites pass, no divergence |
+| 103 | finding-composition | CYCLE-1 | 2026-07-29 | capability graph: no realizable chain; 3 edges tested broken (L2 fixed, F4+F5 fixed, F8 bounded) |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=5867492717535632116 -> idx 16 (of 45) -> #69.
+   raw=6640084940197297139 -> idx 23 (of 44) -> #103.
    HYGIENE (from #64 c1): merge or re-cherry-pick the 5 out-of-lineage
    fixes (138ef3c044, 50e9d14750, 22aa75a2eb, 0a6c377ddb, 4124803dff).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
@@ -171,7 +172,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1), 21(c1,c2), 43(c1), 45(c1), 47(c1,c2), 48(c1), 51(c1), 59(c1), 60(c1),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1), 67(c1), 68(c1), 69(c1), 71(c1,c2), 73(c1), 75(c1),
-76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 94(c1,c2), 95(c1), 100(c1), 104(c1).
+76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 94(c1,c2), 95(c1), 100(c1), 103(c1), 104(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
