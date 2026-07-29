@@ -367,6 +367,30 @@ BOOST_AUTO_TEST_CASE(connman_stop_nodes_resets_network_connection_counts)
     connman.StopNodes();
 }
 
+BOOST_AUTO_TEST_CASE(connman_start_rejects_conflicting_options_before_threads)
+{
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    CConnman::Options options;
+    options.bind_on_any = false;
+    options.m_i2p_accept_incoming = false;
+    options.m_msgproc = m_node.peerman.get();
+    options.m_use_addrman_outgoing = true;
+    options.m_specified_outgoing = {"127.0.0.1"};
+
+    const bool previous_listen{fListen};
+    fListen = false;
+    const bool started{connman.Start(*m_node.scheduler, options)};
+    const bool threads_started{connman.AnyThreadJoinablePublic()};
+    if (threads_started) {
+        connman.Interrupt();
+        connman.Stop();
+    }
+    fListen = previous_listen;
+
+    BOOST_CHECK(!started);
+    BOOST_CHECK(!threads_started);
+}
+
 BOOST_AUTO_TEST_CASE(cnode_send_queue_memory_usage_contracts)
 {
     auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};

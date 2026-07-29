@@ -3588,6 +3588,15 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
     AssertLockNotHeld(m_total_bytes_sent_mutex);
     Init(connOptions);
 
+    if (connOptions.m_use_addrman_outgoing && !connOptions.m_specified_outgoing.empty()) {
+        if (m_client_interface) {
+            m_client_interface->ThreadSafeMessageBox(
+                _("Cannot provide specific connections and have addrman find outgoing connections at the same time."),
+                CClientUIInterface::MSG_ERROR);
+        }
+        return false;
+    }
+
     if (fListen && !InitBinds(connOptions)) {
         if (m_client_interface) {
             m_client_interface->ThreadSafeMessageBox(
@@ -3657,14 +3666,6 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
     // Initiate manual connections
     threadOpenAddedConnections = std::thread(&util::TraceThread, "addcon", [this] { ThreadOpenAddedConnections(); });
 
-    if (connOptions.m_use_addrman_outgoing && !connOptions.m_specified_outgoing.empty()) {
-        if (m_client_interface) {
-            m_client_interface->ThreadSafeMessageBox(
-                _("Cannot provide specific connections and have addrman find outgoing connections at the same time."),
-                CClientUIInterface::MSG_ERROR);
-        }
-        return false;
-    }
     if (connOptions.m_use_addrman_outgoing || !connOptions.m_specified_outgoing.empty()) {
         threadOpenConnections = std::thread(
             &util::TraceThread, "opencon",
