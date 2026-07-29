@@ -4,7 +4,7 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Cycle 93 is active on goal 60 (`reviewer-preference-mining`), selected by exact `shuf -i 0-98 -n 1` -> `60` after Cycle 92 closed goal 81. The dedicated branch is `uber-cycle-93-reviewer-preference-mining-20260729`; start HEAD is `e17065f2351dfa70e3b71a999db842cc19370931`. This cycle mines technically grounded reviewer patterns and applies one reusable review recipe to held-out changes. The existing cycle-92 BIP324 vector evidence remains excluded unless new source or review evidence changes its priority.
+- Cycle 93 is complete on goal 60 (`reviewer-preference-mining`), selected by exact `shuf -i 0-98 -n 1` -> `60` after Cycle 92 closed goal 81. The dedicated branch is `uber-cycle-93-reviewer-preference-mining-20260729`; start HEAD was `e17065f2351dfa70e3b71a999db842cc19370931`, and source/test/journal close commit is `187f73c81084e48e5109d4e6e55ba5c7bf453b90`. This cycle mined technically grounded reviewer patterns, validated one reusable recipe on held-out changes, and corrected one stale local test oracle. The next run must perform a fresh gate and draw a distinct goal. The existing cycle-92 BIP324 vector evidence remains excluded unless new source or review evidence changes its priority.
 - No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
 
 ## Latest authoritative checkpoint
@@ -25,6 +25,19 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
 - The tracked gate passed: branch/worktree/process checks, `git diff --check`, and catalog/protocol/TSV hash checks. Known untracked artifacts remain preserved and excluded from cycle commits.
 - Scope: mine upstream history and online review evidence for generalizable technical review recipes, distinguish general versus contextual or author-specific preferences, then validate one recipe on a held-out change. Prior reviewer-mining journals, exact helper reuse, source/vector drift, and already-checked PRs are excluded unless a new independent evidence path changes the ranking.
+
+## Cycle 93 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `60` (`reviewer-preference-mining`); no reroll was needed because it was distinct from the just-closed goal 81.
+- Branch: `uber-cycle-93-reviewer-preference-mining-20260729`.
+- Start HEAD: `e17065f2351dfa70e3b71a999db842cc19370931`; source/test/journal close commit: `187f73c81084e48e5109d4e6e55ba5c7bf453b90` (`test: correct saturated mempool diagram oracle`), authored as `Lőrinc <pap.lorinc@gmail.com>`. The close snapshot is this state update; the next cycle records its resulting HEAD as its start point.
+- Base: `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `2 974` (`origin/master...HEAD`). Catalog, protocol, and TSV hashes match the active scope above.
+- Distinct scope: mine post-cycle-25/49 public reviewer evidence for technical, reusable rules; separate general contract evidence from contextual reviewer preference; apply the recipe to held-out PR `#35783`; exclude already harvested review threads and prior goal-60 cells.
+- Fresh evidence: PRs `#33014`, `#35664`, and `#35490` established invariant-directed RPC regression oracles, branch-isolated consensus vectors, natural-harness extension, exact state assertions, portable accounting widths, and scope-accurate diffs. The full API-response hashes and technical rationale are recorded in `agent-journal/reviewer-preference-mining.md`.
+- Held-out result: PR `#35783` removed one testnet3 seed from both `src/kernel/chainparams.cpp` and its `getchainparams` fixture. Source/fixture parity held; four intentional testnet3 seeds remain and complete testnet3 removal was correctly treated as separate scope. `bitcoin-util` output matched all five fixtures exactly, valid chain selections returned 0, and extra arguments returned 1.
+- Confirmed local test finding: `src/test/mempool_tests.cpp:1545` had expected `CAmount` minimum plus fee even though the saturating diagram's independent transaction and max-prioritised child follow the minimum-saturated parent cluster, producing `9,999`. The old focused test failed; the corrected test passed, the mempool suite passed 24 cases, and the complete `test_bitcoin` suite passed 1,208 cases. The source change is test-only and does not change production behavior.
+- Validation: clean GCC 12.2.0 `RelWithDebInfo` CMake/Ninja build of `bitcoin-util` and `test_bitcoin` passed all 549 actions; fix rebuild passed 5 actions; `chain_tests,util_tests` passed 85 cases; full unit passed 1,208 cases; `git diff --check` passed. Valgrind was unavailable; two unrelated existing compiler warnings were observed and left unchanged.
+- Verdict: reusable reviewer-mining recipe confirmed and one independent stale test oracle confirmed/fixed. The detailed evidence, API hashes, limitations, and next queue are in `agent-journal/reviewer-preference-mining.md`. No relevant process remains running. The next run must perform a fresh gate and draw a distinct eligible goal, rerolling only if it selects this just-closed goal without new evidence.
 
 ## Cycle 92 Active Scope
 
