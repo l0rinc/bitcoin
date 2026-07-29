@@ -1,0 +1,97 @@
+# Campaign #80 — fuzz-engine-differential
+
+## Cycle 1 (2026-07-29): PSBT parser differential — C++ production vs independent Python reference; no divergence in the production direction
+
+### Draw
+Random draw over the 15-goal eligible pool (12 pending + 3 CYCLE-1,
+#58 excluded as just-cycled): raw=7161189119308982694, index 9 ->
+#80 (first cycle). Branch: audit/fuzz-engine-differential from
+b012b6c3bd (#58 c2 bookkeeping; lineage anchor audit/resurrection @
+5d0155254c). Start state: tracked-clean. Catalog note: #80's
+campaign-focus block contains spec-mapping/conformance text — the
+focus blocks in this region are offset from their title/slug pairs
+(same artifact class as #49/#58); title+slug
+fuzz-engine-differential is authoritative.
+
+### Hypothesis
+The C++ PSBT parser (decodepsbt RPC — the production parser the fuzz
+engine exercises) and the test framework's independent Python PSBT
+implementation (test_framework/psbt.py) can diverge on adversarial
+inputs: either C++ over-accepts (production defect class) or the two
+disagree on canonical form (round-trip inequality).
+
+### Method
+Independent generator (python random, fixed seed 0x80) mutating the
+two RPC-verified valid seeds from #50 (/tmp/btc50_seed/{psbt_min,
+psbt_1in}): 400 cases, byte mutations (flip/truncate/extend/insert/
+delete) + map-level structural mutations (KV shuffle, key
+duplication). Per case: C++ verdict via decodepsbt RPC, Python
+verdict via PSBT.deserialize + serialize round-trip. Classes:
+A = C++ accepts/Python rejects (critical direction),
+B = double-accept but reserialize != input (non-canonical),
+C = C++ rejects/Python accepts (expected only for Python-lax),
+D = both reject, E = both accept + round-trip equal, R = Python
+resource-limited (MemoryError under a 4 GiB RLIMIT_AS).
+
+### Result (deterministic, reproducible)
+TALLY: A=0 B=0 C=123 D=134 E=142 R=1.
+- A=0: production never over-accepts vs the reference. Clean.
+- E=142: every double-accepted document round-trips byte-identically
+  (B=0 non-canonical double-accepts).
+- C=123 sampled reasons — ALL Python-is-laxer, each with a named
+  mechanism: "extra data after PSBT" (C++ full-consumption check;
+  Python never checks EOF), "Separator is missing at the end of the
+  global map" (C++ requires the 0x00 separator strictly),
+  "non-canonical ReadCompactSize()" (C++ canonicality — the O1
+  battery's domain; Python's deser_compact_size accepts
+  non-canonical), "SpanReader end of data" (Python's deser_string
+  under-reads short buffers without raising).
+- R=1: one hostile-count case hit the 4 GiB per-process guard and
+  was contained per-case (see incident note).
+
+### Incident/harness notes (honest record)
+1. First run OOM-killed (kernel log 2026-07-29 06:27, python3
+   14.8 GB RSS): a mutated CompactSize input-count drove the
+   framework's `[from_binary(PSBTMap, f) for _ in range(in_count)]`
+   (psbt.py:132) to allocate unboundedly — the Python reference
+   trusts untrusted counts; the C++ parser rejects the same bytes
+   cheaply (fast bad_alloc). Fixed by RLIMIT_AS=4 GiB + per-case
+   MemoryError classification (class R). No server restart; no other
+   process harmed; /tmp/btc80 cleaned.
+2. Second run was invalidated by MY harness bug: I passed hex to
+   decodepsbt (expects base64) — E=0 exposed it immediately because
+   ~1/7 of cases are zero-mutation and must double-accept. Added an
+   explicit positive-control assertion (E>0) so the harness fails
+   loud on this class. Fixed; v2 result above.
+
+### Verdict
+DISMISSED (no production divergence): 276/400 agreement (E+D), zero
+critical-direction cases, all 123 C divergences are reference-lax
+with named mechanisms. The Python framework's laxness (untrusted
+counts, short reads, no EOF/canonicality checks) is test-helper
+behavior, upstream-matching, and harmless in its role (input
+construction, not oracle) — no local patch (would diverge from
+upstream for zero production benefit; no security theater).
+
+### Exact commands
+- python3 /tmp/btc80_diff.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc80 (deterministic seed 0x80, 400
+  cases, ~2.5 min; script preserved at /tmp/btc80_diff.py)
+- dmesg -T | grep -i oom (incident evidence)
+
+### Limitations / queue for cycle 2
+- 400 cases from 2 seeds; a wider seed set (PSBTv2 documents,
+  taproot fields) would stress version-2 paths the v0 seeds never
+  reach.
+- The differential used decodepsbt (accept/reject) as the C++
+  verdict; the fuzz target's internal round-trip asserts (ser∘de=id)
+  were not directly compared against Python's reserialization for
+  v2 PSBTs.
+- Other parser pairs with independent Python references in the
+  framework: CTransaction/CTxIn (messages.py vs core), merkleblock
+  (already covered #6 c2), BIP152 HeaderAndShortIDs — candidates
+  for the next cell.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
