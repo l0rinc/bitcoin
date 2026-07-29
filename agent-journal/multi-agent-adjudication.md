@@ -104,3 +104,74 @@ perf decision with an now-verified-equivalence premise.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): A11 kernel input_index assert — split verdict; breaker wins on policy + author's own fix branch
+
+### Draw
+Re-rank draw over the rebuilt 3-cell queue:
+raw=6403733973450834911, index 2 -> #40 (second cycle; c1 queue
+"L1 bloom ctor is the next adjudication candidate" — superseded by
+#102 c1's L1 replay; A11 kernel input_index assert is next).
+Branch: audit/multi-agent-adjudication-c2 from 63b4ed5862
+(#106 c2 bookkeeping).
+
+### Protocol (same as c1)
+Two independent subagents, identical inputs, no shared context,
+opposite stances: defender (assert acceptable for WIP API) vs
+breaker (assert is a defect). Adjudicator verifies decisive claims
+directly.
+
+### Agent positions
+- DEFENDER: acceptable — 7+ sibling index asserts are house style;
+  API is explicitly unstable/unreleased (bitcoinkernel.h:75-76);
+  NDEBUG is stripped project-wide (ProcessConfigurations.cmake:
+  121-125) so no silent UB, and an un-ignorable abort beats a
+  nullable status; precondition is cheaply caller-checkable; no
+  in-tree consumer. Flip triggers: stabilization, release
+  inclusion, data-derived-index consumer.
+- BREAKER: defect — developer-notes.md:369-371 ("must never be
+  used to validate user, network or any other input"; an API
+  caller IS the user); intra-function inconsistency (every other
+  caller error uses the status channel); precondition undocumented;
+  abort from a shared lib = host DoS for embedders; fix tiny and
+  API-permitted; upstream master still carries it; the fork
+  author's own branch already implements the fix (6f23568be8).
+
+### Adjudicator verification (direct)
+- developer-notes.md:369-371 — quote verified verbatim.
+- remotes/l0rinc/l0rinc/kernel-handle-invalid-c-api-arguments:
+  6f23568be8 "kernel: report invalid script verification
+  arguments" — "Invalid script verification flags and input indexes
+  currently trigger public C-API assertions. Report both through
+  btck_ScriptVerifyStatus." Verified: the exact fix exists on the
+  fork author's own branch (plus d2f17ee891, 80257396b6 in the
+  same invalid-arguments series).
+
+### Verdict (adjudicated)
+DEFECT-CLASSIFIED, parked with the author: the breaker wins — the
+assert violates the project's stated assertion policy at a public
+API boundary, and the fork author demonstrably agrees (his branch
+replaces it with a status report). The defender's sibling-
+convention argument holds only for the pointer-getter sites, which
+lack an error channel; this function HAS one and uses it for every
+analogous input error. Severity for THIS tree: none today
+(unreleased WIP API, no in-tree caller, unreleased). No local fix:
+the fix belongs to the author's upstreaming path (his branch), not
+to this rotation (rotation records, never adopts the fork author's
+own work). A11 in suspicion-index.md updated accordingly.
+
+### Method note
+First split verdict of the pattern; the adjudication protocol
+(decisive-document + branch evidence over agent authority) worked
+as designed.
+
+### Exact commands
+- two explore subagents (defender/breaker prompts; transcripts in
+  session history)
+- sed doc/developer-notes.md:367-378
+- git log/show remotes/l0rinc/l0rinc/kernel-handle-invalid-c-api-
+  arguments
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.

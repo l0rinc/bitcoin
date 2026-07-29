@@ -41,5 +41,9 @@ A10 | L1 CBloomFilter sizing-ctor zero-input UB | #106-index L1 |
   production never calls sizing ctor; fuzz clamps >=1) | high |
   watch l0rinc PR 35818 (open, 2026-07-28)
 A11 | kernel input_index assert (bitcoinkernel.cpp:717) | #46 c1 |
-  kernel C API | NOTE — upstream WIP precondition, assert-guarded |
-  medium | revisit when kernel API stabilizes
+  kernel C API | DEFECT-CLASSIFIED (adjudicated #40 c2): violates
+  developer-notes.md:369-371 at a public boundary; intra-function
+  inconsistency (status channel used for all analogous errors);
+  severity none today (unreleased WIP API, no in-tree caller) |
+  high | fork author's own branch carries the fix (6f23568be8);
+  watch his upstreaming path
