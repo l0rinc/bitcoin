@@ -1542,7 +1542,9 @@ BOOST_FIXTURE_TEST_CASE(MempoolCheckSaturatingFeeDiagram, TestChain100Setup)
         LOCK(pool.cs);
         const auto diagram{pool.GetFeerateDiagram()};
         BOOST_REQUIRE(!diagram.empty());
-        BOOST_CHECK_EQUAL(diagram.back().fee, std::numeric_limits<CAmount>::min() + fee);
+        // The independent transaction and the max-prioritised child follow the
+        // minimum-saturated parents in the diagram, resulting in 10'000 - 1.
+        BOOST_CHECK_EQUAL(diagram.back().fee, 9'999);
     }
     WITH_LOCK(::cs_main, pool.check(m_node.chainman->ActiveChainstate().CoinsTip(), m_node.chainman->ActiveChain().Height() + 1));
 }
