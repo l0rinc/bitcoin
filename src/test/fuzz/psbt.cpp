@@ -238,6 +238,14 @@ FUZZ_TARGET(psbt, .init = initialize_psbt)
         tap_builder.Add(/*depth=*/0, tap_leaf, TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
         tap_builder.Finalize(XOnlyPubKey{CPubKey{ParseHex("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")}});
         provider.tr_trees.emplace(tap_builder.GetOutput(), tap_builder);
+
+        // Multisig support: register a 2-of-3 P2WSH script with both fuzz
+        // keys plus an unowned third key (chosen 0x5c-clean so seeds can
+        // carry it inside random-length-consumed documents).
+        const CPubKey unknown{ParseHex("024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766")};
+        CScript ms_script;
+        ms_script << OP_2 << keys[0].GetPubKey() << keys[1].GetPubKey() << unknown << OP_3 << OP_CHECKMULTISIG;
+        provider.scripts.emplace(CScriptID(ms_script), ms_script);
     }
     PartiallySignedTransaction psbt_sign = psbt;
     const std::optional<PrecomputedTransactionData> txdata{PrecomputePSBTData(psbt_sign)};
