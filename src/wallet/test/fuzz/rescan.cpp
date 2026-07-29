@@ -430,6 +430,40 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
         LOCK(wallet->cs_wallet);
         Assert(wallet->mapWallet.contains(tx->GetHash()));
     }
+
+    // ---- Crash-resume durability invariant (#71 c2) ----
+    // A save_progress scan persists its position (BESTBLOCK record). A
+    // later process resuming from that record must not miss any wallet
+    // transaction in the remaining range, and resuming must not lose
+    // previously found transactions.
+    if (save_progress && result.last_scanned_height.has_value()) {
+        const uint256 recorded{WITH_LOCK(wallet->cs_wallet, return wallet->GetLastBlockHash())};
+        int recorded_idx{-1};
+        for (size_t i{0}; i < chain.blocks.size(); ++i) {
+            if (chain.blocks[i].hash == recorded) { recorded_idx = static_cast<int>(i); break; }
+        }
+        // v1 scope: resume only when the recorded position is an original
+        // chain block we can locate deterministically (extension-block
+        // resume is a separate cell).
+        if (recorded_idx >= 0 && recorded_idx + 1 < n_blocks) {
+            const size_t wallet_size_before{WITH_LOCK(wallet->cs_wallet, return wallet->mapWallet.size())};
+            int64_t now_calls2{0};
+            reserver.setNow([&]() { return SteadyClock::time_point{SteadyClock::duration{2000 + (++now_calls2) * now_step}}; });
+            const auto resume_result{wallet->ScanForWalletTransactions(recorded, recorded_idx, std::nullopt, reserver, /*save_progress=*/false)};
+            // The resume must not have lost any previously found wallet txs.
+            const size_t wallet_size_after{WITH_LOCK(wallet->cs_wallet, return wallet->mapWallet.size())};
+            Assert(wallet_size_after >= wallet_size_before);
+            // And every wallet tx in blocks after the recorded position that
+            // the original scan saw must be present after the resume.
+            if (resume_result.status == CWallet::ScanResult::SUCCESS) {
+                for (int i = recorded_idx + 1; i < n_blocks; ++i) {
+                    if (!wallet_txs[i] || !chain.blocks[i].active || !chain.blocks[i].has_data) continue;
+                    LOCK(wallet->cs_wallet);
+                    Assert(wallet->mapWallet.contains(wallet_txs[i]->GetHash()));
+                }
+            }
+        }
+    }
 }
 
 } // namespace
