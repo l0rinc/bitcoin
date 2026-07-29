@@ -4,13 +4,26 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Cycle 89 is complete on goal 27 (`error-path-state`), selected by exact `shuf -i 0-98 -n 1` -> `27` after Cycle 88 closed goal 74. Its source/test/journal commit is `600afa95995f5aaa50c23b6b6c2f940dc61674bb`; the close snapshot is this state update.
+- Cycle 90 is complete on goal 69 (`backend-differential`), selected by exact `shuf -i 0-98 -n 1` -> `69` after Cycle 89 closed goal 27. Its four-build ECDH/backend differential found no confirmed defect and made no source change; the close snapshot is this state update. The dedicated branch is `uber-cycle-90-backend-differential-20260729`.
 - No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
 
 ## Latest authoritative checkpoint
 
 - Cycle 89 is complete on goal 27 (`error-path-state`). The dedicated branch is `uber-cycle-89-error-path-state-20260729`; start HEAD was `e005d70cebd00aa20a4d8c8ac73ad9e5720530f7`, source/test/journal close HEAD is `600afa95995f5aaa50c23b6b6c2f940dc61674bb`, `origin/master` is `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`, merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `2 966` (`origin/master...HEAD`). Catalog, protocol, and TSV hashes match the recorded values. The gate and final `git diff --check` passed; no relevant Bitcoin Core process was running.
 - Cycle 89 distinct scope: status/result/exception APIs that mutate shared objects, caches, files, transactions, indexes, or retry state before returning failure. Earlier goal-27 wallet passphrase, transaction-download/index, address-book publication, and `setlabel` RPC cells are excluded unless new backend, restart, or caller evidence changes their priority. The initial mining `BlockTemplate::submitSolution` hypothesis was dismissed because the functional IPC contract intentionally exposes the rejected reconstructed block through `getBlock()` and supports a valid retry on the same template.
+- Cycle 90 is complete on goal 69 (`backend-differential`). The dedicated branch is `uber-cycle-90-backend-differential-20260729`; start HEAD was `89b836342154f71d5d4427dc13864702170eec42`, `origin/master` is `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`, merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `2 968` (`origin/master...HEAD`). Catalog, protocol, and TSV hashes match the recorded values. The gate and final `git diff --check` passed; no relevant Bitcoin Core process was running. Prior goal-69 evidence covered x86_64 Clang API parity with ECDH disabled; this cycle covered ECDH plus Release compiler/backend configuration parity.
+
+## Cycle 90 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `69` (`backend-differential`).
+- Branch: `uber-cycle-90-backend-differential-20260729`.
+- Distinct scope: ECDH enabled, ECDH-only module composition, Release builds, GCC 12 versus Clang 19, and x86_64 assembly versus portable C. The prior ECDH-disabled Clang Debug/full-module cell was excluded.
+- Matrix: four fresh CMake/Ninja builds, with `SECP256K1_ASM=OFF` and `x86_64` crossed against GCC 12.2.0 and Clang 19.1.7. Unit and order-13 exhaustive tests were enabled.
+- Differential result: the fixed external probe ran 4096 vectors per build and returned `vectors=4096 failures=0 digest=88259292f10dcdc7` in every configuration. `cmp` was identical for reference/assembly and cross-compiler pairs.
+- Validation: all four `bin/tests --iterations=2 --seed=0123456789abcdef --jobs=2 --log=1` runs passed, including ECDH and Wycheproof cases; all four `bin/exhaustive_tests` runs reported `test count = 2` and `no problems found`.
+- Verdict: no current backend, compiler, ECDH status, serialization, or algebraic mismatch was confirmed. No source change or finding commit is justified.
+- Limitations: x86_64 little-endian only; no ARM, 32-bit, big-endian, full-module composition, LTO, sanitizer, ctime, or Valgrind run. Detailed evidence remains in the existing untracked `agent-journal/backend-differential.md` and scratch root `/data/my_storage/tmp/cycle90-backend-differential`; known untracked artifacts remain unmodified in commit scope.
+- Next selector draw is pending. The next run must perform a fresh gate and choose a distinct catalog goal, rerolling only if the draw is the just-closed campaign without new evidence.
 
 ## Cycle 89 Completion
 
