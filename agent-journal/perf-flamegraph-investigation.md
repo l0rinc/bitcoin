@@ -148,3 +148,48 @@ CompareMainTransactions hypotheses — carry forward).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-07-29): EvictionProtection* + ConnectBlockAll* profiles — both clean
+
+### Draw
+Re-rank draw over the rebuilt 10-cell queue (after #25 c3):
+raw=8627252179256411442, index 6 -> #23 (third cycle; c1 queue cell
+"EvictionProtection*/ConnectBlockAll profiles (different hot
+paths)"). Branch: audit/perf-flamegraph-c3 from 4359b1c324
+(#25 c3 bookkeeping).
+
+### EvictionProtection3Networks250Candidates
+- Bench is micro: 34.0 us/op (33,944 ns), 7 samples at F 199 — the
+  measured body is tiny; setup dominates the wall.
+- Profile: ReverseCompareNodeTimeConnected 33%,
+  ProtectEvictionCandidatesByRatio 33%, heap adjust (Compare
+  NodeNetworkTime) 33% — exactly the O(n log n) sort of 250
+  candidates. No unguarded per-call work; nothing to fix.
+
+### ConnectBlockAllSchnorr (56 samples)
+- ~98% secp256k1 verification math: gej_add_ge_var 67%,
+  gej_double 24%, schnorrsig_challenge 8%. Consistent with #21
+  c2/c3 (EC is the validation cost; the bench measures exactly the
+  expected work). No bookkeeping anomaly, no new fix candidate.
+
+### Verdict
+DISMISSED: both hot paths are work-shaped as designed (sort vs EC
+verify). The c1/c2 family of perf findings (unguarded loops,
+zero-state sweeps) has no analog here.
+
+### Exact commands
+- perf record -F 199 -g bench_bitcoin --filter=
+  EvictionProtection3Networks250Candidates / ConnectBlockAllSchnorr
+  --min-time=3000/4000; perf report --percent-limit=2/3
+- artifacts: /tmp/btc23_evict.perf, /tmp/btc23_cb.perf
+
+### Limitations / queue
+- Sample counts are small (7/56) — the benches are brief; a
+  --min-time=30s variant would tighten attributions, but the top-3
+  functions are unambiguous at these shares.
+- TxGraph::CompareMainTransactions / memcmp share hypothesis (c1
+  queue) still open — needs a bigger mempool-diff workload.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
