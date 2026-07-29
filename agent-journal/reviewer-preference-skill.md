@@ -239,3 +239,43 @@ Score: 2/3 confirmed, 1 refined — same shape as c1's held-out.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-07-29): reusable review skill encoded — reviews/reviewer-rules.md (R1-R13 + reviewer map)
+
+### Draw
+Re-rank draw over the 7 remaining CYCLE-2+ open cells:
+raw=2554837129443345158, index 6 -> #60 (third cycle; c2 queue cell
+"R1-R13 not yet encoded into reviews/ templates — now the
+highest-value next cell"). Branch: audit/reviewer-skill-c3 from
+0e47dc4623 (#76 c3 bookkeeping).
+
+### Deliverable
+reviews/reviewer-rules.md — durable, undated reference: all 13
+rules with trigger/question/evidence/class, the R2-vs-R12 tension
+line ("Assume for logic invariants, prove-by-construction for type
+invariants, never dead-defend"), the reviewer map (8 reviewers with
+observed behavior), and application notes (house-style overlap,
+pre-submission checklist use, watch items 35744/35818).
+Indexed in reviews/README.md per the directory's convention.
+
+### Validation of the encoding
+Every rule cites its mined evidence (comment id or PR:line) from
+c1/c2; no rule added without evidence, none dropped. The two
+held-out validations (35754, 35670; both 2/3+1) are recorded in
+the file as the confidence basis.
+
+### Verdict
+Deliverable complete (journal + template; no repo code touched).
+The campaign's "reusable review skill" artifact now exists and is
+indexed; future PR reviews in this seam should cite R-numbers
+against it and extend when new evidence lands.
+
+### Queue for cycle 4
+- Validate the template against a NEW held-out PR (post-encoding,
+  blind application) — the acceptance test of the skill itself.
+- Maintainer merge-rationale comments (still unmined).
+- Second author seam (maflcko's own PRs) for generality.
+
+## Rotation note
+Three cycles; the core deliverable is done. Campaign remains open
+for held-out validation of the template itself.
