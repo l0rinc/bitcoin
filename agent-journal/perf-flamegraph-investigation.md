@@ -193,3 +193,52 @@ zero-state sweeps) has no analog here.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-29): CompareMainTransactions/memcmp share hypotheses — closed as inherent-by-design
+
+### Draw
+Re-rank draw over the rebuilt 6-cell queue:
+raw=6107678024432235403, index 1 -> #23 (fourth cycle; c1 queue
+"TxGraph::CompareMainTransactions / memcmp share: rank fix
+hypotheses"). Branch: audit/perf-flamegraph-c4 from f00d25edbe
+(#34 c4 bookkeeping).
+
+### Fresh profile (ComplexMemPool at HEAD, post-c1-fix, 43 samples)
+Flat distribution (~16% each): malloc, memcmp, __aarch64_swp4_rel
+(shared_ptr atomic swap), TxGraphImpl::UnlinkRef, system_clock.
+No single dominant target; CompareMainTransactions itself is below
+the 2% cutoff in this run.
+
+### Code assessment
+- memcmp: txid comparisons inside the hashed/B-tree indexes —
+  32-byte libc memcmp, already optimal; the cost is key-comparison
+  frequency, inherent to the index design.
+- CompareMainTransactions (txgraph.cpp:545-576): lexicographic O(1)
+  comparator (feerate ratio -> prefix size -> fallback order ->
+  linearization index) with early exits; cost is sort invocation
+  frequency, not per-call inefficiency. The Assume(false) at :571
+  documents the strong-ordering contract (c1/c3 claim audit
+  territory, verified there).
+- malloc/atomics: graph allocation + refcount churn; data-structure
+  inherent.
+
+### Verdict
+DISMISSED: the c1-flagged residual shares are inherent-by-design
+(index keys, O(1) comparator, allocation); no unguarded work like
+the c1/c2 findings, no fix candidate. Hypotheses closed.
+
+### Exact commands
+- perf record -F 199 -g bench_bitcoin --filter=ComplexMemPool
+  --min-time=3000; perf report --percent-limit=2
+- reads: txgraph.cpp:545-576 (comparator), :579-589 (ChunkOrder)
+
+### Limitations / queue
+- 43 samples is thin (bench is brief); a 30s variant would tighten
+  the flat distribution but the code-level assessment is decisive.
+- No open perf hypotheses on the mempool paths from this campaign
+  at this point; future re-profiling after upstream cluster-mempool
+  changes.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
