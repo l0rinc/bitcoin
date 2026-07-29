@@ -371,3 +371,89 @@ read-equivalence — queued.
 Four cycles; validation.cpp delta passed (3 deep, rest
 dispositioned). Not exhausted (prevout-pool differential,
 net_processing delta).
+
+## Cycle 6 (2026-07-29): net_processing fork-delta critical-defect pass — stripped-request machinery SOUND; count indices balanced
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=1440765120485782254, index 4 (of 5) -> #49 (sixth cycle; c5
+queue cell "net_processing.cpp fork-delta pass"). Branch:
+audit/critical-history-c6 from 2658b23484 (#101 c3 journal tip).
+Audit target ref: master (b08815bbb5), ref-based reads (see c4
+lineage note). Delta: 6 commits, all prune-assumevalid/download.
+
+### Mechanism 1: stripped block requests (4974124e32) — SOUND
+Hypothesis: a block can be accepted without required witness data
+(witness-commitment unchecked where upstream checks), or a stale
+stripped response punishes an honest peer.
+Analysis (master:src/net_processing.cpp):
+- Send side: per-request flag recorded at send time
+  (QueuedBlock.request_without_witness; GetFetchFlags(peer, block)
+  returns 0 flags exactly when ShouldRequestStripped... at the same
+  lock/instant as BlockRequested records it — consistent pair).
+  Non-witness peers are asked ONLY for stripped-eligible blocks
+  (:1526-1530); compact-block upgrade suppressed for stripped
+  (:2948).
+- Receive side: prune_assumevalid = !has_witness &&
+  requested_without_witness && CanUsePruneAssumeValid(*block_index)
+  — the LIVE eligibility predicate is re-checked at receipt, and the
+  witness-mutation check skip is conditioned on it. A stale stripped
+  response (asked stripped, no longer eligible) is ignored WITHOUT
+  Misbehaving and with only this peer's request removed; an
+  unsolicited or unflagged stripped block falls through to normal
+  rules; a full block answering a stripped request is processed
+  normally. Defense in depth holds.
+- Trust-model note (not a defect): below the assumevalid boundary
+  the witness commitment is unverifiable on stripped blocks — the
+  same opt-in trust extension as assumevalid itself; a
+  commitment-invalid block cannot sustain on the most-work chain
+  because full-checking nodes reject it.
+- GetBlockDownloadWindow: stripped path uses the NARROWER window
+  (PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW = 16x8=128 <
+  BLOCK_DOWNLOAD_WINDOW 1024) — bounds the transient in-memory
+  cache; still >0, no stall shape (download-timeout machinery
+  unchanged).
+
+### Mechanism 2: request-decision reuse (87765f3960) — SOUND
+Any staleness in the cached request-side decision can only produce
+a stale stripped RESPONSE, which Mechanism 1's receive-side double
+check ignores safely. Bounded by defense in depth.
+
+### Mechanism 3: in-flight request count indices (df83a0058b, fb954e3111) — SOUND
+Hypothesis: a removal path misses the decrement -> phantom
+"in flight" count suppresses re-request forever (sync stall).
+Falsified: increments only in BlockRequested (:1342); decrements at
+both removal paths — RemoveBlockRequest per erased entry (:1308)
+and FinalizeNode per disconnecting peer entry (:1816); re-request
+removes-then-adds (:1332); zero-erase on --count==0; Assume-guarded
+underflow (index_count_it != end, >0).
+
+### Dispositioned by class
+- a681a7e674 / 6eb57cf954 (request-count / cache-byte caps):
+  liveness bounds; cap accounting follows the same paired-mutation
+  pattern verified above.
+
+### Verdict
+DISMISSED: no reachable critical defect in the net_processing
+prune-assumevalid delta on master. The download-side feature
+machinery (validation.cpp from c4 + net_processing.cpp here) is
+sound as read; the remaining feature surface is the prevout-pool
+read-equivalence differential (c5 queue, needs a master build).
+
+### Exact commands
+- git log --oneline origin/master..master -- src/net_processing.cpp
+- git show 4974124e32 fb954e3111; git show master:src/
+  net_processing.cpp (:1238-1342, :1800-1830, :4861-4920);
+  git grep master for RemoveBlockRequest/Decrement callers
+
+### Limitations / queue
+- Static reads; no dynamic multi-peer scenario run (the author's
+  functional test from 4974124e32 covers startup/stripped/out-of-
+  order/restart shapes).
+- c7 cell candidates: prevout-pool differential (needs master
+  build); 0d72be5374 flush-cadence interaction with the 100-min
+  schedule under crash-injection.
+
+## Rotation note
+Six cycles; both fork-delta files passed. Not exhausted
+(prevout-pool differential remains the one dynamic cell).
