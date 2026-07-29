@@ -153,7 +153,7 @@ struct btck_TxValidationState : Handle<btck_TxValidationState, TxValidationState
 
 namespace {
 
-BCLog::Level get_bclog_level(btck_LogLevel level)
+constexpr BCLog::Level get_bclog_level(btck_LogLevel level)
 {
     switch (level) {
     case btck_LogLevel_INFO: {
@@ -168,8 +168,11 @@ BCLog::Level get_bclog_level(btck_LogLevel level)
     }
     assert(false);
 }
+static_assert(get_bclog_level(btck_LogLevel_INFO) == BCLog::Level::Info);
+static_assert(get_bclog_level(btck_LogLevel_DEBUG) == BCLog::Level::Debug);
+static_assert(get_bclog_level(btck_LogLevel_TRACE) == BCLog::Level::Trace);
 
-BCLog::LogFlags get_bclog_flag(btck_LogCategory category)
+constexpr BCLog::LogFlags get_bclog_flag(btck_LogCategory category)
 {
     switch (category) {
     case btck_LogCategory_BENCH: {
@@ -208,8 +211,19 @@ BCLog::LogFlags get_bclog_flag(btck_LogCategory category)
     }
     assert(false);
 }
+static_assert(get_bclog_flag(btck_LogCategory_BENCH) == BCLog::LogFlags::BENCH);
+static_assert(get_bclog_flag(btck_LogCategory_BLOCKSTORAGE) == BCLog::LogFlags::BLOCKSTORAGE);
+static_assert(get_bclog_flag(btck_LogCategory_COINDB) == BCLog::LogFlags::COINDB);
+static_assert(get_bclog_flag(btck_LogCategory_LEVELDB) == BCLog::LogFlags::LEVELDB);
+static_assert(get_bclog_flag(btck_LogCategory_MEMPOOL) == BCLog::LogFlags::MEMPOOL);
+static_assert(get_bclog_flag(btck_LogCategory_PRUNE) == BCLog::LogFlags::PRUNE);
+static_assert(get_bclog_flag(btck_LogCategory_RAND) == BCLog::LogFlags::RAND);
+static_assert(get_bclog_flag(btck_LogCategory_REINDEX) == BCLog::LogFlags::REINDEX);
+static_assert(get_bclog_flag(btck_LogCategory_VALIDATION) == BCLog::LogFlags::VALIDATION);
+static_assert(get_bclog_flag(btck_LogCategory_KERNEL) == BCLog::LogFlags::KERNEL);
+static_assert(get_bclog_flag(btck_LogCategory_ALL) == BCLog::LogFlags::ALL);
 
-btck_SynchronizationState cast_state(SynchronizationState state)
+constexpr btck_SynchronizationState cast_state(SynchronizationState state)
 {
     switch (state) {
     case SynchronizationState::INIT_REINDEX:
@@ -221,8 +235,11 @@ btck_SynchronizationState cast_state(SynchronizationState state)
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
+static_assert(cast_state(SynchronizationState::INIT_REINDEX) == btck_SynchronizationState_INIT_REINDEX);
+static_assert(cast_state(SynchronizationState::INIT_DOWNLOAD) == btck_SynchronizationState_INIT_DOWNLOAD);
+static_assert(cast_state(SynchronizationState::POST_INIT) == btck_SynchronizationState_POST_INIT);
 
-btck_Warning cast_btck_warning(kernel::Warning warning)
+constexpr btck_Warning cast_btck_warning(kernel::Warning warning)
 {
     switch (warning) {
     case kernel::Warning::UNKNOWN_NEW_RULES_ACTIVATED:
@@ -232,6 +249,27 @@ btck_Warning cast_btck_warning(kernel::Warning warning)
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
+static_assert(cast_btck_warning(kernel::Warning::UNKNOWN_NEW_RULES_ACTIVATED) == btck_Warning_UNKNOWN_NEW_RULES_ACTIVATED);
+static_assert(cast_btck_warning(kernel::Warning::LARGE_WORK_INVALID_CHAIN) == btck_Warning_LARGE_WORK_INVALID_CHAIN);
+
+// Numeric-identity tripwires: these five enum families currently have
+// identical values on the C++ and btck_* sides. A renumbering of
+// either side fails the build here, which is the desired early
+// warning — name-mapping keeps behavior correct, but silent value
+// drift should be a deliberate act, not an accident. Families whose
+// contract is NAME-mapping rather than numeric identity
+// (btck_ChainType vs util/chaintype.h's differently-ordered
+// ChainType, btck_LogCategory vs the BCLog::LogFlags bitmask) are
+// covered by the pairing static_asserts on their cast functions
+// instead.
+static_assert(int(SynchronizationState::INIT_REINDEX) == int(btck_SynchronizationState_INIT_REINDEX));
+static_assert(int(SynchronizationState::INIT_DOWNLOAD) == int(btck_SynchronizationState_INIT_DOWNLOAD));
+static_assert(int(SynchronizationState::POST_INIT) == int(btck_SynchronizationState_POST_INIT));
+static_assert(int(kernel::Warning::UNKNOWN_NEW_RULES_ACTIVATED) == int(btck_Warning_UNKNOWN_NEW_RULES_ACTIVATED));
+static_assert(int(kernel::Warning::LARGE_WORK_INVALID_CHAIN) == int(btck_Warning_LARGE_WORK_INVALID_CHAIN));
+static_assert(int(BCLog::Level::Trace) == int(btck_LogLevel_TRACE));
+static_assert(int(BCLog::Level::Debug) == int(btck_LogLevel_DEBUG));
+static_assert(int(BCLog::Level::Info) == int(btck_LogLevel_INFO));
 
 struct LoggingConnection {
     std::unique_ptr<std::list<std::function<void(const std::string&)>>::iterator> m_connection;
@@ -985,10 +1023,9 @@ btck_ValidationMode btck_block_validation_state_get_validation_mode(const btck_B
     return btck_ValidationMode_INTERNAL_ERROR;
 }
 
-btck_BlockValidationResult btck_block_validation_state_get_block_validation_result(const btck_BlockValidationState* block_validation_state_)
+constexpr btck_BlockValidationResult cast_block_validation_result(BlockValidationResult result)
 {
-    auto& block_validation_state = btck_BlockValidationState::get(block_validation_state_);
-    switch (block_validation_state.GetResult()) {
+    switch (result) {
     case BlockValidationResult::BLOCK_RESULT_UNSET:
         return btck_BlockValidationResult_UNSET;
     case BlockValidationResult::BLOCK_CONSENSUS:
@@ -1009,6 +1046,30 @@ btck_BlockValidationResult btck_block_validation_state_get_block_validation_resu
         return btck_BlockValidationResult_HEADER_LOW_WORK;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
+}
+static_assert(cast_block_validation_result(BlockValidationResult::BLOCK_RESULT_UNSET) == btck_BlockValidationResult_UNSET);
+static_assert(cast_block_validation_result(BlockValidationResult::BLOCK_CONSENSUS) == btck_BlockValidationResult_CONSENSUS);
+static_assert(cast_block_validation_result(BlockValidationResult::BLOCK_CACHED_INVALID) == btck_BlockValidationResult_CACHED_INVALID);
+static_assert(cast_block_validation_result(BlockValidationResult::BLOCK_INVALID_HEADER) == btck_BlockValidationResult_INVALID_HEADER);
+static_assert(cast_block_validation_result(BlockValidationResult::BLOCK_MUTATED) == btck_BlockValidationResult_MUTATED);
+static_assert(cast_block_validation_result(BlockValidationResult::BLOCK_MISSING_PREV) == btck_BlockValidationResult_MISSING_PREV);
+static_assert(cast_block_validation_result(BlockValidationResult::BLOCK_INVALID_PREV) == btck_BlockValidationResult_INVALID_PREV);
+static_assert(cast_block_validation_result(BlockValidationResult::BLOCK_TIME_FUTURE) == btck_BlockValidationResult_TIME_FUTURE);
+static_assert(cast_block_validation_result(BlockValidationResult::BLOCK_HEADER_LOW_WORK) == btck_BlockValidationResult_HEADER_LOW_WORK);
+static_assert(int(BlockValidationResult::BLOCK_RESULT_UNSET) == int(btck_BlockValidationResult_UNSET));
+static_assert(int(BlockValidationResult::BLOCK_CONSENSUS) == int(btck_BlockValidationResult_CONSENSUS));
+static_assert(int(BlockValidationResult::BLOCK_CACHED_INVALID) == int(btck_BlockValidationResult_CACHED_INVALID));
+static_assert(int(BlockValidationResult::BLOCK_INVALID_HEADER) == int(btck_BlockValidationResult_INVALID_HEADER));
+static_assert(int(BlockValidationResult::BLOCK_MUTATED) == int(btck_BlockValidationResult_MUTATED));
+static_assert(int(BlockValidationResult::BLOCK_MISSING_PREV) == int(btck_BlockValidationResult_MISSING_PREV));
+static_assert(int(BlockValidationResult::BLOCK_INVALID_PREV) == int(btck_BlockValidationResult_INVALID_PREV));
+static_assert(int(BlockValidationResult::BLOCK_TIME_FUTURE) == int(btck_BlockValidationResult_TIME_FUTURE));
+static_assert(int(BlockValidationResult::BLOCK_HEADER_LOW_WORK) == int(btck_BlockValidationResult_HEADER_LOW_WORK));
+
+btck_BlockValidationResult btck_block_validation_state_get_block_validation_result(const btck_BlockValidationState* block_validation_state_)
+{
+    auto& block_validation_state = btck_BlockValidationState::get(block_validation_state_);
+    return cast_block_validation_result(block_validation_state.GetResult());
 }
 
 btck_ChainstateManagerOptions* btck_chainstate_manager_options_create(const btck_Context* context, const char* data_dir, size_t data_dir_len, const char* blocks_dir, size_t blocks_dir_len)
@@ -1524,9 +1585,9 @@ btck_TxValidationState* btck_tx_validation_state_create()
     return btck_TxValidationState::create();
 }
 
-btck_TxValidationResult btck_tx_validation_state_get_tx_validation_result(const btck_TxValidationState* state_)
+constexpr btck_TxValidationResult cast_tx_validation_result(TxValidationResult result)
 {
-    switch (btck_TxValidationState::get(state_).GetResult()) {
+    switch (result) {
     case TxValidationResult::TX_RESULT_UNSET:        return btck_TxValidationResult_UNSET;
     case TxValidationResult::TX_CONSENSUS:           return btck_TxValidationResult_CONSENSUS;
     case TxValidationResult::TX_INPUTS_NOT_STANDARD: return btck_TxValidationResult_INPUTS_NOT_STANDARD;
@@ -1542,6 +1603,37 @@ btck_TxValidationResult btck_tx_validation_state_get_tx_validation_result(const 
     case TxValidationResult::TX_UNKNOWN:             return btck_TxValidationResult_UNKNOWN;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
+}
+static_assert(cast_tx_validation_result(TxValidationResult::TX_RESULT_UNSET) == btck_TxValidationResult_UNSET);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_CONSENSUS) == btck_TxValidationResult_CONSENSUS);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_INPUTS_NOT_STANDARD) == btck_TxValidationResult_INPUTS_NOT_STANDARD);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_NOT_STANDARD) == btck_TxValidationResult_NOT_STANDARD);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_MISSING_INPUTS) == btck_TxValidationResult_MISSING_INPUTS);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_PREMATURE_SPEND) == btck_TxValidationResult_PREMATURE_SPEND);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_WITNESS_MUTATED) == btck_TxValidationResult_WITNESS_MUTATED);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_WITNESS_STRIPPED) == btck_TxValidationResult_WITNESS_STRIPPED);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_CONFLICT) == btck_TxValidationResult_CONFLICT);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_MEMPOOL_POLICY) == btck_TxValidationResult_MEMPOOL_POLICY);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_NO_MEMPOOL) == btck_TxValidationResult_NO_MEMPOOL);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_RECONSIDERABLE) == btck_TxValidationResult_RECONSIDERABLE);
+static_assert(cast_tx_validation_result(TxValidationResult::TX_UNKNOWN) == btck_TxValidationResult_UNKNOWN);
+static_assert(int(TxValidationResult::TX_RESULT_UNSET) == int(btck_TxValidationResult_UNSET));
+static_assert(int(TxValidationResult::TX_CONSENSUS) == int(btck_TxValidationResult_CONSENSUS));
+static_assert(int(TxValidationResult::TX_INPUTS_NOT_STANDARD) == int(btck_TxValidationResult_INPUTS_NOT_STANDARD));
+static_assert(int(TxValidationResult::TX_NOT_STANDARD) == int(btck_TxValidationResult_NOT_STANDARD));
+static_assert(int(TxValidationResult::TX_MISSING_INPUTS) == int(btck_TxValidationResult_MISSING_INPUTS));
+static_assert(int(TxValidationResult::TX_PREMATURE_SPEND) == int(btck_TxValidationResult_PREMATURE_SPEND));
+static_assert(int(TxValidationResult::TX_WITNESS_MUTATED) == int(btck_TxValidationResult_WITNESS_MUTATED));
+static_assert(int(TxValidationResult::TX_WITNESS_STRIPPED) == int(btck_TxValidationResult_WITNESS_STRIPPED));
+static_assert(int(TxValidationResult::TX_CONFLICT) == int(btck_TxValidationResult_CONFLICT));
+static_assert(int(TxValidationResult::TX_MEMPOOL_POLICY) == int(btck_TxValidationResult_MEMPOOL_POLICY));
+static_assert(int(TxValidationResult::TX_NO_MEMPOOL) == int(btck_TxValidationResult_NO_MEMPOOL));
+static_assert(int(TxValidationResult::TX_RECONSIDERABLE) == int(btck_TxValidationResult_RECONSIDERABLE));
+static_assert(int(TxValidationResult::TX_UNKNOWN) == int(btck_TxValidationResult_UNKNOWN));
+
+btck_TxValidationResult btck_tx_validation_state_get_tx_validation_result(const btck_TxValidationState* state_)
+{
+    return cast_tx_validation_result(btck_TxValidationState::get(state_).GetResult());
 }
 
 void btck_tx_validation_state_destroy(btck_TxValidationState* state)
