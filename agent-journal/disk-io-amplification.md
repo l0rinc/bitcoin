@@ -159,3 +159,85 @@ The interesting measurable is the HARNESS confound (below).
 
 ## Rotation note
 Two cycles; UTXO-growth cell closed. Not exhausted (pruning cell).
+
+## Cycle 3 (2026-07-29): pruning-mode retention + rotation probes — machinery clean; below-prune invalidateblock behavior is upstream-identical design
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=16574797430435475050, masked 7351425393580699242, index 0
+(of 2) -> #24 (third cycle; c2 queue cell "pruning-mode undo
+retention / blk rotation"). Branch: audit/disk-io-c3 from
+421f669e51 (#49 c5 journal tip).
+
+### Cell 1: automatic trigger — DEFERRED-BY-SCALE (floor verified in code)
+-prune=N has a 550 MiB MIN_DISK_SPACE_FOR_BLOCK_FILES floor with NO
+-fastprune exemption (blockmanager_args.cpp:31 — byte-identical to
+origin/master). At the measured ~17 KB/bulk-block, auto-triggering
+needs ~33k blocks (~14 h) — out of cycle bounds. The -fastprune
+help text ("lower minimum prune height") refers to the 16 KiB file
+chunking, NOT the disk floor — mildly misleading, upstream-
+identical, recorded only.
+
+### Cell 2: manual pruning machinery (-prune=1 + pruneblockchain) — CLEAN
+Setup: 510 bulk blocks (num_outputs=120 fan-out, ~16 KiB blk
+files), then probes:
+- pruneblockchain(200) -> 199 (FILE granularity; pruneheight=200;
+  blk files 134 -> 104; getblock(199) "Block not available (pruned
+  data)", getblock(200) served — boundary exact).
+- pruneblockchain(400) -> 220: capped by MIN_BLOCKS_TO_KEEP=288
+  (tip 510 - 288 = 222, file-rounded 220). Over-window
+  pruneblockchain(410) silently no-ops at 220.
+- invalidateblock within retained window (by 10): disconnect +
+  reconsider green.
+- Restart: pruneheight persists.
+
+### Cell 3: below-prune invalidateblock (h=100 < pruneheight 221) — UPSTREAM DESIGN, not a defect
+Observed: RPC returns SUCCESS; disconnects 249->221, then
+DisconnectTip fails to read pruned block 220
+("ReadRawBlock FlatFilePos(nFile=-1)" in debug.log), blocks
+100-220 marked BLOCK_FAILED_VALID without disconnection, tip
+settles at 220 (the first data-bearing block). Mechanism:
+DisconnectTip's read failure returns false WITHOUT marking state
+invalid (validation.cpp:3006-3008); InvalidateBlock's loop returns
+false; the RPC wrapper (rpc/blockchain.cpp:1726-1745) ignores the
+bool and keys only on state — state stays valid, ActivateBestChain
+confirms the boundary, RPC returns VNULL. This is UPSTREAM-
+IDENTICAL (wrapper byte-identical; the mark-invalid-immediately
+design at validation.cpp:3706-3711 exists precisely so pruned
+nodes can invalidateblock and still start). Recorded as a
+behavioral characterization, not a finding: the RPC reports success
+on a partially completed operation BY DESIGN (the alternative left
+nodes unstartable).
+
+### Harness lessons (recorded)
+- RAW_P2PK + target_vsize = broken signatures (create_self_transfer
+  pads OP_RETURN outputs AFTER the SIGHASH_ALL signature — NULLFAIL
+  "Signature must be zero"); use num_outputs for bulk instead.
+  (Most in-tree users are signature-less OP_TRUE mode, so the
+  combination is untested upstream too — framework quirk, not a
+  node bug.)
+- Standalone TestNode PortSeed must match the one used at
+  initialize_datadir time (rpcport is baked into bitcoin.conf).
+
+### Exact commands
+- python3 /tmp/btc24_prune.py (510-block builder, -fastprune
+  -prune=550), /tmp/btc24_prune2.py (probes, -prune=1),
+  /tmp/btc24_prune3.py + inline below-prune probe
+- code: blockmanager_args.cpp:18-40, validation.cpp:3616-3735,
+  validation.cpp:3000-3015, rpc/blockchain.cpp:1726-1745
+
+### Verdict
+DISMISSED: pruning retention/rotation/boundary behaviors are
+correct and upstream-identical; the one surprising behavior
+(below-prune invalidateblock "success") is deliberate upstream
+design. No local defect. Automatic-threshold behavior (550 MiB
+floor) deferred by scale with the floor code-verified.
+
+### Limitations / queue
+- dbcache flush cadence isolation still open (c1 queue).
+- Crash-during-prune recovery (unlink vs index ordering) untested
+  dynamically on this tree — see #49 c4's static analysis of the
+  prune-assumevalid variant.
+
+## Rotation note
+Three cycles; pruning cell closed. Not exhausted (flush cadence).
