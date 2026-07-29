@@ -218,3 +218,64 @@ journal-only cycle.
 - validation.cpp ~30 c1 leftovers still open.
 - Fork-added comment pass (PRIVATE_BROADCAST prose is new here;
   worth a dedicated sweep under the c1 queue item).
+
+## Cycle 3 (2026-07-29): txmempool.cpp + txgraph.cpp strong-claim audit — 8/8 verified TRUE
+
+### Draw
+Re-rank draw over the 4 remaining CYCLE-2+ open cells:
+raw=9064950354337441572, index 0 -> #1 (third cycle; c1 queue cell
+"txmempool.cpp untouched" + "fork-added comments pass" ->
+txgraph.cpp). Branch: audit/comment-contract-c3 from ff98babc95
+(#65 c3 bookkeeping).
+
+### txmempool.cpp (5 raw hits; 4 substantive)
+- :537-539 feerate-diagram "should never get behind" -> assert
+  (diagram_iter->size >= check_total_adjusted_weight) — matches,
+  machine-enforced. TRUE.
+- :586-590 topo/score iteration "All parents must have been checked
+  before their children" -> assert(mempoolDuplicate.HaveCoin) at
+  :590 enforces. TRUE.
+- :621 "CheckTxInputs() should always pass" (dummy_state in
+  CTxMemPool::check) -> assert at :624; basis: mempoolDuplicate is
+  built from all confirmed+mempool coins in the same function.
+  TRUE.
+- :893-895 CCoinsViewMempool::GetCoin "always return the mempool
+  entry; guaranteed to never conflict with the underlying cache" ->
+  a txid in both means same transaction (unconfirmed mempool entry
+  vs just-connected block's version — identical outputs);
+  m_temp_added handles the disconnect-pool residue; mempool entries
+  are full (no pruned). TRUE.
+
+### txgraph.cpp (38 raw hits; 4 deep-verified)
+- :3060-3061 "If this Cluster has an acceptable quality level, its
+  chunks must be connected" -> assert IsConnected inside
+  `if (level == 0 && IsAcceptable())` (:3029) — the comment's guard
+  matches the code's guard EXACTLY; disconnected (NEEDS_SPLIT)
+  clusters are never acceptable, and GetChunking's collapse
+  (3ae78dbd25) guarantees chunk-connectedness for connected
+  clusters. TRUE.
+- :2997-3004 mapping/linearization cardinality + hole-free-unless-
+  splitting asserts — consistent with the split machinery. TRUE.
+- :314 "always kept topological" -> sanity asserts at :3020-3024
+  (m_done.IsSupersetOf(Ancestors)) machine-enforce. TRUE.
+- :1495 "The transaction must appear in the chunk" ->
+  Assume(chunk[cluster_idx]) in AppendTrimData (the #25 c2
+  consumer). TRUE.
+
+### Verdict
+DISMISSED: 8/8 strong claims accurate; the fork's txgraph claims
+are exceptionally well machine-guarded (sanity-check function
+mirrors the prose with asserts). No code or comment change.
+
+### Limitations / queue
+- txgraph.cpp remaining ~30 hits are lower-stakes (locator/lifecycle
+  prose); the sanity function itself covers most.
+- wallet/GUI comment cells remain deprioritized.
+- Campaign cells complete across validation.cpp (c1),
+  net_processing.cpp (c2), txmempool.cpp+txgraph.cpp (c3) — the
+  strong-claim surface of the core TUs is now covered.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Core
+strong-claim surface covered; not marking exhausted (lower-stakes
+hits + wallet cells remain).
