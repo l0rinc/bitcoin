@@ -199,6 +199,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 80 | fuzz-engine-differential | CYCLE-2 | 2026-07-29 | raw-tx parser differential: A=0/300, B=0 round-trip-exact, C=240 all Python-lax; production never over-accepts |
 | 49 | critical-history-sweep | CYCLE-2 | 2026-07-29 | remaining advisory cells: 54604 fork-interaction clean (PRIVBROADCAST rate-limited), 46597 32-bit cap present, 52922/21/13/14 markers verified |
 | 91 | compiler-binary-hardening | CYCLE-3 | 2026-07-29 | shared kernel lib measured: 134 btck_ + std weak only, zero internal/secp exports; full RELRO+NX; no BTI note (c1's toolchain finding) |
+| 106 | semantic-twin-inconsistency | CYCLE-3 | 2026-07-29 | vsize twins agree (formula + 6/6 functional); sighash numerics agree; PSBT DEFAULT\|ALL restriction = intentional policy |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -270,6 +271,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    cells now consumed; next queue from journal queues/URGENT.
    RE-RANK draw 19 (rebuilt 10-cell queue): raw=3025727333361852290
    -> idx 0 -> #91 c3.
+   RE-RANK draw 20 (9 cells): raw=2549763356383794637 -> idx 1 ->
+   #106 c3.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -307,7 +310,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1,c2,c3), 4(c1,c2), 6(c1,c2,c3),7(
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3), 35(c1,c2), 36(c1,c2), 23(c1,c2,c3), 25(c1,c2,c3),
 37(c1), 39(c1,c2), 40(c1,c2), 42(c1), 44(c1), 46(c1), 54(c1), 51(c1,c2), 21(c1,c2,c3), 43(c1,c2), 45(c1,c2,c3), 47(c1,c2), 48(c1,c2), 49(c1,c2), 50(c1,c2), 53(c1), 55(c1), 57(c1), 58(c1,c2), 59(c1,c2), 60(c1,c2,c3,c4),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2,c3), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 70(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1,c2,c3),
-76(c1,c2,c3), 80(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1,c2,c3), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 101(c1,c2), 102(c1), 103(c1), 104(c1), 105(c1), 106(c1,c2), 107(c1), 108(c1), 109(c1).
+76(c1,c2,c3), 80(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1,c2,c3), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 101(c1,c2), 102(c1), 103(c1), 104(c1), 105(c1), 106(c1,c2,c3), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
