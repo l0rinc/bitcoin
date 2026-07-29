@@ -59,6 +59,18 @@ F9 | CI script_assets sha256 pin | supply-chain/CI | unpinned
 download | low | CONFIRMED+FIXED | 4124803dff (#59 c1) |
 MERGED as b73b7c5d39 (#66 c2) | bash -n verified | done.
 
+F10 | mempool hex-tx-array decode-loop exact duplicate | rpc |
+duplicated logic (drift risk) | none (code-shape) |
+CONFIRMED+FIXED | 4f97fbfe1e (#58 c1) | BACKPORTED as a7067512e8
+(#58 c2) | mempool_accept.py + rpc_packages.py green at HEAD |
+done.
+
+F11 | base64-PSBT decode-or-throw exact duplicate x6 | rpc |
+6 identical blocks (drift risk) | none (code-shape) |
+CONFIRMED+FIXED | b1e55802f6 (#58 c2) | in lineage (direct) |
+rpc_psbt.py green (all six RPCs, diagnostics asserted) | 7th copy
+in wallet/rpc/spend.cpp:1637 queued.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
