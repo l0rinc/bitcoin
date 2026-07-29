@@ -46,3 +46,13 @@ The test built successfully, then aborted in the new test with `double free or c
 `DynSock::Wait()` constructed an owning `shared_ptr` from its stack-owned `this` pointer. The focused readable-byte regression failed before the fix with the double-free abort. The fix uses a non-owning `shared_ptr<const Sock>` control block only for the temporary `EventsPerSock` key. After the fix, the focused ownership test passed and the test was kept as the regression for this finding.
 
 With the ownership fix applied but the EOF check unchanged, the separate EOF regression ran to the assertion and failed because `RecvEvent` was absent. That isolates Candidate B from the lifetime bug. Candidate A is ready for its own source/test commit; Candidate B remains the next independent fix.
+
+### Candidate B verdict: confirmed
+
+`DynSock::WaitMany()` now treats the `Pipe::GetBytes()` result as readiness whenever it is nonnegative. A positive result represents queued bytes and zero represents EOF, matching the production `poll`/`select` contract that a closed stream is readable. The focused pair
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle103-test /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=netbase_tests/dynsock* --log_level=test_suite
+```
+
+passed both the non-owning lifetime regression and the EOF readiness regression after the second fix. The EOF regression failed before this change after Candidate A was applied, so it is independently attributable. Candidate B is ready for its own source/test commit.
