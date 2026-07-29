@@ -370,3 +370,69 @@ the merge-rationale gap from c3 is closed. Journal-only.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 6 (2026-07-29): second-author-seam generality test (maflcko-authored 35616) — template generalizes (3/4 in-kind, 1 refined); R15 + M5 added
+
+### Draw
+Re-rank singleton (last of the 3-cell queue): #60 (sixth cycle; c5
+queue cell "second author seam for generality"). Branch:
+audit/reviewer-skill-c6 — RECORDED BASE: created from
+audit/critical-history-c3 tip 734121c172 (this cycle stacked on the
+#49 c3 journal tip; the chain is the ledger lineage).
+
+### Method (blind)
+Chose maflcko-authored #35616 ("Use u64 over size_t for all cache
+sizes to fix a 32-bit overflow") from the recently-merged list;
+recorded 4 blind predictions from the R/M template BEFORE reading
+comments; then fetched issue + line-level comments via the public
+GitHub API (curl; /tmp/pr_parse.py, /tmp/pr_comments.py).
+
+### Blind predictions (recorded pre-fetch)
+- P1: goal-vs-achievement/self-contained-proof challenge (R7/M2).
+- P2: type-level prove-by-construction discussion (R12-line).
+- P3: convention-anchored nits, declined/adopted with reasons (R9/R13).
+- P4: test-to-claim completeness demand (R1/R3).
+
+### Score
+- P1 CONFIRMED-in-kind (angle refined): sedited's "might we just
+  remove the index caches instead?" is the R7 goal/cost challenge;
+  the demanded artifact is a deletion-alternative, not a reproducer.
+- P2 CONFIRMED + rule-yielding: std::clamp-vs-max/min precondition
+  discussion (min>max ambiguity) -> R15 added; DrahtBot i686
+  -Werror=narrowing caught the one real narrowing instance.
+- P3 CONFIRMED verbatim: `auto` nit declined via clang-tidy
+  modernize-use-auto convention; theStack IWYU `<cstdint>` nit
+  adopted immediately (R11-adjacent).
+- P4 REFINED-AWAY: no test-completeness demand on a pure type-width
+  refactor; the 32-bit arch-CI gate is the substitute oracle.
+Score: 3/4 confirmed-in-kind, 1 refined. The template GENERALIZES to
+the second author seam.
+
+### Rules added
+- R15 (std::clamp only when lo<=hi provable; else explicit max/min —
+  construction carries the precondition).
+- M5 (conflict choreography: rebase the pull that must force-push
+  anyway; outstanding all-reviewer feedback is a named merge
+  precondition; terse directional merge rationale).
+
+### Exact commands
+- curl api.github.com search/issues?q=repo:bitcoin/bitcoin+type:pr+
+  author:maflcko+is:merged (12 candidates; picked 35616 as the most
+  substantive non-CI one)
+- curl .../issues/35616/comments, .../pulls/35616/comments
+
+### Verdict
+CONFIRMED deliverable: generality of the reviewer-rules template is
+now evidence-backed on a second author seam; two new durable rules
+encoded in reviews/reviewer-rules.md.
+
+### Limitations / queue
+- One-PR sample per seam; a third seam (e.g. achow101-authored) would
+  tighten the generality claim further — low marginal value, queued.
+- DrahtBot LLM-reason hints were treated as hints only; the
+  -Werror=narrowing fact was taken from the CI task line, not the
+  LLM prose.
+
+## Rotation note
+Six cycles; the open generality cell is closed. Not exhausted
+(third-seam tightening queued).
