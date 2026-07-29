@@ -137,3 +137,46 @@ control). Test-only change; no production defect found.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-07-29): fee-diagram incremental-vs-recompute differential — the hook exists; harness verified green
+
+### Draw
+Re-rank draw over the rebuilt 3-cell queue:
+raw=7567157135810338807, index 1 -> #51 (third cycle; c2 queue
+cell "Fee-diagram incremental-vs-recompute differential (needs an
+instrumentation hook)"). Branch: audit/differential-metamorphic-c3
+from 17092d4843 (#50 c3 bookkeeping).
+
+### Finding: the hook already exists
+The txgraph fuzz target IS the incremental-vs-recompute
+differential: real TxGraphImpl (the incremental cached machinery)
+vs SimTxGraph (an independent model recompute), with:
+- per-operation diagram delta asserts (:715-718: sum-main/staged vs
+  sim sums) + sorted-diagram contracts (:1019-1020);
+- ChunkLinearization-on-reordered-input vs sim (:1334-1343);
+- final CompareChunks + set-difference completeness on
+  GetMainStagingDiagrams (:1498-1523);
+- per-cluster SanityCheck (:546/:661).
+FUZZ=txgraph build_fuzz/bin/fuzz -runs=1000: clean, exit 0. The
+c2 queue's "instrumentation hook" is the sim model + these final
+checks — no new harness needed.
+
+### Verdict
+DISMISSED (covered): the incremental-vs-recompute property is
+already differentially tested by the existing target, verified
+green. No code change.
+
+### Exact commands
+- FUZZ=txgraph build_fuzz/bin/fuzz -runs=1000
+- reads: src/test/fuzz/txgraph.cpp:343/546/661/690-730/
+  1000-1045/1334-1343/1498-1523
+
+### Limitations / queue
+- The differential runs the sim only up to small cluster counts
+  (command-budget); a long-run campaign on this target is
+  qa-assets' job.
+- BIP30 fee-domain remains unconstructable (c2 note).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
