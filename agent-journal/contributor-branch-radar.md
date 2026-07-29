@@ -147,3 +147,70 @@ pass". Radar refresh: 226 named branches (was 225; +1 since c1).
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-29): leveldb knob branch batch — premise of the block-cache knob VERIFIED against vendored LevelDB
+
+### Draw
+Re-rank draw over the 5 remaining CYCLE-2+ open cells:
+raw=8499369058190745183, index 3 -> #65 (third cycle; c2 queue cell
+"leveldb knob branches ... unassessed — queued as one batch").
+Branch: audit/contributor-radar-c3 from b0f624c057 (#21 c3
+bookkeeping).
+
+### Batch assessment (6 branches, l0rinc remote, in-repo refs)
+1. l0rinc/tune-leveldb-options (4 commits): write_buffer_size
+   ladder 1/2/4/8 MiB, no messages — benchmark scratch. Not
+   adoptable without measurements.
+2. l0rinc/leveldb-block-cache-write-buffer (2 commits): zero the
+   LevelDB block cache on 64-bit (ecb530c63d) + reassign that half
+   of the DB cache budget to write_buffer (a479f8a071). PREMISE
+   VERIFIED locally: this tree's vendored LevelDB serves
+   uncompressed (dbwrapper.cpp:145 kNoCompression) mmap-backed
+   table blocks directly and marks them NON-cachable —
+   table/format.cc:106 "Do not double-cache" when Read() returns a
+   pointer into the mmap region (data != buf); the block_cache
+   insert gate at table/table.cc:182 (contents.cachable &&
+   options.fill_cache) therefore never fires on 64-bit. The
+   configured block cache (half the budget) is indeed unused here;
+   the knob's premise is exactly right for this tree. (Orthogonal
+   corroboration: iterator read options already use
+   fill_cache=false.)
+3. l0rinc/leveldb-ibd-threshold-benchmarks (4 commits): bench-only
+   I/O-mode toggles (force mmap reads / force permanent fd / raise
+   limits) — benchmark branches, no production intent.
+4. l0rinc/leveldb-options-logging (1 commit): dump non-default
+   LevelDB options at init under -debug=leveldb — trivially sound
+   observability, upstreamable shape.
+5. l0rinc/leveldb-validation-bench-knobs (4 commits): memtable
+   compaction target ladder (L1/L3/L5) + 256 MiB L1 — bench-only.
+6. paplorinc/leveldb-upgrade (2 commits): vendored LevelDB bump to
+   latest + GetOptions adjustment — high-touch vendored change;
+   needs its own build/test matrix before any assessment; not
+   attempted this cycle.
+
+### Verdict
+Journal-only assessment (rotation records, never adopts the fork
+author's own work): the batch decomposes into one PRINCIPLE-
+VERIFIED knob (block-cache->write-buffer, premise proven against
+vendored source with file:line evidence), one diagnostic
+(options-logging), three benchmark ladders, and one vendored bump
+needing a matrix. No local defect; nothing to adopt locally. The
+block-cache premise verification is the durable yield — any future
+adoption decision by the fork author can cite it.
+
+### Exact commands
+- git ls-remote --heads l0rinc (branch set); git log/show per
+  branch (messages, diff stats)
+- reads: src/leveldb/table/format.cc:84-139, table/table.cc:155-208,
+  dbwrapper.cpp:139-154
+
+### Limitations / queue
+- rocksdb-brute / rocksdb-build-fix / lorinc/leveldb-to-rocksdb
+  remain the heavy engine-swap cell (own cycle, #95 method).
+- No local IBD A/B of the verified knob (rotation rule: the fork
+  author's adoption decision, not ours).
+- knots remote still unscanned.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
