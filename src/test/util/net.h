@@ -48,6 +48,17 @@ struct ConnmanTestMsg : public CConnman {
         m_peer_connect_timeout = timeout;
     }
 
+    bool AnyThreadJoinablePublic() const
+    {
+        return threadDNSAddressSeed.joinable() ||
+               threadSocketHandler.joinable() ||
+               threadOpenAddedConnections.joinable() ||
+               threadOpenConnections.joinable() ||
+               threadMessageHandler.joinable() ||
+               threadI2PAcceptIncoming.joinable() ||
+               threadPrivateBroadcast.joinable();
+    }
+
     void ResetAddrCache();
     void ResetMaxOutboundCycle();
     /// Reset the internal state.

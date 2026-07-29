@@ -6,11 +6,19 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Latest authoritative checkpoint
 
+<!-- Cycle 84 has verified a source finding; this checkpoint is updated before the finding commit. -->
+
+- Current verified cycle: 84, goal 71 (`deterministic-simulation`). `CConnman::Start` now rejects conflicting outgoing options before any startup side effect; the focused before/after regression and full `net_tests` suite provide the evidence. The source/test/journal close is pending one self-contained commit.
+- Cycle-start HEAD was `c79c8b401b`. Three pre-existing Codex Security documentation commits advanced this branch to `55cfa7a448` before the cycle finding; they were preserved. At the experiment point, `origin/master...HEAD` was `2 954`, with merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Current branch: `uber-cycle-84-deterministic-simulation-20260728`; no relevant process remains running. Known unrelated untracked files remain preserved.
+
+## Historical Cycle 84 start checkpoint (superseded)
+
 - Cycle 84 is active. Goal 71 (`deterministic-simulation`) is exploring replayable production schedules across task ordering, time, randomness, network, disk, retries, and shutdown, with explicit state, progress, durability, and resource invariants.
 - Cycle 83 is complete. Goal 11 (`sanitizer-valgrind`) found no confirmed current Bitcoin Core or libsecp256k1 source defect and made no production source change; its ASan/TSan/MSan evidence and tool blockers are recorded in `agent-journal/sanitizer-valgrind.md`.
 - Current branch: `uber-cycle-84-deterministic-simulation-20260728`; current HEAD before the start snapshot: `c79c8b401b`. `origin/master...HEAD` is `2 950`; no relevant process remains running.
 
-## Cycle 84 Active State
+## Historical Cycle 84 Active State (superseded)
 
 - Selector: exact `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`).
 - Branch: `uber-cycle-84-deterministic-simulation-20260728`.
@@ -19,6 +27,14 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Exclusions: Cycle 9 generated-artifact determinism and prior full-sync, sanitizer, P2P accounting, filesystem crash, database fault, and scheduler cells without a new boundary or schedule.
 - Journal: `agent-journal/deterministic-simulation.md`. Scratch root: `/data/my_storage/tmp` because `/` is full.
 - Status: cycle 84 is active; first action is inventory of existing production simulation seams, deterministic hooks, and prior schedule evidence.
+
+## Cycle 84 Verified Finding
+
+- Finding: `CConnman::Start` returned `false` for `m_use_addrman_outgoing=true` plus nonempty `m_specified_outgoing` only after starting network thread handles. This violated the failed-start no-thread lifecycle invariant for direct public callers.
+- Before evidence: the focused regression against the old source exited `201`; `!started` passed and `!threads_started` failed at `src/test/net_tests.cpp:391`.
+- Repair: move the existing conflict check immediately after `Init`; add `ConnmanTestMsg::AnyThreadJoinablePublic()` and `net_tests/connman_start_rejects_conflicting_options_before_threads`.
+- After evidence: the focused test exited `0`; full `net_tests` passed 34/34 cases and 150,899/150,899 assertions. The same build command and `/data`-backed `TMPDIR` were used; `git diff --check` passed.
+- Cycle journal: `agent-journal/deterministic-simulation.md`; exact mechanism, reachability, history, limitations, and commands are recorded there. The commit is pending and must be authored as `Lőrinc <pap.lorinc@gmail.com>`.
 
 ## Cycle 83 Completion
 
