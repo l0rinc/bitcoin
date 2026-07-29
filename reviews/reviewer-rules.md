@@ -169,6 +169,25 @@ R15. std::clamp only when lo<=hi is provable; else explicit max/min
     refactors draw no test-completeness demand in this seam; arch CI
     is the substitute oracle.
   Conclusion: the rule set generalizes to a second author seam.
+- 35269 (post-encoding, blind, THIRD AUTHOR SEAM — achow101 as
+  author, musig session-id): 4/4 confirmed-in-kind.
+  * threat-model probe confirmed-in-kind, refined in angle: the
+    seam's security review debates the RESPONSE to failure (rkrux:
+    assert-and-crash vs recoverable RPC error on nonce reuse —
+    "highly likely to leak a private key" framing) — R6 extended:
+    trust-model rigor includes failure-response adjudication.
+  * encoding-level nit confirmed (R12-line: hasher field ordering
+    "pubnonce next to participant pubkey" — declined "I don't think
+    that's necessary", decline accepted, R13 dynamic).
+  * test arm already present (R1 satisfied up front: two-sessions
+    no-nonce-reuse check in the PR); review pressure went to
+    assertion-style consolidation (assert_equal(a,b,c)).
+  * convention nits verbatim (R9/R13: comment placement musig.h vs
+    scriptpubkeyman.h adopted; "Will leave nits for a followup"
+    accepted as a decline-with-reason variant).
+  * R11 verbatim: rkrux attaches commitable diffs for everything.
+  Conclusion: the rule set generalizes to a third author seam; the
+  generality cell is closed with three independent seams.
 
 ## Maintainer merge-rationale class (mined 2026-07-29, #60 c5)
 
