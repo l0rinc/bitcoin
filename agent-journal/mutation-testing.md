@@ -77,3 +77,57 @@ case asserts the exact "size too large" message class.
 ## Rotation note
 Cycle 1 complete with a delivered oracle; rotating per uber-goal
 policy. Not exhausted.
+
+## Cycle 2 (2026-07-29): WriteVarInt per-line sweep — 3 more mutants, all killed; CTxUndo fuzz coverage confirmed
+
+### Draw
+Re-rank draw over the rebuilt 7-cell queue:
+raw=4506871108920428011, index 1 -> #35 (second cycle; c1 queue
+cells "WriteVarInt per-line sweep" + "CTxUndo consumer-side fuzzed
+VARINT fields"). Branch: audit/mutation-testing-c2 from 2689e08db3
+(#34 c3 bookkeeping).
+
+### WriteVarInt per-line sweep (serialize.h:429-444)
+c1 killed the loop-step mutant (n = (n>>7)-1). This cycle, three
+more line-level mutants, each built and run against
+serialize_tests + coins_tests + validation_chainstatemanager_tests:
+- M2: continuation bit always set (tmp[len] = (n&0x7F)|0x80) ->
+  34 failures. KILLED (every multi-byte read continues past the
+  payload).
+- M3: GetSizeOfVarInt break shift (n<=0x7F -> n<0x7F, :415) ->
+  137 failures. KILLED (size/content mismatch across all
+  multi-byte encodings). (sed's first-match hit the size computer
+  rather than the writer; recorded as M3 and covered separately.)
+- M4: WriteVarInt break shift (:436) -> 137 failures. KILLED
+  (same class; identical failure count to M3, consistent).
+All mutants reverted after measurement; restore verified green.
+
+### CTxUndo consumer-side VARINT fields — already covered
+Dedicated fuzz targets exist: txundo_deserialize and
+blockundo_deserialize (src/test/fuzz/deserialize.cpp:256-262),
+plus blockfilter.cpp:51 consuming CBlockUndo::vtxundo. No gap;
+O2's ReadVarInt battery covers the reader guards themselves.
+
+### Verdict
+DISMISSED: the WriteVarInt family is fully mutation-covered
+(per-line: loop-step c1, continuation bit M2, both break
+conditions M3/M4 — 0 survivors). The CTxUndo VARINT consumer is
+fuzz-covered by existing targets. No oracle gap; no code change.
+
+### Exact commands
+- per-mutant: edit serialize.h, cmake --build build-before -j4
+  --target test_bitcoin, test_bitcoin --run_test='serialize_tests,
+  coins_tests,validation_chainstatemanager_tests'
+- backup/restore: cp /tmp/serialize_h.bak (diff-verified clean)
+
+### Limitations / queue
+- The do/while write-loop and len++ lines are mutation-equivalent
+  to the killed break/step lines (any change there desyncs the
+  encoding identically) — noted, not separately run.
+- CTxUndo SEMANTIC apply-vs-reject differential (c1 queue mention)
+  remains open (the #51 oracles cover undo correctness, not
+  hostile-field semantics).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
