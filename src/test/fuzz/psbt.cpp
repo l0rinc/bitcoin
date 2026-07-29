@@ -34,7 +34,13 @@ FUZZ_TARGET(psbt)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
-    auto str = fuzzed_data_provider.ConsumeRandomLengthString();
+    // Hybrid consumption: ConsumeRandomLengthString() alone ends the string
+    // at the first 0x5c byte followed by a non-0x5c byte (backslash-escape
+    // convention), so long binary documents containing such a pair never
+    // arrive whole — which left the per-input/output PSBT code below
+    // unreachable for fuzzer-built inputs. Keep the truncating mode to
+    // explore decoder robustness, but also allow consuming the whole buffer.
+    auto str = fuzzed_data_provider.ConsumeBool() ? fuzzed_data_provider.ConsumeRandomLengthString() : fuzzed_data_provider.ConsumeRemainingBytesAsString();
     util::Result<PartiallySignedTransaction> psbt_res = DecodeRawPSBT(MakeByteSpan(str));
     if (!psbt_res) {
         return;
@@ -154,7 +160,7 @@ FUZZ_TARGET(psbt)
     }
 
     PartiallySignedTransaction psbt_merge = psbt;
-    str = fuzzed_data_provider.ConsumeRandomLengthString();
+    str = fuzzed_data_provider.ConsumeBool() ? fuzzed_data_provider.ConsumeRandomLengthString() : fuzzed_data_provider.ConsumeRemainingBytesAsString();
     util::Result<PartiallySignedTransaction> psbt_merge_res = DecodeRawPSBT(MakeByteSpan(str));
     if (psbt_merge_res) {
         psbt_merge = *psbt_merge_res;
