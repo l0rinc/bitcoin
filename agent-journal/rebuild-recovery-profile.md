@@ -245,3 +245,40 @@ required work per input (already minimal).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-29): dbcache sensitivity — wall +60% at dbcache=4, user-CPU neutral
+
+### Draw
+Re-rank draw over the rebuilt 6-cell queue:
+raw=1546480656633297830, index 2 -> #21 (fourth cycle; c2 queue
+cell "dbcache sensitivity (small vs default)"). Branch:
+audit/rebuild-recovery-c4 from ea13772e36 (#46 c2 bookkeeping).
+ea13772e36 (#46 c2 bookkeeping).
+
+### Measurement (410-block OP_TRUE chain, reindex-chainstate,
+foreground, fresh log per run)
+- default dbcache: user 2.64s, wall 1.23s.
+- dbcache=4 MiB: user 2.63s, wall 1.97s.
+User CPU identical (validation-bound workload, ~86% EC math per
+c3); tiny cache costs +60% wall via sync/flush waits. The live
+UTXO set (~560 entries) fits 4 MiB anyway, so no read-path
+sensitivity appears at this scale.
+
+### Verdict
+Finding of fact: for validation-bound regtest workloads, dbcache
+is a wall-time knob (sync behavior), not a CPU knob; the fork's
+default is sane for this class. CPU sensitivity would need a
+DB-bound (large-UTXO) workload — consistent with c3's conclusion
+and #95 c3's engine-CPU-parity.
+
+### Exact commands
+- /tmp/btc21_db.sh (A/B pattern, wipe-aware gate)
+
+### Limitations / queue
+- Single-run each (noise ~5%); the wall gap is far above noise.
+- Large-UTXO sensitivity untestable here (same disk constraint as
+  the engine cell).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
