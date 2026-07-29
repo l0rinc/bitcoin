@@ -1009,6 +1009,7 @@ bool CWallet::MarkReplaced(const Txid& originalHash, const Txid& newHash)
     // Ensure for now that we're not overwriting data
     Assert(!wtx.m_replaced_by_txid);
 
+    const TxState previous_state{wtx.m_state};
     wtx.m_replaced_by_txid = newHash;
 
     // Refresh mempool status without waiting for transactionRemovedFromMempool or transactionAddedToMempool
@@ -1019,6 +1020,8 @@ bool CWallet::MarkReplaced(const Txid& originalHash, const Txid& newHash)
     bool success = true;
     if (!batch.WriteTx(wtx)) {
         WalletLogPrintf("%s: Updating batch tx %s failed\n", __func__, wtx.GetHash().ToString());
+        wtx.m_replaced_by_txid.reset();
+        wtx.m_state = previous_state;
         success = false;
     }
 

@@ -132,3 +132,128 @@ Verdict: dismissed as a verified continuation of the already fixed Taproot ident
 No new source, test, or documentation defect was confirmed. `git diff --check` passed. The first combined test invocation failed because its explicitly supplied `TMPDIR` directory had not been created and the multi-suite invocation then hit duplicate global argument registration; this was a command setup error, not a product result. The isolated reruns used `/data/my_storage/tmp/local-reasoning-cycle77-tests/{net,txdownload,descriptor,index}` and passed. No relevant process remained running. The next unchecked relationship cell should come from a fresh catalog draw and should not reopen AddrMan linked-IPv4, BaseIndex callback serialization, txdownload peer cleanup, or the cycle-75 Taproot key-lookup fix without new evidence.
 
 Status: dismissed; journal-only close, no source change justified.
+
+## Cycle 97: local-reasoning domain and relationship audit
+
+### Cycle identity and gate
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `57`
+- Selected goal: `local-reasoning-domain`
+- Worktree: `/data/my_storage/bitcoin`
+- Branch: `uber-cycle-97-local-reasoning-domain-20260729`
+- HEAD at cycle start: `9031d02ee52aff27ca3fc7636ee8d0ce7923dc7a`
+- `origin/master`: `9b38d077f894d27ea76413b1db1cb040e25dc296`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Divergence: `origin/master...HEAD = 29 984`
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber prompt SHA256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Gate: `git fetch origin master` passed; tracked worktree and index were clean; `git diff --check` passed; no relevant Bitcoin or libsecp test process was running. Known untracked artifacts remain preserved and excluded from cycle commits.
+
+### Scope and exclusions
+
+Challenge local assumptions that combine values from different objects, snapshots, namespaces, ownership domains, locks, or lifecycle stages. State the expected relationship before testing it, then trace every caller and state transition. This is a fresh cycle, not a reopening of Cycle 65 or Cycle 77: exclude AddrMan `GetNetwork()` versus `GetNetClass()`, linked-IPv4 classification, BaseIndex callback serialization, transaction-download peer cleanup, and Taproot x-only ownership unless new independent evidence changes the contract.
+
+Initial queue:
+
+1. Persistence and index relationships: database cursor position versus decoded key/value domain, chainstate flush tip versus index publication, and block/undo file position versus metadata ownership.
+2. Wallet and descriptor relationships: destination/key ownership, descriptor normalization versus lookup identity, transaction state versus durable record state, and keypool reservation versus address publication.
+3. P2P and mempool relationships: peer identity versus request ownership, package graph versus accounting snapshot, and permission/relay state versus queue cleanup.
+4. Cross-module API relationships: caller-provided context/capability versus helper assumptions, output lifetime versus owner, and optional-module state versus public result.
+
+For each candidate require a deterministic minimal fixture or a rigorous call/dataflow proof. Do not infer a defect from two different names alone: distinguish an intentional domain boundary from a missing precondition, stale snapshot, or publication-order error. Search earlier journals, history, tests, and review discussion before reporting a candidate.
+
+### Evidence ledger
+
+#### Candidate: wallet replacement metadata was published before a failed write
+
+The wallet queue's transaction-state cell was selected after excluding the earlier
+passphrase, descriptor, address-book, and `SetAddressPreviouslySpent` write-failure
+fixes. The local relationship is `(CWalletTx::m_replaced_by_txid,
+CWalletTx::m_state) <-> DBKeys::TX`: the two in-memory fields must describe the
+same durable transaction row after `MarkReplaced` returns. A failed `WriteTx`
+must therefore leave both fields at their pre-call values.
+
+The source-to-sink trace is concrete:
+
+- `src/wallet/wallet.cpp:998-1031` takes `cs_wallet`, finds the existing wallet
+  transaction, writes `m_replaced_by_txid`, calls `RefreshMempoolStatus`, and
+  then persists the entire `CWalletTx` with `WalletBatch::WriteTx`.
+- `src/wallet/feebumper.cpp:371-380` first commits and broadcasts the new bumpfee
+  transaction, then calls `MarkReplaced`. A failed marker write is reported in
+  `errors` but the replacement creation has already succeeded.
+- `src/wallet/feebumper.cpp:44-47` refuses another bump when the in-memory marker
+  is present; `src/wallet/spend.cpp:381-395` uses replacement metadata when
+  deciding whether an unconfirmed input is safe; and
+  `src/wallet/rpc/transactions.cpp:65-69` exposes the marker. The value is also
+  serialized in `src/wallet/transaction.h:267-325`.
+
+Before the fix, `MarkReplaced` changed the marker and potentially changed
+`m_state` from `TxStateInMempool` to `TxStateInactive` before `WriteTx`. The error
+branch only set `success = false`, so a database failure returned false while
+leaving the caller-visible object changed. The current branch did not already
+cover this path: the earlier `98d5cdae66` conversion made replacement fields
+explicit members but retained the mutation-before-write ordering. Recent
+`55eaf087c1`, `6e67919fa6`, `8b9e10c544`, `21f215670b`, and `600afa9599` fixes
+establish the repository's write-before-publication/rollback precedent for
+wallet metadata; no earlier journal entry covered `MarkReplaced`.
+
+#### Independent before/after proof
+
+The regression test creates a mock SQLite wallet, stores a transaction in
+`TxStateInMempool`, and installs a transaction-row `BEFORE INSERT` trigger that
+raises `SQLITE_ABORT` for the exact serialized `DBKeys::TX` key. It then calls
+`MarkReplaced` and checks that the call fails, `m_replaced_by_txid` is empty, and
+the prior `TxStateInMempool` state is retained.
+
+For the old-source control, the rollback lines were temporarily removed from
+`src/wallet/wallet.cpp` in the working tree, the same target was rebuilt, and
+this command was run:
+
+    TMPDIR=/data/my_storage/tmp/cycle97-markreplaced-control \
+      /data/my_storage/tmp/cycle93-build/bin/test_bitcoin \
+      --run_test=wallet_tests/replaced_write_failure_preserves_state \
+      --log_level=test_suite
+
+It exited 201 with one failure at `wallet_tests.cpp:251`: the assertion that
+`m_replaced_by_txid` remained empty failed. The rollback patch was immediately
+restored with `apply_patch`; the temporary control was never committed.
+
+The repaired code snapshots `m_state`, performs the existing in-memory update,
+and on `WriteTx` failure resets `m_replaced_by_txid` and restores the snapshot.
+The focused after command exited 0 with `*** No errors detected`. The related
+wallet run
+
+    TMPDIR=/data/my_storage/tmp/cycle97-markreplaced-control \
+      /data/my_storage/tmp/cycle93-build/bin/test_bitcoin \
+      --run_test=wallet_tests,feebumper_tests,wallet_transaction_tests,walletdb_tests \
+      --log_level=message
+
+passed 22 cases. The complete unit command
+
+    TMPDIR=/data/my_storage/tmp/cycle97-markreplaced-control \
+      /data/my_storage/tmp/cycle93-build/bin/test_bitcoin --log_level=message
+
+passed all 1,210 test cases and exited 0. `CCACHE_DISABLE=1 cmake --build
+/data/my_storage/tmp/cycle93-build --target test_bitcoin -j4` passed after both
+the source and test changes, and `git diff --check` passed.
+
+#### Verdict and limits
+
+Confirmed and fixed. The smallest repair is local to `MarkReplaced`; it preserves
+the existing error return and notification behavior while preventing a failed
+transaction-row write from publishing replacement metadata or a refreshed
+mempool state. The test proves a real SQLite write failure and an independent
+source-to-sink relationship, but it does not exercise Berkeley DB, an on-disk
+restart after a crash, or the full RPC bumpfee path. Those are not required to
+establish this in-memory publication-order defect. The full suite's intentional
+filesystem-error diagnostics and the existing unset script-assets data warning
+were non-failures.
+
+Status: confirmed and repaired in this cycle. Commit the source, regression
+test, and this journal entry together. After the finding commit, update the
+uber-goal state with the commit id and fresh-gate result, then select a new
+catalog draw. Do not reopen AddrMan linked-IPv4, BaseIndex callback ordering,
+transaction-download peer cleanup, Taproot key identity, or this
+`MarkReplaced` write-failure cell without new evidence.
