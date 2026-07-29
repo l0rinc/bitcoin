@@ -100,6 +100,16 @@ seeds /tmp/btc101_seed/*_whole (0x00 mode byte) | grep other targets
 for single-mode document consumers; SigningProvider-bearing target
 for SignPSBTInput family.
 
+O7 | txoutproof negative-oracle battery | merkle-proof RPC
+composition | thin negative oracle (1 variant + in-tree TODO) | n/a
+(test infra) | DELIVERED | 9d1244e6b1 (#6 c2): 8 asserted mutations
+(hash-bit flip, header mutation, nTx 0/max/+1, truncation,
+unconsumed bits/hashes) all rejected; trailing-garbage acceptance
+documented as intentional (shared with submitblock) | BACKPORTED
+into lineage 4b8fa7c937 (#6 c3), rpc_txoutproof.py green at HEAD |
+scratch probe /tmp/r6_txoutproof_probe.py | BIP37 serving side if
+bloom work resumes.
+
 ## Latent / upstream-context items (not local defects)
 
 L1 | CBloomFilter ctor div-by-zero/log(0) | bloom | math UB at

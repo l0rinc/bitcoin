@@ -95,3 +95,73 @@ oracle was thin (1 variant + TODO). Now 9.
 
 ### Next queue for this campaign
 - Wallet record key parsing (low exposure, local files) — last unrun cell.
+
+## Cycle 3 (2026-07-29): c2 backport into lineage + wallet-record cell — campaign EXHAUSTED
+
+### Draw
+Random draw over the 17-goal eligible pool (14 pending + 3 CYCLE-1,
+#49 excluded as just-cycled): raw=5880676013471384719, index 13 ->
+#6. Ledger said CYCLE-1, but history shows a c2 commit
+(9d1244e6b1 on audit/serialization-untrusted-input, 2026-07-28)
+whose row was never restored — so this is cycle 3 plus retro
+bookkeeping. Branch: audit/serialization-untrusted-input-c3 from
+c86a6e847a (#49 c1 bookkeeping).
+
+### Stranded-work recovery (the #66 problem, recurring)
+The c2 deliverable (txoutproof negative-oracle battery, 9 mutations
+closing the in-tree TODO in rpc_txoutproof.py) and the c1+c2 journal
+existed ONLY on the side branch; HEAD still had the TODO at :109.
+Backported the full c2 commit into this branch as 4b8fa7c937
+(cherry-pick; journal conflicts resolved theirs-for-campaign-journal,
+ours-for-historical uber-rotation.md). Verification at HEAD:
+`python3 test/functional/rpc_txoutproof.py
+--configfile=build-before/test/config.ini --tmpdir=/tmp/btc6` ->
+Tests successful.
+
+### Cell: wallet record key parsing — DISMISSED (machinery-bounded, seam fuzzed)
+Hypothesis: an unguarded untrusted-input deserialization defect in
+wallet record loading, distinct from the load_wallet harness.
+Analysis:
+- Modern LoadWallet (walletdb.cpp:1102-1162) is per-class loaders
+  (Legacy/Descriptor/AddressBook/ActiveSPKMs/DecryptionKeys/Tx)
+  inside a catch-all -> DBErrors::CORRUPT; no crash path.
+- Record keys/values deserialize via the same bounded streams
+  machinery audited across this campaign (CompactSize battery O1,
+  ReadVarInt overflow battery O2); fixed-size types (CPubKey/CKeyID/
+  uint256) throw on short reads.
+- The record-application seam is already fuzzed by the O5 harness
+  (load_wallet, #10 c2: FLAGS/VERSION/NAME/descriptor/TX/unknown
+  records, DBErrors-classification + round-trip asserts); descriptor
+  strings additionally have their own fuzz target
+  (descriptor_parse.cpp) plus script_descriptor_cache.cpp.
+- Trust boundary is local-only (wallet files are local state;
+  corruption yields CORRUPT classification, never silent acceptance
+  — harness-asserted).
+- Unfuzzed value classes (crypted keys, ACTIVE*SPK, BESTBLOCK)
+  differ in value type, not machinery; widening them is O5's queued
+  next step under campaign #10, not a #6 gap.
+
+### Campaign exhaustion (all cells accounted)
+- compact-block (c1): bounded, dismissed.
+- addrv2/BIP155 (c1): bounded, dismissed.
+- gettxoutproof/verifytxoutproof (c2): battery delivered, backported
+  4b8fa7c937, green at HEAD.
+- wallet record keys (c3, this cycle): dismissed above.
+- persisted-state coins DB (AmountCompression/ScriptCompression):
+  covered by campaign #98 (c1 note).
+- network deserialization failure handling: covered by #89 P1 (c1
+  note).
+- index DBs: PR 35654 first-cursor-key lineage (c1 note).
+No untrusted-input serialization cell remains without an owner.
+Marking EXHAUSTED; reopen if new parsers/callers appear (the O1/O2
+batteries and O5 harness are the standing oracles).
+
+### Exact commands
+- git cherry-pick 9d1244e6b1 (conflicts: theirs for campaign journal,
+  ours for uber-rotation.md) -> 4b8fa7c937
+- rpc_txoutproof.py at HEAD -> Tests successful
+- reads: walletdb.cpp:485-550/958-1034/1068-1102/1102-1162,
+  fuzz target lists (descriptor_parse, load_wallet:45)
+
+## Rotation note
+Campaign EXHAUSTED as of cycle 3; see exhaustion evidence above.
