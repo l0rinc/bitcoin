@@ -457,3 +457,92 @@ read-equivalence differential (c5 queue, needs a master build).
 ## Rotation note
 Six cycles; both fork-delta files passed. Not exhausted
 (prevout-pool differential remains the one dynamic cell).
+
+## Cycle 5 (2026-07-29): prevout-pool read-equivalence differential — 3-way muhash IDENTICAL (lineage / master+pool / master-noop)
+
+### Draw
+Re-rank draw over the remaining 3-cell queue:
+raw=6717978107659154466, index 0 (of 3) -> #49 (fifth cycle; c4
+queue cell "prevout-pool read-equivalence differential"). Branch:
+audit/critical-history-c5 from a6e7606679 (#50 c6 journal tip).
+NEEDS a master build (pool exists only on master) — done via a
+disposable git worktree (master-wt @ b08815bbb5, removed after) +
+build-master (reduced targets: no gui/wallet/tests/bench/fuzz/ipo).
+
+### Hypothesis
+CoinsViewOverlay's parallel prefetch (fccdc098d3 + b3b0d49aad +
+67cad6779e) changes the coins ConnectBlock sees vs the sequential
+path (ordering, missing coins, duplicate fetches) — observable as a
+UTXO-set divergence after a dependency-heavy chain.
+
+### Experiment (three arms, one deterministic chain)
+Same 250-block chain (110 warmup + 250) on three binaries:
+- run0: build-before bitcoind (lineage — NO overlay at all)
+- run1: master bitcoind (overlay + thread-pool prefetch)
+- run2: master with a scratch StartFetching no-op patch
+  (if (true) return CreateResetGuard(); — overlay present, every
+  coin fetched sequentially; binary preserved as
+  /tmp/bitcoind_master_pool for the pool arm, patch never committed)
+Chain per block: txA (newest mature utxo -> 2 wallet outputs),
+txB (spends txA:0 INTRA-BLOCK), txC (spends txB:0, 2-deep intra-
+block), txD (spends OLDEST wallet utxo, cross-block); amount guards
+skip sub-10000-sat branches. Oracle: gettxoutsetinfo("muhash") +
+txouts at h=360.
+
+### Result — CLEAN
+run0: txouts=859 muhash=34ef9380e7387668fa5a5288b8bb99a7161c81b
+db420dd882b27ef2829dc591e bogosize=73015
+run1: IDENTICAL. run2: IDENTICAL. The pool's parallel reads are
+outcome-equivalent to sequential reads over intra-block dependency
+chains, cross-block spends, and skip-branch variation.
+
+### Determinism work (the real cost; recorded as harness lesson)
+Three failed oracle iterations before the clean result:
+1. Raw runs gave DIFFERENT muhashes even for the SAME binary twice
+   (txouts 851-858 across runs). Root cause found by chain
+   inspection (block-hash diff is time-only; tx input comparison):
+   the framework's ECKey.sign_ecdsa (key.py:167-178) uses python
+   `random` for the ECDSA nonce when rfc6979=False — the DEFAULT —
+   so every MiniWallet signature (and txid) is random per process.
+   FIX: random.seed(0x49) at the top of each run; the seeded stream
+   replays identically (verified: two same-binary runs then produce
+   byte-identical muhash; the 3-way run reproduced the same muhash
+   again).
+2. bad-txns-vout-negative: halving-recycled outputs undercut zero —
+   amount guards.
+3. dust: sub-threshold branches — wutxo filters <10000 sats.
+4. KeyError 'muhash': gettxoutsetinfo defaults to
+   hash_serialized_3; muhash needs the explicit arg.
+Also: MiniWallet.generate() rescans utxos from the node EVERY block
+(incl. mempool) — manual _utxos edits are wiped; and standalone
+TestNode needs initialize_datadir + matching PortSeed for rpcport.
+
+### Verdict
+DISMISSED: no read-equivalence defect in the prevout pool over the
+tested shapes. The parallel/sequential equivalence question is now
+evidence-backed, not assumed.
+
+### Exact commands
+- git worktree add master-wt master; cmake -B build-master -S
+  master-wt -G Ninja (Release, reduced targets); cmake --build
+  build-master --target bitcoind -j4
+- patch master-wt/src/coins.h (StartFetching no-op), incremental
+  rebuild; cp build-master/bin/bitcoind /tmp/bitcoind_master_pool
+  (BEFORE the patch, for the pool arm)
+- python3 /tmp/btc49_diff.py <build-before> <pool> <noop>
+  (seeded; RESULT lines above)
+- cleanup: git worktree remove --force master-wt; rm -rf
+  build-master /tmp/btc49_run*
+
+### Limitations / queue
+- 250 blocks / ~1000 txs / one dependency shape; deeper DAGs,
+  reorgs, and mempool-eviction races untested.
+- The differential compares OUTCOMES, not internal fetch ordering;
+  a timing-only anomaly (e.g., rare stale-read under reorg) would
+  not appear here.
+- build-master deleted (disk); reproduction = the recorded cmake +
+  patch recipe (~45 min).
+
+## Rotation note
+Five cycles; the prevout-pool dynamic cell is closed. #49's
+remaining surface: 0d72be5374 flush-cadence crash-injection (low).
