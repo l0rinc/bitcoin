@@ -1636,11 +1636,7 @@ RPCMethod walletprocesspsbt()
     wallet.BlockUntilSyncedToCurrentChain();
 
     // Unserialize the transaction
-    util::Result<PartiallySignedTransaction> psbt_res = DecodeBase64PSBT(request.params[0].get_str());
-    if (!psbt_res) {
-        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", util::ErrorString(psbt_res).original));
-    }
-    PartiallySignedTransaction psbtx = *psbt_res;
+    PartiallySignedTransaction psbtx{DecodeBase64PSBTOrThrow(request.params[0].get_str())};
 
     // Get the sighash type
     std::optional<int> nHashType = ParseSighashString(request.params[2]);

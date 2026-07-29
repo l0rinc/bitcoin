@@ -7,6 +7,7 @@
 
 #include <addresstype.h>
 #include <consensus/amount.h>
+#include <psbt.h>
 #include <rpc/util.h>
 #include <map>
 #include <string>
@@ -19,6 +20,9 @@ struct CMutableTransaction;
 class Coin;
 class COutPoint;
 class SigningProvider;
+
+/** Decode a Base64 PSBT string, throwing an RPC error with the decode failure reason on error. */
+PartiallySignedTransaction DecodeBase64PSBTOrThrow(const std::string& psbt_string);
 
 /**
  * Sign a transaction with the given keystore and previous transactions

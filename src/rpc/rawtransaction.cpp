@@ -84,16 +84,6 @@ static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& 
     }
 }
 
-/** Decode a Base64 PSBT string, throwing an RPC error with the decode failure reason on error. */
-static PartiallySignedTransaction DecodeBase64PSBTOrThrow(const std::string& psbt_string)
-{
-    util::Result<PartiallySignedTransaction> psbt_res = DecodeBase64PSBT(psbt_string);
-    if (!psbt_res) {
-        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", util::ErrorString(psbt_res).original));
-    }
-    return *psbt_res;
-}
-
 static std::vector<RPCArg> CreateTxDoc()
 {
     return {
