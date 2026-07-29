@@ -14,6 +14,21 @@ import time
 
 GIT = os.getenv('GIT', 'git')
 
+
+def is_ancestor(ancestor, descendant):
+    """Return whether ancestor precedes descendant, failing on Git errors."""
+    result = subprocess.run([GIT, "merge-base", "--is-ancestor", ancestor, descendant])
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    print(
+        f'git merge-base --is-ancestor failed with status {result.returncode}',
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
 def tree_sha512sum(commit='HEAD'):
     """Calculate the Tree-sha512 for the commit.
 
@@ -111,8 +126,7 @@ def main():
             sys.exit(0)
         else:
             # Make sure this commit isn't older than trusted roots
-            check_root_older_res = subprocess.run([GIT, "merge-base", "--is-ancestor", verified_root, current_commit])
-            if check_root_older_res.returncode != 0:
+            if not is_ancestor(verified_root, current_commit):
                 print(f"\"{current_commit}\" predates the trusted root, stopping!")
                 sys.exit(0)
 
@@ -123,8 +137,7 @@ def main():
                 no_sha1 = False
             else:
                 # Skip the tree check if we are older than the trusted root
-                check_root_older_res = subprocess.run([GIT, "merge-base", "--is-ancestor", verified_sha512_root, current_commit])
-                if check_root_older_res.returncode != 0:
+                if not is_ancestor(verified_sha512_root, current_commit):
                     print(f"\"{current_commit}\" predates the trusted SHA512 root, disabling tree verification.")
                     verify_tree = False
                     no_sha1 = False

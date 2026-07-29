@@ -28,3 +28,66 @@ Every candidate must have a trust boundary, contract/invariant, source and histo
 - Trace a small number of completed and rejected findings end to end from discovery through independent verification, source fix or dismissal, final report, and journal/state update.
 - Search prior findings by exact hash, symbol/path, semantic summary, and commit/PR provenance before selecting a new pipeline cell.
 - Choose the highest-risk unproven pipeline contract, create or reuse the smallest deterministic fixture, and record whether the defect is in repository code, test/harness, documentation, tool, dependency, or process evidence.
+
+## Cycle 85 verification: `verify-commits` ancestry error
+
+### Scout receipt and deduplication
+
+The round-two security shard at `doc/security/codex-security-bitcoin-round2/shard_00.jsonl`
+reported the candidate `verify-commits-ancestry-error-success`. Its independent
+triage overview, `overview.md` rows 11 and 83-98, explicitly recorded the
+reproducer and requested a return-code distinction plus a regression. The scout
+produced evidence only and did not modify the source.
+
+The trust boundary is the release/CI operator invoking `contrib/verify-commits/verify-commits.py`
+against a candidate revision and a Git object database. A missing or otherwise
+unresolvable candidate must never be reported as successfully verified. A valid
+`git merge-base --is-ancestor` result has status 0 for ancestor and 1 for
+non-ancestor; status 128 is an operational error and must fail closed.
+
+Exact and semantic searches found this instance only in the round-two shard and
+overview, with no earlier journal finding or separate candidate fingerprint for
+the same path and bug shape. The first-round artifacts contain only inventory
+and broad review coverage for this file, not a prior verifier receipt or fix.
+
+### Independent verifier result before fixing
+
+On clean current Cycle 85 source, before the patch:
+
+    python3 contrib/verify-commits/verify-commits.py this-object-does-not-exist
+    status=0
+    "this-object-does-not-exist" predates the trusted root, stopping!
+
+The underlying command returned status 128 and printed `Not a valid object
+name`. The verifier therefore exited before `git verify-commit`, tree hashing,
+or parent checks. This independently reproduced the scout's claimed behavior
+on the current checkout. History shows the broad nonzero check was introduced
+by `bb86887527` (`verify-commits: Skip checks for commits older than trusted
+roots`); no regression test for Git's status-1-versus-error distinction exists.
+
+### Fix and regression evidence
+
+The verified candidate was confirmed as a local release-integrity tool defect.
+Both trusted-root ancestry checks now use `is_ancestor`, which accepts only
+statuses 0 and 1 and exits 1 for every other status. The new executable
+`contrib/verify-commits/test.py` independently checks mocked statuses 0, 1,
+and 128, then invokes the real script with the missing revision. The focused
+command passed:
+
+    python3 contrib/verify-commits/test.py
+    Ran 3 tests ... OK
+
+After the fix, the real missing-revision invocation returned status 1 and
+reported `git merge-base --is-ancestor failed with status 128`; no success
+message was emitted. `git diff --check` passed. The README documents the
+regression command.
+
+The final report limitation remains that ordinary CI normally supplies an
+existing ref, so practical impact requires an incomplete object database,
+invalid candidate ref, or another invocation path that reaches the verifier
+with an unresolved revision. This is nevertheless a confirmed fail-open
+contract violation in security verification tooling, not a remote P2P finding.
+
+Repository-wide `test/lint/lint-files.py` was also run and reported five
+pre-existing shebang-permission failures in unrelated files; `lint-python.py`
+was skipped because `lief` is unavailable. Those files were not changed.
