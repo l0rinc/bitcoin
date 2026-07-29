@@ -475,7 +475,7 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
 
     // The current version will store the decay with each individual TxConfirmStats and also keep a scale factor
     filein >> Using<EncodedDoubleFormatter>(decay);
-    if (decay <= 0 || decay >= 1) {
+    if (!std::isfinite(decay) || decay <= 0 || decay >= 1) {
         throw std::runtime_error("Corrupt estimates file. Decay must be between 0 and 1 (non-inclusive)");
     }
     filein >> scale;

@@ -61,9 +61,11 @@ void WriteEncodedDoubleMatrix(AutoFile& file, const std::vector<std::vector<doub
     file << Using<VectorFormatter<VectorFormatter<TestEncodedDoubleFormatter>>>(values);
 }
 
-void WriteFeeStats(AutoFile& file, const size_t num_buckets, const FeeStatsValues& values = {}, const size_t max_periods = 1)
+void WriteFeeStats(AutoFile& file, const size_t num_buckets,
+                   const FeeStatsValues& values = {}, const size_t max_periods = 1,
+                   const double decay = 0.5)
 {
-    file << EncodeDouble(0.5); // decay
+    file << EncodeDouble(decay);
     file << uint32_t{1};       // scale
     WriteEncodedDoubleVector(file, std::vector<double>(num_buckets, values.feerate_avg));
     WriteEncodedDoubleVector(file, std::vector<double>(num_buckets, values.tx_count));
@@ -93,7 +95,9 @@ int CurrentFeesFileVersion(const fs::path& path)
     return version;
 }
 
-void WriteEstimatorFile(const fs::path& path, int version, const std::vector<double>& buckets, const FeeStatsValues& values = {}, const size_t max_periods = 1)
+void WriteEstimatorFile(const fs::path& path, int version, const std::vector<double>& buckets,
+                        const FeeStatsValues& values = {}, const size_t max_periods = 1,
+                        const double decay = 0.5)
 {
     fs::remove(path);
     AutoFile out{fsbridge::fopen(path, "wb")};
@@ -103,7 +107,7 @@ void WriteEstimatorFile(const fs::path& path, int version, const std::vector<dou
     out << uint32_t{0}; // historicalFirst
     out << uint32_t{0}; // historicalBest
     WriteEncodedDoubleVector(out, buckets);
-    WriteFeeStats(out, buckets.size(), values, max_periods);
+    WriteFeeStats(out, buckets.size(), values, max_periods, decay);
     WriteFeeStats(out, buckets.size(), {}, max_periods);
     WriteFeeStats(out, buckets.size(), {}, max_periods);
     BOOST_REQUIRE_EQUAL(out.fclose(), 0);
@@ -445,6 +449,12 @@ BOOST_AUTO_TEST_CASE(reject_corrupt_fee_estimate_file_vectors)
 
     WriteEstimatorFile(corrupt_path, current_version, sane_buckets);
     BOOST_CHECK(ReadEstimatorFile(corrupt_path, estimator_path));
+
+    const double infinity{std::numeric_limits<double>::infinity()};
+    for (const double invalid_decay : {-infinity, nan, infinity}) {
+        WriteEstimatorFile(corrupt_path, current_version, sane_buckets, {}, 1, invalid_decay);
+        BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+    }
 
     WriteEstimatorFile(corrupt_path, current_version, {100.0, nan});
     BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
