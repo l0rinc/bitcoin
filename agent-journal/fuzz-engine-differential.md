@@ -150,3 +150,62 @@ Python lax) is uniform and upstream-matching.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-07-29): consensus-level acceptance differential — A=0/300; no structural over-acceptance
+
+### Draw
+Re-rank draw over the rebuilt 2-cell queue:
+raw=5930901419059390541, index 1 -> #80 (third cycle; c2 queue
+cell "consensus-level acceptance differential (CheckBlock/mempool
+on mutated txs)"). Branch: audit/fuzz-engine-c3 from 0c94597ec9
+(#44 c2 bookkeeping).
+
+### Method
+Independent Python oracle re-implementing CheckTransaction's
+structural rules (tx_check.cpp: vin/vout empty, weight cap, amount
+range/overflow, dup inputs, null prevouts for non-coinbase), vs C++
+testmempoolaccept (parse + consensus + policy), over 300 mutated
+real transactions (RLIMIT guard, E>0 positive control).
+
+### Result
+TALLY: A(cpp-ok/py-reject)=0, E(both accept)=53,
+C(cpp-reject/py-accept)=148, D(both reject)=99.
+- A=0: no transaction C++ accepted that the independent structural
+  oracle rejects — consensus structural acceptance never
+  over-accepts.
+- C=148: expected classes by construction: (a) C++ parse-strict
+  failures the Python parser tolerates (c2's Python-lax family);
+  (b) mempool POLICY rejections outside CheckTransaction's scope
+  (standardness/fees/mempool state), which the structural oracle
+  deliberately doesn't model.
+- D=99 agreement; E=53 agreement.
+
+### Harness lesson (recorded)
+First run reported A=53 with py-reason="parse" for ALL cases and
+E=0 — the try block swallowed an AttributeError from MY oracle
+(COutPoint has .hash/.n in this framework, not .txid). Every
+"reference rejects" was my bug. The E>0 positive control caught it
+instantly (zero double-accepts is impossible with valid seeds) —
+the pattern keeps proving itself.
+
+### Verdict
+DISMISSED: no consensus-level over-acceptance on the structural
+rule set; C++ parse+policy is strictly more rejecting than the
+structural oracle, exactly as designed.
+
+### Exact commands
+- python3 /tmp/btc80_cons.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc80c
+
+### Limitations / queue
+- Script-level acceptance (CheckTxInputs/script verification)
+  beyond the structural set is out of this oracle's scope (would
+  need the framework's script engine or a signed-corpus
+  differential — the #55 ECDSA differential covered signature
+  semantics separately).
+- Block-level (CheckBlock) differential folded into the tx-level
+  run by construction (same CheckTransaction core).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
