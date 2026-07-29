@@ -337,3 +337,62 @@ Knots remote now scanned; radar cell closed.
 ## Rotation note
 Five cycles; knots cell closed. Not exhausted (new upstream
 contributor branches appear continuously — periodic re-scan).
+
+## Cycle 6 (2026-07-29): l0rinc re-scan — txindex storage-format series force-updated (IN SCOPE); wallet-export crash branch (wallet scope)
+
+### Draw
+Re-rank singleton (last queue cell): #65 (sixth cycle; c5 queue
+cell "periodic re-scan"). Branch: audit/contributor-radar-c6 from
+ed0daeee0a (#80 c7 journal tip). Remote refreshed: git fetch
+l0rinc --prune.
+
+### Seed 1 (in scope — indexes/storage): txindex_optimization
+Force-updated (716cf096f4...e2dc767418): a txindex STORAGE-FORMAT
+series on top of 367-commits-ahead master:
+- 590cd56bf6 txindex: skip bloom filters and legacy lookups for new
+  databases
+- 20d99d411a txindex: hash key prefixes and pack block positions
+- f8cbd6424f txindex: pass the full block to DB::WriteTxs
+- 15dae813cc tests: cover txindex hash prefix collisions and
+  legacy fallback
+- 088b0b4a89 doc: release notes; e2dc767418 contrib benchmark
+Sibling branches: txindex-benchmark-variants,
+txindex-block-fetch-proxy (same series).
+The critical-review question when a cycle lands here: does the new
+prefixed/packed key format read OLD databases byte-correctly
+(legacy fallback), and does skipping bloom/legacy lookups change
+any observable result? Format migrations are exactly the
+critical-history class. Recorded, not assessed (multi-hour cell).
+
+### Seed 2 (wallet scope — recorded, not pursued):
+l0rinc/wallet-export-source-id (NEW branch): 5744e18ff8 "test:
+characterize watch-only export crash" + 7cdd1a9eee "wallet:
+preserve source ID during export". A wallet export crash
+characterization + fix. Wallet-scope per the campaign scope note;
+no core-reachability claim apparent. Recorded for the wallet-owning
+campaigns.
+
+### Also noted
+l0rinc/master advanced to 7dea464d6b (upstream merges past our
+local master's b08815bbb5 — no fork-feature content; our master
+tracking is fine).
+
+### Verdict
+Radar cell complete: two seeds recorded with provenance and the
+exact review questions; nothing requiring immediate preemption
+(no critical-class surprise in the new commits' shapes).
+
+### Exact commands
+- git fetch l0rinc --prune; git ls-remote --heads l0rinc (860)
+- git log master..l0rinc/master (upstream-only)
+- git log refs/remotes/l0rinc/txindex_optimization (-6);
+  l0rinc/l0rinc/wallet-export-source-id (-2)
+
+### Limitations / queue
+- txindex format-migration assessment (legacy fallback byte-
+  correctness; bloom-skip equivalence) — the one substantial cell,
+  needs its own cycle.
+- knots fixes-line re-scan on next radar cycle.
+
+## Rotation note
+Six cycles; re-scan cell closed. Not exhausted (txindex series).
