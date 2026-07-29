@@ -73,3 +73,89 @@ lost the pid twice — recorded as harness lesson).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): UTXO-GROWING fan-out chain — linear coins-DB growth, no superlinear write amplification; trace-log confound isolated
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=3510230010931241503, index 3 (of 5) -> #24 (second cycle; c1
+queue cell "UTXO-GROWING chain (fan-out outputs)"). Branch:
+audit/disk-io-c2 from 05eb46be09 (#60 c6 journal tip).
+
+### Hypothesis
+On a chain that GROWS the UTXO set every block (fan-out to
+unspendable outputs), LevelDB/coins-DB write volume grows
+superlinearly (WAL+compaction rewrites against an ever-larger DB) —
+falsifiable via per-100-block write deltas: a rising slope confirms,
+a constant slope dismisses.
+
+### Setup
+build-before HEAD-lineage node, regtest, isolated datadir
+(/tmp/btc24_fan, PortSeed 319). 700 blocks x 8 txs x 20 outputs to a
+FIXED external P2PK script (secp256k1 generator G — no known private
+key, provably never re-spent => net UTXO growth) + change back to
+MiniWallet (RAW_P2PK). Final txouts=112,810 (112,000 fan-out).
+Sampling: /proc/<pid>/io rchar/wchar + du per 100 blocks; clean
+shutdown; post-stop du.
+
+### Results (wchar in bytes; chainstate/blocks du)
+- start (h=110): wchar=682,837; chainstate=8,339; blocks=17,840,221
+- per-100-block wchar deltas (MB): 5.86, 8.74, 7.07, 7.08, 5.95,
+  7.10, 7.10 — CONSTANT slope while the UTXO set grew 16k -> 112k.
+- per-100-block chainstate du deltas (KB): 1214, 691, 891, 891,
+  1278, 891, 891 — linear ~8.9 KB/block (~160 new UTXOs x ~55 B).
+- end (h=810): wchar=49,584,963 (delta 48.9 MB); chainstate
+  6,757,655 (~60 B/UTXO); blocks 17,971,980 (payload fit the 16 MB
+  blk prealloc; real block bytes ~6.1 MB); blocks/index 146,180.
+- POST-STOP chainstate 6,758,045 (+390 bytes) — no shutdown rewrite
+  storm; WAL fully checkpointed.
+- LevelDB layout at end: 5 .ldb files + tiny live WAL; mid-run
+  snapshot showed 2 compacted SSTs + rotating 51 KB WAL at h=393.
+
+### Decomposition / amplification
+- wchar delta 48.9 MB INCLUDES debug.log (framework default
+  loglevel=trace): final debug.log 26.8 MB (~33 KB/block; estimated
+  in-window share ~23 MB) — a harness artifact, not node behavior.
+- Node-behavior writes ~25.8 MB vs logical payload ~14.7 MB
+  (blocks 6.1 + undo 0.5 + index 0.1 + coins inserts ~8.0) =>
+  ~1.8x amplification, consistent with c1's ~2x (undo-dominated
+  there, coins-WAL/compaction here). Naive incl-logs figure is 3.3x.
+- FALSIFIED: no rising slope, no quadratic LevelDB behavior; growth
+  is linear in blocks and UTXOs, compaction healthy, shutdown clean.
+
+### Verdict
+DISMISSED: the UTXO-growing cell shows bounded linear write
+amplification (~1.8x ex-logs), same design class as c1. No defect.
+The interesting measurable is the HARNESS confound (below).
+
+### Harness lessons (recorded)
+1. tail-buffered background pipes hide intermediate SAMPLE output —
+   sample the datadir independently or redirect with line buffering.
+2. Framework default args run loglevel=trace; debug.log dominates
+   wchar on long runs (26.8 MB vs 22 MB real) — subtract it or pass
+   quiet args when wchar is the metric.
+3. Standalone TestNode needs initialize_datadir() (writes
+   bitcoin.conf with the matching rpcport + stderr/stdout dirs);
+   an -rpcport extra_arg must equal rpc_port(index) for the chosen
+   PortSeed — c1's 19804 worked only because PortSeed 317 maps to
+   it (PortSeed 319 -> 19828). Three failed starts diagnosed:
+   missing stderr/stdout dirs, then the port mismatch (node healthy,
+   client ECONNREFUSED on the wrong port).
+4. Pure-python sign_tx caps harness throughput ~0.4 blk/s at 8
+   tx/block — the 1500-block plan was re-scoped to 700 (112k UTXOs
+   still gave 5 SST files and a full compaction cycle).
+
+### Exact commands
+- python3 /tmp/btc24_fanout.py (this cycle's script; K=20, 8 tx/blk,
+  G-point P2PK outputs, samples per 100 blocks)
+- mid-run: du -sb chainstate blocks; grep rchar/wchar /proc/$pid/io;
+  ls chainstate/*.ldb|*.log
+
+### Limitations / queue
+- Pruning-mode cell (undo retention, blk rotation/delete) still
+  unmeasured — next cell if a cycle lands here.
+- dbcache flush cadence not isolated (periodic vs shutdown).
+- rchar stayed tiny (3.7 MB) — read-side not stressed by this cell.
+
+## Rotation note
+Two cycles; UTXO-growth cell closed. Not exhausted (pruning cell).
