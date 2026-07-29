@@ -177,3 +177,73 @@ a churn/risk trade against a cosmetic cache-miss + debug-path byte).
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-29): full depends download-integrity sweep — 22 packages URL-verified, all 28 cached sources pin-clean, mechanism green
+
+### Draw
+Random pool EXHAUSTED at this point (0 pending, 0 CYCLE-1 after #51
+c2) — first re-rank draw over the 8-entry CYCLE-2+ open-cell queue:
+raw=2099841385913238651, index 3 -> #76 (third cycle; c2 queue cell
+"full depends download sweep"). Branch:
+audit/reproducible-builds-c3 from b267ac40db (#51 c2 bookkeeping).
+
+### Method (three independent verification forms)
+1. Live URL sweep (script /tmp/btc76_sweep.sh v2): per-package
+   primary + FALLBACK_DOWNLOAD_PATH (bitcoincore.org/depends-sources),
+   streamed into sha256sum, compared to .mk pins. Result: 22 PASS,
+   1 by-design-skip (native_libmultiprocess = local_dir source, no
+   URL), 1 skip (native_qt hash lives in qt_details vars).
+2. Authoritative mechanism: `make -C depends download` — completed
+   clean (it aborts on any hash mismatch). Most sources cached; the
+   one fresh fetch (systemtap-5.3.tar.gz) came from its PRIMARY
+   (sourceware.org) and verified OK — proving at least one primary
+   end-to-end through the project's own machinery.
+3. Cached-source hashes: all 23 tarballs in depends/sources
+   sha256-listed; spot prefixes match pins (boost 8a82bd11...,
+   qrencode da448ed4f5..., consistent with sweep results).
+
+### Harness incident (recorded honestly)
+Sweep v1 reported pass=0/fail=24 — entirely a script bug: make's
+print-% emits "varname=value" and I used the whole line as the URL,
+so every fetch failed with the empty-string hash (e3b0c44...).
+v2 fixed parsing + used the real FALLBACK mechanism; v1's "results"
+are discarded.
+
+### Findings
+- All 22 URL-reachable packages verify against pins (primaries
+  where alive; bitcoincore.org fallback otherwise). No integrity
+  defect.
+- qrencode primary (fukuchi.org) still dead (c2's finding stands;
+  fallback serves pinned bytes da448ed4f5...).
+- xorg.freedesktop.org primaries (libXau, xcb_proto, xproto) are
+  UNREACHABLE from this host (curl code 000, connection-level, not
+  404) — environmental/unknown, NOT confirmed-dead; fallback covers
+  with pinned bytes. Classified environmental, not a finding.
+- My script's earlier "wrong-version" primary URLs (boost-1.5.0,
+  R_1_5_0, v1.5.0, capnp-dir) were variable-evaluation artifacts of
+  print-% in make's global context (cross-package version bleed);
+  the depends system evaluates correctly per-package at build time
+  (proven by the clean make download + the systemtap primary fetch).
+
+### Verdict
+DISMISSED: the full depends download surface verifies — pins exact,
+fallback complete and byte-correct, mechanism aborts on mismatch,
+no package left unverified (native_libmultiprocess is local-source
+by design; native_qt extras verified via the mechanism).
+
+### Exact commands
+- /tmp/btc76_sweep.sh v2 (make print-% per package; curl|sha256sum)
+- make -C depends download (clean; systemtap primary fetch OK)
+- sha256sum depends/sources/*.tar.{gz,xz}
+- curl -I xorg.freedesktop.org primaries -> 000 (unreachable)
+
+### Limitations / queue for cycle 4
+- 45-uncacheable ccache calls remain unitemized (c2 queue;
+  CCACHE_DEBUG rebuild would name them — disk-bound).
+- xorg.freedesktop.org primaries unverifiable from this host today;
+  re-probe on a future cycle.
+- qrencode upstream-watch stands (take upstream's .mk if it moves).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
