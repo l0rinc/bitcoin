@@ -103,3 +103,63 @@ was a verified dup. No missing must-fix found in this cell.
   tx_check.cpp:41-45 + checkblock tests, L4 context).
 - Medium/Low advisories from the 2024 batch (UPnP, addr-spam) are
   dependency/config-adjacent — lower priority per scope note.
+
+## Cycle 2 (2026-07-29): remaining advisory cells — 54604 fork-interaction clean, 46597 cap present, 4 older cells marker-verified
+
+### Draw
+Re-rank draw (last of the rebuilt 6-cell queue; #80 drawn at draw
+17 left this singleton): #49 c2. Branch:
+audit/critical-history-c2 from 9b3eff4eef (#80 c2 bookkeeping).
+
+### CVE-2025-54604 (spoofed self-connections log-filling) — COVERED
+Fix = PR #32604 log rate-limiting, already verified present in c1
+(LogRateLimiter wired default-on, init.cpp:1497-1503, unit tests
+green). FORK-SPECIFIC interaction checked: the fork's
+PRIVATE_BROADCAST feature adds 8 LogDebug(BCLog::PRIVBROADCAST)
+sites (net_processing.cpp:1691/1696/2326/2330/2333/3625/3631/3772)
+— all flow through the same LogPrint -> rate limiter (per source
+location, 1 MiB/h), so connection-spam log-filling is capped on
+the fork's added paths too. No gap.
+
+### CVE-2025-46597 (32-bit block-size overflow crash) — COVERED
+Fix present: node/mempool_args.cpp:50-52 rejects -maxmempool above
+MAX_32BIT_MEMPOOL_MB when sizeof(void*) == 4. aarch64 host cannot
+execute the original repro (32-bit-only, plus needs a 3GB+ mempool
+on a 4GiB machine — the advisory's own exploitability caveat);
+code-presence verified.
+
+### Older cells (presence-by-marker)
+- CVE-2024-52922 (stalling peers): BLOCK_STALLING_TIMEOUT_DEFAULT
+  2s / MAX 64s (net_processing.cpp:133-137) + per-peer stall timers.
+- CVE-2024-52921 (mutated blocks): BLOCK_MUTATED case (:1969) +
+  Misbehaving on mutated block (:4937-4938).
+- CVE-2024-52913 (re-request censorship): m_txrequest with the
+  documented exclusion invariants (:802-804).
+- CVE-2024-52914 (orphan stall): bounded m_orphanage machinery.
+- CVE-2018-17144: previously noted guarded (tx_check.cpp:41-45 +
+  checkblock tests; L4 context).
+
+### Verdict
+DISMISSED (sweep complete): every consensus/remote advisory cell in
+scope is fix-present or fork-interaction-clean. Remaining list
+entries are dependency/config-adjacent (UPnP CVE-2015-20111/
+52917, miniupnpc/SOCKS CVE-2017-18350, BIP70 CVE-2024-52918,
+inv-buffer/headers CVE-2024-52915/52916, getdata CVE-2024-52920,
+addr-spam CVE-2024-52919) — lower priority per the scope note;
+queued, not swept this cycle.
+
+### Exact commands
+- advisory fetches: bitcoincore.org disclose-cve-2025-{54604,46597}
+- greps: PRIVBROADCAST log sites; mempool_args.cpp:50-52;
+  net_processing.cpp:133-137/429/1969/4937/802-804
+
+### Limitations / queue
+- Dependency-adjacent advisories (UPnP/SOCKS/BIP70 era) unswept —
+  next cell if a cycle lands here.
+- No adversarial re-triggering attempted for the two fresh CVEs
+  (fixes are config/code-presence verified; reproducing the
+  upstream attacks is upstream-CI's job).
+
+## Rotation note
+Two cycles; the consensus/remote advisory surface is swept. Not
+marking exhausted (dependency cells remain).
