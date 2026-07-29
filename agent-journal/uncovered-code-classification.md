@@ -190,3 +190,50 @@ this closes the coverage classification.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-29): dbwrapper record-boundary reads — layers safe; warmup asymmetry = author's PR 35654 pending
+
+### Draw
+Re-rank draw over the rebuilt 7-cell queue:
+raw=4758704522666985144, index 2 -> #34 (fourth cycle; c2 queue
+cell "dbwrapper record-boundary reads"). Branch:
+audit/uncovered-code-c4 from 8b553eee19 (#43 c3 bookkeeping).
+
+### Boundary layers (all safe-by-construction, verified across cycles)
+- LevelDB record framing + CRC (vendored, upstream domain).
+- CoinEntry key parse (txdb.cpp:49-55): key(uint8) + hash + VARINT
+  — fixed-layout + O2-batteried reader; SpanReader throws on short.
+- Coin value parse: TxOutCompression — AmountCompression throws on
+  out-of-range (#98/c3), ScriptCompression degrades/throws (c3).
+
+### The one asymmetry (documented, parked)
+Cursor() warmup (txdb.cpp:253-258) sets keyTmp.first = entry.key
+UNCONDITIONALLY when the leveldb iterator is valid, ignoring
+GetKey's decode-failure return; Next() (:289-296) invalidates
+(keyTmp.first = 0) on the same failure. So a corrupt-chainstate
+edge — a malformed first DB_COIN key — reports a valid cursor
+position with a degenerate cached key, inconsistent with
+mid-iteration behavior. This is exactly upstream PR 35654
+(l0rinc/txdb-malformed-first-coin-cursor-key, commit 3837d9192a,
+with unit test), pending upstream. The rotation does not adopt the
+fork author's own PR-shaped work; recorded as the reference.
+Master-relative severity: none (corrupt-DB-only; the value read
+would hit the compression guards anyway).
+
+### Verdict
+DISMISSED: boundary reads are safe; the warmup inconsistency is
+small, corrupt-only, and owned by the author's pending PR.
+
+### Exact commands
+- reads: txdb.cpp:40-57/246-296, dbwrapper.h:166
+- git show 3837d9192a (branch remotes/l0rinc/l0rinc/txdb-
+  malformed-first-coin-cursor-key; remotes/pr/35654)
+
+### Limitations / queue
+- Branch coverage of merkleblock.cpp padding Assume arms (c1 note)
+  remains the only open #34 cell.
+- The 35654 test should be re-run if the PR lands upstream.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
