@@ -171,3 +171,53 @@ measured this cycle).
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-29): clean-build wall measured (cold 23.6 min vs warm 1.0 min, 23.8x); CI cache keys assessed sound
+
+### Draw
+Re-rank draw over the 2 remaining CYCLE-2+ open cells:
+raw=203410285419299450, index 0 -> #75 (third cycle; c1/c2 queue
+cell "clean-build wall, CI cache keys"). Branch:
+audit/build-throughput-c3 from 4340ba0f87 (#45 c3 bookkeeping).
+
+### Clean-build wall (this host, aarch64 A76 4-core, Ninja, Release)
+- Cold: fresh dir + CCACHE_DISABLE=1 (real compile cost, c1's
+  method note): 1418.2s wall (23.6 min), 631 edges, exit 0.
+- Warm: fresh dir + session-hot ccache (same flags/content as
+  build-before): 59.6s wall, exit 0.
+- Ratio 23.8x. The warm residual is link time + the secp256k1
+  subtree recompiles (c2's absolute-I key divergence — secp calls
+  miss the content cache and recompile every fresh dir; the warm
+  build's last edge was the secp noverify_tests link, consistent).
+- Both dirs deleted post-measurement (disk 100%).
+
+### CI cache keys (GitHub Actions ci.yml:164-194)
+Key = job + job-type + run_id with restore-prefix job+job-type;
+save only on default branch on miss (the actions/cache update
+workaround). Correctness does NOT depend on the key: ccache's own
+content key includes the compiler binary (CCACHE_COMPILERCHECK
+mtime) and flags, so a stale-prefixed restore can only waste space,
+never serve wrong objects. Design sound (and upstream-identical per
+#59 c2's byte-parity).
+
+### Verdict
+Findings of fact: the cold/warm walls are now measured on-record
+(23.6 min / 1.0 min); ccache is a 23.8x lever here and its CI key
+design cannot serve wrong artifacts. No defect.
+
+### Exact commands
+- cmake -B build-cold -G Ninja -DCMAKE_BUILD_TYPE=Release;
+  CCACHE_DISABLE=1 cmake --build build-cold -j4 (1418.2s)
+- same for build-warm without the disable (59.6s)
+- reads: .github/workflows/ci.yml:162-194, ci/test/00_setup_env.sh
+  :51-61, ci/test/03_test_script.sh:113-145
+
+### Limitations / queue
+- Single cold sample (no variance run; build hosts are noisy).
+- The 45-uncacheable ccache calls STILL unitemized (c2/c3 queue;
+  needs CCACHE_DEBUG rebuild — disk-bound).
+- IPC/capnp generated-code build share not split out.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
