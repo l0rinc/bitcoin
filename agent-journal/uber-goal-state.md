@@ -133,11 +133,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 74 | memory-pressure-allocator | CYCLE-2 | 2026-07-29 | LockedPool oversize alloc -> graceful bad_alloc via RPC (fault-injected); no residue |
 | 105 | project-bug-autopsy-recurrence | CYCLE-1 | 2026-07-29 | txgraph saturation family autopsy: recurrence mapped, no uncovered sibling |
 | 45 | constant-time-declassification | CYCLE-2 | 2026-07-29 | walletpassphrase: KDF-only throttle 0.10s/attempt measured, no lockout by design |
+| 109 | whole-feature-public-path | CYCLE-1 | 2026-07-29 | compact-block relay mapped; all boundaries guarded incl. wrong-vs-malicious split |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=13832910584231443478 -> idx 30 (of 40) -> #45.
+   raw=2967907378595399043 -> idx 24 (of 39) -> #109.
    HYGIENE (from #64 c1): merge or re-cherry-pick the 5 out-of-lineage
    fixes (138ef3c044, 50e9d14750, 22aa75a2eb, 0a6c377ddb, 4124803dff).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
@@ -177,7 +178,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1), 21(c1,c2), 43(c1), 45(c1,c2), 47(c1,c2), 48(c1), 51(c1), 53(c1), 59(c1), 60(c1),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1), 67(c1), 68(c1), 69(c1), 71(c1,c2), 73(c1), 74(c1,c2), 75(c1),
-76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 94(c1,c2), 95(c1), 100(c1), 103(c1), 104(c1), 105(c1).
+76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 94(c1,c2), 95(c1), 100(c1), 103(c1), 104(c1), 105(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
