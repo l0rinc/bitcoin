@@ -340,3 +340,56 @@ differential-clean. Seed preserved: /tmp/psbt_v2_musig_seed.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 7 (2026-07-29): MuSig2 nonce + partial-sig PSBT fields seeded (67/99-byte keys) — differential clean
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=12027658190395197936, masked 2804286153540422128, index 0
+(of 2) -> #80 (seventh cycle; c6 queue cell "MUSIG2_PUB_NONCE /
+PARTIAL_SIG unseeded"). Branch: audit/fuzz-engine-c7 from
+ed6ad1e971 (#50 c8 journal tip).
+
+### Seed (632 B, format verified against psbt.h first)
+/tmp/psbt_v2_musig2_seed (sha256
+e8e81bce4d297130ae80d80f19bce9ea25c4892e7ef3a375c6478b6b9da6ea60):
+the c6 musig doc plus, on input 0:
+- 0x1b MUSIG2_PUB_NONCE, key = type+agg+part (67 B), value 66 B
+  (two concatenated compressed pubkeys as the pubnonce)
+- 0x1b with the +leaf_hash key variant (99 B) — covers the
+  second allowed key length
+- 0x1c MUSIG2_PARTIAL_SIG, key = type+agg+part (67 B), value 32 B
+Key layout and the 67-or-99 length gate verified against
+psbt.h:870-901 before construction (agg BEFORE part; value must be
+exactly 66 / 32 bytes — no iteration needed, first-try accepted).
+
+### Verifications
+- decodepsbt: accepted; input lists musig2_pubnonces=2,
+  musig2_partial_sigs=1, musig2_participant_pubkeys=1.
+- Differential (400 cases; new seed 1/3 of the corpus mix with
+  c6-musig/rich-v2/minimal-v2/v0): TALLY A=0 B=0 C=167 D=132
+  E=101 R=0. Production never over-accepts; 101 round-trip-equal
+  accepts (positive control); no resource-guard events (R=0).
+
+### Verdict
+DISMISSED (clean): the MuSig2 nonce/partial-sig parse surface is
+differential-clean, including the leaf-hash key-length variant.
+The full MuSig2 PSBT field family (0x1a/0x1b/0x1c) is now seeded
+and clean.
+
+### Exact commands
+- python3 seed extension (framework PSBT parse + append + reser)
+- python3 /tmp/btc80_dec.py --configfile=... (DECODE-OK)
+- python3 /tmp/btc80_diff_c7.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc80_c7 (TALLY above)
+
+### Limitations / queue
+- TAP_LEAF_SCRIPT / TAP_MERKLE_ROOT fields remain unseeded (the
+  taproot parse surface counterpart) — next cell if redrawn.
+- The differential covers parse/round-trip only; nonce/sig VALUE
+  validation (musig2 session logic) is the wallet's, not the
+  parser's.
+
+## Rotation note
+Seven cycles; MuSig2 field family closed. Not exhausted (taproot
+parse fields).
