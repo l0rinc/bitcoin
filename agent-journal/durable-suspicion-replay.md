@@ -73,3 +73,49 @@ Replay result: CONFIRMS the old verdict and SHARPENS it:
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): A5 replay against the v28.2 release binary — same abort, independent verifier form
+
+### Draw
+Re-rank draw over the rebuilt 7-cell queue:
+raw=2757803267336390011, index 4 -> #102 (second cycle; c1 queue
+"replay round for A-items"). Branch: audit/durable-suspicion-c2
+from c1b1a23a64 (#95 c4 bookkeeping).
+
+### Replay subject
+A5 (-capturemessages aborts node on capture IO failure; classified
+upstream-matching by SOURCE comparison in #43 c2). Replay form:
+BEHAVIORAL — the actual v28.2 release binary under the same fault,
+no source argument needed.
+
+### Replay result
+- v28.2 -capturemessages on regtest: capture dirs created.
+- Fault applied (message_capture replaced by a regular file):
+  node DIED within seconds. debug.log: "EXCEPTION: filesystem
+  error: cannot create directories: Not a directory
+  [.../message_capture/127.0.0.1_18444] ... bitcoin in msghand".
+- Same shape as HEAD (uncaught exception escaping the msghand
+  thread -> abort), with the throw at create_directories in this
+  build (v28.2 predates some AutoFile hardening) — the uncaught
+  propagation is identical.
+
+### Verdict
+A5 UPGRADED from source-matching to behavior-verified: the abort
+is reproduced on the actual upstream release binary. No change to
+the classification (debug-only option, upstream behavior) — the
+journal's evidence tier rises.
+
+### Exact commands
+- /tmp/btc102_replay.sh (v28.2 binary, fault injection, state check)
+- releases/v28.2/bin/bitcoind (Bitcoin Core v28.2.0)
+
+### Limitations / queue
+- The replay used the create_directories fault (HEAD replay used
+  the fopen-EISDIR fault); both throw into the same uncaught site —
+  the difference is noted, the class is identical.
+- A8 (perf attribution replay) is superseded by HEAD measurements;
+  remaining replay candidates: none pressing (A-items are green).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
