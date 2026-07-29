@@ -84,6 +84,16 @@ static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& 
     }
 }
 
+/** Decode a Base64 PSBT string, throwing an RPC error with the decode failure reason on error. */
+static PartiallySignedTransaction DecodeBase64PSBTOrThrow(const std::string& psbt_string)
+{
+    util::Result<PartiallySignedTransaction> psbt_res = DecodeBase64PSBT(psbt_string);
+    if (!psbt_res) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", util::ErrorString(psbt_res).original));
+    }
+    return *psbt_res;
+}
+
 static std::vector<RPCArg> CreateTxDoc()
 {
     return {
@@ -128,11 +138,7 @@ static std::vector<RPCArg> CreateTxDoc()
 PartiallySignedTransaction ProcessPSBT(const std::string& psbt_string, const std::any& context, const HidingSigningProvider& provider, std::optional<int> sighash_type, bool finalize)
 {
     // Unserialize the transactions
-    util::Result<PartiallySignedTransaction> psbt_res = DecodeBase64PSBT(psbt_string);
-    if (!psbt_res) {
-        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", util::ErrorString(psbt_res).original));
-    }
-    PartiallySignedTransaction psbtx = *psbt_res;
+    PartiallySignedTransaction psbtx{DecodeBase64PSBTOrThrow(psbt_string)};
 
     if (g_txindex) g_txindex->BlockUntilSyncedToCurrentChain();
     const NodeContext& node = EnsureAnyNodeContext(context);
@@ -1101,11 +1107,7 @@ static RPCMethod decodepsbt()
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
     // Unserialize the transactions
-    util::Result<PartiallySignedTransaction> psbt_res = DecodeBase64PSBT(request.params[0].get_str());
-    if (!psbt_res) {
-        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", util::ErrorString(psbt_res).original));
-    }
-    PartiallySignedTransaction psbtx = *psbt_res;
+    PartiallySignedTransaction psbtx{DecodeBase64PSBTOrThrow(request.params[0].get_str())};
 
     UniValue result(UniValue::VOBJ);
 
@@ -1622,11 +1624,7 @@ static RPCMethod combinepsbt()
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Parameter 'txs' cannot be empty");
     }
     for (unsigned int i = 0; i < txs.size(); ++i) {
-        util::Result<PartiallySignedTransaction> psbt_res = DecodeBase64PSBT(txs[i].get_str());
-        if (!psbt_res) {
-            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", util::ErrorString(psbt_res).original));
-        }
-        psbtxs.push_back(*psbt_res);
+        psbtxs.push_back(DecodeBase64PSBTOrThrow(txs[i].get_str()));
     }
 
     std::optional<PartiallySignedTransaction> merged_psbt = CombinePSBTs(psbtxs);
@@ -1667,11 +1665,7 @@ static RPCMethod finalizepsbt()
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
     // Unserialize the transactions
-    util::Result<PartiallySignedTransaction> psbt_res = DecodeBase64PSBT(request.params[0].get_str());
-    if (!psbt_res) {
-        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", util::ErrorString(psbt_res).original));
-    }
-    PartiallySignedTransaction psbtx = *psbt_res;
+    PartiallySignedTransaction psbtx{DecodeBase64PSBTOrThrow(request.params[0].get_str())};
 
     bool extract = request.params[1].isNull() || (!request.params[1].isNull() && request.params[1].get_bool());
 
@@ -1892,11 +1886,7 @@ static RPCMethod joinpsbts()
     uint32_t best_version = 1;
     uint32_t best_locktime = 0xffffffff;
     for (unsigned int i = 0; i < txs.size(); ++i) {
-        util::Result<PartiallySignedTransaction> psbt_res = DecodeBase64PSBT(txs[i].get_str());
-        if (!psbt_res) {
-            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", util::ErrorString(psbt_res).original));
-        }
-        psbtxs.push_back(*psbt_res);
+        psbtxs.push_back(DecodeBase64PSBTOrThrow(txs[i].get_str()));
         const PartiallySignedTransaction& psbtx = psbtxs.back();
         if (psbtx.GetVersion() != 0) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "joinpsbts only operates on version 0 PSBTs");
@@ -2010,11 +2000,7 @@ static RPCMethod analyzepsbt()
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
     // Unserialize the transaction
-    util::Result<PartiallySignedTransaction> psbt_res = DecodeBase64PSBT(request.params[0].get_str());
-    if (!psbt_res) {
-        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", util::ErrorString(psbt_res).original));
-    }
-    const PartiallySignedTransaction& psbtx = *psbt_res;
+    const PartiallySignedTransaction psbtx{DecodeBase64PSBTOrThrow(request.params[0].get_str())};
 
     PSBTAnalysis psbta = AnalyzePSBT(psbtx);
 
