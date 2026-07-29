@@ -261,3 +261,79 @@ beyond the author's own roadmap.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 5 (2026-07-29): knots remote scan — 29.x-knotsfixes delta inventoried; secp256k1 fixes present, two tor fixes dispositioned
+
+### Draw
+Re-rank draw over the remaining 4-cell queue:
+raw=8930217931205760543, index 3 (of 4) -> #65 (fifth cycle; c4
+queue cell "knots remote still unscanned"). Branch:
+audit/contributor-radar-c5 from d96a7614b2 (#24 c2 journal tip).
+Remote: knots https://github.com/bitcoinknots/bitcoin.git
+(59 branches + tags; latest v29.3.knots20260508).
+
+### Method
+git fetch --depth=40 knots 29.x-knots 29.x-knotsfixes; the fixes
+delta (20+ topic merges) triaged by scope: core/consensus/crypto/
+net in-scope; qt/guix/doc/rpc/wallet/win inventoried only.
+
+### fix_secp256k1_bugs-29 (d941a2618b) — DISMISSED (present)
+Two upstream secp256k1 PRs knots vendored:
+- #1821 (fed5dd96cd): ellswift_xdh overflow flag overwritten by
+  `overflow = secp256k1_scalar_is_zero(&s)` (should be |=) — keys
+  >= n silently reduced instead of rejected. PRESENT in-tree:
+  src/secp256k1/src/modules/ellswift/main_impl.h:557 already has
+  `overflow |=`. (Master-relative reachability would have been low
+  anyway: BIP324's XDH secret is self-generated, always < n.)
+- #1731 (3594134e4b): schnorrsig nonce buffer rename+clear.
+  PRESENT: schnorrsig/main_impl.h:128 nonce32[32].
+Our vendored subtree is newer (b7f9178976 "Update secp256k1 subtree
+to latest master"); knots' fixes are backports of what we already
+carry.
+
+### fix_tor_common_bind-29.2 family — two fixes
+- 85a13e943a (torcontrol: map bind-any to loopback before
+  StartTorControl): NOT present in-tree (init.cpp:2219 passes
+  onion_service_target through unchanged) NOR in origin/master.
+  Reachability: -listenonion + torcontrol + bind-any target;
+  connect("0.0.0.0") works on Linux (our platform), fails on
+  Windows. Severity: low (Windows-only, config-dependent).
+  Verdict: DISMISSED for this tree (platform/scope); recorded as an
+  upstream-watch seed (knots hash above) — if upstream takes a
+  bind-any guard, take theirs.
+- 23071773f6 (net: treat connections to the first normal bind as
+  Tor when appropriate): targets the PRE-REWORK binding model.
+  Our tree has the dedicated -bind=addr:port=onion machinery
+  (init.cpp:575/2175, net.h:1115 m_onion_binds classification) that
+  supersedes it. Verdict: DISMISSED (superseded by rework).
+
+### Inventory (not deep-scanned, scope note)
+qt/guix/doc/win merges (fix_qt_*, fix_win_exclopen, restore_guix_,
+docfix), extsigner_sanitychk_fingerprint (wallet/HWW),
+fix_rpc_mixed_params_edgecases (RPC), rm_dnsseed_pt (policy),
+plus __base_29 policy features (assumeunconf, datacarriercost,
+permitephemeral, rdts_consent_prompt) — Knots policy surface, not
+must-fix class.
+
+### Verdict
+DISMISSED (scan complete): no must-fix seeds from the knots fixes
+line; the two net-adjacent items are platform-scoped or superseded.
+Knots remote now scanned; radar cell closed.
+
+### Exact commands
+- git ls-remote --heads/--tags knots
+- git fetch --depth=40 knots 29.x-knots 29.x-knotsfixes
+- git log --oneline knots/29.x-knots..knots/29.x-knotsfixes
+- git show d941a2618b fed5dd96cd 3594134e4b 85a13e943a 23071773f6
+- greps: ellswift main_impl.h:557, schnorrsig:128, init.cpp:2219,
+  origin/master init/torcontrol IsBindAny
+
+### Limitations / queue
+- knots syslibs branches and pre-29 lines unexamined (historical;
+  low value).
+- qt/rpc/wallet knotsfix topics inventoried only — scan them only
+  if a core-reachability concern appears.
+
+## Rotation note
+Five cycles; knots cell closed. Not exhausted (new upstream
+contributor branches appear continuously — periodic re-scan).
