@@ -115,3 +115,50 @@ handoff commit.
 - Search history, issues, PRs, and prior journals for binding fixes and reviewer
   precedent before selecting a candidate. The next unchecked cell must be a
   distinct boundary, not a repeat of the prior opaque pointer-array finding.
+
+## Cycle 87 finding: tracing demo omitted replacement-kind field
+
+### Candidate and contract
+
+The maintained `contrib/tracing/mempool_monitor.py` BCC consumer modeled
+`mempool:replaced` with seven values and submitted a seven-field event. The
+native tracepoint in `src/validation.cpp` passes eight values: the eighth is
+`replaced_with_tx`, which distinguishes a replacement transaction ID from a
+package hash. `doc/tracing.md` documents the same eighth `bool`, and
+`test/functional/interface_usdt_mempool.py` already reads and asserts it.
+
+This is a concrete observability/FFI parity defect. Package RBF is a reachable
+production path, and the demo's replacement hash is otherwise ambiguous. The
+history search found the field-introducing commit `5736d1ddacc4` ("tracing:
+pass if replaced by tx/pkg to trace"), which explicitly added the discriminator
+because the tracepoint can now expose either a transaction ID or package hash.
+
+### Verification and fix
+
+- Source comparison: `src/validation.cpp` passes argument 8 as
+  `replaced_with_tx`; `doc/tracing.md` specifies the argument; the functional
+  BPF struct and `ctypes.Structure` both contain
+  `replaced_by_transaction` and read argument 8. The demo lacked both pieces
+  and rendered the replacement hash without a kind.
+- Applied fix: add `bool replaced_by_transaction` to the demo event, read
+  `bpf_usdt_readarg(8, ...)`, and render `transaction` or `package` before the
+  replacement hash. This is one self-contained source change; no native ABI
+  change is needed.
+- `python3 -m py_compile contrib/tracing/mempool_monitor.py`: passed.
+- `git diff --check`: passed.
+- Structural review of the patched event declaration/read sequence against the
+  functional harness: passed.
+- Live BCC validation was unavailable because `python3 -c 'import bcc'` failed
+  with `ModuleNotFoundError: No module named 'bcc'`. The repository functional
+  runner also could not start because `test/functional/../config.ini` is absent
+  in this checkout. These are environment limitations, not test failures in
+  the patch.
+
+### Verdict
+
+Confirmed. The demo silently discarded a documented, reachable tracepoint
+field and could not tell users whether its replacement hash was a transaction
+ID or package hash. The narrow fix preserves the existing event layout and
+adds the missing semantic label. Remaining queue: inspect the other shipped
+USDT/BCC consumers for the same class of dropped or stale fields, then close
+the cycle only after the patched file is committed with this journal.
