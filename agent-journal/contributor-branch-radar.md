@@ -427,3 +427,61 @@ closed.
 
 ## Rotation note
 Seven cycles; radar quiet. Not exhausted (periodic re-scans).
+
+## Cycle 8 (2026-07-29): txindex sibling branches — block-fetch-proxy is a substantive IN-SCOPE seed; benchmark-variants is revert-heavy WIP
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=1875611079037645143, index 1 (of 2) -> #65 (eighth cycle; c6
+queue cell "txindex siblings"). Branch:
+audit/contributor-radar-c8 from aec66d1264 (#50 c10 journal tip).
+
+### Seed: l0rinc/txindex-block-fetch-proxy (6-commit series)
+Pruned-block retrieval layered on the new txindex format:
+- 482d9d9d7e blockstorage: keep cursor files from pruning
+- 477ce33c4b net, rpc: fetch and retain pruned blocks
+- 5f5a08f570 txindex: read transactions from pruned blocks —
+  proxy fetch ONLY for "explicitly trusted local callers", REST
+  lookups stay disk-only; legacy physical-position DBs rejected
+  (they cannot identify pruned blocks by height/hash — requires
+  the 20d99d411a format assessed in #49 c8).
+- c79ee794ae rpc: gettxoutproof reads the located block through
+  the proxy when enabled; disk-only path and errors preserved
+  otherwise.
+- 990865587e wallet: rescan pruned blocks through proxy;
+  019b499da6 doc.
+Review questions when a cycle lands here:
+1. Is the proxy-fetched block hash-verified against the block
+   index before use (fetch-by-hash from the local index vs
+   fetch-by-height)?
+2. gettxoutproof: is the merkle root of a refetched block
+   re-verified against the indexed header before the proof is
+   served (a wrong-block fetch must not yield a valid-looking
+   proof to a light client)?
+3. Is the "trusted local caller" gate consistent across RPC paths
+   (gettransaction vs gettxoutproof vs REST)?
+4. Cursor-file retention vs the prune disk bound.
+### Also scanned
+txindex-benchmark-variants: benchmark scaffolding with paired
+Reverts (cache-reallocation, no-block-cache, 16 KiB blocks) —
+revert-heavy WIP, no review value this cycle.
+
+### Verdict
+Radar cell complete: block-fetch-proxy recorded as the top
+in-scope seed with four concrete review questions; no preemption
+warranted (the branch is the author's own WIP, not yet proposed).
+
+### Exact commands
+- git fetch l0rinc 'refs/heads/l0rinc/txindex-*'
+- git log --oneline master..refs/remotes/l0rinc/l0rinc/
+  txindex-{block-fetch-proxy,benchmark-variants}
+- git show --stat c79ee794ae 5f5a08f570
+
+### Limitations / queue
+- The four review questions above are the assessment cell if a
+  future cycle lands here (static first; the branch builds
+  against a master we already built for #49 c5).
+- knots fixes-line on next radar cycle.
+
+## Rotation note
+Eight cycles; siblings scanned. Not exhausted (the proxy seed).
