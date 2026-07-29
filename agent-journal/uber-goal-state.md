@@ -4,18 +4,18 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
-- Cycle 86 is active on goal 25 (`performance-regression-bisect`). The first exact draw was `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`) and was rejected as the just-closed campaign; the exact reroll was `shuf -i 0-98 -n 1` -> `25`.
+- Cycle 86 is complete on goal 25 (`performance-regression-bisect`). The first exact draw was `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`) and was rejected as the just-closed campaign; the exact reroll was `shuf -i 0-98 -n 1` -> `25`. Its historical performance comparison was inconclusive and produced no source patch.
 - Current branch: `uber-cycle-86-performance-regression-bisect-20260729`; start HEAD is `1d1db50f3f`; `origin/master...HEAD` is `2 959`; merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
 - No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
 
 ## Latest authoritative checkpoint
 
-- Cycle 86 is active on goal 25 (`performance-regression-bisect`), after rejecting the exact draw `71` and accepting reroll `25`. The dedicated branch is `uber-cycle-86-performance-regression-bisect-20260729`; start HEAD is `1d1db50f3f5fe1002c0701a7b1a8fe78ec9338aa`, `origin/master...HEAD` is `2 959`, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Cycle 86 is complete on goal 25 (`performance-regression-bisect`), after rejecting the exact draw `71` and accepting reroll `25`. The dedicated branch is `uber-cycle-86-performance-regression-bisect-20260729`; start HEAD is `1d1db50f3f5fe1002c0701a7b1a8fe78ec9338aa`, `origin/master...HEAD` is `2 959`, and merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
 - Cycle 85 is complete on goal 63 (`loupe-pipeline`) with source/fix commit `468e4ef6fd` and close snapshot `1d1db50f3f`; its fail-closed release-verifier evidence is recorded in `agent-journal/loupe-pipeline.md`.
 - Cycle 84 is complete with confirmed commit `89b320fe37` and close snapshot `eb9a35d139`; its deterministic failed-start lifecycle evidence is recorded in `agent-journal/deterministic-simulation.md`.
-- Cycle 86 journal: `agent-journal/performance-regression-bisect.md`. Scope is a stable, evidence-backed performance comparison and bisect with correctness controls; no relevant process remains running.
+- Cycle 86 journal: `agent-journal/performance-regression-bisect.md`. Scope was a stable, evidence-backed performance comparison and bisect with correctness controls; no relevant process remains running.
 
-## Cycle 86 Active State
+## Cycle 86 Completion
 
 - Initial draw: exact `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`), rejected as the just-closed campaign with no new schedule evidence.
 - Accepted reroll: exact `shuf -i 0-98 -n 1` -> `25` (`performance-regression-bisect`).
@@ -23,7 +23,11 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Start HEAD: `1d1db50f3f5fe1002c0701a7b1a8fe78ec9338aa`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `2 959`.
 - Scope: recent performance regression bisecting across stable local workloads, benchmark integrity, build mode, cache state, profiles, I/O, CPU, allocation, and correctness controls.
 - Journal: `agent-journal/performance-regression-bisect.md`; scratch root `/data/my_storage/tmp`.
-- Status: cycle 86 is active; first action is inventory of performance journals, benchmark recipes, recent performance-sensitive history, and stable workload candidates.
+- Status: cycle 86 is complete with a journal-only handoff; first action was inventory of performance journals, benchmark recipes, recent performance-sensitive history, and stable workload candidates.
+- Candidate boundary: merge `c0e91efdb3` (`validation: fetch block input prevouts in parallel during ConnectBlock`) versus first parent `f0da26cfc8`. Both historical worktrees built successfully with the same GCC 12.2.0 `RelWithDebInfo` configuration and `/data`-backed scratch/ccache settings.
+- Evidence: three interleaved parent/child `feature_block.py` runs all passed. Parent wall samples were `57.25`, `56.62`, and `56.72` seconds; child samples were `56.52`, `59.64`, and `58.41` seconds. Parent mean was `56.863` seconds and child mean `58.190` seconds, but the child test forces eight prefetch workers while the parent test uses the framework default of one, and the child sample spread was much larger. No causal profile, failure, or correctness regression was found.
+- Verdict: inconclusive workload signal; no source change justified. The direct `connectblock` benchmark was excluded because it bypasses `ConnectTip` prefetch. Next evidence should use identical worker settings and a deterministic cold/evicted-chainstate transaction workload before treating any effect as a regression.
+- Close action: commit this journal and state update as a single state-only handoff, then draw the next exact selector with `shuf -i 0-98 -n 1` and start a distinct branch/journal cycle.
 
 ## Cycle 85 Completion
 
