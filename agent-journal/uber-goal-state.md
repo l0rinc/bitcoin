@@ -125,11 +125,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 104 | analogical-vulnerability-translation | CYCLE-1 | 2026-07-29 | EMPTY-TRUTHINESS-FLIP fails on PartialMerkleTree (fail-closed + Assume contracts) |
 | 90 | historical-knowledge-recipes | CYCLE-2 | 2026-07-29 | R15-R22 added (sancov inlining, reindex gating, MiniWallet API, io sampling, mutant-first, pool mechanics, dict fuzzing, flag persistence) |
 | 71 | deterministic-simulation | CYCLE-2 | 2026-07-29 | crash-resume durability invariant delivered (6c6e7d9f87), 3k scans clean |
+| 32 | whole-history-leftovers | CYCLE-1 | 2026-07-29 | multiply-first percentage shape: no exploitable survivor (range/memory-bounded) |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=12477597616785016971 -> idx 42 (of 47) -> #71.
+   raw=15264671492345946424 -> idx 2 (of 46) -> #32.
    HYGIENE (from #64 c1): merge or re-cherry-pick the 5 out-of-lineage
    fixes (138ef3c044, 50e9d14750, 22aa75a2eb, 0a6c377ddb, 4124803dff).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
