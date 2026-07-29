@@ -445,3 +445,83 @@ SignPSBTInput, each with two independent verifiers.
 
 ## Rotation note
 Six cycles; witness-v0 cell closed. Not exhausted (P2TR).
+
+## Cycle 7 (2026-07-29): P2TR PSBTv2 correlated seed — raw-output-key keypath arm driven (SignTaproot output-key fallback + SIGHASH_DEFAULT)
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=6221299261676566590, index 0 (of 2) -> #50 (seventh cycle;
+c6 queue cell "P2TR"). Branch: audit/introspector-blockers-c7
+from 4828e826da (#9 c4 journal tip).
+
+### Mechanism analysis (before construction)
+FillableSigningProvider::GetTaprootSpendData only consults
+tr_trees (a plain AddKey does NOT register taproot spend data),
+so a tweaked-keypath P2TR is unsignable by this harness. BUT
+SignTaproot has the output-key fallback (sign.cpp:607
+make_keypath_sig(output, nullptr)): CreateSchnorrSig ->
+GetKeyByXOnly(output) (signingprovider.h:186-193, covers both
+Y-parities) -> CKey::SignSchnorr with merkle_root=nullptr = RAW
+schnorr under the untweaked output key. So a P2TR output whose
+output key IS K's x-only pubkey (no BIP341 tweak) signs with a
+plain provider key. Consensus-side this is a valid keypath spend
+(output-key tweak status is a wallet-side convention; verification
+checks the sig against the output key directly).
+
+### Seed (c6 layout, taproot variant)
+/tmp/psbt_v2_tr_seed (223 B, sha256
+39fb43787958c26ce84280b946bc917ae760c5e841b4f7c4e954cf0f2f618b74):
+[151 B PSBTv2 doc: funding tx pays 50000 to
+51201b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d
+5dd078f (P2TR of x-only(K), K=0x01*32, negated=True); spend input
+witness_utxo-only; 49000 OP_TRUE output]
+[0x5c 0x00][0x5c 0x00][K 32B][junk K2 32B][4 bools=1].
+Constructor /tmp/btc50_tr.py (compute_xonly_pubkey).
+
+### Signing proof (two independent verifiers)
+1. In-target trace (temporary instrumentation, reverted):
+   SIGDBG input=0 spk=51201b84... sign_err=7(OK) verified=1
+   tap_key_sig=0 final_ss=0 final_wit=1 — OK + consensus-verified
+   + final witness set (keypath sig finalized into the witness;
+   m_tap_key_sig reads 0 post-finalization). The
+   WITNESS_V1_TAPROOT SignStep -> SignTaproot -> output-key
+   fallback arm is confirmed driven, with the taproot
+   SIGHASH_DEFAULT branch taken (psbt.cpp:700: no sighash_type,
+   IsPayToTaproot -> DEFAULT).
+2. Public RPC: descriptor wallet rawtr(descsum_create(WIF))
+   active=False; walletprocesspsbt complete=True; finalizepsbt
+   complete=True (020000000001011f2e0848... — segwit tx spending
+   the funding prevout). rawtr (BIP386 untweaked) matches the
+   harness's raw-key semantics exactly.
+
+### Post-restore control
+150-run corpus over the 5-seed family (v0, v2, 2-in, wit, tr)
+clean; target byte-identical (git diff empty).
+
+### Exact commands
+- python3 /tmp/btc50_tr.py (constructor; prints xonly/spk/shas)
+- python3 /tmp/btc50_corrt_v2.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc50_tr_rpc (CORRT-SIGN-OK)
+- FUZZ=psbt build_fuzz/bin/fuzz -runs=2 /tmp/psbt_v2_tr_seed
+  (trace); -runs=150 /tmp/psbt_c5_corpus (final)
+
+### Verdict
+CONFIRMED deliverable: the correlated-seed family now covers
+P2PKH, multi-key P2PKH, P2WPKH (require_witness_sig), and P2TR
+raw-key keypath — every SignPSBTInput complete arm reachable
+through a plain FillableSigningProvider. The remaining
+unreachable arm is taproot SCRIPT-PATH (needs tr_trees/script
+leaves — provider extension, not a seed shape).
+
+### Limitations / queue
+- Taproot script-path arm: needs the fuzz target to also populate
+  provider.tr_trees (a TaprootBuilder from fuzz bytes) — a harness
+  extension candidate if a cycle lands here.
+- Tweaked (BIP86) keypath: needs tr_spenddata via PSBT_IN_TAP_
+  BIP32_DERIVATION or provider extension; RPC-side covered by tr()
+  if ever needed.
+- qa-assets corpus-dir import still queued.
+
+## Rotation note
+Seven cycles; the seed family is complete through keypath taproot.
+Not exhausted (script-path harness extension).
