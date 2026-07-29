@@ -653,4 +653,39 @@ BOOST_AUTO_TEST_CASE(compactsize_exhaustive_boundaries)
     }
 }
 
+BOOST_AUTO_TEST_CASE(compactsize_254form_exhaustive)
+{
+    // EXHAUSTIVE legal 254-form domain: every value in [253, 0xFFFF] must
+    // encode canonically as 0xFD + 2 LE bytes and round-trip exactly.
+    for (uint64_t n{253}; n <= 0xFFFF; ++n) {
+        DataStream ss{};
+        WriteCompactSize(ss, n);
+        BOOST_CHECK_EQUAL(ss.size(), 3U);
+        BOOST_CHECK_EQUAL(ss[0], (std::byte)0xFD);
+        DataStream rd{ss};
+        BOOST_CHECK_EQUAL(ReadCompactSize(rd, /*range_check=*/false), n);
+        BOOST_CHECK(rd.empty());
+    }
+    // EXHAUSTIVE non-canonical 254-form: every value < 0x10000 presented in
+    // 254-form (0xFE + 4 LE bytes) must throw — this upgrades c1's 8-sample
+    // battery to the full 65536-case domain.
+    for (uint64_t n{0}; n <= 0xFFFF; ++n) {
+        DataStream ss{};
+        ser_writedata8(ss, 254);
+        ser_writedata32(ss, (uint32_t)n);
+        BOOST_CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
+    }
+    // 0xFE-form acceptance near the class boundary: [0x10000, 0x100FF]
+    // round-trips at 5 bytes (0xFE + 4 LE bytes).
+    for (uint64_t n{0x10000ULL}; n <= 0x100FFULL; ++n) {
+        DataStream ss{};
+        WriteCompactSize(ss, n);
+        BOOST_CHECK_EQUAL(ss.size(), 5U);
+        BOOST_CHECK_EQUAL(ss[0], (std::byte)0xFE);
+        DataStream rd{ss};
+        BOOST_CHECK_EQUAL(ReadCompactSize(rd, /*range_check=*/false), n);
+        BOOST_CHECK(rd.empty());
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
