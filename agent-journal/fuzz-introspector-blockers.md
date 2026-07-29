@@ -654,3 +654,80 @@ import path to qa-assets is now mechanical (copy + PR).
 ## Rotation note
 Nine cycles; the long-carried import cell is closed. #50's
 remaining cells need new PSBT features or harness depth.
+
+## Cycle 10 (2026-07-29): P2WSH 2-of-3 multisig arm — provider.scripts registration; wit_items=4 proof + RPC verifier
+
+### Draw
+Re-rank draw over the remaining 3-cell queue:
+raw=5379781919100994291, index 1 (of 3) -> #50 (tenth cycle; the
+multisig arm cell). Branch: audit/introspector-blockers-c10 from
+9638d28e61 (#35 c3 journal tip).
+
+### Mechanism
+WITNESS_V0_SCRIPTHASH signing needs the witness script from the
+PROVIDER (sign.cpp:710-717: GetCScript keyed by
+CScriptID{RIPEMD160(program)} = Hash160(script)); a key-holding
+provider without the script only produces missing_witness_script.
+FlatSigningProvider.scripts covers it. The multisig SignStep then
+iterates the script's pubkeys, signs with available keys, and
+completes when the threshold is met.
+
+### Harness extension (this cycle's buildable change)
+Inside the c8 both-keys-valid block: register
+OP_2 <pk(keys[0])> <pk(keys[1])> <pk(unowned)> OP_3
+OP_CHECKMULTISIG into provider.scripts. The unowned key is
+024d4b6c...0766 (pubkey of 0x02*32) — chosen for containing no
+0x5c+non-0x5c pair (scan over small scalars), since docs carrying
+it must survive the random-length consumption; the generator
+constant used elsewhere contains TWO truncation pairs and is
+unusable inside documents (lesson recorded: the c8 tree internal
+only ever appears hashed, so it stayed).
+
+### Seed (331 B, sha256
+11b2873bb0714ff9100b1a70503bdb3714792a65155c0afa8ab1cb6a9aca0558)
+[259 B PSBTv2 doc: funding tx pays 50000 to
+002018942da51da7e44b2c24b2878e7e534cc9481b690d60a2b1b5a829f7d
+f94ce0e (P2WSH of the 2-of-3 script); witness_utxo + explicit
+PSBT_IN_WITNESS_SCRIPT; 49000 OP_TRUE output] + c4 trailer.
+Constructor /tmp/btc50_ms.py.
+
+### Signing proof (two independent verifiers)
+1. In-target trace (temporary instrumentation, reverted):
+   sign_err=7(OK) verified=1 final_wit=1 wit_items=4 — the exact
+   2-of-3 witness shape [OP_0 dummy (CHECKMULTISIG bug), sig(K),
+   sig(K2), witness_script]. The multisig SignStep + witness
+   script lookup + require_witness_sig arms all driven.
+2. Public RPC: descriptor wallet wsh(multi(2, WIF(K), WIF(K2),
+   024d4b6c...)); walletprocesspsbt complete=True; finalizepsbt
+   complete=True (02000000000101d48b510f... — prevout matches the
+   funding txid).
+
+### Final-code control
+250-run corpus over the 7-seed family (v0, v2, 2-in, wit, tr,
+trsp, ms) clean; target = extension only (prints reverted).
+
+### Exact commands
+- python3 /tmp/btc50_ms.py (constructor; 0x5c scan for pk3)
+- python3 /tmp/btc50_corrms_v2.py --configfile=...
+  (CORRMS-SIGN-OK)
+- FUZZ=psbt build_fuzz/bin/fuzz -runs=2 /tmp/psbt_v2_ms_seed
+  (wit_items=4 trace); -runs=250 /tmp/psbt_c5_corpus (final)
+
+### Verdict
+CONFIRMED deliverable: the witness multisig arm is driven with
+two verifiers. Every standard provider-reachable signing class in
+the psbt target is now covered: P2PKH, multi-key, P2WPKH, P2TR
+keypath, P2TR script-path, P2WSH multisig.
+
+### Limitations / queue
+- P2SH-wrapped multisig (legacy nested) and bare multisig:
+  same registration pattern, marginal new information — only on
+  a fresh signal.
+- CHECKMULTISIG partial-completion (threshold unmet ->
+  partial_sigs + missing_sigs) would need a 2-of-3 doc with ONE
+  owned key (a second unknown key in place of keys[1]) — a
+  follow-up seed if a cycle lands here.
+
+## Rotation note
+Ten cycles; multisig cell closed. The signing-arm map is
+complete; remaining cells need new PSBT/script features.
