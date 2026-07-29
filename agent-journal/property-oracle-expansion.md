@@ -192,3 +192,72 @@ closes the VarInt family.
 ## Rotation note
 Two cycles; VarInt write side closed. Not exhausted (CTxUndo
 consumer side).
+
+## Cycle 3 (2026-07-29): CTxUndo consumer-side fuzzed VARINT fields — all paths safe; fork amount-hardening EXCEEDS upstream
+
+### Draw
+Re-rank draw over the remaining 4-cell queue:
+raw=4741416227469711203, index 3 (of 4) -> #35 (third cycle; c1
+queue cell "CTxUndo consumer-side fuzzed VARINT fields"). Branch:
+audit/property-oracle-c3 from bfae1cf0c9 (#9 c6 journal tip).
+
+### Surface (undo.h TxInUndoFormatter + compressor.h)
+The undo deserialization consumes fuzzed VARINT at: nCode,
+dummy-version, amount (AmountCompression::Unser), script size
+(ScriptCompression::Unser). Existing fuzz coverage:
+txundo_deserialize, blockundo_deserialize,
+txoutcompressor_deserialize (the latter with a fork-added
+MoneyRange assert).
+
+### Paths (all safe; arms run no-crash on build_fuzz)
+- oversized script (nSize > MAX_SCRIPT_SIZE+6): short stream ->
+  SpanReader::ignore throws "end of data" -> expected-reject;
+  full stream -> script replaced with OP_RETURN (upstream-tolerated
+  degrade, identical code in origin/master). Arms:
+  /tmp/undo_armA (10 B, reject) and /tmp/undo_armB (10007 B,
+  accept) both exit 0 on txundo_deserialize.
+- special scripts (nSize 0-5): fixed-size reads only.
+- VARINT overflow itself: c1's battery (both guards).
+- amount: FORK ADDED a check upstream lacks — upstream master
+  (7dea464d6b, fetched today) has AmountCompression::Unser =
+  `val = DecompressAmount(v)` with NO bound; the fork throws on
+  amount > MAX_MONEY and Assumes it on Ser. Self-consistent with
+  the fork's MoneyRange assert in the fuzz target (throw makes the
+  assert unreachable on bad input).
+
+### Upstream note (seed, not a local defect)
+Upstream silently accepts invalid amounts from a CORRUPTED LOCAL
+DB (DecompressAmount can overflow and exceed MAX_MONEY; no check,
+no fuzz assert at origin/master). Trust-boundary choice (local
+disk is trusted); the fork's throw+assert exceeds it and could be
+offered upstream. DecompressAmount's own overflow-wrap means the
+fork's post-computation check could in principle pass a wrapped
+small value — a local-corruption corner, noted for completeness;
+no reachable-by-design path (only hostile/corrupt datadir).
+
+### Verdict
+DISMISSED (consumer side safe; fork strictly better than
+upstream). The c1/c2/c3 VarInt + undo family is closed: read-side
+guards (c1), write-side encodings (c2), undo consumer (c3).
+
+### Exact commands
+- layout from undo.h TxInUndoFormatter; arm blobs per
+  [CompactSize(1) varint(4) varint(0) varint(1) varint(10007)]
+- FUZZ=txundo_deserialize build_fuzz/bin/fuzz -runs=1
+  /tmp/undo_armA /tmp/undo_armB (both exit 0)
+- git show origin/master:src/compressor.h (AmountCompression,
+  no check); git show origin/master:src/test/fuzz/deserialize.cpp
+  (no MoneyRange assert); git diff origin/master..HEAD --
+  src/compressor.h (fork hardening; constexpr diff is
+  upstream-ahead cosmetic)
+
+### Limitations / queue
+- The overflow-wrap corner (DecompressAmount internal overflow
+  wrapping below MAX_MONEY) is unpatched in both trees; a
+  DecompressAmount-range-INSIDE check would close it — candidate
+  micro-fix if a cycle lands here.
+- PSBT_OUT_TAP_* family belongs to #80 c10.
+
+## Rotation note
+Three cycles; the VarInt/undo family is closed. Not exhausted
+(the overflow-wrap corner).
