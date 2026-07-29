@@ -4,6 +4,8 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Current Run
 
+- Cycle 94 is active on goal 56 (`stale-pr-critical-fix`), selected by exact `shuf -i 0-98 -n 1` -> `56` after Cycle 93 closed goal 60. The dedicated branch is `uber-cycle-94-stale-pr-critical-fix-20260729`; start HEAD is `b72e2ade288714d66864e2b33048aa7297428bd2`. `origin/master` advanced during the fresh gate to `9b38d077f894d27ea76413b1db1cb040e25dc296`; merge-base remains `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, with start divergence `29 977`. This cycle mines stale pull requests for current, independently reproducible critical fixes; Cycle 93 reviewer-mining evidence and the Cycle 92 BIP324 vector cell remain excluded.
+
 - Cycle 93 is complete on goal 60 (`reviewer-preference-mining`), selected by exact `shuf -i 0-98 -n 1` -> `60` after Cycle 92 closed goal 81. The dedicated branch is `uber-cycle-93-reviewer-preference-mining-20260729`; start HEAD was `e17065f2351dfa70e3b71a999db842cc19370931`, and source/test/journal close commit is `187f73c81084e48e5109d4e6e55ba5c7bf453b90`. This cycle mined technically grounded reviewer patterns, validated one reusable recipe on held-out changes, and corrected one stale local test oracle. The next run must perform a fresh gate and draw a distinct goal. The existing cycle-92 BIP324 vector evidence remains excluded unless new source or review evidence changes its priority.
 - No relevant process remains running. Preserved unrelated untracked artifacts remain excluded from all cycle commits.
 
@@ -14,6 +16,18 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 - Cycle 90 is complete on goal 69 (`backend-differential`). The dedicated branch is `uber-cycle-90-backend-differential-20260729`; start HEAD was `89b836342154f71d5d4427dc13864702170eec42`, `origin/master` is `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`, merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `2 968` (`origin/master...HEAD`). Catalog, protocol, and TSV hashes match the recorded values. The gate and final `git diff --check` passed; no relevant Bitcoin Core process was running. Prior goal-69 evidence covered x86_64 Clang API parity with ECDH disabled; this cycle covered ECDH plus Release compiler/backend configuration parity.
 - Cycle 91 is complete on goal 58 (`exact-helper-reuse`). The dedicated branch is `uber-cycle-91-exact-helper-reuse-20260729`; start HEAD was `10e39ef493a79dae58c7839b891805710986e169`, source/test/goal-journal close HEAD is `993c9681b7`, `origin/master` is `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`, merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `2 969` (`origin/master...HEAD`). Catalog, protocol, and TSV hashes match the recorded values. The gate and final `git diff --check` passed; no relevant process remains running. The prior goal-58 transaction total-size helper cell and commit `8ff6f9dd27` were excluded. This cycle confirmed four production consumers duplicated the witness-inclusive block-size expression and replaced them with `CBlock::ComputeTotalSize()`; independent direct serializer expressions remain in tests and fuzzers.
 - Cycle 92 is complete on goal 81 (`spec-vector-drift`). The dedicated branch is `uber-cycle-92-spec-vector-drift-20260729`; start HEAD was `ceca2378b0aeb0906f57d70bf2fbacae576ac0ea`, source/test/journal finding commit is `32f2dc178e`, `origin/master` is `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`, merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `2 971` (`origin/master...HEAD`). Catalog, protocol, and TSV hashes match the recorded values. The final gate and `git diff --check` passed; no relevant process was running. The preserved `spec-vector-drift.md` contains the detailed Cycle 92 evidence and remains untracked/preserved.
+
+## Cycle 94 Active Scope
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `56` (`stale-pr-critical-fix`). No reroll was needed because the draw was distinct from the just-closed goal 60.
+- Branch: `uber-cycle-94-stale-pr-critical-fix-20260729`.
+- Start HEAD: `b72e2ade288714d66864e2b33048aa7297428bd2`; `origin/master`: `9b38d077f894d27ea76413b1db1cb040e25dc296`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `29 977` (`origin/master...HEAD`).
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Uber prompt SHA256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- The fresh gate passed `git fetch origin master`, tracked worktree/index cleanliness, `git diff --check`, hash checks, and process checks. Preserved untracked artifacts remain excluded from cycle commits.
+- Scope: mine abandoned or stale Bitcoin Core and libsecp256k1 PRs for current security, correctness, testing, portability, or performance fixes; reconstruct intent from review/history; reproduce on current HEAD; and resurrect only a self-contained, evidence-backed fix. Initial queue prioritizes stale PRs with regression tests or concrete reviewer-identified failures, then incomplete follow-ups, then obsolete proposals whose current boundary remains untested.
+- Journal: `agent-journal/stale-pr-critical-fix.md`.
 
 ## Cycle 93 Active Scope
 
