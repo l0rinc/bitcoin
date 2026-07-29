@@ -78,3 +78,48 @@ uncleared residues are upstream-matching and non-severity.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): clang cross-check of the cleanse probes — idiom honored, barrier un-elidable
+
+### Draw
+Re-rank draw over the rebuilt 3-cell queue:
+raw=2732842920470447767, index 1 -> #44 (second cycle; c1 queue
+"clang-18 disassembly cross-check — verify rather than assume").
+Branch: audit/secret-copy-c2 from b37b79ebf7 (#42 c2 bookkeeping).
+
+### Method note
+clang LTO cannot link on this host (no LLVMgold/lld), so the
+cross-check uses whole-TU compilation (probe+cleanse.cpp in one
+translation unit — the post-inlining equivalent LTO would see).
+
+### Result (clang++-18 -O3, LLVM IR)
+- Probe 2 (opaque source): main = { calloc(1,32);
+  `asm sideeffect "", "r,~{memory}"(ptr); free; } — clang folds
+  malloc+memcpy+cleanse into calloc (zero-state preserved, same as
+  gcc) AND the asm barrier SURVIVES as an explicit IR instruction
+  between calloc and free. The barrier is un-elidable; the
+  compiler realizes the zero-state via calloc.
+- Probe 1 (foldable): identical shape (calloc + barrier + free).
+- Single-TU (no-LTO) case: memory_cleanse stays an external call
+  before free — cannot be elided across the TU boundary anyway.
+
+### Verdict
+DISMISSED (confirmed-clean): the Langley barrier idiom is honored
+by clang as documented — the zero-state guarantee at deallocation
+holds in both foldable and opaque cases, and the barrier marker
+itself is never optimized out. The c1 gcc result now has its
+cross-compiler confirmation.
+
+### Exact commands
+- clang++-18 -O3 -S -emit-llvm -I src p{1,2}_one.cpp
+  (whole-TU: probe + src/support/cleanse.cpp)
+- (no-link LTO: LLVMgold.so missing on this host; noted)
+
+### Limitations / queue
+- MSVC's SecureZeroMemory path is Windows-only by construction
+  (cleanse.cpp #if WIN32) — uninspectable here.
+- Wallet-side crossing map (c1 queue) still open.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
