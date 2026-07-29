@@ -396,3 +396,34 @@ exact review questions; nothing requiring immediate preemption
 
 ## Rotation note
 Six cycles; re-scan cell closed. Not exhausted (txindex series).
+
+## Cycle 7 (2026-07-29): knots fixes-line re-scan — no new activity since c5 (same tip)
+
+### Draw
+Re-rank singleton (last queue cell): #65 (seventh cycle; c6 queue
+cell "knots fixes-line re-scan"). Branch:
+audit/contributor-radar-c7 from d2a3b053b8 (#49 c8 journal tip).
+
+### Result
+git fetch --depth=40 knots 29.x-knots 29.x-knotsfixes: the
+knotsfixes tip is UNCHANGED from c5 (d941a2618b Merge
+fix_secp256k1_bugs-29). The delta count (875) is a shallow-clone
+artifact — the --depth=40 window excludes the merge-base, so the
+delta appears to cover all visible history; the tip comparison is
+the authoritative check.
+
+### Verdict
+No new knotsfix topics since c5; nothing to assess. Radar cell
+closed.
+
+### Exact commands
+- git fetch --depth=40 knots 29.x-knots 29.x-knotsfixes
+- git log --oneline knots/29.x-knots..knots/29.x-knotsfixes
+  (tip d941a2618b, unchanged; count artifact explained)
+
+### Limitations / queue
+- Next radar cycle: l0rinc re-scan (new branches appear
+  continuously; txindex siblings from c6 may update).
+
+## Rotation note
+Seven cycles; radar quiet. Not exhausted (periodic re-scans).
