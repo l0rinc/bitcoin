@@ -485,3 +485,69 @@ warranted (the branch is the author's own WIP, not yet proposed).
 
 ## Rotation note
 Eight cycles; siblings scanned. Not exhausted (the proxy seed).
+
+## Cycle 9 (2026-07-29): block-fetch-proxy assessment — all four review questions SOUND
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=16381284910993384311, masked 7157912874138608503, index 1
+(of 2) -> #65 (ninth cycle; c8's proxy seed). Branch:
+audit/contributor-radar-c9 from 24b9fb0b4b (#50 c11 journal tip).
+Static reads on refs/remotes/l0rinc/l0rinc/txindex-block-fetch-proxy.
+
+### Q1: hash verification of fetched blocks — SOUND
+Requests are by-hash from the LOCAL block index
+(block_index.GetBlockHash()); the response passes
+IsBlockMutated (witness-root when segwit-active; mismatch ->
+Misbehaving + caller woken with error) and then full
+ProcessNewBlock(force_processing=true) validation before
+storage. A wrong block cannot be stored.
+
+### Q2: merkle-root re-verification for proofs — SOUND
+gettxoutproof's block comes from disk (validated at connect) or
+the proxy (validated at ProcessNewBlock). The proof anchors to
+the INDEX header hash; GetTransaction checks
+block_index->GetBlockHash() == block_hash. A non-active-chain
+result is still cryptographically consistent (the client checks
+the block hash itself).
+
+### Q3: trusted-caller gate consistency — SOUND
+Two independent flags (allow_block_fetch, allow_local_only):
+REST gets (false, false) — fully disk-only; gettransaction,
+utxoupdatepsbt prevout, gettxoutproof get fetch=true with
+local_only defaulting true. Matches the commit's stated
+contract; no RPC path fetches for untrusted callers.
+
+### Q4: cursor retention vs prune bound — SOUND
+Fetched blocks append to the CURRENT block file (per cursor —
+both cursors handled for assumeutxo), retained only until normal
+file rotation; the LOCAL_ONLY marker is cleared when the
+containing file is eventually pruned. No unbounded cache;
+no separate disk/memory store.
+
+### Also noted
+Legacy physical-position txindex DBs are rejected at startup
+with an explicit InitError (they cannot identify pruned blocks
+by height/hash) — forces the #49 c8-assessed format. The series
+carries its own feature_blockfetchproxy.py coverage.
+
+### Verdict
+DISMISSED (assessment clean): the pruned-block-retrieval design
+holds under all four review questions. The block-fetch-proxy
+seed is closed; if the branch is proposed upstream, the R/M
+template predicts the review surface (trust-boundary questions
+are already answered in-code).
+
+### Exact commands
+- git show 477ce33c4b 5f5a08f570 c79ee794ae 482d9d9d7e
+  (--stat and net_processing.cpp/txindex.cpp/transaction.cpp/
+  rest.cpp/rawtransaction.cpp/txoutproof.cpp)
+
+### Limitations / queue
+- Static only; the series' own functional test was not run (it
+  lives on the branch, not in this tree).
+- knots fixes-line on next radar cycle.
+
+## Rotation note
+Nine cycles; the top in-scope seed is assessed and closed.
+Radar returns to periodic scanning.
