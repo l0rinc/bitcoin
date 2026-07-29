@@ -212,3 +212,38 @@ convenience, upstream-matching option design.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-29): ELF posture census across all build products — uniform hardening, zero divergence
+
+### Draw
+Re-rank draw over the rebuilt 6-cell queue:
+raw=5848245164434789317, index 3 -> #91 (fourth cycle; c3 queue
+"bitcoind-qt / test binaries' ELF posture"). Branch:
+audit/compiler-hardening-c4 from 3915b60883 (#102 c2 bookkeeping).
+
+### Census (build-before/bin, readelf/nm)
+bitcoind, bitcoin-cli, bitcoin-tx, bitcoin-util, bitcoin-wallet,
+test_bitcoin, bench_bitcoin — all 7 identical on every axis:
+- type DYN (PIE), GNU_STACK RW (NX), GNU_RELRO + BIND_NOW (full
+  RELRO), stack-canary symbols present, BTI note absent (c1's
+  toolchain finding: crt files note-less, enforcement inactive).
+No divergence between production and test/bench binaries.
+bitcoind-qt is not built on this host (GUI off) — noted, not
+assessed.
+
+### Verdict
+Findings of fact: hardening posture is uniform and complete on the
+available axes; only BTI enforcement is toolchain-inactive (c1).
+Journal-only.
+
+### Exact commands
+- readelf -h/-lW/-dW/-n, nm -D per binary (7/7)
+
+### Limitations
+- bitcoind-qt unbuilt here (GUI off); its posture would inherit the
+  same flags when built.
+- Windows/macOS hardening uninspectable (c1 note).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
