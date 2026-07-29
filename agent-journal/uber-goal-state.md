@@ -161,6 +161,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 6 | serialization-untrusted-input | EXHAUSTED | 2026-07-29 | wallet-record cell dismissed (machinery-bounded, O5 harness owns the seam); all cells accounted |
 | 58 | helper-reuse | CYCLE-1 (retro) | 2026-07-28 | mempool hex-tx-array decode-loop dedup (4f97fbfe1e, row restored); backported a7067512e8+3e887dbbf7, green at HEAD |
 | 58 | helper-reuse | CYCLE-2 | 2026-07-29 | base64-PSBT decode-or-throw dedup x6 (b1e55802f6); rpc_psbt.py green |
+| 80 | fuzz-engine-differential | CYCLE-1 | 2026-07-29 | PSBT C++/Python differential 400 cases: A=0 (no over-acceptance), E=142 round-trip-equal, C=123 all reference-lax |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -174,6 +175,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    raw=5200339953805149283 -> idx 7 (of 18) -> #49.
    raw=5880676013471384719 -> idx 13 (of 17) -> #6.
    raw=2597777539898758520 -> idx 8 (of 16) -> #58.
+   raw=7161189119308982694 -> idx 9 (of 15) -> #80.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -212,7 +214,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1,c2), 4(c1,c2), 6(c1,c2,c3),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1,c2), 21(c1,c2), 43(c1,c2), 45(c1,c2), 47(c1,c2), 49(c1), 50(c1), 48(c1), 51(c1), 53(c1), 55(c1), 57(c1), 58(c1,c2), 59(c1,c2), 60(c1),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2), 75(c1),
-76(c1,c2), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 101(c1,c2), 103(c1), 104(c1), 105(c1), 107(c1), 108(c1), 109(c1).
+76(c1,c2), 80(c1), 81(c1,c2), 90(c1,c2), 91(c1), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2), 99(c1), 100(c1), 101(c1,c2), 103(c1), 104(c1), 105(c1), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
@@ -247,6 +249,15 @@ grep fallback as coverage evidence. A padded NetMsgType dictionary
 coverage 42% and is reusable across P2P targets.
 Reindex-harness note (#21 c2): plain -reindex on a synced datadir is
 block-INDEX-only; the validation cell needs -reindex-chainstate.
+OOM-guard note (#80 c1): any scratch differential/fuzz script that
+feeds fuzzed counts into Python reference parsers MUST set
+resource.setrlimit(RLIMIT_AS, 4 GiB) and catch MemoryError per case —
+the framework's deserializers trust untrusted CompactSize counts and
+will otherwise consume the whole host (kernel OOM-kill at 14.8 GB RSS
+on 2026-07-29; only the script died, no restart). Pair every
+differential with a positive-control assertion (E>0-style) — a
+systematic harness error (hex passed to a base64 RPC) showed up
+instantly as zero double-accepts.
 Completion gating must not poll pre-wipe-true state (610/False matches
 BEFORE the wipe) — gate on the debug.log markers ('Wiping LevelDB' ->
 final 'UpdateTip.*height=N version') and distrust gates against copied
