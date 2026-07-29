@@ -129,3 +129,66 @@ sufficient everywhere the wrapper is used.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-29): LevelDB vs RocksDB reindex A/B on a tx-heavy chain — CPU parity (validation-bound), RocksDB wall -43%
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=1659704294019222637, index 2 -> #95 (third cycle; c2/#65-c3
+queued "large DB-engine experiment; #95 differential method").
+Branch: audit/db-semantics-c3 from b681a8dc0a (#23 c4 bookkeeping).
+
+### Method (the #95 differential, finally executed)
+- Worktree at l0rinc/rocksdb-build-fix (67b37ca71b, base 2026-06-03):
+  cmake Release, wallet/tests/fuzz/gui OFF; bitcoind built clean
+  (601 edges) — the branch COMPILES AND LINKS today.
+- Workload: identical 410-block / ~20k-tx OP_TRUE regtest chain
+  (built once by HEAD; reindex rebuilds index+chainstate from
+  engine-independent blk*.dat). Foreground /usr/bin/time, wipe-
+  aware gating (fresh debug.log per run).
+- LevelDB (build-before): user 2.71s, wall 2.26s.
+- RocksDB (branch): user 2.77s, wall 1.28s.
+
+### Result
+User-CPU parity within noise (+2%): the reindex is validation-
+bound (#21 c3: ~86% EC math even for OP_TRUE), so the engines do
+not separate on CPU at this scale. RocksDB's wall time is -43%
+(1.28s vs 2.26s) — consistent with write-path parallelism
+(RocksDB's concurrent memtable/compaction vs LevelDB's serialized
+writer); single-run, small-scale, read as directional only.
+UTXO-scan differential (gettxoutsetinfo) is meaningless on this
+chain: MiniWallet self-transfers keep the set at ~560 entries.
+
+### Harness incidents (recorded)
+1. -daemon under /usr/bin/time measures the forking parent
+   (0.11s "result"); fixed to foreground + CLI stop.
+2. Stale-log gate matched the copied chain log; fixed by
+   truncating debug.log per run.
+3. rocksdb worktree has no bitcoin-cli (bitcoind-only target) —
+   main-tree cli is protocol-compatible; noted.
+
+### Verdict
+Findings of fact, journal-only: the swap branch builds and runs a
+full reindex correctly today (functional parity, chainstate
+byte-level operation confirmed by identical UpdateTip hashes);
+the engine differential is CPU-neutral on validation-bound work
+and wall-positive for RocksDB on this workload. No local defect;
+no adoption decision (fork author's branch).
+
+### Exact commands / artifacts
+- git worktree add /tmp/btc95_wt (removed after); cmake --build
+  --target bitcoind (601 edges)
+- /tmp/btc95_ab.sh (v4, foreground + wipe-aware gate)
+- workloads: /tmp/btc25_mw chain (removed)
+
+### Limitations / queue
+- DB-dominated separation (mainnet-scale chainstate, or a
+  large-UTXO workload > dbcache) untested — needs a much bigger
+  experiment (days-scale disk budget this host lacks).
+- Durability/crash-consistency differential (kill -9 mid-write,
+  recovery comparison) — the natural c4 cell.
+- rocksdb-brute (bulk coin ops) unassessed (depends on the swap).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
