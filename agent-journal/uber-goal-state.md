@@ -6,11 +6,19 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Latest authoritative checkpoint
 
-- Cycle 83 is complete. Goal 11 (`sanitizer-valgrind`) found no confirmed current Bitcoin Core or libsecp256k1 source defect and made no production source change.
-- Current ASan/UBSan/LSan fuzz reruns for `process_messages`, `validation_block_reorg`, and `dbwrapper_threaded` exited 0 for 16 executions each with no sanitizer report. The fresh standalone TSan corpus runner and fresh TSan+libFuzzer build covered parser, database, P2P private-broadcast, and reorg targets without reports; a suppression-free TSan replay also passed.
-- A bounded Clang 19 MSan libsecp256k1 run covered all 16 modules in 176.119 seconds with no report. The longer default 16-iteration MSan run was explicitly inconclusive and interrupted after 14:28. Valgrind is unavailable, and no full Bitcoin Core MSan build or local `qa-assets` corpus exists.
-- The only negative ASan results were default libFuzzer RSS-limit failures during fixture setup; reruns with an explicit 4096 MiB limit passed. The exact commands, seeds, outputs, exclusions, and scratch log paths are in `agent-journal/sanitizer-valgrind.md`.
-- Current branch: `uber-cycle-83-sanitizer-valgrind-20260728`; current HEAD before the close snapshot: `f8ca766f4b`. `origin/master...HEAD` is `2 948`; no relevant process remains running. The next exact random selector is pending.
+- Cycle 84 is active. Goal 71 (`deterministic-simulation`) is exploring replayable production schedules across task ordering, time, randomness, network, disk, retries, and shutdown, with explicit state, progress, durability, and resource invariants.
+- Cycle 83 is complete. Goal 11 (`sanitizer-valgrind`) found no confirmed current Bitcoin Core or libsecp256k1 source defect and made no production source change; its ASan/TSan/MSan evidence and tool blockers are recorded in `agent-journal/sanitizer-valgrind.md`.
+- Current branch: `uber-cycle-84-deterministic-simulation-20260728`; current HEAD before the start snapshot: `c79c8b401b`. `origin/master...HEAD` is `2 950`; no relevant process remains running.
+
+## Cycle 84 Active State
+
+- Selector: exact `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`).
+- Branch: `uber-cycle-84-deterministic-simulation-20260728`.
+- Start HEAD: `c79c8b401b`; base `origin/master` `7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `2 950`.
+- Scope: replayable production schedules for task ordering, time, randomness, network, disk, retries, and shutdown, with explicit final-state, progress, durability, cleanup, and resource invariants.
+- Exclusions: Cycle 9 generated-artifact determinism and prior full-sync, sanitizer, P2P accounting, filesystem crash, database fault, and scheduler cells without a new boundary or schedule.
+- Journal: `agent-journal/deterministic-simulation.md`. Scratch root: `/data/my_storage/tmp` because `/` is full.
+- Status: cycle 84 is active; first action is inventory of existing production simulation seams, deterministic hooks, and prior schedule evidence.
 
 ## Cycle 83 Completion
 
