@@ -1,0 +1,37 @@
+{
+  "assignedRange": {
+    "startRow": 65,
+    "endRow": 110,
+    "count": 46
+  },
+  "reviewedCount": 46,
+  "allFilesReviewed": true,
+  "firstFile": "src/CMakeLists.txt",
+  "lastFile": "src/modinv64_impl.h",
+  "unreviewableItems": [],
+  "surfacesChecked": [
+    "core build and backend selection",
+    "ARM32 field assembly",
+    "benchmark and constant-time test harnesses",
+    "ECDSA DER parsing, signing, and verification",
+    "public-key parsing, serialization, and tweaking",
+    "constant-time and variable-time EC multiplication",
+    "precomputation and scratch-space batching",
+    "field and group arithmetic",
+    "SHA-256, HMAC-SHA256, and RFC6979",
+    "heapsort over public key and recipient arrays",
+    "native and structured int128 backends",
+    "32-bit and 64-bit modular inversion"
+  ],
+  "riskAreasChecked": [
+    "malformed public input reachability",
+    "memory safety and undefined behavior",
+    "arithmetic and cryptographic correctness",
+    "secret-dependent control flow and memory access",
+    "invalid and infinity object handling",
+    "integer and allocation-size bounds",
+    "secret cleanup",
+    "supported backend and platform assumptions"
+  ],
+  "notes": "Reviewed every assigned file from start to finish and inspected supporting public callers where needed. DER and key parsing bound checks, field/group invariants, constant-time secret paths, scratch batching, table indexing, backend selection, and inversion limb bounds showed no technically plausible discovery candidate. No raw-candidates artifact was created."
+}
