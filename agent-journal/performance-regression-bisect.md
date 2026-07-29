@@ -44,3 +44,73 @@ show the expected metric movement on the same workload.
 - Keep benchmark-harness defects, source regressions, and inconclusive host
   variance as separate verdicts. Preserve raw samples, profiles, commands,
   environment, and the next queue in this journal.
+
+## Cycle 86 investigation: prevout-fetch merge boundary
+
+### Candidate and source evidence
+
+- The strongest distinct recent candidate was merge commit `c0e91efdb31f`
+  (`validation: fetch block input prevouts in parallel during ConnectBlock`),
+  with first parent `f0da26cfc8a4`. The merge changes `CoinsViewOverlay`,
+  `ConnectTip`, configuration, functional tests, fuzz harnesses, and unit
+  tests. Its release description claims 1.18x to over 3x IBD improvements on
+  disk-miss workloads, a default of eight fetch workers capped at 16, and
+  `-prevoutfetchthreads=0` as the serial control.
+- The historical boundary was checked out in detached worktrees:
+  `/data/my_storage/tmp/cycle86-parent` at `f0da26cfc8` and
+  `/data/my_storage/tmp/cycle86-child` at `c0e91efdb3`. Both used GCC 12.2.0,
+  `RelWithDebInfo`, `BUILD_TESTS=OFF`, `BUILD_BENCH=OFF`, wallet/GUI/IPC/BDB/
+  ZMQ disabled, the same separate build directories, and the same `/data`
+  backed ccache/TMPDIR. Both `bitcoind` and `bitcoin-cli` targets built at
+  `298/298`.
+- `src/bench/connectblock.cpp` was explicitly excluded: it calls
+  `Chainstate::ConnectBlock` directly and does not exercise the `ConnectTip`
+  prefetch boundary. The current functional test is also an imperfect
+  source-bisect workload: the parent uses the framework-generated
+  `prevoutfetchthreads=1`, while the child commit adds
+  `-prevoutfetchthreads=8` to `feature_block.py`. Its large reorg mostly spends
+  recently created outputs and does not establish a cold chainstate read
+  regression by itself.
+
+### Controlled functional comparison
+
+The test runner was invoked from each historical worktree with the matching
+generated `test/config.ini`, fixed `--randomseed=8601`, isolated scratch roots,
+different port seeds, and no default datadir. The authoritative command shape
+was:
+
+    time -p python3 test/functional/test_runner.py feature_block.py --tmpdirprefix=<isolated-root> --quiet --portseed=<seed> --randomseed=8601
+
+All six runs passed `feature_block.py`, and a process scan after each completed
+with no remaining `bitcoind`, test runner, or feature-test process.
+
+| revision | run | wall seconds | user seconds | system seconds | result |
+|---|---:|---:|---:|---:|---|
+| `f0da26cfc8` parent | 1 | 57.25 | 40.22 | 5.86 | pass |
+| `c0e91efdb3` child | 1 | 56.52 | 40.74 | 5.39 | pass |
+| `f0da26cfc8` parent | 2 | 56.62 | 40.39 | 5.72 | pass |
+| `c0e91efdb3` child | 2 | 59.64 | 40.56 | 5.57 | pass |
+| `f0da26cfc8` parent | 3 | 56.72 | 40.49 | 5.60 | pass |
+| `c0e91efdb3` child | 3 | 58.41 | 40.62 | 5.84 | pass |
+
+Parent mean wall time was 56.863 seconds with 0.339 seconds sample standard
+deviation. Child mean wall time was 58.190 seconds with 1.572 seconds sample
+standard deviation: 1.327 seconds, or 2.33%, slower on this harness. The
+parent median was 56.72 seconds and child median 58.41 seconds. The child
+outlier and unequal worker setting prevent this from being a confirmed source
+regression. The runs provide no failing correctness result, sanitizer trace,
+or causal profile.
+
+### Cycle verdict and handoff
+
+- Verdict: inconclusive performance signal; no source change is justified.
+- Dismissed as evidence of a bug: the direct `ConnectBlock` benchmark and the
+  six passing functional runs do not prove a regression in the production
+  prefetch path.
+- Retained hypothesis: rerun the exact parent/child boundary with identical
+  worker settings (`0`, `1`, and `8`) and a deterministic transaction-heavy
+  chainstate workload that evicts or bypasses the UTXO cache, then collect
+  repeated wall/CPU/I/O measurements and a profile. Only a stable first-bad
+  effect with matching configuration and correctness evidence should produce a
+  fix. The next cycle should select a distinct unchecked goal after this
+  journal-only close.
