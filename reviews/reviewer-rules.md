@@ -123,3 +123,24 @@ R13. Non-blocking nits are self-labeled and declinable (process)
   predicts the KIND of demand, not always the specific angle.
 - Watch items with open upstream PRs: 35744 (TSan flagged on first
   rework — see campaign #42 c1), 35818 (bloom sizing UB — see L1).
+
+R14. Public setters validate at the boundary, not downstream
+  Trigger: a public API accepts a value that later aborts or
+  misbehaves.
+  Ask: "accepts 0 and 1, but these produce an empty cache and abort
+  in node/chainstate.cpp — should the setter reject these?"
+  (w0xlt, 35205 test_kernel.cpp:804). Class: API-robustness.
+
+## Held-out validation record
+
+- 35754 (pre-encoding): 2/3 confirmed, 1 refined (R7).
+- 35670 (pre-encoding): 2/3 confirmed, 1 refined (R12/R13).
+- 35205 (post-encoding, blind): 3/3 confirmed — maflcko's
+  goal-clarity challenge cut the header split (R7 verbatim
+  dynamic); diff/suggestion blocks from w0xlt + iwyu links from
+  stringintech (R11); nits self-labeled and convention-anchored
+  (R9/R13; copyright-year point cited PR 24539's convention).
+  R14 added from this PR's setter-validation demand.
+- 35818 (attempted): no human review yet — unscoreable; carries a
+  DrahtBot CI flag on 32-bit ARM (bloom_create_invalid_false_
+  positive_rate std::fetestexcept) — recorded under L1's watch.
