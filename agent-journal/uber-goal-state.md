@@ -114,11 +114,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 48 | property-oracle-expansion | CYCLE-1 | 2026-07-28 | CompactSize exhaustive battery delivered (8b7d8ac878), 1/1 boundary mutant killed |
 | 67 | release-version-differential | CYCLE-1 | 2026-07-28 | v28.2/v0.20.1 ↔ HEAD sync+handshake clean both directions; BIP324 fallback correct |
 | 24 | disk-io-amplification | CYCLE-1 | 2026-07-28 | regtest IBD: ~2x byte amplification (undo+index), bounded 16MB prealloc; no pathological growth |
+| 63 | loupe-style-pipeline | CYCLE-1 | 2026-07-28 | fee-estimator zero-state waste confirmed+fixed (675011ba86): 20.4%->0 samples, -34% IBD user |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=15028562080738234013 -> idx 1 (of 58) -> #24.
+   raw=17607707707087155929 -> idx 18 (of 57) -> #63.
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
    validation/indexes/storage); wallet/IPC/GUI/RPC only to prove
@@ -155,7 +156,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
 7(c1), 2(c1), 9(c1,c2), 10(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2),
 37(c1), 39(c1), 21(c1,c2), 43(c1), 45(c1), 47(c1,c2), 48(c1), 51(c1), 59(c1), 60(c1),
-61(c1,c2,c3), 65(c1,c2), 66(c1), 67(c1), 68(c1), 71(c1), 73(c1), 75(c1),
+61(c1,c2,c3), 63(c1), 65(c1,c2), 66(c1), 67(c1), 68(c1), 71(c1), 73(c1), 75(c1),
 76(c1,c2), 81(c1,c2), 90(c1), 91(c1), 94(c1), 95(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
