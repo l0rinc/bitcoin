@@ -58,7 +58,7 @@ FUZZ_TARGET(load_wallet, .init = initialize_load_wallet)
     {
         auto batch{database->MakeBatch()};
         LIMITED_WHILE(fdp.ConsumeBool(), 24) {
-            switch (fdp.ConsumeIntegralInRange<int>(0, 5)) {
+            switch (fdp.ConsumeIntegralInRange<int>(0, 8)) {
             case 0: { // FLAGS record
                 const uint64_t flags{fdp.ConsumeIntegral<uint64_t>()};
                 if (batch->Write(DBKeys::FLAGS, flags)) seeded_flags = flags;
@@ -101,6 +101,31 @@ FUZZ_TARGET(load_wallet, .init = initialize_load_wallet)
             }
             case 5: { // unknown record type: prefix-cursor robustness
                 (void)batch->Write(std::make_pair(fdp.ConsumeRandomLengthString(16), fdp.ConsumeIntegral<uint64_t>()), ConsumeRandomLengthByteVector(fdp, 64));
+                break;
+            }
+            case 6: { // CRYPTED_KEY record: pubkey key + mutated crypted payload
+                const auto pubkey_bytes{ConsumeRandomLengthByteVector(fdp, 33)};
+                (void)batch->Write(std::make_pair(DBKeys::CRYPTED_KEY, pubkey_bytes), ConsumeRandomLengthByteVector(fdp, 64));
+                break;
+            }
+            case 7: { // ACTIVE*SPK records: output-type + descriptor id
+                const uint8_t output_type{fdp.ConsumeIntegralInRange<uint8_t>(0, 7)};
+                const uint256 id{ConsumeUInt256(fdp)};
+                // LoadActiveScriptPubKeyMan asserts WALLET_FLAG_DESCRIPTORS
+                // (wallet.cpp:3757): a corrupt DB with ACTIVE*SPK records but
+                // no DESCRIPTORS flag aborts there instead of yielding a
+                // DBErrors classification. That is upstream's design choice
+                // for the invariant (upstream-matching, corrupt-local-DB
+                // only) — recorded as the known-reachable assertion, and the
+                // combination is gated here so the fuzzer can progress past it.
+                if (seeded_flags.has_value() && (*seeded_flags & WALLET_FLAG_DESCRIPTORS) != 0) {
+                    (void)batch->Write(std::make_pair(DBKeys::ACTIVEEXTERNALSPK, output_type), id);
+                    (void)batch->Write(std::make_pair(DBKeys::ACTIVEINTERNALSPK, output_type), id);
+                }
+                break;
+            }
+            case 8: { // BESTBLOCK record: mutated locator bytes
+                (void)batch->Write(DBKeys::BESTBLOCK, ConsumeRandomLengthByteVector(fdp, 256));
                 break;
             }
             }

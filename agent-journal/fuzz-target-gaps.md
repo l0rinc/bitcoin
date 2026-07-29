@@ -182,3 +182,59 @@ runs.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-29): load_wallet widening (crypted/ACTIVE*SPK/BESTBLOCK) + a corrupt-DB assertion finding
+
+### Draw
+Re-rank draw over a rebuilt 5-cell queue:
+raw=8893763982643078528, index 3 -> #10 (third cycle; O5 queue
+"widen record classes (crypted keys, ACTIVE*SPK, BESTBLOCK)").
+Branch: audit/fuzz-gaps-c3 from 3496f15c7e (#42 c4 bookkeeping).
+
+### Widening (harness)
+load_wallet.cpp: three new record classes — CRYPTED_KEY (pubkey +
+mutated payload), ACTIVEEXTERNALSPK/ACTIVEINTERNALSPK (output-type
++ descriptor id), BESTBLOCK (mutated locator bytes).
+
+### Bring-up crash (the finding)
+5000-run smoke crashed on a 6-byte seed:
+CWallet::LoadActiveScriptPubKeyMan asserts
+IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS) (wallet.cpp:3757) via
+walletdb.cpp:1079 (LoadActiveSPKMs). Reachability: a corrupt
+wallet DB carrying ACTIVE*SPK records while the DESCRIPTORS flag
+is absent aborts with an assertion instead of a DBErrors
+classification — a persisted-state trust-boundary abort.
+UPSTREAM-MATCHING: upstream master's wallet.cpp carries the
+identical assertion and comment (raw fetch compared). Severity:
+none per the rotation's bar (corrupt local DB only; no remote
+primitive, no consensus/funds/privacy impact).
+
+### Engineering decision
+The ACTIVE*SPK seed class is gated to FLAGS-explicit-DESCRIPTORS
+inputs so the fuzzer progresses past the known-reachable
+assertion; the assertion's corrupt-DB reachability and the gating
+rationale are documented in the harness comment (fuzzer should
+not rediscover a classified, upstream-matching assertion).
+5000 runs clean after the gate (~51/s).
+
+### Verdict
+- Harness: CONFIRMED widening delivered (9 record classes total).
+- Finding: documented assertion-reachability, upstream-matching,
+  NOT a local defect; no code change to production.
+- Framework lessons: importdescriptors needs descsum checksum +
+  active=False for non-ranged (also recorded in #50 c3).
+
+### Exact commands
+- make -C build_fuzz -j4 fuzz
+- FUZZ=load_wallet build_fuzz/bin/fuzz -runs=5000
+- FUZZ=load_wallet .../fuzz -runs=1 ./crash-ccfddd9700ce651a...
+
+### Limitations / queue
+- MASTER_KEY / HDCHAIN / POOL / KEYMETA record classes remain
+  (next widening step if a cycle lands here).
+- The ACTIVE*SPK assert could be upstreamed as a CORRUPT
+  classification question — the author's decision, recorded.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
