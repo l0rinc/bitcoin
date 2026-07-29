@@ -113,11 +113,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 10 | fuzz-target-gaps | CYCLE-2 | 2026-07-28 | load_wallet harness delivered (fd74c4a7c2); bring-up crash = harness-oracle bug, production clean |
 | 48 | property-oracle-expansion | CYCLE-1 | 2026-07-28 | CompactSize exhaustive battery delivered (8b7d8ac878), 1/1 boundary mutant killed |
 | 67 | release-version-differential | CYCLE-1 | 2026-07-28 | v28.2/v0.20.1 ↔ HEAD sync+handshake clean both directions; BIP324 fallback correct |
+| 24 | disk-io-amplification | CYCLE-1 | 2026-07-28 | regtest IBD: ~2x byte amplification (undo+index), bounded 16MB prealloc; no pathological growth |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
    pending + CYCLE-1 pool, exhausted excluded; this cycle:
-   raw=3281368855708499593 -> idx 21 (of 59) -> #67.
+   raw=15028562080738234013 -> idx 1 (of 58) -> #24.
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
    validation/indexes/storage); wallet/IPC/GUI/RPC only to prove
