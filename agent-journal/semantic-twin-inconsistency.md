@@ -78,3 +78,53 @@ both say record, don't touch.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-29): merkle-root twin differential — 6/6 multi-shape blocks agree; asymmetries classified
+
+### Draw
+Re-rank draw over the rebuilt 4-cell queue:
+raw=2632070695870877747, index 3 -> #106 (second cycle; c1 queue
+cell "merkle-root computation twins"). Branch:
+audit/semantic-twin-c2 from 48fab216e5 (#60 c4 bookkeeping).
+
+### Twin map
+- C++ ComputeMerkleRoot (consensus/merkle.cpp:46-72): odd-level
+  last-element duplication, SHA256D64 pairs, empty -> zero;
+  optional CVE-2012-2459 mutation detection.
+- C++ BlockMerkleRoot (:73-82) / BlockWitnessMerkleRoot (:84-93):
+  the witness twin zeroes the coinbase leaf.
+- Python test framework get_merkle_root (messages.py:823-831) /
+  calc_witness_merkle_root: structurally identical pairing and
+  zero-coinbase convention; NO mutation-detection feature
+  (intentional asymmetry — the framework doesn't need it), and
+  empty-vector -> IndexError (Python-lax; unreachable: blocks
+  always have a coinbase).
+
+### Differential proof (functional, /tmp/btc106_merkle.py)
+Node-reported merkleroot (getblock) vs framework recomputation from
+the same block's txids: 6/6 blocks agree across tx counts
+{3,8,5,5,3,3} (odd/even/multi shapes), "Tests successful".
+Harness lessons recorded: verbosity 1 for txid strings (v2 returns
+decoded objects); generate(w, n) mines n BLOCKS (~1 tx each), so
+multi-tx shapes need send_self_transfer + generate(1).
+
+### Verdict
+DISMISSED: the twins agree; the asymmetries are intentional
+(mutation flag is C++-only) or unreachable (Python empty-vector).
+No defect.
+
+### Exact commands
+- python3 /tmp/btc106_merkle.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc106m
+- reads: consensus/merkle.cpp:46-93, messages.py:823-845
+
+### Limitations / queue
+- Differential is regtest-scale (6 blocks); the pairing logic is
+  shape-exhaustive at these sizes, not at 4k-tx mainnet blocks —
+  the structure is size-independent (same loop), noted.
+- GetVirtualTransactionSize variants + sighash flag maps (c1 queue)
+  remain open.
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
