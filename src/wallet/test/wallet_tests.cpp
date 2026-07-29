@@ -227,6 +227,33 @@ BOOST_FIXTURE_TEST_CASE(previously_spent_write_failure_preserves_state, WalletTe
     BOOST_REQUIRE_EQUAL(sqlite3_finalize(statement), SQLITE_OK);
 }
 
+BOOST_FIXTURE_TEST_CASE(replaced_write_failure_preserves_state, WalletTestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    CMutableTransaction original_tx;
+    original_tx.vout.emplace_back(1 * COIN, CScript{});
+    const CTransactionRef original_ref{MakeTransactionRef(original_tx)};
+    const Txid original_hash{original_ref->GetHash()};
+    const Txid replacement_hash{Txid::FromUint256(uint256::ONE)};
+    BOOST_REQUIRE(wallet.AddToWallet(original_ref, TxStateInMempool{}));
+
+    DataStream tx_db_key;
+    tx_db_key << std::make_pair(DBKeys::TX, original_hash);
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+    const std::string trigger{
+        "CREATE TRIGGER fail_replaced_tx_write BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{tx_db_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    {
+        LOCK(wallet.cs_wallet);
+        BOOST_CHECK(!wallet.MarkReplaced(original_hash, replacement_hash));
+        const CWalletTx& original_wtx{*wallet.GetWalletTx(original_hash)};
+        BOOST_CHECK(!original_wtx.m_replaced_by_txid);
+        BOOST_CHECK(original_wtx.state<TxStateInMempool>());
+    }
+}
+
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {
     CMutableTransaction mtx;
