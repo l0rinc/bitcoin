@@ -1735,4 +1735,77 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_disconnect_restores_coins_exactly, Tes
     BOOST_CHECK(std::equal(before.begin(), before.end(), after.begin(), after.end(), same_coin));
 }
 
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_disconnect_composes_across_blocks, TestChain100Setup)
+{
+    Chainstate& active_chainstate{Assert(m_node.chainman)->ActiveChainstate()};
+    // Same snapshot helpers as chainstatemanager_disconnect_restores_coins_exactly:
+    // cache cursors are disabled in this tree, so flush and iterate the DB cursor.
+    const auto all_coins{[](Chainstate& cs) {
+        LOCK(::cs_main);
+        cs.ForceFlushStateToDisk();
+        std::vector<std::pair<COutPoint, Coin>> ret;
+        for (std::unique_ptr<CCoinsViewCursor> cursor{cs.CoinsDB().Cursor()}; cursor->Valid(); cursor->Next()) {
+            COutPoint key;
+            Coin coin;
+            Assert(cursor->GetKey(key));
+            Assert(cursor->GetValue(coin));
+            ret.emplace_back(key, coin);
+        }
+        return ret;
+    }};
+    const auto same_coin{[](const std::pair<COutPoint, Coin>& a, const std::pair<COutPoint, Coin>& b) {
+        return a.first == b.first && a.second.out == b.second.out &&
+               a.second.fCoinBase == b.second.fCoinBase && a.second.nHeight == b.second.nHeight;
+    }};
+
+    mineBlocks(1);
+
+    // Spend the first mature coinbase in a new block.
+    const CScript p2pk{CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG};
+    CMutableTransaction spend;
+    spend.vin.emplace_back(COutPoint{m_coinbase_txns[0]->GetHash(), 0});
+    spend.vout.emplace_back(m_coinbase_txns[0]->vout[0].nValue - 1000, p2pk);
+    const uint256 sighash{SignatureHash(m_coinbase_txns[0]->vout[0].scriptPubKey, spend, 0, SIGHASH_ALL, 0, SigVersion::BASE)};
+    std::vector<unsigned char> sig;
+    BOOST_REQUIRE(coinbaseKey.Sign(sighash, sig));
+    sig.push_back(static_cast<unsigned char>(SIGHASH_ALL));
+    spend.vin[0].scriptSig = CScript() << ToByteVector(sig);
+
+    const auto before{all_coins(active_chainstate)};
+    const CBlock spend_block{CreateAndProcessBlock({spend}, p2pk)};
+    BOOST_CHECK(WITH_LOCK(::cs_main, return active_chainstate.m_chain.Tip()->GetBlockHash()) == spend_block.GetHash());
+    const auto after_spend{all_coins(active_chainstate)};
+
+    // A second, coinbase-only block on top.
+    const CBlock empty_block{CreateAndProcessBlock({}, p2pk)};
+    BOOST_CHECK(WITH_LOCK(::cs_main, return active_chainstate.m_chain.Tip()->GetBlockHash()) == empty_block.GetHash());
+
+    BlockValidationState state;
+    DisconnectedBlockTransactions disconnectpool{MAX_DISCONNECTED_TX_POOL_BYTES};
+
+    // Undo the coinbase-only block: the set must return to the post-spend
+    // state exactly — the multi-block composition step the single-disconnect
+    // oracle does not cover.
+    {
+        LOCK2(::cs_main, Assert(m_node.mempool)->cs);
+        BOOST_CHECK(active_chainstate.DisconnectTip(state, &disconnectpool));
+        BOOST_CHECK(state.IsValid());
+        disconnectpool.clear();
+    }
+    const auto after_first_undo{all_coins(active_chainstate)};
+    BOOST_CHECK_EQUAL(after_spend.size(), after_first_undo.size());
+    BOOST_CHECK(std::equal(after_spend.begin(), after_spend.end(), after_first_undo.begin(), after_first_undo.end(), same_coin));
+
+    // Undo the spend block: the set must return to the pre-connect state.
+    {
+        LOCK2(::cs_main, Assert(m_node.mempool)->cs);
+        BOOST_CHECK(active_chainstate.DisconnectTip(state, &disconnectpool));
+        BOOST_CHECK(state.IsValid());
+        disconnectpool.clear();
+    }
+    const auto after_second_undo{all_coins(active_chainstate)};
+    BOOST_CHECK_EQUAL(before.size(), after_second_undo.size());
+    BOOST_CHECK(std::equal(before.begin(), before.end(), after_second_undo.begin(), after_second_undo.end(), same_coin));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
