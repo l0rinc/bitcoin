@@ -279,3 +279,42 @@ qa-assets substitutes only where the target lineage is upstream's.
 ## Rotation note
 Four cycles; coins-target import cell closed. Campaign #9's
 remaining cells need fresh coverage signals.
+
+## Cycle 5 (2026-07-29): qa-assets process_messages import — clean at upstream-grade coverage; no fork-added arms to miss
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=8574729547574712489, index 4 (of 5) -> #9 (fifth cycle; c3
+recipe applied to process_messages). Branch:
+audit/hit-frequency-c5 from 785fe50ced (#24 c4 journal tip).
+
+### Result
+- fuzz_corpora/process_messages (3783 seeds, 56 MB) on the fork's
+  target: 4963 runs in 59 s, cov=18197 ft=58683, NO crash.
+- Fork-arm check: the fork's process_messages target has NO
+  PRIVATE_BROADCAST references and does not pick connection types
+  — there are no fork-added arms for the corpus to miss (the
+  c3/c4 pattern "fork section invisible to upstream seeds" does
+  not apply here).
+
+### Verdict
+CONFIRMED (import compatibility + coverage): the corpus drives
+the fork's process_messages at upstream-grade coverage with no
+compatibility break. PRIVATE_BROADCAST message-path coverage
+would need a dedicated harness (connection-type-driving); noted,
+not a defect.
+
+### Exact commands
+- sparse-fetch recipe (c3); FUZZ=process_messages build_fuzz/bin/
+  fuzz -runs=3783 <corpus> (numbers above)
+- grep -in private src/test/fuzz/process_messages.cpp (empty)
+
+### Limitations / queue
+- Per-arm accounting of expected-failure branches (c2 queue)
+  remains a nicety.
+- PRIVATE_BROADCAST harness cell queued to whoever owns P2P
+  harness work next.
+
+## Rotation note
+Five cycles; process_messages import closed. Campaign #9's cells
+now need fresh coverage signals.
