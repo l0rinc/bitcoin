@@ -127,3 +127,54 @@ attempts/s/connection maximum on this host.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-29): RPC/cookie auth declassification sweep — constant-time at the secret comparisons; one de-minimis shape
+
+### Draw
+Re-rank draw over the 3 remaining CYCLE-2+ open cells:
+raw=1921359177284103813, index 0 -> #45 (third cycle; c1/c2 queue
+cell "Cookie/RPC auth declassification — username-enumeration shapes
+in auth error paths"). Branch: audit/constant-time-declass-c3 from
+3a05e3441f (#1 c3 bookkeeping).
+
+### Audit (httprpc.cpp auth path, full read :50-101, :216)
+- CheckUserAuthorized (:63-82): per-rpcauth-entry, username compare
+  via TimingResistantEqual (:66); on match, HMAC-SHA256(pass, salt)
+  then TimingResistantEqual against the stored hash (:73-77).
+  TimingResistantEqual itself (strencodings.h:202-209) is
+  branch-free over the FIRST argument's length (the stored value),
+  so attacker-controlled lengths do not steer the timing; the
+  documented length-proportional time leaks only the config value's
+  length.
+- Error identity: single 401 for any failure (:216) — no
+  wrong-user vs wrong-pass message distinction.
+- Shape recorded (de minimis): the per-entry loop runs HMAC only
+  when the username matches (:67-74), so response time differs
+  between existing and non-existing usernames (username-existence
+  oracle). Reachability: RPC is localhost/authorized-network by
+  default; the username is not the credential (the salted password
+  hash is); upstream-identical code. Classified de minimis, not a
+  defect.
+- Cookie auth shares the same path (synthetic __cookie__ entry) and
+  the same constant-time comparisons.
+
+### Verdict
+DISMISSED: secret comparisons are constant-time; the single-401
+error shape hides user existence at the message level; the
+HMAC-on-match timing shape is de minimis at this trust boundary
+(local RPC) with usernames non-secret. No code change.
+
+### Exact commands
+- reads: httprpc.cpp:50-101/216, strencodings.h:195-209,
+  rpc/request.cpp (cookie generation)
+
+### Limitations / queue
+- Remote timing measurement of the HMAC-on-match delta not
+  attempted (loopback HTTP noise dwarfs ~1us HMAC; the shape is
+  recorded as informational).
+- The 25000-rounds static constant note (c2) stands.
+- #53's AES-CBC padding cell stays cross-linked (closed there).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
