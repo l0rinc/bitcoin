@@ -411,6 +411,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    #49 c8 (txindex migration assessed SOUND).
    RE-RANK draw 71 (1 cell, singleton): #65 c7. Queue consumed;
    next draw rebuilds.
+   RE-RANK draw 72 (3 cells): raw=16888814550837975994, masked
+   7665442513983200186 -> idx 2 -> #65 c8, DISCARDED as
+   degenerate (re-scan minutes after quiet c6/c7 sweeps; zero
+   information content). Deferred to next radar interval.
+   RE-RANK draw 73 (2 cells): raw=14363064615506178869, masked
+   5139692578651403061 -> idx 1 -> #35 c2.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
