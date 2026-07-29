@@ -128,3 +128,53 @@ No defect.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-07-29): vsize + sighash twins — formula agreement by read AND functional differential (6/6)
+
+### Draw
+Re-rank draw over the rebuilt 9-cell queue:
+raw=2549763356383794637, index 1 -> #106 (third cycle; c1/c2 queue
+cells "GetVirtualTransactionSize variants" + "sighash flag maps").
+Branch: audit/semantic-twin-c3 from daf2934555 (#91 c3
+bookkeeping).
+
+### vsize twins
+- C++ GetTransactionWeight (consensus/validation.h:133): 3x
+  stripped + total (WITNESS_SCALE_FACTOR-1 multiplier);
+  GetVirtualTransactionSize (policy.h:181-187): ceil(weight/4).
+- Python messages.py:728-734: get_weight = 3x without_witness +
+  with_witness; get_vsize = math.ceil(weight/4). Formula-identical
+  by read.
+- Functional differential (/tmp/btc106_vsize.py): 6 MiniWallet txs,
+  getmempoolentry["vsize"] (104) == tx.get_vsize() (104) for all 6
+  (weight 415 -> ceil(415/4)=104). "Tests successful".
+
+### sighash flag twins
+- C++ interpreter.h: SIGHASH_DEFAULT=0, ALL=1, NONE=2, SINGLE=3,
+  ANYONECANPAY=0x80.
+- Python script.py:611-614 (+ANYONECANPAY): identical numerics;
+  the SIGHASH_SINGLE bug note (:685, inIdx not checked) mirrors the
+  C++ semantics.
+- PSBT sighash restriction (psbt.cpp:709-710): non-taproot inputs
+  accept only DEFAULT|ALL — an intentional signing-policy
+  constraint, not a twin divergence. Recorded.
+
+### Verdict
+DISMISSED: both twin families agree; the PSBT restriction is
+intentional policy. No defect.
+
+### Exact commands
+- python3 /tmp/btc106_vsize.py --configfile=build-before/test/
+  config.ini --tmpdir=/tmp/btc106v
+- reads: policy.h:178-190, consensus/validation.h:133,
+  messages.py:725-735, script.py:611-615, psbt.cpp:697-715
+
+### Limitations / queue
+- vsize differential used uniform OP_TRUE txs; exotic scripts
+  change constants not the formula.
+- GetVirtualTransactionInputSize (input-level) not separately
+  exercised (same family).
+
+## Rotation note
+One bounded cycle complete; rotating per uber-goal policy. Not
+exhausted.
