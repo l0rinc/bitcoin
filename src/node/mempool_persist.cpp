@@ -196,8 +196,11 @@ bool DumpMempool(const CTxMemPool& pool, const fs::path& dump_path, FopenFn mock
         for (const auto& i : vinfo) {
             file << TX_WITH_WITNESS(*(i.tx));
             file << int64_t{count_seconds(i.m_time)};
-            file << int64_t{i.nFeeDelta};
-            mapDeltas.erase(i.tx->GetHash());
+            // Preserve the authoritative user delta. The modified-fee difference
+            // loses information when the fee saturates at an integer limit.
+            const auto delta_it{mapDeltas.find(i.tx->GetHash())};
+            file << int64_t{delta_it == mapDeltas.end() ? 0 : delta_it->second};
+            if (delta_it != mapDeltas.end()) mapDeltas.erase(delta_it);
         }
 
         file << mapDeltas;

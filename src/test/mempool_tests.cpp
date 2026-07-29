@@ -3,11 +3,14 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <common/system.h>
+#include <addresstype.h>
+#include <node/mempool_persist.h>
 #include <policy/policy.h>
 #include <test/util/time.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
 #include <util/time.h>
+#include <validation.h>
 
 #include <test/util/setup_common.h>
 
@@ -554,6 +557,55 @@ BOOST_AUTO_TEST_CASE(MempoolUnbroadcastMemoryAccounting)
     pool.RemoveUnbroadcastTx(tx->GetHash());
     BOOST_CHECK(!pool.GetUnbroadcastTxs().contains(tx->GetHash()));
     BOOST_CHECK_EQUAL(pool.DynamicMemoryUsage(), usage_before);
+}
+
+BOOST_FIXTURE_TEST_CASE(MempoolV1SignedDeltaExtremes, TestChain100Setup)
+{
+    bilingual_str error;
+    CTxMemPool::Options source_options{MemPoolOptionsForTest(m_node)};
+    source_options.persist_v1_dat = true;
+    CTxMemPool source_pool{source_options, error};
+    BOOST_REQUIRE(error.empty());
+
+    const CTransactionRef tx = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns.front(), 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+    const CTransactionRef absent_tx = make_tx({1 * COIN});
+    TestMemPoolEntryHelper entry;
+    TryAddToMempool(source_pool, entry.Fee(COIN).Time(Now<NodeSeconds>()).FromTx(tx));
+    source_pool.PrioritiseTransaction(tx->GetHash(), std::numeric_limits<CAmount>::max());
+    source_pool.PrioritiseTransaction(absent_tx->GetHash(), std::numeric_limits<CAmount>::min());
+
+    const fs::path dump_path = m_path_root / "mempool-v1-signed-extremes.dat";
+    BOOST_REQUIRE(node::DumpMempool(source_pool, dump_path, fsbridge::fopen, true));
+
+    CTxMemPool& destination = *Assert(m_node.mempool);
+    BOOST_REQUIRE(node::LoadMempool(destination, dump_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = false,
+    }));
+    BOOST_REQUIRE(destination.exists(tx->GetHash()));
+    const auto tx_info = destination.info(tx->GetHash());
+    BOOST_CHECK(tx_info.fee + tx_info.nFeeDelta == std::numeric_limits<CAmount>::max());
+
+    const auto deltas = destination.GetPrioritisedTransactions();
+    BOOST_REQUIRE_EQUAL(deltas.size(), 2U);
+    for (const auto& delta : deltas) {
+        if (delta.txid == tx->GetHash()) BOOST_CHECK_EQUAL(delta.delta, std::numeric_limits<CAmount>::max());
+        if (delta.txid == absent_tx->GetHash()) BOOST_CHECK_EQUAL(delta.delta, std::numeric_limits<CAmount>::min());
+    }
+
+    source_pool.PrioritiseTransaction(tx->GetHash(), -COIN);
+    destination.PrioritiseTransaction(tx->GetHash(), -COIN);
+    CAmount source_modified_fee;
+    {
+        LOCK(source_pool.cs);
+        source_modified_fee = Assert(source_pool.GetEntry(tx->GetHash()))->GetModifiedFee();
+    }
+    const auto destination_info = destination.info(tx->GetHash());
+    BOOST_CHECK_EQUAL(source_modified_fee, destination_info.fee + destination_info.nFeeDelta);
+
+    BOOST_REQUIRE(fs::remove(dump_path));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
