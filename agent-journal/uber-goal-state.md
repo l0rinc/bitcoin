@@ -6,6 +6,12 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 
 ## Latest authoritative checkpoint
 
+- Cycle 84 (`deterministic-simulation`) is complete with confirmed finding commit `89b320fe3709b3d96d91a5a596fae40f3d71e0a5` (`net: reject conflicting start options before threads`). The invalid public `CConnman::Start` option combination now returns before any network thread or other startup side effect; the before/after regression and full `net_tests` evidence are recorded in `agent-journal/deterministic-simulation.md`.
+- The next selector draw is cycle 85: exact `shuf -i 0-98 -n 1` -> `63` (`loupe-pipeline`). Its branch and start snapshot are pending initialization below. Current branch HEAD is `89b320fe3709b3d96d91a5a596fae40f3d71e0a5`; `origin/master...HEAD` is `2 955`; merge-base is `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- No relevant process remains running. Unrelated tracked commits and untracked files were preserved.
+
+## Historical pre-close checkpoint (superseded)
+
 <!-- Cycle 84 has verified a source finding; this checkpoint is updated before the finding commit. -->
 
 - Current verified cycle: 84, goal 71 (`deterministic-simulation`). `CConnman::Start` now rejects conflicting outgoing options before any startup side effect; the focused before/after regression and full `net_tests` suite provide the evidence. The source/test/journal close is pending one self-contained commit.
@@ -334,6 +340,17 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
 | 79 | `shuf -i 0-98 -n 1` -> `80` | `fuzz-engine-differential` (distinct parse_numbers engine comparison) | dismissed; no new source defect | Excluded cycle 8's completed `bech32_roundtrip` comparison. Current-head libFuzzer, AFL++, and Honggfuzz used the same 220-file corpus and 15-second controls; native metric differences were engine-specific, all retained outputs passed current Clang 19 ASan replay, and cross-engine transfer found no crash, hang, corpus corruption, or semantic mismatch. FuzzTest remained unavailable. See `fuzz-engine-differential.md`. | Journal/state-only close; no production source change justified | Recheck the gate and draw the next eligible goal |
 | 80 | `shuf -i 0-98 -n 1` -> `33` | `external-vulnerability-variants` (advisory and related-project fix variants) | dismissed; no new source defect | A1-A4 were dismissed after current code/history tracing and focused cache, validation, logging, mempool, and AddrMan suites. A6's private-broadcast proxy-preservation fix passed both unit and functional regression tests. A7's wallet-tool cleanup passed; the full previous-release migration harness is unavailable because its old binaries are absent. See `external-vulnerability-variants.md`. | Journal/state-only close; no production source change justified | Recheck the gate and draw the next eligible goal |
 | 81 | `shuf -i 0-98 -n 1` -> `6` | `serialization-untrusted-input` (length, encoding, parser, and failure-state audit) | in progress | Trace untrusted bytes through allocations, casts, loops, canonicalization, object mutation, and later assumptions. Exclude prior parser cells unless a distinct caller or trust boundary is proven. See `serialization-untrusted-input.md`. | Start state pending | Complete the parser/serialization cycle and then draw the next eligible goal |
+| 82 | `shuf -i 0-98 -n 1` -> `7` | `resource-exhaustion-variants` (oversized locator count) | confirmed; fixed | `getblocks`/`getheaders` accepted a huge CompactSize locator count into generic vector deserialization before the later 101-entry policy check, reserving about 5 MiB. `ReadBlockLocator` now rejects the count first; normal, TSan, and focused regressions passed. See `resource-exhaustion-variants.md`. | `1e0091464c` (`net: reject oversized locators before deserialization`) | Draw the next eligible goal |
+| 83 | `shuf -i 0-98 -n 1` -> `11` | `sanitizer-valgrind` | dismissed; no new source defect | ASan/UBSan, standalone and libFuzzer TSan, suppression-free TSan, and bounded standalone MSan coverage found no current source diagnostic. Valgrind was unavailable and the unbounded MSan suite was stopped at a real resource boundary; see `sanitizer-valgrind.md`. | `c79c8b401b` journal-only close | Draw the next eligible goal |
+| 84 | `shuf -i 0-98 -n 1` -> `71` | `deterministic-simulation` (failed `CConnman::Start` lifecycle) | confirmed; fixed | The public start path rejected conflicting outgoing options only after creating network thread handles. The old-source focused regression failed at `!threads_started`; moving the guard before startup made it pass, and full `net_tests` passed 34 cases and 150,899 assertions. See `deterministic-simulation.md`. | `89b320fe37` (`net: reject conflicting start options before threads`) | Initialize cycle 85 goal 63 |
+
+## Cycle 84 Completion
+
+- Branch: `uber-cycle-84-deterministic-simulation-20260728`.
+- Cycle-start HEAD: `c79c8b401b`; pre-existing branch commits `0bfcf35cf6`, `7f08743b4a`, and `55cfa7a448` were preserved before the cycle finding.
+- Confirmed finding commit: `89b320fe3709b3d96d91a5a596fae40f3d71e0a5`; author and committer are `Lőrinc <pap.lorinc@gmail.com>`.
+- Validation: old-source focused regression exited 201 with the joinable-thread assertion failing; repaired focused regression exited 0; full `net_tests` passed 34/34 cases and 150,899/150,899 assertions; `git diff --check` passed.
+- Next draw: exact `shuf -i 0-98 -n 1` -> `63` (`loupe-pipeline`). No relevant process remains running.
 
 ## Cycle 72 Completion
 
