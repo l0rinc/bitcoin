@@ -279,3 +279,58 @@ mirrors the prose with asserts). No code or comment change.
 One bounded cycle complete; rotating per uber-goal policy. Core
 strong-claim surface covered; not marking exhausted (lower-stakes
 hits + wallet cells remain).
+
+## Cycle 4 (2026-07-30): fork-added PRIVATE_BROADCAST comment pass — all five strong claims verified TRUE
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=5820747569139027543, index 1 (of 2) -> #45 (fourth cycle;
+c3 queue cell "fork-added comment pass"). Branch:
+audit/comment-contract-c4 from 3b58782cf2 (#89 c2 journal tip).
+
+### Claims verified (comment -> code evidence)
+1. net.h:1231-1233 "Opening private broadcast connections will be
+   paused if this is equal to 0" (semaphore) -> net.cpp:3315
+   CountingSemaphoreGrant ctor calls blocking Acquire()
+   (semaphore_grant.h:69-76); the thread pauses exactly at 0 until
+   a release. TRUE.
+2. net.h:1220-1228 m_outbound_tor_ok_at_least_once docstring (set
+   only after a real outbound Tor connection incl. P2P exchange)
+   -> net.cpp:4173-4177 sets it only when !inbound && IsTor &&
+   sending VERACK (both directions happened); read at
+   ProxyForIPv4or6 (:3206-3212) for the stated purpose. TRUE.
+3. net_processing.cpp:5911 "The logic below does not apply to
+   private broadcast peers, so skip it" -> early return before
+   MaybeSendPing/addr logic; private peers get only the lifetime
+   check; the comment honestly scopes itself as an optimization
+   with PushMessage-side enforcement. TRUE.
+4. net_processing.cpp:1769-1771 "don't call Connected() for
+   private broadcast (could leak information in addrman)" -> the
+   condition explicitly excludes IsPrivateBroadcastConn(). TRUE.
+5. net.cpp:4154-4161 outbound allowlist (VERSION, VERACK, INV,
+   TX, PING only) -> minimal and privacy-coherent; the inbound
+   GETDATA path (net_processing.cpp:4273-4298, #49 c3) only
+   serves the announced tx and disconnects on anything else.
+   TRUE.
+
+### Verdict
+DISMISSED: the fork-added PRIVATE_BROADCAST prose is accurate and
+honest about its own scope (including the optimization framing at
+:5912-5913 and the addrman leak rationale at :1770). No comment
+or code change needed.
+
+### Exact commands
+- net.h:1217-1290 (PrivateBroadcast class docs);
+  net.cpp:3315/3708/4154-4177/3206-3212; semaphore_grant.h:13-90;
+  net_processing.cpp:1768-1772/5905-5925/4273-4298
+
+### Limitations / queue
+- validation.cpp ~30 lower-stakes c1 leftovers remain open
+  (bounded by lower value).
+- txgraph.cpp ~30 lower-stakes hits (c3 queue) remain; the sanity
+  function covers most.
+- wallet/GUI comment cells remain deprioritized per scope.
+
+## Rotation note
+Four cycles; the fork-added comment surface is verified. Core
+strong-claim surface covered; not marking exhausted (leftovers).
