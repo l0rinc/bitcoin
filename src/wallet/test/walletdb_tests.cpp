@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <test/util/setup_common.h>
+#include <chain.h>
 #include <clientversion.h>
 #include <streams.h>
 #include <uint256.h>
@@ -36,6 +37,17 @@ BOOST_AUTO_TEST_CASE(walletdb_readkeyvalue)
     DataStream ssKey{};
     uint32_t dummy_index;
     BOOST_CHECK_THROW(ssKey >> dummy_index, std::ios_base::failure);
+}
+
+BOOST_AUTO_TEST_CASE(walletdb_best_block_read_result)
+{
+    auto database = CreateMockableWalletDatabase();
+    WalletBatch batch{*database};
+    CBlockLocator locator;
+
+    BOOST_CHECK(batch.ReadBestBlockResult(locator) == BestBlockReadResult::NOT_FOUND);
+    BOOST_REQUIRE(batch.WriteBestBlock(locator));
+    BOOST_CHECK(batch.ReadBestBlockResult(locator) == BestBlockReadResult::FOUND);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -180,10 +180,22 @@ bool WalletBatch::WriteBestBlock(const CBlockLocator& locator)
     return WriteIC(DBKeys::BESTBLOCK_NOMERKLE, locator);
 }
 
+BestBlockReadResult WalletBatch::ReadBestBlockResult(CBlockLocator& locator)
+{
+    if (m_batch->Read(DBKeys::BESTBLOCK, locator)) {
+        if (!locator.vHave.empty()) return BestBlockReadResult::FOUND;
+    } else if (m_batch->Exists(DBKeys::BESTBLOCK)) {
+        return BestBlockReadResult::ERROR;
+    }
+
+    if (m_batch->Read(DBKeys::BESTBLOCK_NOMERKLE, locator)) return BestBlockReadResult::FOUND;
+    if (m_batch->Exists(DBKeys::BESTBLOCK_NOMERKLE)) return BestBlockReadResult::ERROR;
+    return BestBlockReadResult::NOT_FOUND;
+}
+
 bool WalletBatch::ReadBestBlock(CBlockLocator& locator)
 {
-    if (m_batch->Read(DBKeys::BESTBLOCK, locator) && !locator.vHave.empty()) return true;
-    return m_batch->Read(DBKeys::BESTBLOCK_NOMERKLE, locator);
+    return ReadBestBlockResult(locator) == BestBlockReadResult::FOUND;
 }
 
 bool WalletBatch::IsEncrypted()
