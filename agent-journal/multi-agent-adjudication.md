@@ -1,5 +1,70 @@
 # Independent Multi-Agent Disagreement and Adjudication
 
+## Cycle 111: explicit transaction GETDATA from block-relay-only peers
+
+### Gate and scope
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `40`
+- Selected goal: `multi-agent-adjudication`
+- Worktree: `/data/my_storage/bitcoin`
+- Branch: `uber-cycle-111-multi-agent-adjudication-20260729`
+- HEAD at cycle start: `a51e47bb0c905b5e3664cd949f1846e00bfa6aca`
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Divergence: `origin/master...HEAD = 40 1011`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The fresh gate passed fetch, tracked/index cleanliness, `git diff --check`, catalog hashes, and process checks. PID `777094` (`wallet_tests`, parent `725042`) was preserved.
+
+Cycle 66's ForceRelay late-recipient disagreement is closed and excluded. This cycle selects the adjacent but distinct `ProcessGetData` contract for an explicit `GETDATA(tx)` from a block-relay-only connection. The source branch at `src/net_processing.cpp:2869-2873` discards the request when `Peer::GetTxRelay()` is null. The current functional test covered transaction rejection, INV rejection, RPC non-relay, and relay-permission behavior, but did not cover this explicit request. The later upstream commit `278710a88d8` adds exactly this focused assertion, so it is a source/history seed rather than an unquestioned oracle.
+
+### Falsifiable disagreement
+
+Investigator A treats an explicit `GETDATA(tx)` as a stronger per-message request than the peer's `relay=false` announcement preference. Under that interpretation, the node should answer a known transaction or return `NOTFOUND`; silently dropping the request creates an asymmetric API where the peer can ask but receives no protocol response. A's trust boundary is the remote peer's message and the transaction relay policy, with privacy and bandwidth as possible counterarguments.
+
+Investigator B treats `m_tx_relay == nullptr` as the protocol boundary for the whole transaction-relay capability. A block-relay-only peer must not receive transaction data or inventory, and `-blocksonly` explicitly opts out of receiving and relaying transactions except for `relay` permission. Under that interpretation, returning `NOTFOUND` would disclose transaction knowledge and make a forbidden request observable, while silently consuming it is intentional. B's trust boundary is the connection type/relay negotiation, not the individual request.
+
+The adjudication must compare source comments and permission definitions, historical rationale, the existing full lifecycle, the isolated request schedule, and a temporary mutation that changes the request outcome. A source change requires evidence that the current contract is wrong, not merely that A's alternate behavior is observable.
+
+### Initial source and history evidence
+
+- `PeerManagerImpl::ProcessGetData()` obtains the optional `TxRelay` state at `:2853`. It consumes transaction requests from the front of the queue at `:2861-2867`; at `:2869-2873`, null relay state means a block-relay-only peer or a peer that asked not to receive transaction announcements, and the request is consumed without lookup or `NOTFOUND`.
+- `PeerManagerImpl::RejectIncomingTxs()` at `src/net_processing.cpp:5971-5978` independently treats block-relay-only connections as unable to send transactions and requires `relay` permission in `-blocksonly` mode.
+- `src/net_permissions.h` defines `NetPermissionFlags::Relay` as allowing relay and acceptance “even if `-blocksonly` is true”; `src/net_permissions.cpp` describes it as relay even in blocksonly mode. No permission grants transaction responses to a block-relay-only connection.
+- `doc/reduce-traffic.md:42-53` describes `-blocksonly` as turning off transaction relay and says only a `forcerelay` peer remains an exception. `doc/reduce-memory.md:30` is broader: blocksonly opts out of receiving and relaying transactions except from a peer with `relay` permission.
+- `fb821731eb` introduced the ignore branch in 2020 as “ignore tx GETDATA from blocks-only peers.” The later test-only commit `278710a88d` states the same special case and adds an assertion that no `NOTFOUND` is sent. The historical evidence favors B, while A's concern remains recorded because the wire protocol normally answers unknown `GETDATA` with `NOTFOUND`.
+
+### Baseline execution
+
+The current `p2p_blocksonly.py` passed with a freshly generated 199-block cache, Clang 19 functional binaries from `/data/my_storage/tmp/cycle105-clang19-release`, seed `7111`, and scratch data under `/data/my_storage/tmp/cycle111-multi-agent-adjudication-blocksonly-current2/`. It covered both ordinary blocksonly mode and relay-permission acceptance/forwarding, and exited 0. An earlier attempt using the incomplete `/data/my_storage/tmp/cycle104-cache` initialized only genesis and failed the framework's expected-height assertion; it was discarded as cache setup noise and not used as code evidence.
+
+A temporary copy of the test added the focused schedule from upstream: restart in normal mode, create a block-relay-only outbound peer, send `GETDATA(MSG_WTX, 0x12345)`, assert `relaytxes == false`, and assert no `NOTFOUND`. The run used seed `7112` and scratch data `/data/my_storage/tmp/cycle111-multi-agent-adjudication-blocksonly-getdata/`; all lifecycle steps and the new request check passed with exit 0. This confirms the current behavior is deterministic and matches the documented special case, but does not alone settle whether the contract is desirable.
+
+### Mutation and independent controls
+
+The node was rebuilt after a temporary mutation changed the null-relay branch from “consume and ignore” to “append the request to `vNotFound` and continue.” The focused temporary harness then failed at its no-`NOTFOUND` assertion with exit 1, while the rest of the lifecycle completed. This proves the regression oracle is sensitive to the disputed behavior. The mutation was restored with `apply_patch`, `src/net_processing.cpp` is clean, and a clean-after rebuild of `bitcoind` passed.
+
+The clean-after focused run used seed `7114` and scratch data `/data/my_storage/tmp/cycle111-multi-agent-adjudication-blocksonly-clean-after/`; it passed the ordinary lifecycle, the unknown `GETDATA(MSG_WTX, 0x12345)` no-response check, and a second temporary check that requested a known mempool transaction by `MSG_TX` from the same block-relay-only peer and observed neither `TX` nor `NOTFOUND`. The full-relay control `p2p_leak_tx.py` used seed `7115` and scratch data `/data/my_storage/tmp/cycle111-multi-agent-adjudication-leak-control/`; it passed and retained the ordinary `NOTFOUND` behavior for a full-relay inbound peer's unannounced transaction. A first known-transaction harness attempt was stopped after it tried to exceed the block-relay-only connection capacity; that was a harness error, not a node verdict, and the corrected reuse-of-existing-peer run passed with seed `7117`.
+
+### Independent investigator reports
+
+**Investigator A, dissent:** The wire protocol normally uses `NOTFOUND` to complete a `GETDATA` request, and `p2p_leak_tx.py` demonstrates that an ordinary peer can request an unannounced transaction and receive that response. A argues that a block-relay-only peer's explicit request should be answered consistently, at least with `NOTFOUND`, and that silent consumption can strand a peer waiting for a response. A could not identify a permission, BIP, or caller that promises transaction data to a block-relay-only peer, and acknowledged that answering a known transaction would defeat the connection's privacy/bandwidth purpose.
+
+**Investigator B, ruling:** `GetTxRelay() == nullptr` is the negotiated capability boundary, not merely an announcement filter. The node separately rejects transactions received from block-relay-only peers, does not announce mempool transactions to them, documents blocksonly as opting out of receiving and relaying transactions, and defines `relay` permission as the exception. Returning `NOTFOUND` for a forbidden request would disclose that the request reached transaction handling and would diverge from the established 2020 decision to ignore these requests. The historical commit `fb821731eb` and current permission/comment evidence support consuming the message without a response.
+
+### Final adjudication
+
+Final verifier verdict: **dismissed; no production change justified**. A's request-completion concern is technically coherent but is outweighed by the explicit relay-capability contract, privacy/bandwidth rationale, historical implementation decision, current full-relay contrast, and the deterministic known-transaction control. The later upstream test-only commit `278710a88d` confirms this is a worthwhile regression oracle, but it is not a missing production fix and is already available as upstream evidence. No source or permanent test commit was made in this cycle.
+
+### Cycle close
+
+- Source diff: none; the temporary mutation was restored and `git diff --check` passed.
+- Functional evidence: current `p2p_blocksonly.py` passed with seed `7111`; the focused unknown-request harness passed with seed `7112`; its mutation failed with seed `7113`; the clean-after focused harness passed with seed `7114`; full-relay `p2p_leak_tx.py` passed with seed `7115`; and the known-transaction reuse harness passed with seed `7117`.
+- All Cycle 111 functional daemons were stopped. Persistent PID `777094` was untouched. Temporary harnesses and datadirs are outside the repository; no temporary source was staged.
+- Next queue: draw another goal after the close snapshot. Do not reopen this block-relay-only request contract without new protocol, permission, or implementation evidence.
+
 ## Cycle 66: global relay queue and ForceRelay transition
 
 ### Gate and scope
