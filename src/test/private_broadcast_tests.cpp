@@ -233,6 +233,36 @@ BOOST_AUTO_TEST_CASE(rejection_at_cap)
     BOOST_CHECK_EQUAL(pb.GetBroadcastInfo().size(), num_cap);
 }
 
+BOOST_AUTO_TEST_CASE(send_status_history_is_bounded)
+{
+    FakeNodeClock clock{};
+
+    PrivateBroadcast pb{/*max_transactions=*/1};
+    const auto tx{MakeDummyTx(/*id=*/1, /*num_witness=*/0)};
+    BOOST_REQUIRE(pb.Add(tx) == PrivateBroadcast::AddResult::Added);
+
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+    constexpr size_t num_attempts{PrivateBroadcast::MAX_RETAINED_SEND_STATUSES * 3};
+    for (NodeId nodeid{0}; nodeid < static_cast<NodeId>(num_attempts); ++nodeid) {
+        const CService addr{ipv4Addr, static_cast<uint16_t>(10000 + nodeid % 50000)};
+        BOOST_REQUIRE(pb.PickTxForSend(nodeid, addr).has_value());
+        const bool confirmed{nodeid % 2 == 0};
+        if (confirmed) pb.NodeConfirmedReception(nodeid);
+        BOOST_CHECK_EQUAL(pb.MarkNodeDisconnected(nodeid), !confirmed);
+    }
+
+    const auto infos{pb.GetBroadcastInfo()};
+    BOOST_REQUIRE_EQUAL(infos.size(), 1);
+    BOOST_CHECK_LE(infos[0].peers.size(), PrivateBroadcast::MAX_RETAINED_SEND_STATUSES);
+
+    const auto removed{pb.Remove(tx).value()};
+    BOOST_CHECK_EQUAL(removed.num_picked, num_attempts);
+    BOOST_CHECK_EQUAL(removed.num_confirmed, num_attempts / 2 + num_attempts % 2);
+    BOOST_CHECK_EQUAL(removed.num_unconfirmed_disconnected, num_attempts / 2);
+    BOOST_CHECK_EQUAL(removed.NumUnstarted(/*target_attempts=*/3), 0);
+}
+
 BOOST_AUTO_TEST_CASE(reject_null_transaction_ref)
 {
     test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};

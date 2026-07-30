@@ -46,13 +46,11 @@ std::optional<PrivateBroadcast::RemoveResult> PrivateBroadcast::Remove(const CTr
     const auto handle{m_transactions.extract(tx)};
     if (handle) {
         RemoveResult result;
-        for (const auto& send_status : handle.mapped().send_statuses) {
-            ++result.num_picked;
-            if (send_status.confirmed.has_value()) {
-                ++result.num_confirmed;
-            } else if (send_status.disconnected) {
-                ++result.num_unconfirmed_disconnected;
-            }
+        const auto& tx_status{handle.mapped()};
+        result.num_picked = tx_status.priority.num_picked;
+        result.num_confirmed = tx_status.priority.num_confirmed;
+        result.num_unconfirmed_disconnected = tx_status.num_unconfirmed_disconnected;
+        for (const auto& send_status : tx_status.send_statuses) {
             if (!send_status.disconnected) {
                 const auto [_, inserted]{m_removed_active_nodes.insert(send_status.nodeid)};
                 Assert(inserted);
@@ -84,11 +82,16 @@ std::optional<CTransactionRef> PrivateBroadcast::PickTxForSend(const NodeId& wil
     const auto it{std::ranges::max_element(
             m_transactions,
             [](const auto& a, const auto& b) { return a < b; },
-            [](const auto& el) { return DerivePriority(el.second.send_statuses); })};
+            [](const auto& el) { return el.second.priority; })};
 
     if (it != m_transactions.end()) {
         auto& [tx, state]{*it};
-        state.send_statuses.emplace_back(will_send_to_nodeid, will_send_to_address, NodeClock::now());
+        CompactSendStatuses(state);
+        Assert(state.send_statuses.size() < MAX_RETAINED_SEND_STATUSES);
+        const auto now{NodeClock::now()};
+        state.send_statuses.emplace_back(will_send_to_nodeid, will_send_to_address, now);
+        ++state.priority.num_picked;
+        state.priority.last_picked = now;
         AssertInvariants();
         return tx;
     }
@@ -115,10 +118,16 @@ void PrivateBroadcast::NodeConfirmedReception(const NodeId& nodeid)
     LOCK(m_mutex);
     const auto tx_and_status{GetSendStatusByNode(nodeid)};
     if (tx_and_status.has_value()) {
+        auto& tx_status{tx_and_status.value().tx_status};
         auto& send_status{tx_and_status.value().send_status};
         const bool was_confirmed{send_status.confirmed.has_value()};
         if (!send_status.disconnected) {
-            send_status.confirmed = NodeClock::now();
+            const auto now{NodeClock::now()};
+            if (!was_confirmed) {
+                ++tx_status.priority.num_confirmed;
+            }
+            send_status.confirmed = now;
+            tx_status.priority.last_confirmed = now;
         }
         Assert(!send_status.disconnected || (send_status.confirmed.has_value() == was_confirmed));
     }
@@ -149,9 +158,15 @@ bool PrivateBroadcast::MarkNodeDisconnected(const NodeId& nodeid)
 
     const auto tx_and_status{GetSendStatusByNode(nodeid)};
     if (tx_and_status.has_value()) {
+        auto& tx_status{tx_and_status.value().tx_status};
         auto& send_status{tx_and_status.value().send_status};
         const bool should_retry{!send_status.disconnected && !send_status.confirmed.has_value()};
-        send_status.disconnected = true;
+        if (!send_status.disconnected) {
+            if (!send_status.confirmed.has_value()) {
+                ++tx_status.num_unconfirmed_disconnected;
+            }
+            send_status.disconnected = true;
+        }
         AssertInvariants();
         return should_retry;
     }
@@ -177,7 +192,7 @@ std::vector<CTransactionRef> PrivateBroadcast::GetStale() const
     const auto now{NodeClock::now()};
     std::vector<CTransactionRef> stale;
     for (const auto& [tx, state] : m_transactions) {
-        const Priority p{DerivePriority(state.send_statuses)};
+        const Priority& p{state.priority};
         if (p.num_confirmed == 0) {
             if (state.time_added < now - INITIAL_STALE_DURATION) stale.push_back(tx);
         } else {
@@ -208,18 +223,19 @@ std::vector<PrivateBroadcast::TxBroadcastInfo> PrivateBroadcast::GetBroadcastInf
     return entries;
 }
 
-PrivateBroadcast::Priority PrivateBroadcast::DerivePriority(const std::vector<SendStatus>& sent_to)
+void PrivateBroadcast::CompactSendStatuses(TxSendStatus& tx_status)
 {
-    Priority p;
-    p.num_picked = sent_to.size();
-    for (const auto& send_status : sent_to) {
-        p.last_picked = std::max(p.last_picked, send_status.picked);
-        if (send_status.confirmed.has_value()) {
-            ++p.num_confirmed;
-            p.last_confirmed = std::max(p.last_confirmed, send_status.confirmed.value());
-        }
+    if (tx_status.send_statuses.size() < MAX_RETAINED_SEND_STATUSES) {
+        return;
     }
-    return p;
+    std::vector<SendStatus> retained;
+    retained.reserve(tx_status.send_statuses.size());
+    for (const auto& send_status : tx_status.send_statuses) {
+        if (send_status.disconnected) continue;
+        retained.emplace_back(send_status.nodeid, send_status.address, send_status.picked);
+        retained.back().confirmed = send_status.confirmed;
+    }
+    tx_status.send_statuses = std::move(retained);
 }
 
 std::optional<PrivateBroadcast::TxAndSendStatusForNode> PrivateBroadcast::GetSendStatusByNode(const NodeId& nodeid)
@@ -229,7 +245,7 @@ std::optional<PrivateBroadcast::TxAndSendStatusForNode> PrivateBroadcast::GetSen
     for (auto& [tx, state] : m_transactions) {
         for (auto& send_status : state.send_statuses) {
             if (send_status.nodeid == nodeid) {
-                return TxAndSendStatusForNode{.tx = tx, .send_status = send_status};
+                return TxAndSendStatusForNode{.tx = tx, .tx_status = state, .send_status = send_status};
             }
         }
     }
@@ -244,26 +260,31 @@ void PrivateBroadcast::AssertInvariants() const
     for (const auto& [tx, state] : m_transactions) {
         Assert(tx != nullptr);
 
-        size_t num_confirmed{0};
-        NodeClock::time_point last_picked{};
-        NodeClock::time_point last_confirmed{};
+        size_t retained_num_confirmed{0};
+        size_t retained_num_unconfirmed_disconnected{0};
+        NodeClock::time_point retained_last_picked{};
+        NodeClock::time_point retained_last_confirmed{};
         for (const auto& send_status : state.send_statuses) {
             const auto [_, inserted]{sent_nodes.insert(send_status.nodeid)};
             Assert(inserted);
             Assert(!m_removed_active_nodes.contains(send_status.nodeid));
-            last_picked = std::max(last_picked, send_status.picked);
+            retained_last_picked = std::max(retained_last_picked, send_status.picked);
             if (send_status.confirmed.has_value()) {
                 Assert(send_status.picked <= *send_status.confirmed);
-                ++num_confirmed;
-                last_confirmed = std::max(last_confirmed, *send_status.confirmed);
+                ++retained_num_confirmed;
+                retained_last_confirmed = std::max(retained_last_confirmed, *send_status.confirmed);
+            } else if (send_status.disconnected) {
+                ++retained_num_unconfirmed_disconnected;
             }
         }
 
-        const Priority p{DerivePriority(state.send_statuses)};
-        Assert(p.num_picked == state.send_statuses.size());
-        Assert(p.last_picked == last_picked);
-        Assert(p.num_confirmed == num_confirmed);
-        Assert(p.last_confirmed == last_confirmed);
+        Assert(state.send_statuses.size() <= MAX_RETAINED_SEND_STATUSES);
+        Assert(state.priority.num_confirmed <= state.priority.num_picked);
+        Assert(state.num_unconfirmed_disconnected <= state.priority.num_picked - state.priority.num_confirmed);
+        Assert(retained_num_confirmed <= state.priority.num_confirmed);
+        Assert(retained_num_unconfirmed_disconnected <= state.num_unconfirmed_disconnected);
+        Assert(retained_last_picked <= state.priority.last_picked);
+        Assert(retained_last_confirmed <= state.priority.last_confirmed);
     }
     for (const NodeId nodeid : m_removed_active_nodes) {
         Assert(!sent_nodes.contains(nodeid));
