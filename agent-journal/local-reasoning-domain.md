@@ -1,5 +1,48 @@
 # Local Reasoning Domain and Relationship Audit
 
+## Cycle 135: index file-position and publication relationships
+
+### Cycle identity and gate
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `57` (`local-reasoning-domain`); no reroll was needed because this was a new cycle, not a repeated draw within the cycle.
+- Worktree: `/data/my_storage/bitcoin`
+- Branch: `uber-cycle-135-local-reasoning-domain-20260730`
+- HEAD at cycle start: `a0df83a228482ecca561dd223cd62520cc3dd804`
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Start divergence: `origin/master...HEAD = 40 1056`.
+- The fresh gate passed: origin fetch, catalog/protocol hash checks, tracked-worktree cleanliness, and `git diff --check`. PID `777094` (the unrelated wallet test) remained untouched. All unrelated untracked artifacts were preserved and excluded from cycle commits.
+
+### Scope and hypothesis
+
+This cycle selected a new local relationship cell after excluding the prior AddrMan classifier, BaseIndex callback-publication, transaction-download ownership, Taproot key-identity, and wallet replacement-state findings. The primary hypothesis was that `BlockFilterIndex` could let its physical filter-file cursor, per-height `DBVal` entries, `DB_FILTER_POS`, and `DB_BEST_BLOCK` describe different logical tips after a write, reorg, failed commit, or restart. The secondary control was the analogous CoinStats relationship between its per-height `DBVal`, in-memory MuHash/counters, `DB_MUHASH`, and `DB_BEST_BLOCK`.
+
+The required invariant was: a committed index tip must have a readable, hash-checked filter or CoinStats row; the cursor/state committed for that tip must describe the next append position or the same UTXO set; and an interrupted or failed update must be replayable from the last committed best block without publishing an invalid relationship.
+
+### Source and history trace
+
+- `BlockFilterIndex::WriteFilterToDisk()` writes the encoded block hash and filter at the current `FlatFilePos`, only advances `m_next_filter_pos` after a successful close, and records the row's old position before the advance (`src/index/blockfilterindex.cpp:194-249,276-291`). File rotation truncates and commits the old file before moving to the next file.
+- `BlockFilterIndex::CustomCommit()` commits and closes the current filter file before adding `DB_FILTER_POS` to the same batch as `BaseIndex::DB_BEST_BLOCK` (`src/index/blockfilterindex.cpp:136-158`, `src/index/base.cpp:286-308`). A failed commit therefore does not publish the cursor or best-block locator; stale physical bytes are not referenced by the old database cursor and are overwritten or bypassed on replay.
+- Reorg removal copies the disconnected height row to the hash index and persists the current cursor before changing the cached previous header (`src/index/blockfilterindex.cpp:293-313`). The unchanged height row is intentionally retained until the replacement chain overwrites that height, while hash lookup preserves the stale branch filter.
+- CoinStats appends update the in-memory counters and MuHash, persist a height row, and deliberately defer `DB_MUHASH` until `CustomCommit()` batches it with `DB_BEST_BLOCK` (`src/index/coinstatsindex.cpp:200-213,262-313`). On restart, `CustomInit()` verifies the stored MuHash against the row selected by the committed block reference before restoring the counters.
+- History explicitly documents and tests the relevant boundaries: `3679f1ecf5` prevents commits ahead of flushed chainstate, `33fe1e3282` introduced the batched index-write design in its historical branch, and `80a1947178` added explicit write-file close checks. The current tree's `baseindex_no_commit_ahead_of_flush`, block-filter reorg/crash tests, and CoinStats unclean-shutdown test cover the publication ordering.
+
+### Verification
+
+The corrected focused command was:
+
+    mkdir -p /data/my_storage/tmp/cycle135-test-tmp
+    TMPDIR=/data/my_storage/tmp/cycle135-test-tmp /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=baseindex_tests,blockfilter_index_tests,coinstatsindex_tests --log_level=test_suite
+
+It ran 8 cases and exited 0 with `*** No errors detected`. This included `baseindex_no_commit_ahead_of_flush`, block-filter initial sync, initialization/destruction, null-reference rejection, reader reinitialization, reorg-crash handling, CoinStats initial sync, and CoinStats unclean shutdown/reload. The isolated test process used the current cycle-134-built binary; no production source changed during this cycle.
+
+The first attempt supplied a non-existent `TMPDIR`, causing a filesystem `temp_directory_path` failure before the fixtures ran; it was terminated while unwinding after the setup abort. That command failure is recorded as an environment/setup issue, not product evidence. The rerun created the scratch directory and passed. A second independent check of the source/history relationship found no reachable interleaving that could invalidate the two `BaseIndex::Commit()` tip loads: validation callbacks for one subscriber are serialized, and the sync thread exits after its final commit before steady-state callbacks publish later updates.
+
+### Verdict and handoff
+
+Dismissed. No source, test, or documentation defect was confirmed. The apparent cursor/row/locator mismatches are intentional recovery stages: uncommitted rows and stale file bytes are replayable from the old best-block locator, while committed cursor and MuHash state are published with the corresponding best-block state. No permanent test or source change was justified. Remaining open cells are cross-index database failure injection, physical filter-file corruption detection beyond existing checks, and concurrent index restart under a separately instrumented sanitizer run; those are distinct from this cycle's closed relationship cell.
+
 ## Cycle 65: AddrMan network classification relationship
 
 ### Cycle identity and gate
