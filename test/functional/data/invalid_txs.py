@@ -144,7 +144,6 @@ class ExtraWitness(BadTxTemplate):
 
 class SizeSub64(BadTxTemplate):
     reject_reason = "tx-size-small"
-    expect_disconnect = False
     valid_in_block = True
 
     def get_tx(self):
