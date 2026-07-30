@@ -2,6 +2,52 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 163 Completion
+
+- The fresh gate after Cycle 162 kept the catalog, prompt, and goals TSV hashes
+  at `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, and
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+  The exact selector sequence was `58`, `62`, `7`, `8`; the first three were
+  closed cells and were rerolled. Goal 8 (`locking-threading`) was accepted on
+  branch `uber-cycle-163-locking-threading-20260730` at start HEAD
+  `c7aeed287d4426b0af928137ba41e14cc375b754`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence `42 1107`.
+- The distinct open cell was the mapport lifecycle shared by GUI option
+  changes and core shutdown. `StartThreadMapPort()` assigned the global
+  `std::thread` while `StopMapPort()`/`InterruptMapPort()` read it without
+  synchronization. A two-thread barrier test reproduced a TSan race in the
+  original implementation: seed `163007` exited 66 with a write in
+  `std::thread::operator=` racing a `joinable()` read, identified as global
+  `g_mapport_thread`.
+- `src/mapport.cpp` now protects all lifecycle entry points with a file-scope
+  `GlobalMutex`, keeps interrupt plus join atomic for disable, and interrupts
+  inside `StopMapPortInternal()` before joining. The permanent
+  `pcp_tests/mapport_lifecycle_is_serialized` test uses a null socket factory,
+  a barrier, and 32 concurrent enable/disable iterations. Source/test/journal
+  commit `45129ce6b6027effb78d6301f2f093b9378328d1` is
+  `mapport: serialize lifecycle operations`, authored as
+  `Lőrinc <pap.lorinc@gmail.com>`.
+- The fixed Clang 19 ThreadSanitizer binary (`a77f6a5301b29771508858913c36a3dd3e9980f6500959322298da1b4fea34f`)
+  passed the lifecycle test with seed `163014`, one case and one assertion,
+  with no report. The fixed Clang 19 UBSan/alignment/object-size binary
+  (`fd7d77de6838316e9dafc03b2a43be6b3c977917e5c0d2d0d79dabe53771ed6b`) passed
+  `pcp_tests` seed `163015` (13 cases/213 assertions), `net_tests` seed
+  `163016` (36/146816), `denialofservice_tests` seed `163017` (5/90), and
+  `scheduler_tests` seed `163018` (4/27). `git diff --check` passed.
+- TSan configuration initially hit the installed Cap'n Proto 0.9.2/Clang 19
+  C++20 incompatibility and a broken ccache symlink; the successful isolated
+  build used `-DENABLE_IPC=OFF -DWITH_CCACHE=OFF`. The persistent unrelated
+  processes PIDs `777094` and `956381` and all unrelated untracked artifacts
+  were preserved. The detailed evidence is in
+  `agent-journal/locking-threading.md`.
+- Verdict: confirmed and fixed. The next mapport queue cell is platform-specific
+  worker network behavior during shutdown; do not reopen the fixed thread
+  lifecycle race unless its ownership or call-thread contract changes. A
+  separate state-only close commit follows, then the next cycle must run a
+  fresh gate and exact selector draw.
+
 ## Cycle 162 Completion
 
 - Exact selector: the fresh gate drew `86` (`bitcoin-chainstate-symmetry`). The dedicated branch is `uber-cycle-162-bitcoin-chainstate-symmetry-20260730`; start HEAD was `7bd126c42ffd0cea05e87efa12d6ea48e237743b`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `1105 42`.
