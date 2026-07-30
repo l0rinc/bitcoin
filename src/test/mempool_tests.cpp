@@ -807,6 +807,32 @@ BOOST_AUTO_TEST_CASE(MempoolUnbroadcastBlockConflictRemoval)
     BOOST_CHECK_EQUAL(usage_after_unbroadcast_removal, usage_after_regular_removal);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolPrioritisationClearedForConfirmedAbsentTx)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    const CTransactionRef block_tx = make_tx({8 * COIN});
+    constexpr CAmount FEE_DELTA{5000};
+
+    const size_t usage_before = pool.DynamicMemoryUsage();
+    pool.PrioritiseTransaction(block_tx->GetHash(), FEE_DELTA);
+    const size_t usage_with_delta = pool.DynamicMemoryUsage();
+    BOOST_CHECK_GT(usage_with_delta, usage_before);
+
+    const auto deltas = pool.GetPrioritisedTransactions();
+    BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+    BOOST_CHECK(deltas.front().txid == block_tx->GetHash());
+    BOOST_CHECK_EQUAL(deltas.front().delta, FEE_DELTA);
+    BOOST_CHECK(!deltas.front().in_mempool);
+    BOOST_CHECK(!deltas.front().modified_fee.has_value());
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        pool.removeForBlock({block_tx}, 1);
+    }
+    BOOST_CHECK(pool.GetPrioritisedTransactions().empty());
+    BOOST_CHECK_EQUAL(pool.DynamicMemoryUsage(), usage_before);
+}
+
 BOOST_FIXTURE_TEST_CASE(MempoolV1SignedDeltaExtremes, TestChain100Setup)
 {
     bilingual_str error;
