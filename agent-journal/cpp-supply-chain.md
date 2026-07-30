@@ -1,4 +1,69 @@
-# C/C++ Supply-Chain Cycle 41
+# C/C++ Supply-Chain Cycle 119
+
+## Cycle 119 Start: Dependency, Tool, and Build-Gate Audit
+
+### Identity and Gate
+
+- Cycle: `119`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `59`
+- Goal: `C/C++ supply-chain and security-gate audit`
+- Slug: `cpp-supply-chain`
+- Branch: `uber-cycle-119-cpp-supply-chain-20260730`
+- Start HEAD: `7c2204b3fcab8e7e359c137338bad4fb479274f6`
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- `origin/master...HEAD` at the gate: `40 1027`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Tracked and staged state at the gate: clean; persistent untracked artifacts and `test/cache/` were preserved.
+- PID `777094` (`test_bitcoin --run_test=wallet_tests`) and parent PID `725042` were observed and will not be touched.
+
+### Closed Cells and New Scope
+
+The Cycle 41/63 trusted-signature threshold, duplicate-signer, and Guix cached-archive provenance findings are closed and must not be rediscovered. This cycle audits dependency/tool downloads, CI action and container references, generated build inputs, source/license gates, hash/signature binding, and whether a security check runs before untrusted bytes can affect compilation or release artifacts.
+
+### Initial Hypotheses
+
+1. A dependency or compiler/tool fetch may have a mutable URL/cache identity, weak or absent digest/signature check, or a verification step that occurs after extraction or use.
+2. A CI action, container, or bootstrap tool may be referenced by a moving tag or mutable image without a repository-local integrity or review gate.
+3. A generated input, vendored file, or license/provenance check may omit an optional or platform-specific source that still reaches a build or release artifact.
+4. A check may bind metadata to a path or archive name rather than to the exact bytes and version consumed; distinguish real exposure from an intentional authenticated boundary.
+
+### Protocol
+
+For each candidate, inspect implementation, callers, history, docs, CI, and the relevant upstream contract; reproduce with scratch caches and deterministic local substitutes; and lock confirmed, dismissed, or inconclusive before changing code. Keep the prior signature/archive findings excluded, preserve raw commands and hashes, and require a pre-use failure or an independently verifiable artifact mismatch before committing a fix.
+
+## Cycle 119 Finding: Mutable External CI Action References
+
+### Applicability and Trust Boundary
+
+- Before the fix, the active root workflow and composite actions referenced 20 external actions by moving major tags: `WarpBuilds/cache/{restore,save}@v1`, `actions/checkout@v6`, `actions/cache/{restore,save}@v5`, `actions/upload-artifact@v7`, `actions/download-artifact@v8`, `actions/github-script@v8`, and `docker/setup-buildx-action@v4`.
+- The workflow selects `provider: warp` for `github.repository == 'bitcoin/bitcoin'` in the cross-build and matrix jobs. The selected third-party cache action therefore executes on the project's trusted default-repository runners, not only on an isolated developer machine.
+- `configure-docker` runs `actions/github-script` before the container build and exports every environment variable whose name starts with `ACTIONS_` into `GITHUB_ENV`, including the cache service variables named in the adjacent comment. The cache action's checked-out `restore/action.yml` and `save/action.yml` are Node 24 actions with checked-in `dist` entry points, so a tag change changes executable workflow code without a Bitcoin repository diff.
+- The `WarpBuilds/cache` `v1` ref resolves via `git ls-remote` to `40f3443ae7b70e568d6e2070ea897f3df94d7553`; the shallow clone reports that ref as a commit and `show-ref` reports a lightweight tag, not a signed tag object. The official action refs similarly resolved to `actions/checkout` `d23441a48e516b6c34aea4fa41551a30e30af803`, `actions/cache` `caa296126883cff596d87d8935842f9db880ef25`, `actions/upload-artifact` `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`, `actions/download-artifact` `3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c`, `actions/github-script` `ed597411d8f924073f98dfc5c65a23a2325f34cd`, and `docker/setup-buildx-action` `bb05f3f5519dd87d3ba754cc423b652a5edd6d2c`.
+
+### Independent Verification
+
+- A pre-change static inventory found all 20 external refs in `.github/workflows/ci.yml` and `.github/actions/**/action.yml` used tags rather than immutable object IDs.
+- The action metadata and workflow conditions independently established that the third-party action is on a trusted build path and receives the cache integration context. The reproducible failure mode is ref substitution: moving or compromised tag contents would be executed by CI while the Bitcoin tree remained unchanged; this is a provenance/control failure even without simulating an external account compromise.
+- A post-change Python scanner enumerated the same 20 active external refs, asserted each matched `[0-9a-f]{40}`, and reported `all_external_refs_are_full_sha=yes`. `git diff --check` passed.
+
+### Fix
+
+Replace every active root-workflow external tag with the exact commit resolved from that tag, including both Warp cache entry points, both GitHub cache entry points, checkout, artifact transfer, GitHub Script, and Buildx. Local composite-action references remain local. This keeps behavior at the audited tag while preventing silent tag movement from changing CI code.
+
+### Validation and Limits
+
+- The exact tag resolutions were captured before editing with `git ls-remote`; the Warp action was also cloned at `v1` and its checked-out commit matched the pinned SHA.
+- The static full-SHA scanner and `git diff --check` passed. `actionlint` and Ruby YAML parsing are unavailable in this environment, so a live GitHub Actions run was not attempted. No functional source build was needed for this workflow-only change.
+- Nested workflows vendored under `src/` are not active root workflows and were not changed. CI package/bootstrap downloads, SDK archives, and generated-input gates remain distinct queued cells; the Cycle 41/63 signature/archive findings remain excluded.
+
+### Verdict
+
+**Confirmed and fixed.** The active CI trust boundary depended on mutable external action tags, including a third-party cache action on trusted runners. Full-SHA pinning removes the unreviewed ref-movement path; the exact action versions and validation limitations are recorded for future bump review.
+
+## C/C++ Supply-Chain Cycle 41
 
 ## Identity and Gate
 
