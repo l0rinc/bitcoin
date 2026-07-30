@@ -71,3 +71,53 @@ claims made.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-30): by-value struct layout battery delivered (oracle O13) — compile-time mutation killed
+
+### Draw
+Re-harvested-queue draw (seed_raw=15796267858001076908,
+masked=6572895821146301100, n=3, idx=0) -> abi-layout-battery ->
+#92 (second cycle; c1 queue cell "struct-layout regression
+battery"). Branch: audit/abi-alignment-c2 from 8965d3872d
+(#63 c5 journal tip).
+
+### Scope (from c1's enum/type map)
+The public C API's by-value structs with bodies (all other btck_
+types are opaque pointers — no layout to pin):
+1. btck_ValidationInterfaceCallbacks (6 pointers, 48 B),
+2. btck_NotificationInterfaceCallbacks (9 pointers, 72 B),
+3. btck_LoggingOptions (5 ints, 20 B).
+
+### Battery delivered (src/test/kernel/test_kernel.cpp,
+btck_abi_layout_battery)
+static_assert on sizeof + every field offset for all three
+structs, plus runtime BOOST_CHECK echoes so the battery also
+appears in test output. Compile-time tripwire form: any field
+reorder/retype is a build failure, not a runtime surprise for
+downstream consumers.
+
+### Mutation verification (compile-time)
+Swapped block_checked <-> pow_valid_block in the header:
+static assertion failed at test_kernel.cpp:1498-1499 with the
+exact offsets named; restore -> builds + full test_kernel green.
+
+### Verdict
+ORACLE DELIVERED + mutation-verified: the by-value C ABI layout
+now has an early-warning tripwire; c1's enum name-map conclusion
+(value-independent) extends to layout-pinned structs.
+
+### Exact commands
+- cmake --build build-before --target test_kernel -j4;
+  build-before/bin/test_kernel [--run_test='*abi_layout*']
+- mutation: python swap above; rebuild; restore.
+
+### Limitations / queue
+- The battery pins aarch64/x86-64 pointer sizes (8/8); a 32-bit
+  build would need its own row if ever shipped (currently no such
+  target in the matrix).
+- Callback threading/lifetime contracts (user_data_destroy
+  ordering) remain partially covered by #16 c2's doc pass.
+
+## Rotation note
+Two cycles; enum maps pinned value-independent, struct layouts
+pinned by tripwire.

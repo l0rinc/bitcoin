@@ -1488,3 +1488,44 @@ BOOST_AUTO_TEST_CASE(btck_transaction_check_tests)
         "ffffffff00ffffffff000100000000000000000000000000000000000000000000000000000000"
         "00000000000000ffffffff010000000000000000015100000000");
 }
+
+// ---- btck by-value struct layout battery (#92 c2) ----
+// Early-warning tripwire for accidental layout drift in the public by-value
+// C structs. Any field reorder/retype silently breaks the C ABI for
+// downstream consumers; these asserts make that a compile-time failure.
+BOOST_AUTO_TEST_CASE(btck_abi_layout_battery)
+{
+    // btck_ValidationInterfaceCallbacks: user_data + destroy + 4 callbacks
+    static_assert(sizeof(btck_ValidationInterfaceCallbacks) == 48);
+    static_assert(offsetof(btck_ValidationInterfaceCallbacks, user_data) == 0);
+    static_assert(offsetof(btck_ValidationInterfaceCallbacks, user_data_destroy) == 8);
+    static_assert(offsetof(btck_ValidationInterfaceCallbacks, block_checked) == 16);
+    static_assert(offsetof(btck_ValidationInterfaceCallbacks, pow_valid_block) == 24);
+    static_assert(offsetof(btck_ValidationInterfaceCallbacks, block_connected) == 32);
+    static_assert(offsetof(btck_ValidationInterfaceCallbacks, block_disconnected) == 40);
+
+    // btck_NotificationInterfaceCallbacks: user_data + destroy + 7 callbacks
+    static_assert(sizeof(btck_NotificationInterfaceCallbacks) == 72);
+    static_assert(offsetof(btck_NotificationInterfaceCallbacks, user_data) == 0);
+    static_assert(offsetof(btck_NotificationInterfaceCallbacks, user_data_destroy) == 8);
+    static_assert(offsetof(btck_NotificationInterfaceCallbacks, block_tip) == 16);
+    static_assert(offsetof(btck_NotificationInterfaceCallbacks, header_tip) == 24);
+    static_assert(offsetof(btck_NotificationInterfaceCallbacks, progress) == 32);
+    static_assert(offsetof(btck_NotificationInterfaceCallbacks, warning_set) == 40);
+    static_assert(offsetof(btck_NotificationInterfaceCallbacks, warning_unset) == 48);
+    static_assert(offsetof(btck_NotificationInterfaceCallbacks, flush_error) == 56);
+    static_assert(offsetof(btck_NotificationInterfaceCallbacks, fatal_error) == 64);
+
+    // btck_LoggingOptions: 5 ints
+    static_assert(sizeof(btck_LoggingOptions) == 20);
+    static_assert(offsetof(btck_LoggingOptions, log_timestamps) == 0);
+    static_assert(offsetof(btck_LoggingOptions, log_time_micros) == 4);
+    static_assert(offsetof(btck_LoggingOptions, log_threadnames) == 8);
+    static_assert(offsetof(btck_LoggingOptions, log_sourcelocations) == 12);
+    static_assert(offsetof(btck_LoggingOptions, always_print_category_levels) == 16);
+
+    // Runtime echo so the battery also appears in test output.
+    BOOST_CHECK_EQUAL(sizeof(btck_ValidationInterfaceCallbacks), 48U);
+    BOOST_CHECK_EQUAL(sizeof(btck_NotificationInterfaceCallbacks), 72U);
+    BOOST_CHECK_EQUAL(sizeof(btck_LoggingOptions), 20U);
+}
