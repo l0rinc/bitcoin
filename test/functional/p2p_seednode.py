@@ -27,6 +27,14 @@ class P2PSeedNodes(BitcoinTestFramework):
         with self.nodes[0].assert_debug_log(expected_msgs=[], unexpected_msgs=["Empty addrman, adding seednode", f"Couldn't connect to peers from addrman after {ADD_NEXT_SEEDNODE} seconds. Adding seednode"], timeout=ADD_NEXT_SEEDNODE):
             self.restart_node(0, extra_args=self.nodes[0].extra_args)
 
+    def test_empty_seednode(self):
+        self.log.info("Check that empty seednode values are ignored")
+        with self.nodes[0].assert_debug_log(
+                expected_msgs=["Ignoring empty -seednode value", "Adding fixed seeds as -dnsseed=0"],
+                unexpected_msgs=["Empty addrman, adding seednode", f"Couldn't connect to peers from addrman after {ADD_NEXT_SEEDNODE} seconds. Adding seednode"],
+                timeout=2):
+            self.restart_node(0, extra_args=self.nodes[0].extra_args + ['-dnsseed=0', '-fixedseeds=1', '-seednode=', '-seednode= '])
+
     def test_seednode_empty_addrman(self):
         seed_node = "25.0.0.1"
         self.log.info("Check that the seednode is immediately added on bootstrap on an empty addrman")
@@ -52,6 +60,7 @@ class P2PSeedNodes(BitcoinTestFramework):
 
     def run_test(self):
         self.test_no_seednode()
+        self.test_empty_seednode()
         self.test_seednode_empty_addrman()
         self.test_seednode_non_empty_addrman()
 

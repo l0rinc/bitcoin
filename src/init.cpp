@@ -2279,7 +2279,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         }
     }
 
-    connOptions.vSeedNodes = args.GetArgs("-seednode");
+    for (const std::string& seed_node : args.GetArgs("-seednode")) {
+        // Such a value is not a valid seed node, but would otherwise cause the
+        // connection threads to wait for an address fetch that cannot succeed.
+        if (TrimStringView(seed_node).empty()) {
+            LogWarning("Ignoring empty -seednode value");
+            continue;
+        }
+        connOptions.vSeedNodes.push_back(seed_node);
+    }
 
     const auto connect = args.GetArgs("-connect");
     if (!connect.empty() || args.IsArgNegated("-connect")) {
