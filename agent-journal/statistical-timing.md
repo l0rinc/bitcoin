@@ -1,3 +1,76 @@
+# Cycle 110: Secret scalar tweak API timing cell
+
+## Identity and scope
+
+- Cycle: `110`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `53`
+- Goal: Statistical timing-side-channel campaign
+- Slug: `statistical-timing`
+- Branch: `uber-cycle-110-statistical-timing-20260729`
+- HEAD at cycle start: `32d63a0d1c4f8b22f72142a093e0ce777ee93e0c`
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Entry divergence: `origin/master...HEAD = 40 1009`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+
+The fresh gate passed `git fetch origin master`, tracked/index cleanliness, `git diff --check`, all catalog hashes, and process checks. PID `777094` (`wallet_tests`, parent `725042`) was preserved. Prior timing cells covered public-key creation/ECDSA, ECDH/Schnorr/MuSig, GCC and Clang backend/optimization variants, ElligatorSwift, and Silent Payments. This cycle excludes those completed caller cells and targets the secret scalar tweak APIs and their keypair wrapper.
+
+## Contract and hypotheses
+
+`secp256k1_ec_seckey_tweak_add` and `secp256k1_ec_seckey_tweak_mul` receive a secret scalar plus a public tweak. Their source path uses fixed-width scalar parsing, addition or multiplication, a constant-time conditional zero on failure, and scalar serialization. `secp256k1_keypair_xonly_tweak_add` loads a secret scalar and its public point, normalizes public-key parity, applies the same secret tweak, and uses variable-time public-point arithmetic on a declassified public key. The keypair API is therefore a boundary control: a timing difference there is not a secret leak without a source/ctime explanation.
+
+Hypothesis H1: secret-class timing separates in the raw scalar tweak APIs under a supported compiler/backend, indicating a compiler or scalar implementation issue. Hypothesis H2: the keypair wrapper shows a class effect only through its public/declassified point path, which should be distinguishable from H1. A reportable finding requires stable repeated separation, identical successful outputs, source-level secret dependence, and an independent ctime/MSan or mutation control. Passing timing statistics remain limited evidence, not proof of constant time.
+
+## Execution plan
+
+Use current-source Clang 19 and GCC 12 Release libraries with `SECP256K1_ASM=AUTO`, plus a current-source Clang 19 `SECP256K1_ASM=OFF` build. The deterministic probe will use valid scalar classes `1`, `2`, `n-1`, and a high non-boundary scalar, a fixed nonzero public tweak, randomized class order, CPU affinity, paired samples, raw `CLOCK_MONOTONIC_RAW` timings, medians/percentiles, Welch statistics, and a same-input control. Each mutating API receives a fresh copy of its key material per sample. Run the official relevant extrakeys/core tests and the ctime target when the available MSan toolchain permits it. Preserve raw outputs, compiler flags, library hashes, and exact commands under `/data/my_storage/tmp/cycle110-statistical-timing/`.
+
+## Evidence ledger
+
+### Builds and measurement
+
+The probe was compiled from `agent-journal/statistical_timing_cycle110_probe.cpp` against:
+
+- current-source Clang 19 Release, `SECP256K1_ASM=AUTO`, using `/data/my_storage/tmp/cycle105-clang19-release`;
+- current-source GCC 12 Release, `SECP256K1_ASM=AUTO`, using `/data/my_storage/tmp/cycle105-gcc-release`; and
+- a fresh current-source Clang 19 Release build with `SECP256K1_ASM=OFF` at `/data/my_storage/tmp/cycle110-statistical-timing/clang-off`.
+
+The probe pinned execution to one CPU, randomized pair order, timed 10,000 samples per pair with 16 API calls per sample, and repeated each pair three times. It compared four valid secret-key pairs (`1`/high, `1`/`2`, `n-1`/high, and `1`/`n-1`) with a fixed nonzero public tweak. It exercised `secp256k1_ec_seckey_tweak_add`, `secp256k1_ec_seckey_tweak_mul`, `secp256k1_keypair_xonly_tweak_add`, and `secp256k1_pubkey_tweak_add` as a public control. Raw logs and binaries are retained under `/data/my_storage/tmp/cycle110-statistical-timing/`.
+
+### Timing results
+
+The scalar APIs showed no stable class-dependent effect across builds or repetitions. Across all scalar-tweak logs, Welch statistics ranged from approximately `0.03` to `1.19` for tweak-add and `0.06` to `1.64` for tweak-mul; paired statistics changed sign and stayed within approximately `-2.30` to `2.36`. The public `pubkey_tweak_add` control was similarly directionless, with Welch values from about `0` to `0.86` and paired values from about `-1.77` to `1.27`.
+
+`keypair_xonly_tweak_add` showed a repeated negative paired direction for `1` versus high and for `1` versus `n-1`, especially in the Clang runs. The source explains this without a secret-dependent branch: `src/secp256k1/src/modules/extrakeys/main_impl.h:180-200` explicitly declassifies the public half while loading the keypair, and `:275-278` branches on the normalized public point's y parity before applying the secret tweak. Keys `1` and `n-1` produce `G` and `-G`, so this is an expected public/declassified distinction. The Welch statistic was not consistently significant, and the scalar-only APIs did not reproduce the effect.
+
+### Independent ctime control
+
+A fresh Clang 19 MSan build with `SECP256K1_ASM=OFF` and ctime tests enabled was built at `/data/my_storage/tmp/cycle110-statistical-timing/msan`. The restored source passed:
+
+```text
+MSAN_OPTIONS='halt_on_error=1:exit_code=86:report_umrs=1:print_summary=1' /data/my_storage/tmp/cycle110-statistical-timing/msan/bin/ctime_tests
+status=0
+```
+
+As a sensitivity check, removing only `secp256k1_declassify(ctx, &ret, sizeof(ret));` at `main_impl.h:283` caused the same command to exit `86` with an MSan `use-of-uninitialized-value` report at `secp256k1_keypair_xonly_tweak_add`, `main_impl.h:283:9`. Restoring the line and rerunning returned status `0`. The tracked source was verified clean after the mutation. This confirms that the ctime oracle detects a missing public-result declassification; it does not turn the timing observation into a secret leak.
+
+### Functional validation and verdict
+
+The official `tests` and `noverify_tests` passed with seed `0123456789abcdef`, two iterations, and two workers in all three build variants. The Clang AUTO, Clang assembly-off, and GCC AUTO logs recorded total test times of `18.317/9.688`, `18.281/9.526`, and `19.622/10.280` seconds respectively for `tests/noverify_tests`.
+
+**Verdict: dismissed for the scalar timing hypothesis; inconclusive timing-only evidence for the wrapper, with the observed direction classified as the expected public parity/declassification path. No production source defect or source change was found.** Valgrind and dudect were unavailable, and this cycle did not cover ARM, 32-bit, LTO, or a full compiler/optimization matrix. Keep the goal eligible for a future caller, tool, architecture, or compiler cell rather than treating these runs as a proof of constant-time behavior.
+
+### Next queue
+
+1. Reopen only with a distinct evidence source, such as dudect/Valgrind, another compiler or optimization configuration, a non-x86 target, or a new secret-bearing caller.
+2. Preserve the scalar probe logs and the MSan mutation log; do not repeat the same API/build cell without new evidence.
+3. Draw the next eligible goal after closing this cycle and re-run the full fresh gate.
+
+---
+
 # Statistical Timing Cycle 1
 
 ## Identity and Scope
