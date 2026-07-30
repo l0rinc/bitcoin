@@ -201,7 +201,7 @@ class Bip54Test(BitcoinTestFramework):
             node.setmocktime(0)
 
     def murch_zawy_attack(self, node):
-        """Perform a pseudo Timewarp attack. Pseudo because regtest does not have retargets, so we only do the first 3 periods."""
+        """Perform a pseudo Murch-Zawy attack. Pseudo because regtest does not have retargets, so we only do the first 3 periods."""
         # Expected duration in seconds of a regtest retarget interval (by the incorrect formula).
         interval_expected_sec = 144 * 10 * 60
 
@@ -226,6 +226,7 @@ class Bip54Test(BitcoinTestFramework):
         prev_header = node.getblockheader(prev_hash)
         height = prev_header["height"] + 1
         ntime = prev_header["time"] + 1
+        first_period_start_time = ntime
         while height % 144 < 143:
             block = create_block(tmpl={
                 "previousblockhash": prev_hash,
@@ -243,7 +244,7 @@ class Bip54Test(BitcoinTestFramework):
         block = create_block(tmpl={
             "previousblockhash": blocks[-1].hash_hex,
             "height": height,
-            "curtime": start_time +  4 * interval_expected_sec,
+            "curtime": first_period_start_time + 4 * interval_expected_sec,
         })
         block.solve()
         blocks.append(block)
@@ -259,6 +260,7 @@ class Bip54Test(BitcoinTestFramework):
         })
         block.solve()
         blocks.append(block)
+        second_period_start_time = block.nTime
         height += 1
         ntime += 1
 
@@ -276,13 +278,17 @@ class Bip54Test(BitcoinTestFramework):
                 ntime += 1
 
         # The timestamp of the last block of the period is again set to maximally reduce difficulty.
+        # It must be ratcheted from this period's first block: reusing the previous period's
+        # closing timestamp would make this period's elapsed time zero, which the clamp turns
+        # into a 4x difficulty increase instead of the intended reduction.
         block = create_block(tmpl={
             "previousblockhash": blocks[-1].hash_hex,
             "height": height,
-            "curtime": start_time + 4 * interval_expected_sec,
+            "curtime": second_period_start_time + 4 * interval_expected_sec,
         })
         block.solve()
         blocks.append(block)
+        second_period_end_time = block.nTime
         height += 1
 
         # And the first block of the following period with the same time, to respect the timewarp fix.
@@ -310,12 +316,29 @@ class Bip54Test(BitcoinTestFramework):
             if height % 4 == 0:
                 ntime += 1
 
+        # Check that the three periods exercise the retarget clamps claimed below.
+        assert_equal(len(blocks), 3 * 144)
+        period_timespans = [
+            blocks[143].nTime - blocks[0].nTime,
+            blocks[287].nTime - blocks[144].nTime,
+            blocks[431].nTime - blocks[288].nTime,
+        ]
+        clamped_timespans = [
+            max(interval_expected_sec // 4, min(timespan, 4 * interval_expected_sec))
+            for timespan in period_timespans
+        ]
+        assert_equal(clamped_timespans, [
+            4 * interval_expected_sec,
+            4 * interval_expected_sec,
+            interval_expected_sec // 4,
+        ])
+
         # Now if regtest actually had difficulty adjustment we'd be in a situation where the time
         # has been reset to its minimal value, yet the difficulty is 4x lower than when we started
         # the attack (because it was /4 twice and only *4 once). In an actual Murch-Zawy attack,
         # Mallory would repeat the process until the post-dated blocks can be submitted. A single
         # round is sufficient to demonstrate the attack, so we'll move forward and submit our chain.
-        node.setmocktime(start_time + 2 * 4 * interval_expected_sec)
+        node.setmocktime(second_period_end_time)
         try:
             for block in blocks:
                 node.submitheader(CBlockHeader(block).serialize().hex())
