@@ -1,5 +1,46 @@
 # Secret-data lifetime and zeroization audit
 
+## Cycle 152: HMAC context state retained after destruction
+
+Status: confirmed and fixed.
+
+### Gate and scope
+
+- Selected by the uber selector as goal 13 (`secret-lifetime-zeroization`), exact draw `shuf -i 0-98 -n 1` -> `13`; no reroll was needed.
+- Branch: `uber-cycle-152-secret-lifetime-zeroization-20260730`.
+- Base and pre-cycle HEAD: `d762d618eab9d501e56f280d23788cf781bfadd5`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1088 42`.
+- The ECDHSecret and HKDF context cells were excluded as exact prior findings. The HMAC classes were a distinct ownership cell: their SHA inner state retained caller input bytes, while no HMAC destructor cleansed that state.
+- PID `777094` and all unrelated untracked artifacts were preserved.
+
+### Hypothesis and evidence
+
+`CHMAC_SHA256` and `CHMAC_SHA512` own `CSHA256`/`CSHA512` inner and outer objects. Their constructors already cleanse the local normalized key and `Finalize` cleanses its local digest buffer, but the implicit HMAC destructor did nothing. `CSHA512::Write` leaves partial input in `inner.buf`, and `Finalize` leaves the final padded block there. The HMAC key also remains represented in the inner and outer state. This affects secret-bearing callers including `CExtKey::SetSeed`, `BIP32Hash` chain-code derivation, HKDF expansion, RPC password authentication, and Tor authentication.
+
+An aligned placement probe used a 64-byte `0xa5` input and inspected the complete 400-byte `CHMAC_SHA512` storage after explicit destruction. Against the pre-fix crypto library it reported `marker_bytes=64 storage_bytes=400` and failed; after the destructor change it reported `marker_bytes=0 storage_bytes=400` and passed. The same probe linked against the rebuilt Clang 19 `-O2` crypto library also passed.
+
+### Repair
+
+Declared destructors for both HMAC classes and implemented them with the existing `memory_cleanse` helper over the complete `outer` and `inner` objects. Added placement-storage regressions for both SHA-256 and SHA-512 HMAC contexts, checking that all bytes are cleared after a secret-bearing `Write` and `Finalize`. Existing HMAC output contracts remain unchanged. The repository has no HMAC copy or assignment call sites; copyability was otherwise left unchanged to avoid an unnecessary public API break.
+
+### Verification
+
+- The first build attempt failed before compilation because the host ccache directory `/root/.cache/ccache/tmp` was absent. Rerunning with `CCACHE_DIR=/data/my_storage/tmp/cycle152-ccache cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j2` passed.
+- `TMPDIR=/data/my_storage/tmp/cycle152-focused-tests-20260730 /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=crypto_tests,key_tests,bip324_tests,rpc_tests --log_level=test_suite` passed 65 selected cases with `*** No errors detected`, including both new destructor regressions and the prior HKDF cleanup regression.
+- `/data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=bip32_tests --log_level=test_suite` passed all 8 BIP32 cases; the combined `crypto_tests,bip32_tests,key_tests,bip324_tests,rpc_tests` run passed 73 cases with no errors.
+- The rebuilt Clang 19 Release crypto objects used `-O2 -fstack-protector-all -fcf-protection=full`. Their destructor disassembly retains two `memory_cleanse` calls: `0x68` bytes for each `CSHA256` member and `0xc8` bytes for each `CSHA512` member. This is compiler evidence in addition to the storage probe.
+- `git diff --check` passed. No MSan, Valgrind, or full Clang unit binary result is claimed; the Clang build was stopped after the optimized crypto library and callers were rebuilt because the full test target required a broad unrelated dependency rebuild.
+
+### Verdict and limits
+
+Confirmed and fixed: HMAC contexts retained secret input and key-derived state in ordinary object storage after their lifetime ended. The type-level destructor covers temporary and caller-owned HMAC objects without changing digest results. It does not erase copies before their own destruction, and the required RPC credential/output or durable encrypted data remain separate storage contracts.
+
+### Next queue
+
+1. Search other public cryptographic context types for raw message/key state that survives destruction, excluding ECDHSecret, HKDF, and both HMAC classes.
+2. Revisit compiler-visible cleanup only with a fresh type or a new optimizer/toolchain hypothesis; the current HMAC assembly evidence is closed.
+3. Continue auditing secret-bearing error paths and callback-owned buffers, preserving direct storage-level regressions.
+
 ## Cycle 117: remaining wallet and cryptographic secret lifetimes
 
 Status: in progress.
