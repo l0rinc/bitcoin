@@ -1342,6 +1342,28 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         CheckWithinBIP54Limits(CTransaction(tx2), coins, test_vectors, "Bare Script with malformed PUSHDATA2 after counting 2500 BIP54-sigops");
     }
 
+    // BIP16 accurate counting returns zero P2SH sigops for a non-push-only
+    // scriptSig, even if its final push contains a redeemScript with sigops.
+    // The transaction is invalid for other reasons, but this edge is part of
+    // the static accounting inherited by BIP54.
+    {
+        CCoinsViewCache coins{&CoinsViewEmpty::Get()};
+        CScript redeem_script;
+        for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS + 1; ++i) {
+            redeem_script << OP_CHECKSIG;
+        }
+        const CScript spk{GetScriptForDestination(ScriptHash(redeem_script))};
+
+        CMutableTransaction tx_create;
+        tx_create.vout.emplace_back(0, spk);
+        AddCoins(coins, CTransaction{tx_create}, 0, false);
+
+        CMutableTransaction tx2;
+        tx2.vin.emplace_back(tx_create.GetHash(), 0);
+        tx2.vin[0].scriptSig << OP_DUP << ToByteVector(redeem_script);
+        CheckWithinBIP54Limits(CTransaction{tx2}, coins, test_vectors, "Non-push-only P2SH scriptSig whose redeemScript contains 2501 CHECKSIGs");
+    }
+
     // Optionally dump test vectors as JSON. Uncomment UPDATE_JSON_TESTS at the top of this file to use.
 #ifdef UPDATE_JSON_TESTS
     WriteJSONTestVectors(test_vectors, "bip54_sigops.json.gen");
