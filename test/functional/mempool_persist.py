@@ -109,6 +109,14 @@ class MempoolPersistTest(BitcoinTestFramework):
         tx_prioritised_not_submitted = self.mini_wallet.create_self_transfer()
         self.nodes[0].prioritisetransaction(txid=tx_prioritised_not_submitted['txid'], fee_delta=9999)
 
+        mempool_entries_before_restart = self.nodes[0].getrawmempool(verbose=True)
+        aggregate_totals_before_restart = (
+            sum(entry['fees']['base'] for entry in mempool_entries_before_restart.values()),
+            sum(entry['vsize'] for entry in mempool_entries_before_restart.values()),
+        )
+        assert_equal(self.nodes[0].getmempoolinfo()['total_fee'], aggregate_totals_before_restart[0])
+        assert_equal(self.nodes[0].getmempoolinfo()['bytes'], aggregate_totals_before_restart[1])
+
         self.log.debug("Stop-start the nodes. Verify that node0 has the transactions in its mempool and node1 does not. Verify that node2 calculates its balance correctly after loading wallet transactions.")
         self.stop_nodes()
         # Give this node a head-start, so we can be "extra-sure" that it didn't load anything later
@@ -122,6 +130,15 @@ class MempoolPersistTest(BitcoinTestFramework):
         assert_equal(len(self.nodes[2].getrawmempool()), 5)
         # The others have loaded their mempool. If node_1 loaded anything, we'd probably notice by now:
         assert_equal(len(self.nodes[1].getrawmempool()), 0)
+
+        mempool_entries_after_restart = self.nodes[0].getrawmempool(verbose=True)
+        aggregate_totals_after_restart = (
+            sum(entry['fees']['base'] for entry in mempool_entries_after_restart.values()),
+            sum(entry['vsize'] for entry in mempool_entries_after_restart.values()),
+        )
+        assert_equal(aggregate_totals_after_restart, aggregate_totals_before_restart)
+        assert_equal(self.nodes[0].getmempoolinfo()['total_fee'], aggregate_totals_after_restart[0])
+        assert_equal(self.nodes[0].getmempoolinfo()['bytes'], aggregate_totals_after_restart[1])
 
         self.log.debug('Verify prioritization is loaded correctly')
         fees = self.nodes[0].getmempoolentry(txid=last_txid)['fees']
