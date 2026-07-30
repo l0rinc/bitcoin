@@ -808,18 +808,21 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     if (tx.IsCoinBase())
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "coinbase");
 
+    // BIP 54 makes transactions with a witness-stripped size of exactly 64 bytes
+    // invalid regardless of whether they also violate relay policy.
+    const auto stripped_size{::GetSerializeSize(TX_NO_WITNESS(tx))};
+    if (stripped_size == INVALID_TX_NONWITNESS_SIZE) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "txn-size-64", "Transactions with a witness-stripped size of exactly 64 bytes are invalid.");
+    }
+
     // Rather not work on nonstandard transactions (unless -testnet/-regtest)
     std::string reason;
     if (m_pool.m_opts.require_standard && !IsStandardTx(tx, m_pool.m_opts.max_datacarrier_bytes, m_pool.m_opts.permit_bare_multisig, m_pool.m_opts.dust_relay_feerate, reason)) {
         return state.Invalid(TxValidationResult::TX_NOT_STANDARD, reason);
     }
 
-    // To mitigate CVE-2017-12842, transactions smaller than 65 non-witness bytes are not relayed,
-    // and BIP 54 extends this protection at consensus by making the 64-byte case invalid.
-    const auto stripped_size{::GetSerializeSize(TX_NO_WITNESS(tx))};
-    if (stripped_size == INVALID_TX_NONWITNESS_SIZE) {
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "txn-size-64", "Transactions with a witness-stripped size of exactly 64 bytes are invalid.");
-    } else if (stripped_size < MIN_STANDARD_TX_NONWITNESS_SIZE) {
+    // To mitigate CVE-2017-12842, transactions smaller than 65 non-witness bytes are not relayed.
+    if (stripped_size < MIN_STANDARD_TX_NONWITNESS_SIZE) {
         return state.Invalid(TxValidationResult::TX_NOT_STANDARD, "tx-size-small");
     }
 

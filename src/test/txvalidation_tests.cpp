@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <consensus/consensus.h>
 #include <consensus/validation.h>
 #include <key_io.h>
 #include <policy/packages.h>
@@ -51,6 +52,30 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_reject_coinbase, TestChain100Setup)
     // Check that the validation state reflects the unsuccessful attempt.
     BOOST_CHECK(result.m_state.IsInvalid());
     BOOST_CHECK_EQUAL(result.m_state.GetRejectReason(), "coinbase");
+    BOOST_CHECK(result.m_state.GetResult() == TxValidationResult::TX_CONSENSUS);
+
+    coinbaseTx.vout[0].scriptPubKey = CScript() << OP_0 << OP_0;
+    BOOST_REQUIRE_EQUAL(GetSerializeSize(TX_NO_WITNESS(CTransaction{coinbaseTx})), INVALID_TX_NONWITNESS_SIZE);
+    const auto small_result{m_node.chainman->ProcessTransaction(MakeTransactionRef(coinbaseTx))};
+    BOOST_REQUIRE(small_result.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+    BOOST_CHECK_EQUAL(small_result.m_state.GetRejectReason(), "coinbase");
+    BOOST_CHECK(small_result.m_state.GetResult() == TxValidationResult::TX_CONSENSUS);
+}
+
+BOOST_FIXTURE_TEST_CASE(tx_mempool_reject_64byte_as_consensus, TestChain100Setup)
+{
+    CMutableTransaction tx;
+    tx.version = TX_MAX_STANDARD_VERSION + 1;
+    tx.vin.resize(1);
+    tx.vin[0].prevout = COutPoint{Txid::FromUint256(uint256::ONE), 0};
+    tx.vout.emplace_back(0, CScript{} << OP_0 << OP_1 << OP_2 << OP_4);
+    BOOST_REQUIRE_EQUAL(GetSerializeSize(TX_NO_WITNESS(tx)), INVALID_TX_NONWITNESS_SIZE);
+
+    LOCK(cs_main);
+    const auto result{m_node.chainman->ProcessTransaction(MakeTransactionRef(tx))};
+
+    BOOST_REQUIRE(result.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+    BOOST_CHECK_EQUAL(result.m_state.GetRejectReason(), "txn-size-64");
     BOOST_CHECK(result.m_state.GetResult() == TxValidationResult::TX_CONSENSUS);
 }
 
