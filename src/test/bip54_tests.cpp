@@ -116,7 +116,7 @@ static bool VerifyTxin(const CScript& spent_script, const CMutableTransaction& t
 {
     Assert(idx < tx.vin.size());
     PrecomputedTransactionData txdata;
-    txdata.Init(tx, std::forward<std::vector<CTxOut>>(spent_outputs), /*force=*/true);
+    txdata.Init(tx, std::move(spent_outputs), /*force=*/true);
     const MutableTransactionSignatureChecker checker{&tx, idx, amount, txdata, MissingDataBehavior::ASSERT_FAIL};
     return VerifyScript(tx.vin[idx].scriptSig, spent_script, &tx.vin[idx].scriptWitness, MANDATORY_SCRIPT_VERIFY_FLAGS, checker);
 }
@@ -139,7 +139,7 @@ static std::vector<CTxOut> RecordSpent(const CCoinsViewCache& coins, const T& tx
 {
     std::vector<CTxOut> spent_outputs(tx.vin.size());
     for (size_t i{0}; i < tx.vin.size(); ++i) {
-        const auto coin{*Assert(coins.GetCoin(tx.vin[i].prevout))};
+        auto coin{*Assert(coins.GetCoin(tx.vin[i].prevout))};
         spent_outputs[i] = std::move(coin.out);
     }
     return spent_outputs;

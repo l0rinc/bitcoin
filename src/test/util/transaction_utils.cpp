@@ -97,7 +97,7 @@ bool SignSignature(const SigningProvider &provider, const CScript& fromPubKey, C
     assert(nIn < txTo.vin.size());
 
     PrecomputedTransactionData txdata;
-    txdata.Init(txTo, std::forward<std::vector<CTxOut>>(spent_outputs), /*force=*/true);
+    txdata.Init(txTo, std::move(spent_outputs), /*force=*/true);
     MutableTransactionSignatureCreator creator(txTo, nIn, amount, &txdata, {.sighash_type = nHashType});
 
     bool ret = ProduceSignature(provider, creator, fromPubKey, sig_data);
