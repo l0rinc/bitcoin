@@ -1,5 +1,39 @@
 # Database-engine and persistence-semantics differential
 
+## Cycle 126: LevelDB batch, recovery, and engine-version differential
+
+### Selection and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `95` (`database-semantics-differential`).
+- Branch: `uber-cycle-126-database-semantics-differential-20260730`.
+- Cycle start HEAD: `418c28820de8ad27e53df358c58951f24a3162d3`.
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `40 1041` (`origin/master...HEAD`).
+- The fresh gate fetched `origin master`, passed tracked/index cleanliness and `git diff --check`, matched the catalog/prompt/TSV hashes, and preserved PID `777094` with its Codex parent `725042`.
+
+### Scope and exclusions
+
+Cycle 45 fixed the Bitcoin wrapper's loss of LevelDB iterator read errors. This cycle excluded that path and selected the queued batch/recovery ordering, sync durability, comparator, and engine-version cells. The hypotheses were that a current or v31.1 engine would disagree on write-batch ordering, snapshots/iterators, WAL/MANIFEST recovery, corruption handling, filters, compaction, or sync-related semantics used by `CDBWrapper`, or that the wrapper's model/fault harness would expose a current invariant violation.
+
+### Wrapper evidence
+
+- The current Clang 19 Release `test_bitcoin` passed `dbwrapper_tests`: 14 cases, 2,475 assertions. The v31.1 Clang 19 Release scratch binary passed its common wrapper suite: 9 cases, 2,411 assertions. The extra current cases are the post-v31.1 cleanup and error-contract regressions; no common case failed.
+- The existing deterministic `dbwrapper` fuzz harness was exercised with a fixed scratch seed and returned `dbwrapper: succeeded against 1 files in 0s.` Its model covers bytewise serialized-key ordering, point reads, existence, batches with overwrite/delete ordering, clear/reuse, reopens, optional forced compaction, iterators, deserialization failures, size estimates, obfuscation, and controlled background compaction. No failure or model mismatch was produced.
+- Source review covered `CDBBatch::WriteImpl`/`EraseImpl`, `CDBWrapper::WriteBatch`, `fSync` selection, `CompactFull`, custom `testing_env` ownership, `CDBIterator` snapshots, prefix ranges, chainstate partial-flush markers, and all production LevelDB key prefixes. The apparent obfuscation-metadata collision is a reserved internal key namespace: production LevelDB callers use explicit ASCII prefixes, and the existing malformed-key test exercises reopening behavior; no reachable production collision was established.
+
+### Cross-version LevelDB verification
+
+- The vendored current LevelDB source was configured standalone with Clang 19 Debug and all tests enabled in `/data/my_storage/tmp/cycle126-leveldb-tests`. The complete CTest suite passed `30/30` tests in 92.76 seconds. This includes `db_test` (56 internal tests), recovery, fault injection, corruption, write batches, snapshots, comparators, tables, filters, environment, and platform-file tests.
+- The v31.1 LevelDB source was first configured unmodified. Its own CMake selected C++11 while `util/no_destructor.h` used `std::is_standard_layout_v`, so the standalone build failed before runtime tests. This is a historical release build mismatch, not a database behavior result. The v31.1 scratch copy was then configured with C++17 and the missing placement-new declaration only to run the engine tests; the Bitcoin v31.1 superproject build already supplies a newer language mode. The complete adjusted CTest suite also passed `30/30` in 96.90 seconds.
+- `git diff v31.1..HEAD -- src/leveldb` shows only source-backed maintenance differences: standalone CMake language-mode handling, initialization of `manifest_size`, the POSIX mmap limit, Windows handle move assignment, standard fallthrough annotations, and the `<new>` include. The runtime suite found no behavior divergence attributable to these changes.
+- The focused current and v31.1 `db_test`, `recovery_test`, `fault_injection_test`, and `corruption_test` runs independently passed 56, 7, 2, and 12 internal tests on each version. No batch ordering, recovery, checksum, compaction, comparator, snapshot, or sync-related discrepancy appeared.
+
+### Verdict and limits
+
+Dismissed for this cycle. The Bitcoin wrapper tests, deterministic model harness, and complete cross-version LevelDB test matrices found no current persistence-semantics defect or unexplained engine drift. No production or permanent test change was justified.
+
+The v31.1 standalone CMake mismatch is recorded as a historical build/configuration limitation rather than patched in the repository. No alternative engine such as RocksDB or Pebble was installed, no real power-loss device fault was available, and the custom fuzz binary was a deterministic file runner rather than a mutation engine. Future database cycles should target real process-kill/partial-filesystem schedules, a second installed engine, or a newly observed wrapper contract change. The exact scratch paths and test logs are retained for recurrence checks.
+
 ## Cycle 45
 
 ### Selection and gate
