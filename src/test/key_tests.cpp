@@ -227,6 +227,22 @@ BOOST_AUTO_TEST_CASE(key_recover_compact_failure_invalidates_pubkey)
     BOOST_CHECK(!recovered.IsValid());
 }
 
+BOOST_AUTO_TEST_CASE(key_recover_compact_rejects_noncanonical_header)
+{
+    const CKey key{DecodeSecret(strSecret1C)};
+    BOOST_REQUIRE(key.IsValid());
+    const uint256 msg_hash{Hash(std::string{"recover rejects noncanonical header"})};
+
+    std::vector<unsigned char> compact_sig;
+    BOOST_REQUIRE(key.SignCompact(msg_hash, compact_sig));
+    BOOST_REQUIRE(compact_sig[0] >= 27 && compact_sig[0] <= 34);
+
+    compact_sig[0] += 8;
+    CPubKey recovered{key.GetPubKey()};
+    BOOST_CHECK(!recovered.RecoverCompact(msg_hash, compact_sig));
+    BOOST_CHECK(!recovered.IsValid());
+}
+
 BOOST_AUTO_TEST_CASE(key_der_import_export_contracts)
 {
     std::array<unsigned char, 32> out32;

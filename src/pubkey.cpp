@@ -320,7 +320,7 @@ bool CPubKey::RecoverCompact(const uint256 &hash, const std::vector<unsigned cha
         Assume(!IsValid());
         return false;
     };
-    if (vchSig.size() != COMPACT_SIGNATURE_SIZE)
+    if (vchSig.size() != COMPACT_SIGNATURE_SIZE || vchSig[0] < 27 || vchSig[0] > 34)
         return fail();
     int recid = (vchSig[0] - 27) & 3;
     bool fComp = ((vchSig[0] - 27) & 4) != 0;
