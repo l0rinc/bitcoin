@@ -542,8 +542,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    raw=14671989418026382988, masked 5448617381171607180 -> idx 0 ->
    tx-heavy-import -> #63 c3 (tx-heavy P2P replay profile: ~87%
    ECDSA floor, both perf fixes hold; DISMISSED).
-   LEDGER FIX (2026-07-30): cycles-done for #63 said 63(c1,c2,c3); the
-   journal has c1,c2. Corrected to 63(c1,c2,c3) with this cycle.
+   LEDGER FIX (2026-07-30): cycles-done for #63 said 63(c1); the
+   journal has c1,c2. Corrected to 63(c1,c2,c3) with that cycle.
+   RE-RANK draw 115 (5-cell queue): raw=6489529727745126125 -> idx 0
+   -> comment-code-contract-txgraph -> #1 c4 (106-claim sweep; 4
+   stale comments CONFIRMED+FIXED, F15; 0 code defects).
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -577,7 +580,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 20, 26, 27, 33, 52,
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
-Cycles done (random-pool state): 0(c1,c2), 1(c1,c2,c3), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2,c3,c4), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5),
+Cycles done (random-pool state): 0(c1,c2), 1(c1,c2,c3,c4), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2,c3,c4), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4), 35(c1,c2,c3,c4), 36(c1,c2), 23(c1,c2,c3,c4), 25(c1,c2,c3),
 37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3,c4,c5), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 52(c1,c2), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3,c4), 47(c1,c2,c3,c4), 48(c1,c2), 49(c1,c2,c3,c4,c5,c6,c7,c8), 50(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12), 53(c1), 55(c1), 57(c1,c2,c3,c4), 58(c1,c2,c3), 59(c1,c2), 60(c1,c2,c3,c4,c5,c6,c7,c8), 24(c1,c2,c3,c4,c5,c6),
 61(c1,c2,c3), 63(c1,c2,c3), 64(c1), 65(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1,c2,c3,c4), 70(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2,c3,c4), 75(c1,c2,c3,c4),

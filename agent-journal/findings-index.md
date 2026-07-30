@@ -102,6 +102,20 @@ missing destructor (offerable) | audit/raii-resource-leaks-c2 @
 4d8ae03172, archive agent/all-findings @ d87da3929e (fix
 461c21cbfa) | done; upstream offer.
 
+F15 | txgraph.cpp stale comment set (4 sites) | docs/comment-code
+contract | :706 named nonexistent types (MiningOrder/EvictionOrder);
+:775/:786 referenced deleted Ref move assignment; :2261-2262
+unconditional chunk-connectedness claim dropped the saturation
+condition proven necessary by 3ae78dbd25 | trivial (documentation;
+no behavioral impact) | CONFIRMED+FIXED | independent re-verification
+of scout flags (tree-wide greps, sole-caller checks :3792/:3783,
+txgraph.h:247, GetChunking collapse :1142-1153); 106-claim sweep:
+48 sanity-enforced (70,024-run fuzz enforcement clean), 52
+prose-verified, T-block resolved by Trim caller audit
+(txmempool.cpp:110-126 single-direction deps) | #1 c4 on
+audit/comment-code-contract-c4 (this cycle) | done; same
+comment-drift family as F1 (LockPoints).
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
