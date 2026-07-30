@@ -215,3 +215,55 @@ It ran one case and exited 0 with `*** No errors detected`. The full `crypto_tes
 **Verdict:** dismissed as a current core SHA256 backend mismatch. No output divergence, status divergence, padding-boundary error, fragmented-write error, or `SHA256D64` batch mismatch was observed. No production repair or permanent test is justified by this cycle.
 
 **Evidence limits:** this is an executed x86_64 GCC comparison only. The result does not cover ARM, 32-bit, big-endian, LTO, sanitizer builds, compiler-generated differences under another toolchain, or timing/constant-time equivalence. The unrelated pre-existing PID `777094` remained untouched. Next action is to close the cycle and draw a fresh catalog goal; backend work should return only for one of the explicitly untested architecture/toolchain/sanitizer cells.
+
+## Cycle 123: full-module Release compiler and assembly differential
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `69`
+- Selected goal: `backend-differential` (SIMD, assembly, and portable-reference backend differential)
+- Branch: `uber-cycle-123-backend-differential-20260730`
+- HEAD at gate: `89e43c2c06262bbaf22664729f6c8e8b409200f3`
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `1035 40`
+
+The clean tracked gate passed after the Cycle 122 close commit; known untracked agent artifacts remain preserved and excluded from the cycle. Prior backend cycles covered x86_64 Debug libsecp assembly versus portable APIs, an ECDH-only Release compiler matrix, Core SHA256 dispatch, and CRC32C SSE4.2 versus portable behavior. ARM32 execution is unavailable because this environment has no ARM cross-compiler or QEMU. This cycle therefore selected the remaining full-module Release composition/compiler cell rather than repeating those results.
+
+The hypothesis was that x86_64 assembly and portable backends, or GCC and Clang Release code, could diverge only when all current modules were composed together. The trust boundary was the libsecp256k1 public API, with deterministic serialized output, return status, and invalid-input behavior required to match. The independent probe covered ECDH and EllSwift; the library's current MuSig and Silent Payments tests supplied module-specific verification.
+
+## Cycle 123 result
+
+The four planned trees configured and built successfully. Each summary reported ECDH, recovery, extrakeys, Schnorr, MuSig, ElligatorSwift, and Silent Payments enabled, Release `-O2`, tests and exhaustive tests enabled, ctime/benchmark/examples disabled, and the requested compiler/backend:
+
+```text
+/data/my_storage/tmp/cycle123-backend-differential/{gcc-off,gcc-asm,clang-off,clang-asm}
+GCC 12.2.0 x SECP256K1_ASM=OFF
+GCC 12.2.0 x SECP256K1_ASM=x86_64 (USE_ASM_X86_64=1)
+Clang 19.1.7 x SECP256K1_ASM=OFF
+Clang 19.1.7 x SECP256K1_ASM=x86_64 (USE_ASM_X86_64=1)
+```
+
+The identical seeded test command was run in all four trees:
+
+```text
+<tree>/bin/tests --iterations=2 --seed=0123456789abcdef --jobs=2 --log=1
+```
+
+All test groups passed. Total execution times were 43.514 seconds (GCC portable), 43.056 seconds (GCC assembly), 41.386 seconds (Clang portable), and 41.147 seconds (Clang assembly). The results included ECDH API/generator/Wycheproof/context-hash cases, ECDSA and recovery, Schnorr, all MuSig tests including nonce and vector cases, the refreshed `ellswift_xdh_test_vectors_tests`, EllSwift round trips and XDH correctness, and all Silent Payments tests. Each `<tree>/bin/exhaustive_tests` run also passed order 13 with `test count = 2` and `no problems found`.
+
+The first independent probe link attempt failed in all four cells because the standalone `tests` target compiles the implementation into `tests.c` and does not build the shared library. This was a reproducible harness setup issue, not a source failure. After explicitly building each `secp256k1` target, the probe linked successfully. The probe source is preserved at `agent-journal/backend_differential_cycle123_probe.cpp`; it exercises 512 deterministic key pairs through public-key serialization, default and custom-hash ECDH in both directions, EllSwift create/decode, BIP324 EllSwift XDH in both directions, and invalid-secret return status/output paths.
+
+The Clang 19-built probe returned exactly this output for every library:
+
+```text
+vectors=512 failures=0 digest=fe288ea1ddb151fb
+```
+
+`cmp` matched all four logs. Their identical SHA256 was `c9799f98016b16dd5f4faff7ca8cffd505eea4a75defe60547f371953e64b308`. Rebuilding the same probe with GCC 12 and running it against all four libraries produced the same output and digest. The external probe therefore agrees across compiler-built libraries and independently checks the current EllSwift and ECDH paths beyond the shared test executable.
+
+**Verdict:** dismissed as a current full-module Release backend/compiler mismatch. No output, status, error-contract, ECDH, EllSwift, MuSig, Silent Payments, or exhaustive algebraic divergence was observed. No production repair or permanent test change is justified.
+
+Limitations: execution remains x86_64 little-endian; no ARM cross-compiler/QEMU, 32-bit target, big-endian target, LTO/PGO, Valgrind, or sanitized library build was available. The external probe does not independently implement MuSig or Silent Payments semantics, which were covered by their dedicated current-source test groups. The first link failure and the missing Valgrind dependency are recorded rather than suppressed.
+
+Next queue: close this cycle, preserve the four build trees, probe, and raw logs under `/data/my_storage/tmp/cycle123-backend-differential/`, run a fresh gate, and draw another goal. Reopen backend differential only for ARM/cross-architecture, sanitizer-built libraries, LTO/PGO, or a new backend/module change.
