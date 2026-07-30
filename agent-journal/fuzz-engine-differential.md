@@ -1,5 +1,61 @@
 # Fuzz-engine and property-framework differential
 
+## Cycle 131: descriptor_parse engine and toolchain comparison
+
+### Selection and fresh gate
+
+- Selector: exact `shuf -i 0-98 -n 1` -> `80` (`fuzz-engine-differential`); no reroll was needed because the previous cycle was goal 7.
+- Branch: `uber-cycle-131-fuzz-engine-differential-20260730`.
+- Gate HEAD: `b1f32f6fc4263e46b92998b447fe64e5502eeabf`.
+- Gate `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `1048 40`.
+- Tracked state was clean, `git diff --check` passed, all catalog/protocol hashes matched the authoritative values, and PID 777094 was preserved. Known unrelated untracked artifacts remain outside the cycle scope.
+- Catalog hashes: reusable goals `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, random prompt `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, goals TSV `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, uber protocol `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+### Scope and exclusions
+
+Cycle 8 already compared `bech32_roundtrip` under libFuzzer, AFL++, and Honggfuzz. Cycle 79 compared `parse_numbers` with the same three engines and cross-engine sanitizer replay. Those target/corpus/result cells remain closed. FuzzTest is still not integrated in the repository and was not found locally; it will be recorded as unavailable rather than represented by another framework.
+
+The distinct target for this cycle is `descriptor_parse`, which prior evidence queued but did not execute in an engine differential. Its production harness parses each input both with and without a required checksum, asserts that equivalent successful results serialize identically, expands descriptors, checks inferred scripts, and applies range/solvability/key-count invariants. The cycle hypothesis is that engine instrumentation or input scheduling may expose a parser-state, corpus-transfer, crash, timeout, or harness-realism difference that the earlier parser targets did not show.
+
+The comparison will use one shared deterministic seed corpus, identical target selection and process limits, Clang 19 libFuzzer with sanitizer replay, AFL++ persistent mode, and Honggfuzz feedback mode. Native coverage counters will remain engine-specific; only transferred inputs, exit status, sanitizer diagnostics, crashes, hangs, and target output will be treated as cross-engine evidence. All builds and runs use scratch directories and no default datadir, wallet, key, or database.
+
+### Cycle 131 build, corpus, and tool matrix
+
+- The source corpus was /data/my_storage/tmp/cycle131-corpus/source: 20 text seeds, 2,269 bytes total, manifest SHA256 d5f4508c15750de5d11719d278eb8129a0741d8842b7658cb685d8daca87ae4a. It covered valid and invalid public descriptors, ranged and multipath extended keys, multisig, miniscript, taproot, checksum, bounds, truncation, unknown syntax, and empty-input cases. The same copied 20-file corpus was supplied to each engine.
+- All builds used current source HEAD, Clang 19.1.7, Debug, BUILD_FOR_FUZZING=ON, wallet/IPC disabled, x86_64, FUZZ=descriptor_parse, and isolated /data/my_storage/tmp/cycle131-* paths. The libFuzzer build used ASan+UBSan+libFuzzer. AFL++ and Honggfuzz throughput builds were unsanitized and every generated input was replayed through the ASan+UBSan libFuzzer oracle.
+- The libFuzzer target built in /data/my_storage/tmp/cycle131-build-libfuzzer. The AFL++ target built in /data/my_storage/tmp/cycle131-build-afl19d with AFL++ commit ad5304010ae3be9d5cdc1ba51b09e14169c5cb87, PCGUARD, -fno-lto, and LLVM 19 lld; afl-showmap independently captured 575 tuples from a seed and reported a 300,555-edge target map. The Honggfuzz target built in /data/my_storage/tmp/cycle131-build-honggfuzz19 with Honggfuzz commit cf8b66a4d09f4d4d786d96e3c46d9141fb4e98e2.
+- The first AFL++ launch placed env FUZZ=descriptor_parse after --, so AFL++ checked /usr/bin/env and rejected it as uninstrumented. The corrected launch inherited FUZZ before the fuzzer command and used the instrumented Bitcoin target. This was a scratch invocation error and is excluded from product evidence. Earlier AFL link attempts using host LLVM 14 and the project's -fcf-protection=full flag were also quarantined as scratch toolchain integration failures; the successful build filtered that wrapper-detected flag and used matching LLVM 19 lld.
+- FuzzTest was not installed and no repository integration was found. No substitute property framework was counted as a FuzzTest result.
+
+### Cycle 131 fixed-budget comparison
+
+Each engine used one worker and a 15-second budget. Native counters are engine-specific and are not comparable as equal coverage units.
+
+| Engine | Executions | Native coverage/corpus signal | Peak RSS | Crashes/hangs |
+|---|---:|---|---:|---|
+| libFuzzer, seed 13101 | 36,935 | 799 new units; 1,900 final coverage; 16 retained corpus files | 357 MiB | 0/0 |
+| AFL++ 5.03a | 233,494 | 2,668 edges; 0.89% bitmap; 98.39% stability; 470 new queue entries | 22 MiB | 0/0 |
+| Honggfuzz 2.6, one thread | 61,163 | 290 new units; 325 .honggfuzz.cov outputs; 300,358 guards; branch metric reported 0% | 30 MiB | 0/0 |
+| libFuzzer, seed 13102 | 36,935 | 325 new units; 8,537 final coverage; 280-entry in-memory corpus | 352 MiB | 0/0 |
+
+The libFuzzer corpus-only control loaded all 20 seeds and completed 21 executions with peak RSS 242 MiB. The fixed-budget runs used -rss_limit_mb=4096, -max_len=4096, and ASan/UBSan halt-on-error settings. Honggfuzz ended with crashes_count:0, timeout_count:0, and new_units_added:290. AFL++ ended with saved_crashes:0, saved_hangs:0, 233,494 executions, and 15,549.68 executions/sec. Its native queue is under /data/my_storage/tmp/cycle131-runs/afl-out2/cycle131/; Honggfuzz's generated corpus is under /data/my_storage/tmp/cycle131-runs/hong-out/.
+
+### Cycle 131 transfer and sanitizer verification
+
+- The ASan/UBSan libFuzzer replay consumed 490 AFL++ queue files and 325 Honggfuzz .cov files, 815 files total, and completed 816 executions with exit status 0. It reported no sanitizer diagnostic, assertion, crash artifact, or timeout; peak RSS was 265 MiB. Log: /data/my_storage/tmp/cycle131-runs/cross-replay.log.
+- The initial libFuzzer replay of all 20 seeds exited 0. Both fixed-seed libFuzzer runs exited 0, as did the corrected AFL++ and Honggfuzz sessions. Logs are /data/my_storage/tmp/cycle131-runs/libfuzzer-13101.log, /data/my_storage/tmp/cycle131-runs/libfuzzer-13102.log, /data/my_storage/tmp/cycle131-runs/afl2.log, and /data/my_storage/tmp/cycle131-runs/hong.log.
+- AFL++'s crashes and hangs directories contain zero files. Honggfuzz emitted 325 coverage corpus files and no crash or timeout files. The two crash/timeout text matches in its log are its startup configuration line and final zero-valued summary, not failures.
+
+### Cycle 131 verdict
+
+The bounded hypothesis is dismissed for a new repository defect. The distinct descriptor_parse target completed current-head libFuzzer, AFL++, and Honggfuzz runs from the same corpus, and all engine-produced inputs survived ASan/UBSan replay. Coverage and corpus-growth differences are expected consequences of each engine's mutation, persistence, shared-memory, instrumentation, and scheduling model. No crash, hang, sanitizer failure, corpus corruption, or target semantic mismatch was reproduced. No production or test change is justified.
+
+### Cycle 131 handoff
+
+- Close this cycle with journal/state-only commits; no source finding was confirmed.
+- Preserve the corpus manifest, tool commits, corrected AFL invocation, quarantined scratch-toolchain failures, native engine metrics, and cross-engine replay log above.
+- The broader goal remains eligible for a future distinct target or compiler/engine/toolchain evidence cell; do not repeat bech32_roundtrip, parse_numbers, or this descriptor_parse cell without new evidence.
+
 ## Cycle 8
 
 - Selector: `shuf -i 0-98 -n 1`
