@@ -664,6 +664,80 @@ BOOST_AUTO_TEST_CASE(MempoolUnbroadcastMemoryAccounting)
     BOOST_CHECK_EQUAL(pool.DynamicMemoryUsage(), usage_before);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolUnbroadcastRemovalPaths)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    TestMemPoolEntryHelper entry;
+
+    const auto run_case = [&](const CTransactionRef& tx, NodeSeconds time, const auto& remove) {
+        const auto run_once = [&](bool unbroadcast) {
+            {
+                LOCK2(::cs_main, pool.cs);
+                TryAddToMempool(pool, entry.Fee(10000).Time(time).FromTx(tx));
+            }
+            if (unbroadcast) {
+                pool.AddUnbroadcastTx(tx->GetHash());
+                BOOST_REQUIRE(pool.GetUnbroadcastTxs() == std::set<Txid>{tx->GetHash()});
+            }
+
+            {
+                LOCK2(::cs_main, pool.cs);
+                remove();
+            }
+            BOOST_CHECK(!pool.exists(tx->GetHash()));
+            BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+            return pool.DynamicMemoryUsage();
+        };
+
+        const size_t usage_after_unbroadcast_removal = run_once(true);
+        const size_t usage_after_regular_removal = run_once(false);
+        BOOST_CHECK_EQUAL(usage_after_unbroadcast_removal, usage_after_regular_removal);
+    };
+
+    const CTransactionRef recursive_tx = make_tx({10 * COIN});
+    run_case(recursive_tx, Now<NodeSeconds>(), [&] {
+        pool.removeRecursive(CTransaction(*recursive_tx), REMOVAL_REASON_DUMMY);
+    });
+
+    const CTransactionRef block_tx = make_tx({11 * COIN});
+    run_case(block_tx, Now<NodeSeconds>(), [&] {
+        pool.removeForBlock({block_tx}, 1);
+    });
+
+    const CTransactionRef expiry_tx = make_tx({12 * COIN});
+    run_case(expiry_tx, Now<NodeSeconds>() - std::chrono::seconds{1}, [&] {
+        BOOST_REQUIRE_EQUAL(pool.Expire(GetTime<std::chrono::seconds>()), 1);
+    });
+
+    const CTransactionRef trim_tx = make_tx({13 * COIN});
+    run_case(trim_tx, Now<NodeSeconds>(), [&] {
+        pool.TrimToSize(0);
+    });
+
+    const CTransactionRef replaced_tx = make_tx({14 * COIN});
+    const CTransactionRef replacement_tx = make_tx({15 * COIN});
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(10000).FromTx(replaced_tx));
+    }
+    pool.AddUnbroadcastTx(replaced_tx->GetHash());
+    {
+        LOCK2(::cs_main, pool.cs);
+        auto changeset = pool.GetChangeSet();
+        changeset->StageRemoval(pool.GetIter(replaced_tx->GetHash()).value());
+        changeset->StageAddition(replacement_tx, 20000, 0, 1, 0, false, 4, LockPoints{});
+        changeset->Apply();
+    }
+    BOOST_CHECK(!pool.exists(replaced_tx->GetHash()));
+    BOOST_CHECK(pool.exists(replacement_tx->GetHash()));
+    BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+    {
+        LOCK2(::cs_main, pool.cs);
+        pool.removeRecursive(CTransaction(*replacement_tx), REMOVAL_REASON_DUMMY);
+    }
+    BOOST_CHECK_EQUAL(pool.size(), 0U);
+}
+
 BOOST_FIXTURE_TEST_CASE(MempoolV1SignedDeltaExtremes, TestChain100Setup)
 {
     bilingual_str error;
