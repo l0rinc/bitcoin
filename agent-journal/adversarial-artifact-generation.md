@@ -156,3 +156,74 @@ closed.
 ## Rotation note
 Three cycles; v1+v2 hostile transports closed. Not exhausted
 (xswiftec edge vectors).
+
+## Cycle 4 (2026-07-30): xswiftec edge vectors vs production C — 256/256 match, both verifiers green
+
+### Draw
+Harvested-queue draw (seed_raw=17579083735087921526,
+masked=8355711698233145718, n=7, idx=3) -> xswiftec-edge-vectors cell
+-> #108 (fourth cycle; c3 queue cell "Malformed-ellswift EDGE
+classes"). Branch: audit/adversarial-artifact-c4 from 92beb0c745
+(#42 c5 journal tip).
+
+### Hypothesis
+The in-tree C secp256k1 xswiftec_inv (the production BIP324 decode
+primitive; secp256k1_ellswift_xswiftec_inv_var,
+src/secp256k1/src/modules/ellswift/main_impl.h:168) could diverge
+from the BIP324 edge-vector annotations
+(test/functional/test_framework/crypto/xswiftec_inv_test_vectors.csv,
+32 rows x 8 cases: ok / bad[valid_x(-x-u)] / bad[non_square(s)] /
+bad[non_square(q)] / info[v=0]) on accept/reject classification or
+output t. Test-gap context: the CSV is consumed in-tree ONLY by the
+Python framework self-test (ellswift.py test_elligator_encode_
+testvectors) and a lint rule — the C implementation never sees these
+vectors in-tree (#81 c2 verified only CSV byte-identity vs upstream).
+
+### Experiment 1 (C driver vs CSV)
+Scratch harness /tmp/xsw_driver.c: unity build of secp256k1.c with
+ENABLE_MODULE_ELLSWIFT=1 + precomputed_ecmult{,_gen}.c; parses the
+CSV, runs secp256k1_ellswift_xswiftec_inv_var per (u,x,case),
+compares NONE-vs-t and exact t bytes.
+- gcc -O2 -I src/secp256k1 -I src/secp256k1/src /tmp/xsw_driver.c
+  src/secp256k1/src/precomputed_ecmult.c
+  src/secp256k1/src/precomputed_ecmult_gen.c -o /tmp/xsw_driver
+- /tmp/xsw_driver test/functional/test_framework/crypto/xswiftec_inv_test_vectors.csv
+  -> rows=32 cases=256 mismatches=0 (driver_exit=0)
+(Driver v1 had a CSV parser double-increment bug — fixed before any
+vector ran; noted so the green is not misread as a parser artifact:
+the fixed parser verified field counts and 64-hex shapes strictly.)
+
+### Experiment 2 (Python differential, second verifier)
+- cd test/functional && python3 -m unittest
+  test_framework.crypto.ellswift -v -> Ran 5 tests, OK
+  (test_elligator_encode_testvectors runs the same CSV against the
+  pure-Python xswiftec_inv, including xswiftec(u,t)==x re-encode).
+
+### Verdict
+DISMISSED (correctness confirmed): both independent implementations
+agree with all 256 annotated edge cases — every rejection class and
+every ok output matches exactly. A misclassification here would have
+meant ellswift decode of non-canonical/non-curve inputs in the v2
+handshake (wrong shared secret, availability-level); no such
+divergence exists. Reachability note: any 64-byte peer ellswift is
+decodable by design (c3 V2 class), so this edge surface IS the
+reachable one — and it is clean.
+
+### Exact commands
+- as above; harness preserved at /tmp/xsw_driver.c (+/tmp/xsw_driver),
+  CSV path in-tree, unittest module
+  test.functional.test_framework.crypto.ellswift.
+
+### Limitations / queue
+- The C-side CSV check is NOT wired into any in-tree test — a
+  persistent C++ or ctest harness for these vectors is the natural
+  hardening follow-up (would convert this scratch verification into
+  a regression gate). Queued as an oracle-delivery cell.
+- Post-handshake v2 slowloris (inactivity timeout) still untested —
+  long-wall cell, low value.
+- secp256k1's own exhaustive ellswift suite not rerun here (upstream
+  CI covers it; the CSV differential was the gap).
+
+## Rotation note
+Four cycles; v1+v2 transports and the ellswift edge-vector axis
+closed. Remaining queue: the oracle-delivery hardening cell above.
