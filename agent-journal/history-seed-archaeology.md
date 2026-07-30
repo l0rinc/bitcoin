@@ -248,3 +248,65 @@ The version story is consistent with the code.
 
 ## Rotation note
 Four cycles; four persistence artifacts, all fail closed.
+
+## Cycle 5 (2026-07-30): peers.dat three-tier archaeology — recreate / backup+recreate / FATAL-with-workaround, all verified; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=9758505963115004795,
+masked=535133926260228987, n=4, idx=3) -> peers-dat -> #41 (fifth
+cycle; c4 queue note "peers.dat is the natural next archaeology
+cell"). Branch: audit/history-seed-c5 from 6a37ad2479 (#41 c4
+journal tip).
+
+### Mechanism map (addrdb.cpp:197-227, addrman.cpp:215-240,
+addrman_impl.h:166-186)
+- File layout: 4-byte network magic + format byte (V4_MULTIPORT=4)
+  + compat byte (INCOMPATIBILITY_BASE 32 + lowest_compatible 4 =
+  36).
+- LoadAddrman tiers: DbNotFoundError -> recreate ('Creating
+  peers.dat because the file was not found');
+  InvalidAddrManVersionError (compat-base > FILE_FORMAT) ->
+  rename to peers.dat.bak + recreate + warning; any OTHER
+  exception -> util::Error FATAL startup abort with the exact
+  workaround message.
+
+### Experiment (real peers.dat + byte surgery + background starts)
+1. control: STARTED, 'Loaded 0 addresses from peers.dat 0ms'
+   (regtest node had no outbound peers; mechanics fine).
+2. compat-high (compat=41>36): STARTED with '[warning] Creating
+   new peers.dat because the file version was not compatible ...
+   Original backed up to peers.dat.bak' + .bak created.
+3. compat-low (compat=10<32): FATAL '[error] Invalid or corrupt
+   peers.dat (Corrupted addrman database: The compat value (10)
+   is lower than the expected minimum value 32...)'.
+4. wrong-magic (mainnet f9beb4d9 over regtest fabfb5da): FATAL
+   '(Invalid network magic number)'.
+5. flipped mid-file: FATAL '(AutoFile::read: end of file:
+   iostream error)'.
+6. missing: STARTED, 'Creating peers.dat because the file was
+   not found'.
+
+### Verdict
+DISMISSED: the three tiers behave exactly as designed, with exact
+messages — missing and too-new are soft-recoverable (recreate,
+backup+recreate), while too-old, wrong-network, and corruption
+are FATAL with a workaround, never silent. peers.dat is the
+strictest artifact in the family; story consistent with the code.
+Harness lesson recorded: the file starts with 4-byte network
+magic BEFORE the format byte — my v1 version-patches at offset 0
+hit the magic, not the format (both magic corruptions also fatal,
+recorded).
+
+### Exact commands
+- /tmp/pd_run.sh + dd byte surgery at seek=0 (magic), seek=5
+  (compat); log greps above.
+
+### Limitations / queue
+- The 0-address round-trip reflects regtest (no outbound peers);
+  a populated peers.dat round-trip is the same deserialization
+  class as control.
+- banlist.dat/.json (CBanDB's dual-format story) is the last
+  artifact of this family if a cycle lands here.
+
+## Rotation note
+Five cycles; five persistence artifacts, every tier verified.
