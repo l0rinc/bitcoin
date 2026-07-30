@@ -63,6 +63,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -2224,6 +2225,11 @@ static RPCMethod getblockstats()
 }
 
 namespace {
+bool IsDuplicateScanObject(const UniValue& scanobject, std::set<std::string>& seen)
+{
+    return !seen.emplace(scanobject.write()).second;
+}
+
 //! Search for a given set of pubkey scripts
 bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& should_abort, int64_t& count, CCoinsViewCursor* cursor, const std::set<CScript>& needles, std::map<COutPoint, Coin>& out_results, std::function<void()>& interruption_point)
 {
@@ -2418,9 +2424,11 @@ static RPCMethod scantxoutset()
         std::set<CScript> needles;
         std::map<CScript, std::string> descriptors;
         CAmount total_in = 0;
+        std::set<std::string> seen_scanobjects;
 
         // loop through the scan objects
         for (const UniValue& scanobject : request.params[1].get_array().getValues()) {
+            if (IsDuplicateScanObject(scanobject, seen_scanobjects)) continue;
             FlatSigningProvider provider;
             auto scripts = EvalDescriptorStringOrObject(scanobject, provider);
             for (CScript& script : scripts) {
@@ -2651,7 +2659,9 @@ static RPCMethod scanblocks()
 
         // loop through the scan objects, add scripts to the needle_set
         GCSFilter::ElementSet needle_set;
+        std::set<std::string> seen_scanobjects;
         for (const UniValue& scanobject : request.params[1].get_array().getValues()) {
+            if (IsDuplicateScanObject(scanobject, seen_scanobjects)) continue;
             FlatSigningProvider provider;
             std::vector<CScript> scripts = EvalDescriptorStringOrObject(scanobject, provider);
             for (const CScript& script : scripts) {
@@ -2808,9 +2818,11 @@ static RPCMethod getdescriptoractivity()
     }
 
     std::set<CScript> scripts_to_watch;
+    std::set<std::string> seen_scanobjects;
 
     // Determine scripts to watch.
     for (const UniValue& scanobject : request.params[1].get_array().getValues()) {
+        if (IsDuplicateScanObject(scanobject, seen_scanobjects)) continue;
         FlatSigningProvider provider;
         std::vector<CScript> scripts = EvalDescriptorStringOrObject(scanobject, provider);
 

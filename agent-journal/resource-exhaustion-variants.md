@@ -1,5 +1,72 @@
 # Untrusted-Interface Resource-Exhaustion Variant Analysis
 
+## Cycle 130: duplicate ranged descriptor expansion in scan RPCs
+
+### Selection and gate
+
+- The first post-cycle gate selector was `shuf -i 0-98 -n 1` -> `36` (`sanitizer-analysis-matrix`). Its queued MSan/instrumented-dependency, TokenPipe, and analyzer-warning cells were already closed by Cycle 78, so it was rejected without a branch. The required reroll command returned `7` (`resource-exhaustion-variants`).
+- Branch: `uber-cycle-130-resource-exhaustion-variants-20260730`
+- Cycle-start HEAD: `890dcd7e202ffc3e362126e090378d682790be10`; `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1046 40` from `git rev-list --left-right --count HEAD...origin/master`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`; prompt SHA256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`; TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`; uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The fresh fetch, tracked/index status, `git diff --check`, catalog/protocol hashes, and process check passed. PID `777094` (`test_bitcoin --run_test=wallet_tests`) and its Codex parent were preserved. Existing untracked agent artifacts, `node_modules/`, package files, and `test/cache/` were not touched.
+
+### Scope and hypothesis
+
+Cycles 57, 82, and 104 close the cfilters, BIP35, locator, relay-backlog, receive-buffer, transport-send-queue, and REST `getutxos` allocation cells. This cycle followed the remaining RPC scan and request-derived queue leads. P2P address and GETDATA state was rechecked first: `MAX_ADDR_TO_SEND=1000`, address token-bucket accounting, `MAX_INV_SZ=50000`, per-peer GETDATA draining/backpressure, block-in-flight removal, and `txdownloadman.DisconnectedPeer()` all provide explicit bounds or disconnect cleanup. No new P2P retention defect was established.
+
+The distinct hypothesis was in the shared descriptor-scan input path. `EvalDescriptorStringOrObject()` permits a range of up to one million positions per scan object, but `scantxoutset`, `scanblocks`, and `getdescriptoractivity` independently expand every array element before inserting scripts into sets. Exact duplicate scan objects have no semantic effect because all three consumers deduplicate their resulting scripts, yet the old code repeated descriptor parsing/derivation for each duplicate. The resource equation is:
+
+```text
+request CPU = one chain/filter/activity scan + N scan objects * descriptor parsing and range expansion
+```
+
+The HTTP RPC body limit is 32 MiB, but none of these methods imposed an aggregate scan-object or expansion budget. Therefore a small authenticated request can multiply the already expensive ranged derivation work without changing the result.
+
+### Independent pre-fix reproduction
+
+The existing unmodified `rpc_scantxoutset.py` suite passed with a fresh cache. A scratch regtest daemon at height 10001 was then queried over authenticated JSON-RPC with the same valid ranged descriptor repeated exactly, using `range=1000` and no matching outputs. The request was generated in memory with Python `urllib`, so no production or repository fixture was changed. Results were:
+
+| Exact duplicate objects | JSON request bytes | Elapsed | `txouts` | matches |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 228 | 0.530 s | 10001 | 0 |
+| 10 | 1597 | 3.712 s | 10001 | 0 |
+| 50 | 7677 | 18.130 s | 10001 | 0 |
+| 100 | 15278 | 36.024 s | 10001 | 0 |
+| 200 | 30478 | 72.656 s | 10001 | 0 |
+
+The output was identical for every request, while the cost scaled linearly with the redundant object count. This is an authenticated RPC resource-exhaustion issue, not an unauthenticated P2P claim; it matters when an RPC credential is exposed to an untrusted caller and is also a deterministic local-work amplification in the RPC worker pool.
+
+### Fix and verification
+
+`src/rpc/blockchain.cpp` now serializes each scan object once into a temporary `std::set<std::string>` and skips exact duplicates before calling `EvalDescriptorStringOrObject()`. The same guard is applied to all three descriptor-scan RPCs. This is semantics-preserving: the old downstream `std::set<CScript>`/GCS element set/script watch set already removed duplicate derived scripts. `test/functional/rpc_scantxoutset.py` adds a regression comparing the complete result for one ranged object with the result for that object repeated twice.
+
+The first rebuild attempt failed before compiling the changed file because the configured ccache launcher could not create `/root/.cache/ccache/tmp`. The isolated retry used `CCACHE_DIR=/data/my_storage/tmp/cycle130-ccache`:
+
+```text
+CCACHE_DIR=/data/my_storage/tmp/cycle130-ccache cmake --build /data/my_storage/tmp/cycle89-build --target bitcoind test_bitcoin -j2
+```
+
+It completed successfully. The fixed binary produced the following matched control:
+
+```text
+objects=1   payload=228   elapsed=0.459s txouts=10001 matches=0
+objects=200 payload=30478 elapsed=0.462s txouts=10001 matches=0
+```
+
+The fixed `rpc_scantxoutset.py`, `rpc_scanblocks.py`, and `rpc_getdescriptoractivity.py` functional tests all exited 0 with `Tests successful`. The focused unit command
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle130-rpc-unit /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=rpc_tests --log_level=test_suite --report_level=short
+```
+
+passed 22 cases and 311 assertions. `git diff --check` passed.
+
+### Classification and limitations
+
+Classification: confirmed local authenticated-RPC resource-exhaustion amplification. The old path accepted a 30 KB request that consumed 72.656 seconds while an equivalent one-object request consumed 0.530 seconds; the fix removes the exact redundant multiplier without changing valid output. No arbitrary new limit was introduced and distinct descriptor objects remain supported.
+
+The reproduction used GCC 12 and a 10001-block scratch chain, not a full mainnet UTXO set or a maximum 32 MiB request. The measurements establish the mechanism and linearity, not a production-wide wall-time bound. Semantically equivalent but textually different objects are not deduplicated, and a single large ranged descriptor remains intentionally expensive and documented. The next resource cycle should not repeat exact duplicate descriptor expansion; remaining work should target distinct descriptor-equivalence normalization, a new parser/queue boundary, or a P2P cleanup state with an independent source-to-sink proof.
+
 ## Cycle 57
 
 - Selected by the uber loop: `shuf -i 0-98 -n 1` -> `7`
