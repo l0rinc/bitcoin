@@ -1,4 +1,88 @@
-# Historical Knowledge Recipe Synthesis
+# Historical Knowledge Recipe Synthesis: Cycle 120
+
+## Cycle 120 Identity and Gate
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `90`
+- Selected goal: `historical-knowledge-recipes` (Whole-PR and commit knowledge-base recipe synthesis)
+- Worktree: `/data/my_storage/bitcoin`
+- Branch: `uber-cycle-120-historical-knowledge-recipes-20260730`
+- Start HEAD: `885645974b844071416088ef7d842808089777a3`
+- Base: `origin/master` at `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- `origin/master...HEAD` at the gate: `40 1029`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Tracked and staged state at the gate: clean; persistent untracked artifacts and `test/cache/` were preserved.
+- PID `777094` (`test_bitcoin --run_test=wallet_tests`) and parent PID `725042` were observed and will not be touched.
+
+## Cycle 120 Scope and Exclusions
+
+The existing recipes are closed: `presence-vs-verification-before-assertion`, `reservation-conservation-after-deferred-eligibility`, and `configurable-parallel-feature-lifecycle`. This cycle must select a different bug shape, derive a compact trigger/invariant/review recipe from a whole PR or commit sequence, and test it against a held-out change from another subsystem. A recipe-only result is acceptable when the current tree satisfies the extracted contract; any production finding requires an independent reproducer and its own self-contained commit.
+
+## Cycle 120 Evidence Log
+
+### Seed: compact-block slot provenance and counter conservation
+
+The selected seed is Bitcoin Core PR `#35727`, merge `883ef1d85d74c928ae753e07116d3fc61de4e446`. Its source fix is `6aa5d8d9481f5e06b10095df7f46f0532f7ecdb7` (`blockencodings: fix extra transaction count`) and its characterization test is `be4e64d9e4051f7272c75c2819ceb075ed5452c7` (`test: characterize extra transaction miscount`). The merge history and review record show a focused two-stage correction rather than a broad refactor.
+
+The contract table is:
+
+| State/source | Slot meaning | Counter effect | Can a later candidate refill it? |
+| --- | --- | --- | --- |
+| `NONE` | no candidate has claimed the short-ID slot | none | yes |
+| `MEMPOOL` | a transaction came from the mempool | increment `mempool_count` | only if invalidated by the source-specific collision rule |
+| `EXTRA` | a transaction came from `extra_txn` | increment both `mempool_count` and `extra_count` | only if invalidated by the source-specific collision rule |
+| `COLLIDED` | the slot is ambiguous or invalidated | counters already decremented for its prior source | no |
+
+The old `vector<bool> have_txn` retained presence but discarded provenance. Consequently, an unrelated `extra_txn` could first claim a slot, a later mempool short-ID collision could clear it, and the code could decrement the aggregate count as if the cleared entry had come from the mempool. The repair adds a parallel `TxSource` vector, decrements `extra_count` only when the invalidated source was `EXTRA`, and makes `COLLIDED` terminal so a later candidate cannot silently refill a slot that has already affected accounting.
+
+The first test commit deliberately leaves one block transaction missing so scanning reaches the collision. It records the original mismatch (`extra_count == 0` where the contract requires `1`) rather than immediately choosing an implementation. The follow-up test expands the matrix: mempool-sourced collision, extra-sourced collision, and genuine transactions arriving after a collision. The final assertions cover both counters, availability, and the no-refill rule. This is the useful review pattern: characterize the state transition first, then mutate each provenance and terminal-state branch.
+
+### Commit, review, and rejection evidence
+
+The source commit states the mechanism and impact precisely: a short-ID collision can invalidate a mempool-sourced transaction after an unrelated transaction was found in `extra_txn`, causing the extra count to drift. It also records why retaining collision state matters for later candidates. The test commit is separate, which makes the regression oracle independently inspectable. The merge body records ACKs from `l0rinc` after retesting, `andrewtoth`, and `sedited`; no review evidence supports replacing the source enum with an aggregate-only adjustment.
+
+The rejected designs are therefore concrete. Keeping only a boolean preserves occupancy but cannot answer which counter to decrement. Decrementing `extra_count` for every collision fixes one ordering but breaks the mempool-source case. Clearing the slot and allowing a later candidate to refill it hides the original collision and can double-count or resurrect a state that the compact-block reconstruction no longer knows how to classify. The minimal accepted design is explicit provenance plus a terminal collision state, with focused tests for each transition.
+
+### Held-out validation: private-broadcast removal and disconnect state
+
+The independent held-out change `13da611b396664bfc63587f5eeac3bdc1ce1b163` (`privatebroadcast: track disconnects for removal accounting`) matches the extracted recipe in another subsystem. Its old `Remove()` result exposed only confirmed receptions, although a picked but still unconfirmed connection had already consumed a counter slot. The repair preserves per-send provenance with `num_picked`, `num_confirmed`, and `num_unconfirmed_disconnected`, derives `NumUnstarted()` from consumed slots, and tombstones active node IDs until the in-flight removal is resolved. `MarkNodeDisconnected()` is idempotent and distinguishes a removed active node from a live pending send.
+
+The analogy is behavioral, not lexical: both systems have a bounded aggregate, multiple source/status classes, a later invalidation event, and a terminal state that must not be re-used. The held-out unit mutations are sensitive to both halves of the recipe: changing `NumUnstarted()` back to confirmed-only fails the count assertions, while skipping tombstones fails the node-disconnect assertions. The current focused binary then passed both relevant suites:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle120-historical-recipe \
+  /data/my_storage/tmp/cycle89-build/bin/test_bitcoin \
+  --run_test=blockencodings_tests,private_broadcast_tests \
+  --report_level=short --catch_system_errors=no
+
+Test module "Bitcoin Core Test Suite" has passed with:
+  40 test cases out of 1213 passed
+  1173 test cases out of 1213 skipped
+  20876 assertions out of 20876 passed
+```
+
+The binary is configured against `/data/my_storage/bitcoin`, and its timestamp is newer than the current private-broadcast test source. The current tree also contains the compact-block collision and no-refill assertions at the inspected source locations. No source change is justified by the held-out review.
+
+### Negative controls and fingerprint boundary
+
+`a39a6d7cafc54a5fba403a74710f141650d9a4f8` (`coins: check failed spend no-op contracts`) is not a match: it protects whole-operation rollback and has no deferred candidate source or aggregate reservation. `4ea3901a8834a85d0fb84d79f0a8398284ae013f` (`mempool: check dump failure preserves file`) likewise protects atomic file replacement, not provenance-aware counter ownership. These controls prevent the recipe from degenerating into “any state-accounting regression.”
+
+The recipe fingerprint is `provenance-aware-terminal-state-accounting`. It is related to, but distinct from, the earlier `reservation-conservation-after-deferred-eligibility` recipe: that recipe starts with resources reserved before recipient eligibility is known, while this one starts with aggregate counts that cannot be interpreted correctly after a source-specific collision or lifecycle transition. A future candidate needs both explicit source/status classes and a proof that terminal states cannot be counted or selected again.
+
+### Reusable recipe
+
+1. List every per-item state that contributes to each aggregate counter. If two sources or lifecycle statuses have different decrement/refund rules, an occupancy bit is insufficient.
+2. Write conservation equations before changing code. For each transition, state the prior source, the event that invalidates it, the exact counters to change, and whether the item becomes terminal.
+3. Search for all candidate orderings: source A then source B, B then A, duplicate candidates, late candidates, missing candidates, removal, disconnect, retry, and node/object reuse.
+4. Replace inferred provenance with an enum, tagged result, or equivalent status carried alongside the item. Keep terminal collision/removal/tombstone states explicit and non-refillable until their lifecycle is complete.
+5. Add a characterization fixture for the first divergence, then a mutation-sensitive matrix that changes each source-specific decrement and terminal-state guard. Assert counters, availability, output selection, and post-event behavior together.
+6. Validate the recipe against a held-out subsystem and at least one negative control. Preserve exact source commits, review rationale, commands, and limitations in the knowledge base.
+
+### Cycle 120 verdict
+
+**Recipe confirmed; no new production defect found on current HEAD.** PR `#35727` supplies the source/provenance invariant and the staged characterization-to-fix test sequence. `13da611b396664bfc63587f5eeac3bdc1ce1b163` is a positive held-out match, and the coins/dump-failure changes bound the fingerprint. This cycle requires a journal-only close and no implementation commit.
 
 ## Cycle Identity
 
