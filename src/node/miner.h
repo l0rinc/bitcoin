@@ -116,9 +116,9 @@ private:
 };
 
 /**
- * Get the minimum time a miner should use in the next block. This always
- * accounts for the BIP94 timewarp rule, so does not necessarily reflect the
- * consensus limit.
+ * Get the minimum time a miner should use in the next block. At a difficulty
+ * adjustment boundary it always applies testnet4's timewarp tolerance as miner
+ * policy, even where consensus does not require it.
  */
 int64_t GetMinimumTime(const CBlockIndex* pindexPrev, int64_t difficulty_adjustment_interval);
 
