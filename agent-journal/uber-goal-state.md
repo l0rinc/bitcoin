@@ -597,6 +597,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    -> anchors-dat -> #41 c4 (anchors.dat archaeology:
    all-or-nothing + read-and-delete everywhere, trailing junk
    tolerated; DISMISSED).
+   RE-RANK draw 128 (4-cell queue): raw=9758505963115004795, masked
+   535133926260228987 -> idx 3 -> peers-dat -> #41 c5 (three-tier
+   archaeology: missing -> recreate, too-new -> .bak+recreate,
+   too-old/wrong-magic/corrupt -> FATAL with workaround;
+   DISMISSED).
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
