@@ -43,6 +43,10 @@ public:
     /// Additions that would exceed this are rejected (see Add()).
     static constexpr size_t MAX_TRANSACTIONS{10'000};
 
+    /// Maximum number of send statuses retained per transaction.
+    /// Active statuses are retained until their connection disconnects.
+    static constexpr size_t MAX_RETAINED_SEND_STATUSES{MAX_PRIVATE_BROADCAST_CONNECTIONS};
+
     /// @param[in] max_transactions Cap on the number of simultaneously tracked
     /// transactions. Defaults to MAX_TRANSACTIONS.
     explicit PrivateBroadcast(size_t max_transactions = MAX_TRANSACTIONS)
@@ -194,12 +198,6 @@ private:
         }
     };
 
-    /// A pair of a transaction and a sent status for a given node. Convenience return type of GetSendStatusByNode().
-    struct TxAndSendStatusForNode {
-        const CTransactionRef& tx;
-        SendStatus& send_status;
-    };
-
     // No need for salted hasher because we are going to store just a bunch of locally originating transactions.
 
     struct CTransactionRefHash {
@@ -216,11 +214,20 @@ private:
         }
     };
 
-    /**
-     * Derive the sending priority of a transaction.
-     * @param[in] sent_to List of nodes that the transaction has been sent to.
-     */
-    static Priority DerivePriority(const std::vector<SendStatus>& sent_to);
+    struct TxSendStatus {
+        const NodeClock::time_point time_added{NodeClock::now()};
+        Priority priority;
+        size_t num_unconfirmed_disconnected{0};
+        // Keep recent statuses for RPC/node lookup; priority and removal counters are cumulative.
+        std::vector<SendStatus> send_statuses;
+    };
+
+    /// A pair of a transaction and a sent status for a given node. Convenience return type of GetSendStatusByNode().
+    struct TxAndSendStatusForNode {
+        const CTransactionRef& tx;
+        TxSendStatus& tx_status;
+        SendStatus& send_status;
+    };
 
     /**
      * Find which transaction we sent to a given node (marked by PickTxForSend()).
@@ -230,13 +237,10 @@ private:
     std::optional<TxAndSendStatusForNode> GetSendStatusByNode(const NodeId& nodeid)
         EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
 
+    static void CompactSendStatuses(TxSendStatus& tx_status);
+
     void AssertInvariants() const
         EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
-
-    struct TxSendStatus {
-        const NodeClock::time_point time_added{NodeClock::now()};
-        std::vector<SendStatus> send_statuses;
-    };
     /// Cap on the number of simultaneously tracked transactions (see Add()).
     const size_t m_max_transactions;
     mutable Mutex m_mutex;
