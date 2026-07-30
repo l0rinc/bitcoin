@@ -356,3 +356,76 @@ this campaign: c4 rescan regime, c5 no-rescan both budgets).
 
 ## Rotation note
 Five cycles; pressure cell closed. Campaign queue-empty.
+
+## Cycle 6 (2026-07-30): CRITICAL tier directly observed — single-block jump fires IF_NEEDED critical=1 flush; DISMISSED
+
+### Draw
+Rebuilt-queue draw (seed_raw=2063430805213321808, masked same,
+n=3, idx=2) -> dbcache-pressure-critical -> #24 (sixth cycle; c5
+queue cell "CRITICAL tier not directly observed"). Branch:
+audit/disk-io-amplification-c6 from af63419c7b (#108 c5 tip).
+
+### Hypothesis
+A single block whose cache usage leapfrogs the LARGE band straight
+over the CRITICAL threshold could expose a broken gate (no flush,
+or flush next block), letting the coins cache overshoot the
+configured budget.
+
+### Budget math (verified in-tree)
+-dbcache=4 -> block_tree 0.5 / coins_db 1.8 / coins tip 1.8 MiB
+(kernel/caches.h:29-36); -maxmempool=5 honored (startup log "plus
+up to 4.8 MiB of unused mempool space"). nTotalSpace = 1.8 +
+max(0, 4.8 - mempoolUsage) (validation.cpp:2720-2736); LARGE =
+max(0.9*total, total-10MiB) (validation.h:566-571). CRITICAL logs
+"Cache size (%s) exceeds total space (%s)" at :2731; flushes log
+mode+flags via BCLog::COINDB at :2810; empty_cache flushes call
+CoinsTip().Flush(), periodic-only writes call .Sync() (:2847-2849).
+
+### Experiment (driver /tmp/btc24_crit.py; TestNode, PortSeed 318)
+Regtest node -dbcache=4 -maxmempool=5 -debug=coindb; approach: 5
+blocks x 30 fan-out txs x 200 outputs (confirmed_only spends —
+v1's unconfirmed spends died at the 64-cluster cap, silently
+under-fueling the approach); jump: 1 block x 42 txs x 500 outputs
+= 19,502 outputs in one block.
+
+### Results
+- Pre-jump: 24,410 outputs, est cache 3.34 MB (below LARGE ~5.2).
+- JUMP block: cache logged 6,450,432 B vs total 5,785,120 B (total
+  shrunk by the ~0.9 MB in-flight mempool, as predicted) ->
+  EXACTLY ONE "exceeds total space" line (validation.cpp:2731),
+  at the jump block.
+- Same block: "Writing chainstate to disk: flush mode=IF_NEEDED,
+  prune=0, large=0, critical=1" — the critical-tier flush fired
+  immediately; chainstate du +928 kB (the fresh entries written).
+- Node continued mining (tip advanced), shutdown clean.
+- Accounted actual = 146.9 B/entry (6,450,432/43,912) vs the c4
+  steady-state model 136.7 — +7%, consistent with all-dirty flagged
+  entries + growth-edge bucket overallocation; model direction
+  consistent with c4 (no under-accounting).
+- RSS unusable as a flush signal at this scale (+38 MB at jump,
+  +114 MB after two EMPTY blocks — glibc arena retention from the
+  21k-output tx deserialization swamps it; recorded as method
+  guidance: use the coindb flush lines + chainstate du).
+
+### Verdict
+DISMISSED (defensive tier confirmed working): the CRITICAL gate
+classifies correctly at a real single-block budget jump and the
+IF_NEEDED critical=1 flush writes immediately — no overshoot, no
+next-block delay, no broken-gate path. The c5 observation gap is
+closed; #24 remains QUEUE-EMPTY.
+
+### Exact commands
+- python3 /tmp/btc24_crit.py (full output above); greps: 'exceeds
+  total space' (1 hit), 'Writing chainstate to disk' (mode/critical
+  flags); budget reads: kernel/caches.h:29-36, validation.cpp
+  :2720-2736, :2798-2810, :2847-2849, validation.h:566-571.
+
+### Limitations / queue
+- The FORCE_SYNC lines in the tail are shutdown flushes (normal).
+- v1 attempt's anomaly (cluster-throttled approach + RSS
+  contamination) preserved above as method guidance; v1 datadir
+  deleted, /tmp/btc24_crit.py is the v2 driver.
+
+## Rotation note
+Six cycles; every queued cell including the CRITICAL-tier nicety is
+now closed with direct evidence. Campaign #24 COMPLETE.
