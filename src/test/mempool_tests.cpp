@@ -1570,6 +1570,13 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1DependencyOrdering, TestChain100Setup)
     const CTransactionRef independent = MakeTransactionRef(CreateValidMempoolTransaction(
         m_coinbase_txns[1], 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
 
+    const CAmount parent_fee = m_coinbase_txns[0]->vout[0].nValue - parent->GetValueOut();
+    const CAmount child_fee = parent->vout[0].nValue - child->GetValueOut();
+    const CAmount independent_fee = m_coinbase_txns[1]->vout[0].nValue - independent->GetValueOut();
+    const auto parent_size = GetVirtualTransactionSize(*parent);
+    const auto child_size = GetVirtualTransactionSize(*child);
+    const auto independent_size = GetVirtualTransactionSize(*independent);
+
     const int64_t now = TicksSinceEpoch<std::chrono::seconds>(NodeClock::now());
     const fs::path child_first_path = m_path_root / "mempool-v1-child-first.dat";
     const fs::path parent_first_path = m_path_root / "mempool-v1-parent-first.dat";
@@ -1600,6 +1607,13 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1DependencyOrdering, TestChain100Setup)
         }
         BOOST_CHECK_EQUAL(destination.info(parent->GetHash()).nFeeDelta, 1000);
         BOOST_CHECK_EQUAL(destination.info(independent->GetHash()).nFeeDelta, 3000);
+        {
+            LOCK(destination.cs);
+            const CAmount expected_fee = parent_fee + independent_fee + (child_present ? child_fee : 0);
+            const auto expected_size = parent_size + independent_size + (child_present ? child_size : 0);
+            BOOST_CHECK_EQUAL(destination.GetTotalFee(), expected_fee);
+            BOOST_CHECK_EQUAL(destination.GetTotalTxSize(), expected_size);
+        }
 
         const auto deltas = destination.GetPrioritisedTransactions();
         BOOST_REQUIRE_EQUAL(deltas.size(), 3U);
