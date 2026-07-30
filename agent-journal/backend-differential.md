@@ -58,3 +58,55 @@ complete vector corpus.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-30): SHA256 arm_shani vs forced-scalar differential — 2015/2015 byte-identical
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=5820747569139027543, index 1 (of 2) -> #45 c4; THIS cycle:
+singleton -> #69 (second cycle; backend-differential queue cell
+"SHA256 arm_shani vs scalar differential"). Branch:
+audit/backend-differential-c2 from 60debab91c (#45 c4 journal
+tip).
+
+### Experiment
+Direct-compiled driver (/tmp/btc72_sha.cpp) that
+SHA256AutoDetect(USE_ALL)-hashes a corpus, then
+SHA256AutoDetect(STANDARD)-rehashes it and byte-compares.
+Corpus: BIP test vectors (empty, "abc"), block-boundary lengths
+(55,56,63,64,65,119,120,127,128,129,255,256,1000 — covering the
+64/128-byte block edges and the 2way path), and 2000 PRNG
+(xorshift64) inputs of 0-300 bytes.
+Build note: the driver needs -DENABLE_ARM_SHANI
+-march=armv8-a+crypto to expose the backend at all — without the
+define the source silently autodetects to "standard" (the
+introspection.cmake:200 / crypto/CMakeLists.txt:55-62 wiring).
+
+### Result
+autodetect(USE_ALL) -> arm_shani(1way;2way);
+autodetect(STANDARD) -> standard;
+TALLY corpus=2015 mismatches=0. Byte-identical digests across
+every case, both 1way and 2way code paths (matches the node's own
+startup line "Using the 'arm_shani(1way;2way)' SHA256
+implementation").
+
+### Verdict
+DISMISSED (differential clean): the arm_shani SHA256 backend is
+byte-identical to the scalar reference across the boundary and
+random corpus. The c1 int128/int64 explicit-split cell remains
+the only open backend item.
+
+### Exact commands
+- g++ -O2 -std=c++20 -DENABLE_ARM_SHANI -march=armv8-a+crypto
+  -I src -o /tmp/btc72_sha /tmp/btc72_sha.cpp
+  src/crypto/sha256.cpp src/crypto/sha256_arm_shani.cpp
+- /tmp/btc72_sha (output above)
+
+### Limitations / queue
+- The 2way path is driven indirectly (>128B inputs); a direct
+  TransformD64 call graph check would be the exhaustive version —
+  same expected result given the wrapper already routes there.
+- int128_struct vs int128 explicit split (c1 queue) remains.
+
+## Rotation note
+Two cycles; SHA256 backend closed. Not exhausted (int128 split).
