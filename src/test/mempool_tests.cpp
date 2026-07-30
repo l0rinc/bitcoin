@@ -148,15 +148,26 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     tx2.vout[0].nValue = 10 * COIN;
     TryAddToMempool(pool, entry.Fee(500LL).FromTx(tx2));
 
+    const auto tx1_vsize = GetVirtualTransactionSize(CTransaction(tx1));
+    const auto tx2_vsize = GetVirtualTransactionSize(CTransaction(tx2));
+    const auto check_totals = [&](CAmount expected_fee, uint64_t expected_size) {
+        BOOST_CHECK_EQUAL(pool.GetTotalFee(), expected_fee);
+        BOOST_CHECK_EQUAL(pool.GetTotalTxSize(), expected_size);
+    };
+    check_totals(1500, tx1_vsize + tx2_vsize);
+
     pool.TrimToSize(pool.DynamicMemoryUsage()); // should do nothing
     BOOST_CHECK(pool.exists(tx1.GetHash()));
     BOOST_CHECK(pool.exists(tx2.GetHash()));
+    check_totals(1500, tx1_vsize + tx2_vsize);
 
     pool.TrimToSize(pool.DynamicMemoryUsage() * 3 / 4); // should remove the lower-feerate transaction
     BOOST_CHECK(pool.exists(tx1.GetHash()));
     BOOST_CHECK(!pool.exists(tx2.GetHash()));
+    check_totals(1000, tx1_vsize);
 
     TryAddToMempool(pool, entry.FromTx(tx2));
+    check_totals(1500, tx1_vsize + tx2_vsize);
     CMutableTransaction tx3 = CMutableTransaction();
     tx3.vin.resize(1);
     tx3.vin[0].prevout = COutPoint(tx2.GetHash(), 0);
@@ -165,16 +176,20 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     tx3.vout[0].scriptPubKey = CScript() << OP_3 << OP_EQUAL;
     tx3.vout[0].nValue = 10 * COIN;
     TryAddToMempool(pool, entry.Fee(2000LL).FromTx(tx3));
+    const auto tx3_vsize = GetVirtualTransactionSize(CTransaction(tx3));
+    check_totals(3500, tx1_vsize + tx2_vsize + tx3_vsize);
 
     pool.TrimToSize(pool.DynamicMemoryUsage() * 3 / 4); // tx3 should pay for tx2 (CPFP)
     BOOST_CHECK(!pool.exists(tx1.GetHash()));
     BOOST_CHECK(pool.exists(tx2.GetHash()));
     BOOST_CHECK(pool.exists(tx3.GetHash()));
+    check_totals(2500, tx2_vsize + tx3_vsize);
 
     pool.TrimToSize(GetVirtualTransactionSize(CTransaction(tx1))); // mempool is limited to tx1's size in memory usage, so nothing fits
     BOOST_CHECK(!pool.exists(tx1.GetHash()));
     BOOST_CHECK(!pool.exists(tx2.GetHash()));
     BOOST_CHECK(!pool.exists(tx3.GetHash()));
+    check_totals(0, 0);
 
     CFeeRate maxFeeRateRemoved(2500, GetVirtualTransactionSize(CTransaction(tx3)) + GetVirtualTransactionSize(CTransaction(tx2)));
     BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE);
@@ -227,11 +242,17 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     tx7.vout[1].scriptPubKey = CScript() << OP_7 << OP_EQUAL;
     tx7.vout[1].nValue = 10 * COIN;
 
+    const auto tx4_vsize = GetVirtualTransactionSize(CTransaction(tx4));
+    const auto tx5_vsize = GetVirtualTransactionSize(CTransaction(tx5));
+    const auto tx6_vsize = GetVirtualTransactionSize(CTransaction(tx6));
+    const auto tx7_vsize = GetVirtualTransactionSize(CTransaction(tx7));
+
     TryAddToMempool(pool, entry.Fee(700LL).FromTx(tx4));
     auto usage_with_tx4_only = pool.DynamicMemoryUsage();
     TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
     TryAddToMempool(pool, entry.Fee(110LL).FromTx(tx6));
     TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
+    check_totals(1810, tx4_vsize + tx5_vsize + tx6_vsize + tx7_vsize);
 
     // From the topology above, tx7 must be sorted last, so it should
     // definitely evicted first if we must trim. tx4 should definitely remain
@@ -240,6 +261,18 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     pool.TrimToSize(pool.DynamicMemoryUsage() - 1);
     BOOST_CHECK(pool.exists(tx4.GetHash()));
     BOOST_CHECK(!pool.exists(tx7.GetHash()));
+
+    CAmount expected_fee_after_first_chunk{700};
+    auto expected_size_after_first_chunk = static_cast<uint64_t>(tx4_vsize);
+    if (pool.exists(tx5.GetHash())) {
+        expected_fee_after_first_chunk += 100;
+        expected_size_after_first_chunk += tx5_vsize;
+    }
+    if (pool.exists(tx6.GetHash())) {
+        expected_fee_after_first_chunk += 110;
+        expected_size_after_first_chunk += tx6_vsize;
+    }
+    check_totals(expected_fee_after_first_chunk, expected_size_after_first_chunk);
 
     // Tx5 and Tx6 may be removed as well because they're in the same chunk as
     // tx7, but this behavior need not be guaranteed.
@@ -256,10 +289,12 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     BOOST_CHECK(!pool.exists(tx5.GetHash()));
     BOOST_CHECK(!pool.exists(tx6.GetHash()));
     BOOST_CHECK(!pool.exists(tx7.GetHash()));
+    check_totals(700, tx4_vsize);
 
     TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
     TryAddToMempool(pool, entry.Fee(110LL).FromTx(tx6));
     TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
+    check_totals(1810, tx4_vsize + tx5_vsize + tx6_vsize + tx7_vsize);
 
     std::vector<CTransactionRef> vtx;
     FakeNodeClock clock{42s};
