@@ -2,6 +2,41 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 164 Completion
+
+- The post-Cycle-163 gate was clean at `98f0c7b4eac40756eb6c2441818b2d013516e324`,
+  with origin/master `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `42 1109`.
+  The exact selector returned `35`, which was rerolled because Cycle 107
+  already closed mutation testing; the required reroll returned `30`
+  (`security-logging`). The dedicated branch is
+  `uber-cycle-164-security-logging-20260730`.
+- The audit found that `ArgsManager::LogArgs()` applied `SENSITIVE` redaction
+  to config and command-line values but emitted `rw_settings` values through
+  `setting.second.write()` unchanged. `settings.json` is read before startup
+  logging, and registered values such as `rpcpassword` are marked SENSITIVE,
+  so a persistent password could reach `debug.log` in plaintext. The pre-fix
+  `getarg_tests/logargs` regression exited 201 with the captured `private42`
+  and no masked setting line.
+- `LogArgs()` now resolves each settings key with `InterpretKey`, obtains the
+  same argument flags, and emits `****` for sensitive settings. The existing
+  logargs test covers the persistent map. Source/test/journal commit
+  `6da617fd728ba15188f8ef89feb3b5673ae02ddf` (`args: redact sensitive
+  settings in startup logs`) is authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- After the fix, `getarg_tests/logargs` seed `164002` passed all 7 assertions;
+  `getarg_tests,argsman_tests` seed `164003` passed 25 cases and 220787
+  assertions. A scratch `regtest/settings.json` containing
+  `{"rpcpassword":"cycle164-secret"}` was exercised through the UBSan
+  `bitcoind` startup path. The output contained `Setting file arg: rpcpassword = ****`
+  and never the secret; the bounded daemon run reached `Shutdown done` with
+  expected timeout status 124.
+- The detailed ledger is `agent-journal/security-logging.md`. Remaining
+  security-logging queue: attacker-controlled peer/message/error strings for
+  truthfulness, escaping, and bounded repetition, followed by diagnostic
+  severity and rate-limit review. The next cycle must perform a fresh gate
+  and exact selector draw. PIDs `777094` and `956381` and unrelated untracked
+  artifacts remain preserved.
+
 ## Cycle 163 Completion
 
 - The fresh gate after Cycle 162 kept the catalog, prompt, and goals TSV hashes
