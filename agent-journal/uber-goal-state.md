@@ -584,6 +584,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    -> history-persistence-artifacts -> #41 c2 (mempool.dat:
    badver rejected pre-loop zero-mutation, v2 full round-trip,
    flip per-entry-fail tolerance, trunc tolerant abort; DISMISSED).
+   RE-RANK draw 125 (4-cell queue): raw=17581368771181834455,
+   masked 8357996734327058647 -> idx 3 -> xor-dat -> #41 c3
+   (obfuscation-key archaeology: 4 corruption classes all fail
+   LOUD, designed dbwrapper_error gate for shape corruption;
+   DISMISSED).
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/

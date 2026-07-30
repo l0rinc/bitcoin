@@ -125,3 +125,68 @@ line. The mempool.dat version story is consistent with the code.
 
 ## Rotation note
 Two cycles; fee_estimates.dat and mempool.dat both fail closed.
+
+## Cycle 3 (2026-07-30): obfuscation-key (xor) archaeology — every corruption class fails LOUD; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=17581368771181834455,
+masked=8357996734327058647, n=4, idx=3) -> xor-dat -> #41 (third
+cycle; c1 queue cell "xor.dat version story"). Branch:
+audit/history-seed-c3 from 963a50267e (#41 c2 journal tip).
+
+### Mechanism map (fork-specific, dbwrapper.cpp:276-292)
+- The obfuscation key lives as a LevelDB record INSIDE each DB:
+  record key = compactsize(14) + "\000obfuscate_key" (0e prefix),
+  value = 08 + 8 key bytes (chainstate obfuscates by default,
+  validation.cpp:1959).
+- Open path: Read fails + Exists -> throw dbwrapper_error
+  ('Invalid obfuscation key in <path>') — the designed fatal
+  gate. Key missing on non-empty DB -> null key (reads plain).
+- Stock-LevelDB tooling sees only raw bytes; the compactsize
+  prefix is what naive exact-match probing misses (my v1 tool
+  reported 'NO obfuscation key record' — recorded as a tool
+  lesson: the fork prefixes the name with its serialized length).
+
+### Experiment (tool /tmp/xor_tool on a scratch obfuscated
+chainstate, fresh copies per case, background starts)
+1. manglelen (value length byte broken): '[error] Invalid
+   obfuscation key in <path>' -> startup abort — the designed
+   dbwrapper_error gate fires exactly.
+2. corruptkey (whole-record XOR, also broke the shape): same
+   designed gate ('Invalid obfuscation key' -> 'Error opening
+   coins database.').
+3. delkey (record deleted on obfuscated data): 'Using obfuscation
+   key ... 0000000000000000' (null key) -> 'Error initializing
+   block database.' — loud downstream deserialization failure, NOT
+   silent garbage loading.
+4. wrongkey (valid shape, 8 key bytes flipped): opens with the
+   wrong key 'c8a5f6b36dc77461' -> 'Error initializing block
+   database.' — garbage never silently accepted.
+5. control (pristine copy): starts clean with the original key.
+
+### Verdict
+DISMISSED: every corruption/deletion of the obfuscation key
+produces a loud startup failure — the designed gate for shape
+corruption (1-2), loud load failure for missing/wrong keys (3-4).
+Nothing fails silently; the xor-key story is consistent with the
+code.
+
+### Exact commands
+- /tmp/xor_tool (modes dump/corruptkey/manglelen/delkey/wrongkey/
+  flipcoin) vs build-before libleveldb; case datadirs copied from
+  a 12-block scratch chainstate, starts via
+  bitcoind -regtest -datadir=<case> -daemon + log greps above.
+- Setup note: generatetoaddress on a walletless node fails (no
+  default wallet) — the scratch chain is genesis-only, which does
+  not affect the key mechanics (recorded as a setup flaw; the
+  flipcoin case was dropped for it in v2).
+
+### Limitations / queue
+- blocks/index and blocksdir keys (separate artifacts, seen as
+  0000000000000000 / '8a8ef6f08e2ac8d0' in the logs) — same record
+  family; the chainstate cases cover the mechanics.
+- anchors.dat remains as its own (smaller) cell.
+
+## Rotation note
+Three cycles; fee_estimates.dat, mempool.dat, and the xor-key
+story all fail closed/loud.
