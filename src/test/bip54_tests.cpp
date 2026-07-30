@@ -1321,6 +1321,39 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
 #endif
 }
 
+BOOST_FIXTURE_TEST_CASE(bip54_created_output_sigops, TestChain100Setup)
+{
+    CScript created_script;
+    for (unsigned int i{0}; i < MAX_TX_BIP54_SIGOPS + 1; ++i) {
+        created_script << OP_CHECKSIG;
+    }
+
+    const CMutableTransaction tx{CreateValidMempoolTransaction(
+        /*input_transaction=*/m_coinbase_txns.front(),
+        /*input_vout=*/0,
+        /*input_height=*/1,
+        /*input_signing_key=*/coinbaseKey,
+        /*output_destination=*/created_script,
+        /*output_amount=*/1 * COIN,
+        /*submit=*/false)};
+    BOOST_REQUIRE_EQUAL(tx.vout.front().scriptPubKey.GetSigOpCount(/*fAccurate=*/true), MAX_TX_BIP54_SIGOPS + 1);
+
+    // BIP54 statically counts scripts associated with inputs, not output
+    // scripts created by the transaction under validation.
+    const unsigned int legacy_sigops{GetLegacySigOpCount(CTransaction{tx})};
+    BOOST_REQUIRE_EQUAL(legacy_sigops, MAX_TX_BIP54_SIGOPS + 1);
+    BOOST_REQUIRE_LE(legacy_sigops * WITNESS_SCALE_FACTOR, MAX_BLOCK_SIGOPS_COST);
+
+    const CBlock block{CreateBlock(/*txns=*/{tx}, CScript{} << OP_TRUE)};
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+    BlockValidationState state;
+    {
+        LOCK(chainman.GetMutex());
+        state = TestBlockValidity(chainman.ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true);
+    }
+    BOOST_CHECK_MESSAGE(state.IsValid(), state.ToString());
+}
+
 /** A test case for the BIP 54 timestamp rules. */
 struct TimestampTestCase {
     std::vector<CBlockHeader> header_chain;
