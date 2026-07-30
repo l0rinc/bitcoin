@@ -1,5 +1,52 @@
 # Local Reasoning Domain and Relationship Audit
 
+## Cycle 174 start: cross-domain lifecycle and snapshot relationships
+
+### Fresh selection and gate
+
+- The exact post-Cycle-173 selector was `shuf -i 0-98 -n 1` -> `57`
+  (`local-reasoning-domain`). No reroll was needed: the prior goal-57 cells
+  are closed by scope, but this journal records remaining open relationship
+  cells rather than exhausting the goal.
+- Branch: `uber-cycle-174-local-reasoning-domain-20260730`.
+- Start HEAD: `607fb909086c54abb17244996dd34e706e301b68`; origin/master:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `42 1129`.
+- The fresh gate passed `git fetch origin master`, tracked/index diff checks,
+  the four input-hash checks, and the persistent-process check. PIDs `777094`
+  and `956381` remain unrelated long-running tests and must not be stopped;
+  known untracked artifacts remain outside this cycle's commits.
+
+### Exclusions and initial queue
+
+Do not reopen Cycle 65's AddrMan `GetNetwork()` versus `GetNetClass()` and
+linked-IPv4 classification, Cycle 77's BaseIndex callback serialization and
+transaction-download peer cleanup, Cycle 97's wallet `MarkReplaced` rollback,
+Cycle 135's index file-position/publication relationships, or Cycle 173's
+wallet best-block corruption handling. A new candidate needs a different
+object pair, caller, backend, or lifecycle transition with independent proof.
+
+Mine relationships where values from different objects, snapshots, namespaces,
+locks, queues, or lifecycle stages are combined. Prioritize current code touched
+by recent history and cross-layer state that can publish stale, mismatched, or
+unowned data. Initial queue:
+
+1. Chainstate, block storage, and validation relationships between active tip,
+   flushed tip, block-index metadata, undo/block-file positions, and restart
+   state, excluding the already-reviewed index publication path.
+2. Mempool and P2P relationships between peer/request ownership, transaction
+   graph metadata, package accounting, permissions, and removal/eviction state.
+3. Wallet, descriptor, and RPC relationships between normalized identifiers,
+   object lifetime, public result state, and durable records, excluding the
+   recent migration and replacement-write cells.
+4. Kernel, IPC, and optional-module relationships between callback context,
+   capability/lifetime, output ownership, and feature-disabled behavior.
+
+For every candidate state the exact domain and invariant first, then trace
+callers, history, tests, docs, locks, and failure transitions. Require a
+deterministic fixture or rigorous dataflow proof, independent verification, and
+a failing-before/passing-after oracle before changing production code.
+
 ## Cycle 135: index file-position and publication relationships
 
 ### Cycle identity and gate
