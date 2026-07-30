@@ -1321,6 +1321,33 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
 #endif
 }
 
+BOOST_AUTO_TEST_CASE(bip54_large_input_count)
+{
+    // Exercise more inputs than the fuzz corpus framing can encode, forcing a
+    // full scan before the final input determines the result.
+    constexpr uint32_t input_count{65'536};
+    const Txid txid{Txid::FromUint256(uint256::ZERO)};
+    const CTxOut spent_output{0, CScript{} << OP_TRUE};
+    CCoinsViewCache coins{&CoinsViewEmpty::Get(), /*deterministic=*/true};
+    CMutableTransaction tx;
+    tx.vin.reserve(input_count);
+    for (uint32_t index{0}; index < input_count; ++index) {
+        tx.vin.emplace_back(COutPoint{txid, index});
+        coins.AddCoin(tx.vin.back().prevout, Coin{spent_output, 0, false}, /*possible_overwrite=*/false);
+    }
+
+    for (unsigned int sigops{0}; sigops < MAX_TX_BIP54_SIGOPS - 1; ++sigops) {
+        tx.vin.back().scriptSig << OP_CHECKSIG;
+    }
+    BOOST_CHECK(Consensus::CheckSigopsBIP54(CTransaction{tx}, coins));
+
+    tx.vin.back().scriptSig << OP_CHECKSIG;
+    BOOST_CHECK(Consensus::CheckSigopsBIP54(CTransaction{tx}, coins));
+
+    tx.vin.back().scriptSig << OP_CHECKSIG;
+    BOOST_CHECK(!Consensus::CheckSigopsBIP54(CTransaction{tx}, coins));
+}
+
 BOOST_FIXTURE_TEST_CASE(bip54_created_output_sigops, TestChain100Setup)
 {
     CScript created_script;
