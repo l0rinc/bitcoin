@@ -112,7 +112,13 @@ bool FlatFileSeq::Flush(const FlatFilePos& pos, bool finalize) const
         }
         return false;
     }
-    DirectoryCommit(m_dir);
+    if (!DirectoryCommit(m_dir)) {
+        LogError("%s: failed to commit directory %s\n", __func__, fs::PathToString(m_dir));
+        if (fclose(file) != 0) {
+            LogError("Failed to close file %d", pos.nFile);
+        }
+        return false;
+    }
 
     if (fclose(file) != 0) {
         LogError("Failed to close file %d after flush", pos.nFile);

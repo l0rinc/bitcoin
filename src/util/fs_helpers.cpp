@@ -136,14 +136,26 @@ bool FileCommit(FILE* file)
     return true;
 }
 
-void DirectoryCommit(const fs::path& dirname)
+bool DirectoryCommit(const fs::path& dirname)
 {
 #ifndef WIN32
     FILE* file = fsbridge::fopen(dirname, "r");
-    if (file) {
-        fsync(fileno(file));
-        fclose(file);
+    if (!file) {
+        LogError("Unable to open directory %s", fs::PathToString(dirname));
+        return false;
     }
+    bool success{true};
+    if (fsync(fileno(file)) != 0 && errno != EINVAL) {
+        LogError("fsync failed for directory %s: %s", fs::PathToString(dirname), SysErrorString(errno));
+        success = false;
+    }
+    if (fclose(file) != 0) {
+        LogError("Failed to close directory %s: %s", fs::PathToString(dirname), SysErrorString(errno));
+        success = false;
+    }
+    return success;
+#else
+    return true;
 #endif
 }
 
