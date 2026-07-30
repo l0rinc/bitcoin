@@ -169,6 +169,7 @@ using node::ShouldPersistMempool;
 using node::VerifyLoadedChainstate;
 using util::Join;
 using util::ReplaceAll;
+using util::TrimStringView;
 using util::ToString;
 using util::TrimStringView;
 
@@ -2296,7 +2297,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         connOptions.m_use_addrman_outgoing = false;
 
         if (connect.size() != 1 || connect[0] != "0") {
-            connOptions.m_specified_outgoing = connect;
+            for (const std::string& connect_node : connect) {
+                // Such a value is not a valid connection target, but would otherwise be
+                // retried indefinitely by the manual connection thread.
+                if (TrimStringView(connect_node).empty()) {
+                    LogWarning("Ignoring empty -connect value");
+                    continue;
+                }
+                connOptions.m_specified_outgoing.push_back(connect_node);
+            }
         }
         if (!connOptions.m_specified_outgoing.empty() && !connOptions.vSeedNodes.empty()) {
             LogInfo("-seednode is ignored when -connect is used");
