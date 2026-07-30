@@ -59,3 +59,46 @@ Node alive and responsive after all four (getblockcount OK).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-30): split-packet + slowloris classes — all handled correctly (byte-at-a-time completes; 60s timeout enforced)
+
+### Draw
+Re-rank draw over the remaining 4-cell queue:
+raw=14986909651204603959, masked 5763537614349828151, index 3
+(of 4) -> #108 (second cycle; c1 queue cell "split-packet and
+slowloris"). Branch: audit/adversarial-artifact-c2 from b3a67a05ff
+(#52 c2 journal tip).
+
+### Classes (driver /tmp/btc108_peer2.py, extends c1's artifact)
+- E1 byte-at-a-time: full version+verack+ping handshake sent as
+  200 one-byte chunks (4 ms apart) -> handshake COMPLETES, pong
+  received.
+- E2 weird chunks: 73 random-size chunks (1/2/3/7/11 B) ->
+  COMPLETES, pong received.
+- E3 half-version slowloris: 20 bytes of the version frame, then
+  stall -> node disconnects at exactly 60 s (peer_connect_timeout,
+  net.h:87).
+- E4 no-bytes slowloris: connect and send nothing -> node
+  disconnects at 60 s with "socket no message in first 60
+  seconds... disconnecting peer" in debug.log.
+
+### Verdict
+DISMISSED (robustness confirmed): the V1 transport assembles
+arbitrarily fragmented frames correctly at any chunk granularity,
+and the 60-second handshake timeout closes both stall shapes at
+the expected constant. Matches c1's hostile-frame classes; the
+split/stall surface is closed for V1.
+
+### Exact commands
+- bitcoind -regtest -datadir=/tmp/btc108_n -port=29001
+  -bind=127.0.0.1:29001 -rpcport=29002 -debug=net -daemon
+- python3 /tmp/btc108_peer2.py (output above); debug.log grep
+
+### Limitations / queue
+- BIP324 v2 hostile-peer variant (encrypted framing boundary)
+  remains queued — needs the v2 handshake in the driver.
+- Post-handshake stall (after version completes; the 30-min
+  inactivity class) untested — long-wall cell, low value.
+
+## Rotation note
+Two cycles; V1 split/stall closed. Not exhausted (v2 variant).
