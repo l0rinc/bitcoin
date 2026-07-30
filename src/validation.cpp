@@ -4195,8 +4195,9 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
         if (block.vtx[0]->nLockTime != static_cast<uint32_t>(nHeight - 1)) {
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-locktime", "block height mismatch in coinbase nLockTime");
         }
+        // A final input sequence disables nLockTime, so require a non-final value.
         if (block.vtx[0]->vin[0].nSequence == CTxIn::SEQUENCE_FINAL) {
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-sequence", "locktime is disabled for coinbase");
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-sequence", "coinbase input nSequence is final");
         }
     }
 
