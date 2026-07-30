@@ -1,5 +1,58 @@
 # Historical reviewer-preference mining and reusable review skill
 
+## Cycle 146: platform-failure evidence and narrow workaround review
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `60`
+- Slug: `reviewer-preference-mining`
+- Branch: `uber-cycle-146-reviewer-preference-mining-20260730`
+- HEAD at the cycle gate: `cca2d589eeae4a87eb2b348451aa9a9b2107d68e`
+- `origin/master` at the cycle gate: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Explicit `git rev-list --left-right --count HEAD...origin/master`: `1076 42`
+- `git fetch origin master` passed. Tracked and staged state was clean; existing untracked agent artifacts were preserved. PID `777094` remained untouched and alive.
+- Catalog, goal TSV, random-prompt, and uber-protocol hashes matched the established ledger.
+
+### Fresh evidence
+
+The new upstream first-parent merge since the earlier review-mining gate is `67efced1fc83` (PR [#35838](https://github.com/bitcoin/bitcoin/pull/35838), source commit `45f5609f2ed9e35ae2a109c1e8a7c085e0a78006`), a follow-up to [#35551](https://github.com/bitcoin/bitcoin/pull/35551). Public GitHub API data was collected with unauthenticated `curl` requests to the PR, review, issue-comment, and check-run endpoints. The API is useful evidence but not a complete record of private or omitted review discussion.
+
+The PR removes the macOS skip from `test/functional/interface_gui.py` and, only for Darwin GUI subprocesses, sets `QT_STYLE_OVERRIDE=fusion` with `setdefault` in `test/functional/test_framework/test_node.py`. The Windows skip remains. The rationale is concrete: Qt's QMacStyle assumes a Cocoa window, while the test uses the minimal platform; a QGroupBox path can then call `addSubview` on an invalid native object (QTBUG-49686).
+
+Review discussion established a reusable pattern. A macOS run exited with `-11`; fanquake asked for combined stderr, maflcko identified the likely Qt style issue, and hebasto applied the narrow Fusion-style workaround. The final review response was an ACK after that change. PR checks contained 29 check-runs: all executed checks succeeded, with only the expected conditional ancestor-commit check skipped. CoreCheck's report was successful but reported no new-code coverage data, so it was not treated as evidence that macOS GUI coverage existed. The exact PR files were extracted to scratch storage and passed `python3 -m py_compile`; the PR diff passed `git diff --check`.
+
+### Recipe extracted
+
+1. Start from the exact failure and collect the diagnostic evidence reviewers request; do not enable a skipped platform merely because the test is desirable.
+2. Scope a workaround to the affected OS and subprocess. Preserve caller overrides with `setdefault`, and keep unsupported platforms skipped until their prerequisite exists.
+3. Enable the path only after the platform-specific cause is addressed and native or platform CI checks confirm it. Treat coverage-bot absence as a limitation, not as positive coverage evidence.
+4. Preserve prerequisite ordering in stacked PRs. A later cross-built macOS PR asking to sit on top of #35838 is supporting evidence that platform enablement and its prerequisite should be reviewed together.
+
+These are technical and contextual preferences, not universal stylistic rules. The supported generalization is: evidence-backed diagnosis, smallest platform-scoped change, explicit override behavior, and verification at the actual affected boundary.
+
+### Held-out validation
+
+PR [#35828](https://github.com/bitcoin/bitcoin/pull/35828), merged at `9611a356035be531d62bfc40879f388d5dc359c4`, was used as an independent held-out example. Its review record included a macOS/arm64 build-and-test approval and ACKs. The change refactors `LineReader` from a byte span interface to `std::string_view`, removes the raw-byte constructor, and updates the HTTP and Tor-control consumers from `std::byte` buffers to `char` buffers. It is a separate review cluster from the GUI platform workaround.
+
+The exact merge revision was checked out in `/data/my_storage/tmp/cycle146-heldout-35828`, built in `/data/my_storage/tmp/cycle146-heldout-35828-build` with a clean RelWithDebInfo, tests-on, GUI/bench/ZMQ/USDT/IPC-off CMake configuration, and linked `bin/test_bitcoin` successfully. The focused independent run was:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle146-heldout-35828-tmp \
+/data/my_storage/tmp/cycle146-heldout-35828-build/bin/test_bitcoin \
+  --run_test=util_tests,httpserver_tests,torcontrol_tests \
+  --random=146061 --log_level=message --report_level=short --color_output=false
+```
+
+Result: 69 test cases passed, 725 of the 794 total cases were skipped by selection, and all 2,207 assertions passed. This held-out check recovers the recipe's expected behavior: review the full consumer boundary and validate the focused observable contracts, rather than relying on a source-only or coverage-only claim.
+
+### Verdict and handoff
+
+Verdict: the reviewer-preference recipe is reinforced; no production or permanent test change is justified. The current investigation branch predates #35828, so an initial utility test run against the current branch was discarded as invalid; the detached exact-merge worktree supplied the held-out result. No local macOS GUI environment was available, and unauthenticated API visibility plus CoreCheck's missing coverage data remain limitations. No source process was left running by this cycle; unrelated PID `777094` and untracked artifacts remain preserved.
+
+Next work must perform a fresh gate, draw exactly `shuf -i 0-98 -n 1`, and use a distinct eligible evidence cell. Do not reopen this cycle unless new platform-review evidence or a concrete recurrence changes the verdict.
+
 ## Cycle 25: technical review rule extraction
 
 ### Selection and gate
