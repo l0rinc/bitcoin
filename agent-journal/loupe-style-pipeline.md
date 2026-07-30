@@ -161,3 +161,62 @@ are the reference.
 
 ## Rotation note
 Four cycles; estimator waste (fixed), churn (characterized).
+
+## Cycle 5 (2026-07-30): generatetoaddress decay attribution — NOT reproduced: both curves FLAT to 20k; wallet = constant ~2x factor; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=5564503156500269060, masked
+same, n=4, idx=0) -> generatetoaddress-decay -> #63 (fifth cycle;
+c1 queue cell "generatetoaddress throughput decay (108 -> 19
+blocks/s by height 20000, wallet-growth vs write path) unpinned").
+Branch: audit/loupe-pipeline-c5 from 94e708cd8c (#63 c4 tip).
+
+### Hypothesis
+The loupe observation's decay could be wallet-growth (per-block
+wallet scan cost rising with tx history) or write-path growth
+(block-file/chainstate costs rising with height).
+
+### Experiment (driver /tmp/gta_decay.py; two sequential regtest
+nodes, 20 chunks x 1000 blocks each, empty blocks)
+- A (wallet-full, uses_wallet=True): generates to its own wallet
+  address; the wallet sees every coinbase (~20k wallet txs by
+  20k).
+- B (wallet-less): same address string, no wallet loaded — the
+  write path alone.
+- Harness lessons: this fork's TestNode defaults
+  uses_wallet=False (-disablewallet); generatetoaddress needs
+  called_by_framework=True.
+
+### Results (blk/s per 1000-block chunk)
+- A (wallet-full): 1243.2 @ 1k -> 1267.9 @ 20k — FLAT
+  (range 1243-1314).
+- B (wallet-less): 2617.5 @ 1k -> 2568.6 @ 20k — FLAT
+  (range 2527-2617).
+- Wallet factor: ~2.02x constant throughput cost (block scanning
+  is per-block constant, NOT history-dependent — the growing
+  20k-tx wallet does NOT slow it down).
+
+### Verdict
+DISMISSED (not reproduced / pinned): the decay does not exist
+under this shape — both curves are flat to height 20000, and a
+growing 20k-transaction wallet does not degrade throughput. The
+loupe observation (108 -> 19 blk/s) is environment/shape-specific
+(the author's environment/block content), not an inherent node
+behavior at this scale; the transferable facts are the ~2x
+constant wallet factor and the flat curves. Wallet-growth is
+excluded as the mechanism by direct A/B; write-path growth is
+excluded by the flat wallet-less curve.
+
+### Exact commands
+- python3 /tmp/gta_decay.py (full chunk table in the log above).
+
+### Limitations / queue
+- Empty blocks: tx-bearing blocks change the per-block work
+  profile (validation/UTXO growth) — the loupe environment may
+  have had that shape; not re-tested here (the queue question was
+  wallet-vs-write-path, both excluded).
+- banlist.dat archaeology remains the last family artifact.
+
+## Rotation note
+Five cycles; estimator waste fixed, churn characterized, decay
+pinned (absent under this shape).
