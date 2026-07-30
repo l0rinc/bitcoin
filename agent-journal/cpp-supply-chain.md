@@ -1,3 +1,64 @@
+# C/C++ Supply-Chain Cycle 154
+
+## Cycle 154 Start: Tool Asset Integrity Audit
+
+### Identity and Gate
+
+- Cycle: `154`
+- Draw command: `shuf -i 0-98 -n 1`
+- First draw: `27` (closed error-path state cell; rerolled with the exact command)
+- Selected draw: `59`
+- Goal: `C/C++ supply-chain and security-gate audit`
+- Slug: `cpp-supply-chain`
+- Branch: `uber-cycle-154-cpp-supply-chain-20260730`
+- Start HEAD: `2712998b621542ffdd6c6f2ba2b308af492a901e`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- `origin/master...HEAD` at the gate: `1090 42`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Tracked/staged state at the gate: clean; all pre-existing untracked agent artifacts, catalog files, `node_modules/`, and `test/cache/` were preserved.
+- PID `777094` (`test_bitcoin --run_test=wallet_tests`) and parent PID `725042` were observed and not touched.
+
+### Scope and Prior Evidence
+
+Cycle 119 closed mutable external GitHub Action references. Cycle 41/63 closed the release signature threshold and Guix cached-archive cells. This cycle reopens only a distinct executable-tool download surface and leaves container image tags, compiler/SDK downloads, generated test inputs, license gates, and release manifests queued.
+
+The current `ci/lint/01_install.sh` installs ShellCheck and mlc as root during the trusted lint image build. The active root workflow at `.github/workflows/ci.yml:586-614` builds that image on the Bitcoin repository's trusted Warp runner and runs the resulting lint container. Before this cycle, the script used:
+
+```text
+curl --fail -L <ShellCheck release URL> | tar --xz -xf - --directory /tmp/
+mv /tmp/shellcheck-v0.11.0/shellcheck /usr/bin/
+curl --fail -L <mlc release URL> -o /usr/bin/mlc
+chmod +x /usr/bin/mlc
+```
+
+The version/tag and HTTPS transport did not bind the bytes to an immutable digest. The repository's `doc/fuzzing-findings.md:1522-1526` records short IDs `48d6460315` and `09a2c19d8e` as fixes on a separate `audit/supply-chain` line. `git ls-remote` found no such branch or ref, GitHub's commit API returned HTTP 422 for both IDs, and the configured forks exposed no matching refs, so that note was treated as prior evidence rather than as an importable patch. Current history still contained the unverified install shape.
+
+### Independent Verification
+
+- Release API asset inventories showed ShellCheck v0.11.0 Linux `x86_64` and `aarch64` archives and mlc v1.2.0 `x86_64` and `aarch64` Linux binaries. Downloads to `/data/my_storage/tmp/cycle154-assets.04wJHq/` produced these exact bytes:
+
+  ```text
+  8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  shellcheck-v0.11.0.linux.x86_64.tar.xz
+  12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588  shellcheck-v0.11.0.linux.aarch64.tar.xz
+  7a72a93d5b3ee8a554cb840abdfe90aefb709418f225461b52021e3a058238a2  mlc-x86_64-linux
+  01ec8e086f3b625616d461b63451be9175a02557de6b591bac7cde6791ab074b  mlc-aarch64-linux
+  ```
+
+- A deterministic scratch harness substituted a `curl` function that returned `attacker-controlled` bytes and a `tar` function that placed an attacker-controlled executable at the expected path. The old production command shape returned `old_pipeline_exit=0` and installed both payload markers. This proves the missing check is pre-use and is not dependent on a malformed archive.
+- The patched verification helper accepted the downloaded x86_64 artifacts, extracted/installed them into a scratch directory, and executed `/data/my_storage/tmp/cycle154-postproof.*/shellcheck --version` and `mlc --version`, reporting ShellCheck and mlc v1.2.0. The same helper rejected a modified MLC file with `tampered_asset=rejected_before_install`.
+- `bash -n ci/lint/01_install.sh`, ShellCheck v0.11.0 on the changed script, and `git diff --check` passed. Docker is unavailable in this environment, so the full `ci/lint.py` image build and the complete lint suite were not run.
+
+### Fix
+
+Replace the pipe-to-extraction and direct-to-`/usr/bin` downloads with architecture-specific SHA-256 pins for the two Linux architectures supplied by both tools. Download both assets into a private `mktemp` directory, verify the expected digest before extraction or installation, fail closed for unsupported architectures, and clean the directory on exit. `install --mode=755` preserves executable permissions without placing unverified bytes in the image.
+
+### Verdict and Handoff
+
+**Confirmed and fixed in the current worktree.** Before this fix, mutable GitHub release contents could execute in a trusted CI image without a repository-local integrity check. The source change is intentionally limited to lint-tool acquisition. The source-and-journal commit and separate uber-goal state close will record the exact hashes; leave compiler/SDK downloads, mutable image tags, qa-assets, and generated-input provenance in the next queue.
+
 # C/C++ Supply-Chain Cycle 119
 
 ## Cycle 119 Start: Dependency, Tool, and Build-Gate Audit
