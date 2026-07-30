@@ -2,6 +2,14 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 161 Completion
+
+- Exact selector sequence: the fresh gate first drew `84` (`secp-nonce-session`), which was already closed by Cycle 95; the required exact reroll `shuf -i 0-98 -n 1` drew `20` (`micro-optimization`). The dedicated branch is `uber-cycle-161-micro-optimization-20260730`; start HEAD was `41fb712ad28f701dec477ea9d5245c1ff1a4e4f3`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `42 1103`.
+- Cycle 140's `BufferedFile::FindByte`/`memchr` cell was excluded. This cycle measured a distinct `HexStr` loop in `src/crypto/hex_base.cpp`. The tested candidate replaced the existing two-byte `memcpy` from the lookup table with direct `it[0]`/`it[1]` stores.
+- The same GCC 12.2 `RelWithDebInfo` (`-O2 -g`, `REDUCE_EXPORTS=ON`) build produced five CPU-2-pinned base/candidate pairs in each execution order. Base-first averages were `0.002207324` seconds, `24,000,403.926` instructions, and `1,774,230.198` cycles for base versus `0.003073632` seconds, `36,000,404.723` instructions, and `2,467,150.864` cycles for candidate. Candidate-first averages were `0.002196625` seconds, `24,000,403.918` instructions, and `1,766,416.644` cycles versus `0.003095499` seconds, `36,000,405.163` instructions, and `2,484,963.980` cycles. Per 4,000,000-byte batch, the candidate regressed from about `6.00` to `9.00` instructions/byte and `0.44` to `0.62` cycles/byte in both orders.
+- The candidate binary passed `util_tests/util_HexStr` (one case, no errors), which covers empty input, all supported span types, and every byte value. A first broad test invocation used a nonexistent `TMPDIR` and entered an unrelated long-running path; that newly started process was stopped after recording the setup failure. Persistent PIDs `777094` and `956381` were preserved and untouched. No source/test change is justified; the source was restored exactly and `git diff --check` passed.
+- Verdict: dismissed as a performance regression. Detailed evidence, exact commands, binary hashes, and limitations are in `agent-journal/micro-optimization.md`. Journal-only close commit `3cee083ae0` (`uber-goal: close cycle 161 micro optimization`) is authored as `Lőrinc <pap.lorinc@gmail.com>`. A separate state-only close commit follows; the next cycle must perform a fresh gate and exact selector draw.
+
 ## Cycle 159 Completion
 
 - Exact selector: `shuf -i 0-98 -n 1` -> `81` (`spec-vector-drift`). The dedicated branch is `uber-cycle-159-spec-vector-drift-20260730`; start HEAD was `b89ef9a7569c2120c0ee62148b4d6fb729644d9a`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `42 1100`.
