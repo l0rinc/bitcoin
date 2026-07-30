@@ -85,7 +85,8 @@ independently verified.
 - Branch/commit: audit/assertion-invariant-c2 @ 5e0a80ade5;
   journal assertion-invariant-audit.md c2. Archive pick this cycle.
 - Next: offer upstream (one-line validation, mirrors the existing
-  upper-bound error).
+  upper-bound error); re-verified NOT duplicated upstream @
+  9611a35603 (#42 c5 — file is src/node/mempool_args.cpp there).
 
 ## ✅ CompactSize exhaustive boundary battery (oracle delivered 8b7d8ac878)
 - Mechanism: consensus wire-length primitive canonicality; existing
@@ -159,7 +160,8 @@ independently verified.
   73a6798206); journal raii-resource-leaks.md c2. Archived on
   agent/all-findings @ d87da3929e (fix 461c21cbfa).
 - Next: offer upstream (small RAII fix, mirrors existing option
-  ownership comments); audit other throwing ctors holding raw
+  ownership comments); re-verified NOT duplicated upstream @
+  9611a35603 (#42 c5). Audit other throwing ctors holding raw
   members.
 
 ---
