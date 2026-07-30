@@ -162,6 +162,63 @@ BOOST_AUTO_TEST_CASE(taproot_bip32_input_keypath_does_not_read_past_value)
     BOOST_CHECK_EQUAL(reader.size(), tail.size());
 }
 
+BOOST_AUTO_TEST_CASE(psbt_value_deserialization_does_not_read_past_value)
+{
+    std::vector<unsigned char> serialized;
+    VectorWriter writer{serialized, 0};
+
+    writer << std::vector<unsigned char>{PSBT_OUT_TAP_INTERNAL_KEY};
+    writer << std::vector<unsigned char>{};
+
+    // The declared value is empty. These bytes belong to a later map entry and
+    // must not be consumed by the fixed-size field parser before rejection.
+    std::vector<unsigned char> tail{1, 9, 32};
+    tail.insert(tail.end(), 32, 0x42);
+    tail.push_back(PSBT_SEPARATOR);
+    serialized.insert(serialized.end(), tail.begin(), tail.end());
+
+    SpanReader reader{serialized};
+    BOOST_CHECK_THROW((PSBTOutput{deserialize, reader, /*psbt_version=*/2}), std::ios_base::failure);
+    BOOST_CHECK_EQUAL(reader.size(), tail.size());
+}
+
+BOOST_AUTO_TEST_CASE(psbt_global_value_deserialization_does_not_read_past_value)
+{
+    std::vector<unsigned char> serialized;
+    VectorWriter writer{serialized, 0};
+
+    writer << PSBT_MAGIC_BYTES;
+    writer << std::vector<unsigned char>{PSBT_GLOBAL_UNSIGNED_TX};
+    writer << std::vector<unsigned char>{};
+
+    // Ten zero bytes are enough to look like an empty transaction to the old
+    // outer-stream parser, but are not part of the declared value.
+    std::vector<unsigned char> tail(10, 0);
+    serialized.insert(serialized.end(), tail.begin(), tail.end());
+
+    SpanReader reader{serialized};
+    BOOST_CHECK_THROW((PartiallySignedTransaction{deserialize, reader}), std::ios_base::failure);
+    BOOST_CHECK_EQUAL(reader.size(), tail.size());
+}
+
+BOOST_AUTO_TEST_CASE(psbt_value_length_must_fit_remaining_data)
+{
+    std::vector<unsigned char> serialized;
+    VectorWriter writer{serialized, 0};
+
+    writer << PSBT_MAGIC_BYTES;
+    writer << std::vector<unsigned char>{PSBT_GLOBAL_UNSIGNED_TX};
+    WriteCompactSize(writer, 11);
+
+    // The declared value is one byte longer than the available input.
+    std::vector<unsigned char> tail(10, 0);
+    serialized.insert(serialized.end(), tail.begin(), tail.end());
+
+    SpanReader reader{serialized};
+    BOOST_CHECK_THROW((PartiallySignedTransaction{deserialize, reader}), std::ios_base::failure);
+    BOOST_CHECK_EQUAL(reader.size(), tail.size());
+}
+
 BOOST_AUTO_TEST_CASE(analyzepsbt_invalid_result_contract)
 {
     CMutableTransaction mtx;
