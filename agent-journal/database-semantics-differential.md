@@ -1,5 +1,50 @@
 # Database-engine and persistence-semantics differential
 
+## Cycle 136: replaceable chainstate wrapper reader contract
+
+### Selection and gate
+
+- Exact selector after the Cycle 135 gate: `shuf -i 0-98 -n 1` -> `95` (`database-semantics-differential`); no reroll was needed.
+- Branch: `uber-cycle-136-database-semantics-differential-20260730`.
+- Cycle start HEAD: `db6d40b1372d63fea0408c305294784891ef38f9`.
+- The prior Cycle 126 campaign already covered the broad CDBWrapper/LevelDB batch, recovery, WAL/MANIFEST, snapshot, iterator, corruption, checksum, comparator, compaction, sync, and v31.1 engine matrix. Cycle 45's iterator-status defect and the later coins cursor lifetime fixes were excluded.
+
+### New cell and hypothesis
+
+The new cell was the lifetime contract for ordinary `CCoinsViewDB` readers while `ResizeCache()` destroys and reopens the replaceable `CDBWrapper`. `GetCoin()`, `HaveCoin()`, `GetBestBlock()`, `GetHeadBlocks()`, `NeedsUpgrade()`, `EstimateSize()`, and `GetDBProperty()` directly dereference `m_db` without taking `m_db_mutex`, while `ResizeCache()` takes that mutex only after requiring `cs_main`.
+
+Hypothesis: a production caller could reach one of those methods without `cs_main` or without the cursor's `m_db_mutex` protection, allowing a concurrent cache resize to use or destroy `m_db` and produce a use-after-free, invalid LevelDB access, or inconsistent persistence result.
+
+### Contract and caller trace
+
+- `Chainstate::CoinsDB()` asserts and declares `EXCLUSIVE_LOCKS_REQUIRED(::cs_main)`. `Chainstate::ResizeCoinsCaches()` also requires `cs_main` before calling `CoinsDB().ResizeCache()`.
+- Startup `NeedsUpgrade()` runs inside `CompleteChainstateInitialization()`, which is explicitly `EXCLUSIVE_LOCKS_REQUIRED(::cs_main)`.
+- Chainstate `BatchWrite()`, `GetHeadBlocks()`, `GetBestBlock()`, and ordinary coin lookups route through the chainstate/cache paths protected by `cs_main`; the RPC, REST, and node-interface direct lookup paths all acquire `cs_main` before touching the active chainstate.
+- `gettxoutsetinfo` obtains the DB reference under `cs_main`. `kernel::ComputeUTXOStats()` reacquires `cs_main` while creating the cursor and reading its best block, then keeps the cursor alive through the complete scan. The cursor owns `m_db_mutex`, so a concurrent resize may wait but cannot reset the database under the scan. `EstimateSize()` is called before that cursor is destroyed.
+- Snapshot preparation holds `cs_main` across the flush, statistics, and cursor construction. `Cursor()` and `CompactFullAsync()` have explicit `!m_db_mutex` contracts and runtime assertions, and `ResizeCache()` holds the mutex while replacing `m_db`.
+- The only current `GetDBProperty()` caller is the coins unit test. `EstimateSize()` is used by the coinstats path and test/fuzz storage helpers; no unprotected production caller was found.
+
+The code therefore uses two compatible protections: `cs_main` excludes ordinary chainstate operations from cache replacement, while `m_db_mutex` extends the lifetime for asynchronous compaction and persistent cursors that intentionally outlive the initial `cs_main` section.
+
+### Snapshot-size side check
+
+The long coinstats scan can observe a LevelDB database that advances after its cursor snapshot was created. Its `nDiskSize` is calculated from `GetApproximateSizes()` after the scan, not from a LevelDB snapshot. This is not a demonstrated contract violation: the RPC describes it as the estimated current chainstate disk size, and the functional test explicitly treats `disk_size` as nondeterministic across equivalent calls. The counts, hash, and block identity remain tied to the cursor snapshot.
+
+### Verification
+
+- `mkdir -p /data/my_storage/tmp/cycle136-test-tmp` was required before the test runner could create its temporary directory; the initial setup issue was corrected without changing the repository.
+- `TMPDIR=/data/my_storage/tmp/cycle136-test-tmp /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=coins_tests,dbwrapper_tests,coinstatsindex_tests --log_level=test_suite --color_output=false` passed 53 selected cases and ended with `*** No errors detected`.
+- The run included persistent `coins_db_resize_cursor`, malformed first-key rejection, LevelDB layout/compaction, the complete current dbwrapper error/iterator/reopen suite, and both coinstats initial-sync/unclean-shutdown cases.
+- The focused source/history trace and the existing persistent resize test independently cover the two lifetime mechanisms. No sanitizer trace, failing-before behavior, or engine-specific semantic divergence was found for this new cell.
+
+### Verdict and limits
+
+Dismissed for this cycle. No source or permanent test change is justified. The unannotated methods depend on the enclosing chainstate contract, and the one long-running storage path that releases `cs_main` retains the DB through its cursor. No alternate RocksDB/Pebble engine is installed, and no real power-loss device schedule was available; those remain future evidence sources rather than findings.
+
+### Handoff
+
+The next cycle must refresh the gate, rerun the exact selector, and choose a goal other than this already-covered reader-lifetime cell. Preserve the distinction between the fixed cursor/resize defect and this dismissed ordinary-reader contract audit.
+
 ## Cycle 126: LevelDB batch, recovery, and engine-version differential
 
 ### Selection and gate
