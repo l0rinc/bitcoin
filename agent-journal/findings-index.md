@@ -290,3 +290,13 @@ final_script_sig, byte-exact vs c4 fuzz-side); gate-2-check
 deletion turns case red at psbt_tests.cpp:439; restore green |
 #50 c13 on audit/introspector-blockers-c13 (this cycle) |
 taproot/MuSig2 sighash-class variants as the next cell.
+O13 | btck by-value struct layout battery | kernel C ABI | oracle
+gap: layout drift in the public by-value C structs would silently
+break downstream ABI with no tripwire | n/a (test infra) |
+DELIVERED, compile-time mutation-verified | test_kernel
+btck_abi_layout_battery: sizeof + per-field offsetof static_asserts
+for ValidationInterfaceCallbacks (48 B), NotificationInterfaceCallbacks
+(72 B), LoggingOptions (20 B) + runtime echoes; field swap ->
+static assertion failed at test_kernel.cpp:1498-1499; restore
+green | #92 c2 on audit/abi-alignment-c2 (this cycle) | 32-bit row
+only if such a target ships.
