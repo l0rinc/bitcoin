@@ -128,10 +128,15 @@ template<typename Stream, typename... X>
 void UnserializeFromVector(Stream& s, X&&... args)
 {
     size_t expected_size = ReadCompactSize(s);
-    size_t remaining_before = s.size();
-    UnserializeMany(s, args...);
-    size_t remaining_after = s.size();
-    if (remaining_after + expected_size != remaining_before) {
+    if (expected_size > s.size()) {
+        throw std::ios_base::failure("Size of value exceeds remaining data");
+    }
+
+    std::vector<unsigned char> value(expected_size);
+    s.read(MakeWritableByteSpan(value));
+    SpanReader value_reader{value};
+    UnserializeMany(value_reader, args...);
+    if (!value_reader.empty()) {
         throw std::ios_base::failure("Size of value was not the stated size");
     }
 }

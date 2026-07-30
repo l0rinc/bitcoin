@@ -1,5 +1,41 @@
 # Serialization, deserialization, and untrusted-input sweep
 
+## Cycle 121 start
+
+- Initial selector: exact `shuf -i 0-98 -n 1` -> `36` (`sanitizer-analysis-matrix`), rejected because that campaign's sanitizer/static-analysis cells were already closed in Cycles 26 and 78.
+- Reroll selector: exact `shuf -i 0-98 -n 1` -> `6` (`serialization-untrusted-input`).
+- Branch: `uber-cycle-121-serialization-untrusted-input-20260730`.
+- Cycle-start HEAD: `2c580e30ae0cc89042ab37cf53a6713d011d691a` (`uber-goal: close cycle 120 historical recipes`).
+- Base: `origin/master` at `9611a356035be531d62bfc40879f388d5dc359c4`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD` at the gate was `40 1031`.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Fresh `git fetch origin master`, tracked/index checks, and `git diff --check` passed. Persistent untracked artifacts and `test/cache/` are preserved and excluded.
+- PID `777094` (`test_bitcoin --run_test=wallet_tests --log_level=test_suite`) and parent PID `725042` were observed and will not be touched.
+
+### Scope and prior-finding exclusions
+
+Mine a distinct byte-to-object contract from current code, recent history, tests, fuzz targets, and review precedent. Exclude Cycle 81's fixed Taproot BIP32 PSBT value-boundary over-read, Cycle 80's external advisory variants, Cycle 79's `parse_numbers` comparison, Cycle 78's TokenPipe status contract, Cycle 76's compact-block read-failure path, Cycle 75's descriptor x-only lookup, Cycle 73's LevelDB ownership path, and any generic serialization/property result already indexed elsewhere. A current finding needs a smallest malformed fixture or deterministic trace, an independently verified first invalid operation or state divergence, and a self-contained fix/test commit; a recipe-only close remains valid if all candidates are dismissed.
+
+### Initial queue
+
+1. Recent parser and deserializer fixes since Cycle 81, especially network message counts, RPC/JSON arrays, persisted database records, and public cryptographic objects.
+2. Length/count fields that cross a stream boundary, allocation, cast, or loop before a complete domain check.
+3. Non-canonical, truncated, duplicate, or trailing-byte encodings whose direct and wrapper callers may disagree.
+4. Output and object mutation on late parse failure, including restart/recovery and fuzz harness paths.
+
+Record exact source/history links, valid domains, malformed bytes, first-invalid operation, current tests, and any temporary mutation. Do not use a default datadir, wallet, key, or production database.
+
+## Cycle 121 result
+
+- Prior evidence and deduplication: the repository's tracked `doc/security/codex-security-bitcoin/investigation-report.md` sections 9 and 10, `doc/security/codex-security-bitcoin/evidence/raw_candidates_06.jsonl`, and the review coverage files already described this generic helper boundary as `psbt-global-unsigned-tx-value-boundary` and `psbt-input-non-witness-utxo-value-boundary`, with reproduction pending. This cycle treats those records as provenance and independently verifies/remediates them; it is not a new duplicate claim. The earlier Cycle 81 fix for the Taproot BIP32 helper remains excluded as a separate, already-fixed path.
+- Hypothesis: `UnserializeFromVector` reads a declared PSBT value length, then deserializes directly from the outer stream and checks the byte count only afterward. A malformed short value can therefore let a nested parser consume bytes from later map data, perform parsing/allocation work before rejection, or report the wrong first failure. The helper is used by global unsigned transactions, input UTXOs, script witnesses, scalar fields, locktimes, and other PSBT values.
+- Pre-fix reproducer: `psbt_tests/psbt_value_deserialization_does_not_read_past_value` encoded `PSBT_OUT_TAP_INTERNAL_KEY` with an empty declared value followed by a 36-byte later-map tail. On clean pre-fix code, the focused command exited 201 with `reader.size() == 4` instead of `36`; the fixed-size parser consumed 32 bytes beyond the declared field before throwing. This is a direct first-invalid-operation/reader-state proof, not a semantic-acceptance claim.
+- Global entry-point reproducer: `psbt_tests/psbt_global_value_deserialization_does_not_read_past_value` encodes the PSBT magic, `PSBT_GLOBAL_UNSIGNED_TX` with an empty value, and ten zero bytes. The old outer parser can consume those ten bytes as an empty transaction before the late size mismatch; the regression requires all ten bytes to remain in the outer reader.
+- Fix: `UnserializeFromVector` now rejects a declared length larger than the remaining stream, copies exactly the declared bytes into a bounded vector, deserializes through a `SpanReader` over that vector, and requires the subreader to be exhausted. Existing `ReadCompactSize` range checking remains in force, so the new copy is bounded by the project's 32 MiB serialization limit and by available input bytes.
+- Validation: the initial normal build exposed only an environment issue (`ccache` could not create `/root/.cache/ccache/tmp`); `CCACHE_DISABLE=1 cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j2` passed. The normal focused and full `psbt_tests` runs passed, ending at 13 cases and 144/144 assertions. A clean Clang UBSan build in `/data/my_storage/tmp/cycle106-clang19-ubsan` was rebuilt after the header and test changes; with `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`, the global regression and final full PSBT group passed, ending at 13 cases and 144/144 assertions. The UBSan build emitted only its pre-existing `-O0` object-size-sanitizer warning and no runtime diagnostic.
+- Independent verification: the caller inventory matched the generic helper's global and input/output sites; the old-versus-new reader-size result independently establishes the boundary change; normal and UBSan builds exercised both a direct global transaction path and a fixed-size output path. No valid PSBT behavior changed in the focused/full regression set. Impact is limited here to pre-rejection cross-field parsing/resource work and malformed-input error locality; this cycle does not claim a remotely exploitable semantic-acceptance bypass or quantify worst-case amplification.
+- Disposition: confirmed and fixed as a remediation of prior indexed security evidence. Preserve the two malformed fixtures, the exact commands, and the bounded-reader rationale in the source/test/journal commit. Next queue after close: revisit other untrusted serialization surfaces, excluding this helper and the Cycle 81 Taproot helper.
+
 ## Cycle 81 start
 
 - Selector: exact `shuf -i 0-98 -n 1` -> `6` (`serialization-untrusted-input`).
