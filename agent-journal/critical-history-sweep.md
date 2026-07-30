@@ -670,3 +670,82 @@ escalation path if one emerges).
 ## Rotation note
 Eight cycles; the txindex radar seed is assessed and closed.
 #49 reopens on new fork commits.
+
+## Cycle 9 (2026-07-30): txindex v2 prefix-collision claim MEASURED on the real 345M-row DB — uniform, 1.040x amplification; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=8356496777076536508, masked
+same, n=4, idx=0) -> critical-point-read-claim -> #49 (ninth
+cycle; c8 queue cell "the 's'/'h' point-read claim ... not
+measured"). Branch: audit/critical-history-c9 from 20f3587f4c
+(#2 c3 journal tip).
+
+### The claim (txindex_optimization e2dc767418 txindex.cpp:81-85)
+"Bloom filters ... the per-tx hashed ('x') lookups seek with an
+iterator, and the 's'/'h' point reads are at most one per block
+against a tiny keyspace" — justifying bloom-enable only for
+legacy-containing DBs.
+
+### Static verification (line-precise, branch code)
+1. 'x' seeks with an iterator: VERIFIED — FindHashedTx
+   (:170-173) uses NewIterator + Seek + collision walk (iterators
+   bypass LevelDB bloom filters by design).
+2. 's'/'h' point reads at most one per block: VERIFIED —
+   sync-time reads are <=1/block (:114 next_block_seq); RPC-time
+   's' reads at :175 are collision-bounded per candidate.
+3. tiny keyspace: 2 rows/block vs 1 row/tx, by construction.
+
+### The measurement (the cell's actual gap)
+The locally deployed /mnt/my_storage/BitcoinData/indexes/txindex
+(25 GB) is a V2 txindex (markers best_block_v2 + txid_hash_salt)
+built during the branch's 4-byte-prefix benchmark window
+(3e28ff7509, later reverted to 5 by 617a2a6773; tip uses 5).
+The branch tip's own contrib/txindex/txindex-collision-count.cpp
+expects 5-byte keys (12B); the deployed DB has 11-byte keys
+(4-byte prefix) — retuned HASH_PREFIX_BYTES=4 and scanned:
+- 345,064,792 hashed rows, 0 malformed, 88.4 s.
+- colliding pairs: observed 13,863,543 vs Poisson-expected
+  13,861,538.65 (+0.014%).
+- exactly-2 buckets: 12,790,364 vs 12,791,441.91 expected.
+- exactly-3 buckets: 343,943 vs 342,561.88 expected.
+- largest bucket: 6 (2 instances; expected tail ~5-6).
+- singleton rows: 318,424,853 / 345,064,792 (92.3%).
+- estimated uniform successful-lookup amplification: 1.0402x;
+  expected candidates for a missing lookup: 0.0803.
+The 4-byte SipHash-1-3-UJ prefix is statistically
+indistinguishable from uniform at mainnet scale; a lookup reads
+~1.04 candidates on average — the "at most one per block"
+premise holds measured. (The later 5-byte choice only widens the
+margin; no position taken on the revert.)
+
+### Storage-behavior note (honest record)
+Opening the DB for the scan let LevelDB resume its own
+maintenance (~3 GB of compaction writes observed via /proc/io);
+that is stock self-maintenance on a DB left mid-compaction by its
+last close, not scan damage. No bitcoind was running (verified);
+paranoid_checks + verify_checksums on for the scan.
+
+### Verdict
+DISMISSED (claim verified) / CONFIRMED (measurement delivered):
+the bloom-rationale comment is accurate on all three parts, and
+the collision profile of the deployed v2 txindex matches the
+uniform model exactly.
+
+### Exact commands
+- strings on *.ldb/*.log for v2 markers; /tmp/txi_probe (row-type
+  census: 5M x-rows, 11-byte keys)
+- g++ -std=c++20 -O3 -DNDEBUG -I src/leveldb/include
+  /tmp/coll_count.cpp build-before/src/libleveldb.a
+  build-before/src/libcrc32c.a -pthread
+  (HASH_PREFIX_BYTES retuned 5->4 for this DB)
+- /tmp/txindex-collision-count /mnt/my_storage/BitcoinData/indexes/txindex
+
+### Limitations / queue
+- The scan is of the 4-byte-prefix build; if a 5-byte build is
+  ever deployed, rerun with the tip's unmodified tool.
+- The amplification figure assumes uniform lookups (Zipf-real
+  workloads read hot prefixes — bounded by the same histogram).
+
+## Rotation note
+Nine cycles; the txindex v2 claim is now measured, closing c8's
+only open cell.
