@@ -195,6 +195,19 @@ size_t CDBBatch::ApproximateSize() const
 }
 
 struct LevelDBContext {
+    //! Free the database and all option-owned resources on every exit path.
+    //! On the success path Close() has already deleted and nulled these
+    //! (deleting nullptr is safe); on a constructor-throw path (e.g. failed
+    //! DB::Open) this is the only cleanup that runs.
+    ~LevelDBContext()
+    {
+        delete pdb; // before the options members it may reference
+        delete options.filter_policy;
+        delete options.info_log;
+        delete options.block_cache;
+        delete penv;
+    }
+
     //! custom environment this database is using (may be nullptr in case of default environment)
     leveldb::Env* penv;
 
