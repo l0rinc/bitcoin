@@ -376,4 +376,75 @@ BOOST_AUTO_TEST_CASE(update_psbt_output_zero_inputs)
     BOOST_CHECK(psbt.outputs[0].hd_keypaths.empty());
 }
 
+namespace {
+
+CTransactionRef MakeTestPrevTx(const CKey& key, CAmount value, int version)
+{
+    CMutableTransaction mtx;
+    mtx.version = version;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint{Txid::FromUint256(uint256::ONE), 0};
+    mtx.vin[0].scriptSig = CScript{} << std::vector<unsigned char>(71, 0x30) << ToByteVector(key.GetPubKey());
+    mtx.vout = {CTxOut{value, GetScriptForDestination(PKHash(key.GetPubKey()))}};
+    mtx.nLockTime = 0;
+    return MakeTransactionRef(std::move(mtx));
+}
+
+PartiallySignedTransaction MakeTestPsbt(const CTransactionRef& prevtx)
+{
+    CMutableTransaction mtx;
+    mtx.version = 2;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint{prevtx->GetHash(), 0};
+    mtx.vin[0].nSequence = 0xfffffffd;
+    mtx.vout = {CTxOut{prevtx->vout[0].nValue - 1000, prevtx->vout[0].scriptPubKey}};
+    PartiallySignedTransaction psbt{mtx};
+    psbt.inputs[0].non_witness_utxo = prevtx;
+    return psbt;
+}
+
+} // namespace
+
+BOOST_AUTO_TEST_CASE(signpsbtinput_missing_inputs_arms)
+{
+    // The programmatic MISSING_INPUTS gates of SignPSBTInput
+    // (psbt.cpp:673-687): the deserializer pre-rejects malformed
+    // non_witness_utxo for both v0 and v2 (psbt.h:1583-1595), so these
+    // gates are reachable only from in-process construction (FillPSBT,
+    // unit tests) — drive them directly.
+    CKey key;
+    key.MakeNewKey(true);
+    FillableSigningProvider provider;
+    provider.AddKey(key);
+    const auto prevtx{MakeTestPrevTx(key, 50000, 2)};
+    const auto othertx{MakeTestPrevTx(key, 40000, 1)}; // same key, different hash
+
+    {   // control: well-formed PSBT signs OK and finalizes
+        auto psbt{MakeTestPsbt(prevtx)};
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_REQUIRE(txdata.has_value());
+        BOOST_CHECK(SignPSBTInput(provider, psbt, 0, &*txdata, {}) == PSBTError::OK);
+        BOOST_CHECK_EQUAL(psbt.inputs[0].final_script_sig.size(), 106U);
+    }
+    {   // gate 1: prevout index out of range
+        auto psbt{MakeTestPsbt(prevtx)};
+        psbt.inputs[0].prev_out = 1; // prevtx has only vout 0
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_CHECK(SignPSBTInput(provider, psbt, 0, &*txdata, {}) == PSBTError::MISSING_INPUTS);
+    }
+    {   // gate 2: non_witness_utxo hash mismatch
+        auto psbt{MakeTestPsbt(prevtx)};
+        psbt.inputs[0].non_witness_utxo = othertx;
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_CHECK(SignPSBTInput(provider, psbt, 0, &*txdata, {}) == PSBTError::MISSING_INPUTS);
+    }
+    {   // gate 3: no utxo fields at all
+        auto psbt{MakeTestPsbt(prevtx)};
+        psbt.inputs[0].non_witness_utxo.reset();
+        psbt.inputs[0].witness_utxo = CTxOut{};
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_CHECK(SignPSBTInput(provider, psbt, 0, &*txdata, {}) == PSBTError::MISSING_INPUTS);
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

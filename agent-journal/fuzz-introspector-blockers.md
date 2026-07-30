@@ -849,3 +849,63 @@ unavailability (decoder-side).
 ## Rotation note
 Twelve cycles; the outcome-class map is complete. #50 quiets
 pending new signing features.
+
+## Cycle 13 (2026-07-30): programmatic MISSING_INPUTS arms driven (3 gates + control) + persistent oracle O12, mutation-verified
+
+### Draw
+Re-harvested-queue draw (seed_raw=5024985370541799207, masked
+same, n=4, idx=3) -> missing-inputs-arm -> #50 (thirteenth cycle;
+c12 queue cell "programmatic MISSING_INPUTS arm would need a C++
+unit-style driver"). Branch: audit/introspector-blockers-c13 from
+7e88645b92 (#71 c3 tip).
+
+### Gates mapped (psbt.cpp:673-687, SignPSBTInput)
+1. prevout.n >= non_witness_utxo->vout.size() -> MISSING_INPUTS.
+2. non_witness_utxo->GetHash() != prevout.hash -> MISSING_INPUTS.
+3. no utxo fields at all -> MISSING_INPUTS.
+Decoder pre-rejection verified for BOTH v0 and v2: psbt.h:1583-1595
+('Non-witness UTXO does not match outpoint hash', 'Input specifies
+output index that does not exist') — so gates 1-2 are reachable
+ONLY from in-process construction (FillPSBT, unit tests), never
+from the fuzz target's byte-parsed input model (c12's boundary).
+
+### Experiment (driver /tmp/missing_inputs_arm.cpp, in-process PSBT)
+- control: well-formed P2PKH PSBT -> OK + final_script_sig = 106 B
+  (byte-exact match with c4's independent fuzz-side observation —
+  two verifier forms agree).
+- gate 1 (prev_out = 1 over a 1-vout prevtx): MISSING_INPUTS.
+- gate 2 (same-key different-hash non_witness_utxo): MISSING_INPUTS.
+- gate 3 (both utxo fields cleared): MISSING_INPUTS.
+Bring-up notes: ECC_Context required (secp256k1_context_sign null
+SEGV — same class as the c4 fuzz-target finding); PSBTFillOptions
+finalizes by default so complete P2PKH lands in final_script_sig,
+not partial_sigs.
+
+### Persistent oracle (O12): psbt_tests
+signpsbtinput_missing_inputs_arms (same four cases) in
+src/test/psbt_tests.cpp. Mutation-verified: deleting gate 2's
+check (psbt.cpp:680-682) turns the case red at psbt_tests.cpp:439
+('check == MISSING_INPUTS has failed'); restore green.
+test_bitcoin --run_test=psbt_tests: No errors detected.
+
+### Verdict
+CONFIRMED: all three programmatic MISSING_INPUTS gates fire with
+the exact status class; the decoder pre-rejection boundary is
+verified for both PSBT versions; the outcome map is now complete
+through the programmatic arms, with a persistent mutation-verified
+oracle.
+
+### Exact commands
+- g++ -O2 -std=c++20 -I src -I build-before/src
+  /tmp/missing_inputs_arm.cpp -lbitcoin_common -lbitcoin_consensus
+  -lbitcoin_util -lbitcoin_crypto -lbitcoin_clientversion
+  -lsecp256k1 -lunivalue -> all 5 cases PASS
+- mutation: python edit (above), rebuild, rerun; restore.
+
+### Limitations / queue
+- Taproot/MuSig2 variants of the same gates (sighash size classes)
+  remain the next signing-outcome cell if one lands here.
+
+## Rotation note
+Thirteen cycles; the SignPSBTInput outcome map is complete through
+the programmatic gates with a persistent oracle.
