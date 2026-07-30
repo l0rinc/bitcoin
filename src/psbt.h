@@ -831,6 +831,9 @@ public:
                     uint256 hash;
                     s_key >> xonly;
                     s_key >> hash;
+                    if (!xonly.IsFullyValid()) {
+                        throw std::ios_base::failure("Input Taproot script path signature x-only pubkey is invalid");
+                    }
                     std::vector<unsigned char> sig;
                     s >> sig;
                     if (sig.size() < 64) {
@@ -865,6 +868,9 @@ public:
                     SpanReader s_key{std::span{key}.subspan(1)};
                     XOnlyPubKey xonly;
                     s_key >> xonly;
+                    if (!xonly.IsFullyValid()) {
+                        throw std::ios_base::failure("Input Taproot BIP32 keypath x-only pubkey is invalid");
+                    }
                     m_tap_bip32_paths.emplace(xonly, DeserializeTaprootBIP32Keypath(s, "Input Taproot BIP32 keypath"));
                     break;
                 }
@@ -872,6 +878,9 @@ public:
                 {
                     ExpectedKeySize("Input Taproot Internal Key", key, 1);
                     UnserializeFromVector(s, m_tap_internal_key);
+                    if (!m_tap_internal_key.IsFullyValid()) {
+                        throw std::ios_base::failure("Input Taproot internal x-only pubkey is invalid");
+                    }
                     break;
                 }
                 case PSBT_IN_TAP_MERKLE_ROOT:
@@ -1163,6 +1172,9 @@ public:
                 {
                     ExpectedKeySize("Output Taproot Internal Key", key, 1);
                     UnserializeFromVector(s, m_tap_internal_key);
+                    if (!m_tap_internal_key.IsFullyValid()) {
+                        throw std::ios_base::failure("Output Taproot internal x-only pubkey is invalid");
+                    }
                     break;
                 }
                 case PSBT_OUT_TAP_TREE:
@@ -1200,6 +1212,9 @@ public:
                 {
                     ExpectedKeySize("Output Taproot BIP32 Keypath", key, 33);
                     XOnlyPubKey xonly(uint256(std::span<uint8_t>(key).last(32)));
+                    if (!xonly.IsFullyValid()) {
+                        throw std::ios_base::failure("Output Taproot BIP32 keypath x-only pubkey is invalid");
+                    }
                     m_tap_bip32_paths.emplace(xonly, DeserializeTaprootBIP32Keypath(s, "Output Taproot BIP32 keypath"));
                     break;
                 }

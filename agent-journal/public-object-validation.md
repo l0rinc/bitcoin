@@ -1,5 +1,72 @@
 # Public object parsing and validation variant analysis
 
+## Cycle 168: direct address/key decoding and wrapper validation follow-up
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `15`
+- Slug: `public-object-validation`
+- Branch: `uber-cycle-168-public-object-validation-20260730`
+- Gate HEAD: `74f50d5012f425ba0bc7f07d397270286422836d`; `origin/master` at `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD=42 1117`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Corrected goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The fresh gate passed fetch, tracked/index cleanliness, `git diff --check`, catalog/protocol/TSV hashes, and preservation of unrelated PIDs `777094` and `956381`. Cycles 27, 51, 75, and 166 were searched before accepting this draw; their full-key inference, x-only leaf inference, Taproot lookup, and compact-header cells are excluded.
+
+### Scope and active hypothesis queue
+
+This cycle continues goal 15 only for direct public-object decoding and wrapper boundaries that were not closed by the prior descriptor and compact-signature campaigns. The trust boundary is caller-supplied public bytes or text; the output contract includes validity, canonicalization, error reporting, and safe reuse of an output object. I will trace each candidate through its producer, parser, serializer, consumer, tests, history, and release-version behavior before treating a mismatch as a finding.
+
+Initial queue:
+
+1. Direct `HexToPubKey`, `XOnlyPubKey`, address, and destination decoding variants, with malformed/truncated/noncanonical inputs and reused outputs.
+2. Public RPC/API wrappers that translate decoded keys, scripts, signatures, or addresses and may accept one representation while emitting another that its corresponding parser rejects.
+3. Release-to-release parser differences for public objects, only after current direct paths are mapped and prior key-I/O/parser cells are excluded.
+
+Status: confirmed and fixed. Cycle 168 closed the Taproot PSBT x-only metadata validation cell; direct address/key decoding and release-version parser differences remain queued.
+
+## Cycle 168: Taproot PSBT x-only metadata must be curve-valid
+
+### Contract and source/history evidence
+
+The direct parser map is a caller-supplied PSBT boundary. The affected fields are public-key metadata, not arbitrary witness-program bytes:
+
+- `PSBT_IN_TAP_SCRIPT_SIG` carries an x-only public key plus a leaf hash in its key data.
+- `PSBT_IN_TAP_BIP32_DERIVATION` carries an x-only public key in its key data.
+- `PSBT_IN_TAP_INTERNAL_KEY` carries an x-only public key in its value.
+- The output map has the corresponding internal-key and BIP32-derivation fields.
+
+BIP371 (https://bips.dev/371/) describes each of these values as an x-only public key. BIP340 (https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki) defines the public-key domain through `lift_x`: the x coordinate must be below the field modulus and have a valid square root. `XOnlyPubKey::IsFullyValid()` is the existing libsecp256k1-backed implementation of that contract.
+
+Ordinary PSBT public-key and BIP32 fields already call `CPubKey::IsFullyValid()`. MuSig2 PSBT deserialization was strengthened by `d221d1c633` after invalid curve points caused downstream failures. In contrast, all five Taproot x-only sites constructed or deserialized `XOnlyPubKey` values and inserted them into maps without checking curve membership. This is distinct from a v1 witness output program: BIP341 intentionally permits arbitrary 32-byte output programs, while these BIP371 fields explicitly represent public keys.
+
+The trust boundary is an untrusted or stale PSBT supplied through raw decoding, RPC, wallet import, or another PSBT consumer. The old parser accepted an all-zero x-only value, then `PSBTInput::FillSignatureData()` exposed it through `taproot_misc_pubkeys` and `tap_pubkeys`; output filling exposed the same value to signing-provider metadata. The result was an internally stored object that was not a BIP340 public key. No consensus acceptance or funds-loss primitive was established; this is a parser/API correctness defect with downstream failure and resource/DoS risk for consumers that attempt to use the invalid metadata.
+
+### Reproducer and verification
+
+The focused unit probe serializes each malformed field through the real `SpanReader` map parser, using all-zero x-only bytes and otherwise valid PSBTv2 framing. Before the production edit, the test asserted successful parsing and passed 8 assertions. The accepted cases were:
+
+1. input Taproot script-path signature key;
+2. input Taproot BIP32 derivation key;
+3. input Taproot internal key value;
+4. output Taproot internal key value; and
+5. output Taproot BIP32 derivation key.
+
+The pre-fix build and result are preserved in `/data/my_storage/tmp/cycle168-pref_fix_build4.log` and `/data/my_storage/tmp/cycle168-pref_fix_test4.log`. The first probe fixture omitted the required map separator and was discarded; the second used PSBTv2 without required transaction fields and was discarded. Neither exercised production behavior as a result.
+
+### Fix and regression oracle
+
+`src/psbt.h` now rejects an x-only value unless `IsFullyValid()` succeeds at each of the five deserialization sites. The fixed regression expects `std::ios_base::failure` for each malformed field. Existing value-boundary tests were updated to use `XOnlyPubKey::NUMS_H` so they still reach their intended nested-value length checks instead of failing earlier on the new public-key contract.
+
+The normal build `CCACHE_DIR=/data/my_storage/tmp/cycle168-ccache cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j2` exited 0. The focused regression passed 5 assertions (`/data/my_storage/tmp/cycle168-post_fix_test.log`), and the full `psbt_tests` suite passed 14 cases and 149 assertions (`/data/my_storage/tmp/cycle168-psbt_suite2.log`). An independent Clang 19 UBSan/alignment/object-size build rebuilt the affected targets successfully and passed the complete PSBT suite with 14 cases and 149 assertions; logs are `/data/my_storage/tmp/cycle168-ubsan-build.log` and `/data/my_storage/tmp/cycle168-ubsan-test.log`. `git diff --check` passed.
+
+The complete 1,229-case normal unit suite was attempted twice but could not provide a repository result: the shared root filesystem reached the test harness disk guard and block-file flush then failed with an I/O error. The overlapping retry was stopped after discovering the first invocation was still running; only those cycle-168 processes were stopped. Generated `/tmp` test scratch was removed with no active descriptors. Persistent PIDs `777094` and `956381` were preserved.
+
+### Verdict and handoff
+
+Confirmed local public-object parser contract defect. Commit the source, regression, and this journal entry as one self-contained change, then close the cycle with a separate state-only uber-goal commit. Do not reopen this Taproot x-only metadata cell without a distinct field, caller, backend, or recurrence signal. Continue with direct address/key decoding, malformed public API wrappers, and release-version parser differences.
+
 ## Cycle 166: compact recovery header domain and public-key parser parity
 
 ### Selection and gate
