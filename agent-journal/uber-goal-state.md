@@ -593,6 +593,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    -> flatfileseq-open-churn -> #63 c4 (FlatFileSeq::Open measured:
    20.7% inclusive = 13.2% genuine page IO + ~7.5% avoidable fopen
    machinery; design cost, not a defect; DISMISSED).
+   RE-RANK draw 127 (4-cell queue): raw=1453947281365744417 -> idx 1
+   -> anchors-dat -> #41 c4 (anchors.dat archaeology:
+   all-or-nothing + read-and-delete everywhere, trailing junk
+   tolerated; DISMISSED).
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
