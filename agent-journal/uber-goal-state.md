@@ -2,6 +2,50 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 172 Completion
+
+- Cycle 172 selected goal `12` (`static-analysis-true-positives`) from the
+  exact post-Cycle-171 selector `shuf -i 0-98 -n 1`. The dedicated branch is
+  `uber-cycle-172-static-analysis-true-positives-20260730`; its fresh start
+  HEAD was `fbb264b16d48875df068f2f2b6bc68d8e009a72c`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1125 42`.
+  The required fetch, diff checks, persistent-process check, and input hashes
+  passed. PIDs `777094` and `956381` were preserved.
+- A fresh Clang 19 CMake compilation database was built under
+  `/data/my_storage/tmp/cycle172-static-scan1` with wallet, IPC, ZMQ, bench,
+  and fuzz binaries disabled and tests enabled. Direct LLVM analyzer commands
+  covered 30 newly selected node, validation, chainstate, mempool, RPC,
+  persistence, policy, and kernel translation units. Ten warnings appeared in
+  `validation.cpp`, `coins.cpp`, `node/interfaces.cpp`, and `policy/rbf.cpp`;
+  the other selected units were clean. The raw logs and exact matrix are in
+  `agent-journal/static-analysis-true-positives.md`.
+- Source/dataflow/history review classified all ten reports as analyzer
+  artifacts or explicit contracts: moved-from construction, shared mempool
+  index lookup after `exists`, assertion-backed chain/tip/ancestor validity,
+  unique-pointer ownership transfer, aligned `std::byte` placement-new
+  modeling, constructor-backed coin-view base validity, node-context factory
+  lifetime, and the locked RBF `exists`/`GetEntry` relation. A minimal probe
+  reproduced only the placement-new checker warning and ran clean under Clang
+  19 ASan+UBSan with leak detection. Independent GCC 12.2 `-fanalyzer` runs on
+  all four warning-bearing units emitted no diagnostics.
+- Focused controls passed `rbf_tests,interfaces_tests,validation_chainstate_tests`
+  with 16 cases and 1,315 assertions; the existing pool/overlay control passed
+  16 cases and 23,962 assertions. No source or permanent test change was
+  justified. Journal-only close commit `da79e3ecf1` (`journal: close cycle 172
+  static analysis`) is authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- Limitations are recorded rather than hidden: clang-tidy, CodeQL, Semgrep,
+  cppcheck, and IWYU are unavailable; this was a direct analyzer scan rather
+  than a full project-wide scan-build build; GCC cross-checking covered the
+  warning-bearing files only; and no full unit suite was attempted because the
+  root filesystem remains at 99% capacity. The next goal-12 queue is the
+  conditional-compilation/configuration matrix for node/RPC/persistence and a
+  future tool-version scan of public nullable hooks only with distinct evidence.
+- Verdict: dismissed/no new finding. A separate state-only close commit must
+  follow. After it, run the fresh gate, preserve this dismissed cell unless a
+  new evidence source is selected, draw the next exact eligible goal, and open
+  its dedicated branch and journal.
+
 ## Cycle 171 Completion
 
 - Cycle 171 selected goal `80` (`fuzz-engine-differential`) after the exact
