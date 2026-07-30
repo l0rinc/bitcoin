@@ -1,5 +1,37 @@
 # Rejected-Finding Resurrection and Assumption Attack
 
+## Cycle 157 Selection, Reopened Cell, and Gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `62` (`rejected-finding-resurrection`). The dedicated branch is `uber-cycle-157-rejected-finding-resurrection-20260730`; start HEAD was `9f67b9fc0a65ba8599d153cd772db053420a2935`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `42 1097` (`origin/master...HEAD`).
+- The fresh gate fetched `origin` successfully, preserved the catalog/protocol hashes, and found no tracked or staged changes. It also found the unrelated long-running test processes PID `777094` (`wallet_tests`) and PID `956381` (`util_tests`); neither was touched. Existing agent artifacts, `node_modules/`, `package*.json`, and `test/cache/` remained untracked and were preserved.
+- This cycle excludes the earlier CoinStatsIndex mismatch dismissal and the Qt stale-state fix. It reopens the Cycle 137 `-seednode=` dismissal from `agent-journal/history-incomplete-fixes.md`, which established only that an empty seed node produces one failed address-fetch attempt and is not retried indefinitely.
+
+## Distinct Hypothesis: Empty Seed Node Suppresses Fallback
+
+The old dismissal missed a separate startup contract. `AppInitMain()` copied raw `-seednode` values into `connOptions.vSeedNodes`, while both network threads independently tested raw `gArgs.GetArgs("-seednode").empty()`. On an empty addrman with `-dnsseed=0 -fixedseeds=1`, an empty or whitespace-only value therefore did three things: it created an invalid empty `ADDR_FETCH` target, marked seed nodes as active for the fixed-seed policy, and delayed fixed-seed insertion until the one-minute timeout. With DNS enabled it also made the DNS thread wait through its 30-second seed-node phase even though no usable seed existed.
+
+Trust boundary: local command-line/configuration input controls startup peer discovery. The input is not a consensus value, but a malformed local setting can delay bootstrap, consume an address-fetch slot, and suppress the fallback intended for an empty peers database.
+
+## Independent Discovery and Verification
+
+Discovery track:
+
+- `src/init.cpp` at the pre-fix gate assigned `connOptions.vSeedNodes = args.GetArgs("-seednode")` without validation. `src/net.cpp::ThreadOpenConnections()` computed `use_seednodes` from raw `gArgs` rather than its already-selected seed span. `CConnman::ThreadDNSAddressSeed()` used the same raw argument check. The open-connection path used the seed span for `add_addr_fetch`, so the raw flag and usable vector could disagree.
+- The pre-fix binary at commit `9f67b9fc0a65ba8599d153cd772db053420a2935` was run in an isolated signet datadir with `-listen=0 -discover=0 -dnsseed=0 -fixedseeds=1 -maxconnections=1 -proxy=127.0.0.1:1 -seednode=`. At `2026-07-30T15:03:04Z` it logged `Empty addrman, adding seednode () to addrfetch`, then `trying v2 connection (addr-fetch) to , lastseen=0.0hrs`, followed by the controlled local proxy refusal. The no-seed control on the same binary logged immediate fixed-seed insertion.
+- The source history confirms the adjacent empty `-connect` fix (`6f91b89157`) filters invalid values before the retry loop, but no corresponding `-seednode` validation existed. The current option description requires a hostname/address and permits repetition; an empty value has no valid interpretation.
+
+Verification track:
+
+- The fix filters empty and whitespace-only `-seednode` values in `AppInitMain()`, logs `Ignoring empty -seednode value`, and passes only the filtered vector to the network lifecycle. `ThreadOpenConnections()` now derives `use_seednodes` from its filtered span. `ThreadDNSAddressSeed()` receives the same boolean captured at thread start, so valid seed-node behavior remains unchanged and empty input cannot create a DNS delay.
+- A direct post-fix regtest run with `-dnsseed=0 -fixedseeds=1 -seednode= -seednode=' ' -proxy=127.0.0.1:1` logged two warnings and, at `2026-07-30T15:08:36Z`, `Adding fixed seeds as -dnsseed=0 ... neither -addnode nor -seednode are provided`; it emitted no empty address-fetch message. Regtest has no fixed seed addresses, so the subsequent `Added 0 fixed seeds` is expected; the gating log is the relevant assertion.
+- `CCACHE_DIR=/data/my_storage/tmp/cycle157-ccache cmake --build /data/my_storage/tmp/cycle89-build --target bitcoind -j2` passed. `BITCOIND=/data/my_storage/tmp/cycle89-build/bin/bitcoind test/functional/p2p_seednode.py --configfile=/data/my_storage/tmp/cycle89-build/test/config.ini --cachedir=/data/my_storage/tmp/cycle157-p2p-seednode-cache-2 --tmpdir=/data/my_storage/tmp/cycle157-p2p-seednode-2 --portseed=157` passed all four cases, including empty and whitespace-only values. The adjacent `p2p_dns_seeds.py` run with an isolated tmpdir and port seed 158 passed all cases. `git diff --check` passed.
+
+## Verdict and Fix
+
+**Confirmed and fixed as a distinct recurrence/variant.** The prior finding was correctly limited to the absence of indefinite retries, but its dismissal did not cover the changed caller configuration where an invalid value suppresses fixed-seed fallback and starts an empty fetch. The fix is limited to input filtering and making both network-thread decisions use the filtered seed-node state. Valid repeated seed nodes still enter the existing fetch and DNS-wait paths. No consensus, wallet, key, or remote-network impact was established.
+
+Source/test changes are ready for one self-contained commit. The exact old and new startup traces, proxy isolation, and functional-suite results above are the handoff for review; future work should test other malformed multi-value startup options against their fallback gates rather than reopening this cell without new evidence.
+
 ## Cycle 33 Selection and Gate
 
 - Selected index: `62`
