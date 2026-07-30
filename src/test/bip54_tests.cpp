@@ -1390,8 +1390,14 @@ BOOST_AUTO_TEST_CASE(bip54_timestamps)
             const bool res{test_setup.m_node.chainman->ProcessNewBlockHeaders(test.header_chain, /*min_pow_checked=*/true, state, /*ppindex=*/nullptr)};
             BOOST_CHECK_MESSAGE(res == test.valid, test.comment);
             if (!test.valid) {
-                const auto reason{state.GetRejectReason()};
-                BOOST_CHECK_MESSAGE(reason == "time-timewarp-attack" || reason == "time-negative-interval", test.comment);
+                // Each vector extends the genesis-rooted chain by one candidate header, so its
+                // height determines which of the two rules must have rejected it.
+                const int interval{static_cast<int>(test_setup.m_node.chainman->GetConsensus().DifficultyAdjustmentInterval())};
+                const int height{static_cast<int>(test.header_chain.size()) - 1};
+                const bool period_opener{height % interval == 0};
+                BOOST_REQUIRE_MESSAGE(period_opener || height % interval == interval - 1, test.comment);
+                const char* expected_reason{period_opener ? "time-timewarp-attack" : "time-negative-interval"};
+                BOOST_CHECK_MESSAGE(state.GetRejectReason() == expected_reason, test.comment);
             }
         }
     }
