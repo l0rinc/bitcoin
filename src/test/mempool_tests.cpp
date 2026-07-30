@@ -1357,7 +1357,7 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1SignedPartialImportMetadata, TestChain100Setup)
     BOOST_REQUIRE(fs::remove(dump_path));
 }
 
-BOOST_FIXTURE_TEST_CASE(MempoolV1SignedPartialImportDumpReload, TestChain100Setup)
+BOOST_FIXTURE_TEST_CASE(MempoolV1SignedPartialImportDumpReloadPreservesTotals, TestChain100Setup)
 {
     mineBlocks(1);
     const CTransactionRef tx_before = MakeTransactionRef(CreateValidMempoolTransaction(
@@ -1401,6 +1401,14 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1SignedPartialImportDumpReload, TestChain100Setu
     BOOST_CHECK(destination.exists(tx_before->GetHash()));
     BOOST_CHECK(destination.exists(tx_after->GetHash()));
     BOOST_CHECK(!destination.exists(invalid_tx->GetHash()));
+    const auto expected_total_size = GetVirtualTransactionSize(*tx_before) +
+        GetVirtualTransactionSize(*tx_after);
+    const auto check_totals = [&] {
+        LOCK(destination.cs);
+        BOOST_CHECK_EQUAL(destination.GetTotalFee(), 2 * COIN);
+        BOOST_CHECK_EQUAL(destination.GetTotalTxSize(), expected_total_size);
+    };
+    check_totals();
 
     BOOST_REQUIRE(node::DumpMempool(destination, roundtrip_path, fsbridge::fopen, true));
     {
@@ -1425,6 +1433,7 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1SignedPartialImportDumpReload, TestChain100Setu
     BOOST_CHECK(destination.exists(tx_before->GetHash()));
     BOOST_CHECK(destination.exists(tx_after->GetHash()));
     BOOST_CHECK(!destination.exists(invalid_tx->GetHash()));
+    check_totals();
     BOOST_CHECK_EQUAL(destination.info(tx_before->GetHash()).nFeeDelta, -1000);
     BOOST_CHECK_EQUAL(destination.info(tx_after->GetHash()).nFeeDelta, -3000);
 
