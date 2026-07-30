@@ -7,6 +7,7 @@
 #include <key.h>
 #include <pubkey.h>
 #include <span.h>
+#include <test/data/xswiftec_inv_test_vectors.csv.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
@@ -15,6 +16,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <sstream>
+#include <string>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -338,6 +341,53 @@ BOOST_AUTO_TEST_CASE(failed_decrypt_preserves_outputs)
     BOOST_CHECK(!responder.Decrypt(std::span{damaged_ciphertext}.subspan(BIP324Cipher::LENGTH_LEN), aad, ignore, decrypted));
     BOOST_CHECK(decrypted == decrypted_before);
     BOOST_CHECK(ignore);
+}
+
+BOOST_AUTO_TEST_CASE(xswiftec_inv_edge_vectors)
+{
+    // BIP324 xswiftec_inv edge vectors: byte-identical copy of
+    // test/functional/test_framework/crypto/xswiftec_inv_test_vectors.csv
+    // (the upstream BIP324 reference set). For every (u, x, case) row where
+    // the inverse exists, the production C ellswift decode path must map the
+    // 64-byte encoding u||t to a curve point whose X coordinate equals x.
+    // This is the C++-side gate for the vectors the Python framework
+    // self-test only exercises against its own pure-Python xswiftec_inv.
+    const std::string csv{reinterpret_cast<const char*>(test::data::xswiftec_inv_test_vectors.data()),
+                          test::data::xswiftec_inv_test_vectors.size()};
+    std::istringstream lines{csv};
+    std::string line;
+    BOOST_REQUIRE(std::getline(lines, line)); // header
+    size_t rows{0}, encodings{0};
+    while (std::getline(lines, line)) {
+        std::vector<std::string> fields;
+        for (size_t pos{0};;) {
+            const size_t comma{line.find(',', pos)};
+            if (comma == std::string::npos) { fields.push_back(line.substr(pos)); break; }
+            fields.push_back(line.substr(pos, comma - pos));
+            pos = comma + 1;
+        }
+        BOOST_REQUIRE_GE(fields.size(), 10u);
+        const auto u{ParseHex(fields[0])};
+        const auto x{ParseHex(fields[1])};
+        BOOST_REQUIRE_EQUAL(u.size(), 32u);
+        BOOST_REQUIRE_EQUAL(x.size(), 32u);
+        ++rows;
+        for (size_t c{0}; c < 8; ++c) {
+            if (fields[2 + c].empty()) continue; // xswiftec_inv rejects this case
+            const auto t{ParseHex(fields[2 + c])};
+            BOOST_REQUIRE_EQUAL(t.size(), 32u);
+            std::array<std::byte, 64> enc;
+            std::copy(u.begin(), u.end(), reinterpret_cast<uint8_t*>(enc.data()));
+            std::copy(t.begin(), t.end(), reinterpret_cast<uint8_t*>(enc.data()) + 32);
+            const CPubKey decoded{EllSwiftPubKey{enc}.Decode()};
+            BOOST_REQUIRE_MESSAGE(decoded.IsValid(), "decode failed for row " << rows << " case " << c);
+            BOOST_REQUIRE_EQUAL(decoded.size(), 33u);
+            BOOST_CHECK_EQUAL_COLLECTIONS(decoded.begin() + 1, decoded.begin() + 33, x.begin(), x.end());
+            ++encodings;
+        }
+    }
+    BOOST_REQUIRE_EQUAL(rows, 32u);
+    BOOST_REQUIRE_EQUAL(encodings, 98u); // exact: guards against silent CSV truncation
 }
 
 BOOST_AUTO_TEST_SUITE_END()

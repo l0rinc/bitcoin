@@ -227,3 +227,58 @@ reachable one — and it is clean.
 ## Rotation note
 Four cycles; v1+v2 transports and the ellswift edge-vector axis
 closed. Remaining queue: the oracle-delivery hardening cell above.
+
+## Cycle 5 (2026-07-30): xswiftec edge-vector C++ gate delivered (oracle O10), mutation-verified
+
+### Draw
+Rebuilt-queue draw (seed_raw=4478165777402910479, masked same,
+n=4, idx=3) -> xswiftec-oracle-delivery -> #108 (fifth cycle; c4
+queue cell "persistent C-side harness as regression gate"). Branch:
+audit/adversarial-artifact-c5 from cc334e9f5d (#74 c4 journal tip).
+
+### What was delivered
+The c4 scratch verification converted into a persistent in-tree
+gate over the PRODUCTION C decode path (c4 found the CSV was
+consumed in-tree only by the Python framework self-test):
+- src/test/data/xswiftec_inv_test_vectors.csv — byte-identical copy
+  of the framework CSV (cmp-verified; itself upstream BIP324
+  reference vectors, #81 c2 byte-drift-clean).
+- src/test/CMakeLists.txt — added to target_raw_data_sources
+  (embedded as test::data::xswiftec_inv_test_vectors via the
+  GenerateHeaderFromRaw rule, same mechanism as asmap.raw).
+- src/test/bip324_tests.cpp — new BOOST case
+  xswiftec_inv_edge_vectors: parses all 32 rows; for every ok-case
+  (non-empty t) builds the 64-byte encoding u||t, runs
+  EllSwiftPubKey::Decode() (production secp256k1_ellswift_decode),
+  requires IsValid + decoded X == annotated x. Exact-count guards
+  (rows==32, encodings==98) catch silent CSV truncation.
+
+### Evidence
+- cmake --build build-before --target test_bitcoin -j4 (header
+  regenerates via DEPENDS on the CSV).
+- build-before/bin/test_bitcoin --run_test=bip324_tests
+  -> No errors detected (all 98 decode/x checks pass).
+- MUTATION KILLED: row1 case2 t-tail byte flipped (a287466b ->
+  a2874600) -> x-comparison fails at bip324_tests.cpp:385; restore
+  byte-identical (cmp vs framework copy) -> green.
+- First draft asserted encodings>100; actual ok-case count is 98 —
+  corrected to the exact count (tighter gate, recorded so the
+  initial failure is not misread as a vector problem).
+
+### Verdict
+ORACLE DELIVERED (test infrastructure; mutation-verified). The
+production C ellswift decode now has a persistent edge-vector
+regression gate in the standard suite.
+
+### Limitations / queue
+- The bad-case rejection classes (xswiftec_inv returning None) are
+  not expressible through the public decode path — they remain
+  covered Python-side only; testing them C++-side would require
+  exposing secp256k1 internals (rejected: subtree divergence).
+- Remaining #108 queue: post-handshake v2 slowloris (long-wall,
+  low value). #108 is otherwise complete.
+
+## Rotation note
+Five cycles; transports, edge-vector verification, and the
+persistent gate are done. Marking #108 QUEUE-COMPLETE except the
+low-value slowloris cell.
