@@ -4144,7 +4144,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         const CBlockIndex* first_block{Assert(pindexPrev->GetAncestor(first_height))};
         if (block.GetBlockTime() < first_block->GetBlockTime()) {
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-negative-interval",
-                                 "the last block’s timestamp in the difficulty adjustment interval is earlier than the first block’s");
+                                 "the last block's timestamp in the difficulty adjustment interval is earlier than the first block's");
         }
     }
 
