@@ -1,5 +1,39 @@
 # Whole-history incomplete-fix and migration mining
 
+## Cycle 167: migration-side persistence follow-up
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `32`
+- Slug: `history-incomplete-fixes`
+- Branch: `uber-cycle-167-history-incomplete-fixes-20260730`
+- Gate HEAD: `c95f1fd976f0fe4914ac2ad8393269cdc8f2ab4c`; `origin/master` at `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD=42 1115`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Corrected goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The fresh gate had no tracked modifications and preserved all pre-existing untracked artifacts and unrelated processes. Cycles 43, 58, and 137 were searched before accepting this draw; their migration write-return, undo-output, and empty-`-connect` cells are excluded.
+
+### Scope and hypothesis queue
+
+This cycle mines historical persistence and migration fixes for a current sibling outside the already-fixed `CWallet::ApplyMigrationData()` writes. I will first map every migration-side write, transaction boundary, failure return, and restart-visible effect, then compare them with the historical commits and tests that motivated the earlier fixes. A candidate must demonstrate a distinct unchecked write, wrong transaction ownership, stale in-memory publication, or incomplete migration/recovery transition with an isolated fault-injection reproducer. The trust boundary is local wallet/database state plus user-supplied legacy or migration data; no default wallet or production database will be used.
+
+Initial queue:
+
+1. `WalletBatch` writes and transaction ownership in migration helpers not covered by `ApplyMigrationData()`.
+2. Address-book, descriptor, keypool, and metadata migration paths that commit state in more than one durable transaction.
+3. A non-wallet historical partial-fix shape only if the migration map yields no distinct current omission.
+
+### Confirmed finding: failed migration left a deleted auxiliary wallet in startup settings
+
+- Historical source: `0bf7b38bff` introduced the auxiliary-wallet settings writes inside `DoMigration()` before `RunWithinTxn()` applied the main-wallet migration. `4acd063ba6` changed those writes to honor `load_on_startup` but preserved their pre-transaction position. The auxiliary wallets are created with an `empty_context`, so failure cleanup only resets them locally and does not call `RemoveWallet()`, leaving any already-written setting behind.
+- Focused functional reproduction: the existing `test_failed_migration_cleanup` created a watch-only wallet, then deliberately blocked creation of `failed_solvables` with a pre-existing wallet database. On the unmodified binary, the test itself passed its existing cleanup assertions, but `/data/my_storage/tmp/cycle167-focus-pre-4/node0/regtest/settings.json` retained `"wallet": ["default_wallet", "failed_watchonly"]` even though `failed_watchonly` had been deleted. The scratch run used the v28.4 wallet-enabled release binary with BDB migration support and a current wallet-enabled binary; no default datadir was used.
+- Fix: remove both pre-transaction settings writes and perform them only after `RunWithinTxn()` returns success. A failed migration therefore cannot advertise an auxiliary wallet that cleanup removes. The existing `load_on_startup` behavior is preserved for successful migrations, including the no-load path.
+- Regression: extend `test_failed_migration_cleanup` to read `settings.json` and require both failed auxiliary names to be absent. The permanent test checks persisted state, not only `listwallets()` or filesystem cleanup.
+- Verification: `git diff --check` passed. The wallet-enabled v28.4 depends/configure/build completed with BDB and SQLite support. `CCACHE_DIR=/data/my_storage/tmp/cycle167-current-ccache cmake --build /data/my_storage/tmp/cycle89-build --target bitcoind -j2` passed after the source edit. The post-fix focused functional run at `/data/my_storage/tmp/cycle167-focus-final` passed and left only `"wallet": ["default_wallet"]`; the temporary pre-fix ordering mutation rebuilt successfully and failed at the new `failed_watchonly` assertion, with the old setting restored. No owned daemon processes remain.
+
+Verdict: confirmed and fixed. This is a local migration/restart correctness defect: a failed migration could cause a later startup to attempt loading a wallet directory that cleanup had removed. The next cycle must draw a fresh goal and avoid reopening this settings-transaction cell unless a distinct migration mode or recurrence supplies new evidence.
+
 ## Cycle 137: paired empty-node fix follow-up
 
 - Goal: mine a historical partial fix and its follow-up for an omitted analogous current site. The dedicated branch is `uber-cycle-137-whole-history-migration-20260730`; the cycle started at HEAD `6c2042c0898c5462402f764551cd70630f1924d7`, with `origin/master` `9611a356035be531d62bfc40879f388d5dc359c4`, merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1059 40`. The fresh gate passed tracked/index cleanliness, `git diff --check`, catalog/protocol/goal-TSV hashes, and preservation of wallet-test PID 777094. The first exact selector draw was `57`, a closed goal; the documented reroll `shuf -i 0-98 -n 1` returned `32`.

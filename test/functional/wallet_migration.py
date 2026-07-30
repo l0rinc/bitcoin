@@ -1074,6 +1074,11 @@ class WalletMigrationTest(BitcoinTestFramework):
 
         assert all(wallet not in self.master_node.listwallets() for wallet in ["failed", "failed_watchonly", "failed_solvables"])
 
+        with (self.master_node.chain_path / "settings.json").open(encoding="utf8") as settings_file:
+            wallet_settings = json.load(settings_file).get("wallet", [])
+        assert "failed_watchonly" not in wallet_settings
+        assert "failed_solvables" not in wallet_settings
+
         assert not (self.master_node.wallets_path / "failed_watchonly").exists()
         # Since the file in failed_solvables is one that we put there, migration shouldn't touch it
         assert solvables_path.exists()
