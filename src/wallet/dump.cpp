@@ -196,6 +196,7 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
     ReadDatabaseArgs(args, options);
     options.require_create = true;
     options.require_format = DatabaseFormat::SQLITE;
+    const bool wallet_path_exists = fs::exists(wallet_path);
     std::unique_ptr<WalletDatabase> database = MakeDatabase(wallet_path, options, status, error);
     if (!database) return false;
 
@@ -276,7 +277,9 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
     }
     // On failure, gather the paths to remove
     std::vector<fs::path> paths_to_remove = wallet->GetDatabase().Files();
-    if (!name.empty()) paths_to_remove.push_back(wallet_path);
+    // Only remove a wallet path created by this operation. In particular, removing
+    // an existing symlink would delete the symlink itself rather than its target.
+    if (!name.empty() && !wallet_path_exists) paths_to_remove.push_back(wallet_path);
 
     wallet.reset(); // The pointer deleter will close the wallet for us.
 

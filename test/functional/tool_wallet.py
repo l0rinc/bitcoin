@@ -311,6 +311,7 @@ class ToolWalletTest(BitcoinTestFramework):
         self.write_dump(dump_data, bad_sum_wallet_dump, skip_checksum=True)
         self.assert_raises_tool_error('Error: Missing checksum', '-wallet=badload', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
         assert not (self.nodes[0].wallets_path / "badload").is_dir()
+        bad_missing_checksum_wallet_dump = bad_sum_wallet_dump
         bad_sum_wallet_dump = self.nodes[0].datadir_path / "wallet-bad_sum3.dump"
         dump_data["checksum"] = "2" * 10
         self.write_dump(dump_data, bad_sum_wallet_dump)
@@ -320,6 +321,17 @@ class ToolWalletTest(BitcoinTestFramework):
         self.write_dump(dump_data, bad_sum_wallet_dump)
         self.assert_raises_tool_error('Error: Checksum is not the correct size', '-wallet=badload', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
         assert not (self.nodes[0].wallets_path / "badload").is_dir()
+
+        if os.name != "nt":
+            self.log.info('Checking createfromdump preserves an existing symlink wallet path on failure')
+            symlink_target = self.nodes[0].datadir_path / "symlink-target"
+            symlink_path = self.nodes[0].wallets_path / "bad_symlink"
+            symlink_target.mkdir()
+            os.symlink(symlink_target, symlink_path)
+            self.assert_raises_tool_error('Error: Missing checksum', '-wallet=bad_symlink', '-dumpfile={}'.format(bad_missing_checksum_wallet_dump), 'createfromdump')
+            assert symlink_path.is_symlink()
+            assert symlink_target.is_dir()
+            assert not (symlink_target / "wallet.dat").exists()
 
     def test_chainless_conflicts(self):
         self.log.info("Test wallet tool when wallet contains conflicting transactions")
