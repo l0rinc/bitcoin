@@ -2,6 +2,16 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 159 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `81` (`spec-vector-drift`). The dedicated branch is `uber-cycle-159-spec-vector-drift-20260730`; start HEAD was `b89ef9a7569c2120c0ee62148b4d6fb729644d9a`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `42 1100`.
+- This cycle audited the unclosed BIP352 silent-payment specification/vector cell. The authoritative BIP checkout resolved to `9783d61f1b9c81231581fee026c8e8cb9499d265`; its JSON vector file matched the checked-in `bip352_send_and_receive_test_vectors.json` byte-for-byte with SHA-256 `f5f9ed4afd76a1b76f3c70b1cbe67532f89abbe559f8e02d7fc3d8ecb93af4a1`. The current BIP is version 1.1.1 and includes the intermediate-zero/final-nonzero and K_max updates.
+- The local generator matched the current upstream libsecp generator (`3bebf03f30f7f7929c6a3d1b26bcd04860b15ffe0d35354104010aec744d5759`), and regenerating `vectors.h` was byte-identical (`8d88aead1f2f359aca31ac8c803001c55b1231be187839cafbe9c6959cedbbcc`). The corpus has 28 cases, including the two recent boundary/corner-case vectors.
+- The independent BIP reference runner printed all 28 cases and `All tests passed`. The portable and x86_64 assembly LTO consumers from the preceding matrix both passed the complete `silentpayments` module with seed `1593520000000001`, including `run_silentpayments_test_vectors` (11.215s and 11.113s respectively).
+- Verdict: no current specification, vector, generator, or consumer drift was confirmed. No source/test change was justified. The detailed evidence and exact commands are in `agent-journal/spec-vector-drift.md`.
+- Limitations: the local binaries were reused because Cycle 159 made no source changes; ARM, 32-bit, big-endian, QEMU, GCC/full-LTO, sanitizer, Valgrind, timing, and PGO/BOLT evidence remain outside this cell. The independent BIP checkout and caches were outside the repository. PIDs `777094` and `956381` remained preserved and untouched.
+- A single journal/state close commit follows, authored as `Lőrinc <pap.lorinc@gmail.com>`. The next cycle must perform a fresh gate and exact selector draw.
+
 ## Cycle 158 Completion
 
 - Exact selector: `shuf -i 0-98 -n 1` -> `69` (`backend-differential`). The dedicated branch is `uber-cycle-158-backend-differential-20260730`; start HEAD was `b79b80b7ea47a2a13fc32e2337c2b96b3cd9eb70`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `42 1099`.
