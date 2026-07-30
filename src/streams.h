@@ -658,9 +658,10 @@ public:
                 nSrcPos - m_read_pos,
                 nReadLimit - m_read_pos,
             }))};
-            const auto it_start{vchBuf.begin() + buf_offset};
-            const auto it_find{std::find(it_start, it_start + len, byte)};
-            const size_t inc{size_t(std::distance(it_start, it_find))};
+            const auto* const it_start{vchBuf.data() + buf_offset};
+            const auto* const it_find{static_cast<const std::byte*>(std::memchr(
+                it_start, std::to_integer<unsigned char>(byte), len))};
+            const size_t inc{it_find ? size_t(it_find - it_start) : len};
             m_read_pos += inc;
             if (inc < len) break;
             buf_offset += inc;
