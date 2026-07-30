@@ -28,6 +28,7 @@
 #include <test/util/json.h>
 #include <test/util/setup_common.h>
 #include <test/util/transaction_utils.h>
+#include <tinyformat.h>
 #include <univalue.h>
 #include <util/chaintype.h>
 #include <util/fs.h>
@@ -1242,6 +1243,32 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
 
         // CheckSigopsBIP54 will return false because there is 126 CMS that account for 20 each.
         CheckExceedsBIP54Limits(CTransaction(tx2), coins, test_vectors, "Invalid bare script with 126 CHECKMULTISIGs each accounted for 20 BIP54-sigops");
+    }
+
+    // Only OP_1 through OP_16 select accurate multisig accounting. Other
+    // encodings of small numbers, negative one, and values above 16 all use
+    // the conservative 20-sigop fallback.
+    const auto check_multisig_fallback = [&](CScript count_prefix, std::string comment) {
+        CCoinsViewCache coins{&CoinsViewEmpty::Get()};
+        CMutableTransaction tx2;
+        CScript spk{std::move(count_prefix)};
+        spk << OP_CHECKMULTISIG;
+        for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS - 20 + 1; ++i) {
+            spk << OP_CHECKSIG;
+        }
+
+        CMutableTransaction tx_create;
+        tx_create.vout.emplace_back(0, spk);
+        AddCoins(coins, CTransaction{tx_create}, 0, false);
+        tx2.vin.emplace_back(tx_create.GetHash(), 0);
+        CheckExceedsBIP54Limits(CTransaction{tx2}, coins, test_vectors, std::move(comment));
+    };
+
+    check_multisig_fallback(CScript{} << OP_1NEGATE, "OP_1NEGATE before CHECKMULTISIG uses the 20-sigop fallback");
+    for (const int64_t count : {1, 15, 16, 17, 20, 21, 100}) {
+        CScript prefix;
+        prefix << CScriptNum{count}.getvch();
+        check_multisig_fallback(std::move(prefix), strprintf("Push-encoded %d before CHECKMULTISIG uses the 20-sigop fallback", count));
     }
 
     // Note this is also a limitation for legitimate Scripts, for instance if the arguments to
