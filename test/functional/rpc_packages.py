@@ -91,6 +91,7 @@ class RPCPackagesTest(BitcoinTestFramework):
         self.test_rbf()
         self.test_submitpackage()
         self.test_maxfeerate_submitpackage()
+        self.test_low_fee_two_parent_cpfp()
         self.test_maxburn_submitpackage()
 
     def test_independent(self, coin):
@@ -511,6 +512,64 @@ class RPCPackagesTest(BitcoinTestFramework):
         assert "error" not in pkg_result["tx-results"][chained_txns_burn[0]["wtxid"]]
         assert_equal(pkg_result["tx-results"][tx.wtxid_hex]["error"], "scriptpubkey")
         assert_equal(node.getrawmempool(), [chained_txns_burn[0]["txid"]])
+
+    def test_low_fee_two_parent_cpfp(self):
+        node = self.nodes[0]
+        self.log.info("Submit a two-parent package where the child supplies the package fee")
+
+        parent1 = self.wallet.create_self_transfer(fee=Decimal("0"), fee_rate=Decimal("0"), confirmed_only=True)
+        parent2 = self.wallet.create_self_transfer(fee=Decimal("0"), fee_rate=Decimal("0"), confirmed_only=True)
+        child = self.wallet.create_self_transfer_multi(
+            utxos_to_spend=[parent1["new_utxo"], parent2["new_utxo"]],
+            fee_per_output=int(DEFAULT_FEE * 5 * COIN),
+        )
+        package = [parent1, parent2, child]
+
+        submit_result = node.submitpackage([tx["hex"] for tx in package], maxfeerate=0)
+        assert_equal(submit_result["package_msg"], "success")
+
+        txids = [tx["txid"] for tx in package]
+        wtxids = [tx["wtxid"] for tx in package]
+        vsizes = [tx["tx"].get_vsize() for tx in package]
+        fees = [tx["fee"] for tx in package]
+        total_vsize = sum(vsizes)
+        total_fee = sum(fees)
+        mempool = node.getrawmempool(True)
+        assert_equal(set(mempool), set(txids))
+        assert_equal(node.getmempoolinfo()["size"], 3)
+        assert_equal(node.getmempoolinfo()["bytes"], total_vsize)
+        assert_equal(node.getmempoolinfo()["total_fee"], total_fee)
+
+        for tx, wtxid, vsize, fee in zip(package, wtxids, vsizes, fees):
+            result = submit_result["tx-results"][wtxid]
+            assert_equal(result["txid"], tx["txid"])
+            assert_equal(result["vsize"], vsize)
+            assert_equal(result["fees"]["base"], fee)
+
+        parent1_entry = mempool[parent1["txid"]]
+        parent2_entry = mempool[parent2["txid"]]
+        child_entry = mempool[child["txid"]]
+        for parent_entry, parent in [(parent1_entry, parent1), (parent2_entry, parent2)]:
+            assert_equal(parent_entry["ancestorcount"], 1)
+            assert_equal(parent_entry["ancestorsize"], parent["tx"].get_vsize())
+            assert_equal(parent_entry["fees"]["ancestor"], parent["fee"])
+            assert_equal(parent_entry["descendantcount"], 2)
+            assert_equal(parent_entry["descendantsize"], parent["tx"].get_vsize() + child["tx"].get_vsize())
+            assert_equal(parent_entry["fees"]["descendant"], total_fee)
+            assert_equal(parent_entry["spentby"], [child["txid"]])
+            assert_equal(node.getmempooldescendants(parent["txid"]), [child["txid"]])
+
+        assert_equal(child_entry["ancestorcount"], 3)
+        assert_equal(child_entry["ancestorsize"], total_vsize)
+        assert_equal(child_entry["fees"]["ancestor"], total_fee)
+        assert_equal(child_entry["descendantcount"], 1)
+        assert_equal(child_entry["descendantsize"], child["tx"].get_vsize())
+        assert_equal(child_entry["fees"]["descendant"], child["fee"])
+        assert_equal(set(child_entry["depends"]), {parent1["txid"], parent2["txid"]})
+        assert_equal(set(node.getmempoolancestors(child["txid"])), {parent1["txid"], parent2["txid"]})
+
+        self.generate(node, 1)
+        assert_equal(node.getrawmempool(), [])
 
     def test_submitpackage_with_ancestors(self):
         self.log.info("Test that submitpackage can send a package that has in-mempool ancestors")
