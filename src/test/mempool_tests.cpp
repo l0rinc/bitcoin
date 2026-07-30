@@ -4179,4 +4179,45 @@ BOOST_FIXTURE_TEST_CASE(MempoolV2DisabledMetadataOptions, TestChain100Setup)
     BOOST_CHECK_EQUAL(destination.size(), 0U);
 }
 
+BOOST_FIXTURE_TEST_CASE(MempoolV2FeeOptionDisabledUnbroadcastEnabled, TestChain100Setup)
+{
+    bilingual_str error;
+    CTxMemPool::Options source_options{MemPoolOptionsForTest(m_node)};
+    CTxMemPool source_pool{source_options, error};
+    BOOST_REQUIRE(error.empty());
+
+    const CTransactionRef tx = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns.front(), 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+    TestMemPoolEntryHelper entry;
+    {
+        LOCK2(::cs_main, source_pool.cs);
+        TryAddToMempool(source_pool, entry.Fee(1000).Time(Now<NodeSeconds>()).FromTx(tx));
+    }
+    source_pool.PrioritiseTransaction(tx->GetHash(), 7000);
+    source_pool.AddUnbroadcastTx(tx->GetHash());
+
+    const fs::path dump_path = m_path_root / "mempool-v2-fee-disabled-unbroadcast-enabled.dat";
+    BOOST_REQUIRE(node::DumpMempool(source_pool, dump_path, fsbridge::fopen, true));
+
+    CTxMemPool& destination = *Assert(m_node.mempool);
+    BOOST_REQUIRE(node::LoadMempool(destination, dump_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = false,
+        .apply_unbroadcast_set = true,
+    }));
+    BOOST_REQUIRE_EQUAL(destination.size(), 1U);
+    BOOST_CHECK(destination.exists(tx->GetHash()));
+    BOOST_CHECK_EQUAL(destination.info(tx->GetHash()).nFeeDelta, 0);
+    BOOST_CHECK(destination.GetPrioritisedTransactions().empty());
+    BOOST_CHECK(destination.GetUnbroadcastTxs() == std::set<Txid>{tx->GetHash()});
+
+    BOOST_REQUIRE(fs::remove(dump_path));
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.RemoveUnbroadcastTx(tx->GetHash());
+        destination.removeRecursive(CTransaction(*tx), REMOVAL_REASON_DUMMY);
+    }
+    BOOST_CHECK_EQUAL(destination.size(), 0U);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
