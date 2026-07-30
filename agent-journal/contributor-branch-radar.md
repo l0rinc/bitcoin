@@ -576,3 +576,30 @@ Nothing to assess. Radar cell closed.
 
 ## Rotation note
 Ten cycles; radar quiet.
+
+## Cycle 11 (2026-07-30): periodic re-scan — both remotes quiet
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=17777575239433090151, masked 8554203202578314343, index 1
+(of 2) -> #65 (eleventh cycle; periodic radar). Branch:
+audit/contributor-radar-c11 from 01e2eb7549 (#69 c4 journal tip).
+
+### Result
+- l0rinc/master: unchanged (same upstream merges; no new fork
+  commits). 859 branches.
+- knots 29.x-knotsfixes: tip unchanged (d941a2618b); latest tag
+  unchanged (v29.3.knots20260508).
+
+### Verdict
+Nothing new to assess. Radar cell closed.
+
+### Exact commands
+- git fetch l0rinc --prune; git ls-remote --heads l0rinc
+- git fetch --depth=40 knots 29.x-knots 29.x-knotsfixes
+
+### Limitations / queue
+- Next radar interval per rotation.
+
+## Rotation note
+Eleven cycles; radar quiet.
