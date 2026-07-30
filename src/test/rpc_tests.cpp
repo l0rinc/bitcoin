@@ -26,6 +26,7 @@
 
 #include <any>
 #include <array>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -134,6 +135,37 @@ UniValue RPCTestingSetup::CallRPC(std::string args)
 
 
 BOOST_FIXTURE_TEST_SUITE(rpc_tests, RPCTestingSetup)
+
+#if defined(__linux__)
+BOOST_AUTO_TEST_CASE(rpc_cookie_write_failure_preserves_existing_file)
+{
+    const fs::path cookie_path{m_path_root / ".cookie"};
+    fs::path cookie_path_tmp{cookie_path};
+    cookie_path_tmp += ".tmp";
+
+    {
+        std::ofstream cookie_file{cookie_path.std_path()};
+        BOOST_REQUIRE(cookie_file.is_open());
+        cookie_file << "__cookie__:previous";
+    }
+
+    std::error_code ec;
+    fs::create_symlink(fs::path{"/dev/full"}, cookie_path_tmp, ec);
+    BOOST_REQUIRE(!ec);
+
+    gArgs.ForceSetArg("-rpccookiefile", fs::PathToString(cookie_path));
+    std::string user, pass;
+    BOOST_CHECK(GenerateAuthCookie(std::nullopt, user, pass) == AuthCookieResult::Error);
+
+    std::ifstream cookie_file{cookie_path.std_path()};
+    BOOST_REQUIRE(cookie_file.is_open());
+    const std::string saved_cookie{std::istreambuf_iterator<char>{cookie_file}, std::istreambuf_iterator<char>{}};
+    BOOST_CHECK_EQUAL(saved_cookie, "__cookie__:previous");
+
+    fs::remove(cookie_path_tmp, ec);
+    fs::remove(cookie_path, ec);
+}
+#endif
 
 BOOST_AUTO_TEST_CASE(jsonrpc_error_shape)
 {

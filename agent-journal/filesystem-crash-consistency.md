@@ -1,5 +1,47 @@
 # Filesystem, power-loss, and crash-consistency injection
 
+## Cycle 134: RPC cookie partial-write recovery
+
+### Selection and fresh gate
+
+- Selected by exact `shuf -i 0-98 -n 1` -> `72` (`filesystem-crash-consistency`) after the Cycle 133 gate; no reroll was needed.
+- Branch: `uber-cycle-134-filesystem-crash-consistency-20260730`.
+- Cycle-start HEAD: `55585fa9a2b54ffc61c06439a16f475488926ae1`; `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `40 1054`.
+- The gate passed fetch, tracked/index cleanliness, `git diff --check`, all four catalog/protocol hashes, and process checks. PID `777094` (`wallet_tests`, parent `725042`) was preserved. Known unrelated untracked artifacts remain outside the cycle.
+- Catalog hashes: reusable goals `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, random prompt `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, goals TSV `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and uber protocol `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+### Distinct scope and hypothesis
+
+Cycle 113 already fixed direct-write banlist truncation and excluded the settings write/close check fixed by `0654511e1b`. This cycle selected the remaining temporary-file boundary for RPC authentication cookies. `GenerateAuthCookie()` writes credentials to `.cookie.tmp`, then renames that file into `.cookie`, but previously ignored both the stream write state and the state after `close()`. The falsifiable hypothesis was that an `EIO`/short-write schedule could make the daemon report successful cookie generation while publishing an empty or partial credential, replacing a previously valid cookie and leaving restart/authentication inconsistent.
+
+### Independent pre-fix reproduction
+
+A scratch `LD_PRELOAD` library at `/data/my_storage/tmp/cycle134_cookie_partial_write.c` was compiled with `gcc -shared -fPIC -O2 ... -ldl`. It returns `EIO` for writes, `writev`, `pwrite`, `fwrite`, and `fflush` on descriptors whose path contains `.cookie.tmp`, and leaves all other paths unchanged. The older pre-fix daemon `/data/my_storage/tmp/cycle124-wallet-tool/bin/bitcoind` was `v31.99.0-a6bc9afb5417`.
+
+In scratch datadir `/data/my_storage/tmp/cycle134-cookie-pre-2`, an existing 19-byte `/regtest/.cookie` containing `__cookie__:previous` was present before startup. With `FAIL_COOKIE_WRITE=1` and the hook, the old daemon logged both `Generated RPC authentication cookie` and `Using random cookie authentication`, reached the HTTP startup path, and was then killed with `SIGKILL`. Afterward `.cookie` was `0` bytes and `.cookie.tmp` no longer existed. This is an independent durable-state replacement proof: a write failure was reported as successful initialization and destroyed the prior usable credential.
+
+### Fix and regression evidence
+
+`GenerateAuthCookie()` now checks `file.fail()` immediately after writing and again after `file.close()`. Either failure returns `AuthCookieResult::Error`, so `InitRPCAuthentication()` aborts before `RenameOver()` can publish the failed temporary file. `rpc_tests/rpc_cookie_write_failure_preserves_existing_file` creates an existing cookie and a `.cookie.tmp` symlink to Linux `/dev/full`; it verifies the result is `Error` and the prior cookie remains byte-for-byte unchanged.
+
+The fixed tree was built with:
+
+    CCACHE_DIR=/data/my_storage/tmp/cycle134-ccache cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin bitcoind -j4
+
+The focused regression passed after creating its scratch `TMPDIR`:
+
+    mkdir -p /data/my_storage/tmp/cycle134-test-tmp
+    TMPDIR=/data/my_storage/tmp/cycle134-test-tmp /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=rpc_tests/rpc_cookie_write_failure_preserves_existing_file --log_level=test_suite
+    *** No errors detected
+
+The full `rpc_tests` suite passed 23 cases; `rpc_tests,settings_tests,fs_tests,netbase_tests` passed 58 cases; and the complete current-tree unit binary ran 1,217 cases and exited 0 with `*** No errors detected`. The first focused invocation was rejected as an environment setup failure because its requested `TMPDIR` did not exist; the rerun used the explicit `mkdir -p` above.
+
+The fixed daemon `/data/my_storage/tmp/cycle89-build/bin/bitcoind` was run in `/data/my_storage/tmp/cycle134-cookie-post-1` with the same hook and a prior 19-byte cookie. It exited status 1, logged `Unable to close RPC authentication cookie file` followed by `Unable to start HTTP server`, preserved the old cookie at 19 bytes, and left a zero-byte `.cookie.tmp`. Starting normally from that same directory then produced a fresh 75-byte cookie with the `__cookie__:` prefix, proving the failed temporary state is recoverable on restart.
+
+### Verdict and handoff
+
+Confirmed local persistence/authentication-integrity finding. The old code treated a failed temporary credential write as successful and renamed it over the durable cookie; the fix fails closed before publication and preserves restart recovery. Source, regression test, and this journal are one self-contained finding commit. The remaining goal-72 queue is flat block/undo `FileCommit` and `DirectoryCommit` fault ordering, chainstate/index metadata publication after failed flush, and other atomic-rename users; do not repeat the banlist or settings cells. Scratch artifacts are under `/data/my_storage/tmp/cycle134-cookie-*`. Status transitions: `scouted -> independently reproduced -> fixed -> fault-replayed -> restart-verified -> reviewed`.
+
 ## Cycle 113: durable-boundary fault injection
 
 ### Gate and scope
