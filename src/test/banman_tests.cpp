@@ -82,6 +82,43 @@ BOOST_AUTO_TEST_CASE(clear_and_unban)
     fs::remove(banlist_path + ".json");
 }
 
+BOOST_AUTO_TEST_CASE(write_uses_temp_file)
+{
+    FakeNodeClock clock{777s};
+    const fs::path banlist_path{m_args.GetDataDirBase() / "banlist_atomic_write_test"};
+    const fs::path banlist_json{banlist_path + ".json"};
+    const fs::path banlist_tmp{banlist_path + ".json.tmp"};
+    fs::remove(banlist_json);
+    fs::remove(banlist_tmp);
+
+    const CSubNet first_subnet{LookupSubNet("1.2.3.0/24")};
+    const CSubNet second_subnet{LookupSubNet("5.6.7.0/24")};
+    BOOST_REQUIRE(first_subnet.IsValid());
+    BOOST_REQUIRE(second_subnet.IsValid());
+
+    {
+        BanMan banman{banlist_path, /*client_interface=*/nullptr, /*default_ban_time=*/0};
+        banman.Ban(first_subnet, /*ban_time_offset=*/10, /*since_unix_epoch=*/false);
+    }
+
+    BOOST_REQUIRE(WriteBinaryFile(banlist_tmp, "stale temporary banlist"));
+    {
+        BanMan banman{banlist_path, /*client_interface=*/nullptr, /*default_ban_time=*/0};
+        banman.Ban(second_subnet, /*ban_time_offset=*/10, /*since_unix_epoch=*/false);
+    }
+
+    BOOST_CHECK(!fs::exists(banlist_tmp));
+    banmap_t entries;
+    {
+        BanMan banman{banlist_path, /*client_interface=*/nullptr, /*default_ban_time=*/0};
+        banman.GetBanned(entries);
+    }
+    BOOST_CHECK_EQUAL(entries.size(), 2U);
+    BOOST_CHECK_EQUAL(entries.count(first_subnet), 1U);
+    BOOST_CHECK_EQUAL(entries.count(second_subnet), 1U);
+    fs::remove(banlist_json);
+}
+
 BOOST_AUTO_TEST_CASE(expired_at_boundary_is_not_returned)
 {
     FakeNodeClock clock{777s};
