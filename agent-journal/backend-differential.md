@@ -1,5 +1,49 @@
 # SIMD, Assembly, and Portable-Reference Backend Differential
 
+## Cycle 133: sanitized assembly and portable backend differential
+
+### Selection and fresh gate
+
+- Selector: exact shuf -i 0-98 -n 1 -> 69 (backend-differential); no reroll was needed because the previous cycle was goal 33.
+- Branch: uber-cycle-133-backend-differential-20260730.
+- Gate and cycle start HEAD: b3bca20ce48f1c69123bf226f2ed5aa5896f1a2b.
+- Gate origin/master: 9611a356035be531d62bfc40879f388d5dc359c4; merge-base: a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b; divergence: 40 1052.
+- Tracked state was clean, git diff --check passed, the four catalog/protocol hashes matched, and PID 777094 was preserved. Known unrelated untracked artifacts remain outside the cycle scope.
+- Catalog hashes: reusable goals 5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8, random prompt 10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec, goals TSV babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb, uber protocol 954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0.
+
+### Distinct scope and hypothesis
+
+Cycle 123 already compared full-module Release libsecp256k1 builds under GCC 12 and Clang 19 with assembly OFF and x86_64 assembly enabled. This cycle selects the explicitly open sanitizer boundary: current full modules built with Clang 19 ASan+UBSan, comparing portable arithmetic against the x86_64 assembly configuration. The hypothesis is that sanitizer instrumentation or error-path checking exposes an optimized/reference divergence in serialized output, status, invalid-input behavior, or an internal invariant that ordinary Release tests miss.
+
+Both trees used the same current source, Debug, O1, static library output, ECDH/recovery/extrakeys/Schnorr/MuSig/ElligatorSwift/Silent Payments enabled, fixed SECP256K1_ASM=OFF versus SECP256K1_ASM=x86_64, and ASan+UBSan with frame pointers. Each build completed configure and 10/10 Ninja steps. The assembly tree's build graph contains USE_ASM_X86_64=1; the portable tree reports assembly OFF.
+
+### Sanitized library verification
+
+The fixed command was tests --iterations=2 --seed=0123456789abcdef --jobs=2 --log=1, with ASAN_OPTIONS=detect_leaks=1:abort_on_error=1:halt_on_error=1 and UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1.
+
+| Backend | tests | noverify_tests | exhaustive_tests |
+|---|---|---|---|
+| portable, ASAN+UBSAN | exit 0; 70.584 seconds | exit 0; 35.302 seconds | exit 0; order 13, no problems found |
+| x86_64 assembly, ASAN+UBSAN | exit 0; 71.541 seconds | exit 0; 35.278 seconds | exit 0; order 13, no problems found |
+
+Both normal test runs covered the current ECDH, recovery, ECDSA, extrakeys, Schnorr, MuSig, ElligatorSwift, Silent Payments, checksum, byte-order, and constant-time helper groups. The no-VERIFY runs and exhaustive order-13 runs also exited 0. A scan of all six test/probe logs found zero AddressSanitizer, UndefinedBehaviorSanitizer, runtime-error, or sanitizer-summary lines.
+
+### Independent cross-backend probe
+
+The existing independent 512-vector probe agent-journal/backend_differential_cycle123_probe.cpp was compiled with Clang 19 and ASan+UBSan against each static library. It covers public-key creation and serialization, default and custom-hash ECDH in both directions, EllSwift create/decode, BIP324 EllSwift XDH in both directions, and invalid-secret status/output paths.
+
+Both probe processes exited 0 and printed exactly:
+
+    vectors=512 failures=0 digest=fe288ea1ddb151fb
+
+cmp returned 0 for the two logs. The logs have identical SHA256 c9799f98016b16dd5f4faff7ca8cffd505eea4a75defe60547f371953e64b308. This independent output/status comparison agrees with the library test suites and does not depend on the implementation's own expected-value tables.
+
+### Verdict and handoff
+
+The bounded hypothesis is dismissed for a new repository defect. The ASan+UBSan portable and x86_64 assembly backends produced identical probe output/status and passed the same normal, no-VERIFY, and exhaustive test suites without sanitizer diagnostics. No production or permanent test change is justified.
+
+Scratch artifacts and logs are under /data/my_storage/tmp/cycle133-secp-sanitized-off and /data/my_storage/tmp/cycle133-secp-sanitized-asm. The result is an x86_64 little-endian Clang 19 sanitizer comparison; ARM32/cross architecture, 32-bit, big-endian, LTO/PGO, Valgrind/ctime, and timing equivalence remain open. Do not repeat the prior Release compiler/assembly cell without one of those changed evidence sources.
+
 ## Cycle 114: CRC32C SSE4.2 and portable backend differential
 
 ### Selection and gate
