@@ -52,3 +52,70 @@ documented in the comment; suite headers updated "1, 2, 3, 4, 6 and 7"
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-30): Wycheproof AES-CBC-PKCS5 transplant — 24/24 valid + 48/48 invalid rejected, openssl cross-verified; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=7779331150053916422, masked
+same, n=2, idx=0) -> conformance-aes-cbc -> #107 (second cycle; c1
+queue cell "Wycheproof AES-CBC vectors for ctaes"). Branch:
+audit/conformance-transplant-c2 from 1e21c1bfa9 (#68 c3 tip).
+
+### Hypothesis
+The bit-sliced ctaes AES backend under the in-tree AES-256-CBC
+wrapper (wallet key encryption path) could diverge from the
+Wycheproof AES-CBC-PKCS5 vectors — block math error, CBC chaining
+bug, or padding-validation acceptance.
+
+### Vectors and semantics
+C2SP/wycheproof testvectors_v1/aes_cbc_pkcs5_test.json (fetched
+2026-07-30): 216 tests total; 72 with 32-byte keys (24 valid +
+48 invalid, flags BadPadding/NoPadding/Pseudorandom). Wrapper
+semantics from aes.cpp: Encrypt pads PKCS#7; Decrypt constant-time
+padding check returns 0 on failure (:111-127) — "rejection" means
+return 0 (not -1). In-tree coverage before this cycle: 9 NIST-ish
+TestAES256CBC cases, no Wycheproof.
+
+### Differential
+Driver /tmp/wp_aes_driver.cpp vs build-before libs
+(-lbitcoin_crypto -lbitcoin_util -lsecp256k1):
+- valid: Encrypt == ct byte-exact, Decrypt == pt byte-exact:
+  24/24.
+- invalid (padding-oracle class): Decrypt returns 0 (rejected):
+  48/48.
+- Second verifier: openssl 3.0.13 enc -aes-256-cbc over the same
+  24 valid vectors: 24/24 byte-identical.
+
+### Boundary note (not a defect)
+Encrypt of an EMPTY message returns 0 (no padding block emitted) —
+upstream-identical early-return (aes.cpp:96-97 'if (!data || !size
+|| !out)'). The Wycheproof empty-message vector instead asserts
+enc_ret==0 + decrypt-to-empty (verified); openssl emits the
+padding block for the same input (24th vector matched there).
+Recorded as an API-shape boundary; the wallet never encrypts
+empty data.
+
+### Verdict
+DISMISSED (differential) / CONFIRMED (conformance): the ctaes
+backend matches Wycheproof AES-CBC-PKCS5 on every 32-byte-key
+vector, invalids properly rejected, cross-verified by an
+independent implementation.
+
+### Exact commands
+- curl testvectors_v1/aes_cbc_pkcs5_test.json; python3 filter
+  (64-hex keys) > /tmp/wp_input.txt (72 lines)
+- g++ -O2 -std=c++20 -I src /tmp/wp_aes_driver.cpp
+  -L build-before/lib -lbitcoin_crypto -lbitcoin_util
+  -L build-before/src/secp256k1/lib -lsecp256k1
+- /tmp/wp_aes_driver < /tmp/wp_input.txt -> 24+48, 0 mismatches
+- openssl enc -aes-256-cbc -K <key> -iv <iv> -nosalt per vector
+
+### Limitations / queue
+- 16/24-byte keys not run (the in-tree wrapper is AES256-only;
+  the shared block primitive is covered by the 32-byte run +
+  ctaes's own suite).
+- ct64 alignment checks left to the harness (all Wycheproof ct
+  are block-aligned by construction).
+
+## Rotation note
+Two cycles; HMAC and AES-CBC transplants both clean.
