@@ -311,6 +311,7 @@ BASE_SCRIPTS = [
     'feature_reindex_init.py',
     'feature_cltv.py',
     'feature_bip54.py',
+    'feature_bip54_reindex.py',
     'rpc_uptime.py',
     'feature_discover.py',
     'wallet_resendwallettransactions.py',
