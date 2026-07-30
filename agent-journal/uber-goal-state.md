@@ -2,6 +2,14 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 153 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `81` (`spec-vector-drift`); no reroll was needed because the prior closed goal was 13.
+- The dedicated branch is `uber-cycle-153-spec-vector-drift-20260730`; start HEAD was `0ad309ac7e393a6d7a56a85438abaa44f3804df6`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `1090 42` (`origin/master...HEAD`).
+- The distinct finding was deterministic test-vector generator drift. Commit `7c200ece80` migrated the checked-in `src/test/data/key_io_valid.json` metadata from `test` to `testnet4`, but `contrib/testgen/gen_key_io_test_vectors.py` still emitted `test` in four Base58 and four Bech32 templates. Before the fix, regenerating 70 valid vectors differed only in 18 chain metadata fields; this would send regenerated tests through `ChainType::TESTNET` rather than the checked-in `ChainType::TESTNET4` contract.
+- Updated those eight generator tuples to `testnet4`. After the fix, the 70-vector generator output is byte-identical to `key_io_valid.json` with SHA-256 `90bd1d35d12763e0d00c5400b2c9fe551e532a821e1e466c20cad3aced70a7fe`. The invalid generator emitted valid JSON, `py_compile` passed, and `test_bitcoin --run_test=key_io_tests --log_level=test_suite` passed all 4 cases with no errors. `git diff --check` passed.
+- Source/journal commit `15e5353ba7` (`test: sync key IO vector generator metadata`) is authored as `Lőrinc <pap.lorinc@gmail.com>`. The detailed evidence is in `agent-journal/spec-vector-drift.md`; the current mainnet-only RPC BIP350 scope was not broadened. Preserve PID `777094`, unrelated untracked artifacts, and `/data/my_storage/tmp/cycle153-*` evidence. A separate state close commit follows; the next cycle must perform a fresh gate and exact selector draw.
+
 ## Cycle 152 Completion
 
 - Exact selector: `shuf -i 0-98 -n 1` -> `13` (`secret-lifetime-zeroization`); no reroll was needed because it was distinct from the just-closed goal 3.
