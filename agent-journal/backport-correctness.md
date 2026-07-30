@@ -1,5 +1,86 @@
 # Backport Correctness Audit
 
+## Cycle 165: 28.x #35214 backport batch
+
+### Draw, gate, and scope
+
+- Draw sequence: exact `shuf -i 0-98 -n 1` returned `33`, `82`, `98`, `49`, then `66`; goals 33, 82, 98, and 49 were excluded because their journals record closed cells. Goal 66 was retained because its queue explicitly leaves distinct 28.x/29.x/30.x release batches and upgrade/backport cells.
+- Selected goal: `backport-correctness` (Cherry-pick, backport, and release-branch correctness audit).
+- Branch: `uber-cycle-165-backport-correctness-20260730`.
+- Gate HEAD: `ac5dd3ed2a448417504149650b901457c24e8690`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `1111 42` (HEAD-only, origin-only).
+- Selected release ref: `origin/28.x` at `de328509029d36b0541ddf25700ac19a0de6a5c8` (`v28.4` plus `#35213`). The batch under audit is merge `2023de53f073717b28c7d6c87790d221b59c81ab` (`#35214`), whose second-parent commits are `2d3edd9640` (CI seccomp), `2c5242d24f` (Boost multi-index compatibility), and release-note commit `c1c2184f45`.
+- Prior exclusions: Cycles 36 and 66 covered 31.x `#35331`/CVE-2024-52911, Cycle 67 covered 29.x `#34370`, and Cycle 144 covered 30.x `#35232`; Cycle 165 uses the distinct 28.x batch and its 28.x-specific source/configuration context.
+- The tracked tree and `git diff --check` were clean at the gate. The known untracked agent artifacts, `node_modules/`, `package*.json`, `test/cache/`, and unrelated PIDs `777094` and `956381` were preserved and are outside this cycle's scope.
+
+### Initial hypotheses and evidence plan
+
+1. The Boost 1.91 `multi_index` backport may omit a 28.x container or alter an index/type contract while fixing compilation. Compare the release patch with its source-side fix, compile the release tree against the available system Boost and a newer Boost where possible, and run the mempool/transaction-request/miner paths plus a behavior-sensitive differential probe.
+2. The seccomp backport may apply the `--security-opt seccomp=unconfined` capability to the wrong release jobs or fail to pass it through `02_run_container.py`. Trace the exact CI job selection and Docker argument construction, compare the release commit with all source-side variants, and validate the generated command without launching an untrusted or unavailable CI container.
+3. The batch may have an omitted prerequisite, wrong ancestry, or release-note/configuration mismatch. Compare each changed path with the source PR and current master, use patch-id/semantic correspondence where meaningful, and inspect release-branch tests and build manifests.
+
+No conclusion is drawn from the commit message alone. A source change requires a deterministic release-branch reproducer, an independent verifier or mutation/reference result, and narrow plus broad validation. A CI-only mismatch may be recorded without a production fix when the exact external runner/container behavior is unavailable.
+
+### Release source and ancestry audit
+
+The 28.x tree contains exactly three Boost.MultiIndex containers: the modified-transaction set in `src/node/miner.h`, the mempool transaction set in `src/txmempool.h`, and the announcement index in `src/txrequest.cpp`. The older 28.x `src/txorphanage.cpp` uses `std::map` and is not an omitted MultiIndex site. Current master has since moved and redesigned the orphanage as `src/node/txorphanage.cpp`, which explains why the source-side fix `0bc9d354df` touches that file while its 28.x rebased form `2c5242d24f` touches the release-specific miner container instead. The release patch preserves all index tags, extractors, ordering, iterator aliases, and element types; it only inlines `indexed_by<...>` as the second template argument to `multi_index_container`.
+
+The release commit's `Rebased-From: 0bc9d354df` metadata, the source-side history, and the release-tree inventory agree. No changed production site or prerequisite was missing. `origin/28.x:depends/packages/boost.mk` pins Boost 1.81.0, while the host has Boost 1.74.0; the system build therefore checks backward compatibility, and the Boost 1.91-specific compilation claim remains an explicit unavailable environment cell rather than an inferred pass.
+
+### 28.x build and behavioral verification
+
+The initial CMake configure was rejected because this release uses Autotools and has no top-level `CMakeLists.txt`; it did not modify the release source. After `./autogen.sh`, the isolated configure command was:
+
+```text
+/data/my_storage/tmp/cycle165-backport-28/configure --without-gui --disable-zmq --disable-wallet --disable-bench --enable-tests
+```
+
+It completed successfully with GCC 12.2.0, Boost 1.74.0, tests enabled, and the vendored libsecp256k1 tests enabled. The first `make -j2` stopped before compilation because `/root/.cache/ccache/tmp` did not exist; rerunning with `CCACHE_DIR=/data/my_storage/tmp/cycle165-ccache make -j2` completed the entire configured graph with exit 0, including `bitcoind`, `bitcoin-cli`, `bitcoin-tx`, `bitcoin-util`, `test_bitcoin`, and the aggregate fuzz driver.
+
+Focused release tests passed:
+
+- `test_bitcoin --run_test=mempool_tests,miner_tests,txrequest_tests --random=165001`: 8 cases, 118,948 assertions.
+- `test_bitcoin --run_test=net_tests,txpackage_tests,txvalidation_tests,validation_block_tests,validation_chainstate_tests,validation_tests --random=165002`: 36 cases, 195,437 assertions.
+- `test_bitcoin --random=165003`: 565/566 cases, 20,071,853/20,071,853 assertions. The sole warning was the known unset `DIR_UNIT_TEST_DATA` skip for `script_assets_test`; no assertion failed.
+
+The release file-based fuzz driver initially rejected `-runs=1000` as an input path; the corrected deterministic corpus contained zero bytes, `src/txrequest.cpp`, and `src/test/fuzz/txrequest.cpp`. `env FUZZ=txrequest src/test/fuzz/fuzz <corpus>` exited 0 with `txrequest: succeeded against 3 files in 0s.` No fuzz, sanitizer, daemon, or profiling process remains running.
+
+### Boost 1.91 before/after compile control
+
+The pinned Boost 1.91.0 source archive was downloaded from `https://archives.boost.io/release/1.91.0/source/boost_1_91_0.tar.bz2`, verified as `de5e6b0e4913395c6bdfa90537febd9028ea4c0735d2cdb0cd9b45d5f51264f5`, and used only from `/data/my_storage/tmp/`. A fresh 28.x configure with `CPPFLAGS=-I/data/my_storage/tmp/boost-1.91/boost_1_91_0` completed successfully. The patched release compiled `node/libbitcoin_node_a-miner.o`, `libbitcoin_node_a-txmempool.o`, and `libbitcoin_node_a-txrequest.o` with GCC 12 and Boost 1.91 headers, exit 0.
+
+An independent pre-fix worktree at the immediate `#35214` release parent `b110304705` was configured identically. Its three corresponding object targets failed with exit 2. The first diagnostics were:
+
+```text
+src/txmempool.h:332:64: error: invalid use of incomplete type 'struct boost::multi_index::indexed_by<...>'
+boost/multi_index/detail/node_type.hpp:40:66: error: static assertion failed: detail::is_index_list<IndexSpecifierList>::value
+src/node/miner.h:101:68: error: invalid use of incomplete type 'struct boost::multi_index::indexed_by<...>'
+```
+
+The failure log also contained the expected `mp_rename_impl`/`mp_size_impl` errors and downstream missing iterator members. This is a clean failing-before/passing-after control for the exact compatibility claim; no production behavior change is needed beyond the type declaration rewrite.
+
+### CI seccomp verification
+
+The backport `2d3edd9640` adds `CI_CONTAINER_CAP=--security-opt seccomp=unconfined` to `ci/test/00_setup_env_i686_centos.sh`, `ci/test/00_setup_env_i686_multiprocess.sh`, and `ci/test/00_setup_env_win64.sh`. All three files are selected by the 28.x `.github/workflows/ci.yml` matrix. Sourcing each file in an isolated shell produced the expected container name, image, and capability. `bash -n` passed for all three environment files and `ci/test/02_run_container.sh`; the script's Docker invocation at line 76 expands `$CI_CONTAINER_CAP` immediately after `--cap-add LINUX_IMMUTABLE`, so shell tokenization produces `--security-opt seccomp=unconfined --rm ...` for each job. The Windows-cross job includes Wine32 and the 32-bit Linux jobs execute i686 binaries, so the release-specific broader assignment has a concrete socket-call compatibility rationale; no wrong-job or dropped-argument defect was demonstrated.
+
+Docker and Podman are not installed on this host, so image pull, actual container startup, and i686/Windows execution could not be independently run. A pure command-token control confirmed that removing the environment value would remove the security option, while the committed value is present for every affected release job. This is a CI execution limitation, not evidence of a source defect.
+
+### Candidate ledger and verdict
+
+| Candidate | Classification | Verdict |
+|---|---|---|
+| The 28.x Boost fix omits a release-specific MultiIndex site or changes an index contract | Release source/backport | Dismissed; source inventory, ancestry comparison, complete build, focused suites, full unit suite, and fuzz corpus passed |
+| The Boost fix breaks the older supported/system Boost path | Release build compatibility | Dismissed; Boost 1.74 full build/tests and Boost 1.91 changed-object compile passed |
+| The seccomp workaround is assigned to the wrong jobs or is lost before `docker run` | CI configuration/backport | Dismissed; workflow selection, isolated environment sourcing, shell syntax, and argument expansion all match the intended jobs |
+| The release-note/configuration batch lacks a prerequisite or has an unverified semantic conflict | Integration/backport | Dismissed; commit ancestry and changed-path audit found no missing prerequisite; no runtime behavior change is claimed for documentation-only hunks |
+
+**Cycle verdict: dismissed; no confirmed current backport defect and no production or permanent test change justified.**
+
+### Limitations and handoff
+
+This cycle did not execute Docker 29.4.2, native i686, or Windows/Wine. The 28.x release's own CI and dependency containers remain the authoritative follow-up for those cells. The next distinct goal-66 cells are the 28.x `#35213` validation-lifetime integration, a 29.x release batch other than Cycle 67's `#34370`, or an upgrade/downgrade/backport fixture with new source evidence. The next uber cycle must perform a fresh gate, draw with the exact selector command, and preserve this dismissal without treating the unavailable external cells as passed.
+
 ## Cycle 144: 30.x #35232 backport batch
 
 ### Draw, gate, and scope
