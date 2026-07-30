@@ -4,17 +4,48 @@
 
 #include <coins.h>
 #include <consensus/tx_verify.h>
-#include <hash.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
 #include <serialize.h>
 #include <streams.h>
 #include <test/fuzz/fuzz.h>
 
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <utility>
+
+namespace {
+
+/** Unlike CCoinsViewCache::AddCoin, this backing view retains unspendable outputs, so the check
+ *  scans exactly the fuzzer-provided scripts. */
+class FuzzCoinsView final : public CCoinsViewBacked
+{
+public:
+    FuzzCoinsView() : CCoinsViewBacked{&CoinsViewEmpty::Get()} {}
+
+    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override
+    {
+        const auto it{m_coins.find(outpoint)};
+        return it == m_coins.end() ? std::nullopt : std::optional<Coin>{it->second};
+    }
+
+    void AddCoin(const COutPoint& outpoint, Coin&& coin)
+    {
+        m_coins.emplace(outpoint, std::move(coin));
+    }
+
+private:
+    std::map<COutPoint, Coin> m_coins;
+};
+
+} // namespace
+
 /** Check the BIP54 sigops limit for a transaction spending a fuzzer-provided list of legacy inputs. */
 FUZZ_TARGET(bip54_sigops)
 {
-    CCoinsViewCache coins{&CoinsViewEmpty::Get(), /*deterministic=*/true};
+    FuzzCoinsView coins_view;
+    CCoinsViewCache coins{&coins_view, /*deterministic=*/true};
     CMutableTransaction tx;
     Txid dummy_txid;
 
@@ -23,7 +54,8 @@ FUZZ_TARGET(bip54_sigops)
     if (buffer.empty()) return;
     SpanReader reader{buffer};
 
-    // Deserialize a list of legacy inputs spent by a transaction.
+    // Deserialize raw scriptSig and spent scriptPubKey pairs. Keeping both raw
+    // lets the fuzzer cover malformed and non-push-only P2SH scriptSigs.
     try {
         uint16_t inputs_count;
         Unserialize(reader, inputs_count);
@@ -31,20 +63,10 @@ FUZZ_TARGET(bip54_sigops)
             tx.vin.emplace_back(dummy_txid, i);
             Unserialize(reader, tx.vin.back().scriptSig);
 
-            // Either the scriptPubKey (bare) or the redeemScript (P2SH).
-            CScript spent_script;
-            Unserialize(reader, spent_script);
-
-            // If it's P2SH, make sure to append the correct redeem script to the scriptSig.
-            bool is_p2sh;
-            Unserialize(reader, is_p2sh);
-            if (is_p2sh) {
-                tx.vin.back().scriptSig << ToByteVector(spent_script);
-            }
-
-            // If it's P2SH, wrap the redeemScript in a P2SH scriptPubKey.
-            CTxOut prev_txo{0, is_p2sh ? CScript{} << OP_HASH160 << Hash160(spent_script) << OP_EQUAL : std::move(spent_script)};
-            coins.AddCoin(tx.vin.back().prevout, Coin(std::move(prev_txo), 0, false), false);
+            CScript script_pub_key;
+            Unserialize(reader, script_pub_key);
+            CTxOut prev_txo{0, std::move(script_pub_key)};
+            coins_view.AddCoin(tx.vin.back().prevout, Coin(std::move(prev_txo), 0, false));
         }
     } catch (const std::ios_base::failure&) {
         return;
