@@ -5,6 +5,7 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <consensus/params.h>
+#include <deploymentinfo.h>
 #include <test/util/random.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
@@ -14,6 +15,8 @@
 #include <versionbits_impl.h>
 
 #include <boost/test/unit_test.hpp>
+
+#include <string_view>
 
 /* Define a virtual block time, one block per 10 minutes after Nov 14 2014, 0:55:36am */
 static int32_t TestTime(int nHeight) { return 1415926536 + 600 * nHeight; }
@@ -438,6 +441,34 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
     BOOST_CHECK(versionbitscache.IsActiveAfter(lastBlock, params, dep));
 }
 }; // struct BlockVersionTest
+
+BOOST_AUTO_TEST_CASE(versionbits_consensuscleanup_metadata)
+{
+    constexpr auto deployment{Consensus::DEPLOYMENT_CONSENSUSCLEANUP};
+    const auto& metadata{VersionBitsDeploymentInfo[deployment]};
+    BOOST_CHECK_EQUAL(std::string_view{metadata.name}, "consensuscleanup");
+    BOOST_CHECK(!metadata.gbt_optional_rule);
+
+    for (const auto chain_type : {ChainType::MAIN, ChainType::TESTNET, ChainType::TESTNET4, ChainType::SIGNET, ChainType::REGTEST}) {
+        const auto chain_params{CreateChainParams(*m_node.args, chain_type)};
+        const auto& deployment_params{chain_params->GetConsensus().vDeployments[deployment]};
+        const bool regtest{chain_type == ChainType::REGTEST};
+
+        BOOST_CHECK_EQUAL(deployment_params.bit, 3);
+        BOOST_CHECK_EQUAL(deployment_params.nStartTime, regtest ? Consensus::BIP9Deployment::ALWAYS_ACTIVE : Consensus::BIP9Deployment::NEVER_ACTIVE);
+        BOOST_CHECK_EQUAL(deployment_params.nTimeout, Consensus::BIP9Deployment::NO_TIMEOUT);
+        BOOST_CHECK_EQUAL(deployment_params.min_activation_height, 0);
+        if (regtest) {
+            BOOST_CHECK_EQUAL(deployment_params.period, 144);
+            BOOST_CHECK_EQUAL(deployment_params.threshold, 108);
+        }
+
+        TestConditionChecker checker{deployment_params};
+        const auto expected_state{regtest ? ThresholdState::ACTIVE : ThresholdState::FAILED};
+        BOOST_CHECK(checker.StateFor(nullptr) == expected_state);
+        BOOST_CHECK_EQUAL(checker.StateSinceHeightFor(nullptr), 0);
+    }
+}
 
 BOOST_FIXTURE_TEST_CASE(versionbits_computeblockversion, BlockVersionTest)
 {
