@@ -1137,6 +1137,16 @@ BOOST_AUTO_TEST_CASE(package_rbf_tests)
         BOOST_CHECK(!m_node.mempool->exists(tx_child_1->GetHash()));
     }
 
+    CAmount total_fee_before_rbf;
+    {
+        LOCK(m_node.mempool->cs);
+        total_fee_before_rbf = m_node.mempool->GetTotalFee();
+    }
+    const auto check_total_fee = [&](CAmount expected_package_fee) {
+        LOCK(m_node.mempool->cs);
+        BOOST_CHECK_EQUAL(m_node.mempool->GetTotalFee(), total_fee_before_rbf + expected_package_fee);
+    };
+
     // Test package rbf.
     {
         CTransactionRef tx_parent_1 = MakeTransactionRef(CreateValidMempoolTransaction(
@@ -1180,6 +1190,7 @@ BOOST_AUTO_TEST_CASE(package_rbf_tests)
         BOOST_CHECK_EQUAL(it_child_1->second.m_result_type, MempoolAcceptResult::ResultType::VALID);
         expected_pool_size += 2;
         BOOST_CHECK_EQUAL(m_node.mempool->size(), expected_pool_size);
+        check_total_fee(400);
 
         // This replacement is actually not package rbf; the parent carries enough fees
         // to replace the entire package on its own.
@@ -1192,6 +1203,7 @@ BOOST_AUTO_TEST_CASE(package_rbf_tests)
         BOOST_CHECK_EQUAL(it_parent_2->second.m_result_type, MempoolAcceptResult::ResultType::VALID);
         BOOST_CHECK_EQUAL(it_child_2->second.m_result_type, MempoolAcceptResult::ResultType::VALID);
         BOOST_CHECK_EQUAL(m_node.mempool->size(), expected_pool_size);
+        check_total_fee(1000);
 
         // Package RBF, in which the replacement transaction's child sponsors the fees to meet RBF feerate rules
         const auto submit3 = ProcessNewPackage(m_node.chainman->ActiveChainstate(), *m_node.mempool, package3, false, std::nullopt);
@@ -1215,6 +1227,7 @@ BOOST_AUTO_TEST_CASE(package_rbf_tests)
         BOOST_CHECK_EQUAL(it_child_3->second.m_effective_feerate.value().GetFee(package3_total_vsize), 199 + 1300);
 
         BOOST_CHECK_EQUAL(m_node.mempool->size(), expected_pool_size);
+        check_total_fee(1499);
 
         // Finally, check that we can prioritise tx_child_1 to get package1 into the mempool.
         // It should not be possible to resubmit package1 and get it in without prioritisation.
@@ -1222,6 +1235,7 @@ BOOST_AUTO_TEST_CASE(package_rbf_tests)
         if (auto err_4{CheckPackageMempoolAcceptResult(package1, submit4, /*expect_valid=*/false, m_node.mempool.get())}) {
             BOOST_ERROR(err_4.value());
         }
+        check_total_fee(1499);
         m_node.mempool->PrioritiseTransaction(tx_child_1->GetHash(), 1363);
         const auto submit5 = ProcessNewPackage(m_node.chainman->ActiveChainstate(), *m_node.mempool, package1, false, std::nullopt);
         if (auto err_5{CheckPackageMempoolAcceptResult(package1, submit5, /*expect_valid=*/true, m_node.mempool.get())}) {
@@ -1234,6 +1248,7 @@ BOOST_AUTO_TEST_CASE(package_rbf_tests)
         LOCK(m_node.mempool->cs);
         BOOST_CHECK(m_node.mempool->GetIter(tx_parent_1->GetHash()).has_value());
         BOOST_CHECK(m_node.mempool->GetIter(tx_child_1->GetHash()).has_value());
+        BOOST_CHECK_EQUAL(m_node.mempool->GetTotalFee(), total_fee_before_rbf + 400);
     }
 }
 BOOST_AUTO_TEST_SUITE_END()
