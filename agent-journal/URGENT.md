@@ -70,13 +70,22 @@ independently verified.
 - Next: upstream-watch — if bitcoin/bitcoin updates qrencode.mk, take
   theirs. No local divergence warranted (hash is the trust anchor).
 
-## ✅ LockPoints max_input_height bound comment (fixed b1c267c9f1)
-- Mechanism: comment claimed "always less than tip height"; CPFP
-  1-conf parents yield equality. GetAncestor safe either way.
-- Evidence: code read (validation.cpp:247-259, chain.cpp:100 GetAncestor
-  nullptr condition), CPFP reachability argument; comment-only fix.
-- Branch/commit: audit/comment-contract @ b1c267c9f1; in lineage.
-- Next: none.
+## ✅ -limitclustercount=0 accepted at startup (fixed 5e0a80ade5, #52 c2)
+- Mechanism: only the upper bound of -limitclustercount was
+  validated; 0 slipped to TxGraph's Assume(max_cluster_count >= 1)
+  — startup abort in assert builds, or silent rejection of EVERY
+  mempool transaction in release builds (total_count >= 1 > 0).
+- Evidence: failing-before (regtest node starts and runs with 0,
+  Release) + code chain (mempool_args.cpp:35/:110, txmempool.cpp
+  :222, txgraph.cpp:699-700/:2143); passing-after: startup fails
+  with 'limitclustercount must be at least 1', boundary cases
+  (0 and 65) in mempool_cluster.py, full suite green.
+- Severity: small (DEBUG_TEST option, config-triggered) but
+  byte-identical gap present in upstream master (7dea464d6b).
+- Branch/commit: audit/assertion-invariant-c2 @ 5e0a80ade5;
+  journal assertion-invariant-audit.md c2. Archive pick this cycle.
+- Next: offer upstream (one-line validation, mirrors the existing
+  upper-bound error).
 
 ## ✅ CompactSize exhaustive boundary battery (oracle delivered 8b7d8ac878)
 - Mechanism: consensus wire-length primitive canonicality; existing
@@ -154,7 +163,8 @@ independently verified.
 - Next: nothing local; candidate upstream perf note.
 
 ---
-Recently removed from this list (dismissed/closed): l0rinc CheckBlock
+Recently removed from this list (dismissed/closed): LockPoints
+bound comment (fixed b1c267c9f1, no follow-ups); l0rinc CheckBlock
 dup-input equivalence (PROVEN, #40 c1 — resolved, no local action);
 clang-18
 differential (green, #36 c2); net_processing sancov 0/23 alarm

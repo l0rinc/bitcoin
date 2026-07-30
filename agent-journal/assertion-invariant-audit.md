@@ -92,3 +92,66 @@ unfalsifiable-by-construction edit-guards.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-30): txgraph falsification pass — CONFIRMED config-validation gap: -limitclustercount=0 accepted (fix 5e0a80ade5)
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=12410924129186828647, masked 3187552092332052839, index 4
+(of 5) -> #52 (second cycle; c1 queue cell "txgraph saturation
+family falsification"). Branch: audit/assertion-invariant-c2 from
+5223346741 (#50 c12 journal tip).
+
+### Hypothesis
+A txgraph Assume is falsifiable from config/input: the
+max_cluster_count bound Assume (txgraph.cpp:699-700) can be
+violated by an unclamped -limitclustercount value.
+
+### Trace (confirmed)
+- txgraph.cpp:699-700: Assume(max_cluster_count >= 1) and
+  Assume(<= MAX_CLUSTER_COUNT_LIMIT=64) at TxGraphImpl
+  construction (txmempool.cpp:222, no intermediate clamp;
+  MakeTxGraph forwards verbatim, txgraph.cpp:3800-3814).
+- Validation chain: mempool_args.cpp:35 takes -limitclustercount
+  raw (no lower clamp); :110 rejects ONLY > 64. 0 slips through;
+  negative values wrap huge and are caught by :110.
+- Empirical: build-before (Release) starts fine with
+  -limitclustercount=0 (Assume compiled out) — mempool then
+  rejects every transaction (txgraph.cpp:2143 total_count > 0).
+  In assert-enabled builds the same input aborts at
+  MakeTxGraph. Upstream master has the byte-identical gap
+  (7dea464d6b).
+
+### Fix (one buildable commit, failing-before/passing-after)
+5e0a80ade5: symmetric lower-bound error in node/mempool_args.cpp
+("limitclustercount must be at least 1"), boundary cases in
+mempool_cluster.py (0 and 65 both rejected with clear messages;
+full suite green). R14-style boundary validation, upstreamable.
+
+### Verdict
+CONFIRMED defect (small): config validation accepted a nonsense
+cluster count whose effect is either an unfriendly startup abort
+(assert builds) or silent total mempool rejection (release
+builds). FIXED with deterministic regression evidence.
+
+### Exact commands
+- grep chain: txgraph.cpp:699-700/2143/3800, txmempool.cpp:222,
+  mempool_args.cpp:33-42/108-113, kernel/mempool_limits.h:20,
+  policy/policy.h:72
+- build-before/bin/bitcoind -regtest -limitclustercount=0
+  -datadir=/tmp/btc_lc0 (accepted pre-fix; rejected post-fix)
+- git show origin/master:src/node/mempool_args.cpp (identical)
+- python3 test/functional/mempool_cluster.py --configfile=
+  build-before/test/config.ini --tmpdir=/tmp/btc_mcl (green)
+
+### Limitations / queue
+- The remaining txgraph Assume families (ref-graph invariants,
+  sequence uniqueness, locator presence) are local invariants
+  with no config/input surface found this cycle; a dynamic
+  saturation-driven falsification (cluster stress on the mempool)
+  is a heavier future cell.
+- Upstream-side assertion sweep remains a separate large cell.
+
+## Rotation note
+Two cycles; the config-surface falsification is closed with a
+fix. Not exhausted (dynamic saturation, upstream sweep).

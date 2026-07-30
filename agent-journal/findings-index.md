@@ -79,6 +79,16 @@ mempool_tests green; ComplexMemPool 268.5 -> 184.7 ms/op at HEAD
 (stale-binary 278.5 control exposed + resolved) | done; queue:
 EvictionProtection*/ConnectBlockAll profiles.
 
+F13 | -limitclustercount=0 accepted at startup validation |
+config/mempool | lower bound unvalidated -> TxGraph Assume abort
+(assert builds) or silent all-tx mempool rejection (release) |
+low (DEBUG_TEST option) | CONFIRMED+FIXED | 5e0a80ade5 (#52 c2):
+failing-before (node starts with 0) / passing-after ('must be at
+least 1' InitError); boundary cases 0 and 65 in
+mempool_cluster.py, suite green; upstream-identical gap
+(7dea464d6b), offerable upstream | audit/assertion-invariant-c2,
+archive pick this cycle | done; upstream offer.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
