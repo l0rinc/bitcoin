@@ -156,13 +156,15 @@ check_cxx_features()
 #=============================
 # The core_interface library aims to encapsulate common build flags.
 # It is a usage requirement for all targets except for secp256k1, which
-# gets its flags by other means.
+# receives its C compiler and linker flags through cmake/secp256k1.cmake.
 add_library(core_interface INTERFACE)
 add_library(core_interface_relwithdebinfo INTERFACE)
 add_library(core_interface_debug INTERFACE)
+add_library(hardening_interface INTERFACE)
 target_link_libraries(core_interface INTERFACE
   $<$<CONFIG:RelWithDebInfo>:core_interface_relwithdebinfo>
   $<$<CONFIG:Debug>:core_interface_debug>
+  hardening_interface
 )
 
 #=============================
@@ -533,9 +535,9 @@ try_append_cxx_flags("-fmacro-prefix-map=A=B" TARGET core_interface SKIP_LINK
 try_append_cxx_flags("-fstack-reuse=none" TARGET core_interface)
 
 if(MSVC)
-  try_append_linker_flag("/DYNAMICBASE" TARGET core_interface)
-  try_append_linker_flag("/HIGHENTROPYVA" TARGET core_interface)
-  try_append_linker_flag("/NXCOMPAT" TARGET core_interface)
+  try_append_linker_flag("/DYNAMICBASE" TARGET hardening_interface)
+  try_append_linker_flag("/HIGHENTROPYVA" TARGET hardening_interface)
+  try_append_linker_flag("/NXCOMPAT" TARGET hardening_interface)
 else()
 
   # _FORTIFY_SOURCE requires that there is some level of optimization,
@@ -549,38 +551,38 @@ else()
             }"
   )
   if(cxx_supports_fortify_source)
-    target_compile_options(core_interface INTERFACE
+    target_compile_options(hardening_interface INTERFACE
       -U_FORTIFY_SOURCE
       -D_FORTIFY_SOURCE=3
     )
   endif()
   unset(cxx_supports_fortify_source)
 
-  try_append_cxx_flags("-Wstack-protector" TARGET core_interface SKIP_LINK)
-  try_append_cxx_flags("-fstack-protector-all" TARGET core_interface)
-  try_append_cxx_flags("-fcf-protection=full" TARGET core_interface)
+  try_append_cxx_flags("-Wstack-protector" TARGET hardening_interface SKIP_LINK)
+  try_append_cxx_flags("-fstack-protector-all" TARGET hardening_interface)
+  try_append_cxx_flags("-fcf-protection=full" TARGET hardening_interface)
 
   if(MINGW)
     # stack-clash-protection is a no-op for Windows.
     # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=90458 for more details.
   else()
-    try_append_cxx_flags("-fstack-clash-protection" TARGET core_interface)
+    try_append_cxx_flags("-fstack-clash-protection" TARGET hardening_interface)
   endif()
 
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-      try_append_cxx_flags("-mbranch-protection=bti" TARGET core_interface SKIP_LINK)
+      try_append_cxx_flags("-mbranch-protection=bti" TARGET hardening_interface SKIP_LINK)
     else()
-      try_append_cxx_flags("-mbranch-protection=standard" TARGET core_interface SKIP_LINK)
+      try_append_cxx_flags("-mbranch-protection=standard" TARGET hardening_interface SKIP_LINK)
     endif()
   endif()
 
-  try_append_linker_flag("-Wl,--enable-reloc-section" TARGET core_interface)
-  try_append_linker_flag("-Wl,--dynamicbase" TARGET core_interface)
-  try_append_linker_flag("-Wl,--nxcompat" TARGET core_interface)
-  try_append_linker_flag("-Wl,--high-entropy-va" TARGET core_interface)
-  try_append_linker_flag("-Wl,-z,relro" TARGET core_interface)
-  try_append_linker_flag("-Wl,-z,now" TARGET core_interface)
+  try_append_linker_flag("-Wl,--enable-reloc-section" TARGET hardening_interface)
+  try_append_linker_flag("-Wl,--dynamicbase" TARGET hardening_interface)
+  try_append_linker_flag("-Wl,--nxcompat" TARGET hardening_interface)
+  try_append_linker_flag("-Wl,--high-entropy-va" TARGET hardening_interface)
+  try_append_linker_flag("-Wl,-z,relro" TARGET hardening_interface)
+  try_append_linker_flag("-Wl,-z,now" TARGET hardening_interface)
   # TODO: This can be dropped once Bitcoin Core no longer supports
   #       NetBSD 10.0 or if upstream fix is backported.
   # NetBSD's dynamic linker ld.elf_so < 11.0 supports exactly 2
@@ -590,12 +592,12 @@ else()
   # - https://github.com/bitcoin/bitcoin/pull/28724#issuecomment-2589347934
   # - https://mail-index.netbsd.org/tech-userlevel/2023/01/05/msg013666.html
   if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD" AND CMAKE_SYSTEM_VERSION VERSION_LESS 11.0)
-    try_append_linker_flag("-Wl,-z,noseparate-code" TARGET core_interface)
+    try_append_linker_flag("-Wl,-z,noseparate-code" TARGET hardening_interface)
   else()
-    try_append_linker_flag("-Wl,-z,separate-code" TARGET core_interface)
+    try_append_linker_flag("-Wl,-z,separate-code" TARGET hardening_interface)
   endif()
   if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    try_append_linker_flag("-Wl,-fixup_chains" TARGET core_interface)
+    try_append_linker_flag("-Wl,-fixup_chains" TARGET hardening_interface)
   endif()
 endif()
 
