@@ -1,5 +1,63 @@
 # SIMD, Assembly, and Portable-Reference Backend Differential
 
+## Cycle 114: CRC32C SSE4.2 and portable backend differential
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `69`
+- Selected goal: `backend-differential`
+- Branch: `uber-cycle-114-backend-differential-20260729`
+- HEAD at gate: `6051c419bbb2a1a12915f2840e0b07a635394002`
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `40 1017`
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The tracked worktree passed the gate; known untracked agent artifacts remain preserved and excluded from cycle commits. PID `777094` is the unrelated pre-existing wallet test process and must remain untouched.
+
+This cycle excludes the prior libsecp256k1 x86_64 assembly-versus-portable comparison, the Cycle 90 ECDH/compiler matrix, and the Cycle 100 Bitcoin Core SHA256 dispatch comparison. The distinct unchecked cell is bundled CRC32C: its runtime API dispatches to an SSE4.2 implementation when the configured build includes that object and the CPU advertises the instruction, otherwise it uses `ExtendPortable`.
+
+### Scope and hypothesis
+
+The falsifiable hypothesis is that the CRC32C SSE4.2 implementation diverges from the portable implementation at an alignment, short-input, block-threshold, fragmented-extension, nonzero-seed, or large-input boundary. The trust boundary is the CRC32C library API used by persistence/database code; equal output for identical bytes and extension seeds is required, including the C ABI wrappers and empty input.
+
+The planned matrix is two fresh x86_64 builds from the same source: one with SSE4.2 compiler detection enabled and one with it disabled. The probe will use deterministic boundary vectors, repeated pseudo-random vectors, nonzero extension seeds, and fragmented updates. Bundled CRC32C unit and C API tests will run in both builds. Any divergence will be minimized and independently checked before considering a production change.
+
+### Build matrix and differential evidence
+
+The standalone CMake project was configured twice from the current source with tests and benchmarks disabled, `CRC32C_USE_GLOG=OFF` because the optional vendored `third_party/glog` directory is absent, and `HAVE_ARM64_CRC32C=OFF`:
+
+```text
+cmake -S src/crc32c -B /data/my_storage/tmp/cycle114-backend-differential/cmake-reference -G Ninja -DCMAKE_BUILD_TYPE=Release -DCRC32C_BUILD_TESTS=OFF -DCRC32C_BUILD_BENCHMARKS=OFF -DCRC32C_INSTALL=OFF -DCRC32C_USE_GLOG=OFF -DHAVE_SSE42=OFF -DHAVE_ARM64_CRC32C=OFF -DCMAKE_CXX_FLAGS=-mno-sse4.2
+cmake -S src/crc32c -B /data/my_storage/tmp/cycle114-backend-differential/cmake-sse42 -G Ninja -DCMAKE_BUILD_TYPE=Release -DCRC32C_BUILD_TESTS=OFF -DCRC32C_BUILD_BENCHMARKS=OFF -DCRC32C_INSTALL=OFF -DCRC32C_USE_GLOG=OFF -DHAVE_SSE42=ON -DHAVE_ARM64_CRC32C=OFF
+cmake --build /data/my_storage/tmp/cycle114-backend-differential/cmake-reference --parallel 4
+cmake --build /data/my_storage/tmp/cycle114-backend-differential/cmake-sse42 --parallel 4
+```
+
+Both configurations built successfully. Their generated headers contained `HAVE_SSE42 0` and `HAVE_SSE42 1`, respectively. The host advertises `sse4_2`; disassembly showed `_ZN6crc32c11ExtendSse42EjPKhm` in the accelerated archive and no corresponding implementation symbol in the reference archive.
+
+The independent probe is preserved at `agent-journal/crc32c_backend_probe.cpp`. It implements a bitwise CRC32C oracle and checks lengths from zero through 32768 bytes, eight alignment offsets, zero/FF/incrementing/pseudo-random patterns, five extension seeds, eight fragmentation schedules, the C++ and C APIs, and direct portable/SSE routines. It ran against both CMake-produced libraries:
+
+```text
+vectors=5280 api_checks=54912 portable_checks=5280 backend_checks=5280 failures=0 api_digest=87e7750709b157c7 portable_digest=5135e2bd6ec53932 backend_digest=5135e2bd6ec53932
+vectors=5280 api_checks=54912 portable_checks=5280 backend_checks=5280 failures=0 api_digest=87e7750709b157c7 portable_digest=5135e2bd6ec53932 backend_digest=5135e2bd6ec53932
+```
+
+The self-contained bundled `src/crc32c/src/crc32c_capi_unittest.c` was compiled and linked against each archive; both returned status 0 and printed `All tests passed`. The upstream GoogleTest target could not be configured because this checkout has neither `third_party/googletest` nor `third_party/glog`; this is an external checkout limitation, not a test failure. The Bitcoin Core tree has no `leveldb_tests` test case to run under the current unit binary.
+
+### Sanitizer verification
+
+The same direct source matrix was compiled with GCC 12 using `-fsanitize=address,undefined -fno-omit-frame-pointer`, then run with `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:abort_on_error=1 UBSAN_OPTIONS=halt_on_error=1`. Both sanitized binaries returned status 0 with the same `vectors=5280`, zero-failure, and `api_digest=87e7750709b157c7` result. No sanitizer report appeared.
+
+### Verdict and handoff
+
+**Dismissed as a current CRC32C backend mismatch; no confirmed finding.** The public dispatch, C ABI, portable implementation, and direct SSE4.2 implementation agree with the independent bitwise oracle across the selected boundary and fragmentation matrix. No production repair or permanent test change is justified by this cycle.
+
+Limitations: execution was x86_64 little-endian with GCC 12. ARM64, 32-bit, big-endian, other compilers, and faulted CPU feature detection remain open. The upstream GoogleTest suite requires missing vendored dependencies. The optimized/reference comparison is a correctness result, not timing or constant-time evidence.
+
+Next queue: close this cycle, preserve the probe and scratch logs under `/data/my_storage/tmp/cycle114-backend-differential/`, run a fresh gate, and draw a new catalog goal. Reopen backend differential only for an untested architecture, compiler, sanitizer, or module boundary.
+
 ## Cycle Identity
 
 - Draw command: `shuf -i 0-98 -n 1`
