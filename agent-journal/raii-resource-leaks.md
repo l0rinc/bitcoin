@@ -61,3 +61,68 @@ exception-theoretical only.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-30): CONFIRMED+FIXED — options-owned allocations leak on every failed CDBWrapper construction (73a6798206)
+
+### Draw
+Re-rank draw over the remaining 3-cell queue:
+raw=18214628344123528261, masked 8991256307268752453, index 2
+(of 3) -> #13 (second cycle; c1 queue cell "LevelDB-internal
+ownership (info_log on failed DB::Open)"). Branch:
+audit/raii-resource-leaks-c2 from 96075f9172 (#74 c3 journal tip).
+
+### Hypothesis (c1 cell, now confirmed)
+LevelDB does not take ownership of options.info_log /
+filter_policy / block_cache; the caller must delete them. On a
+failed DB::Open the CDBWrapper constructor throws, ~CDBWrapper
+never runs (partially-constructed), and LevelDBContext had no
+destructor — every failed construction leaks the option-owned
+allocations.
+
+### Mechanism (code chain)
+dbwrapper.cpp:228 GetOptions (info_log new :146, block_cache
+NewLRUCache :142, filter_policy :144, penv maybe :235) ->
+:253 DB::Open fails (or :245 TryCreateDirectories throws) ->
+:254 HandleError throws dbwrapper_error -> constructor unwinds:
+m_db_context (unique_ptr) destroys the LevelDBContext STRUCT but
+no member pointers are freed. Upstream master: same missing
+destructor (origin/master:197).
+
+### Failing-before (ASan+LSan probe /tmp/lk_probe.cpp)
+19 failed opens (alternating file-as-path and garbage-CURRENT):
+79,800 bytes leaked in 361 allocations; direct-leak stacks for
+all three classes under GetOptions <- CDBWrapper::CDBWrapper.
+SUMMARY line captured.
+
+### Fix (73a6798206, smallest RAII change)
+LevelDBContext destructor: delete pdb first, then
+options.filter_policy, options.info_log, options.block_cache,
+penv. Safe on both paths (Close() nulls them on success;
+deleting nullptr is safe).
+
+### Passing-after
+- LSan: 20 failed opens, silent (no leak report).
+- Regression: dbwrapper_tests "No errors detected".
+
+### Verdict
+CONFIRMED+FIXED: a real per-failure RAII leak (small but exact:
+~3.7KB+internal per failed open, unbounded under repeated
+failure), with deterministic sanitizer evidence and a green
+regression suite. Upstream-matching gap; offerable upstream.
+
+### Exact commands
+- g++ -g -fsanitize=address ... /tmp/lk_probe.cpp src/dbwrapper.cpp
+  build-before/src/libleveldb.a ... (link list in probe dir)
+- ASAN_OPTIONS=detect_leaks=1 /tmp/lk_probe (before/after)
+- build-before/bin/test_bitcoin --run_test=dbwrapper_tests
+
+### Limitations / queue
+- Repeated-failure frequency in production is low (startup-time
+  only, one wrapper per coins db per open) — severity small; the
+  value is the exact RAII defect + upstreamable one-liner-class
+  fix, not the bytes.
+- GUI/qt and IPC/capnp lifecycles remain deprioritized.
+
+## Rotation note
+Two cycles; the LevelDB ownership cell is closed with a fix. Not
+exhausted (nothing queued).
