@@ -1,5 +1,44 @@
 # Release-to-release behavioral and consensus differential
 
+## Cycle 125: v31.1/current consensus-vector differential
+
+### Selection and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `67` (`release-version-differential`); this was a distinct reopen because Cycle 109's coinbase-only block/reorg/restart cell explicitly queued a fixed transaction/script-vector comparison.
+- Branch: `uber-cycle-125-release-version-differential-20260730`.
+- Cycle start HEAD: `d8bc102d77fc449f77d76573b6e7cc179ac3a5f2`.
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `40 1039` (`origin/master...HEAD`).
+- The fresh gate fetched `origin master`, found no tracked or index changes, passed `git diff --check`, matched the catalog/prompt/TSV hashes, and preserved PID `777094` with its Codex parent `725042`.
+
+### Scope and hypothesis
+
+Cycle 109 covered deterministic coinbase-only blocks, a short reorg, restart, and persisted chainstate. Cycle 11 covered the genesis/RPC matrix. This cycle therefore selected the next queued cell: fixed script and transaction-validation vectors between the local `v31.1` tag (`9be056a8a72b624dae9623b2f7bded92c2a21c91`) and current HEAD. The hypothesis was that a shared valid or invalid script/transaction vector would change acceptance, script error, or validation-cache behavior unexpectedly. Release-specific test-count growth and implementation-contract checks were treated as expected differences until a common vector or source-backed behavior contradicted them.
+
+### Builds and commands
+
+- The v31.1 source was the existing `git archive v31.1` scratch tree at `/data/my_storage/tmp/cycle109-release-differential/v31.1-src`. It was configured as a Clang 19 Release, wallet-off, IPC/ZMQ/GUI-off test build in `/data/my_storage/tmp/cycle125-v311-test`; `env CCACHE_DIR=/data/my_storage/tmp/ccache-cycle124 ninja -C /data/my_storage/tmp/cycle125-v311-test test_bitcoin` completed successfully.
+- Current HEAD was rebuilt in `/data/my_storage/tmp/cycle105-clang19-release`; `ninja -C /data/my_storage/tmp/cycle105-clang19-release test_bitcoin` completed successfully after the source tree was stable. The persistent wallet test process was not touched.
+- Each side ran the same commands with separate existing `TMPDIR` roots and logs under `/data/my_storage/tmp/cycle125-release-differential-clean/`:
+  - `--run_test=script_tests`
+  - `--run_test=transaction_tests`
+  - `--run_test=txvalidation_tests`
+  - `--run_test=txvalidationcache_tests`
+- v31.1 passed `20/683` script cases with `503623` assertions, `13/683` transaction cases with `23717` assertions, `3/683` transaction-validation cases with `118` assertions, and `2/683` cache cases with `210032` assertions.
+- Current passed `27/1129` script cases with `505510` assertions, `18/1129` transaction cases with `23817` assertions, `5/1129` transaction-validation cases with `132` assertions, and `2/1129` cache cases with `210032` assertions. The differing registered-case counts are test-suite growth, not a failed common vector.
+
+### Current-vector cross-check
+
+- `git diff v31.1..HEAD -- src/test/data/script_tests.json` contains 18 added script-vector entries: CHECKSIGVERIFY/CHECKMULTISIGVERIFY failures, CHECKLOCKTIMEVERIFY boundaries, and negative-zero CSV behavior. No transaction, `tx_valid`, or `tx_invalid` vector file changed in this range.
+- To evaluate those additions against the old implementation, the current generated `script_tests.json.h` was copied only into the v31.1 scratch build, `script_tests.cpp` was relinked, and the old binary reran with a fresh temp root. It passed `20/683` cases and `505474` assertions. Thus the entire current expanded script vector set passed under the v31.1 evaluator; no vector exposed an unexplained release drift.
+- The current source does contain broad post-v31.1 script/validation refactors and contract checks, but the common executable suites plus the old-engine/current-vector cross-check produced no failing-before or cross-version discrepancy that justifies a source change.
+
+### Verdict and limits
+
+Dismissed for this cycle. The selected deterministic consensus/script/transaction cell showed no unexplained acceptance, rejection, error-code, or validation-cache drift. No production or permanent test change was justified.
+
+This does not cover historical mainnet blocks, wallet/database migration, P2P transcripts, prune/reorg persistence, release-branch backports, architecture/compiler matrices, or vectors not represented by the selected suites. The next release-differential cycle should choose one of those cells rather than repeat this vector matrix. Raw logs and scratch build paths are preserved above for recurrence checks.
+
 ## Cycle 109: deterministic block/reorg/restart differential
 
 ### Selection and gate
