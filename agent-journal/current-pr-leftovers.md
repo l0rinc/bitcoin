@@ -1,5 +1,14 @@
 # Current Branch and PR Leftover Sweep
 
+## Cycle 141 Completion
+
+- The fresh post-Cycle-140 gate selected `53` with `shuf -i 0-98 -n 1`; Goal 53 (`statistical-timing`) was already closed across the existing ECDH, Schnorr, MuSig, EllSwift, GCC, Clang, and backend cells, with no new tool/compiler/architecture/caller evidence available. The required reroll selected `3` (`current-pr-leftovers`).
+- Branch: `uber-cycle-141-current-pr-leftovers-20260730`. Start HEAD: `80b290c227785139a3ae0970164f43763b15b411`; `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1067 40`. The gate preserved the unrelated untracked artifacts, `test/cache/`, and PID `777094`.
+- The distinct current-stack hypothesis came from `f1008dcd27` (`rpc: deduplicate descriptor scan objects`): the production helper skips exact duplicate descriptor objects in `scantxoutset`, `scanblocks`, and `getdescriptoractivity`, while its permanent regression was added only to `rpc_scantxoutset.py`. `getdescriptoractivity` already had an equivalent duplicate-address assertion. `rpc_scanblocks.py` had no duplicate-input assertion, so a temporary focused assertion was evaluated as a possible leftover.
+- The current `rpc_scanblocks.py` suite passed against `/data/my_storage/tmp/cycle89-build` using `/data/my_storage/tmp/cycle89-build/test/cache` and scratch directory `/data/my_storage/tmp/cycle141-scanblocks-test-20260730-b`. The candidate assertion was then rejected: removing the `scanblocks` dedup guard would still produce the same result because `GCSFilter::ElementSet` deduplicates derived scripts. A result-only test therefore does not kill the production regression; timing thresholds or instrumentation would be flaky or unnecessarily invasive. The prior Cycle 130 resource-exhaustion journal already contains the independent 1-to-200 duplicate-object CPU scaling proof and fixed control.
+- Recent source commits were also checked for analogous omitted sites, stale names, generated/build omissions, and missing tests. The current stack has matching behavioral tests for the recent network, wallet, persistence, parser, and optimization changes; header-only include fixes and vector refreshes have no applicable runtime test omission. No new self-sufficient leftover with hard proof was established.
+- The temporary test edit was removed. `git diff --check` and the tracked/index dirty-state gate are clean. Verdict: **dismissed/no fix** for this cycle. Next queue: continue with a fresh goal draw; do not reopen exact duplicate descriptor expansion unless a new caller or a non-flaky performance oracle is found.
+
 ## Cycle 30 Selection
 
 - Selected index: `3`
