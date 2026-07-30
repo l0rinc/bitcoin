@@ -68,3 +68,86 @@ inserts, so reset() skips the fill on dirty data):
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-30): CCoinsViewCache dirty/fresh flagged-list invariants — 9.18M per-op checks green; DISMISSED
+
+### Draw
+Rebuilt-queue draw (seed_raw=15860256885964587176,
+masked=6636884849109811368, n=2, idx=0) -> coinsview-flags -> #57
+(second cycle; c1 queue cell "CCoinsViewCache dirty/fresh flag
+relationships"). Branch: audit/local-reasoning-c2 from ed268ed3d4
+(#24 c6 journal tip).
+
+### Hypothesis
+The fork's intrusive flagged-list rewrite of the coins cache
+(m_prev/m_next + sentinel + m_dirty_count replacing upstream's
+whole-map flag scan) could lose the DIRTY ==> linked invariant on
+some operation path, silently dropping dirty entries at flush
+(lost writes) or corrupting the cursor walk.
+
+### Coverage audit (duplicate search, src/test/coins_tests.cpp,
+src/coins.cpp SanityCheck:552-583)
+Existing: CCoinsViewTest sim (Add/Spend/Uncache/intermediate
+Flush+Sync/stack churn, SelfTest ~1/1000 iterations) + cursor
+contract tests (:402, :441) + SanityCheck asserting the full
+invariant set. Residual gap probed here: PER-OP checking (vs
+1/1000 sampling) on the production cache + the two guard rails
+(overwrite throw, FRESH-misapplication throw) + the single
+production DANGER caller.
+
+### Experiment (driver /tmp/flags_fuzz.cpp; production CCoinsViewCache
+subclassed for internals access, scripted CCoinsView backend,
+deterministic LCG)
+200,000 ops over parent+child caches (Add/Spend/Uncache/GetCoin/
+AccessCoin/Sync/Flush/child-Flush/child-Sync), invariants after
+EVERY op: DIRTY-set == linked-list membership (with Next/Prev
+cross-link integrity + cycle bound), m_dirty_count accurate,
+valid-state table (spent => dirty&&!fresh; fresh => dirty),
+cachedCoinsUsage recomputed exact.
+- g++ -O2 -std=c++20 -I src -I build-before/src /tmp/flags_fuzz.cpp
+  -L build-before/lib -lbitcoin_node -lbitcoin_common
+  -lbitcoin_consensus -lbitcoin_util -lbitcoin_crypto
+  -lbitcoin_clientversion -L build-before/src/secp256k1/lib -lsecp256k1
+
+### Results
+- phase1: 9,181,831 checks, ZERO violations. 1,573 overwrite-guard
+  enforcements (AddCoin possible_overwrite=false on an unspent
+  cached coin throws — coins.cpp:126), 827 FRESH-misapplication
+  guard firings under deliberate parent/child interleaving
+  (coins.cpp:330-334) — state stayed invariant-consistent across
+  every mid-BatchWrite throw (child rebuilt after each).
+- phase2 (positive control): stale-child FRESH add + concurrent
+  parent add -> Flush throws 'FRESH flag misapplied to coin that
+  exists in parent cache' exactly as designed.
+- phase3: EmplaceCoinInternalDANGER duplicate outpoint keeps the
+  FIRST coin (try_emplace no-replace), flags sane; the silent-drop
+  is backstopped by the snapshot count check
+  (validation.cpp:6135 'Bad snapshot coins count') — its only
+  production caller (snapshot load, validation.cpp:6051) cannot
+  accept a duplicated-outpoint snapshot.
+- Second verifier: build-before/bin/test_bitcoin
+  --run_test=coins_tests -> No errors detected.
+
+### Verdict
+DISMISSED: the flagged-list rewrite maintains all dirty/fresh
+invariants under per-op adversarial sequencing; both guard rails
+fire exactly where the contract says; the one DANGER caller is
+backstopped. No new oracle needed (sim + cursor tests + this
+evidence cover the space).
+
+### Caller-contract note (reachability of the FRESH throw)
+Production never interleaves parent/child mutation the way the
+fuzz does: the per-block overlay (CoinsViewOverlay) is the sole
+writer during ConnectTip, mempool views are serialized by cs_main,
+and snapshot chainstates have their own CoinsTip — the
+FRESH-misapplication throw is defensive-only (upstream-identical
+design), NOT a reachable hazard.
+
+### Limitations / queue
+- CoinsViewOverlay prefetch lifecycle (StartFetching/StopFetching/
+  ResetGuard thread interplay) is a distinct fork-new surface —
+  queued as the next local-reasoning cell.
+- The estimator unit battery from c1 remains queued.
+
+## Rotation note
+Two cycles; m_all_zero and the coins-flag module closed.
