@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -516,6 +517,18 @@ BOOST_AUTO_TEST_CASE(key_ellswift)
         }
         BOOST_CHECK(key.GetPubKey() == decoded_pubkey);
     }
+}
+
+BOOST_AUTO_TEST_CASE(ecdh_secret_clears_on_destruction)
+{
+    alignas(ECDHSecret) std::array<std::byte, sizeof(ECDHSecret)> storage{};
+    auto* secret = new (storage.data()) ECDHSecret{};
+    std::fill(secret->begin(), secret->end(), std::byte{0xa5});
+    secret->~ECDHSecret();
+
+    BOOST_CHECK(std::all_of(storage.begin(), storage.end(), [](std::byte byte) {
+        return byte == std::byte{0};
+    }));
 }
 
 BOOST_AUTO_TEST_CASE(bip341_test_h)

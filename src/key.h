@@ -27,8 +27,12 @@ typedef std::vector<unsigned char, secure_allocator<unsigned char> > CPrivKey;
 /** Size of ECDH shared secrets. */
 constexpr static size_t ECDH_SECRET_SIZE = CSHA256::OUTPUT_SIZE;
 
-// Used to represent ECDH shared secret (ECDH_SECRET_SIZE bytes)
-using ECDHSecret = std::array<std::byte, ECDH_SECRET_SIZE>;
+// Used to represent ECDH shared secret (ECDH_SECRET_SIZE bytes). Shared secrets
+// must not remain in caller-owned storage after their lifetime ends.
+struct ECDHSecret : std::array<std::byte, ECDH_SECRET_SIZE>
+{
+    ~ECDHSecret() { memory_cleanse(data(), size()); }
+};
 
 class KeyPair;
 
