@@ -138,3 +138,76 @@ across all primary statuses.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-30): reorged-record resume oracle delivered (+ mock duplicate-hash fidelity fix) — 3000 runs clean
+
+### Draw
+Re-harvested-queue draw (seed_raw=5478373626480380153, masked
+same, n=3, idx=2) -> resume-reorged-position -> #71 (third cycle;
+c2 queue cell "REORGED recorded position ... the mock needs a
+second-generation chain view"). Branch: audit/deterministic-sim-c3
+from 83d10f09c9 (#73 c3 journal tip).
+
+### Mechanism analysis first
+The mock's flip can only deactivate mid-scan, so at the c2
+oracle's point the recorded position is always ACTIVE — the
+reorged-start classes need deterministic forcing (exactly what
+the queue note predicted). wallet.cpp semantics for the classes:
+deactivated start -> FAILURE + break with last_failed_block =
+record (wallet.cpp:1977-1982, 'prevent marking transactions as
+coming from the wrong block'); unknown start (second-generation)
+-> FAILURE at :1996, then !next_block break; a pending
+abort/shutdown -> USER_ABORT with nothing scanned (legitimate).
+
+### Oracle delivered (src/wallet/test/fuzz/rescan.cpp, +~30 lines)
+After the c2 resume block, when the recorded position is in the
+mock chain, force BOTH sub-classes:
+(a) deactivate the recorded block in place;
+(b) replace its hash with a guaranteed-distinct fresh one.
+Assert: resume status is never SUCCESS; FAILURE implies
+last_failed_block == recorded; mapWallet never shrinks.
+
+### The artifact and the mock-fidelity root cause
+First campaign crashed on seed BwoANwKKAAA= (Base64): the mode-1
+resume returned SUCCESS + last_scanned_h=7 over a replaced
+genesis. Instrumented root cause (M-DEBUG/C3-DEBUG, all restored
+after): the harness's null-hash correction (hash=0 -> uint256::ONE)
+made MULTIPLE mock blocks share hash=ONE; the resume's IndexOf
+found a same-hash SUCCESSOR after blocks[0] was replaced — a
+degenerate unrepresentable chain, not a production defect. Fixed
+at the source: block hashes are now made unique at construction
+(low-byte bump until distinct); the mode-1 replacement is
+guaranteed distinct likewise.
+
+### Verification
+- make -C build_fuzz -j4 fuzz (clean).
+- Artifact repro post-fix: runs clean (no assert).
+- FUZZ=wallet_rescan build_fuzz/bin/fuzz -runs=3000 -max_len=4096
+  /tmp/r71_corpus (artifact seeded as
+  /tmp/r71_corpus/seed_reorg_resume_dup): 'Done 3000 runs in
+  191 second(s)', exit 0, no crash/oracle/sanitizer report.
+
+### Verdict
+- Fault class DELIVERED and oracle-clean: resuming from a reorged
+  recorded position fails cleanly (or aborts with nothing
+  scanned), never scans wrong-chain data, never loses wallet txs.
+- Mock-fidelity flaw CONFIRMED+FIXED (duplicate block hashes from
+  the null->ONE correction) — would have weakened every oracle in
+  the harness that locates blocks by hash.
+- No production defect found: the wallet.cpp FAILURE paths are
+  exactly as designed.
+
+### Exact commands
+- as above; provenance: seed /tmp/r71_corpus/seed_reorg_resume_dup,
+  original artifact Base64 BwoANwKKAAA=.
+
+### Limitations / queue
+- Extension-block resume (recorded position inside the extension)
+  still open (c2 queue).
+- The reorg classes are forced post-scan deterministically; a
+  mock that reorgs DURING a resume (second flip) is a deeper
+  schedule — nicety, not queued.
+
+## Rotation note
+Three cycles; tip-extension, crash-resume durability, and
+reorged-record resume all delivered with oracles.
