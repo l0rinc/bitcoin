@@ -118,7 +118,7 @@ class InputMissing(BadTxTemplate):
 class SizeExactly64(BadTxTemplate):
     reject_reason = "txn-size-64"
     valid_in_block = False
-    block_reject_reason = "bad-txns-size"
+    block_reject_reason = "bad-txns-size-64"
 
     def get_tx(self):
         tx = CTransaction()

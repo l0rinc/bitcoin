@@ -1601,7 +1601,7 @@ BOOST_AUTO_TEST_CASE(bip54_txsize)
         const bool res{chainman.AcceptBlock(pblock, state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true)};
         BOOST_CHECK_MESSAGE(res == test_case.valid, test_case.comment);
         if (!test_case.valid) {
-            BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-txns-size", test_case.comment);
+            BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-txns-size-64", test_case.comment);
         }
     }
 

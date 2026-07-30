@@ -432,9 +432,9 @@ class Bip54Test(BitcoinTestFramework):
         assert_raises_rpc_error(-25, "bad-cb-locktime", self.submit_nontimelocked_cb, node)
         assert_raises_rpc_error(-25, "bad-cb-locktime", self.submit_nontimelocked_cb, node, 1)
         # - Refuse a block containing a 64-byte transaction
-        assert_raises_rpc_error(-25, "bad-txns-size", self.submit_block_64byte, node)
+        assert_raises_rpc_error(-25, "bad-txns-size-64", self.submit_block_64byte, node)
         # - Even if that is the coinbase transaction
-        assert_raises_rpc_error(-25, "bad-txns-size", self.submit_block_64byte_coinbase, node)
+        assert_raises_rpc_error(-25, "bad-txns-size-64", self.submit_block_64byte_coinbase, node)
 
 
 if __name__ == "__main__":
