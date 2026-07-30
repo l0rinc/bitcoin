@@ -14,6 +14,7 @@ from test_framework.messages import (
     COIN,
 )
 from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_node import ErrorMatch
 from test_framework.wallet import (
     MiniWallet,
 )
@@ -411,6 +412,18 @@ class MempoolClusterTest(BitcoinTestFramework):
             self.test_cluster_count_limit(cluster_count_limit)
             if cluster_count_limit > 10:
                 self.test_cluster_merging(cluster_count_limit)
+
+        self.log.info("-> limitclustercount boundary validation")
+        self.stop_node(0)
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=["-limitclustercount=0"],
+            expected_msg="limitclustercount must be at least 1",
+            match=ErrorMatch.PARTIAL_REGEX)
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=["-limitclustercount=65"],
+            expected_msg="limitclustercount must be less than or equal to",
+            match=ErrorMatch.PARTIAL_REGEX)
+        self.start_node(0)
 
 
 if __name__ == '__main__':
