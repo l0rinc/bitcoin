@@ -64,6 +64,14 @@ void ResetChainman(TestingSetup& setup)
     }
 }
 
+void ResetMempool(TestingSetup& setup)
+{
+    bilingual_str error{};
+    setup.m_node.mempool.reset();
+    setup.m_node.mempool = std::make_unique<CTxMemPool>(MemPoolOptionsForTest(setup.m_node), error);
+    Assert(error.empty());
+}
+
 CTransactionRef MakeRelayTransaction(const std::pair<COutPoint, CAmount>& coinbase, uint32_t locktime)
 {
     CMutableTransaction tx;
@@ -107,6 +115,7 @@ void initialize_process_messages()
 FUZZ_TARGET(process_messages, .init = initialize_process_messages)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
+    ResetFuzzedSockMockedFds();
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     FuzzedDataProvider rate_provider(buffer.data(), buffer.size());
 
@@ -125,6 +134,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     node.banman.reset();
     node.addrman.reset();
     node.peerman.reset();
+    ResetMempool(*g_setup);
     node.addrman = std::make_unique<AddrMan>(*node.netgroupman, /*deterministic=*/true, /*consistency_check_ratio=*/0);
     node.peerman = PeerManager::make(connman, *node.addrman,
                                      /*banman=*/nullptr, chainman,

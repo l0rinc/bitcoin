@@ -1,5 +1,169 @@
 # Fuzz-engine and property-framework differential
 
+## Cycle 171 start: stateful process_messages engine comparison
+
+### Selection and fresh gate
+
+- The post-Cycle-170 selector first returned `53` (`statistical-timing`),
+  which was explicitly closed in the authoritative ledger; the required exact
+  reroll `shuf -i 0-98 -n 1` returned `80` (`fuzz-engine-differential`).
+- Branch: `uber-cycle-171-fuzz-engine-differential-20260730`.
+- Start HEAD: `ad4a3cf1577b22bc9793b124922dd26e53052560`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`;
+  `git rev-list --left-right --count HEAD...origin/master`: `1123 42`.
+- The fresh post-close gate fetched `origin master`, passed both
+  `git diff --check` and the cached equivalent, and found no tracked changes.
+  Existing untracked agent/user artifacts remain preserved. PIDs 777094
+  (`wallet_tests`) and 956381 (`util_tests`) were present and must not be
+  stopped. Catalog/prompt/TSV/protocol hashes were unchanged at
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+### Scope and exclusions
+
+Cycles 8, 79, and 131 already compared `bech32_roundtrip`, `parse_numbers`,
+and `descriptor_parse` respectively; those exact target/corpus/result cells
+are closed. FuzzTest is still not installed and has no repository integration,
+so it is an availability result rather than a framework comparison. This
+cycle selects the distinct stateful `process_messages` production harness,
+which creates one to three peers, feeds up to 30 messages through the tested
+connection manager and peer manager, drains each message, then exercises the
+guided transaction-relay slice. The target resets chainstate and peer state,
+checks send-queue accounting, relay-bucket invariants, and cleanup.
+
+The hypothesis is that an engine's persistent-loop, input scheduling, or corpus
+transfer behavior may expose a state-reset, timeout, sanitizer, or harness
+realism difference that the earlier stateless/parser targets did not. Native
+coverage counters are engine-specific and will not be ranked as equal units.
+Only reproduced target behavior, transferred inputs, sanitizer diagnostics,
+crashes, hangs, exit status, and explicit target assertions are cross-engine
+evidence. No production change is justified by throughput or corpus size alone.
+
+Use one shared deterministic seed corpus and identical target selector,
+maximum input length, worker count, fixed wall-clock budget, memory limit, and
+scratch locations. Compare Clang 19 libFuzzer and AFL++ when their targets
+build; use Honggfuzz if its local binary/toolchain is available. Replay every
+engine-produced input through a Clang 19 ASan+UBSan target. If the full
+`process_messages` target is too expensive or one engine cannot initialize its
+stateful loop, record that as a tool/harness limitation and use the distinct
+single-message `process_message` target only with a new scope ledger entry.
+
+### Initial queue
+
+1. Inventory the current `process_messages` harness, its initialization/reset
+   boundaries, target build identity, available fuzz engines, and a small
+   semantic seed corpus covering unknown messages, handshake/order errors,
+   fragmented payloads, multiple peers, relay permissions, and shutdown.
+2. Run a fixed-budget libFuzzer/AFL++ comparison, preserving native metrics,
+   executions, peak RSS, corpus growth, crashes, hangs, timeout diagnostics,
+   and repeatability. Keep engine startup and corpus dry-run time separate from
+   feedback-loop measurements.
+3. Transfer minimized or queue inputs between engines and replay them through
+   the sanitizer oracle. Inspect every failure for a production source path,
+   a target assertion, a state-reset bug, an invalid harness assumption, or an
+   engine/toolchain artifact.
+4. If a real mismatch appears, reduce it to the smallest input and independently
+   reproduce it in a fresh process and through the target's production boundary.
+   A source change requires a failing-before/passing-after regression or an
+   equivalent mutation result. Otherwise close with exact metrics, tool limits,
+   raw artifact paths, and the next untouched target/toolchain cell.
+
+## Cycle 171 evidence and completion
+
+### Discovery and independent verification
+
+The target inventory confirmed that both `process_messages` and the distinct
+single-message `process_message` harness use persistent process state. Each
+input reseeds the deterministic random source and resets chainman and peer
+objects, but neither target reset the process-global mocked socket descriptor
+counter in `src/test/fuzz/util/net.cpp`. The counter is consumed by `FuzzedSock`
+and therefore made later inputs observe different descriptor values even when
+their bytes and the target's deterministic seed were unchanged. Existing
+network fuzzers such as `connman`, `http_request`, `i2p`, `pcp`, and `socks5`
+already call `ResetFuzzedSockMockedFds()` at input start.
+
+The same two targets also retained mempool state between inputs. The
+`cmpctblock` harness provides an existing local precedent for reconstructing
+`CTxMemPool` during per-input reset. The process-message targets reset their
+peer manager before rebuilding it, so reconstructing the mempool at that same
+boundary is safe and makes the stateful harness model one independent input.
+
+The falsifiable hypothesis was tested with AFL++ calibration and repeated
+sanitizer execution. Before the source change, an isolated `06-inv` input for
+`process_messages` produced AFL++'s `instability detected during calibration`
+warning, `variable` behavior, 99.55% stability, 11,998 map entries, and 25
+executions in a five-second run. The single-message target showed the same
+calibration warning. After adding only `ResetFuzzedSockMockedFds()`, the same
+isolated `process_messages` input had no warning, `variable 0`, 12,000 map
+entries, and the single-message target likewise had no warning and `variable
+0` with a 6,062-entry map.
+
+On the shared 13-file corpus, the descriptor-only patch left six variable
+calibration inputs. Recreating the mempool as well reduced the five-second
+corpus run to one variable input and produced no crash or hang. The remaining
+`sendcmpct` calibration variation reproduced in isolation, including a valid
+payload-shaped variant, after both resets. It is therefore retained as an
+inconclusive AFL++ cold/lazy malformed-message or instrumentation limitation,
+not claimed as a source defect. The 20-second final AFL++ run still had no
+crashes or hangs; its final metrics are recorded below.
+
+### Engine matrix and transferred-input evidence
+
+The deterministic corpus had 13 files and 142 bytes, copied identically to
+libFuzzer, AFL++, and Honggfuzz. Current-source engine binaries were rebuilt
+with Clang 19 after both resets. Their SHA256 values were:
+
+- libFuzzer ASan/UBSan: `a90b87c5c72ceb74dd015751717f44a148e96b5e107bf3e2199329bd41eade93`
+- AFL++: `ddcbdc22efcd0f6c3b47d5226951a90ba9a9d442804749c29d74678254aac5b3`
+- Honggfuzz: `e66645729b48bb306d330d77867d33db28aff5070d109e87c43abd7d25e97a03`
+
+The fixed-budget engine results were:
+
+| Engine | Budget/result | Native signal | Failures | Peak RSS |
+|---|---|---|---|---:|
+| libFuzzer, seed 17104 | 20 seconds, 159 executions | `cov 39049`, `ft 45334`, 67 new units | 0 sanitizer diagnostics/artifacts | 745 MiB |
+| AFL++ 4.04c, no-forkserver persistent shmem | 20 seconds, 346 executions, 17.22 exec/s | 12-input corpus, 0.15% bitmap, 99.65% stability, 12,650 edges | 0 crashes, 0 hangs | 1 MiB |
+| Honggfuzz, one worker | 21 seconds, 474 iterations | 56 new units, 300,504 guards, 2% reported branch coverage | 0 crashes, 0 timeouts | 92 MiB |
+
+AFL++'s normal forkserver launch failed before accepting the corpus with
+`Unable to request new process from fork server (OOM?)`; the successful
+measurement used `AFL_NO_FORKSRV=1 -m none` and is explicitly tool-limited
+evidence. The AFL++ final queue contained 14 files and its crashes and hangs
+directories were empty. Honggfuzz emitted 72 `.honggfuzz.cov` files and the
+final log reported `crashes_count:0 timeout_count:0`.
+
+All 14 AFL++ queue files and 76 files from the Honggfuzz output directory were
+replayed through the Clang 19 ASan/UBSan libFuzzer target. The AFL++ replay
+completed 14 runs with no new units and 747 MiB peak RSS. The Honggfuzz replay
+completed 79 runs with no sanitizer diagnostic, assertion, crash artifact, or
+timeout and 747 MiB peak RSS. A separate corpus run of the patched
+`process_message` target also completed cleanly. FuzzTest was not installed
+and no repository integration was found, so no FuzzTest result is claimed.
+
+### Verdict and fix
+
+The confirmed finding is test-harness state leakage: persistent
+`process_messages` and `process_message` executions did not restore the mocked
+socket descriptor allocator or mempool to the per-input state implied by their
+deterministic reset logic. This can create engine-dependent calibration and
+corpus behavior and weakens reproducibility; it is not a Bitcoin production
+behavior defect. The fix adds `ResetFuzzedSockMockedFds()` to both targets and
+reconstructs `CTxMemPool` after the peer manager is released. The focused
+before/after AFL++ calibration result, both target builds, the cross-engine
+reruns, and sanitizer replay independently verify the change. No production
+finding was confirmed.
+
+The source/test/journal commit is `fuzz: reset process message harness state
+between inputs`, authored as `Lőrinc <pap.lorinc@gmail.com>`. A separate
+state-only close commit records the cycle in the authoritative uber-goal
+ledger. The broader goal remains eligible for a future distinct engine,
+target, compiler, or property-framework evidence cell; do not repeat the
+closed `bech32_roundtrip`, `parse_numbers`, or `descriptor_parse` cells without
+new evidence.
+
 ## Cycle 131: descriptor_parse engine and toolchain comparison
 
 ### Selection and fresh gate
