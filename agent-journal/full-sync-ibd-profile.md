@@ -216,3 +216,78 @@ changed (45006056...).
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted (2 leads
 queued above).
+
+## Cycle 3 (2026-07-30): tx-heavy P2P IBD replay profile — ~87% ECDSA validation floor, both perf fixes hold; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=14671989418026382988,
+masked=5448617381171607180, n=6, idx=0) -> tx-heavy-import ->
+#63 (third cycle; c1 queue cell "tx-heavy chain import 500x100").
+Draw 114a (int128-split) was DISCARDED first as a stale duplicate
+of #69 c3 (journal-verified closed). Branch:
+audit/full-sync-ibd-c3 from 30c631a14c (#7 c4 journal tip).
+
+### Hypothesis
+A tx-heavy P2P IBD replay on the post-fix lineage (bloom reset
+fix c8f53e58d9 + estimator m_all_zero gate 675011ba86) could
+expose a NEW anomalous share outside the validation floor — the
+c2 empty-block anomalies are fixed, but tx traffic exercises the
+fixed paths for real (bloom membership inserts, estimator Record),
+plus coins/LevelDB/undo/txdownload shares.
+
+### Coverage audit (duplicate search)
+#21 c3/c4 (rebuild-recovery-profile) already profiled tx-heavy
+VALIDATION (~86% EC floor, 11.2k/9.0k tx/s, dbcache sensitivity) —
+the reindex/rebuild shape. The unmeasured remainder is the P2P
+IBD replay shape (net/txdownload + post-fix behavior), which is
+this cell.
+
+### Experiment
+- Server chain: 610 blocks, 500x100 1-in-1-out RAW_P2PK txs
+  (MiniWallet harness, 597 s build, tip nTx=101).
+- Client: fresh datadir, -connect=127.0.0.1:28811 -listen=0,
+  default dbcache/threads, perf record -F 199 -g, FOREGROUND
+  (v3's -daemon fork escaped perf — 8 samples; recorded as harness
+  lesson). Synced to tip 610 in ~6 s, bestblockhash == server's.
+- perf: 419 cycles:P samples, 0 lost.
+
+### Profile attribution (client)
+- secp256k1 total ~86.8%: gej_add_ge_var 40.9+19.1, gej_double
+  12.0+5.4+2.1+0.5, scalar_reduce_512 4.9, ecmult_strauss_wnaf
+  dominates stacks (52.9% under secp256k1_ecdsa_verify <- CPubKey::
+  Verify <- CachingTransactionSignatureChecker <- EvalScript <-
+  CScriptCheck <- CCheckQueue::Loop).
+- wake_q_add_safe 11.35% (+futex/atomics ~0.5%) — checkqueue
+  idle-wakeup cost at small per-block batches (100 txs); expected
+  trade-off of the sleep-when-idle design, not a defect.
+- CRollingBloomFilter::reset / memset: ABSENT (only ::insert
+  0.92% — legit membership work). UpdateMovingAverages sweep:
+  ABSENT. LevelDB: <0.01%. txdownload beyond the bloom insert:
+  invisible. recv 0.24%.
+
+### Verdict
+DISMISSED: the tx-heavy replay profile is exactly the validation
+floor (~87% ECDSA on 2 active script threads) with both prior
+fixes holding under real tx traffic (zero reset-memset, zero
+zero-state sweep) and no new anomalous share. #63's c1/c2 queue
+is now fully closed.
+
+### Exact commands
+- /tmp/btc24_mw.py (server build, 610 blocks, PortSeed 317);
+  /tmp/ibd_heavy.sh (server + perf'd foreground client sync);
+  perf report --no-children (attribution above).
+- Harness lessons: -daemon escapes perf record (use foreground);
+  bitcoin-cli needs -datadir for the cookie; MiniWallet get_utxo
+  quadratic (from #7 c4) applies here too.
+
+### Limitations / queue
+- 419 samples: solid for >=10% shares, thin below 1%; a 5000-block
+  run would sharpen the tail but not the conclusion (the ~87% floor
+  cross-validates #21 c3's independent measurement).
+- The wake_q share could be split (idle-wake vs steal-wake) with a
+  longer run — cosmetic, not queued.
+
+## Rotation note
+Three cycles; loadblock import, empty-block P2P replay, and
+tx-heavy P2P replay all profiled; both perf fixes hold under tx
+traffic. Campaign quiet pending new anomalies.
