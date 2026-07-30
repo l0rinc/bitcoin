@@ -96,3 +96,68 @@ tracks only mempool-seen transactions).
 Cycle 1 complete with a confirmed fix; rotating per uber-goal policy.
 Not exhausted (pipeline composition pass over accumulated findings
 queued).
+
+## Cycle 4 (2026-07-30): FlatFileSeq::Open churn MEASURED — 20.7% inclusive (13.2% genuine page IO + ~7.5% fopen machinery); design cost, not a defect
+
+### Draw
+Re-harvested-queue draw (seed_raw=3781142207025897645, masked
+same, n=5, idx=0) -> flatfileseq-open-churn -> #63 (fourth cycle;
+c1 queue cell "the verifier's FlatFileSeq::Open 12.79% observation
+goes to the #24 queue" — #24 since COMPLETE; the measurement lands
+here). Branch: audit/loupe-pipeline-c4 from 7f7fac141b (#41 c3
+journal tip).
+
+### Hypothesis
+Per-block file-handle churn (a fresh FILE* per block read) could be
+the dominant non-validation cost in read-heavy block workloads —
+with a handle cache as the obvious repair.
+
+### Mechanism map
+FlatFileSeq (src/flatfile.h:41-96) is minimal: Open returns a new
+FILE* per call (fopen rb/rb+, fseek to pos), callers close per
+read; ReadRawBlock -> OpenBlockFile per block (blockstorage.cpp
+:1138-1151), AutoFile RAII closes at scope end. Upstream-identical
+design (open-per-read).
+
+### Experiment
+2001-block regtest chain, stop, then
+strace -c -f -e trace=openat,close + perf record -F 199 -g on
+bitcoind -reindex-chainstate (reads every block):
+- strace: 3,527 openat (104 errors) / 3,521 close, 0.0745 s total
+  syscall time (12 us openat, 8 us close) over the ~36 s reindex —
+  ~0.2% syscall share; every handle closed (no leak).
+- perf: FlatFileSeq::Open = 20.71% INCLUSIVE of the reindex CPU,
+  decomposed as fseek -> _IO_file_seekoff -> read 13.18% (first-
+  touch page fetches — genuine IO a handle cache cannot remove)
+  plus ~7.5% fopen/fopen_internal machinery (the avoidable churn).
+  The verifier's 12.79% observation reproduces within this family.
+
+### Verdict
+DISMISSED (characterized, design cost): the churn is real (one
+fopen+fclose per block read) but the measured AVOIDABLE share is
+~7.5% of this workload's CPU; the dominant 13% is genuine
+first-touch page IO. A handle cache would also drop most fseeks
+on sequential reads but not the page fetches; upstream-identical
+behavior, not a defect, not queued for local repair. If an
+upstream handle-cache discussion ever opens, the measured numbers
+here (20.7% inclusive, 7.5% avoidable, 3527 opens / 2001 blocks)
+are the reference.
+
+### Exact commands
+- setup: createwallet + generatetoaddress 2001 (16 s, ~125 blk/s)
+- strace -c -f -e trace=openat,close -o /tmp/ffs_strace.txt --
+  perf record -F 199 -g -o /tmp/ffs_reindex.perf --
+  bitcoind -regtest -datadir=/tmp/ffs_root/node0 -reindex-chainstate
+- perf report --stdio [--no-children] (numbers above)
+
+### Limitations / queue
+- Empty regtest blocks: validation cost is minimal here, so the
+  open share is INFLATED relative to a mainnet-scale reindex
+  (where validation dominates); the 7.5% avoidable figure is the
+  upper bound, the composition (fopen vs fseek/read) is the
+  transferable part.
+- generatetoaddress throughput decay (108 -> 19 blocks/s by
+  height 20000) remains the sibling unpinned observation.
+
+## Rotation note
+Four cycles; estimator waste (fixed), churn (characterized).
