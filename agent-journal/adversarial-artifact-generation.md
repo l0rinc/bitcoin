@@ -102,3 +102,57 @@ split/stall surface is closed for V1.
 
 ## Rotation note
 Two cycles; V1 split/stall closed. Not exhausted (v2 variant).
+
+## Cycle 3 (2026-07-30): BIP324 v2 hostile-peer classes — all handled correctly
+
+### Draw
+Re-rank draw over the rebuilt 3-cell queue:
+raw=11237199852652658799, masked 2013827815797882991, index 1
+(of 3) -> #108 (third cycle; c2 queue cell "BIP324 v2 hostile-
+peer variant"). Branch: audit/adversarial-artifact-c3 from
+991b036dae (#69 c2 journal tip).
+
+### Classes (driver /tmp/btc108_peer3.py on the framework's
+EncryptedP2PState)
+- V1 control: full v2 handshake + version exchange + short-id
+  ping -> pong. OK.
+- V2 random-ellswift: random 64B "key" (VALID ellswift by design —
+  any 64 bytes decode) + >4 KiB junk with no garbage terminator ->
+  node disconnects ("missing garbage terminator"). OK.
+- V3 corrupted ciphertext: valid handshake, one flipped byte ->
+  "packet decryption failure (20 bytes)", disconnect. OK.
+- V4 handshake stall: 20 bytes of ellswift then silence -> 60 s V2
+  handshake timeout. OK.
+
+### Driver lessons (recorded)
+- v2 message contents framing: SHORT form = [1-byte short id]
+  (ping=18, pong=19); LONG form = [0x00][12-byte ascii type] — my
+  first version omitted the 0x00 and the node logged "invalid
+  message type" for each packet (exactly the right classifier
+  behavior, observed in debug.log).
+- EncryptedP2PState.complete_handshake takes a STREAM (BytesIO),
+  not bytes.
+
+### Verdict
+DISMISSED (robustness confirmed): the v2 transport completes only
+for correct handshakes, rejects terminator-less garbage streams,
+fails decryption on tampered ciphertext, and enforces the 60 s
+handshake timeout. V1 (c1-c2) and v2 hostile surfaces are both
+closed.
+
+### Exact commands
+- bitcoind -regtest -datadir=/tmp/btc108_v2 -port=29003 -bind=
+  127.0.0.1:29003 -rpcport=29004 -debug=net -daemon
+- python3 /tmp/btc108_peer3.py (output above); debug.log grep
+  "garbage terminator|decryption failure|handshake timeout"
+
+### Limitations / queue
+- Post-handshake v2 slowloris (inactivity timeout) untested —
+  long-wall cell, low value.
+- Malformed-ellswift EDGE classes (non-curve points after
+  xswiftec inversion) — the framework has the test vectors
+  (xswiftec_inv_test_vectors.csv) if a cycle lands here.
+
+## Rotation note
+Three cycles; v1+v2 hostile transports closed. Not exhausted
+(xswiftec edge vectors).
