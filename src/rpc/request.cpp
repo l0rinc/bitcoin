@@ -128,7 +128,15 @@ AuthCookieResult GenerateAuthCookie(const std::optional<fs::perms>& cookie_perms
         return AuthCookieResult::Error;
     }
     file << COOKIEAUTH_USER << ":" << rand_pwd_hex;
+    if (file.fail()) {
+        LogWarning("Unable to write RPC authentication cookie file %s", fs::PathToString(filepath_tmp));
+        return AuthCookieResult::Error;
+    }
     file.close();
+    if (file.fail()) {
+        LogWarning("Unable to close RPC authentication cookie file %s", fs::PathToString(filepath_tmp));
+        return AuthCookieResult::Error;
+    }
 
     fs::path filepath = GetAuthCookieFile(false);
     if (!RenameOver(filepath_tmp, filepath)) {
