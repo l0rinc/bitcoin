@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <common/pcp.h>
+#include <mapport.h>
 #include <netbase.h>
 #include <test/util/logging.h>
 #include <test/util/common.h>
@@ -12,7 +13,9 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <barrier>
 #include <deque>
+#include <thread>
 
 using namespace std::literals;
 
@@ -471,6 +474,30 @@ BOOST_AUTO_TEST_CASE(portmap_interrupt_before_send)
 
     check_interrupted(/*use_pcp=*/true);
     check_interrupted(/*use_pcp=*/false);
+}
+
+BOOST_AUTO_TEST_CASE(mapport_lifecycle_is_serialized)
+{
+    CreateSock = [](int, int, int) { return std::unique_ptr<Sock>{}; };
+
+    constexpr int iterations{32};
+    std::barrier start_line{2};
+    std::thread enabler{[&] {
+        start_line.arrive_and_wait();
+        for (int i{0}; i < iterations; ++i) {
+            StartMapPort(/*enable=*/true);
+        }
+    }};
+    std::thread disabler{[&] {
+        start_line.arrive_and_wait();
+        for (int i{0}; i < iterations; ++i) {
+            StartMapPort(/*enable=*/false);
+        }
+    }};
+
+    enabler.join();
+    disabler.join();
+    StartMapPort(/*enable=*/false);
 }
 
 // PCP IPv6 success after one timeout.

@@ -12,6 +12,7 @@
 #include <netaddress.h>
 #include <netbase.h>
 #include <random.h>
+#include <sync.h>
 #include <util/log.h>
 #include <util/thread.h>
 #include <util/threadinterrupt.h>
@@ -24,6 +25,7 @@
 #include <thread>
 
 static CThreadInterrupt g_mapport_interrupt;
+static GlobalMutex g_mapport_mutex;
 static std::thread g_mapport_thread;
 
 using namespace std::chrono_literals;
@@ -127,7 +129,7 @@ static void ThreadMapPort()
     } while (g_mapport_interrupt.sleep_for(PORT_MAPPING_RETRY_PERIOD));
 }
 
-void StartThreadMapPort()
+static void StartThreadMapPort()
 {
     if (!g_mapport_thread.joinable()) {
         assert(!g_mapport_interrupt);
@@ -135,27 +137,41 @@ void StartThreadMapPort()
     }
 }
 
-void StartMapPort(bool enable)
-{
-    if (enable) {
-        StartThreadMapPort();
-    } else {
-        InterruptMapPort();
-        StopMapPort();
-    }
-}
-
-void InterruptMapPort()
+static void InterruptMapPortInternal()
 {
     if (g_mapport_thread.joinable()) {
         g_mapport_interrupt();
     }
 }
 
-void StopMapPort()
+static void StopMapPortInternal()
 {
     if (g_mapport_thread.joinable()) {
+        g_mapport_interrupt();
         g_mapport_thread.join();
         g_mapport_interrupt.reset();
     }
+}
+
+void StartMapPort(bool enable)
+{
+    LOCK(g_mapport_mutex);
+    if (enable) {
+        StartThreadMapPort();
+    } else {
+        InterruptMapPortInternal();
+        StopMapPortInternal();
+    }
+}
+
+void InterruptMapPort()
+{
+    LOCK(g_mapport_mutex);
+    InterruptMapPortInternal();
+}
+
+void StopMapPort()
+{
+    LOCK(g_mapport_mutex);
+    StopMapPortInternal();
 }

@@ -287,3 +287,98 @@ risk map prioritizes a fresh subsystem selected from the full catalog, with
 callback-owned state, platform-specific worker shutdown, and atomic progress
 contracts still unchecked outside the reviewed net/scheduler paths. Preserve
 the exact source ranges and test commands above to avoid repeating this cell.
+
+# Cycle 163: mapport lifecycle serialization
+
+## Selection and gate
+
+- The fresh gate after Cycle 162 kept the catalog, prompt, and goals TSV hashes
+  unchanged. `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`,
+  the merge base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and the clean
+  tracked start was `c7aeed287d4426b0af928137ba41e14cc375b754` with divergence
+  `42 1107`.
+- The exact selector sequence was `58`, `62`, `7`, `8`: goals 58, 62, and 7
+  were closed cells, so each was rerolled as required. Goal 8 was accepted
+  because its prior risk map left platform-specific worker shutdown and atomic
+  progress contracts open. The branch is
+  `uber-cycle-163-locking-threading-20260730`.
+- The persistent wallet test process (PID 777094), the unrelated util test
+  process (PID 956381), and all unrelated untracked artifacts were preserved.
+
+## Scope and hypothesis
+
+The reviewed net/scheduler cells from Cycles 16, 35, and 98 remain excluded.
+This cycle selected the cross-thread mapport lifecycle boundary:
+
+`OptionsModel::setOption(MapPortNatpmp)` calls `node().mapPort()` from the GUI
+thread (`src/qt/optionsmodel.cpp`), while core shutdown calls `StopMapPort()`
+from `Shutdown()` (`src/init.cpp`). Both paths reached the global
+`g_mapport_thread` in `src/mapport.cpp` without a mutex. `StartThreadMapPort()`
+assigned that `std::thread`, while `StopMapPort()` and
+`InterruptMapPort()` called `joinable()` and, respectively, `join()` or the
+interrupt object. `CThreadInterrupt` makes the interrupt flag safe, but does
+not make concurrent access to the `std::thread` object safe.
+
+The expected contract is that enable, disable, interrupt, and join operations
+are serialized as one lifecycle state machine. In particular, disabling must
+hold the lifecycle exclusion across both interrupt and join; locking those two
+public calls separately would leave a window in which another enable could
+start a thread after the interrupt check and before the join.
+
+## Independent verification
+
+The new `pcp_tests/mapport_lifecycle_is_serialized` test installs a null socket
+factory, uses a two-party `std::barrier`, and concurrently executes 32 enable
+and disable operations. It leaves a final disable operation to clean up any
+thread started by the final enable.
+
+Against the original source, the dedicated Clang 19 ThreadSanitizer build
+(`cmake -S . -B /data/my_storage/tmp/cycle163-tsan -G Ninja` with
+`-fsanitize=thread`, `-DENABLE_IPC=OFF`, and `-DWITH_CCACHE=OFF`) ran:
+
+`TSAN_OPTIONS='halt_on_error=1:exitcode=66:report_signal_unsafe=0' TMPDIR=/tmp /data/my_storage/tmp/cycle163-tsan/bin/test_bitcoin --run_test=pcp_tests/mapport_lifecycle_is_serialized --random=163007 --log_level=message --report_level=short --color_output=false`
+
+It exited 66 with a ThreadSanitizer report. The write was the
+`std::thread::operator=` in `StartThreadMapPort()` (`src/mapport.cpp:134` in
+the pre-fix binary), and the concurrent read was `std::thread::joinable()` in
+`StopMapPort()` (`src/mapport.cpp:157`); TSan identified the object as the
+global `g_mapport_thread`. This is a direct first-conflicting-access trace,
+not a naming or scheduling inference.
+
+The fix adds a file-scope `GlobalMutex`, keeps the worker-start helper private,
+and splits interrupt/stop into internal helpers. All three public lifecycle
+entry points lock the mutex, while `StartMapPort(false)` keeps the same lock
+across interrupt and join. `StopMapPortInternal()` also interrupts before
+joining, so the separate shutdown calls remain safe if a GUI enable happens
+after the earlier `InterruptMapPort()` observed no worker. The worker never
+takes this lifecycle mutex, so joining while it is held cannot create a lock
+cycle.
+
+The same TSan command with seed `163014` against the fixed binary exited 0:
+one test case and one assertion passed with no sanitizer report. The fixed
+Clang 19 UBSan/alignment/object-size binary was rebuilt with:
+
+`cmake --build /data/my_storage/tmp/cycle106-clang19-ubsan --target test_bitcoin -j2`
+
+The following runs all exited 0:
+
+- `pcp_tests`, seed `163015`: 13 cases, 213 assertions.
+- `net_tests`, seed `163016`: 36 cases, 146816 assertions.
+- `denialofservice_tests`, seed `163017`: 5 cases, 90 assertions.
+- `scheduler_tests`, seed `163018`: 4 cases, 27 assertions.
+
+The original source also passed the UBSan lifecycle test, which is expected
+because UBSan does not diagnose a C++ data race; the TSan before/after result
+is the independent regression proof. Initial TSan configuration attempts were
+blocked by the installed Cap'n Proto 0.9.2/Clang 19 C++20 incompatibility and
+a broken ccache symlink; IPC and ccache were disabled in the successful build.
+
+## Verdict and handoff
+
+Cycle 163 confirmed and fixed a GUI-versus-shutdown mapport lifecycle race.
+The source/test change and this journal belong in one independent commit. The
+next open mapport cell is platform-specific behavior of the worker's network
+operations during shutdown; do not reopen the fixed `std::thread` lifecycle
+race unless its ownership or call-thread contract changes. Continue by
+checking the source commit in isolation, then update the uber-goal state and
+perform a fresh gate before the next exact selector draw.
