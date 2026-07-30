@@ -1,5 +1,48 @@
 # Public object parsing and validation variant analysis
 
+## Cycle 166: compact recovery header domain and public-key parser parity
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `15`
+- Slug: `public-object-validation`
+- Branch: `uber-cycle-166-public-object-validation-20260730`
+- Gate HEAD: `2691ebfa27984989a1f19ed390ce79e4cfd4ba41`
+- Base: `origin/master` at `67efced1fc83a0b7215cc1513e7c4754fee0f12`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD=1113 42`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Corrected goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The fresh gate passed with tracked source clean. The prior full-key P2PK inference (`c125061aa4`), tracked x-only/taproot leaf inference (`a81f58f3bf`), and Taproot compressed-key lookup (`d02e22867b`) were searched and excluded as already closed cells.
+
+### Scope and active hypothesis
+
+This cycle targets direct public-object parser and API-wrapper boundaries rather than descriptor inference. The primary hypothesis is that `CPubKey::RecoverCompact()` accepts compact-signature recovery headers outside the documented `27..34` domain because it derives the recovery ID and compression bit with masked arithmetic instead of validating the header first. `CKey::SignCompact()` emits only `27..34`, and the compact format's header contract is therefore a finite eight-value domain. An out-of-domain header that recovers a key would be a noncanonical parser acceptance and cross-wrapper consistency defect; an out-of-domain header that fails would establish only the negative contract.
+
+The trust boundary is a caller-supplied 65-byte compact signature, including its first header byte. The output-state contract is that failure invalidates a reused `CPubKey`, while success produces a fully valid key whose compression state reflects the header. I will compare `SignCompact()` output, `RecoverCompact()`, message-signing RPC callers, history, and tests, then use a deterministic valid signature with each header class and an independent libsecp/reference check. Address, `HexToPubKey()`, and direct `DecodeDestination()` paths remain secondary queue cells unless this hypothesis is dismissed.
+
+Status: confirmed; the compact recovery-header cell produced a source finding and regression commit in this cycle.
+
+### Source/history contract and confirmed finding
+
+The public `CKey::SignCompact()` contract in `src/key.h` defines one header byte with values `0x1B` through `0x1E`, plus `0x04` for compressed keys. Its implementation writes exactly `27 + rec + (fCompressed ? 4 : 0)`, so the complete producer domain is `27..34`. `CPubKey::RecoverCompact()` had kept the recovery ID and compression bit with `& 3` and `& 4` but did not first enforce that domain. The expression is unchanged since `d2e74c55bdd` (2014), and the same parser is used by `MessageVerify()` in `src/common/signmessage.cpp`.
+
+A deterministic scratch probe used one valid compact signature and tried every first-byte value from `0` through `255`. Before the change, headers such as `0`, `3`, `4`, `7`, `8`, `11`, and their repetitions every eight values recovered the same valid public keys as canonical headers. After the change, only `27`, `28`, `31`, and `32` were accepted for that signature, which are exactly its valid recovery/compression combinations. The before/after outputs are preserved at `/data/my_storage/tmp/cycle166-recover-header-probe.log` and `/data/my_storage/tmp/cycle166-recover-header-probe-after.log`.
+
+This is a confirmed public parser differential. A caller supplying a 65-byte compact signature could provide a noncanonical header that `RecoverCompact()` and the message-verification wrapper treated as equivalent to a canonical signature. The fix rejects headers below `27` or above `34` before deriving masked fields and uses the existing failure path, which invalidates a reused `CPubKey`. This is a format-validation correction, not a consensus-validation change; the underlying 64-byte signature and recovery ID remain handled by libsecp256k1 exactly as before.
+
+### Regression and mutation evidence
+
+- Corrected TSAN build: `cmake --build /data/my_storage/tmp/cycle163-tsan --target test_bitcoin -j2`, exit 0. Build log: `/data/my_storage/tmp/cycle166-restored-build.log`.
+- Corrected `key_tests`: 15 cases and 897 assertions passed with seed `166003`; the same new test also passed as a one-case filter with seed `166006`. Logs: `/data/my_storage/tmp/cycle166-key-suite.log` and `/data/my_storage/tmp/cycle166-restored-key.log`.
+- Corrected `util_tests`: 80 cases and 3,994 assertions passed with seed `166002`; the new `MessageVerify()` test also passed as a one-case filter with seed `166007`. Logs: `/data/my_storage/tmp/cycle166-util-suite.log` and `/data/my_storage/tmp/cycle166-restored-util.log`.
+- Mutation proof removed only the new header range check. The key regression then failed because the noncanonical header recovered a valid key (2 of 5 assertions failed, exit 201), and the message-wrapper regression failed because the old path returned the successful/non-error result (exit 201). Logs: `/data/my_storage/tmp/cycle166-mutated-key.log` and `/data/my_storage/tmp/cycle166-mutated-util.log`.
+- An earlier attempted parallel run used a nonexistent `TMPDIR` and shared stateful test setup. It failed during harness initialization with `filesystem_error` and was classified as an invalid test run, not a product result. The affected processes were interrupted, the directory was created, and all recorded validation above was rerun serially.
+
+### Handoff
+
+Commit `src/pubkey.cpp`, the focused key and message-verification regressions, and this journal entry together with the required author. Then close the cycle with a state-only uber-goal commit. The remaining queue is direct address/key decoding, malformed API-wrapper inputs, and release-version parser differences; do not reopen the compact-header cell without a new contract or regression signal.
+
 ## Cycle 51: taproot inference must reject off-curve x-only leaf keys
 
 ### Selection and gate

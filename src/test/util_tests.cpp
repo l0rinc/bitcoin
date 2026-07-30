@@ -1917,6 +1917,22 @@ BOOST_AUTO_TEST_CASE(message_verify)
         MessageVerificationResult::OK);
 }
 
+BOOST_AUTO_TEST_CASE(message_verify_rejects_noncanonical_compact_header)
+{
+    const std::string address{"15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs"};
+    const std::string message{"Trust no one"};
+    const std::string canonical_signature{
+        "IPojfrX2dfPnH26UegfbGQQLrdK844DlHq5157/P6h57WyuS/Qsl+h/WSVGDF4MUi4rWSswW38oimDYfNNUBUOk="};
+    auto signature_bytes{DecodeBase64(canonical_signature)};
+    BOOST_REQUIRE(signature_bytes);
+    BOOST_REQUIRE(signature_bytes->at(0) >= 27 && signature_bytes->at(0) <= 34);
+
+    signature_bytes->at(0) += 8;
+    BOOST_CHECK_EQUAL(
+        MessageVerify(address, EncodeBase64(*signature_bytes), message),
+        MessageVerificationResult::ERR_PUBKEY_NOT_RECOVERED);
+}
+
 BOOST_AUTO_TEST_CASE(message_hash)
 {
     const std::string unsigned_tx = "...";
