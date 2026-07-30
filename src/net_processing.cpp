@@ -1784,6 +1784,7 @@ void PeerManagerImpl::ReattemptPrivateBroadcast(CScheduler& scheduler)
     // Remove stale transactions that are no longer relevant (e.g. already in
     // the mempool or mined) and count the remaining ones.
     size_t num_for_rebroadcast{0};
+    size_t connections_cancelled{0};
     const auto stale_txs = m_tx_for_private_broadcast.GetStale();
     if (!stale_txs.empty()) {
         for (const auto& stale_tx : stale_txs) {
@@ -1799,10 +1800,13 @@ void PeerManagerImpl::ReattemptPrivateBroadcast(CScheduler& scheduler)
                 LogDebug(BCLog::PRIVBROADCAST, "Giving up broadcast attempts for txid=%s wtxid=%s: %s",
                          stale_tx->GetHash().ToString(), stale_tx->GetWitnessHash().ToString(),
                          mempool_acceptable.m_state.ToString());
-                m_tx_for_private_broadcast.Remove(stale_tx);
+                if (const auto removed{m_tx_for_private_broadcast.Remove(stale_tx)}) {
+                    connections_cancelled += removed->NumUnstarted(NUM_PRIVATE_BROADCAST_PER_TX);
+                }
             }
         }
 
+        m_connman.m_private_broadcast.NumToOpenSub(connections_cancelled);
         // This could overshoot, but that is ok - we will open some private connections in vain.
         m_connman.m_private_broadcast.NumToOpenAdd(num_for_rebroadcast);
     }

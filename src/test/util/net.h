@@ -132,6 +132,11 @@ struct ConnmanTestMsg : public CConnman {
         return MultipleManualOrFullOutboundConns(net);
     }
 
+    size_t PrivateBroadcastNumToOpenPublic() const
+    {
+        return m_private_broadcast.NumToOpen();
+    }
+
     CNode* ConnectNodePublic(PeerManager& peerman, const char* pszDest, ConnectionType conn_type)
         EXCLUSIVE_LOCKS_REQUIRED(!m_unused_i2p_sessions_mutex);
 };

@@ -1,3 +1,65 @@
+# Cycle 148: Bitcoin P2P private-broadcast retry accounting
+
+## Selection and fresh gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `89` (`bitcoin-p2p-accounting`), revisited under the prior ledger's explicit allowance for new deterministic-coverage or lifecycle evidence.
+- Branch: `uber-cycle-148-bitcoin-p2p-accounting-20260730`
+- Gate and cycle-start HEAD: `c9f01db21582c0368e0402a213f11fb5f0c44e2e`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Gate divergence (`HEAD...origin/master`): `1080 42`
+- Tracked and staged state was clean. The persistent wallet test process `777094` and unrelated untracked artifacts were preserved.
+- Catalog, random-prompt, goals TSV, and uber-protocol hashes matched the authoritative values.
+
+## Distinct scope and prior-finding exclusion
+
+Cycle 15 fixed stale `m_network_conn_counts` after `CConnman::StopNodes()` and `ConnmanTestMsg::ClearTestNodes()`. That counter excludes `ConnectionType::PRIVATE_BROADCAST`, so this cycle did not repeat the same network-count defect. Cycle 118 separately bounded retained private-broadcast send history, and the later disconnect-removal fix covered `RemoveResult::NumUnstarted()` plus active-node tombstones. Those findings were used as contracts, not repeated.
+
+The new hypothesis came from the current private-broadcast lifecycle exposed by Cycle 147's deterministic coverage audit: when `ReattemptPrivateBroadcast()` finds a stale transaction no longer valid, it removes the transaction but did not cancel the pending connection slots originally added by `InitiateTxBroadcastPrivate()`. The trust boundary is the local stale-transaction scheduler and its atomic `CConnman::PrivateBroadcast::m_num_to_open` work counter. The expected invariant is that removing an invalid transaction cancels exactly `RemoveResult::NumUnstarted(NUM_PRIVATE_BROADCAST_PER_TX)` slots, as the RPC-abort and received-TX paths already do.
+
+## Independent failing-before proof
+
+The regression creates a deliberately invalid empty-input transaction, queues it through the real `PeerManager::InitiateTxBroadcastPrivate()` path, and observes the initial counter value of three. A `FakeNodeClock` advances beyond `PrivateBroadcast::INITIAL_STALE_DURATION`; a real `CScheduler` runs `PeerManagerImpl::StartScheduledTasks()` and therefore the production `ReattemptPrivateBroadcast()` callback. The callback's validation rejects the transaction and removes it.
+
+On the unmodified source:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle148-stale-removal-before \
+  /data/my_storage/tmp/cycle89-build/bin/test_bitcoin \
+  --run_test=net_tests/private_broadcast_stale_removal_cancels_pending_connections \
+  --log_level=message --report_level=short --color_output=false
+
+net_tests.cpp(398): error: check connman.PrivateBroadcastNumToOpenPublic() == 0 has failed [3 != 0]
+3 assertions out of 4 passed; 1 failed
+```
+
+This is a deterministic accounting failure, not a network timing or malformed-message result: no private-broadcast peer needs to be opened for the invalid stale transaction, but all three scheduled slots remained queued.
+
+## Fix
+
+The invalid-stale branch now retains the `Remove()` result and accumulates `NumUnstarted(NUM_PRIVATE_BROADCAST_PER_TX)` in `connections_cancelled`. After the stale set is processed, `NumToOpenSub(connections_cancelled)` cancels those slots before the existing valid-stale `NumToOpenAdd(num_for_rebroadcast)` operation. The valid-stale behavior remains one new retry connection per scheduled stale transaction, and concurrent removal is handled by accepting a null `Remove()` result.
+
+The test-only `ConnmanTestMsg::PrivateBroadcastNumToOpenPublic()` accessor exposes the existing atomic counter for this regression. The test builds a separate private-broadcast-enabled `PeerManager`, schedules the real callback before starting the scheduler thread, and queues the completion marker at 100 ms so callback ordering is deterministic.
+
+## Validation
+
+- `CCACHE_DIR=/data/my_storage/tmp/cycle148-ccache cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j2`: passed after the incremental source/test rebuild.
+- Fixed regression with `--random=14802`: 1 selected case, 4/4 assertions passed.
+- Combined `net_tests,private_broadcast_tests` with `--random=14803`: 46 cases, 165,233/165,233 assertions passed.
+- `git diff --check` passed for all changed files.
+- The first build attempt used the host default ccache path and failed before product compilation because `/root/.cache/ccache/tmp` was absent; the isolated cycle ccache rerun completed successfully. This is setup evidence, not a product failure.
+
+## Verdict and limitations
+
+**Confirmed and fixed:** invalid stale private-broadcast removal leaked pending connection work, causing future private-broadcast attempts to open connections for a transaction already discarded by the scheduler. The correction is local to the missing accounting edge and follows the existing removal contract.
+
+The regression does not run a live Tor/I2P socket or a full daemon scheduler. It does execute the actual `PeerManager` stale callback with a real `CScheduler`, fake time, chain validation, private-broadcast queue, and CConnman counter. Valid stale reattempts and live disconnect replacement remain covered by the existing private-broadcast tests and prior lifecycle/fuzz evidence. The full unit suite was not rerun in this cycle; the focused network/private-broadcast suites are the relevant validation boundary.
+
+## Next queue
+
+Audit the remaining private-broadcast lifecycle edges with new evidence only: valid stale reattempt plus a concurrent abort, `StopThreads()` interruption token cleanup, semaphore grants across `StopNodes()` reuse, and v1/v2 disconnect finalization. Do not repeat the fixed stale-removal, retained-history, tombstone, or generic network-count findings.
+
 # Cycle 15: Bitcoin P2P transport, permission, and peer accounting
 
 ## Selection and baseline
