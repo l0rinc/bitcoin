@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <new>
 #include <span>
 #include <vector>
 
@@ -1345,6 +1346,22 @@ BOOST_AUTO_TEST_CASE(hkdf_hmac_sha256_l32_tests)
     fresh_hkdf32.Expand32(info, fresh.data());
     BOOST_CHECK_EQUAL_COLLECTIONS(first.begin(), first.end(), repeated.begin(), repeated.end());
     BOOST_CHECK_EQUAL_COLLECTIONS(first.begin(), first.end(), fresh.begin(), fresh.end());
+}
+
+BOOST_AUTO_TEST_CASE(hkdf_hmac_sha256_l32_clears_secret_on_destruction)
+{
+    alignas(CHKDF_HMAC_SHA256_L32) std::array<std::byte, sizeof(CHKDF_HMAC_SHA256_L32)> storage{};
+    const std::array<unsigned char, 32> ikm{0xa5};
+    const std::string salt{"cycle149-salt"};
+
+    auto* hkdf{::new (storage.data()) CHKDF_HMAC_SHA256_L32(ikm.data(), ikm.size(), salt)};
+    std::array<unsigned char, 32> output{};
+    hkdf->Expand32("cycle149-info", output.data());
+    hkdf->~CHKDF_HMAC_SHA256_L32();
+
+    BOOST_CHECK(std::all_of(storage.begin(), storage.end(), [](const std::byte value) {
+        return value == std::byte{0};
+    }));
 }
 
 BOOST_AUTO_TEST_CASE(sha256d64)
