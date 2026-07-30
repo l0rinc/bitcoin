@@ -775,6 +775,38 @@ BOOST_AUTO_TEST_CASE(MempoolUnbroadcastRemovalPaths)
     BOOST_CHECK_EQUAL(pool.size(), 0U);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolUnbroadcastBlockConflictRemoval)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    TestMemPoolEntryHelper entry;
+    const CTransactionRef funding_tx = make_tx({10 * COIN});
+    const CTransactionRef mempool_tx = make_tx({9 * COIN}, {funding_tx});
+    const CTransactionRef block_tx = make_tx({8 * COIN}, {funding_tx});
+
+    const auto run_once = [&](bool unbroadcast) {
+        {
+            LOCK2(::cs_main, pool.cs);
+            TryAddToMempool(pool, entry.Fee(10000).FromTx(mempool_tx));
+        }
+        if (unbroadcast) {
+            pool.AddUnbroadcastTx(mempool_tx->GetHash());
+            BOOST_REQUIRE(pool.GetUnbroadcastTxs() == std::set<Txid>{mempool_tx->GetHash()});
+        }
+
+        {
+            LOCK2(::cs_main, pool.cs);
+            pool.removeForBlock({block_tx}, 1);
+        }
+        BOOST_CHECK(!pool.exists(mempool_tx->GetHash()));
+        BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+        return pool.DynamicMemoryUsage();
+    };
+
+    const size_t usage_after_unbroadcast_removal = run_once(true);
+    const size_t usage_after_regular_removal = run_once(false);
+    BOOST_CHECK_EQUAL(usage_after_unbroadcast_removal, usage_after_regular_removal);
+}
+
 BOOST_FIXTURE_TEST_CASE(MempoolV1SignedDeltaExtremes, TestChain100Setup)
 {
     bilingual_str error;
