@@ -1,5 +1,52 @@
 # secp256k1 field and scalar representation matrix
 
+## Cycle 138: Clang 19 sanitized int128_struct backend
+
+### Selection and gate
+
+- Selector: the fresh exact draw `shuf -i 0-98 -n 1` returned `82`, `secp-field-scalar-matrix`. The dedicated branch is `uber-cycle-138-secp-field-scalar-matrix-20260730`; start HEAD was `218a4a2a356e6b14b43b215429ea10464e83d260`, `origin/master` was `9611a356035be531d62bfc40879f388d5dc359c4`, and merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`. The fresh gate reported divergence `1061 40`, clean tracked/index diffs, matching catalog/protocol/TSV hashes, and the preserved wallet-test PID `777094`.
+- Cycle 128's GCC 12 `int128` versus `int64` matrix and Cycle 24's Clang matrix were excluded. Cycle 133's Clang assembly-versus-portable matrix was also excluded as a full backend campaign; this cycle selected the remaining `int128_struct` wide-multiply representation cell. The libsecp subtree is unchanged between Cycle 133's start `b3bca20ce48f1c69123bf226f2ed5aa5896f1a2b` and this cycle's HEAD.
+
+### Scope and hypothesis
+
+The falsifiable hypothesis was that the structure-based 128-bit emulation path could diverge from native wide multiplication in field/scalar arithmetic, normalization, inversion, serialization, public cryptographic outputs, or sanitizer-visible undefined behavior. The trust boundary is the libsecp256k1 internal representation used by Bitcoin Core's signing, verification, ECDH, Schnorr, MuSig, ElligatorSwift, and Silent Payments callers. The source contract was re-read in `int128_struct.h`, `int128_struct_impl.h`, `field.h`, `field_5x52.h`, `field_10x26.h`, `scalar.h`, `scalar_4x64.h`, `scalar_8x32.h`, and their implementation headers. The earlier journals' field magnitude, normalization, non-aliasing, and scalar-reduction rules were retained as test assumptions.
+
+### Sanitized representation matrix
+
+The isolated configuration was:
+
+```text
+cmake -S src/secp256k1 -B /data/my_storage/tmp/cycle138-secp-int128-struct-sanitized -G Ninja -DCMAKE_C_COMPILER=/usr/bin/clang-19 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' -DSECP256K1_ASM=OFF -DSECP256K1_BUILD_TESTS=ON -DSECP256K1_BUILD_EXHAUSTIVE_TESTS=ON -DSECP256K1_BUILD_BENCHMARK=OFF -DSECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int128_struct
+cmake --build /data/my_storage/tmp/cycle138-secp-int128-struct-sanitized --target all -j2
+```
+
+Configuration and all 11 build targets completed successfully. Clang 19.1.7 selected `USE_FORCE_WIDEMUL_INT128_STRUCT=1`; assembly was disabled; ECDH, extrakeys, Schnorr, MuSig, ElligatorSwift, and Silent Payments were enabled. With `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1`, the regular `tests --iterations=2 --seed=0123456789abcdef --jobs=2 --log=1` suite exited 0 after 131.103 seconds, the no-VERIFY suite exited 0 after 79.159 seconds, and `exhaustive_tests` exited 0 with `no problems found`. The field, scalar, inverse, group, ECDH, signature, key, MuSig, ElligatorSwift, and Silent Payments cases all passed; no ASan or UBSan diagnostic was emitted.
+
+### Independent public differential probe
+
+The existing deterministic 512-vector probe `agent-journal/backend_differential_cycle123_probe.cpp` was compiled against the new struct backend and the unchanged Clang 19 ASan/UBSan native-int128 reference build from Cycle 133. The subtree identity check showed no libsecp source difference since that reference build's cycle start. Both runs used the same fixed seed and sanitizer settings:
+
+```text
+clang++-19 -std=c++20 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -I src/secp256k1/include agent-journal/backend_differential_cycle123_probe.cpp -L/data/my_storage/tmp/cycle138-secp-int128-struct-sanitized/lib -Wl,-rpath,/data/my_storage/tmp/cycle138-secp-int128-struct-sanitized/lib -lsecp256k1 -o /data/my_storage/tmp/cycle138-api-struct/backend_probe
+clang++-19 -std=c++20 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -I src/secp256k1/include agent-journal/backend_differential_cycle123_probe.cpp -L/data/my_storage/tmp/cycle133-secp-sanitized-off/lib -Wl,-rpath,/data/my_storage/tmp/cycle133-secp-sanitized-off/lib -lsecp256k1 -o /data/my_storage/tmp/cycle138-api-native/backend_probe
+```
+
+The struct and native runs both printed exactly `vectors=512 failures=0 digest=fe288ea1ddb151fb`, with empty sanitizer output. This independently covers public-key creation/parse/serialize, ECDSA signing/verification/recovery, ECDH, x-only and keypair operations, Schnorr, tweak paths, and invalid-secret output behavior.
+
+### Candidate ledger and verdict
+
+| Candidate | Classification | Verdict |
+|---|---|---|
+| `int128_struct` field/scalar arithmetic differs on current unit/exhaustive coverage | Production representation differential | Dismissed; regular, no-VERIFY, and order-13 exhaustive suites passed under ASan/UBSan |
+| Struct backend diverges at public cryptographic boundaries | Independent API differential | Dismissed; 512 vectors matched the native-int128 digest and failure count |
+| The non-MSVC 32x32 emulation path has sanitizer-visible UB | Sanitizer campaign | Dismissed; no ASan/UBSan diagnostic in the full matrix or probe |
+
+**Cycle verdict: dismissed; no production defect, regression test, or source change justified.**
+
+### Limitations and next queue
+
+This cycle ran Clang 19.1.7 on x86_64 little-endian Linux with the non-MSVC `int128_struct` emulation. MSVC x64/ARM64 intrinsic paths, native ARM, 32-bit, big-endian, cross-architecture execution, Valgrind/ctgrind, ctime, and timing equivalence remain open. Valgrind was unavailable during configuration. Reopen this goal only for one of those distinct architecture/intrinsic/sanitizer cells or new libsecp source/history evidence. Scratch build trees and probe binaries remain under `/data/my_storage/tmp/cycle138-*`; no repository probe or permanent test artifact was added.
+
 ## Cycle 128: GCC 12 forced int128 versus int64 backend matrix
 
 ### Selection and gate
