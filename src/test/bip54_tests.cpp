@@ -1630,7 +1630,7 @@ BOOST_AUTO_TEST_CASE(bip54_txsize)
         tx_copy.vin.back().scriptWitness.stack.resize(1);
         Assert(GetSerializeSize(TX_NO_WITNESS(tx_copy)) == INVALID_TX_NONWITNESS_SIZE - 4);
         Assert(GetSerializeSize(TX_WITH_WITNESS(tx_copy)) == INVALID_TX_NONWITNESS_SIZE);
-        RecordTestCase(test_vectors, CTransaction{tx_copy}, /*valid=*/true, "A 61-byte legacy transaction with a witness.");
+        RecordTestCase(test_vectors, CTransaction{tx_copy}, /*valid=*/true, "A 60-byte legacy transaction with a witness.");
     }
 
     // A 64-byte transaction is invalid.
