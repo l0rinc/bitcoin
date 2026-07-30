@@ -16,6 +16,7 @@
 #include <node/protocol_version.h>
 #include <protocol.h>
 #include <serialize.h>
+#include <scheduler.h>
 #include <span.h>
 #include <streams.h>
 #include <test/util/common.h>
@@ -33,11 +34,13 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <future>
 #include <ios>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace std::literals;
@@ -365,6 +368,34 @@ BOOST_AUTO_TEST_CASE(connman_stop_nodes_resets_network_connection_counts)
     add_node(/*id=*/2);
     BOOST_CHECK(!connman.MultipleManualOrFullOutboundConnsPublic(Network::NET_IPV4));
     connman.StopNodes();
+}
+
+BOOST_AUTO_TEST_CASE(private_broadcast_stale_removal_cancels_pending_connections)
+{
+    FakeNodeClock clock{};
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    AddrMan addrman{*m_node.netgroupman, /*deterministic=*/true, /*consistency_check_ratio=*/0};
+    auto peerman{PeerManager::make(connman, addrman, m_node.banman.get(), *m_node.chainman,
+                                    *m_node.mempool, *m_node.warnings,
+                                    PeerManager::Options{.deterministic_rng = true, .private_broadcast = true})};
+
+    CMutableTransaction invalid_tx;
+    const auto tx{MakeTransactionRef(invalid_tx)};
+    BOOST_REQUIRE(peerman->InitiateTxBroadcastPrivate(tx) == node::TransactionError::OK);
+    BOOST_CHECK_EQUAL(connman.PrivateBroadcastNumToOpenPublic(), 3);
+
+    clock += PrivateBroadcast::INITIAL_STALE_DURATION + 1s;
+
+    CScheduler scheduler;
+    peerman->StartScheduledTasks(scheduler);
+    std::promise<void> completed;
+    scheduler.scheduleFromNow([&completed] { completed.set_value(); }, 100ms);
+    scheduler.m_service_thread = std::thread([&scheduler] { scheduler.serviceQueue(); });
+    completed.get_future().wait();
+    scheduler.stop();
+
+    BOOST_CHECK(peerman->GetPrivateBroadcastInfo().empty());
+    BOOST_CHECK_EQUAL(connman.PrivateBroadcastNumToOpenPublic(), 0);
 }
 
 BOOST_AUTO_TEST_CASE(connman_start_rejects_conflicting_options_before_threads)
