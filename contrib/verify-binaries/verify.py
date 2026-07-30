@@ -434,13 +434,6 @@ def verify_binary_hashes(hashes_to_verify: list[list[str]]) -> tuple[ReturnCode,
 
 
 def verify_published_handler(args: argparse.Namespace) -> ReturnCode:
-    WORKINGDIR = Path(tempfile.gettempdir()) / f"bitcoin_verify_binaries.{args.version}"
-
-    def cleanup():
-        log.info("cleaning up files")
-        os.chdir(Path.home())
-        shutil.rmtree(WORKINGDIR)
-
     # determine remote dir dependent on provided version string
     try:
         version_base, version_rc, os_filter = parse_version_string(args.version)
@@ -451,14 +444,21 @@ def verify_published_handler(args: argparse.Namespace) -> ReturnCode:
         log.error(f"  e.g. {VERSION_EXAMPLE}")
         return ReturnCode.BAD_VERSION
 
+    WORKINGDIR = Path(tempfile.mkdtemp(prefix="bitcoin_verify_binaries."))
+
+    def cleanup():
+        log.info("cleaning up files")
+        os.chdir(Path.home())
+        shutil.rmtree(WORKINGDIR)
+
     remote_dir = f"/bin/{VERSIONPREFIX}{version_base}/"
     if version_rc:
         remote_dir += f"test.{version_rc}/"
     remote_sigs_path = remote_dir + SIGNATUREFILENAME
     remote_sums_path = remote_dir + SUMS_FILENAME
 
-    # create working directory
-    os.makedirs(WORKINGDIR, exist_ok=True)
+    # Create an owned private directory so pre-existing filesystem entries cannot
+    # redirect downloaded metadata or binaries.
     os.chdir(WORKINGDIR)
 
     hosts = [HOST1, HOST2]

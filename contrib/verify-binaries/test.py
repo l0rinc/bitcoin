@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
+import hashlib
 import importlib.util
 import json
+import os
+import shutil
 import sys
 import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -71,12 +75,89 @@ def test_duplicate_trusted_signatures_do_not_meet_threshold():
     assert not result[2]
 
 
+def test_published_verifier_uses_private_workdir():
+    verify = load_verify_module()
+    root = Path(tempfile.mkdtemp(prefix="verify-binaries-workdir-test."))
+    predictable = root / "bitcoin_verify_binaries.31.0"
+    predictable.mkdir()
+    sentinel = root / "sentinel.outside-workdir"
+    sentinel_before = b"sentinel-before\n"
+    sentinel.write_bytes(sentinel_before)
+    redirected_output = predictable / "release.bin"
+    redirected_output.symlink_to(sentinel)
+    private_workdir = root / "private-workdir"
+    payload = b"release payload\n"
+    payload_hash = hashlib.sha256(payload).hexdigest()
+
+    def fake_mkdtemp(prefix):
+        assert prefix == "bitcoin_verify_binaries."
+        private_workdir.mkdir()
+        return str(private_workdir)
+
+    def fake_get_files(_hosts, _path, filename, _require_all=False):
+        if filename == verify.SUMS_FILENAME:
+            Path(filename).write_text(f"{payload_hash} release.bin\n", encoding="ascii")
+        else:
+            Path(filename).write_text("synthetic signature\n", encoding="ascii")
+        return verify.ReturnCode.SUCCESS
+
+    def fake_verify_signature(_signature, _sums, _args):
+        return verify.ReturnCode.SUCCESS, [], [], [], []
+
+    def fake_download(_remote_file, local_file):
+        Path(local_file).write_bytes(payload)
+        return True, ""
+
+    args = argparse.Namespace(
+        version="31.0",
+        require_all_hosts=False,
+        min_good_sigs=3,
+        trusted_keys="",
+        import_keys=False,
+        keyserver="unused",
+        verbose=False,
+        cleanup=False,
+        json=False,
+    )
+    original_cwd = Path.cwd()
+    original_gettempdir = verify.tempfile.gettempdir
+    original_mkdtemp = verify.tempfile.mkdtemp
+    original_get_files = verify.get_files_from_hosts_and_compare
+    original_verify_signature = verify.verify_shasums_signature
+    original_download = verify.download_with_wget
+    try:
+        verify.tempfile.gettempdir = lambda: str(root)
+        verify.tempfile.mkdtemp = fake_mkdtemp
+        verify.get_files_from_hosts_and_compare = fake_get_files
+        verify.verify_shasums_signature = fake_verify_signature
+        verify.download_with_wget = fake_download
+        status = verify.verify_published_handler(args)
+    finally:
+        os.chdir(original_cwd)
+        verify.tempfile.gettempdir = original_gettempdir
+        verify.tempfile.mkdtemp = original_mkdtemp
+        verify.get_files_from_hosts_and_compare = original_get_files
+        verify.verify_shasums_signature = original_verify_signature
+        verify.download_with_wget = original_download
+
+    sentinel_after = sentinel.read_bytes()
+    redirected_is_symlink = redirected_output.is_symlink()
+    private_payload = (private_workdir / "release.bin").read_bytes()
+    shutil.rmtree(root, ignore_errors=True)
+    assert status == verify.ReturnCode.SUCCESS
+    assert sentinel_after == sentinel_before
+    assert redirected_is_symlink
+    assert private_payload == payload
+
+
 def main():
     """Tests ordered roughly from faster to slower."""
     print("- testing trusted signature threshold")
     test_untrusted_signatures_do_not_meet_threshold()
     print("- testing distinct trusted signer threshold")
     test_duplicate_trusted_signatures_do_not_meet_threshold()
+    print("- testing private published-verifier work directory")
+    test_published_verifier_uses_private_workdir()
     expect_code(run_verify("", "pub", '0.32'), 4, "Nonexistent version should fail")
     expect_code(run_verify("", "pub", '0.32.awefa.12f9h'), 11, "Malformed version should fail")
     expect_code(run_verify('--min-good-sigs 20', "pub", "22.0"), 9, "--min-good-sigs 20 should fail")
