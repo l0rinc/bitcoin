@@ -59,3 +59,56 @@ node's own flags).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-30): bech32/bech32m decode differential — spec reference vs C++ decoder: 2433/2433 agree
+
+### Draw
+Re-rank draw over the remaining 3-cell queue:
+raw=14006312474672917596, masked 4782940437818141788, index 1
+(of 3) -> #89 (second cycle; c1 queue cell "bech32 decode
+differential"). Branch: audit/clean-room-c2 from a1b39e2291
+(#108 c2 journal tip).
+
+### Experiment
+Independent from-spec reference decoder (/tmp/btc89_diff.py:
+polymod, hrp_expand, case rules, charset, 90-char limit, BECH32
+vs BECH32M constants — written from the BIPs, not Core source)
+vs a stdin driver over the fork's bech32::Decode
+(/tmp/btc89_driver.cpp, direct-compile of src/bech32.cpp +
+libs). Corpus (2433): BIP173 valid (6) + BIP350 valid (5) +
+BIP173/350 invalid (29) + systematic single-char mutations of 2
+valid addresses (~2380) + length/case boundary cases.
+
+### Result
+TALLY: agree_accept=11, agree_reject=2422, A(cpp-overaccept)=0,
+B(mismatch)=0. Every case agrees: accept decisions, reject
+decisions, and full (encoding, hrp, payload) tuples.
+(Driver-lesson: the first build printed two nibbles per 5-bit
+value — 4 apparent "mismatches" were a formatting artifact,
+verified identical per-value after reformat; a reminder that
+differential formatting IS part of the oracle.)
+
+### Verdict
+DISMISSED (differential clean): the bech32/bech32m decoder is
+behaviorally identical to an independent from-spec reference
+across the vector tables and the mutation sweep. Third
+independent verifier form for this surface (#81 byte-exact
+tables, #48 batteries, this).
+
+### Exact commands
+- g++ -O2 -std=c++20 -I src -o /tmp/btc89_driver
+  /tmp/btc89_driver.cpp src/bech32.cpp
+  build-before/lib/libbitcoin_common.a ..._util.a ..._crypto.a
+  ..._clientversion.a
+- python3 /tmp/btc89_diff.py (TALLY above)
+
+### Limitations / queue
+- VarInt differential (c1's queued cousin of the bech32 cell;
+  undo-format) — next cell if redrawn.
+- Segwit-address layer (convertbits + HRP=bc/tb + program
+  length rules) is ABOVE bech32 proper — a separate surface if a
+  cycle lands there.
+
+## Rotation note
+Two cycles; bech32 closed with a full-agree differential. Not
+exhausted (VarInt cousin, segwit-address layer).
