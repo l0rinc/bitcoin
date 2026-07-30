@@ -1,5 +1,55 @@
 # Boundary and Off-by-One Audit: Cycle 21
 
+## Cycle 150: flat-file position and chunk-allocation boundary
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `5`
+- Selected slug: `boundary-off-by-one`
+- Branch: `uber-cycle-150-boundary-off-by-one-20260730`
+- HEAD before the cycle: `6d5af587439087ab9a488c254c9b3b44e129aaa6`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Start divergence: `1084 42` from `git rev-list --left-right --count HEAD...origin/master`.
+- The tracked tree and index were clean; `git diff --check` passed. The catalog and uber-protocol hashes remained unchanged. PID `777094` (`test_bitcoin --run_test=wallet_tests`) and its parent were preserved. Existing untracked agent artifacts and scratch files were not touched.
+
+### Scope and hypothesis
+
+Cycle 129 closed the height, checkpoint, compact-filter, direct-fetch, and block-file practical cells. This cycle selected a fresh count/offset surface in `FlatFileSeq::Allocate()`, specifically:
+
+```cpp
+unsigned int n_new_chunks = CeilDiv(pos.nPos + add_size, m_chunk_size);
+```
+
+On a 32-bit build, `pos.nPos` (`uint32_t`) and `add_size` (`size_t`) can both be 32-bit unsigned values. At `pos.nPos == UINT32_MAX` and `add_size == 1`, the sum wraps to zero before chunk rounding. The corresponding 64-bit arithmetic reaches `2^32`, so this is a real platform-model difference rather than a comparison typo. The trust boundary is persisted/local file-position state and an allocation request, not a remotely supplied value.
+
+### Production-bound analysis
+
+The configured block-storage callers cannot reach the arithmetic boundary while retaining a valid file position. `MAX_BLOCKFILE_SIZE` is `128_MiB`; `FindNextBlockPos()` rotates when `nSize + nAddSize >= max_blockfile_size`, and the block-file cursor stores the resulting position. Undo files use `UNDOFILE_CHUNK_SIZE == 1_MiB`, and block-filter files rotate at `MAX_FLTR_FILE_SIZE == 16_MiB` before invoking the same helper. The block and undo additions are bounded serialized block sizes, while the filter path uses a `uint64_t data_size` and resets `pos.nPos` on file rollover. A position near `UINT32_MAX` therefore requires invalid/corrupt persisted metadata or an independent caller outside the configured production contracts.
+
+The 32-bit arithmetic model was evaluated explicitly for `(pos, add_size, chunk_size) = (UINT32_MAX, 1, 16 MiB)`: the old chunk count is `256`, the wrapped 32-bit new count is `0`, and the widened 64-bit new count is `256`. This proves the portability concern, but not a reachable current Bitcoin Core defect. A 32-bit executable could not be built because the host lacks multilib C++ headers (`g++ -m32` failed in `<bits/c++config.h>`); no claim of executed 32-bit coverage is made.
+
+### Verification
+
+The existing flat-file unit command used a scratch `TMPDIR`:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle150-flatfile-unit /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=flatfile_tests --catch_system_errors=no --log_level=test_suite --report_level=short --color_output=false
+```
+
+It passed all 4 selected cases and 29 assertions, including exact allocation transitions at positions 0 and 99, read-only open behavior, and flush truncation. The fixed-seed libFuzzer replay used a separate scratch corpus and artifacts directory:
+
+```text
+FUZZ=flatfile /data/my_storage/tmp/cycle131-build-libfuzzer/bin/fuzz -runs=1000 -seed=15001 -rss_limit_mb=2048 -artifact_prefix=/data/my_storage/tmp/cycle150-flatfile-fuzz2/artifacts/ /data/my_storage/tmp/cycle150-flatfile-fuzz2/corpus -print_final_stats=1
+```
+
+It completed 1,000 runs, added 55 corpus units, and reported no sanitizer or contract failure. The fuzzer intentionally exercises positions only through 4096, so it is evidence for ordinary allocation contracts, not the unreachable 32-bit maximum. `git diff --check` passed.
+
+### Verdict and handoff
+
+Verdict: **dismissed for the configured production paths; portability limitation retained**. The arithmetic wrap is valid under a 32-bit platform model, but no supported current caller can supply a near-`UINT32_MAX` file position, and changing `out_of_space` semantics or adding a hard position rejection would be speculative. No source or permanent test change was made. The next boundary cycle should use a new public count/offset contract: `FindNextBlocks()`’s `count` versus prefilled `vBlocks`, `getnodeaddresses` zero/one/max semantics, or an explicit supported-32-bit build if the project matrix gains one. Do not repeat this flat-file or prior filter/block-file cell without new evidence.
+
 ## Cycle 129: scanblocks and compact-filter boundary recheck
 
 ### Selection and gate
