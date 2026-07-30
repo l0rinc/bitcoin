@@ -1348,6 +1348,40 @@ BOOST_AUTO_TEST_CASE(hkdf_hmac_sha256_l32_tests)
     BOOST_CHECK_EQUAL_COLLECTIONS(first.begin(), first.end(), fresh.begin(), fresh.end());
 }
 
+BOOST_AUTO_TEST_CASE(hmac_sha256_clears_secret_on_destruction)
+{
+    alignas(CHMAC_SHA256) std::array<std::byte, sizeof(CHMAC_SHA256)> storage{};
+    const std::array<unsigned char, 12> key{'c', 'y', 'c', 'l', 'e', '1', '5', '2', '-', 'k', 'e', 'y'};
+    std::array<unsigned char, 32> secret;
+    secret.fill(0xa5);
+    std::array<unsigned char, CHMAC_SHA256::OUTPUT_SIZE> output{};
+
+    auto* hmac{::new (storage.data()) CHMAC_SHA256{key.data(), key.size()}};
+    hmac->Write(secret.data(), secret.size()).Finalize(output.data());
+    hmac->~CHMAC_SHA256();
+
+    BOOST_CHECK(std::all_of(storage.begin(), storage.end(), [](const std::byte value) {
+        return value == std::byte{0};
+    }));
+}
+
+BOOST_AUTO_TEST_CASE(hmac_sha512_clears_secret_on_destruction)
+{
+    alignas(CHMAC_SHA512) std::array<std::byte, sizeof(CHMAC_SHA512)> storage{};
+    const std::array<unsigned char, 12> key{'c', 'y', 'c', 'l', 'e', '1', '5', '2', '-', 'k', 'e', 'y'};
+    std::array<unsigned char, 64> secret;
+    secret.fill(0xa5);
+    std::array<unsigned char, CHMAC_SHA512::OUTPUT_SIZE> output{};
+
+    auto* hmac{::new (storage.data()) CHMAC_SHA512{key.data(), key.size()}};
+    hmac->Write(secret.data(), secret.size()).Finalize(output.data());
+    hmac->~CHMAC_SHA512();
+
+    BOOST_CHECK(std::all_of(storage.begin(), storage.end(), [](const std::byte value) {
+        return value == std::byte{0};
+    }));
+}
+
 BOOST_AUTO_TEST_CASE(hkdf_hmac_sha256_l32_clears_secret_on_destruction)
 {
     alignas(CHKDF_HMAC_SHA256_L32) std::array<std::byte, sizeof(CHKDF_HMAC_SHA256_L32)> storage{};
