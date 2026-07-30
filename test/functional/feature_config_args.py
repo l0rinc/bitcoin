@@ -411,6 +411,14 @@ class ConfArgsTest(BitcoinTestFramework):
                 self.restart_node(0, extra_args=[connect_arg, '-dnsseed', '-proxy=localhost:1080'])
         self.stop_node(0)
 
+    def test_empty_connect(self):
+        self.log.info('Test empty -connect values are ignored')
+        with self.nodes[0].assert_debug_log(
+                expected_msgs=['Ignoring empty -connect value'],
+                unexpected_msgs=['trying v2 connection (manual) to']):
+            self.start_node(0, extra_args=['-connect=', '-connect= '])
+        self.stop_node(0)
+
     def test_privatebroadcast(self):
         self.log.info("Test that an invalid usage of -privatebroadcast throws an init error")
         self.stop_node(0)
@@ -518,6 +526,7 @@ class ConfArgsTest(BitcoinTestFramework):
         self.test_args_log()
         self.test_seed_peers()
         self.test_networkactive()
+        self.test_empty_connect()
         self.test_connect_with_seednode()
         self.test_privatebroadcast()
 
