@@ -212,3 +212,51 @@ future misreading as a zigzag-style encoding).
 ## Rotation note
 Four cycles; bech32, VarInt, signed VarInt all closed. Not
 exhausted (segwit layer).
+
+## Cycle 5 (2026-07-30): segwit-address layer differential — 180/180 matrix cells agree
+
+### Draw
+Re-rank singleton (last queue cell): #89 (fifth cycle; c4 queue
+cell "segwit-address layer"). Branch: audit/clean-room-c5 from
+7301ef36a2 (#65 c11 journal tip).
+
+### Experiment
+Full (version x length) matrix: versions 0-17 x lengths
+{1,2,19,20,31,32,33,39,40,41} (180 cells), each with a
+deterministic program. Encode via key_io's EncodeDestination,
+decode via DecodeDestination; compare against the reference rules
+(v0: {20,32} bytes + BECH32; v1-16: 2..40 bytes + BECH32M; v17+:
+reject). Driver /tmp/btc89a_driver.cpp (link closure:
+key_io+bech32+script+block+transaction+merkle+uint256+pubkey+
+hash + common/util/crypto/clientversion/secp256k1/univalue libs +
+SelectParams(MAIN)).
+
+### Result
+TALLY: roundtrip=130 enc_rej_ok=50 dec_rej=0 B=0 (180 total).
+All 130 valid cells round-trip byte-exactly (version + program);
+all 50 invalid cells encode-reject (empty string; v0 wrong
+lengths 1,2,19,31,33,39,40,41 + v1-16 lengths 1,41 + all v17).
+BIP173's canonical example address also round-trips.
+
+### Verdict
+DISMISSED (differential clean): the segwit-address layer matches
+the reference rules at every matrix cell. Clean-room cells now
+closed: bech32 (c2), VarInt (c3), signed VarInt (c4),
+segwit-address (c5).
+
+### Exact commands
+- g++ -O2 -std=c++20 -I src -I src/secp256k1/include -o
+  /tmp/btc89a_driver /tmp/btc89a_driver.cpp src/key_io.cpp
+  src/bech32.cpp src/script/script.cpp src/primitives/block.cpp
+  src/primitives/transaction.cpp src/consensus/merkle.cpp
+  src/uint256.cpp src/pubkey.cpp src/hash.cpp <libs>
+- python3 matrix differential (TALLY above)
+
+### Limitations / queue
+- ConvertBits edge forms (padding variants) are covered by the
+  decode path per cell; explicit pad-garbage strings would be the
+  paranoid extension — low value after c2+c5.
+
+## Rotation note
+Five cycles; the clean-room campaign's cells are closed. Not
+exhausted (new reference-able surfaces only).
