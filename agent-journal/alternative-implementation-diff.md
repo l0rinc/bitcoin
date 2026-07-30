@@ -63,3 +63,68 @@ m with d and compare the compact signature byte-for-byte.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-30): extraEntropy/ndata differential — 25/25 vectors + 200/200 randomized, three implementations byte-identical; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=12034554563773083305,
+masked=2811182526918307497, n=4, idx=1) -> alt-impl-extrantropy ->
+#55 (second cycle; c1 queue cell "ndata-covered vectors"). Branch:
+audit/alt-impl-diff-c2 from 2b9cb9b685 (#1 c4 tip).
+
+### Hypothesis
+The in-tree secp256k1 RFC6979-with-extra-data nonce path
+(secp256k1_nonce_function_rfc6979 + 32-byte ndata) could diverge
+from the sibling implementation (noble-secp256k1 extraEntropy) —
+concat-order or DRBG-instantiation variant — or be wrong outright.
+c1 verified only the no-entropy baseline (the 5 entries' signature
+fields).
+
+### Semantics established (from the sibling's consumer, c1 lesson 1)
+noble's test/vectors/secp256k1/ecdsa.json 'extraEntropy' section
+(5 entries) stores, per entry, the expected signatures for 5 FIXED
+32-byte entropy constants (test/secp256k1.test.ts:181-198):
+0x00..00, 0x00..01, rand 6e72.., n-1, 0xff..ff. Convention probe:
+a python RFC6979+ECDSA implementing the secp256k1 concat order
+(seckey32 || msg32 || extra32) reproduced all 5 noble expected
+values for entry 0 -> conventions agree bit-exactly.
+
+### Differential (three implementations)
+- in-tree C driver vs build-before/src/secp256k1/lib/libsecp256k1.a
+  (secp256k1_ecdsa_sign + nonce_function_rfc6979 + ndata):
+  25/25 byte-identical to noble's expected values.
+- independent python reference (RFC6979 DRBG + EC math, this file's
+  recorded commands): 25/25 vs noble.
+- in-tree secp vs python over 200 randomized (d, m, ent) cases
+  (seed 0xEE55): 200/200 byte-identical.
+
+### Boundary notes (not defects)
+- noble accepts ARBITRARY-length extraEntropy (1-byte and 48-byte
+  cases in its test); secp256k1's ndata is a fixed 32 bytes by API
+  design — the length-variant space is outside the in-tree
+  contract, recorded as an API-shape boundary.
+- Reachability: Core callers never pass extra entropy (CKey::Sign
+  uses the bare RFC6979 path) — the ndata path is library-surface
+  only in-tree; verified here for backend correctness.
+
+### Verdict
+DISMISSED (differential) / CONFIRMED (conformance): the
+RFC6979+ndata nonce path is byte-identical across in-tree
+secp256k1, noble-secp256k1, and an independent python reference.
+The c1 entropy-coverage gap is closed.
+
+### Exact commands
+- curl noble ecdsa.json + secp256k1.test.ts (consumer semantics)
+- gcc -O2 -I src/secp256k1/include /tmp/ee_diff.c
+  build-before/src/secp256k1/lib/libsecp256k1.a -o /tmp/ee_diff;
+  /tmp/ee_diff < /tmp/ee_input.txt -> 25/25
+- /tmp/ee_sign + python reference (both recorded above) -> 200/200
+
+### Limitations / queue
+- Only the 5 noble entries x 5 constants as fixed vectors; the
+  200 randomized cases widen coverage beyond them.
+- Remaining queued: schnorr/BIP340 sibling vectors; btcd/
+  rust-bitcoin tx-serialization differentials.
+
+## Rotation note
+Two cycles; ECDSA baseline + extraEntropy both differential-clean.
