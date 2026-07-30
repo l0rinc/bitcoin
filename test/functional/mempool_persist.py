@@ -11,9 +11,8 @@ the -persistmempool=0 command line option.
 Test is as follows:
 
   - start node0, node1 and node2. node1 has -persistmempool=0
-  - create 5 transactions on node2 to its own address. Note that these
-    are not sent to node0 or node1 addresses because we don't want
-    them to be saved in the wallet.
+  - create 5 transactions on node2, including a package paying a
+    watch-only wallet.
   - check that node0 and node1 have 5 transactions in their mempools
   - shutdown all nodes.
   - startup node0. Verify that it still has 5 transactions
@@ -52,7 +51,7 @@ from test_framework.wallet import MiniWallet, COIN
 class MempoolPersistTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 3
-        self.extra_args = [[], ["-persistmempool=0"], []]
+        self.extra_args = [[], ["-persistmempool=0"], ["-walletbroadcast=0"]]
         self.uses_wallet = None
 
     def run_test(self):
@@ -66,13 +65,47 @@ class MempoolPersistTest(BitcoinTestFramework):
             wallet_watch = self.nodes[2].get_wallet_rpc("watch")
             assert_equal([{'success': True}], wallet_watch.importdescriptors([{'desc': self.mini_wallet.get_descriptor(), 'timestamp': 0}]))
 
-        self.log.debug("Send 5 transactions from node2 (to its own address)")
+        self.log.debug("Send 5 transactions from node2")
         tx_creation_time_lower = int(time.time())
-        for _ in range(5):
+        for _ in range(3 if self.is_wallet_compiled() else 5):
             last_txid = self.mini_wallet.send_self_transfer(from_node=self.nodes[2])["txid"]
         if self.is_wallet_compiled():
+            # Use a distinct sender script so the watch-only wallet sees a
+            # genuine pending receive rather than a net-zero self-transfer.
+            sender = MiniWallet(self.nodes[2], tag_name="mempool-persist-sender")
+            funding_tx = self.mini_wallet.send_to(
+                from_node=self.nodes[2],
+                scriptPubKey=sender.get_output_script(),
+                amount=2 * COIN,
+            )
+            sender.scan_tx(self.nodes[2].decoderawtransaction(funding_tx["hex"]))
+            wallet_receive_tx = sender.send_to(
+                from_node=self.nodes[2],
+                scriptPubKey=self.mini_wallet.get_output_script(),
+                amount=COIN,
+            )
+            last_txid = wallet_receive_tx["txid"]
             self.nodes[2].syncwithvalidationinterfacequeue()  # Flush mempool to wallet
-            node2_balance = wallet_watch.getbalance()
+            wallet_tx_before = wallet_watch.gettransaction(last_txid)
+            wallet_tx_before_metadata = {
+                key: wallet_tx_before[key]
+                for key in (
+                    "confirmations",
+                    "trusted",
+                    "txid",
+                    "wtxid",
+                    "walletconflicts",
+                    "mempoolconflicts",
+                    "time",
+                    "timereceived",
+                    "details",
+                )
+            }
+            wallet_balances_before = wallet_watch.getbalances()["mine"]
+            assert_equal(wallet_tx_before["confirmations"], 0)
+            assert_equal(wallet_tx_before["trusted"], False)
+            assert_equal(wallet_balances_before["untrusted_pending"], Decimal("1.00000000"))
+            assert_equal(wallet_balances_before["nonmempool"], Decimal("0E-8"))
         self.sync_all()
         tx_creation_time_higher = int(time.time())
 
@@ -139,7 +172,13 @@ class MempoolPersistTest(BitcoinTestFramework):
             self.nodes[2].loadwallet("watch")
             wallet_watch = self.nodes[2].get_wallet_rpc("watch")
             self.nodes[2].syncwithvalidationinterfacequeue()  # Flush mempool to wallet
-            assert_equal(node2_balance, wallet_watch.getbalance())
+            wallet_tx_after = wallet_watch.gettransaction(last_txid)
+            wallet_tx_after_metadata = {
+                key: wallet_tx_after[key]
+                for key in wallet_tx_before_metadata
+            }
+            assert_equal(wallet_tx_before_metadata, wallet_tx_after_metadata)
+            assert_equal(wallet_balances_before, wallet_watch.getbalances()["mine"])
 
         mempooldat0 = os.path.join(self.nodes[0].chain_path, 'mempool.dat')
         mempooldat1 = os.path.join(self.nodes[1].chain_path, 'mempool.dat')
