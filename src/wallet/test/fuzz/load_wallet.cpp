@@ -16,6 +16,7 @@
 #include <wallet/walletdb.h>
 
 #include <cassert>
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -54,11 +55,13 @@ FUZZ_TARGET(load_wallet, .init = initialize_load_wallet)
     // What we seeded, for the round-trip oracles.
     std::optional<uint64_t> seeded_flags;
     std::vector<std::pair<std::string, std::string>> seeded_names;
+    std::vector<unsigned int> seeded_mkey_ids;
+    bool seeded_dup_mkey{false};
 
     {
         auto batch{database->MakeBatch()};
         LIMITED_WHILE(fdp.ConsumeBool(), 24) {
-            switch (fdp.ConsumeIntegralInRange<int>(0, 8)) {
+            switch (fdp.ConsumeIntegralInRange<int>(0, 11)) {
             case 0: { // FLAGS record
                 const uint64_t flags{fdp.ConsumeIntegral<uint64_t>()};
                 if (batch->Write(DBKeys::FLAGS, flags)) seeded_flags = flags;
@@ -128,6 +131,61 @@ FUZZ_TARGET(load_wallet, .init = initialize_load_wallet)
                 (void)batch->Write(DBKeys::BESTBLOCK, ConsumeRandomLengthByteVector(fdp, 256));
                 break;
             }
+            case 9: { // MASTER_KEY record: id + fuzzed CMasterKey fields
+                const unsigned int mkey_id{fdp.ConsumeIntegral<unsigned int>() % 4}; // small range to make duplicates likely
+                if (std::find(seeded_mkey_ids.begin(), seeded_mkey_ids.end(), mkey_id) != seeded_mkey_ids.end()) {
+                    seeded_dup_mkey = true;
+                }
+                seeded_mkey_ids.push_back(mkey_id);
+                CMasterKey mkey;
+                mkey.vchCryptedKey = ConsumeRandomLengthByteVector(fdp, 32);
+                mkey.vchSalt = ConsumeRandomLengthByteVector(fdp, 8);
+                mkey.nDerivationMethod = fdp.ConsumeIntegral<unsigned int>() % 3;
+                mkey.nDeriveIterations = fdp.ConsumeIntegral<unsigned int>();
+                mkey.vchOtherDerivationParameters = ConsumeRandomLengthByteVector(fdp, 16);
+                // Duplicate-id MASTER_KEY records must classify DBErrors::CORRUPT
+                // (walletdb.cpp:403-407) — asserted after LoadWallet.
+                (void)batch->Write(std::make_pair(DBKeys::MASTER_KEY, mkey_id), mkey);
+                break;
+            }
+            case 10: { // HDCHAIN record: fuzzed CHDChain (version/counters/seed id)
+                CHDChain hd;
+                hd.nVersion = fdp.PickValueInArray<int>({0, 1, 2, 3, 99});
+                hd.nExternalChainCounter = fdp.ConsumeIntegral<uint32_t>();
+                hd.nInternalChainCounter = fdp.ConsumeIntegral<uint32_t>();
+                // ConsumeRandomLengthByteVector may return fewer bytes than
+                // requested; uint160's span ctor asserts the exact width.
+                auto seed_bytes{ConsumeRandomLengthByteVector(fdp, 20)};
+                seed_bytes.resize(20, 0);
+                hd.seed_id = CKeyID{uint160{seed_bytes}};
+                (void)batch->Write(DBKeys::HDCHAIN, hd);
+                break;
+            }
+            case 11: { // KEYMETA record: pubkey + fuzzed CKeyMetadata
+                std::vector<unsigned char> pubkey_bytes;
+                if (fdp.ConsumeBool()) {
+                    const CKey key{ConsumePrivateKey(fdp)};
+                    if (key.IsValid()) {
+                        const CPubKey pubkey{key.GetPubKey()};
+                        pubkey_bytes = std::vector<unsigned char>(pubkey.begin(), pubkey.end());
+                    }
+                }
+                if (pubkey_bytes.empty()) pubkey_bytes = ConsumeRandomLengthByteVector(fdp, 33);
+                CKeyMetadata meta;
+                meta.nVersion = fdp.PickValueInArray<int>({1, 10, 12, 99});
+                meta.nCreateTime = fdp.ConsumeIntegral<int64_t>();
+                meta.hdKeypath = fdp.ConsumeRandomLengthString(32);
+                auto meta_seed_bytes{ConsumeRandomLengthByteVector(fdp, 20)};
+                meta_seed_bytes.resize(20, 0);
+                meta.hd_seed_id = CKeyID{uint160{meta_seed_bytes}};
+                for (auto& b : meta.key_origin.fingerprint) b = fdp.ConsumeIntegral<uint8_t>();
+                LIMITED_WHILE(fdp.ConsumeBool(), 8) {
+                    meta.key_origin.path.push_back(fdp.ConsumeIntegral<uint32_t>());
+                }
+                meta.has_key_origin = fdp.ConsumeBool();
+                (void)batch->Write(std::make_pair(DBKeys::KEYMETA, pubkey_bytes), meta);
+                break;
+            }
             }
         }
     }
@@ -151,6 +209,10 @@ FUZZ_TARGET(load_wallet, .init = initialize_load_wallet)
     // boundary contract: any DBErrors classification is acceptable;
     // an uncaught exception or abort is a defect.
     const DBErrors result{WalletBatch(wallet->GetDatabase()).LoadWallet(wallet.get())};
+
+    // Duplicate MASTER_KEY ids must classify DBErrors::CORRUPT
+    // (LoadEncryptionKey's duplicate check). Deterministic, input-driven.
+    if (seeded_dup_mkey) assert(result == DBErrors::CORRUPT);
 
     if (result == DBErrors::LOAD_OK) {
         // CWallet::LoadWalletFlags rejects only flags with unknown bits
