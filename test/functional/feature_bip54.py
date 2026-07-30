@@ -382,25 +382,28 @@ class Bip54Test(BitcoinTestFramework):
         block.solve()
         self.try_submit_block(node, block)
 
-    def submit_block_64byte(self, node):
-        """Submit a block that contains a 64-byte (Segwit) transaction."""
-        # Create a 64-byte tx that spends a single Segwit input and contains a single p2a output.
+    def create_sized_tx(self, stripped_size):
+        """Create a Segwit transaction with the requested stripped size."""
+        assert stripped_size in (63, 64, 65)
         prevout = self.wallet.get_utxo(confirmed_only=True)
         tx = CTransaction()
         tx.vin = [CTxIn(COutPoint(int(prevout['txid'], 16), prevout['vout']))]
-        anchor_spk = CScript([OP_1, b"\x4e\x73"])
-        tx.vout = [CTxOut(0, anchor_spk)]
+        output_data = b"\x4e\x73\x00"[:stripped_size - 62]
+        tx.vout = [CTxOut(0, CScript([OP_1, output_data]))]
         self.wallet.sign_tx(tx)
-        assert_equal(len(tx.serialize_without_witness()), 64)
+        assert_equal(len(tx.serialize_without_witness()), stripped_size)
+        return tx
 
-        # Mine a block containing that transaction.
-        self.mine_and_submit(node, [tx])
+    def submit_block_sized_tx(self, node, stripped_size):
+        """Submit a block containing a transaction with the requested stripped size."""
+        self.mine_and_submit(node, [self.create_sized_tx(stripped_size)])
 
     def submit_block_64byte_coinbase(self, node):
         """Submit a block that contains a 64-byte coinbase transaction."""
         template = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
         block = create_block(tmpl=template)
         block.vtx[0].vout[0].scriptPubKey = CScript([0x00])
+        assert_equal(len(block.vtx[0].serialize_without_witness()), 64)
         block.hashMerkleRoot = block.calc_merkle_root()
         block.solve()
         self.try_submit_block(node, block)
@@ -423,7 +426,7 @@ class Bip54Test(BitcoinTestFramework):
         # - Accept a height-locked coinbase whose sequence disables its locktime.
         self.submit_final_sequence_cb(node)
         # - Accept a block containing a 64-byte transaction.
-        self.submit_block_64byte(node)
+        self.submit_block_sized_tx(node, 64)
         # - Even if that is the coinbase transaction.
         self.submit_block_64byte_coinbase(node)
 
@@ -459,8 +462,10 @@ class Bip54Test(BitcoinTestFramework):
         assert_raises_rpc_error(-25, "bad-cb-locktime", self.submit_nontimelocked_cb, node)
         assert_raises_rpc_error(-25, "bad-cb-locktime", self.submit_nontimelocked_cb, node, 1)
         assert_raises_rpc_error(-25, "bad-cb-sequence", self.submit_final_sequence_cb, node)
-        # - Refuse a block containing a 64-byte transaction
-        assert_raises_rpc_error(-25, "bad-txns-size-64", self.submit_block_64byte, node)
+        # - Accept the adjacent stripped-size boundaries but refuse exactly 64 bytes.
+        self.submit_block_sized_tx(node, 63)
+        assert_raises_rpc_error(-25, "bad-txns-size-64", self.submit_block_sized_tx, node, 64)
+        self.submit_block_sized_tx(node, 65)
         # - Even if that is the coinbase transaction
         assert_raises_rpc_error(-25, "bad-txns-size-64", self.submit_block_64byte_coinbase, node)
 
