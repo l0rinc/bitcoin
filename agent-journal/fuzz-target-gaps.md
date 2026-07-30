@@ -238,3 +238,66 @@ not rediscover a classified, upstream-matching assertion).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-07-30): crypted-wallet record classes widened (MASTER_KEY, HDCHAIN, KEYMETA) + deterministic duplicate-mkey oracle
+
+### Draw
+Re-rank draw over the rebuilt 5-cell queue:
+raw=18090839548819896712, masked 8867467511965120904, index 4
+(of 5) -> #10 (fourth cycle; c3 queue cell "MASTER_KEY / HDCHAIN
+/ POOL / KEYMETA"). Branch: audit/fuzz-gaps-c4 from 022a16c59e
+(#89 c5 journal tip).
+
+### Widening (12 record classes total)
+- case 9 MASTER_KEY: fuzzed nID (small range for duplicates) +
+  full CMasterKey field fuzz (crypted key, salt, derivation
+  method/iterations, other params). Loader path: LoadEncryptionKey
+  (walletdb.cpp:394-419).
+- case 10 HDCHAIN: fuzzed CHDChain version {0,1,2,3,99},
+  counters, seed id. Loader: LoadHDChain.
+- case 11 KEYMETA: valid-or-garbage pubkey + fuzzed CKeyMetadata
+  version {1,10,12,99}, time, keypath, seed id, origin
+  fingerprint+path. Loader: the KEYMETA callback
+  (walletdb.cpp:589+).
+- POOL: no loader exists in this fork (descriptor wallets) — the
+  existing unknown-record case covers it.
+
+### New deterministic oracle
+Duplicate MASTER_KEY ids MUST classify DBErrors::CORRUPT
+(LoadEncryptionKey's duplicate check, walletdb.cpp:403-407):
+asserted from the seeded id multiset. Input-driven, not
+probabilistic.
+
+### Bring-up crash (harness's own, production never involved)
+uint160's span ctor asserts exact width;
+ConsumeRandomLengthByteVector(fdp, 20) may return FEWER bytes ->
+assert failure at my seed construction (stack: uint256.h:43 <-
+uint160 <- load_wallet.cpp). Same class as c2's SetWalletFlag
+harness bug; fixed with deterministic padding
+(bytes.resize(20, 0)); crash seed
+crash-9c6e888bbed9af12665b8333be39729f0900c8b0 preserved in this
+journal's record (sha in the fuzz artifact log).
+
+### Verifications
+- crash seed: clean post-fix.
+- 5000-run sweep on the final harness: Done 5000 runs in 98 s,
+  no crash (cov=1248 baseline).
+
+### Verdict
+CONFIRMED deliverable: the crypted-wallet loader paths are now
+fuzz-seeded with a deterministic duplicate classification oracle.
+
+### Exact commands
+- cmake --build build_fuzz --target fuzz -j4
+- FUZZ=load_wallet build_fuzz/bin/fuzz -runs=1 ./crash-9c6e888...
+- FUZZ=load_wallet build_fuzz/bin/fuzz -runs=5000
+
+### Limitations / queue
+- VerifyCryptedKeys-style cross-record consistency (mkey vs
+  CRYPTED_KEY relationship) is a deeper oracle — next cell if a
+  cycle lands here.
+- POOL has no loader (recorded).
+
+## Rotation note
+Four cycles; the crypted-record widening is delivered. Not
+exhausted (cross-record consistency).
