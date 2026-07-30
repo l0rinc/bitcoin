@@ -156,3 +156,77 @@ cap, transient — not a defect.
 ## Rotation note
 Two cycles; bloom + wire-CompactSize families closed. feefrac and
 txgraph families remain.
+
+## Cycle 3 (2026-07-30): txgraph saturation family — UNREACHABLE by bounded proof; DISMISSED
+
+### Draw
+Rebuilt-queue draw (seed_raw=10344607599657158645,
+masked=1121235562802382837, n=7, idx=5) -> txgraph-saturation ->
+#100 (third cycle; c1 queue cell "txgraph saturation family").
+Branch: audit/sink-reverse-c3 from 3c53c2e4e8 (#100 c2 journal tip).
+
+### Hypothesis
+Attacker-controlled mempool contents could drive txgraph's FeeFrac
+sums to saturation/overflow, producing wrong fee ordering, a bad
+block-template package, or a failed Assume.
+
+### Audit (src/txgraph.cpp, src/util/feefrac.h, src/util/overflow.h)
+- The only saturating sums in txgraph are CheckedFeePerWeightSum
+  (:35-60), used ONLY inside G_ABORT_ON_FAILED_ASSUME debug blocks
+  (:3381, :3488), each iterating transactions of a SINGLE
+  cluster/chunk.
+- Cluster size is hard-bounded: MAX_CLUSTER_COUNT_LIMIT = 64
+  (txgraph.h:18), SetType = BitSet<64> (:161).
+- Overflow handling is explicit even if reached: CheckedAdd detects,
+  SaturatingAdd clamps, overflow flags gate the exactness Assume
+  (AssumeMatches), and ChunkLinearizationInfo collapses saturated
+  clusters into one conservative connected chunk (:1143-1153)
+  instead of exposing a disconnected package.
+- feefrac.h arithmetic itself: Mul/MulFallback produce a full
+  96-bit product (int128 or exact (high,low32) decomposition —
+  a*b = (high + (low>>32))*2^32 + uint32(low) holds for negative
+  operands under two's complement); DivFallback's negative left-
+  shift is well-defined under C++20 [expr.shift]; ByRatio cross-
+  multiplication cannot overflow by construction (96-bit).
+- Existing coverage: src/test/fuzz/feefrac.cpp fuzz target (UBSan
+  build) + feefrac_tests.cpp.
+
+### Bounded proof of unreachability (runnable computation, python3)
+- fee (int64, sats): cluster fee sum <= 64 * MAX_MONEY
+  = 134,400,000,000,000,000 < int64 max 9,223,372,036,854,775,807
+  (margin 68.6x). Tighter: mempool txs spend disjoint UTXOs (no
+  in-mempool double-spend), so ANY subset sum of mempool fees <=
+  total supply 2.1e15 sats (margin 4.39e3).
+- size (int32, WU): cluster size sum <= 64 * MAX_STANDARD_TX_WEIGHT
+  = 25,600,000 < int32 max 2,147,483,647 (margin 83.9x).
+- Constants verified in-tree: MAX_MONEY (consensus/amount.h:26),
+  MAX_STANDARD_TX_WEIGHT = 400,000 (policy/policy.h:38),
+  MAX_CLUSTER_COUNT_LIMIT = 64 (txgraph.h:18).
+
+### Verdict
+DISMISSED: saturation is defense-in-depth, unreachable by a wide
+margin under the fork's own cluster limit and consensus/policy
+bounds, and safe-by-construction even if hypothetically reached
+(flagged clamps + conservative chunk collapse). No UB, no ordering
+inversion, no reachable Assume failure. No test gap requiring a
+local oracle (fuzz target + unit tests exist upstream-inherited).
+
+### Exact commands
+- grep/sed reads cited above; margin computation:
+  python3 -c '<see journal body>' (recorded inline above).
+
+### Limitations / queue
+- Proof assumes cluster membership is capped at 64 for ALL paths
+  into CheckedFeePerWeightSum (both call sites iterate one
+  cluster's entries; AddTransaction callers enforce the limit
+  before linking — F13's -limitclustercount validation is the
+  config surface). If a future path links >64 into one cluster,
+  the 68.6x fee margin still holds (needs >4000 max-fee txs).
+- Queued (remaining from c1): shift/narrowing sinks in feefrac —
+  PARTIALLY absorbed here (Mul/DivFallback + shift analysis above);
+  the ctime/int64-backend differential remains a separate queued
+  cell under backend-differential.
+
+## Rotation note
+Three cycles; bloom, wire-CompactSize, and txgraph saturation
+families closed. feefrac remainder folded into backend queue.
