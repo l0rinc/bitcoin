@@ -2,6 +2,15 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 165 Completion
+
+- The post-Cycle-164 gate was clean at `ac5dd3ed2a448417504149650b901457c24e8690`, with `origin/master` `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1111 42`. The catalog, prompt, goals TSV, protocol, and state inputs were unchanged; their authoritative hashes remained `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The exact selector command returned `33`, `82`, `98`, `49`, then `66`. Goals 33, 82, 98, and 49 were rerolled because their journals record closed cells. Goal 66 was retained for its distinct 28.x release-batch queue. The dedicated branch is `uber-cycle-165-backport-correctness-20260730`.
+- Cycle 165 audited 28.x merge `2023de53f073717b28c7d6c87790d221b59c81ab` (`#35214`) on `origin/28.x` `de328509029d36b0541ddf25700ac19a0de6a5c8`, excluding Cycles 36/66's 31.x batch, Cycle 67's 29.x wallet cleanup, and Cycle 144's 30.x `#35232` batch. The source-specific Boost MultiIndex backport covered all three 28.x containers and did not omit the older `std::map` orphanage. A full isolated Autotools build succeeded, focused suites passed 44 cases/314,385 assertions, the complete release unit binary passed 565/566 cases and all 20,071,853 assertions with only the known fixture warning, and the `txrequest` fuzz corpus passed 3/3 files.
+- Boost 1.91.0 was independently pinned by archive hash `de5e6b0e4913395c6bdfa90537febd9028ea4c0735d2cdb0cd9b45d5f51264f5`. The patched `miner.o`, `txmempool.o`, and `txrequest.o` compiled with its headers; the immediate pre-`#35214` parent failed with the expected incomplete `indexed_by` and index-list diagnostics. The seccomp variables in all three 28.x affected CI environment files were sourced correctly, selected by the workflow, syntax-checked, and shown to reach the `docker run` argument list. Docker/Podman were unavailable, so actual CI image, i686, and Windows/Wine execution remains unclaimed.
+- Verdict: dismissed as a current backport defect; no production or permanent test change was justified. Journal-only close commit `2df2a933b3` (`journal: close cycle 165 backport correctness`) is authored as `Lőrinc <pap.lorinc@gmail.com>`. Detailed evidence is in `agent-journal/backport-correctness.md`.
+- The cycle left no owned test, fuzz, sanitizer, daemon, or profiling process running. PIDs `777094` and `956381`, all known unrelated untracked artifacts, and the goal files remain preserved. A separate state-only close commit follows; the next cycle must perform a fresh gate and exact selector draw.
+
 ## Cycle 164 Completion
 
 - The post-Cycle-163 gate was clean at `98f0c7b4eac40756eb6c2441818b2d013516e324`,
