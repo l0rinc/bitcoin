@@ -304,6 +304,12 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
         FuzzRescanChain::Block b;
         b.hash = ConsumeUInt256(fdp);
         if (b.hash.IsNull()) b.hash = uint256::ONE; // keep last_failed_block distinguishable from unset
+        // Keep block hashes unique (a real chain can never repeat one): bump
+        // the low byte until it differs from every earlier block (#71 c3 —
+        // the previous null->ONE correction could produce duplicate hashes).
+        while (std::any_of(chain.blocks.begin(), chain.blocks.end(), [&](const auto& prev) { return prev.hash == b.hash; })) {
+            *reinterpret_cast<uint8_t*>(b.hash.data()) += 1;
+        }
         b.time = fdp.ConsumeIntegralInRange<int64_t>(1, 1LL << 40);
         max_time = std::max(max_time, b.time);
         b.max_time = max_time;
@@ -461,6 +467,46 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
                     LOCK(wallet->cs_wallet);
                     Assert(wallet->mapWallet.contains(wallet_txs[i]->GetHash()));
                 }
+            }
+        }
+        // ---- Reorged recorded position (#71 c3) ----
+        // The mock's flip can only deactivate mid-scan, so the recorded
+        // position is always active here. Force the post-scan reorg classes
+        // deterministically: (a) deactivate the recorded block in place,
+        // (b) replace it with a fresh hash (second-generation chain view).
+        // The resume must fail cleanly (FAILURE with last_failed_block ==
+        // recorded), never scan wrong-chain data, and lose nothing.
+        if (recorded_idx >= 0) {
+            const uint256 fresh{chain.blocks[recorded_idx].hash};
+            for (int mode = 0; mode < 2; ++mode) {
+                if (mode == 0) {
+                    chain.blocks[recorded_idx].active = false;
+                } else {
+                    // second-generation hash, guaranteed unknown to the mock
+                    uint256 replaced{fresh};
+                    do {
+                        *reinterpret_cast<uint8_t*>(replaced.data()) += 0xa5;
+                    } while (std::any_of(chain.blocks.begin(), chain.blocks.end(),
+                                         [&](const auto& prev) { return prev.hash == replaced; }));
+                    chain.blocks[recorded_idx].hash = replaced;
+                }
+                const size_t wallet_size_before{WITH_LOCK(wallet->cs_wallet, return wallet->mapWallet.size())};
+                int64_t now_calls3{0};
+                reserver.setNow([&]() { return SteadyClock::time_point{SteadyClock::duration{2000 + (++now_calls3) * now_step}}; });
+                const auto reorg_result{wallet->ScanForWalletTransactions(
+                    recorded, recorded_idx, std::nullopt, reserver, /*save_progress=*/false)};
+                // A pending abort/shutdown yields USER_ABORT with nothing
+                // scanned (legitimate); otherwise the resume must FAIL with
+                // last_failed_block == recorded. SUCCESS (scanning over a
+                // reorged start) is the defect shape and must never occur.
+                Assert(reorg_result.status != CWallet::ScanResult::SUCCESS);
+                if (reorg_result.status == CWallet::ScanResult::FAILURE) {
+                    Assert(reorg_result.last_failed_block == recorded);
+                }
+                const size_t wallet_size_after{WITH_LOCK(wallet->cs_wallet, return wallet->mapWallet.size())};
+                Assert(wallet_size_after >= wallet_size_before);
+                chain.blocks[recorded_idx].active = true;
+                chain.blocks[recorded_idx].hash = fresh;
             }
         }
     }
