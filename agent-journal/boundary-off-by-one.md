@@ -1,5 +1,59 @@
 # Boundary and Off-by-One Audit: Cycle 21
 
+## Cycle 129: scanblocks and compact-filter boundary recheck
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `5`
+- Selected slug: `boundary-off-by-one`
+- Branch: `uber-cycle-129-boundary-off-by-one-20260730`
+- HEAD before the cycle: `36bcb3e32dc7c24990440319970ab2bbd3b386f9`
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Start divergence: `1045 40` from `git rev-list --left-right --count HEAD...origin/master`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- The fresh fetch, tracked/index status, `git diff --check`, catalog/protocol hashes, and process check passed. PID `777094` (`test_bitcoin --run_test=wallet_tests`) and its Codex parent were preserved. Existing untracked agent artifacts, `node_modules/`, package files, and `test/cache/` were not touched.
+
+### Scope and queued cells
+
+The prior boundary cycles closed CompactSize, direct-fetch, transaction-download, wallet-count, tx-graph, filter-range, flat-file, and block-file cells. This cycle rechecked the remaining height-loop, checkpoint-cardinality, and count/offset surfaces rather than repeating those cells. The falsifiable hypotheses were that the compact-filter checkpoint construction or the `scanblocks` 10,000-block chunking mishandles an exact boundary, or that a reachable height loop overflows before its termination condition.
+
+### Source review
+
+`src/index/blockfilterindex.cpp` computes `results_size` as `stop_index->nHeight - start_height + 1` and walks the inclusive range with `height <= stop_index->nHeight`. A signed overflow is theoretically possible only at an `INT_MAX`-scale height, which is not a reachable Bitcoin chain state. The backward range uses a safe `height >= start_height` condition.
+
+`src/net_processing.cpp` sizes compact-filter checkpoints as `stop_index->nHeight / CFCHECKPT_INTERVAL` and requests heights `(i + 1) * CFCHECKPT_INTERVAL`. This emits exactly 1000, 2000, and later checkpoints no greater than the stop height; an endpoint below 1000 correctly returns an empty vector. Existing `p2p_blockfilters.py` already exercises exact 1000 and 2000 checkpoint and filter-header behavior.
+
+`src/rpc/blockchain.cpp` uses `amount_per_chunk = 10000` and an inclusive `end_range`. Therefore a height difference of exactly 10000 intentionally scans 10001 blocks in one range, while the next range begins after that endpoint. The relevant question is whether the returned interval and results preserve this documented inclusive behavior at both sides of the boundary.
+
+### Evidence
+
+The focused unit command initially exposed a harness setup issue because its `TMPDIR` did not exist; a multi-case invocation then collided with the test fixture's global argument state and was interrupted. This affected only the scratch invocation. After creating the temporary directory and selecting the single case, the exact command
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle129-blockfilter-unit /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=blockfilter_index_tests/blockfilter_index_initial_sync --log_level=test_suite --report_level=short
+```
+
+passed 1 case with 1825/1825 assertions. The existing functional command
+
+```text
+python3 test/functional/p2p_blockfilters.py --configfile=/data/my_storage/tmp/cycle89-build/test/config.ini --tmpdir=/data/my_storage/tmp/cycle129-p2p-blockfilters --portseed=1290 --timeout-factor=2 --loglevel=INFO
+```
+
+passed, including exact-height 1000/2000 checkpoint checks. `rpc_scanblocks.py` first failed because the preserved untracked `test/cache/` contained no cached blocks; rerunning with a fresh scratch cache passed:
+
+```text
+python3 test/functional/rpc_scanblocks.py --configfile=/data/my_storage/tmp/cycle89-build/test/config.ini --cachedir=/data/my_storage/tmp/cycle129-functional-cache --tmpdir=/data/my_storage/tmp/cycle129-rpc-scanblocks-fresh --portseed=1292 --timeout-factor=2 --loglevel=INFO
+```
+
+Finally, a scratch regtest daemon generated 10001 blocks and synchronized the basic block-filter index. The wallet address appeared in every coinbase filter. `scanblocks start ["addr(bcrt1q0fvud2auh4ky77590vggvtj6zade9k26s5ug43)"] 0 10000 basic` returned `from_height=0`, `to_height=10000`, `completed=true`, and 10000 relevant blocks. The same scan through height 10001 returned `from_height=0`, `to_height=10001`, `completed=true`, and 10001 relevant blocks; the shorter result was an exact prefix of the longer result. The scratch daemon was stopped after the run.
+
+### Verdict and handoff
+
+No reachable off-by-one, checkpoint-cardinality, or result-interval defect was confirmed. The `INT_MAX` arithmetic concern is theoretical and lacks a reachable chain fixture; the unsigned `headers.size() - 1` conversion for an empty checkpoint vector is harmless on the supported execution path and did not justify a style-only change. No source or permanent test change was made. The next boundary cycle should select a genuinely new count/offset surface and retain the height-loop limitation instead of repeatedly rerunning the same practical cases.
+
 ## Handoff
 
 - Goal draw: catalog index 5, `boundary-off-by-one`.
