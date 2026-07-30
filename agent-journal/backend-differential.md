@@ -160,3 +160,49 @@ on aarch64/gcc-13.
 ## Rotation note
 Three cycles; secp wide-multiply family fully closed. #69 quiets
 pending new backends.
+
+## Cycle 4 (2026-07-30): secp256k1 ctime variant — valgrind ctime_tests green on this host
+
+### Draw
+Re-rank draw over the remaining 3-cell queue:
+raw=182724797729077762, index 1 (of 3) -> #69 (fourth cycle; c3
+queue cell "ctime variant"). Branch:
+audit/backend-differential-c4 from fec1be1523 (#89 c4 journal
+tip).
+
+### Setup
+Subtree build with SECP256K1_BUILD_CTIME_TESTS=ON (Valgrind found
+at /usr/include, Valgrind_WORKS success; the ctime harness needs
+the memory-checking interface — ctime_tests.c:#error without it).
+Run under valgrind --error-exitcode=42 --quiet.
+
+### Result
+ctime_tests under valgrind: exit 0 — no secret-dependent branch or
+memory-access violation in the covered crypto paths (ecdsa,
+schnorr, ecdh, musig, ellswift modules enabled in this subtree).
+The vendored secp256k1 (post-#65 c5 master update) is
+constant-time clean on aarch64 with the default int128_struct
+path.
+
+### Verdict
+DISMISSED: the ctime variant passes. With c1 (int128 vs int64),
+c2 (SHA256 arm_shani vs scalar), c3 (int128 struct vs native),
+the backend differential campaign's cells are all closed and
+green.
+
+### Exact commands
+- cmake -S src/secp256k1 -B /tmp/secp_ctime -GNinja
+  -DCMAKE_BUILD_TYPE=Release -DSECP256K1_BUILD_TESTS=ON
+  -DSECP256K1_BUILD_CTIME_TESTS=ON
+- ninja -C /tmp/secp_ctime ctime_tests
+- valgrind --error-exitcode=42 --quiet /tmp/secp_ctime/bin/
+  ctime_tests (exit 0)
+
+### Limitations / queue
+- ctime under the int64 override (the other widemul backend) not
+  run — the default path is the shipping one; the int64 variant
+  is c1-covered correctness-wise.
+
+## Rotation note
+Four cycles; backend campaign cells all closed green. #69 quiets
+pending new backends.
