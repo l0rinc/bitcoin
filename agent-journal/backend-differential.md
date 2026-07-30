@@ -1,5 +1,32 @@
 # SIMD, Assembly, and Portable-Reference Backend Differential
 
+## Cycle 158: ThinLTO portable and x86_64 assembly differential
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `69` (`backend-differential`). This is a distinct open cell from the earlier x86_64 CRC32C (Cycle 114), Bitcoin Core SHA256 dispatch (Cycle 100), libsecp Release compiler/assembly (Cycles 90 and 123), and Clang ASan/UBSan assembly/portable (Cycle 133) comparisons. Those cycles did not exercise LTO.
+- The dedicated branch is `uber-cycle-158-backend-differential-20260730`; start HEAD was `b79b80b7ea47a2a13fc32e2337c2b96b3cd9eb70`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `42 1099` (`origin/master...HEAD`).
+- The fresh gate passed `git fetch origin --prune`, catalog/protocol hash checks, tracked-worktree cleanliness, and `git diff --check`. The required hashes remained `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`. PID `777094` and PID `956381` were running unrelated unit tests and were preserved.
+
+### Scope and matrix
+
+The hypothesis was that ThinLTO could change an optimized/reference backend contract even when ordinary Release builds agree: serialized public keys, ECDH outputs, ElligatorSwift/BIP324 outputs, invalid-secret status and output behavior, or an internal field/scalar/group invariant could diverge between libsecp256k1 portable arithmetic and the x86_64 assembly backend.
+
+Two fresh standalone libsecp builds used Clang 19.1.7, Release mode, static libraries, `CMAKE_INTERPROCEDURAL_OPTIMIZATION=ON`, all current modules including ECDSA recovery, and tests/exhaustive tests enabled. The only backend difference was `-DSECP256K1_ASM=OFF` versus `-DSECP256K1_ASM=x86_64`. `ninja -t commands` confirmed `-flto=thin` in both compile and link graphs; the assembly graph also contained `USE_ASM_X86_64=1`. Valgrind/ctime tests were disabled because the host lacks the Valgrind headers.
+
+The installed host has no ARM cross compiler, QEMU, or 32-bit linker runtime. A `gcc-12 -m32` link smoke failed only for missing `Scrt1.o`, `crti.o`, `libgcc`, and 32-bit libc; an AArch64 Clang compile failed because the target libc headers are absent. Those are recorded environment limits, not backend findings.
+
+### Test and independent differential evidence
+
+- `cmake --build /data/my_storage/tmp/cycle158-backend-differential/lto-portable --parallel 2` and the corresponding assembly build completed all 10 Ninja actions after enabling recovery.
+- `/data/my_storage/tmp/cycle158-backend-differential/lto-portable/bin/tests --iterations=2 --seed=0123456789abcdef --jobs=2 --log=1` passed with total execution time `24.530 seconds`; the assembly command passed in `24.201 seconds`. Both covered ECDH, ECDSA recovery, field/scalar/group arithmetic, extrakeys, Schnorr, MuSig, ElligatorSwift, Silent Payments, byte-order, and constant-time helper groups.
+- The matching `noverify_tests` commands passed with captured total execution times `12.035 seconds` (portable) and `11.908 seconds` (assembly). Both exhaustive binaries reported `Exhaustive tests for order 13`, `test count = 2`, `no problems found`, and exit status 0.
+- The independent existing probe `agent-journal/backend_differential_cycle123_probe.cpp` was compiled with `clang++-19 -std=c++17 -Wall -Wextra -Werror -flto=thin -fuse-ld=lld-19` against each LTO archive. It covers 512 deterministic key pairs, public-key creation/serialization, default and custom-hash ECDH in both directions, ElligatorSwift creation/decoding, BIP324 EllSwift XDH, and invalid-secret status/output paths. Both probes exited 0 and printed exactly `vectors=512 failures=0 digest=fe288ea1ddb151fb`; the two logs had SHA-256 `c9799f98016b16dd5f4faff7ca8cffd505eea4a75defe60547f371953e64b308`, and `cmp` returned 0.
+
+### Verdict and handoff
+
+**Dismissed as a current ThinLTO backend mismatch; no source or permanent test change is justified.** The portable and x86_64 assembly configurations agree on the independent API/status digest and both implementation-local test families under the same Clang 19 ThinLTO settings. The result is an x86_64 little-endian correctness comparison, not evidence for ARM/32-bit/big-endian behavior, GCC LTO, full LTO versus ThinLTO, PGO/BOLT, Valgrind/ctime, or timing/constant-time equivalence. Scratch builds, logs, and probe outputs remain under `/data/my_storage/tmp/cycle158-backend-differential/`; the existing probe source remains untracked and was not staged. The next backend reopening should use a newly available architecture/toolchain or a distinct profile/transform boundary.
+
 ## Cycle 133: sanitized assembly and portable backend differential
 
 ### Selection and fresh gate

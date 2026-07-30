@@ -2,6 +2,14 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 158 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `69` (`backend-differential`). The dedicated branch is `uber-cycle-158-backend-differential-20260730`; start HEAD was `b79b80b7ea47a2a13fc32e2337c2b96b3cd9eb70`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `42 1099`.
+- This was the open ThinLTO cell for goal 69, excluding prior CRC32C, Core SHA256, libsecp Release/compiler, and Clang sanitizer backend comparisons. Fresh Clang 19 standalone libsecp builds used `CMAKE_INTERPROCEDURAL_OPTIMIZATION=ON` and `-flto=thin`, all modules including recovery, with portable arithmetic versus x86_64 assembly.
+- Both builds completed. Full seeded tests passed in `24.530s` portable and `24.201s` assembly; no-`VERIFY` tests passed in `12.035s` and `11.908s`; exhaustive order-13 tests reported `no problems found`. An independent 512-vector API/status probe produced `vectors=512 failures=0 digest=fe288ea1ddb151fb` in both builds; log SHA-256 was `c9799f98016b16dd5f4faff7ca8cffd505eea4a75defe60547f371953e64b308` for each and `cmp` returned 0.
+- No current backend or LTO defect was confirmed, so no source/test change was made. The selected journal `agent-journal/backend-differential.md` records the exact matrix, commands, output, missing cross-toolchain/32-bit evidence, and scratch root. A single journal-only close commit follows, authored as `Lőrinc <pap.lorinc@gmail.com>`; the next cycle must run a fresh gate and exact selector draw.
+- ARM/cross compiler, QEMU, 32-bit runtime, Valgrind/ctime, GCC/full-LTO, PGO/BOLT, and timing equivalence remain open. The `gcc-12 -m32` smoke and AArch64 Clang compile stopped at missing target runtime/headers and were not treated as source failures. PIDs `777094` and `956381`, the existing untracked probe, and all unrelated artifacts were preserved.
+
 ## Cycle 157 Completion
 
 - Exact selector: `shuf -i 0-98 -n 1` -> `62` (`rejected-finding-resurrection`). The dedicated branch is `uber-cycle-157-rejected-finding-resurrection-20260730`; start HEAD was `9f67b9fc0a65ba8599d153cd772db053420a2935`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `42 1097` (`origin/master...HEAD`).
