@@ -197,3 +197,68 @@ Running 37 test cases... *** No errors detected
 ### Verdict and Handoff
 
 **Confirmed test-vector drift; fixed.** The drift was limited to libsecp's embedded BIP324 EllSwift XDH oracle, not the BIP324 implementation or the BIP341/MuSig2 corpora. The current vectors now agree across the authoritative CSV, Bitcoin Core packet tests, and direct libsecp XDH tests. A source/test/journal commit should contain this six-row refresh, authored as `Lőrinc <pap.lorinc@gmail.com>`; the cycle close snapshot must follow it. Remaining scope for later protocol audits: BIP342 semantic vectors/formal rules and any future BIP324 source update.
+## Cycle 159: BIP352 Silent-Payment Vector Drift
+
+### Cycle Identity
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `81`
+- Selected goal: `spec-vector-drift` (specification, test-vector, and formal-model drift audit)
+- Worktree: `/data/my_storage/bitcoin`
+- Branch: `uber-cycle-159-spec-vector-drift-20260730`
+- Start HEAD: `b89ef9a7569c2120c0ee62148b4d6fb729644d9a`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Start divergence: `42 1100` (`origin/master...HEAD`)
+
+### Scope and Hypothesis
+
+This cycle selected the unclosed BIP352 silent-payment vector family. The concrete hypothesis was that the checked-in JSON corpus, generated C header, local libsecp256k1 consumer, or recent BIP352 corner-case additions had drifted from the authoritative BIP text and reference implementation. BIP328 and the new BIP32 framework vectors were surveyed first and did not supply a stronger open mismatch; the BIP352 corpus was selected as the distinct authoritative cell.
+
+The trust boundary is the BIP352 specification and its `send_and_receive_test_vectors.json` plus `reference.py`, the local conversion script, `vectors.h`, and the `silentpayments` test module. The relevant specification contract includes compressed/X-only input handling, outpoint ordering, zero-sum rejection, label derivation, output scanning, and the `K_max = 2323` per-group limit.
+
+### Authority and Reproduction Evidence
+
+- The current `bitcoin/bips` master resolved to `9783d61f1b9c81231581fee026c8e8cb9499d265`. Its BIP352 document is version 1.1.1 dated 2026-04-16 and records both the intermediate-zero/final-nonzero vector and the 2323 per-group limit changes.
+- The checked-in JSON and the authoritative raw BIP file were byte-identical. Both SHA-256 values were `f5f9ed4afd76a1b76f3c70b1cbe67532f89abbe559f8e02d7fc3d8ecb93af4a1`; both files were 418648 bytes and `cmp` returned 0.
+- The local `tests_silentpayments_generate.py` matched the current `bitcoin-core/secp256k1` master copy byte-for-byte, with SHA-256 `3bebf03f30f7f7929c6a3d1b26bcd04860b15ffe0d35354104010aec744d5759`. Regenerating the header from the checked-in JSON produced a byte-identical `vectors.h`; both SHA-256 values were `8d88aead1f2f359aca31ac8c803001c55b1231be187839cafbe9c6959cedbbcc`.
+- Parsing the JSON found 28 sending/receiving test cases. The current corpus includes the documented `Input keys intermediate sum is zero but final sum is non-zero` case as vector 27 and `Maximum per-group recipient limit K_max is exceeded (2324 matches)` as vector 28.
+- The BIP reference implementation was run from a depth-one checkout of the authoritative BIP repository against its own vector file. It printed all 28 case names and ended with `All tests passed`.
+
+### Local Consumer Verification
+
+The current standalone libsecp256k1 LTO builds from the preceding backend matrix were reused because the source and generated files were unchanged between cycles. The portable and x86_64 assembly builds both ran:
+
+```text
+tests --target=silentpayments --iterations=2 --seed=1593520000000001 --jobs=2 --log=1
+```
+
+Both passed all seven silent-payment tests, including `run_silentpayments_test_vectors`:
+
+```text
+portable: Test run_silentpayments_test_vectors PASSED (11.215 sec), rc=0
+assembly: Test run_silentpayments_test_vectors PASSED (11.113 sec), rc=0
+```
+
+The regenerated header and local consumer therefore agree on the current full corpus, while the independent BIP reference agrees with the same corpus and expected behavior.
+
+### Review and History Search
+
+The subtree history contains the current vector/generator/header update in `c26d4e2d6f03e26c6c20a4cc854f26d150f38b14` (`Update secp256k1 subtree to latest master`). The BIP changelog explains the recent vector and limit additions. Search of the local silent-payment module found the vector consumer, generator, K_max boundary tests, and tagged-hash tests; no stale alternate copy or unregistered vector source was found.
+
+### Verdict
+
+**Dismissed as current specification or vector drift; no confirmed finding.** The authoritative specification artifacts, local JSON, generator, generated header, portable and assembly consumers, and independent reference implementation all agree. No source, test, or generated-artifact change was justified.
+
+### Limitations and Rejected Leads
+
+- The local binaries were reused from the immediately preceding Cycle 158 standalone builds because no source or generated artifact changed; a new build was not needed to resolve this content question.
+- This cycle did not provide ARM, 32-bit, big-endian, QEMU, GCC/full-LTO, sanitizer, Valgrind, timing, or PGO/BOLT evidence. Those limitations remain platform/backend campaign evidence, not a BIP352 vector mismatch.
+- The BIP reference checkout created only Python bytecode caches outside the repository. No repository files were modified in the investigation.
+- BIP328/MuSig2 values and the new BIP32 framework were surveyed and appeared current; they remain separate future specification cells rather than duplicate BIP352 work.
+
+### Next Queue
+
+1. Draw another eligible catalog goal after a fresh gate and record the exact selector output.
+2. Keep this BIP352 cell closed unless the authoritative BIP or subtree changes.
+3. Preserve the distinction between exact vector synchronization and broader implementation, platform, and constant-time audits.
