@@ -349,11 +349,11 @@ class Bip54Test(BitcoinTestFramework):
             # affect the other tests. Reset the time so those can mine blocks normally.
             node.setmocktime(0)
 
-    def submit_nontimelocked_cb(self, node):
+    def submit_nontimelocked_cb(self, node, locktime_offset=-1):
         """Submit a block with its coinbase transaction not timelocked to its height."""
         template = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
         block = create_block(tmpl=template)
-        block.vtx[0].nLockTime -= 1
+        block.vtx[0].nLockTime += locktime_offset
         block.hashMerkleRoot = block.calc_merkle_root()
         block.solve()
         self.try_submit_block(node, block)
@@ -430,6 +430,7 @@ class Bip54Test(BitcoinTestFramework):
         assert_raises_rpc_error(-25, "time-negative-interval", self.murch_zawy_attack, node)
         # - Refuse blocks with a coinbase not timelocked to the block height
         assert_raises_rpc_error(-25, "bad-cb-locktime", self.submit_nontimelocked_cb, node)
+        assert_raises_rpc_error(-25, "bad-cb-locktime", self.submit_nontimelocked_cb, node, 1)
         # - Refuse a block containing a 64-byte transaction
         assert_raises_rpc_error(-25, "bad-txns-size", self.submit_block_64byte, node)
         # - Even if that is the coinbase transaction

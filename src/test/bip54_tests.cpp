@@ -1425,9 +1425,14 @@ BOOST_AUTO_TEST_CASE(bip54_coinbase)
             blocks.emplace_back();
             BOOST_REQUIRE(DecodeHexBlk(blocks.back(), blk.get_str()));
         }
+        std::string expected_reason;
+        if (!is_valid) {
+            const auto& coinbase{*blocks.back().vtx.front()};
+            const auto expected_locktime{static_cast<uint32_t>(blocks.size() - 2)};
+            expected_reason = coinbase.nLockTime != expected_locktime ? "bad-cb-locktime" : "bad-cb-sequence";
+        }
 
-        // Check the test case by activating the Consensus Cleanup and accepting those blocks. Note how some of the
-        // test vectors demonstrate finality is enforced on coinbase transactions too, which is a rule pre-existing BIP54.
+        // Check the test case by activating the Consensus Cleanup and accepting those blocks.
         {
             auto test_setup{TestingSetup{ChainType::MAIN, {.extra_args = {"-vbparams=consensuscleanup:-1:-1"}}}};
             BlockValidationState state;
@@ -1435,7 +1440,7 @@ BOOST_AUTO_TEST_CASE(bip54_coinbase)
             BOOST_CHECK_MESSAGE(res, comment);
             if (!is_valid) {
                 const auto reason{state.GetRejectReason()};
-                BOOST_CHECK_MESSAGE(reason == "bad-cb-locktime" || reason == "bad-cb-sequence" || reason == "bad-txns-nonfinal", comment);
+                BOOST_CHECK_MESSAGE(reason == expected_reason, comment);
             }
         }
     }
