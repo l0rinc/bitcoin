@@ -2,6 +2,49 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 171 Completion
+
+- Cycle 171 selected goal `80` (`fuzz-engine-differential`) after the exact
+  selector first returned the explicitly closed goal `53`; the required exact
+  reroll returned `80`. The dedicated branch was
+  `uber-cycle-171-fuzz-engine-differential-20260730`; start HEAD was
+  `ad4a3cf1577b22bc9793b124922dd26e53052560`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence `1123 42`.
+- The selected stateful `process_messages` and `process_message` fuzz targets
+  leaked the process-global mocked socket descriptor allocator and retained
+  mempool state across persistent inputs. The focused AFL++ calibration
+  control was unstable before the reset and stable after
+  `ResetFuzzedSockMockedFds()`; reconstructing `CTxMemPool` removed most of the
+  remaining corpus variation. The isolated malformed `sendcmpct` variation
+  survived both resets and remains an explicitly quarantined AFL++ limitation,
+  not a claimed source defect. The detailed engine matrix, exact metrics,
+  transferred-input replay, and tool limitations are in
+  `agent-journal/fuzz-engine-differential.md`.
+- Source/test/journal commit `a215d6ce55bfb34bb0c1648eab45bc739df1b0ea`
+  (`fuzz: reset process message harness state between inputs`) is authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. Current-source libFuzzer, AFL++, and
+  Honggfuzz builds passed; fixed-budget runs found no crash, hang, timeout, or
+  sanitizer diagnostic; AFL++ and Honggfuzz generated inputs replayed cleanly
+  through the ASan/UBSan target. FuzzTest was unavailable locally. No
+  production defect was confirmed.
+- The post-fix close gate after `git fetch origin master` passed with HEAD
+  `a215d6ce55bfb34bb0c1648eab45bc739df1b0ea`, origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and left/right divergence
+  `1124 42`. `git diff --check` passed. The catalog, prompt, corrected goals
+  TSV, and protocol hashes remain `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  PIDs `777094` and `956381` and all unrelated untracked artifacts remain
+  preserved. The root filesystem remains at 99% with about 108 MiB free, so
+  future scratch work must stay on `/data` and avoid broad builds.
+- Verdict: confirmed and fixed as a test-harness reproducibility issue. The
+  next exact selector returned `12` (`static-analysis-true-positives`), which
+  has no explicitly closed cell in the ledger. The next cycle must perform a
+  fresh gate and open `uber-cycle-172-static-analysis-true-positives-20260730`.
+
 ## Cycle 170 Completion
 
 - Cycle 170 selected goal `74` (`memory-pressure-allocator`) by the exact
