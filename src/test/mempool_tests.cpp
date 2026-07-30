@@ -643,6 +643,43 @@ BOOST_AUTO_TEST_CASE(MempoolPrioritisationSaturationRoundTrip)
     }
 }
 
+BOOST_AUTO_TEST_CASE(MempoolPrioritisationSurvivesTrimAndReadd)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    TestMemPoolEntryHelper entry;
+    const CTransactionRef tx = make_tx({10 * COIN});
+    constexpr CAmount BASE_FEE{1000};
+    constexpr CAmount FEE_DELTA{5000};
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(BASE_FEE).FromTx(tx));
+    }
+    pool.PrioritiseTransaction(tx->GetHash(), FEE_DELTA);
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        pool.TrimToSize(0);
+    }
+    BOOST_CHECK(!pool.exists(tx->GetHash()));
+
+    auto deltas = pool.GetPrioritisedTransactions();
+    BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+    BOOST_CHECK(deltas.front().txid == tx->GetHash());
+    BOOST_CHECK_EQUAL(deltas.front().delta, FEE_DELTA);
+    BOOST_CHECK(!deltas.front().in_mempool);
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(BASE_FEE).FromTx(tx));
+        const auto* current = pool.GetEntry(tx->GetHash());
+        BOOST_REQUIRE(current != nullptr);
+        BOOST_CHECK_EQUAL(current->GetModifiedFee(), BASE_FEE + FEE_DELTA);
+        pool.removeForBlock({tx}, 1);
+    }
+    BOOST_CHECK(pool.GetPrioritisedTransactions().empty());
+}
+
 BOOST_AUTO_TEST_CASE(MempoolUnbroadcastMemoryAccounting)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
