@@ -433,7 +433,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         }
 
         // We don't exceed the limit yet.
-        CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "P2SH inputs totalling 125 16-of-17 CHECKMULTISIGs");
+        CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Bare Script inputs totalling 125 16-of-17 CHECKMULTISIGs");
 
         // Add one more input with a single sigop (a P2PKH to mix input types).
         auto spk{GetScriptForDestination(PKHash(pubkey))};
@@ -459,7 +459,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         }
 
         // Now we bump into the limit.
-        CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "P2SH inputs totalling 125 16-of-17 CHECKMULTISIGs + 1 P2PKH input");
+        CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Bare Script inputs totalling 125 16-of-17 CHECKMULTISIGs + 1 P2PKH input");
     }
 
     // Exceed the 2'500 limit using 18-of-18's CHECKMULTISIGs in an intentionally contrived P2SH redeemScript.
@@ -483,7 +483,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         redeem_script << 18 << OP_SWAP << OP_DUP << OP_2DUP << OP_2DUP << OP_3DUP << OP_3DUP << OP_3DUP << OP_3DUP << 18 << OP_CHECKMULTISIG;
         const auto spk{GetScriptForDestination(ScriptHash(redeem_script))};
 
-        // Reach 2400 sigops with 62 inputs.
+        // Reach 2480 sigops with 62 inputs.
         CMutableTransaction tx_create;
         for (int i{0}; i < 62; ++i) {
             tx_create.vout.emplace_back(i, spk);
@@ -516,8 +516,8 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             BOOST_REQUIRE(VerifyTxin(spk, tx_copy, i));
         }
 
-        // We now reached 2600 sigops. We exceed the limit.
-        CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "62 inputs with a contrived P2SH redeemScript executing 2 18-of-18 CHECKMULTISIGs");
+        // We now reached 2520 sigops. We exceed the limit.
+        CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "63 inputs with a contrived P2SH redeemScript executing 2 18-of-18 CHECKMULTISIGs");
     }
 
     // Now reach exactly 2500 sigops with a transaction mixing CMS-only input, CHECKSIG-only input, an input with
@@ -588,7 +588,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         }
         const auto cms_only_p2sh{GetScriptForDestination(ScriptHash(cms_only_redeem_script))};
 
-        // A P2SH with 9 13-of-13 CMS followed by 9 CHECKSIGs. The 9 CHECKMULTISIG's are in
+        // A P2SH with 9 13-of-13 CMS followed by 5 CHECKSIGs. The 9 CHECKMULTISIG's are in
         // a non-executed Script branch. Takes as input a single signature for the CHECKSIG's.
         const auto mixed_p2sh_privkey{GetKeyAt(xprv, 50)};
         const auto mixed_p2sh_pubkey{mixed_p2sh_privkey.GetPubKey()};
@@ -1126,7 +1126,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         AddCoins(coins, CTransaction(mtx_create), 0, false);
         tx_copy.vin.emplace_back(mtx_create.GetHash(), 0);
 
-        // 166 * 15 = 1490 CMS sigops + 10 CHECKSIG sigops
+        // 166 * 15 = 2490 CMS sigops + 10 CHECKSIG sigops
         tx_copy.vin[0].scriptSig << OP_1 << OP_0 << OP_IF;
         for (int i{0}; i < 166; ++i) {
             tx_copy.vin[0].scriptSig << 15 << OP_CHECKMULTISIGVERIFY;
