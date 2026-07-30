@@ -4289,9 +4289,6 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
                     throw std::runtime_error(util::ErrorString(spkm_res).original);
                 }
             }
-
-            // Add the wallet to settings
-            UpdateWalletSetting(*context.chain, wallet_name, load_on_startup, warnings);
         }
         if (data->solvable_descs.size() > 0) {
             wallet.WalletLogPrintf("Making a new watchonly wallet containing the unwatched solvable scripts\n");
@@ -4328,21 +4325,31 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
                     throw std::runtime_error(util::ErrorString(spkm_res).original);
                 }
             }
-
-            // Add the wallet to settings
-            UpdateWalletSetting(*context.chain, wallet_name, load_on_startup, warnings);
         }
     }
 
     // Add the descriptors to wallet, remove LegacyScriptPubKeyMan, and cleanup txs and address book data
-    return RunWithinTxn(wallet.GetDatabase(), /*process_desc=*/"apply migration process", [&](WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet){
+    if (!RunWithinTxn(wallet.GetDatabase(), /*process_desc=*/"apply migration process", [&](WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet){
         if (auto res_migration = wallet.ApplyMigrationData(batch, *data); !res_migration) {
             error = util::ErrorString(res_migration);
             return false;
         }
         wallet.WalletLogPrintf("Wallet migration complete.\n");
         return true;
-    });
+    })) {
+        return false;
+    }
+
+    // Add auxiliary wallets to settings only after the migration transaction commits.
+    if (data->watchonly_wallet) {
+        std::vector<bilingual_str> warnings;
+        UpdateWalletSetting(*context.chain, data->watchonly_wallet->GetName(), load_on_startup, warnings);
+    }
+    if (data->solvable_wallet) {
+        std::vector<bilingual_str> warnings;
+        UpdateWalletSetting(*context.chain, data->solvable_wallet->GetName(), load_on_startup, warnings);
+    }
+    return true;
 }
 
 util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& wallet_name, const SecureString& passphrase, WalletContext& context, bool load_wallet)
