@@ -88,6 +88,7 @@ class PackageRBFTest(BitcoinTestFramework):
         self.test_package_rbf_max_conflicts()
         self.test_too_numerous_ancestors()
         self.test_package_rbf_with_wrong_pkg_size()
+        self.test_package_rbf_three_workspace_guard()
         self.test_insufficient_feerate()
         self.test_0fee_package_rbf()
         self.test_child_conflicts_parent_mempool_ancestor()
@@ -335,6 +336,52 @@ class PackageRBFTest(BitcoinTestFramework):
         pkg_result = node.submitpackage(package_hex3)
         assert_equal(pkg_result["package_msg"], 'package RBF failed: package must be 1-parent-1-child')
         self.assert_mempool_contents(expected=package_txns1 + package_txns2)
+        self.generate(node, 1)
+
+    def test_package_rbf_three_workspace_guard(self):
+        self.log.info("Test package RBF rejects three individually non-viable transactions")
+        node = self.nodes[0]
+        coin1 = self.coins.pop()
+        coin2 = self.coins.pop()
+
+        package_hex1, package_txns1 = self.create_simple_package(coin1, DEFAULT_FEE, DEFAULT_CHILD_FEE)
+        package_hex2, package_txns2 = self.create_simple_package(coin2, DEFAULT_FEE, DEFAULT_CHILD_FEE)
+        node.submitpackage(package_hex1)
+        node.submitpackage(package_hex2)
+        self.assert_mempool_contents(expected=package_txns1 + package_txns2)
+
+        self.ctr += 1
+        parent_result1 = self.wallet.create_self_transfer(
+            fee=0,
+            fee_rate=0,
+            utxo_to_spend=coin1,
+            sequence=MAX_BIP125_RBF_SEQUENCE - self.ctr,
+        )
+        self.ctr += 1
+        parent_result2 = self.wallet.create_self_transfer(
+            fee=0,
+            fee_rate=0,
+            utxo_to_spend=coin2,
+            sequence=MAX_BIP125_RBF_SEQUENCE - self.ctr,
+        )
+        self.ctr += 1
+        child_result = self.wallet.create_self_transfer_multi(
+            fee_per_output=int(DEFAULT_CHILD_FEE * COIN * 10),
+            utxos_to_spend=[parent_result1["new_utxo"], parent_result2["new_utxo"]],
+            sequence=MAX_BIP125_RBF_SEQUENCE - self.ctr,
+        )
+        package_hex3 = [parent_result1["hex"], parent_result2["hex"], child_result["hex"]]
+
+        before_info = node.getmempoolinfo()
+        before_priorities = node.getprioritisedtransactions()
+        pkg_result = node.submitpackage(package_hex3, maxfeerate=0)
+        assert_equal(pkg_result["package_msg"], 'package RBF failed: package must be 1-parent-1-child')
+        self.assert_mempool_contents(expected=package_txns1 + package_txns2)
+        after_info = node.getmempoolinfo()
+        assert_equal(after_info["size"], before_info["size"])
+        assert_equal(after_info["bytes"], before_info["bytes"])
+        assert_equal(after_info["total_fee"], before_info["total_fee"])
+        assert_equal(node.getprioritisedtransactions(), before_priorities)
         self.generate(node, 1)
 
     def test_insufficient_feerate(self):
