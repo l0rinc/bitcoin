@@ -161,3 +161,54 @@ truncated continuation).
 ## Rotation note
 Three cycles; bech32 and VarInt both closed with full-agree
 differentials. Not exhausted (signed mode, segwit layer).
+
+## Cycle 4 (2026-07-30): signed-mode (NONNEGATIVE_SIGNED) VarInt differential — byte-identical; another reference bug caught
+
+### Draw
+Re-rank draw over the rebuilt 4-cell queue:
+raw=14085611517425201985, masked 4862239480570426177, index 1
+(of 4) -> #89 (fourth cycle; c3 queue cell "signed-mode
+differential"). Branch: audit/clean-room-c4 from 1ef2c65ac8
+(#69 c3 journal tip).
+
+### Mechanism finding (first)
+NONNEGATIVE_SIGNED is a TYPE marker, not an encoding variant:
+CheckVarIntMode's static_asserts only bind signedness to the mode
+(DEFAULT=unsigned, NONNEGATIVE_SIGNED=signed); the encode/decode
+bodies are mode-identical. The differential therefore reduces to:
+signed-width encodings must be byte-identical to unsigned for
+in-range values, and signed widths must guard their max on read.
+
+### Experiment
+Driver (/tmp/btc89s_driver.cpp) encoding with
+NONNEGATIVE_SIGNED for int8/16/32/64 and DEFAULT for uint64,
+decoding signed; reference in python. Corpus: 509 encode cases
+(0..299, boundaries, random widths), 513 canonical decodes, and
+overlong/truncated forms.
+
+### Result
+TALLY: ident=509 dec_ok=513 rej_ok=1 B=0 (1023 total). The one
+first-run "mismatch" (overlong 8080808080000000) was MY
+reference reading past the terminator: ReadVarInt correctly
+returns at the FIRST non-continuation byte and leaves trailing
+bytes unread; my loop kept consuming. Second cycle in a row the
+differential caught a bug in the reference, not the
+implementation — the discipline is doing its job.
+
+### Verdict
+DISMISSED (differential clean): signed-mode VarInt is
+byte-identical where it must be, and the signed guards reject
+correctly. The type-marker semantics is recorded (prevents
+future misreading as a zigzag-style encoding).
+
+### Exact commands
+- g++ ... /tmp/btc89s_driver.cpp (libs as in c2)
+- python3 inline differential (TALLY above)
+
+### Limitations / queue
+- The segwit-address layer (convertbits + HRP + program rules)
+  remains the one open clean-room cell.
+
+## Rotation note
+Four cycles; bech32, VarInt, signed VarInt all closed. Not
+exhausted (segwit layer).
