@@ -2,6 +2,15 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 154 Completion
+
+- Exact selector sequence: the first post-Cycle-153 `shuf -i 0-98 -n 1` draw was `27`, already closed without new evidence; the required exact reroll produced `59` (`cpp-supply-chain`). The dedicated branch is `uber-cycle-154-cpp-supply-chain-20260730`; start HEAD was `2712998b621542ffdd6c6f2ba2b308af492a901e`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `1090 42`.
+- This cycle excluded the prior Cycle-41/63 release-signature and Guix cached-archive findings and Cycle-119 mutable-action finding. It audited executable lint-tool downloads in `ci/lint/01_install.sh`, which run as root while building the trusted lint image used by `.github/workflows/ci.yml` on the Bitcoin repository's Warp runner.
+- Before the fix, ShellCheck v0.11.0 and mlc v1.2.0 were fetched from mutable GitHub release URLs, with the ShellCheck archive streamed directly to `tar` and mlc written directly to `/usr/bin`, without a digest or signature check. A deterministic mock `curl`/`tar` harness fed attacker-controlled markers through the exact old command shape; it returned status 0 and installed both markers. The repository's `doc/fuzzing-findings.md` mentions short IDs for a separate supply-chain audit line, but neither ID or branch was reachable from current remotes, so current code was verified independently.
+- Added architecture-specific SHA-256 pins for the x86_64 and aarch64 ShellCheck archives and mlc binaries, private temporary downloads, pre-extraction/pre-install checks, and a fail-closed unsupported-architecture case. The exact downloaded hashes are recorded in `agent-journal/cpp-supply-chain.md`; the patched helper accepted the release artifacts, executed the scratch-installed tools, and rejected a modified MLC file before installation.
+- `bash -n ci/lint/01_install.sh`, ShellCheck v0.11.0 on the changed script, `git diff --check`, and the scratch artifact verification passed. Docker is unavailable, so the full lint image build and complete lint suite were not run. Container image tags, compiler/SDK downloads, qa-assets, generated-input provenance, and license gates remain queued distinct cells.
+- Source/journal commit `db8f598b5d8f033631c5f4443902cefbedf26466` (`ci: verify lint tool release assets`) is authored as `Lőrinc <pap.lorinc@gmail.com>`. Preserve PID `777094`, all unrelated untracked artifacts, and `/data/my_storage/tmp/cycle154-*` evidence. A separate state close commit follows; the next cycle must run a fresh gate and exact selector draw.
+
 ## Cycle 153 Completion
 
 - Exact selector: `shuf -i 0-98 -n 1` -> `81` (`spec-vector-drift`); no reroll was needed because the prior closed goal was 13.
