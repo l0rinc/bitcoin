@@ -292,6 +292,17 @@ class TestFrameworkBlockTools(unittest.TestCase):
         assert_equal(CScriptNum.decode(block.vtx[0].vin[0].scriptSig), 200)
 
     def test_create_coinbase(self):
-        height = 20
-        coinbase_tx = create_coinbase(height=height)
-        assert_equal(CScriptNum.decode(coinbase_tx.vin[0].scriptSig), height)
+        for height in [1, 16, 17, 127, 128, 255, 256, 32767, 32768]:
+            with self.subTest(height=height):
+                coinbase_tx = create_coinbase(height=height)
+                height_opcode, height_data, _ = next(CScript(coinbase_tx.vin[0].scriptSig).raw_iter())
+                if height_data is None:
+                    self.assertTrue(height_opcode.is_small_int())
+                    coinbase_height = height_opcode.decode_op_n()
+                else:
+                    # CScriptNum.decode skips the serialized push-length byte.
+                    coinbase_height = CScriptNum.decode(b"\x00" + height_data)
+                assert_equal(coinbase_height, height)
+                assert_equal(coinbase_tx.nLockTime, height - 1)
+                assert_equal(coinbase_tx.vin[0].nSequence, MAX_SEQUENCE_NONFINAL)
+                self.assertGreaterEqual(len(coinbase_tx.serialize_without_witness()), 65)
