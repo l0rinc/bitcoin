@@ -61,3 +61,67 @@ v28.2 starts fresh and stays healthy (getblockcount OK).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-30): mempool.dat version gate + error paths — fail-closed everywhere, tolerance exactly as documented; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=8742819288871107508, masked
+same, n=3, idx=1) -> history-persistence-artifacts -> #41 (second
+cycle; c1 queue cell "mempool.dat ... own version stories").
+Branch: audit/history-seed-c2 from 405008c571 (#50 c13 tip).
+
+### Hypothesis
+The mempool.dat persistence path could accept an incompatible
+version, accept garbage from a corrupted body, or crash/assert on
+truncated input — the persistence archaeology class from c1
+(fee_estimates.dat fails closed).
+
+### Mechanism map (src/node/mempool_persist.cpp)
+- Version gate (:46-104): v1 (no obfuscation) / v2 (header
+  obfuscation key) — anything else returns false before any entry
+  is read (zero mutation).
+- Entry loop (:110-178): one try block; per-entry ATMP with
+  failed/already_there/expired counters; a deserialization
+  failure anywhere aborts the FILE at that point with
+  'Continuing anyway' + return false (:180-184); entries already
+  accepted stay (partial import, documented).
+- importmempool RPC (rpc/mempool.cpp:1146-1200): throws
+  RPC_MISC_ERROR when LoadMempool returns false.
+
+### Experiment (driver /tmp/mp_arch.py; regtest, PortSeed 322)
+MiniWallet 101+10 mature blocks, 6 fan-out txs, savemempool ->
+2379 B v2 file; restart with cleared mempool.dat, then:
+- ok-v2: import OK, '6 succeeded, 0 failed, 0 expired, 0 already
+  there' — full load.
+- badver-999 (version field patched): NO 'Loading' log line —
+  rejected before any entry read; pool unchanged (zero mutation);
+  RPC error.
+- flip-60% (8 bytes flipped mid-entry, framing intact): NO
+  exception — '0 succeeded, 1 failed, 5 already there' — the
+  corrupted entry is a normal ATMP policy failure, the valid
+  prefix dedupes against the existing pool; no garbage accepted.
+- trunc-40%: 'AutoFile::read: end of file: iostream error.
+  Continuing anyway.' -> RPC error; pool unchanged.
+- Node stopped clean after all four.
+
+### Verdict
+DISMISSED: the version gate fails closed with zero mutation, the
+v2 obfuscated format round-trips fully, corrupt bodies degrade
+exactly as documented (per-entry policy failure, never garbage
+acceptance), truncation aborts tolerantly with the documented log
+line. The mempool.dat version story is consistent with the code.
+
+### Exact commands
+- python3 /tmp/mp_arch.py (output above); mechanism reads
+  node/mempool_persist.cpp:40-185, rpc/mempool.cpp:1146-1200.
+- Harness note: at height 101 only coinbase[0] is mature — mine
+  >=101+k for k spendable coinbases (same lesson as #2 c3).
+
+### Limitations / queue
+- The obfuscation-key portability across nodes (v2 file moved
+  between datadirs) is by design (key embedded); not separately
+  re-run (same class as the ok case).
+- anchors.dat / xor.dat remain as their own cells.
+
+## Rotation note
+Two cycles; fee_estimates.dat and mempool.dat both fail closed.
