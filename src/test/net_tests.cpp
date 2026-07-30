@@ -1904,6 +1904,35 @@ BOOST_AUTO_TEST_CASE(transport_v1_roundtrip_message_contract)
     CheckNetMessage(roundtrip_decoded, expected, time);
 }
 
+BOOST_AUTO_TEST_CASE(transport_v2_rejects_del_message_type)
+{
+    V2TransportTester tester(m_rng, /*test_initiator=*/true);
+    auto ret = tester.Interact();
+    BOOST_REQUIRE(ret && ret->empty());
+    tester.SendKey();
+    tester.SendGarbage();
+    tester.ReceiveKey();
+    tester.SendGarbageTerm();
+    tester.SendVersion();
+    ret = tester.Interact();
+    BOOST_REQUIRE(ret && ret->empty());
+    tester.ReceiveGarbage();
+    tester.ReceiveVersion();
+    tester.CompareSessionIDs();
+
+    const std::string max_printable_type(1, '\x7e');
+    tester.SendMessage(max_printable_type, {});
+    ret = tester.Interact();
+    BOOST_REQUIRE(ret && ret->size() == 1);
+    BOOST_REQUIRE((*ret)[0]);
+    BOOST_CHECK_EQUAL((*ret)[0]->m_type, max_printable_type);
+
+    tester.SendMessage(std::string(1, '\x7f'), {});
+    ret = tester.Interact();
+    BOOST_REQUIRE(ret && ret->size() == 1);
+    BOOST_CHECK(!(*ret)[0]);
+}
+
 BOOST_AUTO_TEST_CASE(v2transport_test)
 {
     // A mostly normal scenario, testing a transport in initiator mode.
