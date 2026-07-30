@@ -864,6 +864,7 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
 
     unsigned nTxnRemoved = 0;
     CFeeRate maxFeeRateRemoved(0);
+    std::vector<COutPoint> no_spends_candidates;
 
     while (!mapTx.empty() && DynamicMemoryUsage() > sizelimit) {
         const auto &[worst_chunk, feeperweight] = m_txgraph->GetWorstMainChunk();
@@ -880,11 +881,12 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
 
         nTxnRemoved += worst_chunk.size();
 
-        std::vector<CTransaction> txn;
         if (pvNoSpendsRemaining) {
-            txn.reserve(worst_chunk.size());
             for (auto ref : worst_chunk) {
-                txn.emplace_back(static_cast<const CTxMemPoolEntry&>(*ref).GetTx());
+                const auto& tx = static_cast<const CTxMemPoolEntry&>(*ref).GetTx();
+                for (const auto& txin : tx.vin) {
+                    no_spends_candidates.push_back(txin.prevout);
+                }
             }
         }
 
@@ -895,13 +897,11 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
         for (auto e : stage) {
             removeUnchecked(e, MemPoolRemovalReason::SIZELIMIT);
         }
-        if (pvNoSpendsRemaining) {
-            for (const CTransaction& tx : txn) {
-                for (const CTxIn& txin : tx.vin) {
-                    if (exists(txin.prevout.hash)) continue;
-                    pvNoSpendsRemaining->push_back(txin.prevout);
-                }
-            }
+    }
+    if (pvNoSpendsRemaining) {
+        for (const COutPoint& prevout : no_spends_candidates) {
+            if (exists(prevout.hash)) continue;
+            pvNoSpendsRemaining->push_back(prevout);
         }
     }
 

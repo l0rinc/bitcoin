@@ -305,6 +305,41 @@ inline CTransactionRef make_tx(std::vector<CAmount>&& output_values, std::vector
     return MakeTransactionRef(tx);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolTrimToSizeNoSpendsRemaining)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    LOCK2(cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    const CTransactionRef external = make_tx({10 * COIN});
+    const CTransactionRef parent = make_tx({9 * COIN}, {external});
+    const CTransactionRef child = make_tx({8 * COIN}, {parent});
+    const CTransactionRef keeper_source = make_tx({11 * COIN});
+    const CTransactionRef keeper = make_tx({9 * COIN}, {keeper_source});
+
+    TryAddToMempool(pool, entry.Fee(10000).FromTx(keeper));
+    const size_t keeper_usage = pool.DynamicMemoryUsage();
+    TryAddToMempool(pool, entry.Fee(1000).FromTx(parent));
+    TryAddToMempool(pool, entry.Fee(1000).FromTx(child));
+    BOOST_REQUIRE(pool.exists(parent->GetHash()));
+    BOOST_REQUIRE(pool.exists(child->GetHash()));
+    BOOST_REQUIRE_EQUAL(pool.size(), 3U);
+    BOOST_REQUIRE(pool.DynamicMemoryUsage() > keeper_usage);
+
+    std::vector<COutPoint> no_spends_remaining;
+    pool.TrimToSize(keeper_usage, &no_spends_remaining);
+
+    BOOST_REQUIRE(pool.exists(keeper->GetHash()));
+    BOOST_CHECK(!pool.exists(parent->GetHash()));
+    BOOST_CHECK(!pool.exists(child->GetHash()));
+    const std::set<COutPoint> expected{
+        COutPoint{external->GetHash(), 0},
+        COutPoint{parent->GetHash(), 0},
+    };
+    const std::set<COutPoint> actual{no_spends_remaining.begin(), no_spends_remaining.end()};
+    BOOST_CHECK(actual == expected);
+}
+
 
 BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
 {
