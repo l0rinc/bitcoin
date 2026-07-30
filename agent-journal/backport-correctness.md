@@ -1,5 +1,99 @@
 # Backport Correctness Audit
 
+## Cycle 144: 30.x #35232 backport batch
+
+### Draw, gate, and scope
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `66`
+- Selected goal: `backport-correctness` (Cherry-pick, backport, and release-branch correctness audit)
+- Branch: `uber-cycle-144-backport-correctness-20260730`
+- Gate HEAD: `354cf3abf41df4c0c843895a17d6b853450e1b0f`
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Explicit `git rev-list --left-right --count HEAD...origin/master`: `1072 40` (HEAD-only, origin-only)
+- `origin/30.x`: `49faec4f87f5cd19c88db01a82e5c68b087c8227` (`v30.3`)
+- The tracked/staged tree and `git diff --check` were clean at the gate. PID `777094` and unrelated untracked artifacts were preserved.
+
+Cycles 36 and 66 covered the 31.x `#35331`/CVE-2024-52911 cells, and Cycle 67 covered the 29.x `#34370` Berkeley wallet cleanup backport. This cycle selected the distinct 30.x `#35232` merge `1fb642efb3ee6212f22302d742f6927981acfa76` and its second-parent batch. The current-master action-reference pinning from Goal 59 was excluded rather than rediscovered.
+
+### Batch inventory and ancestry
+
+The merge has release parent `1d97fda8a1475f0c9c10c5db0a06e1cad5484195` and backport parent `f3320b316e3d6737a4608189c7b92c12ef8a50b5`. Its second-parent chain contains:
+
+```text
+c7034f4854 depends: Unset SOURCE_DATE_EPOCH in gen_id
+f92bd8b8ba doc: mention -DWITH_ZMQ=ON in BSD build guides
+1dba05e7f6 wallet: use outpoint when estimating input size
+c913cd9add Disable seek compaction
+827f9343c4 ci: switch runners from cirrus to warpbuild
+922626571e doc: remove reference to cirrus
+f074c479a5 ci: use ubuntu-latest instead of ubuntu-24.04
+f3320b316e doc: update release notes for v30.x
+```
+
+The risk-bearing implementation changes are the external-input wallet size calculation and the LevelDB read-seek compaction policy. The dependency cache identity, BSD build documentation, release CI runner/cache transition, and release notes were checked as integration surfaces.
+
+The wallet backport patch-id is identical to the master fix `005738e3b846d1ba33f8d4a24f93c238fcf52f88` (`44de1bd989d4df5ca320a7ad87ab2b5e028daa8e`). The seek-compaction patch-id is identical to current master `78714f6d4fdc3b7831bba426bfff55bbe1021e6c` (`74a9d157b962c9b7edd1b5e4fe33b53dadb3913f`). Both patches change the same production/test semantics: pass `CTxIn{outpoint}` to `MaxInputWeight`, and return false from `Version::UpdateStats` while retaining manual/size compactions. The release range passed `git diff --check`.
+
+### Release build and behavior
+
+The detached release worktree `/data/my_storage/tmp/cycle144-release30` was checked out at `v30.3`. A clean GCC 12.2 CMake/Ninja build in `/data/my_storage/tmp/cycle144-release30-build` used wallet and tests enabled, GUI/IPC/ZMQ/USDT disabled, and completed all `489/489` actions while linking `bin/test_bitcoin`.
+
+The focused release command was:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle144-test-tmp /data/my_storage/tmp/cycle144-release30-build/bin/test_bitcoin --run_test=spend_tests,dbwrapper_tests --random=144066 --log_level=test_suite --color_output=false
+```
+
+All 12 selected cases passed, including `spend_tests/max_signed_input_size_uses_external_outpoint`, `wallet_duplicated_preset_inputs_test`, `SubtractFee`, and the eight database-wrapper cases. The complete release command was:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle144-test-tmp /data/my_storage/tmp/cycle144-release30-build/bin/test_bitcoin --random=144067 --log_level=message --report_level=short --color_output=false
+```
+
+It passed `672/673` executable cases and all `19,788,170/19,788,170` assertions. The one warning was the expected `script_assets_tests/script_assets_test` skip because `DIR_UNIT_TEST_DATA` was unset; no product test failed.
+
+The release `depends/gen_id` was run with the required `SHA256SUM=sha256sum`, GCC/binutils command variables, and `SOURCE_DATE_EPOCH` values `1` and `2000000000`. Both release runs returned the same digest `a6e2b19f185c77c7b74c6d812539cbb35053c1f875ba04f48821db20f5278f3f`; current master returned the same digest. The first attempt omitted `SHA256SUM` and produced `line 108: -: command not found`; that was a harness setup error and was discarded.
+
+### Standalone LevelDB follow-up
+
+The release tree's own LevelDB project was configured independently:
+
+```text
+cmake -S /data/my_storage/tmp/cycle144-release30/src/leveldb -B /data/my_storage/tmp/cycle144-leveldb-build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_SHARED_LIBS=OFF -DLEVELDB_BUILD_TESTS=ON -DLEVELDB_BUILD_BENCHMARKS=OFF
+cmake --build /data/my_storage/tmp/cycle144-leveldb-build --target autocompact_test db_test -j2
+```
+
+The build failed in `util/comparator.cc` through `util/no_destructor.h:24`:
+
+```text
+error: 'is_standard_layout_v' is not a member of 'std'
+```
+
+The release `src/leveldb/CMakeLists.txt` sets `CMAKE_CXX_STANDARD 11`, while its `NoDestructor` header uses the C++17 variable template `std::is_standard_layout_v`. This is a real release-branch standalone-LevelDB build defect, but it is not a defect introduced by `#35232`: `src/leveldb/CMakeLists.txt` and `src/leveldb/util/no_destructor.h` are byte-identical between the batch's release parent `1fb642efb3^1` and `origin/30.x`. The current-master LevelDB update `5fe0615f7ab868223ea3c0ba8d44d5b84cd01074` changes the standalone project to C++17. A separate current-master LevelDB build completed `47/47` actions; `autocompact_test` passed both `ReadAll` and `ReadHalf`, and `db_test` passed `GetDoesNotTriggerSeekCompaction`.
+
+Report-ready release repro:
+
+1. Check out `origin/30.x` at `49faec4f87`.
+2. Run the two CMake commands above.
+3. Observe the C++11 `std::is_standard_layout_v` compile error.
+4. Apply the CMake C++17 correction from `5fe0615f7ab` or its minimal equivalent and rerun; the current-master control passes.
+
+This adjacent release issue is recorded for a release-branch report, not committed on the current master-based branch because current master already contains the correction. The floating action references visible on `origin/30.x` were also excluded as the already-covered Goal 59 supply-chain cell.
+
+### Verdict
+
+**Dismissed as a defect in the 30.x #35232 backport batch; no current-tree source or test change is justified.** The release batch's wallet, LevelDB, dependency identity, and release unit behavior match the intended master contracts. A pre-existing standalone LevelDB CMake defect remains a report-ready release-branch finding outside the selected batch.
+
+### Limitations and next queue
+
+- No Windows, non-x86, sanitizer, or real power-loss execution was performed for `v30.3`.
+- The detached release build did not run the full functional migration matrix; the complete release unit binary supplied the broad local control.
+- The standalone LevelDB failure is release-only and pre-existing at the batch parent; it should not be represented as a failed cherry-pick of `#35232`.
+- If Goal 66 repeats, choose another distinct 28.x/29.x/30.x batch or upgrade/downgrade behavior cell rather than reopening `#35232`.
+- Draw the next catalog goal only after recording the fresh gate and preserving all unrelated artifacts.
+
 ## Cycle 67
 
 ### Draw and scope
