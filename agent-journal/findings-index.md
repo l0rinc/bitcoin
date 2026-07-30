@@ -280,3 +280,13 @@ BlockPolicyEstimates, M4 (skip-site) intentionally unobserved
 (perf-only) | #57 c4 on audit/local-reasoning-c4 (this cycle) |
 skip-site perf regression would need the profile harness, not a
 unit test.
+O12 | SignPSBTInput programmatic MISSING_INPUTS arms | PSBT signing
+machinery | oracle gap: gates 1-2 unreachable from byte-parsed
+PSBTs (decoder pre-rejects, psbt.h:1583-1595 both versions); only
+in-process construction reaches them | n/a (test infra) |
+DELIVERED, mutation-verified | psbt_tests
+signpsbtinput_missing_inputs_arms: 3 gates + control (106 B
+final_script_sig, byte-exact vs c4 fuzz-side); gate-2-check
+deletion turns case red at psbt_tests.cpp:439; restore green |
+#50 c13 on audit/introspector-blockers-c13 (this cycle) |
+taproot/MuSig2 sighash-class variants as the next cell.
