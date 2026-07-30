@@ -155,3 +155,88 @@ builds). FIXED with deterministic regression evidence.
 ## Rotation note
 Two cycles; the config-surface falsification is closed with a
 fix. Not exhausted (dynamic saturation, upstream sweep).
+
+## Cycle 3 (2026-07-30): txgraph Assume families under dynamic cluster stress — all hold; two tripwires proven; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=11926377350913041393,
+masked=2703005314058265585, n=5, idx=0) -> assertion-txgraph-assume
+-> #2 (third cycle; c2 queue cell "dynamic saturation-driven
+falsification (cluster stress on the mempool)"). Branch:
+audit/assertion-invariant-c3 from f697931c68 (#107 c2 tip).
+
+### Method (assertion-trapping driver)
+build-before is Release (Assume/assert compiled out), so the
+driver compiles txmempool.cpp + txgraph.cpp INTO the binary with
+-DABORT_ON_FAILED_ASSUME (check.h:28-32 gate) and without NDEBUG,
+linking release libs for the rest — every Assume/assert in the
+mempool/graph families aborts on violation; pool.check() (which
+runs m_txgraph->SanityCheck, txmempool.cpp:499) runs after every
+batch. Any abort = invariant failure.
+Build: g++ -O1 -std=c++20 -DABORT_ON_FAILED_ASSUME -I src
+-I build-before/src /tmp/cluster_stress.cpp src/txmempool.cpp
+src/txgraph.cpp -ltest_util -lbitcoin_node -lbitcoin_common
+-lbitcoin_consensus -lbitcoin_util -lbitcoin_crypto
+-lbitcoin_clientversion -lleveldb -lcrc32c -lunivalue -lsecp256k1
+(full link line in /tmp/cluster_stress build log).
+
+### Phases (TestChain100Setup + 300 mined blocks; signed helper txs
+via CreateValidMempoolTransaction; production ProcessTransaction /
+ProcessNewBlock paths)
+1. 64-chain: accepted with pool.check green every 10; the 65th
+   member rejected 'too-large-cluster' (exact cluster-limit
+   contract); check green at 64.
+2. 40 parallel 4-tx clusters with fee tiers (224 txs): check green.
+3. Trim: own pool filled to 4,064,136 B (310 txs, 500-output
+   fan-outs), TrimToSize(4.05M) -> 4,039,032 B; small-pool check
+   green after trim.
+4. REAL block: 20 topologically-selected pool txs mined via
+   ProcessNewBlock (full ConnectTip path: CoinsTip + mempool
+   update + removeForBlock internals), checks green; 5 fresh-root
+   re-adds green.
+5. PrioritiseTransaction churn across all 209 entries (fee-diagram
+   mutation): check green.
+
+### Tripwire controls (the falsification machinery provably fires)
+- v3: txgraph.cpp:571 Assume(false) in CompareMainTransactions
+  FIRED — backtrace (gdb): TryAddToMempool -> ChangeSet::Apply ->
+  CommitStaging -> MoveToMain -> ChunkOrder insert. Mechanism: my
+  coinbase cycle wrapped at 60 while ~200 roots were inserted,
+  creating SAME-TXID duplicates in two singleton clusters — equal
+  feerate+prefix+fallback hits the 'strong ordering unreachable'
+  branch. This is the graph's 'one tx, one ref' precondition
+  (txgraph.h:247) enforced exactly as designed; production ATMP
+  rejects duplicate txids before insertion. Harness bug, correctly
+  distinguished; fixed with unique roots (300 mined, 280-cycle).
+- v4: txmempool.cpp:590 check() 'mempoolDuplicate.HaveCoin' FIRED —
+  my v4 removed txs 'as if mined' without the ConnectBlock half
+  (no UTXOs added to the coins view), leaving children with
+  unresolvable inputs. Also harness-side; fixed with the real
+  ProcessNewBlock path.
+- v2: premature-coinbase rejection (fixture never mined past 100)
+  — third harness-side lesson.
+
+### Verdict
+DISMISSED: ref-graph invariants, sequence uniqueness, locator
+presence, fee-diagram bookkeeping, and cluster-limit enforcement
+all hold under dynamic cluster stress with assertion trapping;
+both induced violations were harness-contract bugs caught by the
+very tripwires under test (which is the strongest available
+evidence the tripwires work).
+
+### Exact commands
+- build/run as above; gdb -batch -ex run -ex 'bt 25' for the
+  tripwire backtrace (recorded above).
+
+### Limitations / queue
+- The driver exercises the fixture's default limits (64-cluster,
+  101 kvB cluster size); the DEBUG_TEST -limitcluster* variants
+  (F13's config surface) are separate.
+- Persistent harness at /tmp/cluster_stress.cpp; promotion to a
+  unit test optional (mempool_tests covers check(); the unique
+  part is the trapping-compile recipe + cluster-stress shapes).
+- Upstream-side assertion sweep remains a separate large cell.
+
+## Rotation note
+Three cycles; fork Assumes, config validation (F13), and dynamic
+cluster stress all closed.
