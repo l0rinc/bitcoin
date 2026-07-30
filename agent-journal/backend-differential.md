@@ -110,3 +110,53 @@ the only open backend item.
 
 ## Rotation note
 Two cycles; SHA256 backend closed. Not exhausted (int128 split).
+
+## Cycle 3 (2026-07-30): int128 explicit split (struct vs native) — all four suites green, results identical
+
+### Draw
+Re-rank singleton (last queue cell): #69 (third cycle; c1 queue
+cell "int128_struct vs int128 explicit split not separated").
+Branch: audit/backend-differential-c3 from 45788336a8 (#89 c3
+journal tip).
+
+### Cell
+c1 compared the int128 FAMILY (autodetect = int128_struct on this
+host) vs forced int64. The remaining split is WITHIN the 128-bit
+family: manual int128_struct (64x64 software) vs builtin int128
+(native __int128). SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY takes
+both legal values (CMakeLists.txt:81-82), so the split is a
+two-build recipe.
+
+### Setup + results (all green, exit 0)
+- /tmp/secp_struct  (override=int128_struct): tests 159.7s PASS,
+  noverify 102.4s PASS
+- /tmp/secp_native  (override=int128):        tests 102.7s PASS,
+  noverify 55.7s PASS
+Both full suites (exhaustive field/scalar/group/signature vectors
++ randomized rounds) pass on both implementations; no divergence
+in results or error behavior. Native is ~35-45% faster wall —
+expected (hardware 128-bit multiply vs software), not a
+correctness signal.
+
+### Verdict
+DISMISSED: the int128 explicit split is closed — struct and
+native agree on the complete suites. With c1 (int128 family vs
+int64), the wide-multiply backend family is differential-clean
+on aarch64/gcc-13.
+
+### Exact commands
+- cmake -S src/secp256k1 -B /tmp/secp_{struct,native} -GNinja
+  -DCMAKE_BUILD_TYPE=Release -DSECP256K1_BUILD_TESTS=ON
+  -DSECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int128_struct|int128
+- ninja -C <dir> tests noverify_tests; run bin/tests +
+  bin/noverify_tests (times above)
+
+### Limitations / queue
+- ctime variant (SECP256K1_BUILD_CTIME_TESTS) not run — the
+  constant-time harness is heavier; queued if a cycle lands here.
+- secp256k1 arm-specific field/scalar asm backends (none on
+  aarch64 beyond generic) — nothing further to split.
+
+## Rotation note
+Three cycles; secp wide-multiply family fully closed. #69 quiets
+pending new backends.
