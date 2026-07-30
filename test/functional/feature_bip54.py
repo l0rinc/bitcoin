@@ -18,6 +18,7 @@ from test_framework.messages import (
     CTransaction,
     CTxIn,
     CTxOut,
+    SEQUENCE_FINAL,
 )
 from test_framework.script import (
     CScript,
@@ -358,6 +359,14 @@ class Bip54Test(BitcoinTestFramework):
         block.solve()
         self.try_submit_block(node, block)
 
+    def submit_final_sequence_cb(self, node):
+        """Submit a height-locked coinbase whose sequence disables the locktime."""
+        block = create_block(tmpl=node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS))
+        block.vtx[0].vin[0].nSequence = SEQUENCE_FINAL
+        block.hashMerkleRoot = block.calc_merkle_root()
+        block.solve()
+        self.try_submit_block(node, block)
+
     def submit_block_64byte(self, node):
         """Submit a block that contains a 64-byte (Segwit) transaction."""
         # Create a 64-byte tx that spends a single Segwit input and contains a single p2a output.
@@ -396,6 +405,8 @@ class Bip54Test(BitcoinTestFramework):
         self.murch_zawy_attack(node)
         # - Accept a block with its coinbase not timelocked to the block height.
         self.submit_nontimelocked_cb(node)
+        # - Accept a height-locked coinbase whose sequence disables its locktime.
+        self.submit_final_sequence_cb(node)
         # - Accept a block containing a 64-byte transaction.
         self.submit_block_64byte(node)
         # - Even if that is the coinbase transaction.
@@ -431,6 +442,7 @@ class Bip54Test(BitcoinTestFramework):
         # - Refuse blocks with a coinbase not timelocked to the block height
         assert_raises_rpc_error(-25, "bad-cb-locktime", self.submit_nontimelocked_cb, node)
         assert_raises_rpc_error(-25, "bad-cb-locktime", self.submit_nontimelocked_cb, node, 1)
+        assert_raises_rpc_error(-25, "bad-cb-sequence", self.submit_final_sequence_cb, node)
         # - Refuse a block containing a 64-byte transaction
         assert_raises_rpc_error(-25, "bad-txns-size-64", self.submit_block_64byte, node)
         # - Even if that is the coinbase transaction
