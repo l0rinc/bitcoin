@@ -151,3 +151,78 @@ design), NOT a reachable hazard.
 
 ## Rotation note
 Two cycles; m_all_zero and the coins-flag module closed.
+
+## Cycle 3 (2026-07-30): CoinsViewOverlay prefetch — parallel(8) vs serial(0) validation differential ALL EQUAL; DISMISSED
+
+### Draw
+Rebuilt-queue draw (seed_raw=13942745621896996524,
+masked=4719373585042220716, n=3, idx=1) -> overlay-prefetch ->
+#57 (third cycle; c2 queue cell "CoinsViewOverlay prefetch
+lifecycle"). Branch: audit/local-reasoning-c3 from c8a15033f2
+(#57 c2 journal tip).
+
+### Hypothesis
+The fork's parallel prevout prefetch (CoinsViewOverlay +
+-prevoutfetchthreads, default 8) could diverge from serial
+validation on blocks exercising its ordering contracts:
+same-block dependency chains (earlier_txids filter), duplicate-
+prevout invalid blocks (queue tail-match), and disconnects with
+fetched prevouts (Reset/StopFetching path).
+
+### Coverage audit (duplicate search)
+Existing: coins_view_overlay + coins_view_stacked fuzz targets
+(REAL ThreadPool + StartFetching + ASan/UBSan build),
+feature_block.py with -prevoutfetchthreads=8 (the invalid-block
+acceptance suite), option-api-lifecycle c1 (option lifecycle
+clean), differential-metamorphic queue note ("disconnect domain
+with fetched prevouts not differentially tested" — the cell this
+cycle closes). PeekCoin proven non-mutating (coins.cpp:30-49);
+StopFetching idempotent (coins.h:734-751); ResetGuard [[nodiscard]]
++ caller holds it (validation.cpp:3105-3106); production default 8
+(kernel/chainstatemanager_opts.h:25), framework default 1.
+
+### Experiment (driver /tmp/ovpf_diff.py; two TestNodes, PortSeed 319)
+Node A -prevoutfetchthreads=8, Node B =0; identical blocks to both
+(built on A, mirrored as hex via submitblock): 101 maturity, 6
+chain-heavy blocks (25-deep dependency chains + 10 fan-outs each),
+one malleated duplicate-prevout block, then A-side invalidate(3)+
+rebranch(4) forcing a reorg of the chain-heavy blocks on BOTH
+(disconnect path with fetched prevouts).
+Checkpoints: tip + gettxoutsetinfo("muhash") equality.
+
+### Results
+- ALL 9 checkpoints EQUAL (tips + muhashes): maturity, 6 chain-
+  heavy blocks, post-invalid, post-reorg.
+- Invalid block: both reject identically
+  ('bad-txns-inputs-duplicate').
+- 'prefetch queue was not fully consumed' warnings on A: 0 —
+  the earlier_txids filter + in-order tail consumption held across
+  every valid chain-heavy block (the filter's stress case).
+- Prevout-related errors: 0; both nodes stopped clean.
+- Harness iterations recorded: v1 gettxoutsetinfo needs hash_type
+  ("muhash") in this fork; v2/v3 framework CTransaction computes
+  txid/wtxid as properties (no rehash()); v4 CBlock field is
+  hashMerkleRoot (CBlockHeader).
+
+### Verdict
+DISMISSED: parallel prefetch is behaviorally identical to serial
+validation across dependency chains, invalid duplicate-prevout
+blocks, and reorgs; the lifecycle contracts (PeekCoin purity,
+StopFetching idempotency, guard scoping, AllInputsConsumed) hold
+end-to-end. With the existing fuzz targets + feature_block(8) +
+option-lifecycle c1, the overlay-prefetch cell is CLOSED.
+
+### Exact commands
+- python3 /tmp/ovpf_diff.py (output above); code refs: coins.h
+  :583-820, coins.cpp:584-616, validation.cpp:1895, :3105-3106.
+
+### Limitations / queue
+- TSan-class race detection is not in the toolbox (ASan/UBSan
+  only); the fuzz targets + PeekCoin non-mutation proof are the
+  mitigation. If a TSan build ever lands, coins_view_overlay is
+  the first target.
+- Remaining #57 queue: estimator unit battery (from c1).
+
+## Rotation note
+Three cycles; m_all_zero, coins-flags, and overlay-prefetch all
+closed. Estimator battery remains.
