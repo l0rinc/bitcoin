@@ -157,6 +157,7 @@ target_json_data_sources(test_bitcoin
 )
 target_raw_data_sources(test_bitcoin NAMESPACE test::data
   data/asmap.raw
+  data/xswiftec_inv_test_vectors.csv
 )
 
 add_windows_application_manifest(test_bitcoin)

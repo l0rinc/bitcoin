@@ -242,3 +242,15 @@ multi-agent-adjudication.md c1 | fork author's adoption decision.
 ## Replay log
 - 2026-07-29: ancestry/content verification above (merge-base +
   grep per item). No code changes this cycle.
+O10 | xswiftec_inv edge-vector C++ gate | BIP324 ellswift decode /
+secp256k1 | oracle gap: CSV consumed in-tree only by the Python
+framework self-test; production C never saw the edge vectors | n/a
+(test infra) | DELIVERED, mutation-verified | bip324_tests
+xswiftec_inv_edge_vectors: all 32 rows / 98 ok-case encodings
+decode to the annotated X coordinate; exact-count guards (32 rows,
+98 encodings) catch silent truncation; mutation (row1 case2 t-tail
+flip) killed at the x-comparison, restore green; CSV byte-identical
+to the framework copy (cmp-verified) | #108 c5 on
+audit/adversarial-artifact-c5 (this cycle) | bad-case rejection
+classes stay Python-side only (they assert xswiftec_inv None, not
+expressible through the public decode path).
