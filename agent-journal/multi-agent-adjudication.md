@@ -1,5 +1,74 @@
 # Independent Multi-Agent Disagreement and Adjudication
 
+## Cycle 156: null-mempool chainstate deletion and kernel wipe lifecycle
+
+### Gate and scope
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `15`; goal 15 was already closed for the current descriptor-validation cell, so the exact reroll -> `40`.
+- Selected goal: `multi-agent-adjudication` (goal 40).
+- Worktree branch: `uber-cycle-156-multi-agent-adjudication-20260730`.
+- HEAD at cycle start: `6eeda975a0b31d13cd024533d8635d1e768b34b7`; `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `origin/master...HEAD = 1095 42`.
+- Catalog, prompt, and goals TSV hashes matched the authoritative values. Tracked/index state was clean at the gate, known unrelated untracked artifacts were preserved, and PID `777094` (wallet test, parent `725042`) was not touched.
+- The earlier goal-40 cells for ForceRelay late-recipient state and explicit transaction GETDATA from block-relay-only peers are closed and excluded. This is a new lifecycle surface seeded by upstream commit `a99b27f19209e444e895a0e8721c9166f64d7cee` and merge `6e2962e48c`.
+
+### Falsifiable disagreement
+
+Investigator A treats `ChainstateManager::DeleteChainstate()` as required to accept the nullable mempool contract already used by the kernel API. The current assertion dereferences `prev_chainstate->m_mempool` before checking whether it exists. A's hypothesis is that a kernel manager with an existing AssumeUTXO chainstate and `wipe_chainstate_db=true` can reach the assertion and abort instead of returning a status.
+
+Investigator B treats the null pointer as a possible sign of a larger ownership contract defect. B's hypothesis is that allowing deletion alone might mask a later null dereference, an invalid mempool transfer, or a lock-annotation/API mismatch in the same no-mempool lifecycle. B independently audits every production `m_mempool` use, the chainstate load/delete callers, and the activation lock path before accepting a one-line repair.
+
+The adjudication requires both a pre-fix regression proof and an independent lifecycle/dataflow audit. A source change is justified only if the null state is an intended reachable kernel configuration, the failure is reproducible, and the broader audit finds no additional required repair.
+
+### Investigator A: reachability and pre-fix reproduction
+
+The current branch's `node::LoadChainstate()` initializes the validated chainstate with `options.mempool`. The default `ChainstateLoadOptions::mempool` is null, and the kernel wrapper preserves that default. The same function loads an AssumeUTXO chainstate as `std::make_unique<Chainstate>(nullptr, ...)`. When `options.wipe_chainstate_db` is true, it clears the validated target and calls `DeleteChainstate(*assumeutxo_cs)`. The old deletion code then executed:
+
+```cpp
+assert(prev_chainstate->m_mempool->size() == 0);
+```
+
+The existing `AddChainstate()` transition already accepts null mempools with `assert(!prev_chainstate.m_mempool || prev_chainstate.m_mempool->size() == 0)`, which establishes the intended ownership invariant: transfer an existing empty pool, or transfer no pool.
+
+For an isolated reproducer, A added the smallest focused unit case `chainstatemanager_delete_chainstate_no_mempool`. It initializes both validated and snapshot chainstates with null mempools, clears the validated target as `LoadChainstate()` does, and calls `DeleteChainstate()`. The pre-fix build used:
+
+```
+CCACHE_DIR=/data/my_storage/tmp/cycle156-ccache cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j2
+/data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=validation_chainstatemanager_tests/chainstatemanager_delete_chainstate_no_mempool --log_level=test_suite
+```
+
+The test reached the old assertion and reported a memory access violation at address `0x00000058`, with Boost test exit code `201`. This is a deterministic first-invalid-operation proof on the branch's clean pre-fix source.
+
+### Investigator B: independent null-state and caller audit
+
+B searched all current `m_mempool` uses in `src/validation.cpp` and `src/validation.h`. The only unguarded deletion dereference was the assertion above. The other dereferences occur in `MaybeUpdateMempoolForReorg()`, which returns immediately when the pointer is null, or in activation helpers whose runtime bodies guard lock assertions and mempool operations. `DisconnectTip()` and `ConnectTip()` use conditional lock assertions and conditional mutation. `ActivateBestChainStep()` checks the pointer before the final mempool check.
+
+The apparently suspicious `LOCK(MempoolMutex())` calls are intentional: `MempoolMutex()` returns null for a kernel chainstate without a mempool, and the pointer overload of `UniqueLock` returns without locking when passed null. Therefore the activation path does not require a fake mutex or a hidden dereference. B also checked the `AddChainstate()` swap, `LoadAssumeutxoChainstate()`, `LoadChainstate()`, and `btck_chainstate_manager_create()` call chain. No second null-state defect or invalid ownership transfer was found.
+
+B's remaining dissent is that the compact direct test does not create the snapshot directory or call the complete public kernel wrapper. That is a test-strength limitation, not evidence against the source repair: the source trace proves the production call path, and the existing chainstate-manager suite exercises the surrounding snapshot/restart machinery with normal mempool state.
+
+### Fixed verification
+
+The source was changed to preserve the empty-pool invariant while accepting no pool:
+
+```cpp
+assert(!prev_chainstate->m_mempool || prev_chainstate->m_mempool->size() == 0);
+```
+
+The same focused case passed after rebuilding. The full suite initially hit the host root filesystem's `59 MiB` free-space limit because test temporary data defaulted to `/tmp`; that was recorded as environment noise, not a code result. Re-running with `TMPDIR=/data/my_storage/tmp/cycle156-test-tmp` passed all 23 `validation_chainstatemanager_tests` cases, including snapshot activation and restart cases. The separate `chainstatemanager`, `chainstatemanager_ibd_exit_after_loading_blocks`, and focused null-mempool cases also passed with that isolated temporary directory. `git diff --check` passed.
+
+### Final adjudication
+
+Final verifier verdict: **confirmed; source fix justified**. Investigator A's crash is reachable from the intended no-mempool kernel configuration and is independently reproduced before the repair. Investigator B's broader audit found no additional required null guard or ownership change, so the smallest correct repair is the guarded assertion plus the focused regression test. The bug is a local availability failure: an operator-triggered kernel reindex/wipe with an existing snapshot could abort during chainstate deletion before the API returned. It is not a consensus or remote network finding.
+
+The upstream PR was used as a seed, not as proof. The branch was independently tested before and after the change. Existing tests missed the issue because they did not combine a null validated mempool, a null AssumeUTXO mempool, and the deletion transition. The source/test commit records the exact mechanism, reachability, and regression; no broader cleanup is warranted.
+
+### Cycle handoff
+
+- Source finding: guard the nullable previous-chainstate mempool assertion and add `chainstatemanager_delete_chainstate_no_mempool`.
+- Evidence: pre-fix focused test exit `201` with fault address `0x58`; post-fix focused test and all 23 chainstate-manager tests passed using the cycle-local `TMPDIR`.
+- Limitation: the first broad attempt used the full root filesystem and failed before a valid test verdict; the rerun used an isolated data filesystem. No sanitizer result is claimed.
+- The selected goal-40 candidate is closed. After the separate close snapshot, perform a fresh gate and exact selector draw; do not reopen this candidate without new callers, history, or regression evidence.
+
 ## Cycle 111: explicit transaction GETDATA from block-relay-only peers
 
 ### Gate and scope
