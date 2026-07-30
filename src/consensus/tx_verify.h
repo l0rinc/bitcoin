@@ -21,7 +21,11 @@ class TxValidationState;
 
 namespace Consensus {
 /**
- * Check the total number of non-witness sigops across the whole transaction, as per BIP54.
+ * Check the BIP54 limit on static non-witness sigops associated with the transaction's inputs.
+ * This lexically counts sigops in each scriptSig, spent scriptPubKey, and P2SH redeemScript,
+ * including sigops in branches which execution does not reach.
+ *
+ * Preconditions: tx.IsCoinBase() is false.
  */
 bool CheckSigopsBIP54(const CTransaction& tx, const CCoinsViewCache& inputs);
 

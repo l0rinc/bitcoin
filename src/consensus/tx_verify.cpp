@@ -175,12 +175,12 @@ bool Consensus::CheckSigopsBIP54(const CTransaction& tx, const CCoinsViewCache& 
     for (const auto& txin: tx.vin) {
         const auto& prev_txo{inputs.AccessCoin(txin.prevout).out};
 
-        // Unlike the existing block wide sigop limit which counts sigops present in the block
-        // itself (including the scriptPubKey which is not executed until spending later), BIP54
-        // counts sigops in the block where they are potentially executed (only).
-        // This means sigops in the spent scriptPubKey count toward the limit.
-        // `fAccurate` means correctly accounting sigops for CHECKMULTISIGs(VERIFY) with 16 pubkeys
-        // or fewer. This method of accounting was introduced by BIP16, and BIP54 reuses it.
+        // Unlike the existing block-wide limit, BIP54 does not count sigops in
+        // outputs created by this transaction. It statically counts the scripts
+        // associated with each input, whether or not execution reaches a sigop.
+        // BIP16 accurate accounting charges CHECKMULTISIG and
+        // CHECKMULTISIGVERIFY according to an immediately preceding OP_1
+        // through OP_16; all other forms cost 20.
         // The GetSigOpCount call on the previous scriptPubKey counts both bare and P2SH sigops.
         sigops += txin.scriptSig.GetSigOpCount(/*fAccurate=*/true);
         sigops += prev_txo.scriptPubKey.GetSigOpCount(txin.scriptSig);

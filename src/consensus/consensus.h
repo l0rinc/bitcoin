@@ -40,7 +40,10 @@ static constexpr int64_t MAX_TIMEWARP_BIP54{2 * 60 * 60};
  */
 static constexpr int64_t MAX_TIMEWARP_TESTNET4 = 600;
 
-/** The maximum number of potentially executed legacy signature operations in a single tx */
+/**
+ * Maximum static non-witness sigops in the scriptSig, spent scriptPubKey, and
+ * P2SH redeemScript of a noncoinbase transaction under BIP16 accounting.
+ */
 static constexpr unsigned int MAX_TX_BIP54_SIGOPS{2'500};
 
 /**
