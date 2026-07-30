@@ -3,10 +3,12 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chain.h>
+#include <node/kernel_notifications.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <validation.h>
 #include <validationinterface.h>
+#include <util/fs.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -139,6 +141,50 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
     BOOST_CHECK_EQUAL(sub->m_flushed_at_block, second_from_tip);
     BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock()), second_from_tip);
     BOOST_CHECK(sub->m_locator->vHave.front() == second_from_tip->GetBlockHash());
+}
+
+BOOST_FIXTURE_TEST_CASE(flush_failure_stops_metadata_publication, TestChain100Setup)
+{
+#if defined(__linux__)
+    struct TestSubscriber final : CValidationInterface {
+        bool m_did_flush{false};
+        void ChainStateFlushed(const ChainstateRole&, const CBlockLocator&) override { m_did_flush = true; }
+    };
+
+    const auto sub{std::make_shared<TestSubscriber>()};
+    m_node.validation_signals->RegisterSharedValidationInterface(sub);
+    m_node.notifications->m_shutdown_on_fatal_error = false;
+
+    const fs::path block_file{m_args.GetBlocksDirPath() / "blk00000.dat"};
+    fs::path backup_file{block_file};
+    backup_file += ".flush-failure-backup";
+    BOOST_REQUIRE(fs::exists(block_file));
+    BOOST_REQUIRE(!fs::exists(backup_file));
+    fs::rename(block_file, backup_file);
+    struct RestoreBlockFile {
+        const fs::path& path;
+        const fs::path& backup;
+        ~RestoreBlockFile()
+        {
+            std::error_code ec;
+            fs::remove(path, ec);
+            fs::rename(backup, path, ec);
+        }
+    } restore{block_file, backup_file};
+    std::error_code ec;
+    fs::create_symlink(fs::path{"/sys/kernel/uevent_seqnum"}, block_file, ec);
+    BOOST_REQUIRE(!ec);
+
+    BlockValidationState state;
+    const bool flushed{Assert(m_node.chainman)->ActiveChainstate().FlushStateToDisk(state, FlushStateMode::FORCE_SYNC)};
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+
+    BOOST_CHECK(!flushed);
+    BOOST_CHECK(state.IsError());
+    BOOST_CHECK(!sub->m_did_flush);
+#else
+    BOOST_TEST_MESSAGE("Skipped: this test requires a Linux virtual filesystem.");
+#endif
 }
 
 BOOST_AUTO_TEST_SUITE_END()
