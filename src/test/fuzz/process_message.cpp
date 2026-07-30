@@ -22,6 +22,7 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
+#include <test/util/txmempool.h>
 #include <test/util/validation.h>
 #include <util/check.h>
 #include <util/time.h>
@@ -54,6 +55,14 @@ void ResetChainman(TestingSetup& setup)
         node::BlockCreateOptions options;
         MineBlock(setup.m_node, options);
     }
+}
+
+void ResetMempool(TestingSetup& setup)
+{
+    bilingual_str error{};
+    setup.m_node.mempool.reset();
+    setup.m_node.mempool = std::make_unique<CTxMemPool>(MemPoolOptionsForTest(setup.m_node), error);
+    Assert(error.empty());
 }
 
 void AssertSendQueueMemoryUsage(CNode& node)
@@ -92,6 +101,7 @@ void initialize_process_message()
 FUZZ_TARGET(process_message, .init = initialize_process_message)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
+    ResetFuzzedSockMockedFds();
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     FuzzedDataProvider rate_provider(buffer.data(), buffer.size());
 
@@ -110,6 +120,7 @@ FUZZ_TARGET(process_message, .init = initialize_process_message)
     node.banman.reset();
     node.addrman.reset();
     node.peerman.reset();
+    ResetMempool(*g_setup);
     node.addrman = std::make_unique<AddrMan>(*node.netgroupman, /*deterministic=*/true, /*consistency_check_ratio=*/0);
     node.peerman = PeerManager::make(connman, *node.addrman,
                                      /*banman=*/nullptr, chainman,
