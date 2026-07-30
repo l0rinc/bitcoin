@@ -677,6 +677,59 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1DuplicateTransactionRecords, TestChain100Setup)
     BOOST_REQUIRE(fs::remove(dump_path));
 }
 
+BOOST_FIXTURE_TEST_CASE(MempoolV2DuplicateTransactionRecords, TestChain100Setup)
+{
+    const CTransactionRef tx = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns.front(), 0, 0, coinbaseKey, GetScriptForDestination(PKHash(coinbaseKey.GetPubKey())), 49 * COIN, false));
+    const fs::path dump_path = m_path_root / "mempool-v2-duplicate-records.dat";
+    const int64_t now = TicksSinceEpoch<std::chrono::seconds>(NodeClock::now());
+    const std::vector<std::byte> key_bytes(Obfuscation::KEY_SIZE, std::byte{0x5a});
+    const Obfuscation obfuscation{std::span{key_bytes}.first<Obfuscation::KEY_SIZE>()};
+
+    DataStream payload;
+    payload << uint64_t{2};
+    payload << TX_WITH_WITNESS(*tx) << now << int64_t{1000};
+    payload << TX_WITH_WITNESS(*tx) << now << int64_t{2000};
+    payload << std::map<Txid, CAmount>{{tx->GetHash(), 3000}} << std::set<Txid>{tx->GetHash()};
+    obfuscation(payload);
+
+    DataStream dump;
+    dump << uint64_t{2} << obfuscation;
+    dump.write(std::span<const std::byte>{payload.data(), payload.size()});
+    {
+        std::ofstream file{dump_path.std_path(), std::ios::binary};
+        file.write(reinterpret_cast<const char*>(dump.data()), dump.size());
+        file.close();
+        BOOST_REQUIRE(file.good());
+    }
+
+    CTxMemPool& destination = *Assert(m_node.mempool);
+    BOOST_REQUIRE(node::LoadMempool(destination, dump_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = true,
+    }));
+    BOOST_REQUIRE_EQUAL(destination.size(), 1U);
+    BOOST_CHECK(destination.exists(tx->GetHash()));
+    BOOST_CHECK_EQUAL(destination.info(tx->GetHash()).nFeeDelta, 1000);
+    const auto deltas = destination.GetPrioritisedTransactions();
+    BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+    BOOST_CHECK(deltas.front().in_mempool);
+    BOOST_CHECK_EQUAL(deltas.front().delta, 1000);
+    BOOST_CHECK(destination.GetUnbroadcastTxs() == std::set<Txid>{tx->GetHash()});
+
+    BOOST_REQUIRE(fs::remove(dump_path));
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.RemoveUnbroadcastTx(tx->GetHash());
+        destination.removeRecursive(CTransaction(*tx), REMOVAL_REASON_DUMMY);
+        destination.ClearPrioritisation(tx->GetHash());
+    }
+    BOOST_CHECK_EQUAL(destination.size(), 0U);
+    BOOST_CHECK(destination.GetUnbroadcastTxs().empty());
+    BOOST_CHECK(destination.GetPrioritisedTransactions().empty());
+}
+
 BOOST_FIXTURE_TEST_CASE(MempoolV1PartialImportMetadata, TestChain100Setup)
 {
     mineBlocks(1);
