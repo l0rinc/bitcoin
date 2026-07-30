@@ -146,24 +146,26 @@ independently verified.
   condvar/shared_mutex in txdb, resize-cursor test green at HEAD
   per #42 c1). Nothing to do locally.
 
-## ✅ Fee-estimator zero-state per-block waste (fixed 675011ba86)
-- Mechanism: processBlock swept all estimator buckets every connected
-  block with no IBD gate; with zero tracked state (all of IBD for a
-  fresh node) decay-of-zeros is a bit-identical no-op — 20.4-21.7% of
-  regtest IBD CPU.
-- Evidence: independent verifier reproduction (20.43%/1279 samples);
-  post-fix 0 samples in the same 5000-block IBD; user CPU 1.35s ->
-  0.89s (-34%); client tip == server tip; feature_fee_estimation.py
-  green. Skip keyed by explicit m_all_zero dirty flag (Record /
-  removeTx-failAvg / Read) — the naive emptiness predicate was proven
-  unsafe by the verifier (failAvg-without-firstRecordedHeight and
-  Read() restore cases).
-- Branch/commits: audit/loupe-pipeline @ 675011ba86; journal #63;
-  archived on agent/all-findings (content-verified 2026-07-29).
-- Next: nothing local; candidate upstream perf note.
+## ✅ dbwrapper failed-construction leak (fixed 73a6798206, #13 c2)
+- Mechanism: CDBWrapper ctor can throw (LevelDB open failure) after
+  options members block_cache/filter_policy/info_log were allocated;
+  LevelDBContext had no destructor, leaking them per failed open.
+- Evidence: failing-before LSan probe — 79,800 B / 361 allocs over
+  19 failed opens (stacks NewLRUCache dbwrapper.cpp:142, filter_policy
+  :144, info_log :146); passing-after 20 failed opens LSan-silent;
+  dbwrapper_tests green. Upstream master has the same missing
+  destructor (offerable).
+- Branch/commit: audit/raii-resource-leaks-c2 @ 4d8ae03172 (fix
+  73a6798206); journal raii-resource-leaks.md c2. Archived on
+  agent/all-findings @ d87da3929e (fix 461c21cbfa).
+- Next: offer upstream (small RAII fix, mirrors existing option
+  ownership comments); audit other throwing ctors holding raw
+  members.
 
 ---
-Recently removed from this list (dismissed/closed): LockPoints
+Recently removed from this list (dismissed/closed): Fee-estimator
+zero-state per-block waste (fixed 675011ba86, verified, no local
+follow-ups); LockPoints
 bound comment (fixed b1c267c9f1, no follow-ups); l0rinc CheckBlock
 dup-input equivalence (PROVEN, #40 c1 — resolved, no local action);
 clang-18

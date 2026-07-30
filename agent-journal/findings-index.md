@@ -89,6 +89,19 @@ mempool_cluster.py, suite green; upstream-identical gap
 (7dea464d6b), offerable upstream | audit/assertion-invariant-c2,
 archive pick this cycle | done; upstream offer.
 
+F14 | dbwrapper failed-construction leak | storage/leveldb |
+CDBWrapper ctor throws after allocating options-owned members;
+LevelDBContext had no destructor -> per-failed-open leak of
+block_cache/filter_policy/info_log | low (needs repeated failed
+DB opens; no consensus/remote impact) | CONFIRMED+FIXED |
+73a6798206 (#13 c2): failing-before LSan probe 79,800 B / 361
+allocs over 19 failed opens (stacks NewLRUCache dbwrapper.cpp:142,
+filter_policy :144, info_log :146); passing-after 20 failed opens
+LSan-silent, dbwrapper_tests green; upstream master has the same
+missing destructor (offerable) | audit/raii-resource-leaks-c2 @
+4d8ae03172, archive agent/all-findings @ d87da3929e (fix
+461c21cbfa) | done; upstream offer.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
