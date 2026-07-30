@@ -105,3 +105,51 @@ signed comparisons:
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-30): enum underlying-type signedness sweep — class empty in-tree; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=12307389541691523835,
+masked=3084017504836748027, n=3, idx=2) -> abi-enum-signedness ->
+#68 (third cycle; c2 queue cell "enum : char adjacent class").
+Branch: audit/architecture-abi-c3 from 0a4178cb88 (#55 c2 tip).
+
+### Hypothesis
+An enum with a plain-char underlying type (signedness
+implementation-defined: unsigned on aarch64-gcc, signed on
+x86-gcc) could carry sign-sensitive values or comparisons that
+diverge across arches — the adjacent class to c2's plain-char
+sweep.
+
+### Sweep (grep evidence)
+- `enum (class)? X : (signed )?char` (excluding unsigned char):
+  ZERO hits in src/ (the class is empty in-tree).
+- `enum ... : unsigned char`: zero hits.
+- Explicit underlying types actually used: 38x uint, 6x int,
+  2x size_t, 1x unsigned, and 8 enum-underlying-enum kernel
+  wrappers (enum class LogCategory : btck_LogCategory et al.,
+  kernel/bitcoinkernel_wrapper.h:25-64).
+- No negative enumerators in the kernel wrapper enums; no
+  -fshort-enums in the build config (CMakeLists/cmake/ greps) —
+  the C-API enums keep gcc's default int underlying type on both
+  arches, and all uses are equality comparisons.
+
+### Verdict
+DISMISSED: the enum-underlying-type signedness class is empty
+in-tree; adjacent explicit-type uses are arch-invariant. Nothing
+sign-sensitive to fix or gate.
+
+### Exact commands
+- grep -rnE 'enum +(class +)?\w+ *: *(signed +)?char\b' src/
+- underlying-type tabulation (counts above); negative-enumerator
+  and -fshort-enums greps as recorded.
+
+### Limitations / queue
+- QEMU/x86 and s390x cells remain unevidenced (host-limited, c1).
+- The enum-underlying-enum wrapper pattern is legal C++ and
+  gcc-consistent here; clang parity on that construct is covered
+  by the c2 clang differential note.
+
+## Rotation note
+Three cycles; endian, char-signedness, and enum-underlying classes
+all clean. Host-limited cells remain.
