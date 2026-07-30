@@ -226,3 +226,66 @@ option-lifecycle c1, the overlay-prefetch cell is CLOSED.
 ## Rotation note
 Three cycles; m_all_zero, coins-flags, and overlay-prefetch all
 closed. Estimator battery remains.
+
+## Cycle 4 (2026-07-30): m_all_zero battery delivered (oracle O11) — M2/M3 gaps found by sweep, killed by the new tests
+
+### Draw
+Rebuilt-queue draw (seed_raw=1896312681528823955, masked same,
+n=2, idx=1) -> estimator-battery -> #57 (fourth cycle; c1 queue
+cell "feerate-estimator unit battery with the same mutation
+style"). Branch: audit/local-reasoning-c4 from d264be344d
+(#57 c3 journal tip).
+
+### Method: mutation-first (c1 pattern) before writing any test
+Baseline policyestimator_tests green, then sweep over the four
+m_all_zero sites in block_policy_estimator.cpp:
+- M1 Record set-omission (:272): KILLED by the pre-existing suite
+  (3 failures) — Record path already guarded.
+- M2 removeTx failAvg set-omission (:593): SURVIVED — a failAvg-only
+  dirtying (tx evicted unconfirmed after >= scale blocks, zero
+  Record calls) would never decay (frozen pessimism until the
+  first Record). Real behavioral gap.
+- M3 Read set-omission (:549): SURVIVED — a restored nonzero state
+  (exactly the 675011ba86 failAvg-without-records case) would
+  never decay on the fresh instance. Real behavioral gap.
+- M4 skip-site deletion (:285): SURVIVED as designed — perf-only,
+  bit-identical behavior.
+
+### Battery delivered (src/test/policyestimator_tests.cpp,
+feestats_dirty_decay_contracts, public-API only)
+- Drives CBlockPolicyEstimator directly (processTransaction /
+  processBlock / removeTx are public): add tx at height 1, age 4
+  blocks, evict -> failAvg-only dirty state (asserts every other
+  decayed average is EXACTLY zero and failAvg is bumped — the
+  state the flag must not mistake for clean).
+- Snapshot oracle: estimator.Write -> parse back (mirroring
+  TxConfirmStats::Write field order) -> assert every avg equals
+  snapshot * decay^3 after 3 empty blocks (bit-exact).
+- Contract 2: Write -> Read into a fresh estimator -> same 3
+  blocks on both -> bit-identical results required.
+- Mutation verification: M2 re-applied -> 12 failures; M3
+  re-applied -> 6 failures; restore -> suite green.
+
+### Verdict
+ORACLE DELIVERED + two real test gaps closed (M2/M3 set-omissions
+were behaviorally unguarded). No production defect: with the flag
+present, all four sites set/decay correctly — the battery pins the
+contract so a future edit cannot silently drop a set.
+
+### Exact commands
+- mutation sweep: python3 inline edits (recorded above),
+  cmake --build build-before --target test_bitcoin -j4,
+  build-before/bin/test_bitcoin --run_test=policyestimator_tests
+- battery: --run_test=policyestimator_tests/feestats_dirty_decay_contracts
+
+### Limitations / queue
+- The battery does not observe the skip-site (M4) — bit-identical
+  by design; a perf regression there would need the profile
+  harness (c1's IBD profile), not a unit test.
+- Contract 2 relies on the estimator's own Write/Read round-trip;
+  a Write-side bug would mask — but Write format is separately
+  covered by reject_corrupt_fee_estimate_file_vectors.
+
+## Rotation note
+Four cycles; m_all_zero contracts now have a dedicated
+mutation-verified battery. #57 cells all closed.

@@ -19,6 +19,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <limits>
@@ -662,6 +663,209 @@ BOOST_AUTO_TEST_CASE(failed_read_preserves_estimator_state)
     fs::remove(valid_path);
     fs::remove(corrupt_path);
     fs::remove(estimator_path);
+}
+
+namespace {
+
+//! Parsed-back contents of a CBlockPolicyEstimator::Write() file, used to
+//! observe decayed-average behavior through the public API only.
+struct StatsSnapshot {
+    double decay{0};
+    uint32_t scale{0};
+    std::vector<double> feerate_avg, tx_count;
+    std::vector<std::vector<double>> conf_avg, fail_avg;
+};
+
+double ReadEncodedDouble(AutoFile& in)
+{
+    uint64_t encoded;
+    in >> encoded;
+    return DecodeDouble(encoded);
+}
+
+std::vector<double> ReadEncodedDoubleVector(AutoFile& in)
+{
+    const auto n{ReadCompactSize(in)};
+    std::vector<double> v(n);
+    for (auto& x : v) x = ReadEncodedDouble(in);
+    return v;
+}
+
+std::vector<std::vector<double>> ReadEncodedDoubleMatrix(AutoFile& in)
+{
+    const auto n{ReadCompactSize(in)};
+    std::vector<std::vector<double>> m(n);
+    for (auto& row : m) row = ReadEncodedDoubleVector(in);
+    return m;
+}
+
+//! Write the estimator's state to a fresh file and parse it back.
+//! Mirrors CBlockPolicyEstimator::Write + TxConfirmStats::Write.
+std::array<StatsSnapshot, 3> SnapshotStats(CBlockPolicyEstimator& est, const fs::path& path)
+{
+    fs::remove(path);
+    {
+        AutoFile out{fsbridge::fopen(path, "wb")};
+        BOOST_REQUIRE(!out.IsNull());
+        BOOST_REQUIRE(est.Write(out));
+        BOOST_REQUIRE_EQUAL(out.fclose(), 0);
+    }
+    AutoFile in{fsbridge::fopen(path, "rb")};
+    BOOST_REQUIRE(!in.IsNull());
+    int version;
+    uint32_t best_seen, span_first, span_best;
+    in >> version >> best_seen >> span_first >> span_best;
+    const auto buckets{ReadEncodedDoubleVector(in)};
+    BOOST_REQUIRE(!buckets.empty());
+    std::array<StatsSnapshot, 3> snaps;
+    for (auto& s : snaps) {
+        s.decay = ReadEncodedDouble(in);
+        in >> s.scale;
+        s.feerate_avg = ReadEncodedDoubleVector(in);
+        s.tx_count = ReadEncodedDoubleVector(in);
+        s.conf_avg = ReadEncodedDoubleMatrix(in);
+        s.fail_avg = ReadEncodedDoubleMatrix(in);
+    }
+    BOOST_REQUIRE_EQUAL(in.fclose(), 0);
+    fs::remove(path);
+    return snaps;
+}
+
+bool AllZero(const std::vector<double>& v)
+{
+    return std::all_of(v.begin(), v.end(), [](double x) { return x == 0.0; });
+}
+
+bool AllZero(const std::vector<std::vector<double>>& m)
+{
+    return std::all_of(m.begin(), m.end(), [](const auto& row) { return AllZero(row); });
+}
+
+//! Every element of b must equal the matching element of a decayed `rounds` times.
+void CheckDecayed(const std::vector<std::vector<double>>& a, const std::vector<std::vector<double>>& b,
+                  double decay, unsigned rounds, const char* what)
+{
+    BOOST_REQUIRE_EQUAL(a.size(), b.size());
+    for (size_t i = 0; i < a.size(); ++i) {
+        BOOST_REQUIRE_EQUAL(a[i].size(), b[i].size());
+        for (size_t j = 0; j < a[i].size(); ++j) {
+            double expected{a[i][j]};
+            for (unsigned k = 0; k < rounds; ++k) expected *= decay;
+            BOOST_CHECK_MESSAGE(b[i][j] == expected,
+                what << " frozen at [" << i << "][" << j << "]: got " << b[i][j]
+                     << " want " << expected << " (from " << a[i][j] << ")");
+        }
+    }
+}
+
+void CheckDecayed(const std::vector<double>& a, const std::vector<double>& b,
+                  double decay, unsigned rounds, const char* what)
+{
+    BOOST_REQUIRE_EQUAL(a.size(), b.size());
+    for (size_t j = 0; j < a.size(); ++j) {
+        double expected{a[j]};
+        for (unsigned k = 0; k < rounds; ++k) expected *= decay;
+        BOOST_CHECK_MESSAGE(b[j] == expected,
+            what << " frozen at [" << j << "]: got " << b[j]
+                 << " want " << expected << " (from " << a[j] << ")");
+    }
+}
+
+} // namespace
+
+BOOST_AUTO_TEST_CASE(feestats_dirty_decay_contracts)
+{
+    // Guards for the TxConfirmStats m_all_zero dirty-flag contracts behind the
+    // per-block decay skip: a failAvg-only dirtying (eviction after >= scale
+    // blocks, no Record anywhere) and a Read()-restored state must both keep
+    // decaying on subsequent blocks. Mutation history: dropping the flag set
+    // in Record is caught by BlockPolicyEstimates, but dropping it in removeTx
+    // or in Read survives the pre-existing suite — this battery kills both
+    // (the skip-site deletion is a perf-only no-op and intentionally stays
+    // unobserved here).
+    const fs::path snap_path{m_args.GetDataDirBase() / "fee_estimator_dirty_decay.dat"};
+    const fs::path est_path{m_args.GetDataDirBase() / "fee_estimator_dirty_decay_live.dat"};
+    fs::remove(est_path);
+
+    CBlockPolicyEstimator est{est_path, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+    TestMemPoolEntryHelper entry;
+    CMutableTransaction mtx;
+    mtx.vin.resize(1);
+    mtx.vout.resize(1);
+    mtx.vout[0].nValue = 0;
+    const int64_t vsize{GetVirtualTransactionSize(CTransaction(mtx))};
+    // The estimator only tracks txs whose entry height matches its best seen
+    // height, so connect one block first, then add the tx at that height.
+    est.processBlock({}, 1);
+    est.processTransaction(NewMempoolTransactionInfo(MakeTransactionRef(mtx),
+                                                     /*fee=*/2000, vsize,
+                                                     /*mempool_height=*/1,
+                                                     /*mempool_limit_bypassed=*/false,
+                                                     /*submitted_in_package=*/false,
+                                                     /*chainstate_is_current=*/true,
+                                                     /*has_no_mempool_parents=*/true));
+    // Let the tx age past every stats scale without confirming it.
+    for (unsigned h{2}; h <= 5; ++h) est.processBlock({}, h);
+    BOOST_REQUIRE(est.removeTx(mtx.GetHash())); // eviction (not in a block)
+
+    // Contract setup: failAvg must be bumped; every other decayed average
+    // must still be exactly zero, i.e. this is the failAvg-only dirty state
+    // the m_all_zero flag must not mistake for clean.
+    const auto s0{SnapshotStats(est, snap_path)};
+    size_t bumped{0};
+    for (const auto& s : s0) {
+        BOOST_CHECK(AllZero(s.feerate_avg));
+        BOOST_CHECK(AllZero(s.tx_count));
+        BOOST_CHECK(AllZero(s.conf_avg));
+        for (const auto& row : s.fail_avg)
+            for (double x : row) bumped += (x != 0.0);
+    }
+    BOOST_REQUIRE_GT(bumped, 0u);
+
+    // Contract 1: the failAvg-only dirty state keeps decaying.
+    for (unsigned h{6}; h <= 8; ++h) est.processBlock({}, h);
+    const auto s1{SnapshotStats(est, snap_path)};
+    for (size_t t{0}; t < 3; ++t) {
+        CheckDecayed(s0[t].fail_avg, s1[t].fail_avg, s1[t].decay, 3, "fail_avg");
+        CheckDecayed(s0[t].feerate_avg, s1[t].feerate_avg, s1[t].decay, 3, "feerate_avg");
+        CheckDecayed(s0[t].tx_count, s1[t].tx_count, s1[t].decay, 3, "tx_count");
+        CheckDecayed(s0[t].conf_avg, s1[t].conf_avg, s1[t].decay, 3, "conf_avg");
+    }
+
+    // Contract 2: a Read()-restored estimator keeps decaying the same state
+    // (the conservative dirty-on-read rule). Snapshot the live estimator's
+    // current state, restore it into a fresh estimator, then give both the
+    // same 3 blocks and require bit-identical results.
+    const fs::path est2_path{m_args.GetDataDirBase() / "fee_estimator_dirty_decay_restored.dat"};
+    fs::remove(est2_path);
+    {
+        AutoFile out{fsbridge::fopen(snap_path, "wb")};
+        BOOST_REQUIRE(!out.IsNull());
+        BOOST_REQUIRE(est.Write(out));
+        BOOST_REQUIRE_EQUAL(out.fclose(), 0);
+    }
+    CBlockPolicyEstimator est2{est2_path, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+    {
+        AutoFile in{fsbridge::fopen(snap_path, "rb")};
+        BOOST_REQUIRE(!in.IsNull());
+        BOOST_REQUIRE(est2.Read(in));
+        BOOST_REQUIRE_EQUAL(in.fclose(), 0);
+    }
+    for (unsigned h{9}; h <= 11; ++h) {
+        est.processBlock({}, h);
+        est2.processBlock({}, h);
+    }
+    const auto sA{SnapshotStats(est, snap_path)};
+    const auto sB{SnapshotStats(est2, snap_path)};
+    for (size_t t{0}; t < 3; ++t) {
+        CheckDecayed(sA[t].fail_avg, sB[t].fail_avg, sA[t].decay, 0, "fail_avg(restored)");
+        CheckDecayed(sA[t].tx_count, sB[t].tx_count, sA[t].decay, 0, "tx_count(restored)");
+        CheckDecayed(sA[t].conf_avg, sB[t].conf_avg, sA[t].decay, 0, "conf_avg(restored)");
+    }
+
+    fs::remove(snap_path);
+    fs::remove(est_path);
+    fs::remove(est2_path);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

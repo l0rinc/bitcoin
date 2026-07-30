@@ -254,3 +254,15 @@ to the framework copy (cmp-verified) | #108 c5 on
 audit/adversarial-artifact-c5 (this cycle) | bad-case rejection
 classes stay Python-side only (they assert xswiftec_inv None, not
 expressible through the public decode path).
+O11 | feestats m_all_zero dirty-decay battery | fee estimation /
+TxConfirmStats | oracle gap: failAvg-only and Read-restored dirty
+states had no behavioral guard (M2/M3 set-omission mutants survived
+the pre-existing suite) | n/a (test infra) | DELIVERED,
+mutation-verified | feestats_dirty_decay_contracts: failAvg-only
+dirty state asserted (other avgs exactly zero) + decay^3 oracle via
+Write/parse-back; restored-vs-live bit-identity after 3 shared
+blocks; M2 -> 12 failures, M3 -> 6 failures, M1 already killed by
+BlockPolicyEstimates, M4 (skip-site) intentionally unobserved
+(perf-only) | #57 c4 on audit/local-reasoning-c4 (this cycle) |
+skip-site perf regression would need the profile harness, not a
+unit test.
