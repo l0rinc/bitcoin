@@ -125,3 +125,60 @@ Each case: close immediately, measure getpeerinfo count 0.3-0.5s later.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-30): half-close (SHUT_WR) on v1+v2 — prompt disconnect, zero CPU spin, no half-open peers; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=11558546368712918904,
+masked=2335174331858143096, n=3, idx=1) -> network-half-close ->
+#73 (third cycle; c1/c2 queue cell "half-close, distinct from
+full close"). Branch: audit/network-state-c3 from af02ccd167
+(#49 c9 journal tip).
+
+### Hypothesis
+A peer that half-closes (shutdown(SHUT_WR) after a completed
+handshake, keeping its read side open) could leave the node with
+(a) a half-open peer held indefinitely, or (b) a busy loop on the
+repeatedly-readable EOF socket (recv()==0 treated as no-data
+instead of close) — the classic read-0 event-loop DoS class,
+distinct from c2's full-close EOF sweep.
+
+### Experiment (driver /tmp/hc_probe.py; regtest node
+-debug=net, isolated datadir, framework msg_version +
+EncryptedP2PState)
+- V1: full version/verack, then SHUT_WR. Node: peer drop visible
+  at the first poll (drop_at=0.0 s), node's own FIN at 1.0 s,
+  debug.log 'socket closed, disconnecting peer=0', peers_end=0.
+- V2 (BIP324): complete ellswift handshake + encrypted
+  version/verack, then SHUT_WR. Identical: drop at 0.0 s, FIN at
+  1.0 s, 'socket closed, disconnecting peer=1', peers_end=0.
+- Busy-loop check: node utime+stime delta over 4 s post-half-close
+  = 0 jiffies (0.0% of one core) on both.
+- Harness lessons (recorded): regtest magic is fa bf b5 da (my
+  mainnet f9beb4d9 frame got 'V1 peer with wrong MessageStart');
+  ser_string subver is compactsize-prefixed (framework msg_version
+  used after first malformed attempt); pkill -f matches the
+  launching shell's own cmdline (self-kill, v2).
+
+### Verdict
+DISMISSED: both transports treat the read-side EOF as an orderly
+close and disconnect promptly (sub-second), leave no half-open
+peer, and spin zero CPU — the read-0 busy-loop class is absent on
+v1 and v2.
+
+### Exact commands
+- bitcoind -regtest -datadir=/tmp/hc_node -port=29003
+  -bind=127.0.0.1:29003 -daemon -debug=net
+- python3 /tmp/hc_probe.py (output above); debug.log disconnect
+  lines recorded.
+
+### Limitations / queue
+- The probe measures the node's reaction, not the peer's view of
+  node-initiated half-close (node SHUT_WR toward us) — same code
+  path from the other side, unmeasured; queued nicety.
+- Slow-drip ellswift (1 byte/s stall) remains queued (timeout
+  cell).
+
+## Rotation note
+Three cycles; handshake EOF, replay/reorder, and half-close all
+closed. Slow-drip remains.
