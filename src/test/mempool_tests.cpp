@@ -807,6 +807,50 @@ BOOST_AUTO_TEST_CASE(MempoolUnbroadcastBlockConflictRemoval)
     BOOST_CHECK_EQUAL(usage_after_unbroadcast_removal, usage_after_regular_removal);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolBlockConflictPreservesAggregateTotals)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    TestMemPoolEntryHelper entry;
+    const CTransactionRef funding_tx = make_tx({10 * COIN});
+    const CTransactionRef parent_tx = make_tx({9 * COIN}, {funding_tx});
+    const CTransactionRef child_tx = make_tx({8 * COIN}, {parent_tx});
+    const CTransactionRef keeper_tx = make_tx({7 * COIN});
+    const CTransactionRef block_tx = make_tx({8 * COIN}, {funding_tx});
+
+    constexpr CAmount PARENT_FEE{1000};
+    constexpr CAmount CHILD_FEE{2000};
+    constexpr CAmount KEEPER_FEE{3000};
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(PARENT_FEE).FromTx(parent_tx));
+        TryAddToMempool(pool, entry.Fee(CHILD_FEE).FromTx(child_tx));
+        TryAddToMempool(pool, entry.Fee(KEEPER_FEE).FromTx(keeper_tx));
+    }
+
+    const auto expected_total_size = GetVirtualTransactionSize(*parent_tx) +
+        GetVirtualTransactionSize(*child_tx) + GetVirtualTransactionSize(*keeper_tx);
+    {
+        LOCK(pool.cs);
+        BOOST_CHECK_EQUAL(pool.GetTotalFee(), PARENT_FEE + CHILD_FEE + KEEPER_FEE);
+        BOOST_CHECK_EQUAL(pool.GetTotalTxSize(), expected_total_size);
+    }
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        pool.removeForBlock({block_tx}, 1);
+    }
+
+    BOOST_CHECK(!pool.exists(parent_tx->GetHash()));
+    BOOST_CHECK(!pool.exists(child_tx->GetHash()));
+    BOOST_CHECK(pool.exists(keeper_tx->GetHash()));
+    {
+        LOCK(pool.cs);
+        BOOST_CHECK_EQUAL(pool.size(), 1U);
+        BOOST_CHECK_EQUAL(pool.GetTotalFee(), KEEPER_FEE);
+        BOOST_CHECK_EQUAL(pool.GetTotalTxSize(), GetVirtualTransactionSize(*keeper_tx));
+    }
+}
+
 BOOST_AUTO_TEST_CASE(MempoolPrioritisationClearedForConfirmedAbsentTx)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
