@@ -78,11 +78,11 @@ class Bip54Test(BitcoinTestFramework):
         assert_equal(deployment["active"], active)
         return deployment
 
-    def restart_and_assert_deployment(self, node, *, status, active):
+    def restart_and_assert_deployment(self, node, *, status, active, extra_args=None):
         """Restart without changing the chain or the expected deployment state."""
         tip = node.getbestblockhash()
         height = node.getblockcount()
-        self.restart_node(node.index)
+        self.restart_node(node.index, extra_args=extra_args)
         assert_equal(node.getbestblockhash(), tip)
         assert_equal(node.getblockcount(), height)
         self.assert_deployment(node, status=status, active=active)
@@ -471,6 +471,18 @@ class Bip54Test(BitcoinTestFramework):
         self.submit_block_64byte_coinbase(node)
 
         self.log.info("Mempool cleanup rules apply before activation without disconnecting peers")
+        prep_tx, sigop_tx = self.create_mempool_sigop_violation()
+        self.mine_and_submit(node, [prep_tx])
+        self.assert_preactivation_relay_rejection(node, sigop_tx, "bad-txns-legacy-sigops")
+        self.assert_preactivation_relay_rejection(node, self.create_sized_tx(64), "txn-size-64")
+
+        self.restart_and_assert_deployment(
+            node,
+            status="started",
+            active=False,
+            extra_args=self.extra_args[0] + ["-acceptnonstdtxn=1"],
+        )
+        self.log.info("Mempool cleanup checks bypass standardness without disconnecting peers")
         prep_tx, sigop_tx = self.create_mempool_sigop_violation()
         self.mine_and_submit(node, [prep_tx])
         self.assert_preactivation_relay_rejection(node, sigop_tx, "bad-txns-legacy-sigops")
