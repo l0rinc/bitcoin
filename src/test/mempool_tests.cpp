@@ -5,6 +5,7 @@
 #include <common/args.h>
 #include <common/system.h>
 #include <key_io.h>
+#include <memusage.h>
 #include <node/mempool_args.h>
 #include <node/mempool_persist.h>
 #include <policy/policy.h>
@@ -545,6 +546,27 @@ BOOST_AUTO_TEST_CASE(MempoolLoadUnbroadcastRequiresMempoolEntry)
     BOOST_CHECK(!pool.exists(missing_txid));
     BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
     fs::remove(mempool_path);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolUnbroadcastMemoryUsage)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+
+    CMutableTransaction tx;
+    tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256{2}), 0});
+    tx.vout.emplace_back(10 * COIN, CScript() << OP_1);
+    const Txid txid{tx.GetHash()};
+    TryAddToMempool(pool, entry.Fee(1000).FromTx(tx));
+
+    const size_t before{pool.DynamicMemoryUsage()};
+    pool.AddUnbroadcastTx(txid);
+    const size_t after{pool.DynamicMemoryUsage()};
+    const std::set<Txid> expected{txid};
+    BOOST_CHECK_EQUAL(after - before, memusage::DynamicUsage(expected));
+
+    pool.RemoveUnbroadcastTx(txid);
+    BOOST_CHECK_EQUAL(pool.DynamicMemoryUsage(), before);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolDumpFailurePreservesExistingFile)

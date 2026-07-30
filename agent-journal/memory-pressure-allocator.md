@@ -1,5 +1,125 @@
 # Memory Pressure, OOM, Allocator, and Fragmentation Audit
 
+## Cycle 170 start
+
+- Goal: `74`, `memory-pressure-allocator`; exact selector `shuf -i 0-98 -n 1` -> `74`.
+- Branch: `uber-cycle-170-memory-pressure-allocator-20260730`.
+- Start HEAD: `27a40f68419d290b117f499e3d9e6c4120a9f26f`; `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `git rev-list --left-right --count HEAD...origin/master`: `1121 42`.
+- Catalog/prompt/TSV/protocol hashes: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Fresh gate: `git diff --check` passed. Existing untracked artifacts remain preserved. Unrelated test processes `777094` (`wallet_tests`) and `956381` (`util_tests`) were present and must not be stopped. Root storage remains constrained; use `/data/my_storage/tmp/cycle170-*` and do not claim a full-suite result unless it actually runs.
+- Scope: continue the existing memory queue without reopening Cycle 53's prevector OOM policy cell or Cycle 88's receive-accounting cell. Prioritize (1) mempool/package admission and eviction with exact retained-byte and RSS accounting, (2) chainstate/index cache resize and rebuild retention after flush, then (3) `DynamicMemoryUsage()` omitted-capacity or double-counting candidates with an independent recomputation or mutation oracle.
+- Required evidence: deterministic workload and trust boundary; independent retained-state/byte oracle; peak and post-workload RSS or allocator evidence separated from harness/sanitizer reservation; failure/cleanup/retry behavior where applicable; and a failing-before/passing-after regression or equivalent mutation result before any source commit.
+
+### Cycle 170 evidence and verdict
+
+#### Confirmed: unbroadcast transaction nodes were omitted from mempool usage
+
+The primary trust boundary is a locally submitted wallet/RPC transaction that is
+accepted into the resident mempool and then added to `m_unbroadcast_txids` by
+`BroadcastTransaction`. The set is protected by the mempool mutex, owns one
+`std::set` tree node for each tracked transaction, is removed on broadcast or
+transaction removal, and is copied by `GetUnbroadcastTxs()`. Its allocation is
+therefore retained Bitcoin-owned mempool state, not a transient RPC result.
+
+Before this cycle, `CTxMemPool::DynamicMemoryUsage()` accounted for the indexed
+transaction estimate, `mapNextTx`, `mapDeltas`, `txns_randomized`, the main
+transaction graph, and `cachedInnerUsage`, but not `m_unbroadcast_txids`.
+`getmempoolinfo` reports this same method as `usage`, and the chainstate cache
+budget uses it to calculate unused mempool space. The omission meant the usage
+estimate and shared cache budget were low by the set allocation while a local
+transaction remained unbroadcast. This is not a claim that one late broadcast
+registration bypasses every admission check: `BroadcastTransaction` adds the
+set entry after acceptance. It is a confirmed retained-memory accounting error
+for subsequent reporting, trimming, and cache-budget decisions.
+
+History establishes that this was an incomplete accounting extension rather than
+an intentional exclusion. Commit `89eeb4a333` ("[mempool] Track \"unbroadcast\"
+transactions", 2020) added the set and its insertion/removal paths after the
+existing accounting formula, without changing `DynamicMemoryUsage()`. Commit
+`a7ebe48b94` later exposed `unbroadcastcount` in RPC and the 0.21 release notes,
+while the `usage` description remained "Total memory usage for the mempool".
+No later history searched in this cycle added a corresponding usage term.
+
+The fix adds `memusage::DynamicUsage(m_unbroadcast_txids)` to the formula. The
+regression test inserts one resident transaction, records usage before and after
+`AddUnbroadcastTx`, compares the delta with the independent
+`memusage::DynamicUsage(std::set<Txid>)` oracle, then removes the txid and checks
+that usage returns exactly to the baseline. On this 64-bit build the one-node
+oracle is 80 bytes; that is the allocator model used by the project, not an RSS
+claim. A large local submission set therefore creates an equally large omitted
+estimate before the fix (for example, 100,000 nodes model 8,000,000 bytes).
+
+The exact pre-fix mutation was removal of only the new accounting term. The
+incremental GCC build passed, but the focused regression failed with
+`after - before == expected` reported as `[0 != 80]` (exit code 201). Restoring
+the term and rebuilding made the focused test pass with 1 case and 2
+assertions. The full GCC `mempool_tests` suite then passed 25 cases and 425
+assertions. An existing independent Clang 19 Debug build with
+`-fsanitize=undefined,alignment,object-size` was rebuilt for the changed
+production/test objects; its full mempool suite also passed 25 cases and 425
+assertions with `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`.
+
+Commands and scratch locations:
+
+- GCC RelWithDebInfo build: `/data/my_storage/tmp/cycle170-mempool-build`,
+  with scratch ccache `/data/my_storage/tmp/cycle170-ccache`.
+- Focused run: `env TMPDIR=/data/my_storage/tmp/cycle170-mempool-run
+  /data/my_storage/tmp/cycle170-mempool-build/bin/test_bitcoin
+  --run_test=mempool_tests/MempoolUnbroadcastMemoryUsage
+  --log_level=test_suite --report_level=short --color_output=false`.
+- Full GCC run: the same binary with `--run_test=mempool_tests
+  --log_level=message --report_level=short --color_output=false`.
+- Independent UBSan run: `/data/my_storage/tmp/cycle106-clang19-ubsan/bin/test_bitcoin`
+  with the same full mempool selector and `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`.
+- The required `git diff --check` passed. No default datadir, wallet, key, or
+  production database was used.
+
+#### Dismissed: chainstate cache resize and allocator retention
+
+The source audit traced `CCoinsViewCache::DynamicMemoryUsage()` to the
+`CCoinsMap` pool-resource allocation plus `cachedCoinsUsage`. `CCoinsViewCache::Flush`
+can call `ReallocateCache()` after the map is empty, and that routine destroys
+and reconstructs both the map and its memory resource specifically to release
+allocator-retained chunks. `Chainstate::ResizeCoinsCaches()` flushes with
+`FORCE_FLUSH` when the coinstip cache shrinks and keeps the cache when it grows.
+Current tests explicitly cover upsize retention, downsize eviction, exact map
+and coin usage recomputation, and the documented fact that clearing a pool-backed
+map does not necessarily reduce its dynamic usage. The existing rebuild and
+cache profile evidence in prior cycles also found no reproducible state,
+retention, or accounting defect. This cell remains queued for a fresh
+`/data`-backed repeated workload, but no source change is justified from the
+current audit.
+
+#### Dismissed: other dynamic-usage omissions or double counting
+
+The transaction graph documentation explicitly excludes staging operations,
+block builders, queued operations, and temporary caches from its main-graph
+estimate; those are not resident committed mempool state and were not treated
+as defects. The coins cache has an independent recomputation in both production
+sanity checks and `coins_tests`; disconnected-transaction accounting includes
+its inner usage, map, and list ownership and asserts an empty destructor state.
+The network receive accounting cell was already closed in Cycle 88 and was not
+reopened. No second omission survived the source, ownership, and independent
+oracle review in this cycle.
+
+#### Limitations and next queue
+
+Evidence was executed on x86_64 Linux with GCC 12.2 RelWithDebInfo and Clang
+19.1.7 Debug UBSan. The full current-tree unit suite was not run because `/`
+had about 111 MiB free and was at 99%; the focused production suite and the
+independent sanitizer mempool suite completed. Existing unrelated test
+processes 777094 (`wallet_tests`) and 956381 (`util_tests`) were preserved.
+
+Next distinct cells:
+
+1. Exercise package admission and eviction with a fixed operation sequence,
+   comparing staged changeset peak ownership with an independent allocation
+   ledger and reported usage; do not reopen the unbroadcast-set omission.
+2. Run repeated chainstate cache resize/flush cycles on `/data` scratch state,
+   separating allocator retention from cache ownership and RSS noise.
+3. Search other `DynamicMemoryUsage()` implementations for newly added owned
+   containers, using history and a temporary mutation or recomputation oracle.
+
 ## Cycle 53
 
 - Goal: `74`, `memory-pressure-allocator`.
