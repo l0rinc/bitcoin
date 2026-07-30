@@ -65,6 +65,21 @@ class Bip54Test(BitcoinTestFramework):
             prev_height += 1
             prev_hash = block.hash_hex
 
+    def assert_deployment(self, node, *, status, active):
+        deployment = node.getdeploymentinfo()["deployments"]["consensuscleanup"]
+        assert_equal(deployment["bip9"]["status"], status)
+        assert_equal(deployment["active"], active)
+        return deployment
+
+    def restart_and_assert_deployment(self, node, *, status, active):
+        """Restart without changing the chain or the expected deployment state."""
+        tip = node.getbestblockhash()
+        height = node.getblockcount()
+        self.restart_node(node.index)
+        assert_equal(node.getbestblockhash(), tip)
+        assert_equal(node.getblockcount(), height)
+        self.assert_deployment(node, status=status, active=active)
+
     def try_submit_block(self, node, block):
         """Submit this block to that node, raising a JSONRPC error if it is rejected."""
         err = node.submitblock(block.serialize().hex())
@@ -416,19 +431,20 @@ class Bip54Test(BitcoinTestFramework):
         self.reach_end_retarget_period(node)
 
         # Mine enough signaling blocks to transition to locked in and reach the next period.
-        cc_dep = node.getdeploymentinfo()["deployments"]["consensuscleanup"]["bip9"]
-        assert_equal(cc_dep["status"], "started")
+        deployment = self.assert_deployment(node, status="started", active=False)
+        cc_dep = deployment["bip9"]
+        self.restart_and_assert_deployment(node, status="started", active=False)
         signal_bip54 = (1 << 29) | (1 << cc_dep["bit"])
         thresh = cc_dep["statistics"]["threshold"]
         self.generate_bulk(node, thresh, version=signal_bip54)
         self.generate_bulk(node, 144 - thresh + 1)
 
-        # Mine one more retarget period to transition from locked in to active.
-        cc_dep = node.getdeploymentinfo()["deployments"]["consensuscleanup"]["bip9"]
-        assert_equal(cc_dep["status"], "locked_in")
+        # Mine one more deployment period to transition from locked in to active.
+        self.assert_deployment(node, status="locked_in", active=False)
+        self.restart_and_assert_deployment(node, status="locked_in", active=False)
         self.generate_bulk(node, 144)
-        cc_dep = node.getdeploymentinfo()["deployments"]["consensuscleanup"]["bip9"]
-        assert_equal(cc_dep["status"], "active")
+        self.assert_deployment(node, status="active", active=True)
+        self.restart_and_assert_deployment(node, status="active", active=True)
 
         self.log.info("BIP54 tests after activation")
         # Once BIP54 is active we:
