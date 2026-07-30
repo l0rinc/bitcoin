@@ -108,3 +108,71 @@ LevelDB abort (upstream issue reported in PR 35465 discussion).
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-30): UTXO-scan queueing measured — exact N-fold serialization staircase; DISMISSED (documented contract quantified)
+
+### Draw
+Re-harvested-queue draw (seed_raw=17127609671097067094,
+masked=7904237634242291286, n=5, idx=1) -> scan-vs-compaction ->
+#7 (third cycle; c2 queue cell "scan-vs-compaction queueing
+measurement"). Branch: audit/resource-exhaustion-c3 from
+e635e93707 (#57 c4 tip).
+
+### Hypothesis
+The cursor-lifetime m_db_mutex (the e049f064e1 race fix) could
+serialize concurrent UTXO scans at a worse-than-documented cost,
+or let them partially overlap (a locking gap re-opening a
+resize/scan hazard).
+
+### Lock-scope audit (txdb.cpp:225-265)
+CCoinsViewDBCursor holds UniqueLock<Mutex> m_db_mutex for its
+ENTIRE lifetime (ctor takes it, dtor releases); scans therefore
+fully serialize with each other and with ResizeCache. BatchWrite
+(flush) does NOT take m_db_mutex — no scan-vs-flush lock
+contention by construction. Compaction (CompactFullAsync) is
+random-gated (ShouldCompactChainstate: 1/320 per full flush,
+non-IBD, validation.cpp:120-124) — not deterministically
+triggerable without instrumentation; the resize timing half of
+the c2 cell is reachable only via assumeutxo activation
+(correctness already covered by the c2 resize-cursor test).
+
+### Experiment (driver /tmp/scanq.py; TestNode, PortSeed 320,
+-rpcthreads=8, muhash scans)
+Built a 293,079-coin regtest UTXO set (50 blocks x 30 fan-out txs
+x 200 outputs, confirmed_only spends, 601 s), then:
+- baseline: 3 sequential gettxoutsetinfo("muhash") — 2.705 s,
+  2.705 s, 2.705 s (stable).
+- 2-concurrent: per-scan [2.705, 5.384], wall 5.385 s = 1.99x.
+- 3-concurrent: per-scan [2.702, 5.380, 8.056], wall 8.057 s
+  = 2.98x.
+
+### Results
+Exact staircase: N concurrent scans cost 1x/2x/.../Nx baseline —
+full cursor-lifetime serialization, no overlap, no lock gap.
+Queueing multiplier = N; a second concurrent scan costs +100%
+latency, a third +200%.
+
+### Verdict
+DISMISSED: the stall is quantified and matches the documented
+contract (txdb.h:41) exactly — serialization is total and
+correct, with zero hazard window. This is the price of the
+e049f064e1 race fix; upstream 35744's shared-lock refinement
+(concurrent scans) remains unmerged and TSan-flagged upstream
+(#42 c1) — nothing to take, nothing to fix. The compaction-timing
+half-cell stays queued for a big-chain host with a deterministic
+compaction trigger.
+
+### Exact commands
+- python3 /tmp/scanq.py (output above); lock refs: txdb.cpp
+  :225-265, validation.cpp:120-124, :2893-2896, txdb.cpp:202-215.
+
+### Limitations / queue
+- Baseline stability (3x 2.705 s) shows RPC/HTTP adds no measurable
+  variance; the muhash scan is CPU-bound in coin deserialization.
+- getblockstats under pruning remains queued.
+- A deterministic compaction trigger (test-only hook) would
+  unblock the compaction-timing cell; do NOT add one speculatively.
+
+## Rotation note
+Three cycles; HTTP accounting bounded, scan/resize race fixed,
+queueing now measured. getblockstats-pruning remains.
