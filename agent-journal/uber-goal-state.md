@@ -2,6 +2,49 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 173 Completion
+
+- Cycle 173 selected goal `32` (`history-incomplete-fixes`) after the exact
+  post-Cycle-172 selector first returned the explicitly closed goal `30`; the
+  required reroll returned `32`. The dedicated branch is
+  `uber-cycle-173-history-incomplete-fixes-20260730`. Its fresh start HEAD was
+  `2adf2d2ba43e7688a589a18f8866686c77b94d13`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1127 42`.
+  Catalog, prompt, corrected goals TSV, and protocol hashes were unchanged;
+  the persistent test PIDs `777094` and `956381` were preserved.
+- The historical seed was `fd44d48b24`, which correctly made ancient wallets
+  without a best-block locator migrate with an empty locator and rescan. The
+  current `WalletBatch::ReadBestBlock()` collapsed an absent key, a present
+  malformed value, and a read/decode failure into the same `false` result, and
+  migration ignored that result. The exact current callers, database backend
+  semantics, and excluded prior migration cells are recorded in
+  `agent-journal/history-incomplete-fixes.md`.
+- The failing-before test inserted a truncated raw `BESTBLOCK` value (`X'01'`)
+  into an isolated mock SQLite wallet. The pre-fix command
+  `/data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=wallet_tests/migration_corrupt_best_block_is_reported --log_level=test_suite --report_level=short --color_output=false`
+  exited 201 because migration incorrectly returned success. The fixed source
+  adds `BestBlockReadResult::{FOUND, NOT_FOUND, ERROR}`, preserves the existing
+  boolean API, rejects a present undecodable locator, and performs the check
+  before mutating migration state. A separate database test covers absent and
+  valid-empty locator compatibility.
+- Source/test/journal commit `c66c73cf74` (`wallet: reject corrupt best block
+  during migration`) is authored as `Lőrinc <pap.lorinc@gmail.com>`. The fixed
+  malformed migration test passed 8/8 assertions; the new walletdb result test
+  passed 3/3; existing `wallet_tests` passed 20 cases/183 assertions;
+  `walletdb_tests` passed 2/5 assertions; and `db_tests` passed 7/610
+  assertions. `CCACHE_DIR=/data/my_storage/tmp/cycle170-ccache make -C
+  /data/my_storage/tmp/cycle89-build -j2 test_bitcoin` and `git diff --check`
+  passed. The initial build-only ccache failure at `/root/.cache/ccache/tmp`
+  was rerun successfully with the `/data` cache. No default datadir, wallet,
+  key, or production database was used. Low-level I/O failures that make both
+  `Read` and `Exists` fail remain an explicit limitation rather than an
+  overclaimed result.
+- Verdict: confirmed and fixed. The next step is a separate state-only close
+  commit, followed by a fresh gate and exact selector. Do not reopen the Cycle
+  167 auxiliary-wallet settings transaction, Cycle 137 empty `-connect`, Cycle
+  58 undo-output atomicity, or Cycle 43 wallet migration write-return cells.
+
 ## Cycle 172 Completion
 
 - Cycle 172 selected goal `12` (`static-analysis-true-positives`) from the
