@@ -514,6 +514,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    -> dbcache-pressure-critical -> #24 c6 (CRITICAL tier directly
    observed: single-block jump -> 'exceeds total space' + IF_NEEDED
    critical=1 flush same block; DISMISSED; #24 COMPLETE).
+   RE-RANK draw 109 (2-cell queue): raw=15860256885964587176, masked
+   6636884849109811368 -> idx 0 -> coinsview-flags -> #57 c2
+   (flagged-list invariants green over 9.18M per-op checks + both
+   guards fire; DISMISSED).
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -549,7 +553,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 96, 97, 98.
 Cycles done (random-pool state): 0(c1,c2), 1(c1,c2,c3), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4), 35(c1,c2,c3,c4), 36(c1,c2), 23(c1,c2,c3,c4), 25(c1,c2,c3),
-37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3,c4,c5), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 52(c1,c2), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3,c4), 47(c1,c2), 48(c1,c2), 49(c1,c2,c3,c4,c5,c6,c7,c8), 50(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12), 53(c1), 55(c1), 57(c1), 58(c1,c2,c3), 59(c1,c2), 60(c1,c2,c3,c4,c5,c6,c7,c8), 24(c1,c2,c3,c4,c5,c6),
+37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3,c4,c5), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 52(c1,c2), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3,c4), 47(c1,c2), 48(c1,c2), 49(c1,c2,c3,c4,c5,c6,c7,c8), 50(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12), 53(c1), 55(c1), 57(c1,c2), 58(c1,c2,c3), 59(c1,c2), 60(c1,c2,c3,c4,c5,c6,c7,c8), 24(c1,c2,c3,c4,c5,c6),
 61(c1,c2,c3), 63(c1), 64(c1), 65(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 66(c1,c2), 67(c1), 68(c1,c2), 69(c1,c2,c3,c4), 70(c1), 71(c1,c2), 73(c1,c2), 74(c1,c2,c3,c4), 75(c1,c2,c3,c4),
 76(c1,c2,c3), 80(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 81(c1,c2), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4), 99(c1), 100(c1,c2,c3), 101(c1,c2,c3), 102(c1,c2), 103(c1), 104(c1), 105(c1), 106(c1,c2,c3), 107(c1), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
