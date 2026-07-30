@@ -295,6 +295,82 @@ inline CTransactionRef make_tx(std::vector<CAmount>&& output_values, std::vector
     return MakeTransactionRef(tx);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolTrimChildMetadataAccounting)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    TestMemPoolEntryHelper entry;
+
+    const CTransactionRef parent = make_tx({10 * COIN, 10 * COIN});
+    const CTransactionRef child = make_tx(std::vector<CAmount>(16, COIN), {parent}, {0});
+    constexpr CAmount PARENT_FEE{10000};
+    constexpr CAmount CHILD_FEE{100};
+    constexpr CAmount PARENT_DELTA{5000};
+    constexpr CAmount CHILD_DELTA{1};
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(PARENT_FEE).FromTx(parent));
+    }
+    pool.PrioritiseTransaction(parent->GetHash(), PARENT_DELTA);
+    pool.AddUnbroadcastTx(parent->GetHash());
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(CHILD_FEE).FromTx(child));
+    }
+    pool.PrioritiseTransaction(child->GetHash(), CHILD_DELTA);
+    pool.AddUnbroadcastTx(child->GetHash());
+
+    const size_t usage_before_trim = pool.DynamicMemoryUsage();
+    {
+        LOCK2(::cs_main, pool.cs);
+        pool.TrimToSize(usage_before_trim - 1);
+
+        BOOST_REQUIRE(pool.exists(parent->GetHash()));
+        BOOST_REQUIRE(!pool.exists(child->GetHash()));
+        BOOST_CHECK_EQUAL(pool.GetTotalFee(), PARENT_FEE);
+        BOOST_CHECK_EQUAL(pool.GetTotalTxSize(), GetVirtualTransactionSize(CTransaction(*parent)));
+
+        size_t ancestors{0};
+        size_t cluster_size{0};
+        pool.GetTransactionAncestry(parent->GetHash(), ancestors, cluster_size);
+        BOOST_CHECK_EQUAL(ancestors, 1U);
+        BOOST_CHECK_EQUAL(cluster_size, 1U);
+    }
+
+    BOOST_CHECK(pool.GetUnbroadcastTxs() == std::set<Txid>{parent->GetHash()});
+
+    const auto deltas = pool.GetPrioritisedTransactions();
+    BOOST_REQUIRE_EQUAL(deltas.size(), 2U);
+    bool found_parent_delta{false};
+    bool found_child_delta{false};
+    for (const auto& delta : deltas) {
+        if (delta.txid == parent->GetHash()) {
+            found_parent_delta = true;
+            BOOST_CHECK(delta.in_mempool);
+            BOOST_CHECK_EQUAL(delta.delta, PARENT_DELTA);
+            BOOST_REQUIRE(delta.modified_fee.has_value());
+            BOOST_CHECK_EQUAL(*delta.modified_fee, PARENT_FEE + PARENT_DELTA);
+        } else if (delta.txid == child->GetHash()) {
+            found_child_delta = true;
+            BOOST_CHECK(!delta.in_mempool);
+            BOOST_CHECK_EQUAL(delta.delta, CHILD_DELTA);
+            BOOST_CHECK(!delta.modified_fee.has_value());
+        }
+    }
+    BOOST_CHECK(found_parent_delta);
+    BOOST_CHECK(found_child_delta);
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        pool.ClearPrioritisation(parent->GetHash());
+        pool.ClearPrioritisation(child->GetHash());
+        pool.removeForBlock({parent}, 1);
+    }
+    BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+    BOOST_CHECK_EQUAL(pool.size(), 0U);
+}
+
 
 BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
 {
