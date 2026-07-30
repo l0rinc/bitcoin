@@ -185,3 +185,74 @@ documented LockedPool design (stats confirm it plateaus at peak).
 ## Rotation note
 Three cycles; the growth cell is closed with a measured plateau.
 Not exhausted (RSS accounting, mlock-failure).
+
+## Cycle 4 (2026-07-30): dbcache accounting vs RSS — tight (0.94-1.01x) across script shapes; DISMISSED
+
+### Draw
+Rebuilt-queue draw (seed_raw=13280760683108707460,
+masked=4057388646253931652, n=5, idx=2) -> RSS-accounting ->
+#74 (fourth cycle; c2 queue cell "dbcache-vs-RSS accounting
+during tx-heavy sync"). Branch: audit/memory-pressure-c4 from
+02fb4db143 (#100 c3 journal tip).
+
+### Hypothesis
+The coins-cache usage accounting that drives -dbcache flush
+decisions (CCoinsViewCache::DynamicMemoryUsage =
+memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage,
+validation.cpp:2726) could systematically UNDER-account actual RSS,
+letting the cache exceed the configured budget (memory-pressure
+sink), or over-account (harmless early flushes).
+
+### Experiment (driver /tmp/dbcache_rss.cpp, production types)
+Build the exact production CCoinsMap (PoolAllocator unordered_map,
+CCoinsMapMemoryResource, SaltedOutpointHasher deterministic,
+CCoinsCacheEntry + Coin with prevector<36> scripts), insert
+2,000,000 entries, measure VmRSS delta vs the accounted model —
+no node orchestration needed: these ARE the allocator paths the
+sync uses, and the flush trigger compares this exact accounted
+value to the budget.
+- g++ -O2 -std=c++20 -I src -I build-before/src /tmp/dbcache_rss.cpp
+  -L build-before/lib -lbitcoin_common -lbitcoin_consensus
+  -lbitcoin_util -lbitcoin_crypto -lbitcoin_clientversion
+  -L build-before/src/secp256k1/lib -lsecp256k1
+
+### Results (2M entries each)
+| script size | accounted B/entry | RSS B/entry | ratio |
+|---|---|---|---|
+| 25 (inline in prevector<36>) | 136.7 | 137.8 | 1.008 |
+| 67 (heap) | 232.7 | 217.8 | 0.936 |
+| 200 (heap) | 360.7 | 345.8 | 0.959 |
+- script <=36 B: coin.DynamicMemoryUsage()=0 (inline capacity) —
+  everything rides on the map-side accounting, which is essentially
+  exact (1.008) — the PoolAllocator + noexcept-hash (no cached hash
+  node field) design makes nodes cheap and the 4-pointer slack
+  estimate in coins.h accurate for libstdc++ 13.
+- heap scripts: the MallocUsage model ((alloc+31)>>4<<4,
+  memusage.h:52-58) OVER-estimates by ~7% (glibc chunk for 67 B
+  request is 80 B, model says 96; 200 B -> 208, model 224) —
+  conservative direction: flushes trigger slightly EARLY, never
+  late.
+- scale stability: 1M-entry midpoint ratio 1.013 (no growth trend).
+
+### Verdict
+DISMISSED: -dbcache accounting tracks actual RSS within ±7% across
+inline/heap script shapes at 2M entries, with the error direction
+safe (over-accounting on heap scripts). The budget bounds RSS as
+configured; no under-accounting sink. A node-level tx-heavy sync
+would exercise the same types/allocators and adds nothing — c1's
+mempool 1.13x and this are consistent.
+
+### Exact commands
+- build/run as above; runs: /tmp/dbcache_rss {25,67,200} 2000000.
+- model greps: coins.cpp:58-66 (DynamicMemoryUsage), coins.h:99-101,
+  225-238, memusage.h:52-58, validation.cpp:2720-2736.
+
+### Limitations / queue
+- Single-threaded fill; concurrent access doesn't change allocator
+  geometry. Bucket-array quantization visible only at small N.
+- Remaining queue: locked-arena mlock-failure path (needs
+  RLIMIT_MEMLOCK=0 container); pruning-mode IO (from #24).
+
+## Rotation note
+Four cycles; mempool, LockedPool, arena high-water, and dbcache
+accounting all measured tight. Not exhausted (mlock cell).
