@@ -220,3 +220,67 @@ failure (#42 c1) stands as the real signal.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 5 (2026-07-30): periodic upstream watch — watched PRs static; F13/F14 re-verified offerable; #35753 fork-safe
+
+### Draw
+Harvested-queue draw (seed_raw=18209190156073205447,
+masked=8985818119218429639, n=8, idx=7) -> upstream-watches cell ->
+#42 (fifth cycle). Branch: audit/ci-review-bot-c5 from db049ea864
+(#13 c2 bookkeeping tip).
+
+### Hypotheses and verdicts (all DISMISSED / no-action)
+- H1 #35744 (coins cursor/resize, the URGENT 🔴 watch) state change:
+  still OPEN, head UNCHANGED 38b84769608a, last update 2026-07-28.
+  In-tree UniqueLock fix e049f064e1 stands; no DrahtBot-visible new
+  revision to re-assess. DISMISSED (watch continues).
+- H2 #35818 (bloom sizing) landed: still OPEN, head c4302ddf8060.
+  sink-reverse-reachability queue rule stands (take upstream's if it
+  lands). DISMISSED.
+- H3 #35620 (leveldb block-cache knob) landed: still OPEN, head
+  a479f8a071a6, idle since 2026-07-14. DISMISSED.
+- H4 F14 duplicate search: upstream master @ 9611a35603 still has NO
+  ~LevelDBContext (raw penv/options members, dbwrapper.cpp:197ff) and
+  zero dbwrapper.cpp commits since 2026-07-20 -> our fix 73a6798206
+  is NOT duplicated; still offerable. DISMISSED.
+- H5 F13 duplicate search: upstream node/mempool_args.cpp (file lives
+  under src/node/ upstream; fork copy src/mempool_args.cpp) still
+  validates only the upper bound (:35 read, :111 'less than or equal
+  to'; no lower-bound error) -> fix 5e0a80ade5 still offerable.
+  DISMISSED.
+- H6 qrencode.mk changed upstream: unchanged (dead fukuchi.org path,
+  same pinned sha256 da448ed4...71e8e). DISMISSED; fallback anchor
+  unchanged.
+- New-seed sweep, merges 7dea464d6b..9611a35603 (38 commits, 10
+  merges): only in-scope consensus/validation merge is #35753
+  (a99b27f192, null-mempool DeleteChainstate assert, fork-owner
+  authored). Fork ALREADY carries fix + test
+  (src/validation.cpp:6480 new-form assert;
+  validation_chainstatemanager_tests.cpp:293
+  chainstatemanager_delete_chainstate_no_mempool). NOT EXPOSED.
+  Remaining merges: util LineReader, addnode-empty, test-only
+  getdata, gui/guix/build/ipc — out of scope.
+
+### Exact commands
+- git fetch origin master (7dea464d6b..9611a35603)
+- curl api.github.com/repos/bitcoin/bitcoin/pulls/{35744,35818,35620}
+- git show origin/master:src/dbwrapper.cpp | grep '~LevelDBContext'
+- git show origin/master:src/node/mempool_args.cpp | grep -i limitclustercount
+- git show origin/master:depends/packages/qrencode.mk
+- git log --oneline [--merges] 7dea464d6b..9611a35603 [-- in-scope paths]
+- grep prev_chainstate->m_mempool src/validation.cpp;
+  grep chainstatemanager_delete_chainstate_no_mempool src/test/...
+- curl api.github.com/.../commits?path=src/{txdb,dbwrapper}.cpp&since=2026-07-20
+
+### Verdict
+Watch cycle complete; every cell dismissed with evidence, no new
+work triggered. F13/F14 offerability re-confirmed against
+9611a35603. No URGENT severity changes.
+
+### Limitations / queue
+- API sweeps are point-in-time; heads recorded above are the resume
+  anchors. Next watch per rotation; corecheck noise-floor caveat
+  from c4 still applies to any future bench-delta reading.
+
+## Rotation note
+Five cycles; watches quiet, duplicate searches negative.
