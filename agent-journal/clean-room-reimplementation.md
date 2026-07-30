@@ -112,3 +112,52 @@ tables, #48 batteries, this).
 ## Rotation note
 Two cycles; bech32 closed with a full-agree differential. Not
 exhausted (VarInt cousin, segwit-address layer).
+
+## Cycle 3 (2026-07-30): VarInt read/write differential — 5435/5435 agree; the differential caught MY reference's bug
+
+### Draw
+Re-rank draw over the remaining 2-cell queue:
+raw=8837950375080321296, index 0 (of 2) -> #89 (third cycle; c2
+queue cell "VarInt differential"). Branch: audit/clean-room-c3
+from 1c49d1e8ff (#108 c3 journal tip).
+
+### Experiment
+Independent reference (the (n>>7)-1 quirk encode from #35 c2,
+plus a guarded decode for all four widths u8/16/32/64) vs the
+fork's Read/WriteVarInt via a VectorWriter/SpanReader driver
+(/tmp/btc89v_driver.cpp). Corpus: exact encodings for 0..2099 +
+boundary values + 600 random-width values, decode of every
+encoded value, and adversarial byte strings (truncated
+continuation, overlong forms, width-overflow encodings).
+
+### Result
+TALLY: enc_ok=2713 dec_agree=2717 rej_agree=5 A=0 B=0 (5435
+total). PROCESS LESSON: the first run showed 8 "mismatches" —
+all on truncated-continuation inputs (single 0x80/0xff): my
+reference accepted them as complete values; C++ correctly
+rejects a continuation bit on the final byte (the encoding is
+truncated). The reference was wrong, not the implementation —
+the differential did its job by catching the REFERENCE's bug
+(why two independent implementations matter; recorded per the
+campaign's negative-result discipline).
+
+### Verdict
+DISMISSED (differential clean): Read/WriteVarInt matches the
+corrected independent reference on every case — exact encodings,
+all four widths, and all rejection shapes (overflow guards,
+truncated continuation).
+
+### Exact commands
+- g++ -O2 -std=c++20 -I src -o /tmp/btc89v_driver
+  /tmp/btc89v_driver.cpp build-before/lib/libbitcoin_common.a
+  ..._util.a ..._crypto.a ..._clientversion.a
+- python3 /tmp/btc89v_diff.py (TALLY above)
+
+### Limitations / queue
+- Signed-mode (NONNEGATIVE_SIGNED) differential — same machinery
+  with the sign bit; queued nicety.
+- The segwit-address layer from c2 remains the other open cell.
+
+## Rotation note
+Three cycles; bech32 and VarInt both closed with full-agree
+differentials. Not exhausted (signed mode, segwit layer).
