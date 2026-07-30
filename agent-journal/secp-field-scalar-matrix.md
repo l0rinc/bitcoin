@@ -1,5 +1,76 @@
 # secp256k1 field and scalar representation matrix
 
+## Cycle 128: GCC 12 forced int128 versus int64 backend matrix
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `82`
+- Selected slug: `secp-field-scalar-matrix`
+- Branch: `uber-cycle-128-secp-field-scalar-matrix-20260730`
+- HEAD before the cycle: `845800dfff00f9965ef6bb73092964f27b107c2b`
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Start divergence: `1044 40` from `git rev-list --left-right --count HEAD...origin/master`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- `git fetch origin master --quiet`, tracked/index status, `git diff --check`, and the PID check all passed at the fresh gate. PID `777094` (`test_bitcoin --run_test=wallet_tests`) and its Codex parent were not touched. Existing untracked agent artifacts, `node_modules/`, package files, and `test/cache/` were preserved.
+
+### Scope and hypothesis
+
+Cycle 24 already covered the field/scalar edge-vector matrix under Clang 19. This cycle used the explicitly queued GCC cell: GCC 12.2.0, `SECP256K1_ASM=OFF`, and the test-only wide-multiplication overrides `int128` and `int64`. The falsifiable hypothesis was that GCC's 5x52 field plus 4x64 scalar implementation and 10x26 field plus 8x32 scalar implementation diverge on a valid boundary value, arithmetic operation, inverse path, representation invariant, or serialization result.
+
+The source contract was re-read in `src/secp256k1/src/field.h`, `field_5x52.h`, `field_10x26.h`, `scalar.h`, `scalar_4x64.h`, `scalar_8x32.h`, `field_impl.h`, and `scalar_impl.h`. The field representation carries magnitude and normalization metadata in VERIFY builds; field multiplication restricts the third operand from aliasing; scalar inputs are reduced modulo the group order. The temporary probe respected those contracts. History showed only the expected vendored subtree updates for these representation files; no newer local fix or review precedent identified an unclosed GCC-specific defect.
+
+### Isolated GCC build matrix
+
+Both configurations were fresh standalone CMake/Ninja `RelWithDebInfo` trees using GCC 12.2.0, all current optional modules, assembly disabled, regular and no-VERIFY tests enabled, and exhaustive tests enabled:
+
+```text
+cmake -S src/secp256k1 -B /data/my_storage/tmp/cycle128-secp-gcc-int128 -G Ninja -DCMAKE_C_COMPILER=/usr/bin/gcc-12 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSECP256K1_ASM=OFF -DSECP256K1_BUILD_TESTS=ON -DSECP256K1_BUILD_EXHAUSTIVE_TESTS=ON -DSECP256K1_BUILD_BENCHMARK=OFF -DSECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int128
+cmake -S src/secp256k1 -B /data/my_storage/tmp/cycle128-secp-gcc-int64 -G Ninja -DCMAKE_C_COMPILER=/usr/bin/gcc-12 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSECP256K1_ASM=OFF -DSECP256K1_BUILD_TESTS=ON -DSECP256K1_BUILD_EXHAUSTIVE_TESTS=ON -DSECP256K1_BUILD_BENCHMARK=OFF -DSECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64
+cmake --build /data/my_storage/tmp/cycle128-secp-gcc-int128 --target all -j2
+cmake --build /data/my_storage/tmp/cycle128-secp-gcc-int64 --target all -j2
+```
+
+All four build commands completed successfully. The paired fixed-seed runs used:
+
+```text
+<tree>/bin/tests --iterations=2 --seed=0123456789abcdef --jobs=2 --log=1
+<tree>/bin/noverify_tests --iterations=2 --seed=0123456789abcdef --jobs=2 --log=1
+<tree>/bin/exhaustive_tests
+```
+
+Both `tests` binaries exited 0 with every reported test passing; total execution was 27.309 seconds for int128 and 27.950 seconds for int64. Both `noverify_tests` binaries exited 0 with every reported test passing; total execution was 16.146 seconds for int128 and 15.160 seconds for int64. The test order differed between backends, but no case failed and no error, assertion, sanitizer, or abort text appeared. Both exhaustive binaries exited 0 and reported `Exhaustive tests for order 13`, `test count = 2`, and `no problems found`.
+
+### Independent internal-header probe
+
+The temporary `agent-journal/secp_field_cycle128_probe.c` included `int128_impl.h`, `field_impl.h`, and `scalar_impl.h`, compiled with GCC 12 and `-DVERIFY`, and was removed after the run. Its 12 deterministic inputs were zero, one, field-prime minus one, field-prime, field-prime plus one, group order, order minus one, order plus one, `2^255`, `2^255-1`, a patterned value, and `2^256-1`.
+
+The probe exercised field `set_b32_mod`, strict-limit parsing, normalization, canonical serialization, constant-time and variable-time inversion, halving, negation, storage round trips, multiplication, squaring, and addition. It exercised scalar reduction and overflow reporting, canonical serialization, constant-time and variable-time inversion, halving, negation, multiplication, and addition. It emitted 265 lines and 22,232 bytes in each mode. `sizeof(secp256k1_fe)=48` and `sizeof(secp256k1_scalar)=32` in both modes. The complete outputs compared byte-for-byte:
+
+```text
+cmp_status=0
+592291746a53f723fb511739a3635990cfbd0532070810a99753eaef8920c54d  probe-int128.log
+592291746a53f723fb511739a3635990cfbd0532070810a99753eaef8920c54d  probe-int64.log
+```
+
+The boundary rows also matched: field strict-limit parsing accepted `p-1` and rejected `p`, `p+1`, and `2^256-1`; modular field parsing mapped `p` to zero and `p+1` to one; scalar parsing reported overflow at and above the group order and produced identical reduced values. Both stderr streams were empty. An initial direct compile omitted `int128_impl.h` and failed to link the internal helpers; adding that required probe include corrected the harness and did not change production code.
+
+### Candidate ledger and verdict
+
+| Candidate | Classification | Verdict |
+|---|---|---|
+| GCC int128 versus int64 differs on field/scalar boundary vectors or arithmetic | Production representation differential | Dismissed; full native suites and the 265-line canonical probe matched |
+| GCC-specific VERIFY metadata or inverse path diverges | Production invariant differential | Dismissed; constant-time/variable-time inverse, normalization, storage, and metadata outputs matched |
+| The first standalone probe failure indicates a libsecp defect | Scratch harness setup | Dismissed; the missing `int128_impl.h` definition was the complete cause and the corrected probe passed |
+
+**Cycle verdict: dismissed; no confirmed production finding and no source or permanent test change justified.**
+
+### Limitations and next queue
+
+This cycle executed GCC 12.2.0 on x86_64 little-endian with assembly disabled and did not test 32-bit, cross-architecture, big-endian, `int128_struct`, assembly/reference parity, sanitizer builds, timing, or constant-time equivalence. A passing functional comparison is evidence of representation correctness for this matrix, not a proof of constant-time behavior. The raw GCC build trees, logs, and probe outputs remain under `/data/my_storage/tmp/cycle128-secp-gcc-*`; the temporary source was removed. Reopen this goal only for a distinct architecture, assembly, sanitizer, `int128_struct`, or new source/history cell.
+
 ## Cycle 24: forced int128 versus int64 backends
 
 ### Selection and gate
