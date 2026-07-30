@@ -190,3 +190,61 @@ code.
 ## Rotation note
 Three cycles; fee_estimates.dat, mempool.dat, and the xor-key
 story all fail closed/loud.
+
+## Cycle 4 (2026-07-30): anchors.dat archaeology — all-or-nothing + read-and-delete everywhere; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=1453947281365744417, masked
+same, n=4, idx=1) -> anchors-dat -> #41 (fourth cycle; c3 queue
+cell "anchors.dat as its own smaller cell"). Branch:
+audit/history-seed-c4 from 94e708cd8c (#63 c4 journal tip).
+
+### Mechanism map (addrdb.cpp:228-245, :54-133)
+- DumpAnchors: SerializeFileDB('anchors', path, CAddress::V2_DISK
+  (anchors)) — temp-file + rename (atomic) into
+  GetDataDirNet()/<chain>/ first.
+- ReadAnchors: DeserializeFileDB; ANY exception -> anchors.clear()
+  (empty, fail-closed) then fs::remove — read-and-delete, so a
+  corrupt file can never wedge startup or repeat-fail.
+
+### Experiment (driver /tmp/anchors_probe.cpp linking addrdb.cpp,
+3-anchor files + variants)
+1. round-trip: 3 read back, file removed.
+2. flipped-60%: 0 read (all-or-nothing), file removed.
+3. truncated-50%: 0 read, file removed.
+4. trailing-junk (64 B appended): 3 read — TRAILING BYTES IGNORED
+   (the vector deserializes by count; tolerance recorded), file
+   removed.
+5. zero-anchors: 0 read, file removed.
+6. missing file: 0 read.
+
+### Verdict
+DISMISSED: anchors.dat fails closed under every corruption class
+(all-or-nothing deserialization + read-and-delete), tolerates
+trailing junk, round-trips exactly, and never wedges startup.
+The version story is consistent with the code.
+
+### Harness lessons (recorded)
+- SerializeFileDB stages its temp file in
+  GetDataDirNet()/<chain>/ — the driver needs SelectParams(REGTEST)
+  + ForceSetArg datadir + the regtest subdir created, or the dump
+  silently no-ops (fopen NULL -> LogError only).
+- My probe then SEGV'd on fseek(NULL) of the missing file —
+  driver-side, logged for the replay trail.
+
+### Exact commands
+- g++ -O2 -std=c++20 -I src -I build-before/src -I
+  src/univalue/include /tmp/anchors_probe.cpp src/addrdb.cpp
+  -lbitcoin_node -lbitcoin_common -lbitcoin_consensus
+  -lbitcoin_util -lbitcoin_crypto -lbitcoin_clientversion
+  -lleveldb -lcrc32c -lsecp256k1 -lunivalue; output above.
+
+### Limitations / queue
+- peers.dat (the richer LoadAddrman version story with
+  InvalidAddrManVersionError + .bak backup) is the natural next
+  archaeology cell if one lands here.
+- #41's c1 queue is otherwise closed (fee_estimates, mempool,
+  xor-key, anchors).
+
+## Rotation note
+Four cycles; four persistence artifacts, all fail closed.
