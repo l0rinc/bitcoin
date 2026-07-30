@@ -2,6 +2,14 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 156 Completion
+
+- Exact selector sequence: the first post-Cycle-155 `shuf -i 0-98 -n 1` draw was `15`, already closed for the current public-object-validation cell; the required exact reroll produced `40` (`multi-agent-adjudication`). The dedicated branch is `uber-cycle-156-multi-agent-adjudication-20260730`; start HEAD was `6eeda975a0b31d13cd024533d8635d1e768b34b7`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `1095 42`.
+- This was a new goal-40 cell, excluding the prior ForceRelay late-recipient and block-relay-only GETDATA adjudications. The source/history seed was upstream null-mempool chainstate deletion fix `a99b27f19209e444e895a0e8721c9166f64d7cee`. Investigator A traced the kernel no-mempool AssumeUTXO wipe path and reproduced the pre-fix `prev_chainstate->m_mempool->size()` fault at address `0x58` in a focused regression; Investigator B audited all production `m_mempool` callers, nullable locking, and ownership transfer and found no additional required repair.
+- The smallest fix guards the deletion assertion with `!prev_chainstate->m_mempool ||`. The focused regression passed after rebuilding, and the full `validation_chainstatemanager_tests` suite passed all 23 cases with `TMPDIR=/data/my_storage/tmp/cycle156-test-tmp`. The first broad attempt used the full root filesystem and failed at its `59 MiB` free-space limit; the isolated rerun passed. `git diff --check` passed.
+- Source/test/journal commit `41ca5ab550b1e41247ca15163a7477e992adc3e7` (`validation: handle null mempool on chainstate deletion`) is authored as `Lőrinc <pap.lorinc@gmail.com>`. Detailed independent reports, exact commands, pre-fix exit `201`, post-fix evidence, and limitations are in `agent-journal/multi-agent-adjudication.md`. Final verdict: confirmed local availability defect; no consensus or remote-network impact.
+- PID `777094` and all unrelated untracked artifacts were preserved. A separate state close commit follows; the next cycle must perform a fresh gate and exact selector draw.
+
 ## Cycle 155 Completion
 
 - Exact selector sequence: the first post-Cycle-154 `shuf -i 0-98 -n 1` draw was `5`, already closed by the boundary-condition campaign; the required exact reroll produced `55` (`alternative-implementation`). The dedicated branch is `uber-cycle-155-alternative-implementation-20260730`; start HEAD was `158909b90aa0a00fa4684a22aec3200e7830f62c`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `1094 42`.
