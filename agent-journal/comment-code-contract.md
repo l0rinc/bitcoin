@@ -334,3 +334,78 @@ or code change needed.
 ## Rotation note
 Four cycles; the fork-added comment surface is verified. Core
 strong-claim surface covered; not marking exhausted (leftovers).
+
+## Cycle 4 (2026-07-30) [#1]: txgraph.cpp lower-stakes residue — 106 claims classified, 4 stale comments fixed, 0 code defects
+
+### Draw
+Re-harvested-queue draw (seed_raw=6489529727745126125, masked
+same, n=5, idx=0) -> comment-code-contract-txgraph -> #1 (fourth
+cycle; c3 queue cell "txgraph.cpp ~30 lower-stakes hits"). Branch:
+audit/comment-code-contract-c4 from e4b0fd2e8a (#63 c3 journal
+tip; audit/comment-contract-c4 is #45's).
+
+### Method (scout/verify independence)
+An explore subagent enumerated the strong-claim comments (modal/
+invariant language) and first-pass classified 106 hits (after
+excluding c3's 4 deep-verified + 2 non-claims): 48 (S) sanity-
+enforced, 52 (V) verified-true, 4 (F) suspicious/stale, 1 block
+(T) needs-test. I independently re-verified every (F)/(T) hit and
+spot-checked the (S)/(V) classes against the cited lines.
+
+### Enforcement check
+FUZZ=txgraph build_fuzz/bin/fuzz -max_total_time=150: 70,024 runs,
+no crash — TxGraphImpl::SanityCheck + cluster sanity checks hold
+under the fuzzer's op sequences (the (S) class's enforcement).
+
+### (F) hits — CONFIRMED stale comments, fixed in this cycle
+1. txgraph.cpp:706 referenced nonexistent types 'MiningOrder,
+   EvictionOrder' (tree-wide grep: only the comment matches; the
+   deleted ctors are real). Fixed: now names the actual
+   TxGraphImpl* holders (Ref, ChunkOrder :581, BlockBuilderImpl
+   :923).
+2. txgraph.cpp:775 'Only called by Ref's move
+   constructor/assignment' — move assignment is deleted
+   (txgraph.h:247); sole caller is the move ctor (:3792). Fixed.
+3. txgraph.cpp:786 '...and Ref's move assignment' — same
+   staleness; sole caller ~Ref (:3783). Fixed.
+4. txgraph.cpp:2261-2262 'This also guarantees that all chunks are
+   connected (even when non-optimal)' — drops the saturation
+   condition documented in cluster_linearize.h and proven
+   necessary by the fork's own GetChunking collapse (3ae78dbd25,
+   txgraph.cpp:1142-1153). Fixed: states the conditional form +
+   the GetChunking backstop.
+
+### (T) hit — RESOLVED by caller audit
+:3682-3683 'this cannot occur in real scenarios' (cyclic
+dependencies from Trim callers): the sole Trim caller
+(txmempool.cpp:110-126) adds dependencies only old-mempool ->
+new-from-block (AddDependency(parent=it, child=childIter)) —
+single direction, cycles impossible. TRUE.
+
+### Verdict
+4 comment-level defects CONFIRMED+FIXED (documentation only; no
+behavioral impact; class: upstream-design comment drift, same
+family as c1's LockPoints bound comment). 102/106 remaining
+claims accurate (48 machine-enforced, 52 prose-verified, 2
+non-claims dropped). No code defect in the txgraph claim surface;
+the sanity function's coverage claim from c3 holds.
+
+### Exact commands
+- grep claim patterns (recorded in scout brief); fuzz run above;
+  independent greps: MiningOrder/EvictionOrder (txgraph.cpp:706
+  only), UpdateRef/UnlinkRef callers (:3792/:3783), Ref move
+  assignment deleted (txgraph.h:247), Trim caller
+  (txmempool.cpp:110-126).
+- build: cmake --build build-before --target bitcoin_node -j4;
+  test_bitcoin --run_test=txgraph_tests -> green.
+
+### Limitations / queue
+- Spot-checking of the (S)/(V) classes sampled ~25% (weighted to
+  the deepest claims: :2754 staging-merge and :3537-3538
+  regroup-limits both re-read and hold).
+- validation.cpp ~30 lower-stakes c1 leftovers remain (lower value).
+- wallet/GUI comment cells remain deprioritized per scope.
+
+## Rotation note
+#1 c4 complete; the txgraph claim surface is now fully swept with
+the residue fixed. validation.cpp leftovers remain.

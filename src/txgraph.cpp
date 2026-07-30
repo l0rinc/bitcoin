@@ -703,7 +703,7 @@ public:
     /** Destructor. */
     ~TxGraphImpl() noexcept;
 
-    // Cannot move or copy (would invalidate TxGraphImpl* in Ref, MiningOrder, EvictionOrder).
+    // Cannot move or copy (would invalidate TxGraphImpl* held by Ref, ChunkOrder, and BlockBuilderImpl).
     TxGraphImpl(const TxGraphImpl&) = delete;
     TxGraphImpl& operator=(const TxGraphImpl&) = delete;
     TxGraphImpl(TxGraphImpl&&) = delete;
@@ -772,7 +772,7 @@ public:
 
     // Functions for handling Refs.
 
-    /** Only called by Ref's move constructor/assignment to update Ref locations. */
+    /** Only called by Ref's move constructor to update Ref locations. */
     void UpdateRef(GraphIndex idx, Ref& new_location) noexcept final
     {
         auto& entry = m_entries[idx];
@@ -783,7 +783,7 @@ public:
         entry.m_ref = &new_location;
     }
 
-    /** Only called by Ref::~Ref to unlink Refs, and Ref's move assignment. */
+    /** Only called by Ref::~Ref to unlink Refs. */
     void UnlinkRef(GraphIndex idx) noexcept final
     {
         auto& entry = m_entries[idx];
@@ -2259,7 +2259,8 @@ std::pair<uint64_t, bool> GenericClusterImpl::Relinearize(TxGraphImpl& graph, in
         /*old_linearization=*/m_linearization,
         /*is_topological=*/IsTopological());
     // Postlinearize to improve the linearization (if optimal, only the sub-chunk order).
-    // This also guarantees that all chunks are connected (even when non-optimal).
+    // Resulting chunks are connected when chunk feerates are representable without
+    // saturation (cluster_linearize.h); saturated clusters are collapsed by GetChunking.
     PostLinearize(m_depgraph, linearization);
     // Update the linearization.
     m_linearization = std::move(linearization);
