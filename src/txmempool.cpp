@@ -900,7 +900,7 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
     }
     if (pvNoSpendsRemaining) {
         for (const COutPoint& prevout : no_spends_candidates) {
-            if (exists(prevout.hash)) continue;
+            if (mapNextTx.count(prevout)) continue;
             pvNoSpendsRemaining->push_back(prevout);
         }
     }
