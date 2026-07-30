@@ -140,3 +140,48 @@ no leak from the failed path.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-30): sustained arena growth — high-water bounded, zero runaway; churn and size-alternation recycle fully
+
+### Draw
+Re-rank draw over the remaining 4-cell queue:
+raw=2928821531056304015, index 3 (of 4) -> #74 (third cycle; c2
+queue cell "sustained arena growth under adversarial long-lived
+secure usage"). Branch: audit/memory-pressure-c3 from a0a11e0214
+(#10 c4 journal tip).
+
+### Experiment (driver /tmp/btc74_arena.cpp, LockedPoolManager
+stats API)
+- A: 1M rounds of alloc(32)+free with a 1-block live set ->
+  total=262144 (ONE chunk; no runaway).
+- B: grow live set to 200k distinct 24B blocks ("many keys") ->
+  used=6.4MB (block rounds to 32), total=6,553,600 = 25 x 256KB
+  chunks, proportional to the live set. Free all -> used=0,
+  total UNCHANGED (lifetime retention, by design).
+- C: 1M churn rounds again -> total UNCHANGED at 6,553,600
+  (freed blocks fully recycle; zero further growth).
+- D: 200k alternating alloc(8)/alloc(96) pairs -> total UNCHANGED
+  (no fragmentation-driven growth).
+
+### Verdict
+DISMISSED: the locked arena is high-water-bounded under
+adversarial long-lived secure usage — growth tracks the live-set
+peak exactly, churn never regrows it, size alternation causes no
+fragmentation growth. Retention until process end is the
+documented LockedPool design (stats confirm it plateaus at peak).
+
+### Exact commands
+- g++ -O2 -std=c++20 -I src -o /tmp/btc74_arena
+  /tmp/btc74_arena.cpp src/support/lockedpool.cpp
+  src/support/cleanse.cpp
+- /tmp/btc74_arena (stats table above)
+
+### Limitations / queue
+- dbcache-vs-RSS accounting during tx-heavy sync (c2 queue)
+  unmeasured — queued.
+- mlock-failure path (RLIMIT_MEMLOCK=0 container) unexercised —
+  queued.
+
+## Rotation note
+Three cycles; the growth cell is closed with a measured plateau.
+Not exhausted (RSS accounting, mlock-failure).
