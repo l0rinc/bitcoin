@@ -124,7 +124,7 @@ BOOST_AUTO_TEST_CASE(taproot_bip32_keypath_does_not_read_past_value)
     VectorWriter writer{serialized, 0};
 
     std::vector<unsigned char> key{PSBT_OUT_TAP_BIP32_DERIVATION};
-    key.resize(33, 0);
+    key.insert(key.end(), XOnlyPubKey::NUMS_H.begin(), XOnlyPubKey::NUMS_H.end());
     writer << key;
 
     // The value contains only a leaf-hash count, but that count claims one hash.
@@ -148,7 +148,7 @@ BOOST_AUTO_TEST_CASE(taproot_bip32_input_keypath_does_not_read_past_value)
     VectorWriter writer{serialized, 0};
 
     std::vector<unsigned char> key{PSBT_IN_TAP_BIP32_DERIVATION};
-    key.resize(33, 0);
+    key.insert(key.end(), XOnlyPubKey::NUMS_H.begin(), XOnlyPubKey::NUMS_H.end());
     writer << key;
     writer << std::vector<unsigned char>{1};
 
@@ -180,6 +180,93 @@ BOOST_AUTO_TEST_CASE(psbt_value_deserialization_does_not_read_past_value)
     SpanReader reader{serialized};
     BOOST_CHECK_THROW((PSBTOutput{deserialize, reader, /*psbt_version=*/2}), std::ios_base::failure);
     BOOST_CHECK_EQUAL(reader.size(), tail.size());
+}
+
+BOOST_AUTO_TEST_CASE(taproot_xonly_pubkeys_are_validated)
+{
+    const std::vector<unsigned char> invalid_xonly(32, 0);
+
+    {
+        std::vector<unsigned char> serialized;
+        VectorWriter writer{serialized, 0};
+        writer << std::vector<unsigned char>{PSBT_IN_PREVIOUS_TXID};
+        writer << std::vector<unsigned char>(32, 0);
+        writer << std::vector<unsigned char>{PSBT_IN_OUTPUT_INDEX};
+        writer << std::vector<unsigned char>(4, 0);
+        std::vector<unsigned char> key{PSBT_IN_TAP_SCRIPT_SIG};
+        key.insert(key.end(), invalid_xonly.begin(), invalid_xonly.end());
+        key.resize(65, 0);
+        writer << key;
+        writer << std::vector<unsigned char>(64, 0);
+        writer << PSBT_SEPARATOR;
+
+        SpanReader reader{serialized};
+        BOOST_CHECK_THROW((PSBTInput{deserialize, reader, /*psbt_version=*/2}), std::ios_base::failure);
+    }
+
+    {
+        std::vector<unsigned char> serialized;
+        VectorWriter writer{serialized, 0};
+        writer << std::vector<unsigned char>{PSBT_IN_PREVIOUS_TXID};
+        writer << std::vector<unsigned char>(32, 0);
+        writer << std::vector<unsigned char>{PSBT_IN_OUTPUT_INDEX};
+        writer << std::vector<unsigned char>(4, 0);
+        std::vector<unsigned char> key{PSBT_IN_TAP_BIP32_DERIVATION};
+        key.insert(key.end(), invalid_xonly.begin(), invalid_xonly.end());
+        writer << key;
+        writer << std::vector<unsigned char>{0, 0, 0, 0, 0};
+        writer << PSBT_SEPARATOR;
+
+        SpanReader reader{serialized};
+        BOOST_CHECK_THROW((PSBTInput{deserialize, reader, /*psbt_version=*/2}), std::ios_base::failure);
+    }
+
+    {
+        std::vector<unsigned char> serialized;
+        VectorWriter writer{serialized, 0};
+        writer << std::vector<unsigned char>{PSBT_IN_PREVIOUS_TXID};
+        writer << std::vector<unsigned char>(32, 0);
+        writer << std::vector<unsigned char>{PSBT_IN_OUTPUT_INDEX};
+        writer << std::vector<unsigned char>(4, 0);
+        writer << std::vector<unsigned char>{PSBT_IN_TAP_INTERNAL_KEY};
+        writer << invalid_xonly;
+        writer << PSBT_SEPARATOR;
+
+        SpanReader reader{serialized};
+        BOOST_CHECK_THROW((PSBTInput{deserialize, reader, /*psbt_version=*/2}), std::ios_base::failure);
+    }
+
+    {
+        std::vector<unsigned char> serialized;
+        VectorWriter writer{serialized, 0};
+        writer << std::vector<unsigned char>{PSBT_OUT_AMOUNT};
+        writer << std::vector<unsigned char>(8, 0);
+        writer << std::vector<unsigned char>{PSBT_OUT_SCRIPT};
+        writer << std::vector<unsigned char>{};
+        writer << std::vector<unsigned char>{PSBT_OUT_TAP_INTERNAL_KEY};
+        writer << invalid_xonly;
+        writer << PSBT_SEPARATOR;
+
+        SpanReader reader{serialized};
+        BOOST_CHECK_THROW((PSBTOutput{deserialize, reader, /*psbt_version=*/2}), std::ios_base::failure);
+    }
+
+    {
+        std::vector<unsigned char> serialized;
+        VectorWriter writer{serialized, 0};
+        writer << std::vector<unsigned char>{PSBT_OUT_AMOUNT};
+        writer << std::vector<unsigned char>(8, 0);
+        writer << std::vector<unsigned char>{PSBT_OUT_SCRIPT};
+        writer << std::vector<unsigned char>{};
+        std::vector<unsigned char> key{PSBT_OUT_TAP_BIP32_DERIVATION};
+        key.insert(key.end(), invalid_xonly.begin(), invalid_xonly.end());
+        writer << key;
+        writer << std::vector<unsigned char>{0, 0, 0, 0, 0};
+        writer << PSBT_SEPARATOR;
+
+        SpanReader reader{serialized};
+        BOOST_CHECK_THROW((PSBTOutput{deserialize, reader, /*psbt_version=*/2}), std::ios_base::failure);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(psbt_global_value_deserialization_does_not_read_past_value)
