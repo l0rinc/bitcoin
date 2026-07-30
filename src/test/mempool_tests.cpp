@@ -4544,6 +4544,84 @@ BOOST_FIXTURE_TEST_CASE(MempoolV2DisabledMetadataOptions, TestChain100Setup)
     BOOST_CHECK_EQUAL(destination.size(), 0U);
 }
 
+BOOST_FIXTURE_TEST_CASE(MempoolV2PreservesAggregateTotals, TestChain100Setup)
+{
+    bilingual_str error;
+    CTxMemPool::Options source_options{MemPoolOptionsForTest(m_node)};
+    CTxMemPool source_pool{source_options, error};
+    BOOST_REQUIRE(error.empty());
+    mineBlocks(1);
+
+    CKey child_key{GenerateRandomKey()};
+    const CScript parent_spk = GetScriptForDestination(WitnessV0KeyHash(child_key.GetPubKey()));
+    CKey grandchild_key{GenerateRandomKey()};
+    const CScript child_spk = GetScriptForDestination(WitnessV0KeyHash(grandchild_key.GetPubKey()));
+    const CTransactionRef parent_tx = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns[0], 0, 0, coinbaseKey, parent_spk, 49 * COIN, false));
+    const CTransactionRef child_tx = MakeTransactionRef(CreateValidMempoolTransaction(
+        parent_tx, 0, 101, child_key, child_spk, 49 * COIN - 2000, false));
+    const CTransactionRef keeper_tx = MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns[1], 0, 0, coinbaseKey, parent_spk, 49 * COIN, false));
+    TestMemPoolEntryHelper entry;
+    constexpr CAmount PARENT_FEE{COIN};
+    constexpr CAmount CHILD_FEE{2000};
+    constexpr CAmount KEEPER_FEE{COIN};
+    {
+        LOCK2(::cs_main, source_pool.cs);
+        TryAddToMempool(source_pool, entry.Fee(PARENT_FEE).Time(Now<NodeSeconds>()).FromTx(parent_tx));
+        TryAddToMempool(source_pool, entry.Fee(CHILD_FEE).Time(Now<NodeSeconds>()).FromTx(child_tx));
+        TryAddToMempool(source_pool, entry.Fee(KEEPER_FEE).Time(Now<NodeSeconds>()).FromTx(keeper_tx));
+    }
+    source_pool.PrioritiseTransaction(parent_tx->GetHash(), 500);
+    source_pool.AddUnbroadcastTx(child_tx->GetHash());
+
+    const auto expected_total_size = GetVirtualTransactionSize(*parent_tx) +
+        GetVirtualTransactionSize(*child_tx) + GetVirtualTransactionSize(*keeper_tx);
+    {
+        LOCK(source_pool.cs);
+        BOOST_CHECK_EQUAL(source_pool.GetTotalFee(), PARENT_FEE + CHILD_FEE + KEEPER_FEE);
+        BOOST_CHECK_EQUAL(source_pool.GetTotalTxSize(), expected_total_size);
+    }
+
+    const fs::path dump_path = m_path_root / "mempool-v2-aggregate-totals.dat";
+    BOOST_REQUIRE(node::DumpMempool(source_pool, dump_path, fsbridge::fopen, true));
+
+    CTxMemPool& destination = *Assert(m_node.mempool);
+    BOOST_REQUIRE(node::LoadMempool(destination, dump_path, m_node.chainman->ActiveChainstate(), {
+        .use_current_time = true,
+        .apply_fee_delta_priority = true,
+        .apply_unbroadcast_set = true,
+    }));
+    BOOST_REQUIRE_EQUAL(destination.size(), 3U);
+    BOOST_CHECK(destination.exists(parent_tx->GetHash()));
+    BOOST_CHECK(destination.exists(child_tx->GetHash()));
+    BOOST_CHECK(destination.exists(keeper_tx->GetHash()));
+    {
+        LOCK(destination.cs);
+        BOOST_CHECK_EQUAL(destination.GetTotalFee(), PARENT_FEE + CHILD_FEE + KEEPER_FEE);
+        BOOST_CHECK_EQUAL(destination.GetTotalTxSize(), expected_total_size);
+        BOOST_CHECK_EQUAL(destination.info(parent_tx->GetHash()).nFeeDelta, 500);
+    }
+    const auto deltas = destination.GetPrioritisedTransactions();
+    BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+    BOOST_CHECK(deltas.front().txid == parent_tx->GetHash());
+    BOOST_CHECK(deltas.front().in_mempool);
+    BOOST_CHECK_EQUAL(deltas.front().delta, 500);
+    BOOST_CHECK(destination.GetUnbroadcastTxs() == std::set<Txid>{child_tx->GetHash()});
+
+    BOOST_REQUIRE(fs::remove(dump_path));
+    {
+        LOCK2(::cs_main, destination.cs);
+        destination.RemoveUnbroadcastTx(child_tx->GetHash());
+        destination.removeRecursive(CTransaction(*parent_tx), REMOVAL_REASON_DUMMY);
+        destination.removeRecursive(CTransaction(*keeper_tx), REMOVAL_REASON_DUMMY);
+        destination.ClearPrioritisation(parent_tx->GetHash());
+    }
+    BOOST_CHECK_EQUAL(destination.size(), 0U);
+    BOOST_CHECK(destination.GetUnbroadcastTxs().empty());
+    BOOST_CHECK(destination.GetPrioritisedTransactions().empty());
+}
+
 BOOST_FIXTURE_TEST_CASE(MempoolV2FeeOptionDisabledUnbroadcastEnabled, TestChain100Setup)
 {
     bilingual_str error;
