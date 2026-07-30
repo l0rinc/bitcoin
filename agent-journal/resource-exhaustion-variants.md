@@ -176,3 +176,68 @@ compaction trigger.
 ## Rotation note
 Three cycles; HTTP accounting bounded, scan/resize race fixed,
 queueing now measured. getblockstats-pruning remains.
+
+## Cycle 4 (2026-07-30): getblockstats under pruning — horizon correct, 70k race calls clean; DISMISSED
+
+### Draw
+Re-harvested-queue draw (seed_raw=6880818164717981818, masked
+same, n=4, idx=2) -> getblockstats-pruning -> #7 (fourth cycle; c2
+queue cell). Branch: audit/resource-exhaustion-c4 from f3d7414268
+(#7 c3 journal tip).
+
+### Hypothesis
+getblockstats over pruned/horizon-adjacent heights could fail
+uncleanly (hang, crash, garbage stats) or misreport when block or
+undo files are pruned mid-read.
+
+### Code audit
+GetBlockChecked/GetUndoChecked (rpc/blockchain.cpp:699-747) are
+race-aware: availability checked under cs_main, read unlocked,
+prune-in-the-gap -> clean JSONRPCError ('Block not found on disk'
+/ 'Can't read undo data from disk'); pruned heights -> 'Block/Undo
+data not available (pruned data)' (:684-696).
+
+### Experiment (driver /tmp/gbs_prune.py; -fastprune -prune=1,
+PortSeed 321, 350 lean blocks then pruneblockchain(151))
+- tip=451, pruneheight=152 after explicit pruneblockchain
+  (-prune=1 is MANUAL-only, init.cpp:551; v2 proved automatic
+  pruning needs >=550 — recorded as harness lesson).
+- stats at tip: OK (totalfee>0 with undo data).
+- stats at pruneheight (oldest available): OK.
+- h=5 and h=pruneheight-1: clean 'pruned data' JSONRPCError.
+- Race: 70,156 getblockstats calls at pruneheight-{1,2,3} while the
+  main thread mined 5 more blocks and advanced the horizon 5 times
+  -> 0 anomalies (every call full stats or the clean pruned error;
+  no hangs, crashes, or garbage).
+
+### Verdict
+DISMISSED: getblockstats is correct and clean under pruning —
+full stats at/above the horizon, precise pruned-data errors below
+it, race-safe against horizon advancement. No resource-exhaustion
+or failure-contract issue.
+
+### Harness lessons (recorded, all three cost a run)
+- v1: MiniWallet get_utxo(confirmed_only) is O(wallet utxos) per
+  call — quadratic at ~470k utxos; stalled block production (17
+  CPU-minutes in python). Lean profiles (~25 kB blocks) avoid it.
+- v2: -prune=1 enables MANUAL pruning only; automatic pruning
+  needs >=550 (init.cpp:551). pruneblockchain RPC drives the
+  horizon directly.
+- v2: TestNode's shared AuthServiceProxy is NOT thread-safe
+  (CannotSendRequest under concurrent use) — one proxy per thread.
+
+### Exact commands
+- python3 /tmp/gbs_prune.py (v3 output above); code refs
+  rpc/blockchain.cpp:684-747, :2046-2047, init.cpp:551,
+  node/blockstorage.cpp:912-918.
+
+### Limitations / queue
+- The race window hit only the pruned side of the horizon (scanner
+  formula probed ph-{1..3}); the ok side is covered by the static
+  tip/pruneheight checks. A boundary-straddling variant is a
+  nicety, not queued.
+- #7 cells all closed.
+
+## Rotation note
+Four cycles; HTTP accounting, scan/resize race, scan queueing,
+and getblockstats-pruning all closed with measurements.
