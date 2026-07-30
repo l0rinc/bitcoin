@@ -5,6 +5,8 @@
 #ifndef BITCOIN_CRYPTO_HKDF_SHA256_32_H
 #define BITCOIN_CRYPTO_HKDF_SHA256_32_H
 
+#include <support/cleanse.h>
+
 #include <cstddef>
 #include <string>
 
@@ -16,7 +18,14 @@ private:
     static constexpr size_t OUTPUT_SIZE{32};
 
 public:
+    // Avoid duplicating the pseudorandom key held by this context.
+    CHKDF_HMAC_SHA256_L32(const CHKDF_HMAC_SHA256_L32&) = delete;
+    CHKDF_HMAC_SHA256_L32& operator=(const CHKDF_HMAC_SHA256_L32&) = delete;
+    CHKDF_HMAC_SHA256_L32(CHKDF_HMAC_SHA256_L32&&) = delete;
+    CHKDF_HMAC_SHA256_L32& operator=(CHKDF_HMAC_SHA256_L32&&) = delete;
+
     CHKDF_HMAC_SHA256_L32(const unsigned char* ikm, size_t ikmlen, const std::string& salt);
+    ~CHKDF_HMAC_SHA256_L32() { memory_cleanse(m_prk, sizeof(m_prk)); }
     void Expand32(const std::string& info, unsigned char hash[OUTPUT_SIZE]);
 };
 

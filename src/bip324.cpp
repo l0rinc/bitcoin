@@ -73,7 +73,6 @@ void BIP324Cipher::Initialize(const EllSwiftPubKey& their_pubkey, bool initiator
     // Wipe all variables that contain information which could be used to re-derive encryption keys.
     memory_cleanse(ecdh_secret.data(), ecdh_secret.size());
     memory_cleanse(hkdf_32_okm.data(), sizeof(hkdf_32_okm));
-    memory_cleanse(&hkdf, sizeof(hkdf));
     m_key = CKey();
 }
 
