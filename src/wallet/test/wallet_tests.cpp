@@ -141,6 +141,48 @@ BOOST_FIXTURE_TEST_CASE(migration_transaction_write_failure_is_reported, WalletT
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(migration_corrupt_best_block_is_reported, WalletTestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    const CKey key{GenerateRandomKey()};
+    std::optional<MigrationData> data;
+
+    {
+        LOCK(wallet.cs_wallet);
+        auto* legacy_spkm = wallet.GetOrCreateLegacyDataSPKM();
+        BOOST_REQUIRE(legacy_spkm);
+        BOOST_REQUIRE(legacy_spkm->AddKey(key));
+
+        bilingual_str error;
+        data = wallet.GetDescriptorsForLegacy(error);
+        BOOST_REQUIRE(data);
+
+        // ApplyMigrationData replaces the legacy SPKM. Point the test wallet's cache at the
+        // descriptors that will be installed so RefreshAllTXOs does not retain a stale legacy pointer.
+        for (const auto& desc_spkm : data->desc_spkms) {
+            std::set<CScript> scripts;
+            for (const auto& migrated_script : desc_spkm->GetScriptPubKeys()) scripts.insert(migrated_script);
+            wallet.CacheNewScriptPubKeys(scripts, desc_spkm.get());
+        }
+    }
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+    DataStream best_block_key;
+    best_block_key << DBKeys::BESTBLOCK;
+    const std::string insert{
+        "INSERT OR REPLACE INTO main(key,value) VALUES (X'" + HexStr(std::span<const std::byte>{best_block_key}) + "', X'01')"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, insert.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    {
+        LOCK(wallet.cs_wallet);
+        WalletBatch batch{wallet.GetDatabase()};
+        BOOST_REQUIRE(batch.TxnBegin());
+        BOOST_CHECK(!wallet.ApplyMigrationData(batch, *data));
+        BOOST_REQUIRE(batch.TxnAbort());
+        BOOST_CHECK(wallet.GetLegacyDataSPKM());
+    }
+}
+
 BOOST_FIXTURE_TEST_CASE(setlabel_write_failure_is_reported, WalletTestingSetup)
 {
     WalletContext& context{*Assert(m_wallet_loader->context())};

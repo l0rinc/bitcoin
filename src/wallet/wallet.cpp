@@ -4006,6 +4006,12 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
     // Note: when the legacy wallet has no spendable scripts, it must be empty at the end of the process.
     bool has_spendable_material = !data.desc_spkms.empty() || data.master_key.key.IsValid();
 
+    // Read this before changing in-memory or on-disk migration state so a corrupt record cannot leave a partial migration.
+    CBlockLocator best_block_locator;
+    if (local_wallet_batch.ReadBestBlockResult(best_block_locator) == BestBlockReadResult::ERROR) {
+        return util::Error{_("Error: Unable to read wallet's best block locator record")};
+    }
+
     // Get all invalid or non-watched scripts that will not be migrated
     std::set<CTxDestination> not_migrated_dests;
     for (const auto& script : legacy_spkm->GetNotMineScriptPubKeys()) {
@@ -4048,11 +4054,6 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
             SetupOwnDescriptorScriptPubKeyMans(local_wallet_batch);
         }
     }
-
-    // Get best block locator so that we can copy it to the watchonly and solvables
-    // Note: The best block locator was introduced in #152 so ancient wallets do not have it
-    CBlockLocator best_block_locator;
-    (void)local_wallet_batch.ReadBestBlock(best_block_locator);
 
     // Update m_txos to match the descriptors remaining in this wallet
     m_txos.clear();

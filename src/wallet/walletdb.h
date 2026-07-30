@@ -55,6 +55,13 @@ enum class DBErrors : int
     CORRUPT = 10,
 };
 
+enum class BestBlockReadResult
+{
+    FOUND,
+    NOT_FOUND,
+    ERROR,
+};
+
 namespace DBKeys {
 extern const std::string ACENTRY;
 extern const std::string ACTIVEEXTERNALSPK;
@@ -241,6 +248,7 @@ public:
     bool EraseWatchOnly(const CScript &script);
 
     bool WriteBestBlock(const CBlockLocator& locator);
+    BestBlockReadResult ReadBestBlockResult(CBlockLocator& locator);
     bool ReadBestBlock(CBlockLocator& locator);
 
     // Returns true if wallet stores encryption keys

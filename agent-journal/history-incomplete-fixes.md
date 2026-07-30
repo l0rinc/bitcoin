@@ -1,5 +1,124 @@
 # Whole-history incomplete-fix and migration mining
 
+## Cycle 173 start: distinct follow-up and compatibility mining
+
+### Fresh selection and gate
+
+- The exact post-Cycle-172 selector returned `30`, which was explicitly closed
+  by Cycle 164. The required exact reroll returned `32`
+  (`history-incomplete-fixes`).
+- Branch: `uber-cycle-173-history-incomplete-fixes-20260730`.
+- Start HEAD: `2adf2d2ba43e7688a589a18f8866686c77b94d13`; origin/master:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1127 42`.
+- `git fetch origin master`, tracked/index diff checks, and the input-hash
+  gate passed. Known untracked agent/user artifacts remain outside scope.
+  PIDs `777094` and `956381` are persistent unrelated unit tests and must not
+  be stopped.
+- Catalog, prompt, corrected goals TSV, and protocol hashes remain
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+### Exclusions and initial hypothesis
+
+This is a new goal-32 cell. Do not reopen Cycle 167's auxiliary-wallet
+settings transaction boundary, Cycle 137's empty `-connect` retry loop, Cycle
+58's `ReadBlockUndo` output atomicity, or Cycle 43's wallet migration write
+return. Also exclude later source commits already reviewed in those journals.
+
+Mine historical partial fixes, follow-up commits, reverted changes, and
+compatibility migrations for a current sibling with a different source,
+caller, trust boundary, or lifecycle. Prioritize fixes that changed only one
+variant, moved a check without moving publication/cleanup, introduced a new
+field without updating a serializer/index/accounting path, or preserved old
+behavior in one build/module while changing another. A candidate must have a
+current call path and a concrete failure or invariant mismatch; history is a
+seed, not proof.
+
+Initial queue:
+
+1. Recent follow-up pairs involving error returns, cleanup, persistence, or
+   compatibility options; compare every sibling call site on current HEAD.
+2. Reverted or partially reverted changes whose original rationale still
+   applies to a current alternate path or feature configuration.
+3. Migration/format changes outside wallet settings, especially readers and
+   writers that accept both legacy and current state across restart.
+
+For every candidate, record the seed commit and rationale, current source and
+callers, trust boundary, expected contract, exact reproducer or proof, prior
+finding search, and an independent verdict before changing code. Keep the
+smallest self-contained commit discipline from the uber protocol and continue
+to a new historical cell after each verdict.
+
+### Cycle 173 candidate: migration collapsed a corrupt locator into an ancient wallet
+
+- Historical seed: `fd44d48b24` (`wallet: fix ancient wallets migration`), merged
+  by `5486ef8cc2`. The change correctly stopped treating a missing best-block
+  locator as an error because wallets predating PR #152 do not contain either
+  locator record; the resulting empty locator intentionally causes a rescan.
+  The current `CWallet::ApplyMigrationData()` still ignores the boolean result
+  at `src/wallet/wallet.cpp`, while `WalletBatch::ReadBestBlock()` returns the
+  same `false` value for a missing key, a database read failure, and a
+  deserialization failure.
+- Current contract and trust boundary: a legacy wallet database is local input;
+  an absent locator is valid compatibility state, a valid empty locator is a
+  valid rescan request, and an existing undecodable locator is corrupt state
+  that must stop migration. `WriteBestBlock()` intentionally writes an empty
+  `BESTBLOCK` record plus the actual `BESTBLOCK_NOMERKLE` record, so the former
+  cannot be treated as corruption merely because its locator is empty. Current
+  callers of the boolean API are export, chain selection/rescan, and wallet
+  tests; the migration caller is the only one that needs to distinguish absence
+  from corruption.
+- Independent source verification: `DatabaseBatch::Read()` in
+  `src/wallet/db.h` returns false for both `ReadKey()` failure and stream decode
+  exceptions, while `DatabaseBatch::Exists()` checks the serialized key. The
+  SQLite and Berkeley read implementations retain the raw record/key
+  distinction, so a present malformed value can be detected without changing
+  the existing boolean callers. SQLite low-level I/O errors that make both
+  `ReadKey()` and `HasKey()` fail remain a documented limitation; this fix is
+  specifically for a present undecodable record.
+- Failing-before reproduction: the new
+  `wallet_tests/migration_corrupt_best_block_is_reported` inserts a raw
+  `BESTBLOCK` value `X'01'`, which encodes a truncated nonempty locator. On the
+  pre-fix binary, the exact command
+  `/data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=wallet_tests/migration_corrupt_best_block_is_reported --log_level=test_suite --report_level=short --color_output=false`
+  exited 201 at `wallet_tests.cpp(180)` because
+  `!wallet.ApplyMigrationData(batch, *data)` was false. The malformed record
+  was therefore treated like an ancient missing record and migration returned
+  success.
+- Fix: add `BestBlockReadResult::{FOUND, NOT_FOUND, ERROR}` and
+  `WalletBatch::ReadBestBlockResult()`. It preserves empty-`BESTBLOCK` fallback
+  behavior, reports a present undecodable `BESTBLOCK` or
+  `BESTBLOCK_NOMERKLE` as `ERROR`, and leaves `ReadBestBlock()` as a boolean
+  compatibility wrapper. `ApplyMigrationData()` rejects `ERROR` before any
+  in-memory or on-disk migration mutation, preserving the legacy script manager
+  when the database is corrupt.
+- Regression tests: `wallet_tests/migration_corrupt_best_block_is_reported`
+  now passes 8/8 assertions and confirms the legacy manager remains present;
+  `walletdb_tests/walletdb_best_block_read_result` covers absent and valid-empty
+  locator states with 3/3 assertions. The existing
+  `wallet_tests/migration_transaction_write_failure_is_reported` remains green
+  with 8/8 assertions, confirming ancient/no-locator compatibility and the
+  later write-failure path.
+- Build and commands: `CCACHE_DIR=/data/my_storage/tmp/cycle170-ccache make -C
+  /data/my_storage/tmp/cycle89-build -j2 test_bitcoin` passed after the source
+  change; `git diff --check` passed. The first build attempt failed only because
+  the pre-existing build configuration pointed ccache at missing
+  `/root/.cache/ccache/tmp`; rerunning with the `/data` cache succeeded. No
+  default wallet, datadir, key, or production database was used. The two
+  unrelated long-running wallet tests (`777094`, `956381`) were preserved.
+
+Verdict: confirmed and fixed. This is a local wallet migration/corruption
+handling defect: the historical compatibility fix was incomplete because it
+discarded the information needed to reject a present malformed locator. The
+patch does not alter the on-disk format or the boolean behavior of existing
+readers, and it does not claim that low-level I/O failures are fully
+distinguishable from absent records. Commit the source/test/journal finding as
+one self-contained change, then record the cycle state separately and continue
+with a fresh goal draw.
+
 ## Cycle 167: migration-side persistence follow-up
 
 ### Selection and gate
