@@ -1,5 +1,54 @@
 # Release-to-release behavioral and consensus differential
 
+## Cycle 127: prune and persistence differential (complete)
+
+### Selection and gate
+
+- First selector: `shuf -i 0-98 -n 1` -> `36` (`sanitizer-analysis-matrix`), rejected because its MSan/instrumented-dependency, direct TokenPipe, and analyzer-warning cells were already closed in Cycles 26 and 78 with no new evidence.
+- Accepted selector: `shuf -i 0-98 -n 1` -> `67` (`release-version-differential`).
+- Branch: `uber-cycle-127-release-version-differential-20260730`.
+- Cycle start HEAD: `171cdb9f32e6ca3b144cc1d62563876e4f6b6007`.
+- `origin/master`: `9611a356035be531d62bfc40879f388d5dc359c4`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `40 1043` (`origin/master...HEAD`).
+- Fresh gate: `git fetch origin master --quiet` passed; tracked/index state was clean; `git diff --check` passed; catalog/protocol/TSV hashes matched; persistent PID `777094` and its parent `725042` were preserved.
+
+### Distinct scope and hypothesis
+
+Cycle 125 covered fixed script/transaction vectors, and Cycle 109 already covered a coinbase-only reorg/restart with unpruned chainstate. This cycle selects the remaining prune/persistence cell: run the same isolated regtest prune workflow on v31.1 and current, explicitly invoke block pruning, restart after pruning, exercise a short post-prune fork/reorg boundary, and compare chain identity, prune height, block availability/error behavior, chainstate queries, and durable files. Do not repeat the completed unpruned coinbase-only matrix or infer a defect from expected block-file layout differences.
+
+The hypothesis is that pruning or restart could leave an inconsistent active tip, stale prune height, unusable retained block/undo boundary, or divergent reorg behavior between the release and current implementation. Any difference must be classified from source/history and reproduced with the same deterministic command sequence before a fix is considered.
+
+### Execution and controls
+
+The v31.1 release daemon is `/data/my_storage/tmp/cycle109-release-differential/v31.1-build/bin/bitcoind` (`v31.1.0`); the current daemon is `/data/my_storage/tmp/cycle105-clang19-release/bin/bitcoind` (`v31.99.0-a51e47bb0c90-dirty`). The persistent wallet unit-test process was not touched. An initial launch using unsupported legacy option `-upnp=0` failed before initialization in both versions; it created no chain data and is retained only as a configuration artifact. The corrected run used isolated datadirs, `-regtest -server -listen=0 -discover=0 -dnsseed=0 -connect=0 -prune=1 -fastprune=1`, separate RPC/P2P ports, and `setmocktime 1700000000`.
+
+The first corrected run mined 800 coinbase-only blocks independently in each version, called `pruneblockchain 400`, invalidated the tip, and restarted. It returned `pruneblockchain=253` and `getblockchaininfo.pruneheight=254` on v31.1, versus `254` and `255` on current. This was an expected fixture difference, not yet a verdict: v31.1's generated blocks had `weight=892`/`size=250` at height 800, while current had `weight=888`/`size=249`.
+
+To remove that confounder, a non-pruned current node generated one common 800-block stream and a two-block alternate fork using the same fixed mock times. The raw block corpus is `/data/my_storage/tmp/cycle127-common-blocks.Go5GHi/blocks.jsonl`, SHA-256 `d3120a34bf109b5adbcb7c642f8b520011d524fbb7f33f7e3dc18117e1f7d584`; the common fork corpus is `fork-blocks.jsonl`, SHA-256 `d0f088603dd99d5536460e45c4cb5c023feb610b668de294aaabe646fa1164c1`. Both v31.1 and current accepted all 800 common blocks with zero failures. Each then pruned at 400, invalidated common height 800, accepted both common fork blocks, and was stopped/restarted.
+
+### Results
+
+- With the identical block bytes, both versions returned `pruneblockchain=254` and reported `pruneheight=255`. Blocks at heights 100, 249, 253, and 254 returned `Block not available (pruned data)`; heights 255, 256, 400, 799, and 800 were readable. The submit-result manifests are byte-for-byte identical (`c26a2a1441afd18362f83202b33849496a54ccfc4e47a1a911062012ee033fdc`).
+- Both versions accepted the identical alternate fork (`submitblock` returned `null` twice), ended at height 801, and reported the old height-800 block as an invalid one-block branch. After restart, both retained the same active/fork tip hashes, `pruneheight=255`, 801 transactions/txouts, total amount `14562.5`, and the same serialized UTXO state. Their version-specific `disk_size`, warning, verification-progress, and log capitalization differences are non-semantic.
+- `verifychain 4 0` returned `false` on both pruned nodes, with both logs explicitly stopping verification at height 254 because block data was unavailable and reporting no coin-database inconsistencies for the retained range. This is the documented limitation of full verification on pruned data, not a cross-version failure.
+- The current and v31.1 `blockchain_tests` binaries each passed 8 cases and 13 assertions, including the `GetPruneHeight` contract and invalidation case, with exit code 0. The current source's `feature_index_prune.py` and `rpc_getblockfrompeer.py` expected values are already updated from 248 to 249; the v31.1 versions retain 248. That test-vector change matches the observed one-byte block-size effect.
+
+### Classification and verdict
+
+The independent source/history explanation is commit `58eeab790d9825a777f907e3e912a2da78cbc76d` (`mining: only pad with OP_0 at heights <= 16`). It removes the dummy coinbase `OP_0` above height 16, making each newly mined block one byte shorter. Its commit message explicitly records that this shifts block-file wrapping and pruning boundaries, and it updates the pruning and block-fetch functional expectations. The first-run 250-versus-249-byte height-800 blocks and one-block boundary shift are therefore intentional release drift, not a persistence or pruning defect.
+
+Verdict: dismissed for this cycle; no unexplained release-to-release prune, reorg, restart, block-availability, chainstate, or UTXO divergence was found. No production or permanent test change is justified. The earlier fixed-vector, coinbase-only unpruned, and current prune cells are now covered; remaining release-differential cells are historical mainnet blocks, wallet/database migration, P2P transcripts, release-branch backports, and any new version-specific evidence.
+
+### Exact validation and limitations
+
+The focused test commands were:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle127-tests-v311 /data/my_storage/tmp/cycle125-v311-test/bin/test_bitcoin --run_test=blockchain_tests --log_level=test_suite --report_level=short
+TMPDIR=/data/my_storage/tmp/cycle127-tests-current /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=blockchain_tests --log_level=test_suite --report_level=short
+```
+
+Both passed. The controlled daemon run has no wallet, external indexes, historical mainnet blocks, network peers, or wallet/database migration. It does not claim compatibility for other release branches or non-regtest block compositions. No relevant process remains running; scratch raw blocks, datadirs, logs, and manifests remain under `/data/my_storage/tmp/cycle127-common-blocks.Go5GHi/`.
+
 ## Cycle 125: v31.1/current consensus-vector differential
 
 ### Selection and gate
