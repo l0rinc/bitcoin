@@ -4183,10 +4183,24 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
                                       pindexPrev->GetMedianTimePast() :
                                       block.GetBlockTime()};
 
+    const bool enforce_bip54{DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)};
+
+    // Make sure the coinbase transaction is timelocked to the block's height. This runs before the
+    // generic finality check below, which would otherwise report a locktime above the block height
+    // as an ordinary non-final transaction rather than as this rule.
+    if (nHeight > 0 && enforce_bip54) {
+        Assert(!block.vtx.empty() && block.vtx[0] && !block.vtx[0]->vin.empty());
+        if (block.vtx[0]->nLockTime != static_cast<uint32_t>(nHeight - 1)) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-locktime", "block height mismatch in coinbase nLockTime");
+        }
+        if (block.vtx[0]->vin[0].nSequence == CTxIn::SEQUENCE_FINAL) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-sequence", "locktime is disabled for coinbase");
+        }
+    }
+
     // Check that no transaction is 64-byte and that all transactions are finalized.
-    const bool check_txs_size{DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)};
     for (const auto& tx : block.vtx) {
-        if (check_txs_size && GetSerializeSize(TX_NO_WITNESS(tx)) == INVALID_TX_NONWITNESS_SIZE) {
+        if (enforce_bip54 && GetSerializeSize(TX_NO_WITNESS(tx)) == INVALID_TX_NONWITNESS_SIZE) {
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-size", "block contains a 64 bytes transaction");
         }
         if (!IsFinalTx(*tx, nHeight, nLockTimeCutoff)) {
@@ -4201,17 +4215,6 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
         if (block.vtx[0]->vin[0].scriptSig.size() < expect.size() ||
             !std::equal(expect.begin(), expect.end(), block.vtx[0]->vin[0].scriptSig.begin())) {
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-height", "block height mismatch in coinbase");
-        }
-    }
-
-    // Make sure the coinbase transaction is timelocked to the block's height.
-    if (nHeight > 0 && DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)) {
-        Assert(!block.vtx.empty() && block.vtx[0] && !block.vtx[0]->vin.empty());
-        if (block.vtx[0]->nLockTime != static_cast<uint32_t>(nHeight - 1)) {
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-locktime", "block height mismatch in coinbase nLockTime");
-        }
-        if (block.vtx[0]->vin[0].nSequence == CTxIn::SEQUENCE_FINAL) {
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-sequence", "locktime is disabled for coinbase");
         }
     }
 

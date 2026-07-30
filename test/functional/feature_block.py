@@ -921,7 +921,7 @@ class FullBlockTest(BitcoinTestFramework):
         b63.vtx[0].nLockTime = 0xffffffff
         b63.vtx[0].vin[0].nSequence = 0xDEADBEEF
         b63 = self.update_block(63, [])
-        self.send_blocks([b63], success=False, reject_reason='bad-txns-nonfinal', reconnect=True)
+        self.send_blocks([b63], success=False, reject_reason='bad-cb-locktime', reconnect=True)
 
         #  This checks that a block with a bloated VARINT between the block_header and the array of tx such that
         #  the block is > MAX_BLOCK_WEIGHT with the bloated varint, but <= MAX_BLOCK_WEIGHT without the bloated varint,

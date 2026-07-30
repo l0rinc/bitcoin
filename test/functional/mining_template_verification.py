@@ -100,11 +100,11 @@ class MiningTemplateVerificationTest(BitcoinTestFramework):
         bad_block.vtx.append(bad_tx)
         assert_template(node, bad_block, 'bad-txns-inputs-missingorspent')
 
-    def non_final_transaction_test(self, node, block):
-        self.log.info("Non-final transaction")
+    def coinbase_locktime_test(self, node, block):
+        self.log.info("Invalid coinbase locktime")
         bad_block = copy.deepcopy(block)
         bad_block.vtx[0].nLockTime = 2**32 - 1
-        assert_template(node, bad_block, 'bad-txns-nonfinal')
+        assert_template(node, bad_block, 'bad-cb-locktime')
 
     def bad_tx_count_test(self, node, block):
         self.log.info("Bad tx count")
@@ -280,7 +280,7 @@ class MiningTemplateVerificationTest(BitcoinTestFramework):
         self.truncated_final_transaction_test(node, block_2)
         self.duplicate_transaction_test(node, block_2)
         self.thin_air_spending_test(node, block_2)
-        self.non_final_transaction_test(node, block_2)
+        self.coinbase_locktime_test(node, block_2)
         self.bad_tx_count_test(node, block_2)
         self.nbits_test(node, block_2)
         self.merkle_root_test(node, block_2)

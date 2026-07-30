@@ -495,7 +495,7 @@ class MiningTest(BitcoinTestFramework):
         bad_block_lock.vtx[0].nLockTime = 2**32 - 1
         bad_block_lock.hashMerkleRoot = bad_block_lock.calc_merkle_root()
         bad_block_lock.solve()
-        assert_equal(node.submitblock(hexdata=bad_block_lock.serialize().hex()), 'bad-txns-nonfinal')
+        assert_equal(node.submitblock(hexdata=bad_block_lock.serialize().hex()), 'bad-cb-locktime')
         assert_equal(node.submitblock(hexdata=bad_block_lock.serialize().hex()), 'duplicate-invalid')
         # Build a "good" block on top of the submitted bad block
         bad_block2 = copy.deepcopy(block)
