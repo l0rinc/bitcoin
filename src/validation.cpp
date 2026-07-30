@@ -4201,10 +4201,10 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
         }
     }
 
-    // Check that no transaction is 64-byte and that all transactions are finalized.
+    // Check that no transaction is 64 bytes long and that all transactions are finalized.
     for (const auto& tx : block.vtx) {
         if (enforce_bip54 && GetSerializeSize(TX_NO_WITNESS(tx)) == INVALID_TX_NONWITNESS_SIZE) {
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-size-64", "block contains a 64 bytes transaction");
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-size-64", "block contains a 64-byte transaction");
         }
         if (!IsFinalTx(*tx, nHeight, nLockTimeCutoff)) {
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-nonfinal", "non-final transaction");
