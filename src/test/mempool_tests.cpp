@@ -1042,7 +1042,7 @@ BOOST_FIXTURE_TEST_CASE(MempoolV2DuplicateTransactionRecords, TestChain100Setup)
     BOOST_CHECK(destination.GetPrioritisedTransactions().empty());
 }
 
-BOOST_FIXTURE_TEST_CASE(MempoolV1PartialImportMetadata, TestChain100Setup)
+BOOST_FIXTURE_TEST_CASE(MempoolV1PartialImportPreservesMetadataAndTotals, TestChain100Setup)
 {
     mineBlocks(1);
     const CTransactionRef tx_before = MakeTransactionRef(CreateValidMempoolTransaction(
@@ -1080,6 +1080,13 @@ BOOST_FIXTURE_TEST_CASE(MempoolV1PartialImportMetadata, TestChain100Setup)
     BOOST_CHECK(destination.exists(tx_before->GetHash()));
     BOOST_CHECK(destination.exists(tx_after->GetHash()));
     BOOST_CHECK(!destination.exists(invalid_tx->GetHash()));
+    const auto expected_total_size = GetVirtualTransactionSize(*tx_before) +
+        GetVirtualTransactionSize(*tx_after);
+    {
+        LOCK(destination.cs);
+        BOOST_CHECK_EQUAL(destination.GetTotalFee(), 2 * COIN);
+        BOOST_CHECK_EQUAL(destination.GetTotalTxSize(), expected_total_size);
+    }
     BOOST_CHECK_EQUAL(destination.info(tx_before->GetHash()).nFeeDelta, 1000);
     BOOST_CHECK_EQUAL(destination.info(tx_after->GetHash()).nFeeDelta, 3000);
 
