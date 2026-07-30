@@ -139,4 +139,12 @@ BOOST_AUTO_TEST_CASE(rename)
     fs::remove(path2);
 }
 
+BOOST_AUTO_TEST_CASE(directory_commit_missing_directory)
+{
+#ifndef WIN32
+    const fs::path missing_directory{m_args.GetDataDirBase() / "missing-directory"};
+    BOOST_CHECK(!DirectoryCommit(missing_directory));
+#endif
+}
+
 BOOST_AUTO_TEST_SUITE_END()
