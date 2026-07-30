@@ -580,6 +580,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    -> missing-inputs-arm -> #50 c13 (programmatic MISSING_INPUTS
    arms: 3 gates + control driven in-process; persistent oracle
    O12, gate-2 mutation killed).
+   RE-RANK draw 124 (3-cell queue): raw=8742819288871107508 -> idx 1
+   -> history-persistence-artifacts -> #41 c2 (mempool.dat:
+   badver rejected pre-loop zero-mutation, v2 full round-trip,
+   flip per-entry-fail tolerance, trunc tolerant abort; DISMISSED).
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
