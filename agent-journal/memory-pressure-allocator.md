@@ -332,3 +332,52 @@ or a concrete runtime retained-memory discrepancy supplies new evidence.
 3. Audit `DynamicMemoryUsage()` implementations for omitted retained
    capacity or double-counted ownership using an independent recomputation
    oracle and a temporary mutation.
+
+### Cycle 170 completion
+
+- Branch: `uber-cycle-170-memory-pressure-allocator-20260730`. Start HEAD was
+  `27a40f68419d290b117f499e3d9e6c4120a9f26f`; the source/test/journal commit
+  is `a84b27f5c21b2c6b1cf7607a0699f0c002aa0651`, authored as
+  `Lőrinc <pap.lorinc@gmail.com>`, with subject `mempool: account for
+  unbroadcast transaction memory`.
+- The confirmed defect was the omitted `m_unbroadcast_txids` tree-node memory
+  in `CTxMemPool::DynamicMemoryUsage()`. The permanent regression compares the
+  before/after delta with `memusage::DynamicUsage(std::set<Txid>)` and checks
+  exact removal symmetry. Removing only the production term made the focused
+  test fail with `[0 != 80]` and exit code 201; restoring it passed. The
+  post-commit GCC rebuild with
+  `CCACHE_DIR=/data/my_storage/tmp/cycle170-ccache` exited 0, the focused test
+  passed 1 case and 2 assertions, and the full `mempool_tests` suite passed 25
+  cases and 425 assertions. The independent Clang 19 UBSan/alignment/object-
+  size run also passed 25 cases and 425 assertions. An earlier post-commit
+  build wrapper without `CCACHE_DIR` failed only because `/root/.cache/ccache/tmp`
+  was absent; it was rerun successfully with the scratch cache and is not a
+  source failure.
+- The chainstate cache and other dynamic-usage cells were dismissed for this
+  cycle with source, history, existing recomputation tests, and documented
+  ownership exclusions. The next memory queue remains package admission and
+  eviction, repeated chainstate resize/flush retention, and newly added owned
+  containers in other usage functions. Do not reopen the fixed unbroadcast
+  cell, Cycle 53's prevector OOM policy, or Cycle 88's receive accounting
+  without a distinct contract or new evidence.
+- Close gate after `git fetch origin master`: HEAD was
+  `a84b27f5c21b2c6b1cf7607a0699f0c002aa0651`, `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and
+  `git rev-list --left-right --count HEAD...origin/master` returned
+  `1122 42`. `git diff --check` passed. The only worktree changes after the
+  source commit were this handoff and the state ledger; known untracked goal,
+  journal, package, and test-cache artifacts were preserved. PIDs 777094
+  (`wallet_tests`) and 956381 (`util_tests`) remained alive. `/` had 110 MiB
+  free at 99% and `/data` had 50 GiB free at 95%; no full current-tree suite
+  result is claimed.
+- Catalog/prompt/TSV/protocol hashes at the gate were respectively
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Verdict: confirmed and fixed. The first next selector command returned `53`
+  (`statistical-timing`), which was rerolled because its existing timing cells
+  are closed; the required reroll returned `80` (`fuzz-engine-differential`).
+  A separate state-only close commit follows. The next run must perform a
+  fresh gate and open `uber-cycle-171-fuzz-engine-differential-20260730`.

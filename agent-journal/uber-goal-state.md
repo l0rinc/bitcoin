@@ -2,6 +2,55 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 170 Completion
+
+- Cycle 170 selected goal `74` (`memory-pressure-allocator`) by the exact
+  selector `shuf -i 0-98 -n 1` -> `74` after the Cycle 169 gate. The dedicated
+  branch was `uber-cycle-170-memory-pressure-allocator-20260730`; start HEAD
+  was `27a40f68419d290b117f499e3d9e6c4120a9f26f`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence
+  `1121 42`. The catalog, prompt, corrected goals TSV, and protocol hashes
+  remained `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The confirmed defect was an omitted retained allocation: locally submitted
+  transactions are inserted into `CTxMemPool::m_unbroadcast_txids`, but
+  `CTxMemPool::DynamicMemoryUsage()` did not count the set. `getmempoolinfo`
+  reports this estimate as `usage`, and chainstate cache budgeting uses it to
+  calculate unused mempool space. The history trace found the set introduced
+  in `89eeb4a333` after the old accounting formula, with no later accounting
+  extension. The source fix adds `memusage::DynamicUsage(m_unbroadcast_txids)`.
+- The source/test/journal commit is `a84b27f5c21b2c6b1cf7607a0699f0c002aa0651`
+  (`mempool: account for unbroadcast transaction memory`), authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. Its permanent test compares the usage delta
+  with an independent `std::set<Txid>` oracle and checks removal symmetry. A
+  temporary mutation removing only the new term failed with `0 != 80` (exit
+  201); the restored fixed source passed. The post-commit GCC rebuild passed
+  with the scratch ccache, its focused test passed 1 case/2 assertions, and
+  its full mempool suite passed 25 cases/425 assertions. Clang 19 UBSan,
+  alignment, and object-size verification also passed 25/425. A full current
+  unit suite was not run because `/` remained at 99% capacity; no such result
+  is claimed.
+- Chainstate cache resize/reallocation and other usage implementations were
+  reviewed as dismissed cells: current source and tests explicitly recompute
+  coin-cache ownership, force flush/reallocation on shrink, and document
+  pool-retention behavior; transaction-graph temporary memory is explicitly
+  outside its main committed estimate. The detailed evidence and next queue
+  are in `agent-journal/memory-pressure-allocator.md`.
+- The close gate after `git fetch origin master` passed with HEAD
+  `a84b27f5c21b2c6b1cf7607a0699f0c002aa0651`, origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and left/right divergence
+  `1122 42`. `git diff --check` passed. PIDs `777094` and `956381` and all
+  known unrelated untracked artifacts were preserved. The next selector first
+  returned `53` (`statistical-timing`), which was explicitly closed in the
+  ledger, so the required reroll returned `80` (`fuzz-engine-differential`).
+- Verdict: confirmed and fixed. A separate state-only close commit follows;
+  after it, the next cycle must perform a fresh gate and open
+  `uber-cycle-171-fuzz-engine-differential-20260730`.
+
 ## Cycle 169 Completion
 
 - Cycle 169 started at `c5c8c01b6ec551c86a08c5c1e681a828106d0762` on branch `uber-cycle-169-benchmark-integrity-20260730`; the exact selector `shuf -i 0-98 -n 1` returned `19` (`benchmark-integrity`). The close gate after `git fetch origin master` was HEAD `f02853e248dfb20385bc42c416e83315763a40ad`, `origin/master` `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, divergence `42 1120`; catalog, prompt, TSV, and protocol hashes remained `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
