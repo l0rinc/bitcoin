@@ -19,7 +19,9 @@ from test_framework.messages import (
     CTxIn,
     CTxOut,
     SEQUENCE_FINAL,
+    msg_tx,
 )
+from test_framework.p2p import P2PInterface
 from test_framework.script import (
     CScript,
     OP_CHECKMULTISIG,
@@ -29,6 +31,11 @@ from test_framework.script import (
     OP_NOT,
     OP_NOTIF,
     OP_1,
+)
+from test_framework.script_util import (
+    MAX_STD_P2SH_SIGOPS,
+    MAX_TX_BIP54_SIGOPS,
+    script_to_p2sh_script,
 )
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -128,6 +135,29 @@ class Bip54Test(BitcoinTestFramework):
         tx = self.create_spend_tx(prep_tx, 0, script_sig)
 
         return [prep_tx, tx]
+
+    def create_mempool_sigop_violation(self):
+        """Create a standard-input transaction with 2,505 BIP54 sigops."""
+        redeem_script = CScript([OP_CHECKSIG] * MAX_STD_P2SH_SIGOPS)
+        spent_spk = script_to_p2sh_script(redeem_script)
+        output_count = MAX_TX_BIP54_SIGOPS // MAX_STD_P2SH_SIGOPS + 1
+
+        prevout = self.wallet.get_utxo(confirmed_only=True)
+        prevout_sats = int(COIN * prevout["value"])
+        output_value, remainder = divmod(prevout_sats, output_count)
+        prep_tx = CTransaction()
+        prep_tx.vin = [CTxIn(COutPoint(int(prevout["txid"], 16), prevout["vout"]))]
+        prep_tx.vout = [CTxOut(output_value, spent_spk) for _ in range(output_count)]
+        prep_tx.vout[-1].nValue += remainder
+        self.wallet.sign_tx(prep_tx)
+
+        tx = CTransaction()
+        tx.vin = [
+            CTxIn(COutPoint(prep_tx.txid_int, index), CScript([redeem_script]))
+            for index in range(output_count)
+        ]
+        tx.vout = [CTxOut(prevout_sats, self.wallet.get_output_script())]
+        return prep_tx, tx
 
     def submit_block_many_sigops(self, node):
         """Create and submit a block that violates the BIP54 sigops limit."""
@@ -398,6 +428,16 @@ class Bip54Test(BitcoinTestFramework):
         """Submit a block containing a transaction with the requested stripped size."""
         self.mine_and_submit(node, [self.create_sized_tx(stripped_size)])
 
+    def assert_preactivation_relay_rejection(self, node, tx, reject_reason):
+        """Assert unconditional mempool rejection does not disconnect the sender."""
+        peer = node.add_p2p_connection(P2PInterface())
+        try:
+            peer.send_and_ping(msg_tx(tx))
+            assert tx.txid_hex not in node.getrawmempool()
+            assert_raises_rpc_error(-26, reject_reason, node.sendrawtransaction, tx.serialize().hex())
+        finally:
+            peer.peer_disconnect()
+
     def submit_block_64byte_coinbase(self, node):
         """Submit a block that contains a 64-byte coinbase transaction."""
         template = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
@@ -429,6 +469,12 @@ class Bip54Test(BitcoinTestFramework):
         self.submit_block_sized_tx(node, 64)
         # - Even if that is the coinbase transaction.
         self.submit_block_64byte_coinbase(node)
+
+        self.log.info("Mempool cleanup rules apply before activation without disconnecting peers")
+        prep_tx, sigop_tx = self.create_mempool_sigop_violation()
+        self.mine_and_submit(node, [prep_tx])
+        self.assert_preactivation_relay_rejection(node, sigop_tx, "bad-txns-legacy-sigops")
+        self.assert_preactivation_relay_rejection(node, self.create_sized_tx(64), "txn-size-64")
 
         self.log.info("Activating BIP54")
         self.reach_end_retarget_period(node)
