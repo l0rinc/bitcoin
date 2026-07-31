@@ -44,6 +44,19 @@ namespace wallet {
 static_assert(DEFAULT_TRANSACTION_MINFEE >= DEFAULT_MIN_RELAY_TX_FEE, "wallet minimum fee is smaller than default relay fee");
 static_assert(WALLET_INCREMENTAL_RELAY_FEE >= DEFAULT_INCREMENTAL_RELAY_FEE, "wallet incremental fee is smaller than default incremental relay fee");
 
+static bool WalletDatabaseHasKey(MockableSQLiteDatabase& database, const DataStream& key)
+{
+    sqlite3_stmt* statement{nullptr};
+    if (sqlite3_prepare_v2(database.m_db, "SELECT 1 FROM main WHERE key = ?", -1, &statement, nullptr) != SQLITE_OK) return false;
+    if (sqlite3_bind_blob(statement, 1, key.data(), key.size(), SQLITE_STATIC) != SQLITE_OK) {
+        sqlite3_finalize(statement);
+        return false;
+    }
+    const bool found{sqlite3_step(statement) == SQLITE_ROW};
+    sqlite3_finalize(statement);
+    return found;
+}
+
 BOOST_FIXTURE_TEST_SUITE(wallet_tests, WalletTestingSetup)
 
 BOOST_FIXTURE_TEST_CASE(wallet_interface_missing_tx_outputs, WalletTestingSetup)
@@ -294,6 +307,157 @@ BOOST_FIXTURE_TEST_CASE(replaced_write_failure_preserves_state, WalletTestingSet
         BOOST_CHECK(!original_wtx.m_replaced_by_txid);
         BOOST_CHECK(original_wtx.state<TxStateInMempool>());
     }
+}
+
+BOOST_FIXTURE_TEST_CASE(locked_coin_write_failure_preserves_state, WalletTestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    const COutPoint coin{Txid::FromUint256(uint256::ONE), 0};
+    DataStream locked_coin_key;
+    locked_coin_key << std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(coin.hash, coin.n));
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+    const std::string trigger{
+        "CREATE TRIGGER fail_locked_coin_write BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{locked_coin_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    LOCK(wallet.cs_wallet);
+    BOOST_CHECK(!wallet.LockCoin(coin, /*persist=*/true));
+    BOOST_CHECK(!wallet.IsLockedCoin(coin));
+    BOOST_CHECK(!WalletDatabaseHasKey(database, locked_coin_key));
+}
+
+BOOST_FIXTURE_TEST_CASE(locked_coin_erase_failure_preserves_state, WalletTestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    const COutPoint coin{Txid::FromUint256(uint256::ONE), 0};
+    DataStream locked_coin_key;
+    locked_coin_key << std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(coin.hash, coin.n));
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+
+    {
+        LOCK(wallet.cs_wallet);
+        BOOST_REQUIRE(wallet.LockCoin(coin, /*persist=*/true));
+    }
+
+    const std::string trigger{
+        "CREATE TRIGGER fail_locked_coin_erase BEFORE DELETE ON main WHEN lower(hex(OLD.key)) = '" +
+        HexStr(std::span<const std::byte>{locked_coin_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    LOCK(wallet.cs_wallet);
+    BOOST_CHECK(!wallet.UnlockCoin(coin));
+    BOOST_CHECK(wallet.IsLockedCoin(coin));
+    BOOST_CHECK(WalletDatabaseHasKey(database, locked_coin_key));
+}
+
+BOOST_FIXTURE_TEST_CASE(unlock_all_coins_failure_preserves_state, WalletTestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    const COutPoint failed_coin{Txid::FromUint256(uint256::ONE), 0};
+    const COutPoint released_coin{Txid::FromUint256(uint256{2}), 0};
+    DataStream failed_key;
+    failed_key << std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(failed_coin.hash, failed_coin.n));
+    DataStream released_key;
+    released_key << std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(released_coin.hash, released_coin.n));
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+
+    {
+        LOCK(wallet.cs_wallet);
+        BOOST_REQUIRE(wallet.LockCoin(failed_coin, /*persist=*/true));
+        BOOST_REQUIRE(wallet.LockCoin(released_coin, /*persist=*/true));
+    }
+
+    const std::string trigger{
+        "CREATE TRIGGER fail_one_locked_coin_erase BEFORE DELETE ON main WHEN lower(hex(OLD.key)) = '" +
+        HexStr(std::span<const std::byte>{failed_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    LOCK(wallet.cs_wallet);
+    BOOST_CHECK(!wallet.UnlockAllCoins());
+    BOOST_CHECK(wallet.IsLockedCoin(failed_coin));
+    BOOST_CHECK(!wallet.IsLockedCoin(released_coin));
+    BOOST_CHECK(WalletDatabaseHasKey(database, failed_key));
+    BOOST_CHECK(!WalletDatabaseHasKey(database, released_key));
+}
+
+BOOST_FIXTURE_TEST_CASE(lock_coin_promotion_clears_persistent_record, WalletTestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    const COutPoint coin{Txid::FromUint256(uint256::ONE), 0};
+    DataStream locked_coin_key;
+    locked_coin_key << std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(coin.hash, coin.n));
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+
+    LOCK(wallet.cs_wallet);
+    BOOST_REQUIRE(wallet.LockCoin(coin, /*persist=*/false));
+    BOOST_REQUIRE(wallet.LockCoin(coin, /*persist=*/true));
+    BOOST_REQUIRE(wallet.UnlockCoin(coin));
+    BOOST_CHECK(!wallet.IsLockedCoin(coin));
+    BOOST_CHECK(!WalletDatabaseHasKey(database, locked_coin_key));
+}
+
+BOOST_FIXTURE_TEST_CASE(lockunspent_write_failure_is_atomic, WalletTestingSetup)
+{
+    WalletContext& context{*Assert(m_wallet_loader->context())};
+    auto wallet = TestCreateWallet(CreateMockableWalletDatabase(), context, WALLET_FLAG_DESCRIPTORS);
+    BOOST_REQUIRE(AddWallet(context, wallet));
+
+    CMutableTransaction tx;
+    tx.vout.emplace_back(1 * COIN, CScript{});
+    tx.vout.emplace_back(1 * COIN, CScript{});
+    const CTransactionRef tx_ref{MakeTransactionRef(tx)};
+    BOOST_REQUIRE(wallet->AddToWallet(tx_ref, TxStateInactive{}));
+
+    const Txid txid{tx_ref->GetHash()};
+    const COutPoint first_coin{txid, 0};
+    const COutPoint second_coin{txid, 1};
+    DataStream second_key;
+    second_key << std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(second_coin.hash, second_coin.n));
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet->GetDatabase());
+    const std::string trigger{
+        "CREATE TRIGGER fail_second_locked_coin_write BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{second_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    UniValue outputs(UniValue::VARR);
+    for (const COutPoint& coin : {first_coin, second_coin}) {
+        UniValue output(UniValue::VOBJ);
+        output.pushKV("txid", coin.hash.GetHex());
+        output.pushKV("vout", coin.n);
+        outputs.push_back(std::move(output));
+    }
+
+    JSONRPCRequest request;
+    request.context = &context;
+    request.strMethod = "lockunspent";
+    request.params = UniValue(UniValue::VARR);
+    request.params.push_back(false);
+    request.params.push_back(std::move(outputs));
+    request.params.push_back(true);
+    if (RPCIsInWarmup(nullptr)) SetRPCWarmupFinished();
+
+    bool raised{false};
+    try {
+        tableRPC.execute(request);
+    } catch (const UniValue& error) {
+        raised = true;
+        BOOST_CHECK_EQUAL(error["code"].getInt<int>(), RPC_WALLET_ERROR);
+        BOOST_CHECK_EQUAL(error["message"].get_str(), "Locking coin failed");
+    }
+    BOOST_CHECK(raised);
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_CHECK(!wallet->IsLockedCoin(first_coin));
+        BOOST_CHECK(!wallet->IsLockedCoin(second_coin));
+    }
+    DataStream first_key;
+    first_key << std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(first_coin.hash, first_coin.n));
+    BOOST_CHECK(!WalletDatabaseHasKey(database, first_key));
+    BOOST_CHECK(!WalletDatabaseHasKey(database, second_key));
+
+    BOOST_REQUIRE(RemoveWallet(context, wallet, std::nullopt));
+    WaitForDeleteWallet(std::move(wallet));
 }
 
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)

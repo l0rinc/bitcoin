@@ -2787,13 +2787,48 @@ void CWallet::LoadLockedCoin(const COutPoint& coin, bool persistent)
     m_locked_coins.emplace(coin, persistent);
 }
 
+bool CWallet::LockCoin(WalletBatch& batch, const COutPoint& output, bool persist)
+{
+    AssertLockHeld(cs_wallet);
+
+    if (persist && !batch.WriteLockedUTXO(output)) return false;
+
+    auto update_in_memory = [this, output, persist] {
+        AssertLockHeld(cs_wallet);
+        m_locked_coins[output] = persist;
+    };
+    if (batch.HasActiveTxn()) {
+        batch.RegisterTxnListener({.on_commit=std::move(update_in_memory), .on_abort=[] {}});
+    } else {
+        update_in_memory();
+    }
+    return true;
+}
+
 bool CWallet::LockCoin(const COutPoint& output, bool persist)
 {
     AssertLockHeld(cs_wallet);
-    LoadLockedCoin(output, persist);
-    if (persist) {
-        WalletBatch batch(GetDatabase());
-        return batch.WriteLockedUTXO(output);
+    WalletBatch batch(GetDatabase());
+    return LockCoin(batch, output, persist);
+}
+
+bool CWallet::UnlockCoin(WalletBatch& batch, const COutPoint& output)
+{
+    AssertLockHeld(cs_wallet);
+    auto locked_coin_it = m_locked_coins.find(output);
+    if (locked_coin_it == m_locked_coins.end()) return true;
+
+    const bool persisted = locked_coin_it->second;
+    if (persisted && !batch.EraseLockedUTXO(output)) return false;
+
+    auto update_in_memory = [this, output] {
+        AssertLockHeld(cs_wallet);
+        m_locked_coins.erase(output);
+    };
+    if (batch.HasActiveTxn()) {
+        batch.RegisterTxnListener({.on_commit=std::move(update_in_memory), .on_abort=[] {}});
+    } else {
+        update_in_memory();
     }
     return true;
 }
@@ -2801,16 +2836,8 @@ bool CWallet::LockCoin(const COutPoint& output, bool persist)
 bool CWallet::UnlockCoin(const COutPoint& output)
 {
     AssertLockHeld(cs_wallet);
-    auto locked_coin_it = m_locked_coins.find(output);
-    if (locked_coin_it != m_locked_coins.end()) {
-        bool persisted = locked_coin_it->second;
-        m_locked_coins.erase(locked_coin_it);
-        if (persisted) {
-            WalletBatch batch(GetDatabase());
-            return batch.EraseLockedUTXO(output);
-        }
-    }
-    return true;
+    WalletBatch batch(GetDatabase());
+    return UnlockCoin(batch, output);
 }
 
 bool CWallet::UnlockAllCoins()
@@ -2818,10 +2845,15 @@ bool CWallet::UnlockAllCoins()
     AssertLockHeld(cs_wallet);
     bool success = true;
     WalletBatch batch(GetDatabase());
-    for (const auto& [coin, persistent] : m_locked_coins) {
-        if (persistent) success = success && batch.EraseLockedUTXO(coin);
+
+    std::vector<COutPoint> locked_coins;
+    locked_coins.reserve(m_locked_coins.size());
+    for (const auto& [coin, _] : m_locked_coins) locked_coins.push_back(coin);
+
+    for (const COutPoint& coin : locked_coins) {
+        if (!UnlockCoin(batch, coin)) success = false;
     }
-    m_locked_coins.clear();
+
     return success;
 }
 

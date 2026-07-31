@@ -13,6 +13,7 @@
 #include <wallet/rpc/util.h>
 #include <wallet/spend.h>
 #include <wallet/wallet.h>
+#include <wallet/walletdb.h>
 
 #include <univalue.h>
 
@@ -331,13 +332,27 @@ RPCMethod lockunspent()
         outputs.push_back(outpt);
     }
 
+    WalletBatch batch(pwallet->GetDatabase());
+    if (!batch.TxnBegin()) throw JSONRPCError(RPC_WALLET_ERROR, "Unable to begin wallet database transaction");
+
     // Atomically set (un)locked status for the outputs.
     for (const COutPoint& outpt : outputs) {
         if (fUnlock) {
-            if (!pwallet->UnlockCoin(outpt)) throw JSONRPCError(RPC_WALLET_ERROR, "Unlocking coin failed");
+            if (!pwallet->UnlockCoin(batch, outpt)) {
+                batch.TxnAbort();
+                throw JSONRPCError(RPC_WALLET_ERROR, "Unlocking coin failed");
+            }
         } else {
-            if (!pwallet->LockCoin(outpt, persistent)) throw JSONRPCError(RPC_WALLET_ERROR, "Locking coin failed");
+            if (!pwallet->LockCoin(batch, outpt, persistent)) {
+                batch.TxnAbort();
+                throw JSONRPCError(RPC_WALLET_ERROR, "Locking coin failed");
+            }
         }
+    }
+
+    if (!batch.TxnCommit()) {
+        batch.TxnAbort();
+        throw JSONRPCError(RPC_WALLET_ERROR, fUnlock ? "Unlocking coins failed" : "Locking coins failed");
     }
 
     return true;
