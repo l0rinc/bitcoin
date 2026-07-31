@@ -2,6 +2,60 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 181 Completion
+
+- Cycle 181 selected goal `18` (`exhaustive-algebraic`) from the exact fresh
+  selector `shuf -i 0-98 -n 1` -> `18`; no reroll was needed. The prior GCS
+  `MatchAny` and compact-target canonicalization cells were explicitly
+  closed, so this cycle opened a distinct persistence/ownership identity.
+  The dedicated branch was
+  `uber-cycle-181-exhaustive-algebraic-20260731`; its fresh start HEAD was
+  `41bc1fee6cc9e1dc7b08421bb1d05f9b468a2d29`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `42 1150`.
+  Fresh-gate catalog, prompt, corrected TSV, protocol, and start-state hashes
+  were recorded in `agent-journal/exhaustive-algebraic.md`. Persistent
+  untracked artifacts were preserved, and PIDs `777094` and `956381` were
+  not modified.
+
+- The production identity is that a `CDBBatch` created for wrapper `P` must
+  be submitted to `P`. `CDBBatch::WriteImpl()` applies the construction
+  parent's obfuscation key before the bytes enter LevelDB, while
+  `CDBWrapper::WriteBatch()` previously accepted a batch from any wrapper.
+  An obfuscated-source/non-obfuscated-target reproducer therefore stored
+  source-key bytes in the target and decoded a successful but incorrect
+  `uint64_t`: `12549582698032991898` instead of
+  `81985529216486895`. Current production callers were audited and all pair
+  their batches correctly; the trust boundary is local internal database
+  ownership and the impact is silent local data corruption under a future
+  caller/refactor mismatch.
+
+- Source/evidence commit
+  `5b32d8965f8752b4bd0688d822668d5909e0fb25` (`dbwrapper: reject batches
+  from another database`) is authored as `Lőrinc <pap.lorinc@gmail.com>`.
+  `WriteBatch()` now throws `std::logic_error` before logging or invoking
+  LevelDB when `&batch.parent != this`; the regression requires rejection and
+  verifies the target key remains absent. Removing only that guard caused the
+  mutation test to fail both assertions, then the guard was restored.
+
+- Verification passed: normal `dbwrapper_tests` 15 cases/2,477 assertions,
+  `coins_tests` 37/1,218,037, and the related index suites 15/3,097; Clang
+  19 TSan `dbwrapper_tests` and `coins_tests` with the same counts and no
+  race diagnostic; Clang 19 UBSan equivalents with no diagnostic; and the
+  full normal run with seed 181, 1,233 cases passed, one existing
+  filesystem-injection warning, and 27,292,778 assertions passed.
+  `git show --check` passed.
+
+- Verdict: confirmed and fixed as a local persistence ownership/integrity
+  defect. Correctly paired batches, database bytes, obfuscation formats, and
+  current callers are unchanged; no remote trigger, consensus effect, or
+  wallet/key impact was demonstrated. Remaining Goal 18 cells are a new
+  iterator/database recovery identity or index-key reconstruction matrix.
+  This is the separate state-only close record for Cycle 181. Next action:
+  `git fetch origin master`, a fresh gate including hashes, dirty state,
+  process preservation, and storage capacity, then the exact selector;
+  reroll only if the draw is explicitly closed in this ledger.
+
 ## Cycle 180 Completion
 
 - Cycle 180's exact first selector was `shuf -i 0-98 -n 1` -> `70`
