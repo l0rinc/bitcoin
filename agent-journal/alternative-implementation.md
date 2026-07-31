@@ -1,5 +1,69 @@
 # Alternative-implementation compatibility audit
 
+## Cycle 197 selection and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `55` (`alternative-implementation`); no reroll was needed. The dedicated branch is `uber-cycle-197-alternative-implementation-20260731`.
+- Gate timestamp: `2026-07-31T08:00:19Z`. Start HEAD: `3d122740b2c50848485be4421144ab31248fe9fe`; `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence from `origin/master...HEAD`: `42 1184`.
+- The tracked/index gate was clean and `git diff --check` passed. Known unrelated untracked artifacts and protected PIDs `777094`, `956381`, and `1138182` were preserved. Pre-cycle `agent-journal/uber-goal-state.md` SHA-256: `1787428b9b030c292428a6f6c145b477599bde1e236b81b58a7c28c997f5df1d`.
+- Authoritative catalog, prompt, corrected TSV, and uber protocol hashes were `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+This cycle continues the campaign from a new evidence cell. Cycle 155 already covered Core versus Embit/rust-bitcoin/btcd CompactSize and PSBT canonicality, descriptor/key derivation, and ADDRv2 behavior; Cycle 194 covered current advisory variants. Do not reopen those findings. First inventory remaining protocol, transaction, script, wrapper, and persistence boundaries, then select one externally observable behavior with a pinned reference implementation and a deterministic Core fixture. Preserve raw inputs and classify every difference as intentional policy, unsupported feature, reference defect, or a local Core compatibility defect.
+
+## Cycle 197 result: transaction serialization and compact-block compatibility
+
+### Selected cell and source inventory
+
+The new cell was raw transaction extended/witness serialization at the boundaries that are not covered by the earlier CompactSize/PSBT campaign: superfluous witness records, unknown witness flags, truncated fixed-width tails, trailing bytes, and the zero-input marker ambiguity. The Core oracle was the existing `/data/my_storage/tmp/cycle84-build/bin/bitcoin-tx`, built for this checkout with `ninja -C /data/my_storage/tmp/cycle84-build bitcoin-tx -j2`.
+
+The pinned comparison snapshots were unchanged from the gate: bitcoinfuzz `0b02212bc6bf48643d36486acd4d0551df63ee3d`, rust-bitcoin `607e8b2fe0d8f1ebe06923dbbc0ca6afdf00d1d1`, Embit `fff7ffa43f6ce088c5ba22cb3877a122bf01dc96`, and btcd `05585e037ba0690572208dbc46d121a49cc0c4c9`. Rust and Go could not be executed because the host has no `rustc`, `cargo`, or `go`; source contracts and the pure-Python Embit runtime were used instead.
+
+Core's `UnserializeTransaction` in `src/primitives/transaction.h:201-238` requires a nonzero supported flag, reads one witness stack per input, rejects an all-empty witness section as `Superfluous witness record`, rejects unknown optional flags, and then reads the complete four-byte locktime. `DecodeTx` in `src/core_io.cpp:154-220` and `DecodeHexTx` require the serialized input to be fully consumed. The pinned btcd decoder has the corresponding flag, witness-presence, and `io.ReadFull` checks in `wire/msgtx.go:494-637`. The rust-bitcoin decoder rejects unsupported flags and all-empty witness sections in `primitives/src/transaction.rs:519-562`.
+
+### Deterministic malformed-input matrix
+
+The matrix used one minimal one-input/one-output transaction, with the raw bytes retained by SHA-256 rather than relying on a large command-line fixture. `accept` means the parser returned a transaction; `same` means reserialization was byte-identical.
+
+| Case | Bytes / SHA-256 | Core `bitcoin-tx -json` | Embit `Transaction.parse` | Embit serialization |
+| --- | --- | --- | --- | --- |
+| Legacy canonical | 60 / `e05dd47579d2f0369ea5f4f7cd4d4771932bd85e354d962917476d3f7810cd46` | accept | accept | same |
+| SegWit with one witness item | 65 / `bff92bc18572cbc5402efb6d4230feb5f7313c1236100d0297ab4a1c1138d1cb` | accept | accept | same |
+| Superfluous empty witness | 63 / `16769f47384f440b25ffdc6faf018b63497c17119a293e9d5e47a29e9a43fa34` | reject: invalid encoding | accept | changed to legacy |
+| Unknown witness flag | 65 / `5ca0d35d2ef49542a5fa8fe5b0c31494cd6a8628406025916e2f11f84b571cae` | reject: invalid encoding | reject: invalid SegWit marker | - |
+| Legacy locktime shortened by one byte | 59 / `bd35b19a776b099a1677878ce5b33be46cad0246376eaad05d72c8256b40fc8e` | reject: invalid encoding | accept | changed |
+| SegWit locktime shortened by one byte | 64 / `519398f5e8d66f0289df64152fd015e44d90a81abe9a63eabd0bbf146318096b` | reject: invalid encoding | accept | changed |
+| SegWit witness/locktime tail shortened by two bytes | 63 / `bf1571d27b31a8aa8da38914b0db1ff04d6bb800e36c5ecab8ab94aae0fe580e` | reject: invalid encoding | accept | changed |
+| Legacy trailing byte | 61 / `465a61cf13555b2b680a056fbc16928feca3e42c6e2d0fc90808162739ff01ca` | reject: invalid encoding | reject: extra bytes | - |
+| Zero-input legacy form | 10 / `96eeff563b3135e3f77964e8c062328fd207c8bc9e754fc423abaf83eb3f1490` | accept | reject: invalid SegWit marker | - |
+| Zero-input SegWit-style form | 12 / `13cc01f0c367c94ee08a6457b40982c7b82d66fb47e45803997adf52f2e9ce4b` | reject: invalid encoding | accept | changed to legacy |
+
+The final row's displayed hash was independently checked from the exact raw bytes. The exact superfluous-witness reproducer is:
+
+`010000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff00ffffffff010100000000000000000000000000`
+
+Embit's `Transaction.read_from` at `transaction.py:145-167` calls `int.from_bytes(stream.read(4), "little")` for version and locktime without checking that four bytes were returned, and it never checks that a SegWit transaction contains a nonempty witness stack. Its outer `parse` does reject trailing bytes, so the discrepancy is specifically acceptance of truncated fixed-width fields and superfluous witness data, not a general trailing-data issue. The two accepted malformed inputs reserialize differently, making the data-loss risk directly observable.
+
+Zero-input behavior is a deliberate invalid-domain/API distinction, not a Core defect. Rust-bitcoin documents and implements the no-input exception in `primitives/src/transaction.rs:84-95` and `205-213`: it emits BIP141-style serialization to avoid ambiguity even though consensus-invalid zero-input transactions are not meaningful Core transactions. Its decoder skips the witness loop for that special case at `:528-542`. The bitcoinfuzz rust adapter explicitly skips empty-input transactions for this reason. Core's raw decoder accepting the legacy empty form is consistent with its existing `tx_no_inputs` test and later context-free `CheckTransaction` validation.
+
+### Valid-domain and compact-block checks
+
+A seeded Python differential harness generated 50 canonical transactions with one to four inputs and outputs, arbitrary scripts, empty and nonempty witness stacks, versions 1 through 3, and deterministic sequence/locktime values. Core and Embit agreed on acceptance, byte-for-byte reserialization, and txid in all 50 cases. Boundary scripts of lengths 252, 253, 254, 4096, and 16000 bytes also matched in legacy and SegWit forms. A first 65535-byte attempt was blocked by the host's argument-size limit before either parser ran and was not counted as evidence.
+
+For BIP152, Core's `src/blockencodings.h:82-143` and `src/blockencodings.cpp:69-210` enforce the compact-block transaction-count/index bounds and reset partial reconstruction state on failure. Rust-bitcoin's `p2p/src/bip152.rs` uses the same six-byte short-ID and differential prefilled-index wire shape, rejects aggregate index overflow, and separates version-1 txid from version-2 wtxid construction in its block builder. The bitcoinfuzz adapter records the remaining layer difference: rust-bitcoin performs more context-free transaction validation during decode, while Core defers it to `CheckTransaction`, and the harness skips those prefilled cases before comparison. That is an explicit normalization, not a disagreement in Core's compact-block wire parser.
+
+Corrected Core validation commands, with pre-created scratch `TMPDIR`s, passed:
+
+- `test_bitcoin --run_test=transaction_tests --random=19705`: 18/18 cases, 23,817/23,817 assertions.
+- `test_bitcoin --run_test=blockencodings_tests --random=19706`: 30/30 cases, 369/369 assertions.
+- Targeted `transaction_tests/tx_no_inputs` and `blockencodings_tests/SimpleRoundTripTest`: both passed.
+
+An initial suite attempt used non-existent temporary directories and was not treated as code evidence; the corrected runs above were clean. `git diff --check` passed after the journal-only edit.
+
+### Classification and handoff
+
+The superfluous-witness and short-fixed-field differences are report-ready external Embit parser findings at the pinned snapshot, corroborated by Core, btcd, and rust-bitcoin source behavior. They do not justify a Core change. The zero-input difference is documented intentional policy for an invalid consensus domain. The btcd stream decoder's lack of an EOF check is also not comparable to Core's hex/RPC decoder because its API decodes one length-framed wire message from an `io.Reader`.
+
+No local Bitcoin Core source or permanent test change is justified in this cell. The journal is the handoff artifact; preserve the exact raw fixtures and external snapshot hashes for a future bindings/library campaign, but do not repeat the earlier CompactSize, PSBT, descriptor, or ADDRv2 cells. Next queue: fresh selector gate and the highest-risk unchecked protocol, crypto, database, or wrapper cell.
+
 ## Cycle 155 selection and gate
 
 - Exact selector protocol: after the Cycle 154 close, the first fresh draw was `5`, already closed by the boundary-condition campaign. The required exact reroll was `55`, `alternative-implementation`.
