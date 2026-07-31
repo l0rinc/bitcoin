@@ -1,5 +1,140 @@
 # Fuzz Introspector Blocker and Complexity Audit
 
+## Cycle 199 start: partially-downloaded-block target gap
+
+### Selection and fresh gate
+
+- The exact selector was `shuf -i 0-98 -n 1 -> 50`; this is Goal 50 (`fuzz-introspector`). Cycle 195's exact `txgraph` corpus/complexity cell is excluded; this cycle selects the distinct `partially_downloaded_block` target and its partial-download state-machine reachability.
+- Selection timestamp: `2026-07-31T08:23:09Z`.
+- Dedicated branch: `uber-cycle-199-fuzz-introspector-20260731`.
+- Start HEAD: `63299f31d6caba5aa5161c79a2e8430368e58d28` (`uber-goal: record cycle 198 state`).
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `git rev-list --left-right --count origin/master...HEAD`: `42 1188`.
+- `git fetch origin master` completed successfully. Tracked/index state was clean and `git diff --check` passed at entry. Known unrelated untracked agent artifacts, `node_modules/`, package metadata, and `test/cache/` were preserved and excluded from staging.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Corrected TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Uber-goal state SHA-256 at the gate: `651290fc212568b46dfdacd11bacb1128362075fe185693608a4fd5dc19aedd8`.
+- Protected long-running tests with PIDs `777094`, `956381`, `1138182`, and `1157959` were alive and were not touched. Disposable builds, corpora, and logs use `/data/my_storage/tmp`.
+
+### Scope, exclusions, and working hypothesis
+
+Cycle 195 already audited `txgraph`, its empty-start reachability, the current
+official corpus, and the missing Fuzz Introspector executable. Cycle 188's
+`validation_load_mempool` production-backed harness realism fix and Cycle 34's
+`process_messages` empty-corpus coverage-script fix are also excluded. Tool
+absence alone is not a finding.
+
+The selected cell is the current `partially_downloaded_block` target: a large
+production-backed parser/state machine that exercises block reconstruction from
+fragmented compact-block data. Determine whether its corpus and harness reach
+the meaningful partial-data, duplicate, ordering, truncation, and completion
+branches. A low edge count is only a lead; distinguish a real missing-input or
+harness precondition from branches that require valid protocol state or are
+already covered by another target.
+
+Plan: locate the target and its initialization, enumerate the current QA corpus
+and input shapes, build a current sanitized dispatcher, obtain target-specific
+static/dynamic coverage, then compare empty, minimal valid, malformed, and
+corpus replays under fixed seeds. If a blocker is confirmed, prove it with a
+before/after reachability or coverage delta and an oracle-sensitive mutation;
+otherwise record the exact dismissal and next distinct target-gap cell. Keep
+production changes separate from harness/corpus changes.
+
+## Cycle 199 result: compact-block collision-mode reachability
+
+### Evidence and provenance
+
+- The target source is `src/test/fuzz/partially_downloaded_block.cpp`, registered
+  by `src/test/fuzz/CMakeLists.txt`. The target constructs a compact-block
+  header, optional prefilled transactions, a test mempool, extra transaction
+  sources, and `PartiallyDownloadedBlock::InitData`/`FillBlock` state. The
+  source has 17 directed collision and boundary modes after the invalid-init
+  and valid-prefill controls. The late modes were selected by a long chain of
+  dependent `ConsumeBool()` calls, so an empty provider or a parser that had
+  consumed its input made the tail effectively unreachable.
+- The available QA corpus is
+  `/data/my_storage/qa-assets-sparse/fuzz_corpora/partially_downloaded_block`:
+  1,109 files, 177,383,673 bytes, 1 to 984,568 bytes per file. Its QA-assets
+  checkout is at `0772287676fdf3fcf87631b383b12442ab48ce75`, dated 2026-06-25;
+  the target source contains newer guided collision modes through 2026-07-27.
+  No maintained foreign wrapper or alternative implementation was relevant to
+  this target. Fuzz Introspector itself remains unavailable, so the fallback
+  is source/control-flow inspection plus sanitized target-specific coverage.
+- A setup-only empty probe without `TMPDIR` aborted in `setup_common.cpp` after
+  the root filesystem filled. It is discarded as environment evidence. The
+  corrected empty replay with `TMPDIR=/data/my_storage/tmp/cycle199-fuzz-runtime-2`
+  ran 14,344 executions, reached `3/3258` target edges, and used 420 MB peak
+  RSS. This established the empty-input baseline without treating the setup
+  failure as a product result.
+- The fixed 100-file sample at
+  `/data/my_storage/tmp/cycle199-pdb-sample-100` reached `450/3258` target
+  edges in the pre-change build; the late collision callback families all had
+  zero hits. The full pre-change replay (`seed=19904`) completed 1,110
+  executions with target `738/3258`, `InitData` `81/395`, `FillBlock` `41/140`,
+  and 955 MB peak RSS. No ASan, UBSan, or assertion diagnostic occurred.
+- A private full-corpus mutation pass consumed the entire 1,109-file seed
+  corpus without adding units. A 45-second mutation pass from a private
+  100-file copy added 33 units but still left the late collision callbacks at
+  zero. This confirmed a probabilistic/harness reachability blocker rather
+  than merely a short fixed replay.
+
+### Root cause and fix
+
+The first experiment replaced the dependent boolean chain with a bounded
+`ConsumeIntegralInRange<uint8_t>(0, 31)` selector after block deserialization.
+That selector still defaulted to zero whenever `ConsumeDeserializable<CBlock>`
+had consumed the remaining provider bytes. Its full replay reached no late
+collision callback, so that version was not accepted.
+
+The accepted harness change reserves the selector byte immediately after
+constructing `FuzzedDataProvider`, before clock and block deserialization. Mode
+zero through 16 map one-to-one to the existing directed modes; 17 through 31
+retain the ordinary fuzz path. The invalid-init, valid-prefill, prefilled
+collision, overflow, and exact block-size guards remain intact, and each
+directed mode is still mutually exclusive as it was under the old boolean
+prefix. This changes only test input partitioning and does not change
+production compact-block code.
+
+### Verification
+
+- The sanitized Clang 19 dispatcher at
+  `/data/my_storage/tmp/cycle131-build-libfuzzer/bin/fuzz` rebuilt cleanly with
+  `git diff --check` and `cmake --build ... --target fuzz -j2`.
+- The corrected 100-file replay (`seed=19910`) completed 101 executions with
+  no diagnostic. The full corrected replay (`seed=19911`) completed 1,110
+  executions, reached target `542/2844`, `InitData` `177/395`, and `FillBlock`
+  `43/140`, with 934 MB peak RSS. The total target edge denominator changed
+  because the harness source was rebuilt, so the stable production-function
+  comparison is the `InitData` delta and the callback records. The previously
+  zero `force_mempool_extra_sequence` callback was hit once; remaining zero
+  callbacks require stricter exact-size and successful-mempool preconditions
+  and remain in the next queue rather than being claimed fixed.
+- The bounded mutation replay from the 100-file sample (`seed=19913`) ran 60
+  seconds, executed 366 units, added 53 units, used 774 MB peak RSS, and had
+  no ASan, UBSan, assertion, or process diagnostic.
+- The focused production suite
+  `test_bitcoin --run_test=blockencodings_tests --random=19912` passed all 30
+  selected cases and 369 assertions.
+
+### Independent assessment and verdict
+
+The original late-mode reachability hypothesis is **confirmed as a fuzz
+harness coverage blocker**: the old dependent prefix plus post-parse provider
+exhaustion made directed partial-download collision states disproportionately
+unlikely, and the corrected selector measurably increases `InitData` behavior
+and reaches a callback absent from the baseline. It is not a production defect
+and it does not prove every directed mode is reachable. The source change and
+this journal are one self-contained harness/evidence commit. Remaining exact
+size-3/4 and mempool-success cells need a future targeted corpus or a separate
+realism review; do not broaden the mode selector or manufacture transactions
+without a new invariant and independent oracle.
+
+Key logs: `/data/my_storage/tmp/cycle199-pdb-full.log`,
+`/data/my_storage/tmp/cycle199-pdb-guided-full-2.log`,
+`/data/my_storage/tmp/cycle199-pdb-guided-mut-sample.log`, and
+`/data/my_storage/tmp/cycle199-blockencodings-runtime`.
+
 ## Cycle 195 start: current target reachability and blocker matrix
 
 ### Selection and fresh gate
