@@ -1,5 +1,55 @@
 # Secret-data lifetime and zeroization audit
 
+## Cycle 211: Poly1305 context state retained after destruction
+
+Status: confirmed and fixed.
+
+### Gate and scope
+
+- Selected by the uber selector as goal 13 (`secret-lifetime-zeroization`), exact draw `shuf -i 0-98 -n 1` -> `13`; no reroll was needed.
+- Branch: `uber-cycle-211-secret-lifetime-zeroization-20260731`.
+- Base and pre-finding HEAD: `f25398b81608873257bfcad42f93d14978f02715`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1213 42`.
+- Catalog, prompt, TSV, and protocol hashes matched the stored uber-goal state. The tracked/index state was clean at the gate; protected long-running test processes and unrelated untracked artifacts were preserved.
+- The prior journal cells for ECDHSecret, HMAC, HKDF, RPC-cookie entropy, and MuSig secret temporaries were excluded as exact recurrences.
+
+### Hypothesis and evidence
+
+`Poly1305` owns a `poly1305_donna::poly1305_context` containing the one-time authenticator key as clamped `r` words and the secret `pad`, as well as a partial message buffer. The C++ wrapper had an implicit destructor, so an abandoned context retained the key-derived state. A successful `poly1305_finish` zeroes `r`, `h`, and `pad`, but does not clear `buffer`; a partial message therefore remains in the object even after normal finalization. The context is used by every ChaCha20-Poly1305 tag computation and is also a public incremental wrapper.
+
+The source/history search found no prior zeroization campaign for `Poly1305`, and the wrapper was introduced without copy/move restrictions or cleanup. This is a distinct crypto-context ownership cell, not a recurrence of the HMAC or HKDF findings. Existing `ChaCha20`, HMAC, and HKDF wrappers establish the local type-level destructor pattern while preserving copyability where no copy call site requires an API break.
+
+An optimized Clang 19 storage probe at `/data/my_storage/tmp/cycle211-secret/poly1305_probe.cpp` placement-constructed a `Poly1305`, processed a seven-byte message, explicitly destroyed it, and checked all `sizeof(Poly1305)` bytes. Against the pre-fix header/library it printed `retained` and exited 1. This directly demonstrates nonzero context state after the object lifetime, independently of a successful tag result.
+
+### Repair
+
+Added a `Poly1305` destructor that calls the existing compiler-resistant `memory_cleanse` helper over the complete context. Added `crypto_tests/poly1305_clears_secret_on_destruction`, which checks both an abandoned context and a finalized context using aligned placement storage initialized with `0xa5`. The key, tag, incremental API, copy behavior, and cipher outputs are unchanged.
+
+### Verification
+
+- `TMPDIR=/data/my_storage/tmp/cycle211-secret-build-tmp CCACHE_DIR=/data/my_storage/tmp/cycle211-secret-ccache cmake --build /data/my_storage/tmp/cycle105-clang19-release --target test_bitcoin -j2`: passed; rebuilt the crypto archive, node dependencies, and full `test_bitcoin` target.
+- `TMPDIR=/data/my_storage/tmp/cycle211-secret-test-tmp /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=crypto_tests/poly1305_clears_secret_on_destruction --log_level=message`: passed, 1 case.
+- `/usr/bin/clang++-19 -O2 -std=c++20 -I/data/my_storage/tmp/cycle105-clang19-release/src -I/data/my_storage/bitcoin/src /data/my_storage/tmp/cycle211-secret/poly1305_probe.cpp /data/my_storage/tmp/cycle105-clang19-release/lib/libbitcoin_crypto.a /data/my_storage/tmp/cycle105-clang19-release/lib/libbitcoin_util.a -lpthread -o /data/my_storage/tmp/cycle211-secret/poly1305_probe && /data/my_storage/tmp/cycle211-secret/poly1305_probe`: pre-fix probe printed `retained` and exited 1; the repaired placement regression now reports no errors.
+- `TMPDIR=/data/my_storage/tmp/cycle211-secret-test-tmp /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=crypto_tests/poly1305_testvector --log_level=message`: passed, 1 case.
+- `TMPDIR=/data/my_storage/tmp/cycle211-secret-test-tmp /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=crypto_tests --log_level=message`: passed, 27 cases.
+- `TMPDIR=/data/my_storage/tmp/cycle211-secret-test-tmp /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=crypto_tests/chacha20poly1305_testvectors --log_level=message`: passed, 1 case.
+- `TMPDIR=/data/my_storage/tmp/cycle211-secret-test-tmp /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=crypto_tests/chacha20poly1305_failed_decrypt_preserves_output --log_level=message`: passed, 1 case.
+- `TMPDIR=/data/my_storage/tmp/cycle211-secret-test-tmp /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=bip324_tests --log_level=message`: passed, 2 cases.
+- `TMPDIR=/data/my_storage/tmp/cycle211-secret-bench-tmp CCACHE_DIR=/data/my_storage/tmp/cycle211-secret-ccache cmake --build /data/my_storage/tmp/cycle105-clang19-release --target bench_bitcoin -j2`: passed; the benchmark consumer and crypto archive rebuilt.
+- `TMPDIR=/data/my_storage/tmp/cycle211-secret-bench-tmp /data/my_storage/tmp/cycle105-clang19-release/bin/bench_bitcoin -filter='POLY1305.*' -min-time=10`: ran `POLY1305_1MB`, `POLY1305_256BYTES`, and `POLY1305_64BYTES`; the tool warned that CPU frequency scaling makes these measurements unstable, but all benchmarks completed successfully.
+- `/usr/bin/clang++-19 -O2 -std=c++20 -I/data/my_storage/tmp/cycle105-clang19-release/src -I/data/my_storage/bitcoin/src -S /data/my_storage/tmp/cycle211-secret/poly1305_probe.cpp -o /data/my_storage/tmp/cycle211-secret/poly1305_probe.s && grep -n -E 'memory_cleanse|Poly1305' /data/my_storage/tmp/cycle211-secret/poly1305_probe.s`: reported `callq _Z14memory_cleansePvm@PLT`, providing compiler-level evidence that the destructor cleanup is emitted rather than optimized away.
+- `git diff --check`: passed. A comma-separated nested Boost.Test filter was rejected as a setup filter error; the affected cases were rerun individually or by suite, so that setup failure is not counted as a test failure.
+
+### Verdict and limits
+
+Confirmed and fixed: the Poly1305 wrapper retained secret key-derived state on abandonment and retained partial message bytes after finalization. The complete-context destructor closes both lifetime paths without altering cryptographic behavior. The C namespace implementation remains an internal low-level API; this cycle changes the maintained C++ wrapper used by all in-tree callers. No MSan, Valgrind, or TSan run was attempted, and the broad fuzz-target build remains a separate evidence cell.
+
+### Next queue
+
+1. Search remaining public cryptographic context types for destructor or failure-path cleanup gaps, excluding Poly1305, ECDHSecret, HMAC, HKDF, and closed MuSig/RPC cells.
+2. Reopen compiler-visible cleanup only for a new type or independent optimizer/toolchain evidence.
+3. Continue wallet/signing/callback secret-copy analysis after searching this journal and history for exact recurrences.
+
 ## Cycle 152: HMAC context state retained after destruction
 
 Status: confirmed and fixed.

@@ -1398,6 +1398,28 @@ BOOST_AUTO_TEST_CASE(hkdf_hmac_sha256_l32_clears_secret_on_destruction)
     }));
 }
 
+BOOST_AUTO_TEST_CASE(poly1305_clears_secret_on_destruction)
+{
+    const std::array<std::byte, Poly1305::KEYLEN> key{std::byte{0x42}};
+    const std::array<std::byte, 7> message{std::byte{0x17}};
+
+    for (const bool finalize : {false, true}) {
+        alignas(Poly1305) std::array<std::byte, sizeof(Poly1305)> storage{};
+        storage.fill(std::byte{0xa5});
+        auto* poly1305{::new (storage.data()) Poly1305{key}};
+        poly1305->Update(message);
+        if (finalize) {
+            std::array<std::byte, Poly1305::TAGLEN> tag{};
+            poly1305->Finalize(tag);
+        }
+        poly1305->~Poly1305();
+
+        BOOST_CHECK(std::all_of(storage.begin(), storage.end(), [](const std::byte value) {
+            return value == std::byte{0};
+        }));
+    }
+}
+
 BOOST_AUTO_TEST_CASE(sha256d64)
 {
     for (int i = 0; i <= 32; ++i) {
