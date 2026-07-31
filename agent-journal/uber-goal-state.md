@@ -3156,3 +3156,38 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - Validation: full `bitcoind`/`test_bitcoin` rebuild with isolated `TMPDIR`/`CCACHE_DIR`; `bloom_tests` passed 14 cases/37,687 assertions; `net_tests` passed 36 cases/159,095 assertions; full `p2p_filter.py` passed; `git diff --check` passed. Existing unrelated compiler warnings in `httpserver_tests.cpp` and `util_tests.cpp` were recorded in the selected journal.
 - Limitations: the transport still buffers complete messages up to 4 MB before dispatch; this cycle removes the avoidable post-receive vector allocation/element construction and closes the penalty bypass for oversized declarations. Do not repeat the closed BIP37 vector cell without a distinct source, limit, or cleanup failure.
 - State-close commit is next; then the uber loop must perform a fresh gate, preserve all unrelated untracked artifacts, and draw the next goal exactly.
+
+## Cycle 235 close: Goal 71, deterministic scheduler lifetime
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`); no
+  reroll. Branch: `uber-cycle-235-deterministic-simulation-20260731`.
+  Cycle-start HEAD was `55a36c79e3a02aadfbf2509bfcb68cb1e45739b2`;
+  `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1253`.
+  Fresh gate, catalog/prompt/TSV/protocol hashes, and protected-process checks
+  passed.
+- Confirmed finding: after `SerialTaskRunner::flush()` executes a callback
+  directly, its already queued scheduler wrapper retained raw `this`. Destroying
+  the runner and later servicing the scheduler produced an ASan
+  `stack-use-after-scope` in `ProcessQueue`. The distinct schedule is separate
+  from Cycle 84's `CConnman::Start` thread-publication defect.
+- Fix/test commit: `5cc2d26cde` (`scheduler: guard deferred tasks after runner
+  destruction`), authored as `Lőrinc <pap.lorinc@gmail.com>`. A shared atomic
+  liveness token is retained by the deferred wrapper; the wrapper skips the
+  runner dereference after destruction. The permanent test is
+  `scheduler_tests/serial_task_runner_flush_then_scheduler_restarts`.
+- Validation: normal and ASan/UBSan rebuilds passed; focused normal and
+  sanitized tests passed 2 assertions each; the complete `scheduler_tests` plus
+  `validationinterface_tests` selection passed 12 cases and 72 assertions in
+  each build; deterministic `validation_block_reorg` and `dbwrapper` fuzz
+  controls passed 200 runs each; `git diff --check` passed. The first combined
+  suite attempt failed before fixture setup because its `TMPDIR` parents were
+  absent; the isolated-directory retry passed.
+- Limitation: this closes the documented `flush()` schedule with no active
+  scheduler service thread. It does not claim arbitrary concurrent destruction
+  during an executing scheduler callback is safe. Do not repeat this exact
+  deferred-runner schedule without new evidence.
+- Next action: after this state-close commit, perform the fresh gate, fetch
+  `origin/master`, verify stable catalog/prompt/TSV/protocol hashes and protected
+  PIDs, draw exactly one selector with `shuf -i 0-98 -n 1`, and create the next
+  `uber-cycle-236-*` branch. Preserve all unrelated untracked artifacts.
