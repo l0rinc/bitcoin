@@ -2649,3 +2649,44 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   will be committed next. The next run must perform a fresh gate, preserve
   unrelated untracked files, draw with the exact selector, and continue the
   selected campaign.
+
+## Cycle 219 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `61` (`stateful-contract-fuzzer`);
+  no reroll. Branch: `uber-cycle-219-stateful-contract-fuzzer-20260731`.
+  Start HEAD was `41e21e343c6d02baedd174f89bb33196e95ba236`; `origin/master`
+  was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1225 42`.
+  The fresh gate passed and protected PIDs `777094`, `956381`, `1138182`, and
+  `1157959` remained untouched.
+- The selected journal was `agent-journal/stateful-contract-fuzzer.md`.
+  Its distinct cell was the nonempty `DumpMempool` commit-failure path. The
+  existing fuzzer passed `skip_file_commit=true` for its fuzzed file provider,
+  and baseline coverage recorded zero executions of
+  `src/node/mempool_persist.cpp:257-258` despite evaluating the surrounding
+  condition.
+- Source/test/journal commit: `78bf412c82` (`fuzz: cover mempool dump commit
+  failures`), authored as `Lőrinc <pap.lorinc@gmail.com>`. The harness now
+  injects `/dev/full` on Linux after a nonempty mempool fixture is prepared,
+  asserts the dump fails, and verifies the existing destination bytes remain
+  unchanged. No production behavior changed. The final fixed-seed coverage
+  hit the commit-failure lines once; the full QA profile hit them 1,450 times.
+- The coverage fuzz build completed. The ASan/UBSan/libFuzzer build completed;
+  the fixed seed passed 2 executions and a 16-file QA sample passed 17
+  executions, with no sanitizer, leak, assertion, crash, or hang diagnostic.
+  The full available `validation_load_mempool` corpus passed 1,675 executions
+  in 162 seconds, at 1,667 MB peak RSS. The merged full profile reported
+  98.73% lines and 97.06% branches for `mempool_persist.cpp`.
+- The full unit suite was not rerun because production code was unchanged and
+  the focused coverage plus sanitizer corpus replays supplied validation.
+  `/dev/full` is Linux-specific; non-Linux builds retain the null-provider
+  failure-preservation check but do not claim commit-branch coverage. Root
+  storage remained critically full, so all artifacts are under
+  `/data/my_storage/tmp/cycle219-*`.
+- Verdict: **confirmed stateful fuzz-harness reachability gap and fixed; no
+  production defect**. Next Goal 61 queue: deterministic `LoadMempool`
+  validation-interrupt state, then txdownload request/output models after
+  package or reorg transitions. Do not reopen the closed AddrMan, raw tx_pool,
+  or process-message cells without new evidence. The next run must perform a
+  fresh gate, preserve unrelated untracked files, draw with the exact selector,
+  and continue the selected campaign.
