@@ -2,6 +2,59 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 180 Completion
+
+- Cycle 180's exact first selector was `shuf -i 0-98 -n 1` -> `70`
+  (`compiler-optimization-differential`), which is explicitly closed by
+  Cycle 105. The required exact reroll was `shuf -i 0-98 -n 1` -> `57`,
+  selecting `local-reasoning-domain`. The dedicated branch was
+  `uber-cycle-180-local-reasoning-domain-20260731`; its fresh start HEAD was
+  `205803b23c8846666feeeb4fb0cd556634b53d00`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `42 1147`.
+  Catalog, prompt, corrected TSV, protocol, and start-state hashes were
+  recorded in the selected journal. Persistent untracked artifacts were
+  preserved, and PIDs `777094` and `956381` were not modified.
+
+- The cross-index lifecycle audit found that a previously synchronized
+  `BaseIndex` kept `m_synced == true` through `Stop()` and into the next
+  `Init()`/`CustomInit()` sequence. The assumeutxo snapshot completion path
+  performs that stop/reinitialize sequence while RPC and REST readers remain
+  available. A gated test subclass independently reproduced the contract
+  failure: before the fix, the concurrent readiness call could not complete
+  during gated `CustomInit()` and then returned true after initialization was
+  released; the bounded pre-fix test exited 201 with both assertions failing.
+
+- Source/evidence commit
+  `991997bb416d83f03f4cfc20d3677a64834c5511` (`index: reset readiness during
+  restart`) is authored as `Lőrinc <pap.lorinc@gmail.com>`. `Init()` now
+  clears `m_synced` before database and subclass initialization. `Stop()`
+  clears it before unregistering and again after joining the sync thread, so
+  both the stopped interval and a worker's final exit cannot expose stale
+  readiness. The regression test checks false readiness after `Stop()` and
+  during gated reinitialization.
+
+- Verification passed: normal build; the new `baseindex_tests` case (1 case,
+  5 assertions); normal `baseindex_tests`, `coinstatsindex_tests`,
+  `txindex_tests`, `txospenderindex_tests`, and `blockfilter_index_tests`
+  (2/17, 2/14, 3/129, 3/1,086, and 5/1,851 cases/assertions); the matching
+  Clang 19 TSan controls with no diagnostic; the matching Clang 19 UBSan
+  suites with no diagnostic; and the full normal unit run with 1,232 passed
+  cases, one existing filesystem-injection warning, and 27,115,698 passed
+  assertions. `git show --check` passed.
+
+- Verdict: confirmed and fixed as a local index lifecycle/readiness defect.
+  The trust boundary is authorized snapshot/index restart activity plus
+  concurrent RPC/REST callers; no consensus, wallet/key, or persisted-index
+  corruption was demonstrated. The test models the production callback's
+  gated subclass initialization rather than a full assumeutxo integration.
+  Remaining distinct Goal 57 cells are cross-index database failure
+  injection and physical filter-file corruption beyond existing checks. This
+  is the separate state-only close record for Cycle 180. Next action:
+  `git fetch origin master`, a fresh gate including hashes, dirty state,
+  process preservation, and storage capacity, then the exact selector;
+  reroll only if the draw is explicitly closed in this ledger.
+
 ## Cycle 179 Completion
 
 - Cycle 179 selected goal `26` (`cross-subsystem-bug-shapes`) from the exact
