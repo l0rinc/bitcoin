@@ -42,6 +42,45 @@ dependency, or other-project behavior before any patch is drafted. Negative
 controls and prior-finding hashes will be recorded so this cycle does not
 reopen the closed cells above.
 
+## Cycle 179 Findings: Empty Manual-Peer Targets Across Interfaces
+
+### Seed and structural trace
+
+The current branch already contains two related repairs: `9754c1cb6c` filters empty `-seednode` values before they can make the address-fetch thread wait forever, and `6f91b89157` filters empty `-connect` values before the manual connection thread retries them. Upstream history supplies the independent paired seed for the remaining manual-peer interface: `69465de447` filters empty startup `-addnode` values, and `90ce21e21d` rejects empty RPC `addnode` values. Their review rationale is the same resource/lifecycle contract: an empty target cannot resolve, but retaining it creates a persistent manual target and can delay fixed-seed fallback.
+
+The current source had both gaps. `AppInitMain` copied `args.GetArgs("-addnode")` directly into `CConnman::Options::m_added_nodes`; `CConnman::Init` then copied those values to `m_added_node_params`, and `ThreadOpenAddedConnections` passed every entry to `OpenNetworkConnection` and retried the list. Separately, `rpc/net.cpp::addnode` passed its raw string to `AddNode`, which stores it in the same persistent manual-target list. `ThreadOpenConnections` also treats any nonempty `m_added_node_params` as evidence that `-addnode` is available before adding fixed seeds. The trust boundary is local configuration or an authenticated RPC caller, not an unauthenticated peer; the impact is invalid persistent state, repeated failed connection work, and delayed startup peer discovery.
+
+### Independent pre-fix reproduction
+
+Using the pre-change `cycle89-build` binaries and a fresh regtest datadir, this command accepted and retained a blank startup target:
+
+```text
+/data/my_storage/tmp/cycle89-build/bin/bitcoind -regtest -datadir=/data/my_storage/tmp/cycle179-empty-node/node -daemon -listen=0 -discover=0 -dnsseed=0 -fixedseeds=0 -connect=0 -maxconnections=0 -rpcbind=127.0.0.1 -rpcport=18479 -rpcuser=cycle179 -rpcpassword=cycle179 -addnode=
+/data/my_storage/tmp/cycle89-build/bin/bitcoin-cli -regtest -rpcport=18479 -rpcuser=cycle179 -rpcpassword=cycle179 getaddednodeinfo
+```
+
+The result contained one entry with `"addednode": ""`. After removing that entry, `addnode '' add` returned success and `getaddednodeinfo` again returned the blank entry; adding it a second time returned `-23` (`Error: Node already added`) rather than an input error. The daemon was stopped and its scratch datadir is outside the repository. Source inspection independently explains why the entry is retried and why it blocks the `m_added_node_params.empty()` fixed-seed condition.
+
+### Repair and controls
+
+`src/init.cpp` now trims each configured `-addnode` value, logs and drops whitespace-only values, and preserves all nonempty values. `src/rpc/net.cpp` applies the same boundary rule to all `addnode` commands before `AddNode`, returning `RPC_INVALID_PARAMETER` with `Error: Node address cannot be empty`. This keeps valid hostnames, ports, and command semantics unchanged while aligning startup and RPC contracts with the already-fixed `-connect` and `-seednode` paths.
+
+The source/evidence controls were:
+
+```text
+git diff --check
+python3 -m py_compile test/functional/feature_config_args.py test/functional/rpc_net.py
+CCACHE_DIR=/data/my_storage/tmp/cycle179-ccache TMPDIR=/data/my_storage/tmp/cycle179-build-tmp cmake --build /data/my_storage/tmp/cycle89-build --target bitcoind bitcoin-cli -j2
+python3 /data/my_storage/tmp/cycle89-build/test/functional/feature_config_args.py --tmpdir=/data/my_storage/tmp/cycle179-feature-test --cachedir=/data/my_storage/tmp/cycle179-functional-cache --portseed=17901 --test_methods test_empty_addnode --loglevel=INFO
+python3 /data/my_storage/tmp/cycle89-build/test/functional/rpc_net.py --tmpdir=/data/my_storage/tmp/cycle179-rpc-net-test --cachedir=/data/my_storage/tmp/cycle179-functional-cache --portseed=17902 --test_methods test_addnode_getaddednodeinfo --loglevel=INFO
+```
+
+The rebuild passed `bitcoind` and `bitcoin-cli`. The configuration method passed after starting with `-addnode=` and `-addnode= ` and checking both the expected warning and absence of a manual connection attempt. The RPC method passed for all three commands and both empty spellings, then confirmed that only the valid test node remained. Python syntax compilation and `git diff --check` passed. This is independently consistent with upstream regression coverage in `69465de447` and `90ce21e21d`, but the local source trace and live pre-fix behavior are the primary evidence.
+
+### Verdict and limitations
+
+Verdict: confirmed and fixed. This is a configuration/RPC cross-interface variant of the existing empty-target connection bug shape, not a duplicate of the closed `-connect`, `-seednode`, wallet-rescan, chainstate-candidate, or compact-block-read cells. The tests are focused method runs rather than the full functional suites; a full suite run remains a follow-up validation if resources permit. No remote trigger or consensus impact is claimed.
+
 ## Identity and Gate
 
 - Cycle: `62`
