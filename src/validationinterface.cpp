@@ -38,13 +38,18 @@ class ValidationSignalsImpl
 {
 private:
     Mutex m_mutex;
-    //! List entries consist of a callback pointer and reference count. The
+    //! List entries consist of a callback pointer, registration generation, and reference count. The
     //! count is equal to the number of current executions of that entry, plus 1
     //! if it's registered. It cannot be 0 because that would imply it is
     //! unregistered and also not being executed (so shouldn't exist).
-    struct ListEntry { std::shared_ptr<CValidationInterface> callbacks; int count = 1; };
+    struct ListEntry {
+        std::shared_ptr<CValidationInterface> callbacks;
+        uint64_t generation = 0;
+        int count = 1;
+    };
     std::list<ListEntry> m_list GUARDED_BY(m_mutex);
     std::unordered_map<CValidationInterface*, std::list<ListEntry>::iterator> m_map GUARDED_BY(m_mutex);
+    uint64_t m_next_generation GUARDED_BY(m_mutex) = 0;
 
 public:
     std::unique_ptr<util::TaskRunnerInterface> m_task_runner;
@@ -56,7 +61,10 @@ public:
     {
         LOCK(m_mutex);
         auto inserted = m_map.emplace(callbacks.get(), m_list.end());
-        if (inserted.second) inserted.first->second = m_list.emplace(m_list.end());
+        if (inserted.second) {
+            inserted.first->second = m_list.emplace(m_list.end());
+            inserted.first->second->generation = ++m_next_generation;
+        }
         inserted.first->second->callbacks = std::move(callbacks);
     }
 
@@ -86,7 +94,8 @@ public:
     template<typename F> void Iterate(F&& f) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
         WAIT_LOCK(m_mutex, lock);
-        for (auto it = m_list.begin(); it != m_list.end();) {
+        const uint64_t generation{m_next_generation};
+        for (auto it = m_list.begin(); it != m_list.end() && it->generation <= generation;) {
             ++it->count;
             {
                 REVERSE_LOCK(lock, m_mutex);
