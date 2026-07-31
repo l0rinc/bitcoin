@@ -256,3 +256,64 @@ mempool 1.13x and this are consistent.
 ## Rotation note
 Four cycles; mempool, LockedPool, arena high-water, and dbcache
 accounting all measured tight. Not exhausted (mlock cell).
+
+## Cycle 5 (2026-07-31): mlock-failure degraded-arena path — exercised live (RLIMIT_MEMLOCK=0, unprivileged); secure allocs proceed unlocked, failure is LOG-SILENT; DISMISSED
+
+### Draw
+RE-RANK draw 144 over the 8-cell queue: raw=8265742044986960116
+(already 63-bit) -> idx 4 -> #74 locked-arena mlock-failure (c1/c2
+queue). Branch: audit/memory-pressure-c5 from cc334e9f5d.
+
+### Contract (lockedpool.cpp)
+PosixLockedPageAllocator::AllocateLocked mmaps the arena and sets
+*lockingSuccess = (mlock()==0); on failure the LockedPool still
+uses the arena (new_arena else-branch), calling LockingFailed()
+which returns true (continue) — degraded-but-functional. GetLimit()
+returns 0 under RLIMIT_MEMLOCK=0, skipping only the first-arena
+size cap.
+
+### Experiment (isolated regtest)
+- n1 (normal root node): getmemoryinfo locked=262144 == total
+  (arena fully locked).
+- n3 (setpriv nobody + prlimit --memlock=0): bitcoind functional,
+  secure allocations SUCCEED (used=368), but locked=0 — degraded
+  arena exactly per contract.
+- LOG SILENCE: zero lock-related lines in debug.log — the failure
+  is invisible except via getmemoryinfo ("locked" field documents
+  exactly this case). LockingFailed()'s TODO (no logging) is
+  upstream-identical; operator-visibility note only.
+
+### SETUP TRAP (recorded): two masks
+1. prlimit --memlock=0 as ROOT does NOT fail mlock — CAP_IPC_LOCK
+   bypasses RLIMIT_MEMLOCK entirely (n2 measured locked==total
+   despite the 0 limit; /proc/<pid>/limits confirmed 0, mlock
+   still succeeded).
+2. pgrep -f '<datadir>' matched MY OWN shell's cmdline (the
+   pattern text is in the invoking command) — pid attribution
+   garbage; use pgrep -x bitcoind + /proc/<pid>/limits for
+   ground truth.
+Also: second node on the same host needs distinct -rpcport (the
+first n2 attempt died on "Unable to bind RPC" and I initially read
+it as an mlock casualty — startup-order artifact).
+
+### Verdict
+DISMISSED: the mlock-failure path behaves exactly as contracted —
+secure allocations degrade to unlocked, node stays functional,
+getmemoryinfo reports locked=0 vs total. No crash, no corruption,
+no misaccounting (cumulative_bytes_locked stays 0, stats honest).
+The log-silence is the only wart and is upstream-identical.
+
+### Exact commands
+- setpriv --reuid nobody --regid nogroup --clear-groups prlimit
+  --memlock=0 bitcoind -regtest -datadir=/tmp/btc74c5/n3 -daemon
+- getmemoryinfo locked-section diff (values above);
+  /proc/<pid>/limits + CapEff verification.
+
+### Limitations / queue
+- Persistent unlocked-key residency (swap-out of the degraded
+  arena) not observable without memory pressure at scale —
+  theoretical, upstream-known.
+- #74 queue: pruning-mode IO (from #24) remains the last cell.
+
+## Rotation note
+Cycle 5 complete; rotating per uber-goal policy. Not exhausted.
