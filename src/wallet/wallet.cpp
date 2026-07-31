@@ -1202,6 +1202,7 @@ bool CWallet::LoadToWallet(const Txid& hash, const UpdateWalletTxFn& fill_wtx)
     const auto& ins = mapWallet.emplace(std::piecewise_construct, std::forward_as_tuple(hash), std::forward_as_tuple(nullptr, TxStateInactive{}));
     CWalletTx& wtx = ins.first->second;
     if (!fill_wtx(wtx, ins.second)) {
+        if (ins.second) mapWallet.erase(ins.first);
         return false;
     }
     // If wallet doesn't have a chain (e.g when using bitcoin-wallet tool),

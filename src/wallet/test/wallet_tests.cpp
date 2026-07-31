@@ -100,6 +100,23 @@ BOOST_FIXTURE_TEST_CASE(wallet_interface_missing_tx_outputs, WalletTestingSetup)
     BOOST_CHECK_EQUAL(num_blocks, 0);
 }
 
+BOOST_FIXTURE_TEST_CASE(load_to_wallet_failure_does_not_retain_transaction, WalletTestingSetup)
+{
+    CMutableTransaction mutable_tx;
+    mutable_tx.vout.emplace_back(1 * COIN, CScript{});
+    const CTransactionRef tx{MakeTransactionRef(mutable_tx)};
+    const Txid database_hash{Txid::FromUint256(uint256::ONE)};
+    BOOST_REQUIRE_NE(tx->GetHash(), database_hash);
+
+    LOCK(m_wallet.cs_wallet);
+    BOOST_CHECK(!m_wallet.LoadToWallet(database_hash, [&](CWalletTx& wtx, bool new_tx) {
+        BOOST_REQUIRE(new_tx);
+        wtx.SetTx(tx);
+        return false;
+    }));
+    BOOST_CHECK(!m_wallet.mapWallet.contains(database_hash));
+}
+
 BOOST_FIXTURE_TEST_CASE(migration_transaction_write_failure_is_reported, WalletTestingSetup)
 {
     CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
