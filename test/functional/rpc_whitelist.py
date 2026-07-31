@@ -25,6 +25,18 @@ def rpccall(node, user, method):
     return resp
 
 
+def rpccall_batch(node, user, methods):
+    url = urllib.parse.urlparse(node.url)
+    headers = {"Authorization": "Basic " + str_to_b64str('{}:{}'.format(user[0], user[3]))}
+    conn = http.client.HTTPConnection(url.hostname, url.port)
+    conn.connect()
+    body = '[' + ','.join('{"method": "' + method + '"}' for method in methods) + ']'
+    conn.request('POST', '/', body, headers)
+    resp = conn.getresponse()
+    conn.close()
+    return resp
+
+
 def get_permissions(whitelist):
     return [perm for perm in whitelist.split(",") if perm]
 
@@ -76,6 +88,18 @@ class RPCWhitelistTest(BitcoinTestFramework):
             for permission in self.never_allowed:
                 self.log.info(f"[{user[0]}]: Testing a non permitted permission ({permission})")
                 assert_equal(403, rpccall(self.nodes[0], user, permission).status)
+
+        # Method names are request-controlled strings. They must not create extra debug-log records.
+        injected_method = r"bad\nINJECT"
+        with self.nodes[0].assert_debug_log(
+                expected_msgs=["RPC User user1 not allowed to call method badINJECT"],
+                unexpected_msgs=["method bad\nINJECT"]):
+            assert_equal(403, rpccall(self.nodes[0], self.users[0], injected_method).status)
+        with self.nodes[0].assert_debug_log(
+                expected_msgs=["RPC User user1 not allowed to call method badINJECT"],
+                unexpected_msgs=["method bad\nINJECT"]):
+            assert_equal(403, rpccall_batch(self.nodes[0], self.users[0], [injected_method]).status)
+
         # Now test the strange users
         for permission in self.never_allowed:
             self.log.info("Strange test 1")
