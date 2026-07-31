@@ -13,6 +13,11 @@
 
 CScheduler::CScheduler() = default;
 
+SerialTaskRunner::~SerialTaskRunner()
+{
+    m_alive->store(false, std::memory_order_release);
+}
+
 CScheduler::~CScheduler()
 {
     assert(nThreadsServicingQueue == 0);
@@ -139,7 +144,10 @@ void SerialTaskRunner::MaybeScheduleProcessQueue()
         if (m_are_callbacks_running) return;
         if (m_callbacks_pending.empty()) return;
     }
-    m_scheduler.schedule([this] { this->ProcessQueue(); }, std::chrono::steady_clock::now());
+    const auto alive{m_alive};
+    m_scheduler.schedule([this, alive] {
+        if (alive->load(std::memory_order_acquire)) this->ProcessQueue();
+    }, std::chrono::steady_clock::now());
 }
 
 void SerialTaskRunner::ProcessQueue()

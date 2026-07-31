@@ -94,3 +94,63 @@ Result: 34/34 `net_tests` cases and 150,899/150,899 assertions passed. `git diff
 Verdict: **confirmed local lifecycle/source defect**, reachable by any caller that supplies the conflicting public `Options`; the normal command-line construction path makes it uncommon, so this is a correctness and shutdown-integrity issue rather than a consensus or remote high-severity finding. The smallest repair is one source move, plus `ConnmanTestMsg::AnyThreadJoinablePublic()` and the focused regression. No unrelated cleanup or new simulation infrastructure was added.
 
 The test covers the invalid configuration and proves the failed-start no-thread invariant. It does not prove all possible `Start` failure paths are side-effect-free, nor does this cycle cover Clang/TSan or an active network start. Those remain separate queue cells. No process remains running and the next cycle must be selected after the finding commit.
+
+## Cycle 235 Completion: Goal 71, deferred scheduler task after runner destruction
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`); no reroll.
+  Branch: `uber-cycle-235-deterministic-simulation-20260731`. Cycle-start HEAD
+  was `55a36c79e3a02aadfbf2509bfcb68cb1e45739b2`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1253`.
+  The fresh gate passed, catalog/prompt/TSV/protocol hashes were unchanged,
+  and protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained
+  alive. The previous Goal 71 scheduler cell from Cycle 84, which concerned
+  `CConnman::Start` publishing worker threads before rejecting options, was
+  excluded. This cycle exercises a distinct `SerialTaskRunner` post-flush
+  lifetime schedule.
+- Contract and schedule: construct a `CScheduler` with no service thread;
+  insert one callback into a `SerialTaskRunner`; call `flush()`, which runs the
+  callback directly but leaves the already queued `ProcessQueue` wrapper in the
+  scheduler; destroy the runner; then start `serviceQueue()` and schedule its
+  stop callback. Required invariants are exactly one user-callback execution,
+  no callback or dereference after runner destruction, safe scheduler reuse,
+  and one bounded deferred wrapper. The old wrapper captured raw `this`, so the
+  later scheduler service dereferenced the destroyed runner.
+- Source evidence: `SerialTaskRunner::MaybeScheduleProcessQueue()` scheduled a
+  raw-`this` lambda, while `flush()` drains the runner directly and has no way
+  to remove a wrapper already held by `CScheduler`. The public runner lifetime
+  is bound to the scheduler, but the scheduler can outlive a runner in this
+  supported no-service-thread flush sequence. Production shutdown normally
+  stops scheduler processing before destroying validation signals; that order
+  does not make the direct schedule safe for independently used runners.
+- Independent reproduction: the temporary regression passed normally before
+  the source fix, so ordinary execution did not expose the stale callback. The
+  same pre-fix test in the ASan/UBSan build reported
+  `AddressSanitizer: stack-use-after-scope` in `SerialTaskRunner::ProcessQueue`
+  through `CScheduler::serviceQueue()`, with the runner's stack scope already
+  ended. This is a first-invalid-operation sanitizer trace, not a sleep-based
+  timing inference.
+- Fix and regression: `SerialTaskRunner` now owns a shared atomic liveness
+  token. The deferred scheduler wrapper retains the token and checks it with
+  acquire semantics before dereferencing `this`; the destructor publishes
+  false with release semantics. The permanent regression is
+  `scheduler_tests/serial_task_runner_flush_then_scheduler_restarts` and
+  asserts the callback count remains one after the scheduler services the
+  stale wrapper.
+- Validation: normal and ASan/UBSan `test_bitcoin` rebuilds completed with
+  isolated `/data/my_storage/tmp` build and run directories. The focused test
+  passed 2 assertions in both builds. The complete `scheduler_tests` plus
+  `validationinterface_tests` selection passed 5 scheduler cases, 7
+  validation-interface cases, and 72 assertions in both builds. The initial
+  combined-suite attempt failed before fixture setup because its `TMPDIR`
+  parents did not exist; the corrected isolated-directory rerun passed. The
+  earlier deterministic `validation_block_reorg` and `dbwrapper` fuzz controls
+  also passed 200 runs each. `git diff --check` passed.
+- Verdict: **confirmed local scheduler lifetime defect and fixed**. The token
+  closes the schedule where `flush()` is used while scheduler service threads
+  are stopped, which is the documented precondition. It does not claim that
+  arbitrary concurrent destruction while a scheduler callback is actively
+  executing is safe; that would require a separate active-callback ownership
+  contract and is outside this minimal fix. The next cycle must choose a fresh
+  goal and must not repeat this exact deferred-runner schedule without new
+  evidence.

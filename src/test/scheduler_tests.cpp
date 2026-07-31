@@ -212,4 +212,22 @@ BOOST_AUTO_TEST_CASE(mockforward)
     BOOST_CHECK(delta > 2*60 && delta < 3*60);
 }
 
+BOOST_AUTO_TEST_CASE(serial_task_runner_flush_then_scheduler_restarts)
+{
+    CScheduler scheduler;
+    int callback_count{0};
+
+    {
+        SerialTaskRunner runner(scheduler);
+        runner.insert([&callback_count] { ++callback_count; });
+        runner.flush();
+        BOOST_CHECK_EQUAL(callback_count, 1);
+    }
+
+    scheduler.scheduleFromNow([&scheduler] { scheduler.stop(); }, 0ms);
+    std::thread scheduler_thread([&scheduler] { scheduler.serviceQueue(); });
+    scheduler_thread.join();
+    BOOST_CHECK_EQUAL(callback_count, 1);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
