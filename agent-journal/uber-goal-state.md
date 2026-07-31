@@ -2,6 +2,59 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 182 Completion
+
+- Cycle 182 selected goal `87` (`bitcoin-mempool-accounting`) from the exact
+  fresh selector `shuf -i 0-98 -n 1` -> `87`; no reroll was needed. The
+  dedicated branch is
+  `uber-cycle-182-bitcoin-mempool-accounting-20260731`; its fresh start HEAD
+  was `689efba2e58fd231eda120b194549f027e255b21`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `42 1153`.
+  Catalog, prompt, corrected TSV, protocol, and start-state hashes were
+  recorded in `agent-journal/bitcoin-mempool-accounting.md`. Persistent
+  untracked artifacts were preserved, and PIDs `777094` and `956381` were
+  not modified.
+
+- The cycle found a test/oracle gap rather than a production mempool defect.
+  Existing ancestry checks compared APIs backed by the same `TxGraph`; they
+  did not independently recompute transitive parent/child closures, fee and
+  virtual-size sums, or undirected cluster components from raw transaction
+  inputs. The new `CheckMempoolGraphAccountingModel()` and
+  `MempoolGraphAccountingStateMachine` in `src/test/mempool_tests.cpp` cover a
+  diamond graph, prioritization, recursive removal, re-addition, block
+  removal, `UpdateTransactionsFromBlock()` dependency repair, and merge
+  removal.
+
+- Source/evidence commit
+  `17e7de1377fbb9658c7e010f1d3c7ec31b3e9af1` (`test: independently model
+  mempool graph accounting`) is authored as `Lőrinc <pap.lorinc@gmail.com>`.
+  It includes the independent oracle and the selected journal update. A
+  disposable removal of `TxGraph::AddDependency` caused 28 of 564 focused
+  assertions to fail, including ancestor/descendant count, size, fee, and
+  cluster mismatches; production source was restored. The first oracle draft
+  also caught its own incorrect cluster model because cousins require an
+  undirected connected-component calculation.
+
+- Verification passed: the focused normal test passed 1 case and 588
+  assertions; combined normal `mempool_tests,txgraph_tests` passed 49 cases
+  and 1,624 assertions; the separate suite controls passed 25/425 and
+  23/611; and Clang 19 UBSan passed the focused case with 588/588 assertions
+  and no diagnostic. `git diff --check` and `git show --check` passed.
+  Exact commands, source trace, mutation output, and limitations are in
+  `agent-journal/bitcoin-mempool-accounting.md`.
+
+- Verdict: confirmed and fixed as an independent test/oracle gap. H1 was not
+  confirmed by the tested replacement/removal sequence; H4's cluster relation
+  is now independently covered for the representative graph. H2 remains
+  open for package acceptance/rejection rollback and secondary-state
+  accounting. H3 remains open for broader trim, expiry, block/reorg overlap,
+  and eviction-accounting sequences. This is the separate state-only close
+  record for Cycle 182. Next action: `git fetch origin master`, a fresh gate
+  including hashes, dirty state, process preservation, and storage capacity,
+  then the exact selector; reroll only if the draw is explicitly closed in
+  this ledger.
+
 ## Cycle 181 Completion
 
 - Cycle 181 selected goal `18` (`exhaustive-algebraic`) from the exact fresh
