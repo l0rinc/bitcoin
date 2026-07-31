@@ -183,6 +183,72 @@ void CheckTransactionAncestryAll(const CTxMemPool& tx_pool)
     }
 }
 
+void CheckIndependentMempoolGraph(const CTxMemPool& tx_pool)
+{
+    LOCK(tx_pool.cs);
+
+    // Recompute the graph from transaction inputs instead of asking TxGraph for
+    // parents, children, or transitive closure. This keeps the oracle independent
+    // from the indexes exercised by the fuzz target.
+    std::map<Txid, const CTxMemPoolEntry*> entries;
+    for (const auto& entry : tx_pool.mapTx) {
+        Assert(entries.emplace(entry.GetTx().GetHash(), &entry).second);
+    }
+
+    std::map<Txid, std::set<Txid>> parents;
+    std::map<Txid, std::set<Txid>> children;
+    for (const auto& [txid, entry] : entries) {
+        for (const auto& txin : entry->GetTx().vin) {
+            if (!entries.contains(txin.prevout.hash)) continue;
+            Assert(parents[txid].insert(txin.prevout.hash).second);
+            Assert(children[txin.prevout.hash].insert(txid).second);
+        }
+    }
+
+    const auto closure = [](const Txid& root, const std::map<Txid, std::set<Txid>>& links) {
+        std::set<Txid> result{root};
+        std::vector<Txid> pending{root};
+        while (!pending.empty()) {
+            const Txid current{pending.back()};
+            pending.pop_back();
+            const auto it{links.find(current)};
+            if (it == links.end()) continue;
+            for (const Txid& next : it->second) {
+                if (result.insert(next).second) pending.push_back(next);
+            }
+        }
+        return result;
+    };
+
+    const auto totals = [&entries](const std::set<Txid>& txids) {
+        size_t size{0};
+        CAmount fees{0};
+        for (const Txid& txid : txids) {
+            const auto it{entries.find(txid)};
+            Assert(it != entries.end());
+            size += it->second->GetTxSize();
+            fees = SaturatingAdd(fees, it->second->GetModifiedFee());
+        }
+        return std::pair{size, fees};
+    };
+
+    for (const auto& [txid, entry] : entries) {
+        const auto expected_ancestors{closure(txid, parents)};
+        const auto expected_descendants{closure(txid, children)};
+        const auto [expected_ancestor_size, expected_ancestor_fees]{totals(expected_ancestors)};
+        const auto [expected_descendant_size, expected_descendant_fees]{totals(expected_descendants)};
+
+        const auto [actual_ancestor_count, actual_ancestor_size, actual_ancestor_fees]{tx_pool.CalculateAncestorData(*entry)};
+        const auto [actual_descendant_count, actual_descendant_size, actual_descendant_fees]{tx_pool.CalculateDescendantData(*entry)};
+        Assert(actual_ancestor_count == expected_ancestors.size());
+        Assert(actual_ancestor_size == expected_ancestor_size);
+        Assert(actual_ancestor_fees == expected_ancestor_fees);
+        Assert(actual_descendant_count == expected_descendants.size());
+        Assert(actual_descendant_size == expected_descendant_size);
+        Assert(actual_descendant_fees == expected_descendant_fees);
+    }
+}
+
 void CheckPrioritisedTransactions(const CTxMemPool& tx_pool)
 {
     const auto prioritised{tx_pool.GetPrioritisedTransactions()};
@@ -604,6 +670,7 @@ void CheckTrimToSizeNoSpendsRemaining(CTxMemPool& tx_pool)
 void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Chainstate& chainstate)
 {
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
+    CheckIndependentMempoolGraph(tx_pool);
     CheckTransactionAncestryAll(tx_pool);
     CheckHasDescendants(tx_pool);
     CheckDirectMempoolEdges(tx_pool);
@@ -638,6 +705,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         }
         tx_pool.UpdateTransactionsFromBlock(hashes_to_update);
         CheckUpdatedBlockDependencies(tx_pool, hashes_to_update);
+        CheckIndependentMempoolGraph(tx_pool);
         CheckHasDescendants(tx_pool);
         CheckDirectMempoolEdges(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
@@ -654,6 +722,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         WITH_LOCK(tx_pool.cs, tx_pool.removeRecursive(tx_to_remove, MemPoolRemovalReason::BLOCK /* dummy */));
         assert(tx_pool.size() < info_all.size());
         CheckTransactionAncestryAll(tx_pool);
+        CheckIndependentMempoolGraph(tx_pool);
         CheckHasDescendants(tx_pool);
         CheckDirectMempoolEdges(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
@@ -672,6 +741,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         // Try expiry
         LOCK2(::cs_main, tx_pool.cs);
         tx_pool.Expire(GetMockTime() - std::chrono::seconds(fuzzed_data_provider.ConsumeIntegral<uint32_t>()));
+        CheckIndependentMempoolGraph(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
         CheckMempoolInfoViews(tx_pool);
     }
@@ -682,6 +752,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     CheckPrioritisedTransactions(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
     CheckMempoolInfoViews(tx_pool);
+    CheckIndependentMempoolGraph(tx_pool);
     CheckMempoolBlockBuilder(tx_pool);
     CheckTrimToSizeNoSpendsRemaining(tx_pool);
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
@@ -964,6 +1035,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         CheckDirectMempoolEdges(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
         CheckMempoolInfoViews(tx_pool);
+        CheckIndependentMempoolGraph(tx_pool);
     }
     FuzzedDataProvider extract_provider(buffer.data(), buffer.size());
     CheckExtractBestByMiningScoreWithTopology(tx_pool, extract_provider);
@@ -1041,6 +1113,7 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
         CheckDirectMempoolEdges(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
         CheckMempoolInfoViews(tx_pool);
+        CheckIndependentMempoolGraph(tx_pool);
     }
     FuzzedDataProvider extract_provider(buffer.data(), buffer.size());
     CheckExtractBestByMiningScoreWithTopology(tx_pool, extract_provider);
