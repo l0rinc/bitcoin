@@ -1,3 +1,123 @@
+# Cycle 200: repeated P2P rejection-warning amplification
+
+## Selection and fresh gate
+
+- The exact selector for this cycle was `shuf -i 0-98 -n 1` -> `30`, selecting
+  `security-logging`. This is a distinct cell from Cycle 196's fixed RPC
+  whitelist method newline injection and Cycle 164's fixed persistent-setting
+  redaction. The current cell is repeated P2P rejection warnings, attacker-
+  controlled diagnostic text, and per-peer/per-source log amplification.
+- The dedicated branch is `uber-cycle-200-security-logging-20260731`. The
+  fresh gate timestamp is `2026-07-31T09:10:35Z`; start HEAD is
+  `4cf7b4e36af1fc14a5c75fb2640f49d48116c8be`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and exact divergence `42 1190`
+  from `git rev-list --left-right --count origin/master...HEAD`.
+- `git fetch origin master`, tracked/index cleanliness, and `git diff --check`
+  passed at entry. Catalog, prompt, corrected goals TSV, protocol, and
+  pre-cycle state SHA-256 values are `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`,
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`, and
+  `dc68bc5ec918487efde16dd9d5dd3edc35beb6f8df61d45dc15a286c8e097479`.
+- Protected unrelated processes `777094`, `956381`, `1138182`, and `1157959`
+  were observed alive and are excluded from this cycle. Scratch data, logs,
+  sockets, and daemon state must stay under `/data/my_storage/tmp/cycle200-security-logging`;
+  never use a default datadir, wallet, key, or production database.
+
+## Scope and plan
+
+Inventory P2P `LogPrint`, `LogWarning`, `LogError`, and disconnect/ban messages
+that include peer-controlled or protocol-derived values: command names,
+`subVer`, addresses, inventory counts, reject reasons, message sizes, hashes,
+and malformed payload summaries. Trace each value from the network boundary to
+the sink and classify it as public, private, attacker-controlled, or secret.
+For repeated events, calculate the maximum log work and bytes per peer,
+connection, address, and unit time, including reconnect and multi-peer cases.
+
+Prioritize a falsifiable amplification or misleading-diagnostic hypothesis.
+Use deterministic socket/message transcripts or an isolated functional test;
+do not infer a defect from a large log alone. Search history, existing
+discouragement/ban/rate-limit policy, and prior journals before fixing. A
+confirmed finding needs captured pre-fix output plus a bounded resource or
+truthfulness failure, then an independent replay after the smallest fix.
+
+## Cycle 200 evidence and verdict
+
+### Rejection and punishment paths
+
+- The cached-invalid header warning at `src/net_processing.cpp:3429` is reached
+  only for an invalid header received from an outbound peer whose result is
+  `BLOCK_CACHED_INVALID`. The current validation sources searched for this
+  result use fixed reasons such as `duplicate-invalid`; no peer-supplied
+  payload is copied into the warning. The only variable fields are the bounded
+  validation message and numeric peer id.
+- The warning is followed immediately by
+  `MaybePunishNodeForBlock(..., "invalid header received")`. For an ordinary
+  outbound peer this sets `m_should_discourage`, and `SendMessages` calls
+  `MaybeDiscourageAndDisconnect` before doing more work. That function clears
+  the flag, discourages the address, and calls `DisconnectNode`, so the normal
+  remote path cannot repeatedly emit the warning on one live connection.
+- `NoBan` and manually connected peers deliberately bypass punishment and can
+  reach the two unconditional `Not punishing ...` warnings repeatedly. These
+  are explicit operator-trusted connection classes rather than unauthenticated
+  public peers. Both call sites are still protected by the default unconditional
+  logging quota. No correction to punishment or warning severity is justified
+  by this cycle's evidence.
+
+### Opt-in transaction rejection logging
+
+`ProcessInvalidTx` logs one line per rejected transaction through
+`LogDebug(BCLog::MEMPOOLREJ, ...)`. The category is disabled unless the
+operator enables `-debug=mempoolrej`, and the release documentation describes
+the same opt-in contract. The line contains fixed-size transaction and witness
+hashes plus validation reasons. A source search over all transaction
+`ValidationState::Invalid` call sites found enum names, bounded indexes and
+numeric values, script-error names, hashes, and policy diagnostics, but no raw
+transaction byte string or unbounded peer text. This remains an intentionally
+verbose debug facility, not an unconditional security warning; its lack of
+the unconditional quota is expected after explicit debug opt-in.
+
+### Input-to-log contract checks
+
+- P2P message types are sanitized at the normal processing entry point, and
+  transport validation limits message types to printable 12-byte headers.
+- Version user agents are read with `MAX_SUBVERSION_LENGTH` and sanitized
+  before they are logged. `CNode::LogPeer()` formats only the numeric peer id
+  and, when enabled, a structured address/port.
+- The only unconditional P2P warning carrying validation text is therefore
+  bounded diagnostic state, not a newline-capable or arbitrary remote string.
+
+### Independent verification
+
+The following source/history checks were run on the clean cycle base:
+
+```text
+git grep -n -E 'm_should_discourage|Discourage|MaybePunishNodeForBlock|BLOCK_CACHED_INVALID|If this happens with all peers' -- src/net.cpp src/net_processing.cpp src/net.h src/net_processing.h
+git show --format=fuller --no-ext-diff 2f51951d03 -- src/net_processing.cpp
+git grep -n -E 'LogWarning|MEMPOOLREJ|GetDebugMessage|MAX_SUBVERSION_LENGTH|LogPeer' -- src/net_processing.cpp src/net.cpp src/validation.cpp src/consensus/validation.h
+/data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=logging_tests --log_level=test_suite
+```
+
+The logging run exited 0 with 9 cases and `*** No errors detected`, including
+the per-source suppression and reset tests. The default implementation is
+`RATELIMIT_MAX_BYTES = 1 MiB` per source location per `RATELIMIT_WINDOW = 1h`;
+the limiter suppresses disk output while leaving console output available, and
+`-nologratelimit` is an explicit operator override. Those documented limits
+and exceptions are recorded rather than treated as defects.
+
+### Cycle verdict and handoff
+
+Verdict: **dismissed**. No confirmed security, correctness, privacy, or
+misleading-diagnostic defect was found in this P2P logging cell, so no
+production patch or regression test is warranted. The remaining useful queue
+is to sample unconditionally logged P2P timeout/old-chain messages across
+reconnect and multi-peer schedules, then separately audit whether any
+operator-controlled connection class can bypass both disconnection and the
+logging quota. The next cycle must choose from the full catalog again and
+must not reopen the fixed RPC whitelist newline or persistent-settings
+redaction findings.
+
 # Cycle 196: security-sensitive and misleading logging audit
 
 ## Selection and gate
