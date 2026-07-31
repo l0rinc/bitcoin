@@ -143,6 +143,52 @@ BOOST_AUTO_TEST_CASE(add_wallet_descriptor_does_not_extend_non_self_expanding)
     }
 }
 
+BOOST_AUTO_TEST_CASE(add_wallet_descriptor_cache_write_failure_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+
+    FlatSigningProvider keys;
+    std::string error;
+    auto descriptors{Parse("wpkh(" + EncodeExtPubKey(extkey.Neuter()) + "/*)", keys, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_EQUAL(descriptors.size(), 1);
+    WalletDescriptor descriptor{std::move(descriptors.at(0)), /*creation_time=*/1, /*range_start=*/0, /*range_end=*/1, /*next_index=*/0};
+    descriptor.cache.CacheParentExtPubKey(0, extkey.Neuter());
+
+    const uint256 descriptor_id{descriptor.id};
+    const std::string descriptor_cache_type{"walletdescriptorcache"};
+    DataStream cache_key;
+    cache_key << std::make_pair(std::make_pair(descriptor_cache_type, descriptor_id), uint32_t{0});
+    DataStream descriptor_key;
+    descriptor_key << std::make_pair(DBKeys::WALLETDESCRIPTOR, descriptor_id);
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+    const std::string trigger{
+        "CREATE TRIGGER fail_imported_descriptor_cache BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{cache_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    {
+        LOCK(wallet.cs_wallet);
+        wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS | WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+        auto result{wallet.AddWalletDescriptor(descriptor, keys, /*label=*/"", /*internal=*/false)};
+        BOOST_CHECK(!result);
+        BOOST_CHECK(!wallet.GetDescriptorScriptPubKeyMan(descriptor));
+    }
+    BOOST_CHECK(!DatabaseHasKey(database, descriptor_key));
+    BOOST_CHECK(!DatabaseHasKey(database, cache_key));
+
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, "DROP TRIGGER fail_imported_descriptor_cache", nullptr, nullptr, nullptr), SQLITE_OK);
+    {
+        LOCK(wallet.cs_wallet);
+        auto result{wallet.AddWalletDescriptor(descriptor, keys, /*label=*/"", /*internal=*/false)};
+        BOOST_REQUIRE(static_cast<bool>(result));
+        BOOST_CHECK(wallet.GetDescriptorScriptPubKeyMan(descriptor));
+    }
+    BOOST_CHECK(DatabaseHasKey(database, descriptor_key));
+    BOOST_CHECK(DatabaseHasKey(database, cache_key));
+}
+
 BOOST_AUTO_TEST_CASE(update_descriptor_key_write_failure_preserves_state)
 {
     CExtKey extkey;
