@@ -114,6 +114,9 @@ bool BaseIndex::Init()
 
     // May need reset if index is being restarted.
     m_interrupt.reset();
+    // Do not let callers observe the previous lifecycle state while the index
+    // database and subclass-specific state are being reinitialized.
+    m_synced = false;
 
     // m_chainstate member gives indexing code access to node internals. It is
     // removed in followup https://github.com/bitcoin/bitcoin/pull/24230
@@ -509,6 +512,9 @@ bool BaseIndex::StartBackgroundSync()
 
 void BaseIndex::Stop()
 {
+    // The index is unavailable after Stop(), even if it was synced before the
+    // unregister/join sequence began.
+    m_synced = false;
     if (m_chain->context()->validation_signals) {
         m_chain->context()->validation_signals->UnregisterValidationInterface(this);
     }
@@ -516,6 +522,7 @@ void BaseIndex::Stop()
     if (m_thread_sync.joinable()) {
         m_thread_sync.join();
     }
+    m_synced = false;
 }
 
 IndexSummary BaseIndex::GetSummary() const
