@@ -2,6 +2,58 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 189 Completion
+
+- Cycle 189 selected goal `8` (`locking-threading`) from the exact selector
+  `shuf -i 0-98 -n 1` -> `8`; no reroll was needed. The dedicated branch is
+  `uber-cycle-189-locking-threading-20260731`; its fresh start HEAD was
+  `69be8957de541093a7c182b7363e81a4e613f3cd`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1168 42`.
+  Catalog, prompt, corrected TSV, protocol, and gate-state hashes are
+  recorded in `agent-journal/locking-threading.md`. Known unrelated
+  untracked artifacts were preserved, and PIDs `777094` and `956381` were not
+  touched.
+
+- Prior Goal 8 cells covered and closed peer/mempool and V2 lock ordering,
+  normal scheduler lifetime, callback-owned peer state, the `DumpAddresses()`
+  persistence race, and the mapport `std::thread` lifecycle race. This cycle
+  audited the separate `util::SignalInterrupt` reset/handler state machine.
+  `src/init.cpp` invokes the signal-safe interrupt from SIGTERM/SIGINT and the
+  GUI chainstate retry path resets the same object before reindexing.
+
+- The old Unix sequence drained the pending token while `m_flag` stayed true,
+  then stored false. A signal arriving after the drain saw true in
+  `operator()`, wrote no replacement token, and was then erased by reset. The
+  Windows sequence released its mutex before clearing the flag, allowing the
+  same lost-event ordering through a console callback. This is a real
+  shutdown-wakeup race established by the atomic/pipe state trace; TSan cannot
+  diagnose it because the flag itself is atomic.
+
+- Source/evidence commit `6a96f5644d9655b60755ecd91f5dc9ddd70d75c8`
+  (`util: preserve concurrent signal during reset`) is authored as
+  `Lőrinc <pap.lorinc@gmail.com>` and includes the selected journal. Unix
+  reset now atomically clears the flag before draining the old token, so a
+  later signal publishes a new token and remains observable. Windows reset
+  clears the flag under the same mutex as the callback. The focused
+  `signal_interrupt_reset_drains_pending_event` test checks reset, false
+  postconditions, and reuse for a second event.
+
+- Clang 19 UBSan/alignment/object-size and TSan unit builds both rebuilt
+  `test_bitcoin`. Each focused post-commit run passed 1 case and 8 assertions;
+  each full `util_tests` run passed 81 cases and 4,002 assertions with no TSan
+  report. The first UBSan invocation before creating its `/data` `TMPDIR`
+  failed in fixture setup with `temp_directory_path`; the rerun after creating
+  the directory passed. No Windows or native signal-handler runtime was
+  available, so those branches are covered by source inspection and the
+  platform-specific synchronization proof.
+
+- Verdict: confirmed and fixed interrupt reset lost-wakeup race. The next
+  Goal 8 queue is a fresh worker/callback lifecycle or pipe-failure state
+  machine. Do not reopen this reset interleaving or the prior mapport,
+  address-dump, peer-lock, scheduler-lifetime, or V2 transport cells. The
+  next cycle must perform a fresh gate and exact random selection.
+
 ## Cycle 188 Completion
 
 - Cycle 188 selected goal `10` (`fuzz-target-gaps`) from the exact selector
