@@ -122,3 +122,90 @@ The cycle is a journal-only handoff. Do not count the repeated branch copies as 
 4. Database snapshot/iterator duplicate-key and deletion accounting under restart, excluding the closed iterator-status propagation finding.
 
 Retain the raw logs under `/data/my_storage/tmp/cycle52-dedup/`. The next cycle must repeat the branch/base/dirty/process/catalog gate, select a fresh goal with `shuf -i 0-98 -n 1`, and search this semantic index before testing.
+
+## Cycle 216 - 2026-07-31
+
+### Gate and scope
+
+- Selector: `shuf -i 0-98 -n 1` returned `64` (`finding-dedup-recurrence`); no reroll.
+- Branch: `uber-cycle-216-finding-dedup-recurrence-20260731`.
+- Start HEAD: `ad38c8416ae58e758ce3794771dfea4b5e58af`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence was 42 behind and
+  1220 ahead. Fetch, tracked/index checks, and `git diff --check` passed.
+- Catalog, prompt, TSV, and protocol hashes matched the prior gate. The state
+  hash at entry was `f800841312e8b0ec3fbfe97c970114699f7cf62fdc3f8b45f35994a05f9f0fc7`.
+  Protected long-running tests remained alive and no cycle-owned process was
+  running.
+- This cycle excluded the already closed orphanage, txrequest aliasing,
+  ordinary LevelDB iterator/status, and broad graph-accounting cells. The
+  active risk map was package rejection rollback, replacement/reorg graph
+  recurrence, and historical finding duplication.
+
+### Hypotheses and evidence
+
+1. **Package test-accept rollback recurrence.** The current package-evaluation
+   fuzzer snapshots mempool, outpoint, and coin-cache state around
+   `ProcessNewPackage`; the production cleanup path removes `coins_to_uncache`
+   entries after rejection. The focused
+   `txpackage_tests/package_test_accept_preserves_coins_cache` control passed
+   1 case and 5 assertions. The witness-swap control passed 1 case and 23
+   assertions. No secondary-state recurrence was observed.
+2. **Replacement/reorg cluster recurrence.** Current
+   `UpdateTransactionsFromBlock` rebuilds direct parent edges from
+   `mapNextTx`, trims the graph, removes trim results, and verifies descendants'
+   ancestor sets. `mempool_tests/MempoolGraphAccountingStateMachine` passed 1
+   case and 588 assertions; `MempoolAncestryTestsDiamond` passed 1 case and 35
+   assertions. Existing mutation evidence still kills deletion of
+   `TxGraph::AddDependency`; the current replay found no distinct bypass.
+3. **Historical semantic duplicate.** Patch-id grouping collapsed 16 visible
+   `mempool: check gathered cluster union` copies to
+   `dbff7a688284f5b856901f99c2f73e0f5bbd73cf` and 14 visible
+   `mempool: check reorg dependency repair` copies to
+   `2b121db769527cd8f4b92736a5ccc349aa6afafd`. The common
+   `mempool: check cluster and fee diagram contracts` copies shared
+   `c08797746b86399e71c214d3cb0e4fa0ef6b9e3c`; the apparent outlier
+   `62fcb8d2bc25` (`e75a8d87db0fef980c91735a26878cc1fe3dd1df`) had the same
+   four-file, 166-line patch as `4cff9175e3` after ignoring index hashes and
+   shifted hunk context. It is a context-shifted duplicate, not a new finding.
+   The one-off package-cache and witness-swap commits remain separate oracle
+   hardening fingerprints, not repeated production defects.
+
+The first replay attempt exited 201 because its four newly named `TMPDIR`
+directories did not exist. After creating those scratch directories, the same
+commands completed successfully:
+
+```
+env TMPDIR=/data/my_storage/tmp/cycle216-mempool-state /data/my_storage/tmp/cycle214-build/bin/test_bitcoin --run_test=mempool_tests/MempoolGraphAccountingStateMachine --random=21601 --log_level=message --report_level=short --color_output=false
+env TMPDIR=/data/my_storage/tmp/cycle216-mempool-cluster /data/my_storage/tmp/cycle214-build/bin/test_bitcoin --run_test=mempool_tests/MempoolAncestryTestsDiamond --random=21602 --log_level=message --report_level=short --color_output=false
+env TMPDIR=/data/my_storage/tmp/cycle216-package /data/my_storage/tmp/cycle214-build/bin/test_bitcoin --run_test=txpackage_tests/package_test_accept_preserves_coins_cache --random=21603 --log_level=message --report_level=short --color_output=false
+env TMPDIR=/data/my_storage/tmp/cycle216-witness /data/my_storage/tmp/cycle214-build/bin/test_bitcoin --run_test=txpackage_tests/package_witness_swap_tests --random=21604 --log_level=message --report_level=short --color_output=false
+```
+
+All four exited 0. The initial setup failure is harness-only and has no
+product implication. Scratch logs remain under the four cycle216 directories.
+
+### Verdict
+
+No new recurrence or independent duplicate was confirmed. The current package,
+cluster, and reorg controls preserve the relevant state, and the apparent
+historical outlier is semantically identical to an existing patch identity.
+No source or permanent test change is justified. This is a journal-only
+handoff; do not reopen these fingerprints without a new caller, changed
+contract, or recurrence after a source change.
+
+### Next queue
+
+1. Package acceptance rejection after a secondary index or cache write, using
+   injected failure points and complete pre/post state comparison.
+2. Mempool trim, expiry, block removal, and reorg reinsertion overlap outside
+   the representative graph sequence, with independent full-recompute
+   accounting.
+3. Release-branch or cherry-pick variants of the same graph/package fixes only
+   when ancestry changes the caller or contract.
+4. Database snapshot/iterator duplicate-key and deletion accounting under
+   restart, retaining the prior iterator-status exclusion.
+
+The next cycle must repeat the fresh gate, preserve unrelated untracked
+artifacts, select a new goal with `shuf -i 0-98 -n 1`, and search this index
+before testing.
