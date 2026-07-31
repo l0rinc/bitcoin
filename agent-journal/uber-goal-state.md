@@ -2,6 +2,61 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 188 Completion
+
+- Cycle 188 selected goal `10` (`fuzz-target-gaps`) from the exact selector
+  `shuf -i 0-98 -n 1` -> `10`; no reroll was needed. The dedicated branch is
+  `uber-cycle-188-fuzz-target-gaps-20260731`; its fresh start HEAD was
+  `9472fdc21f5cc57cdc0b05615c0f84739965b55b`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1166 42`.
+  Catalog, prompt, corrected TSV, protocol, and gate-state hashes are
+  recorded in `agent-journal/fuzz-target-gaps.md`. Known unrelated untracked
+  artifacts were preserved, and PIDs `777094` and `956381` remained alive.
+
+- The distinct cell audited the production-backed
+  `validation_load_mempool` target and its `FuzzedFileProvider`. The full
+  current QA-assets corpus contained 1,674 files and 122,866,874 bytes. Before
+  the change, its full profile reached `mempool_persist.cpp` at 89.24% lines
+  and 82.35% branches, but had no successful transaction acceptance, no
+  nonempty dump vinfo loop, and no matching restored-unbroadcast lookup. The
+  existing target's later roundtrips were therefore serializing empty pools.
+
+- The harness now sets mock time, mines mature `P2WSH_OP_TRUE` coinbase
+  outputs once during initialization, chooses a mature output not already
+  referenced by a transaction accepted from the fuzzed initial load, and
+  accepts one deterministic witness-valid transaction. It then applies fee
+  priority and unbroadcast metadata before the existing roundtrips. This is a
+  harness-only realism improvement; no production or consensus code changed.
+  The unused-output selection avoids an input-dependent assertion collision.
+
+- The final profile binary rebuilt successfully with Clang 19 and LLVM source
+  coverage. The full corpus replay used seed `1891`, completed 1,675 runs in
+  159 seconds at about 1.07 GB RSS, and exited 0. Final coverage was 98.10%
+  lines and 95.59% branches for `mempool_persist.cpp`, and 90.40% lines and
+  79.41% branches for the harness. It reached valid acceptance 6.70k times,
+  already-present handling 1.67k, fee-delta import 459k, nonempty metadata
+  loops 1.06M, matching unbroadcast lookups 5.07k, nonempty dump vinfo 5.03k,
+  close failure 9, and rename failure 1.67k. The stratified 16-file replay
+  under the ASan/UBSan/libFuzzer build completed 17 runs in 7 seconds with no
+  diagnostic; the post-commit empty-input smoke replay also passed.
+
+- Source/evidence commit `7e516d555ae9bcf4cf51251cc8024ea56651db05`
+  (`fuzz: exercise nonempty mempool persistence paths`) is authored as
+  `Lőrinc <pap.lorinc@gmail.com>` and includes the selected journal. The
+  final source diff passed `git diff --check`, both fuzz binaries rebuilt, and
+  the tracked worktree was clean after the commit. The fixed-input 100-run
+  smoke invocation was reported by libFuzzer as replay-only, so it is not
+  counted as mutation evidence.
+
+- Verdict: confirmed local fuzz-harness realism gap, fixed in this cycle. The
+  remaining distinct Goal 10 queue is the nonempty `DumpMempool`
+  `file.Commit()` failure branch and the `LoadMempool` validation-interrupt
+  branch. Those require deterministic fault injection plus proofs of existing
+  file preservation and mempool-state contracts. Do not reopen the prior
+  empty-corpus, P2P private-broadcast corpus, or single-fixture collision
+  cells. The next cycle must perform a fresh gate and exact random selection.
+
 ## Cycle 187 Completion
 
 - Cycle 187 selected goal `18` (`exhaustive-algebraic`) from the exact selector
