@@ -2474,3 +2474,39 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - State-only close commit: pending. The next cycle must perform a fresh gate,
   preserve unrelated untracked artifacts, and draw a distinct eligible goal;
   Goal 77's six-character grammar amount-parser cell is closed.
+
+## Cycle 214 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `27` (`error-path-state`); no reroll.
+  Branch: `uber-cycle-214-error-path-state-20260731`. The fresh gate started at
+  `d5d3c458f064941c84e1d1d71691f58842c6aef0`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1217 42`.
+  Fetch, tracked/index checks, and `git diff --check` passed; the four protected
+  test processes remained alive and untouched.
+- The distinct wallet loader cell confirmed that `CWallet::LoadToWallet` left a
+  newly emplaced `CWalletTx` in `mapWallet` when its fill callback returned
+  false. `LoadTxRecords` reaches that branch for a persisted transaction whose
+  embedded hash differs from its `DBKeys::TX` key, leaving a map entry keyed by
+  the wrong hash even though the load failed. The pre-fix regression exited 201
+  with `3` assertions passed and the map-entry absence assertion failed.
+- Source/test/journal commit `3f836d1332656774934840b02bb3d1eb5f10d640`
+  (`wallet: roll back failed transaction loads`) is authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It erases only newly inserted entries on a
+  failed callback, before ordered/spend indexes are published, and adds
+  `load_to_wallet_failure_does_not_retain_transaction`.
+- The current-source wallet-enabled build at
+  `/data/my_storage/tmp/cycle214-build` completed all 547 Ninja steps. The
+  repaired focused test passed `1` case / `4` assertions; `wallet_tests` passed
+  `26` / `220`; `walletload_tests` passed `1` / `6`; and `walletdb_tests` passed
+  `2` / `5`. The initial before-state and final after-state commands, source
+  trace, exact limitation, and full finding record are in
+  `agent-journal/error-path-state.md`. The regression is backend-independent
+  but did not perform full corrupt-DB population, Berkeley DB, or power-loss
+  testing.
+- Verdict: **confirmed and fixed**. No earlier Goal 27 cell was reopened. The
+  source/test/evidence commit is complete; this is the separate state-only
+  handoff commit. The next run must perform a fresh gate, use the exact random
+  selector, and continue with a distinct eligible cell; Goal 27's next queue is
+  descriptor top-up failure after prior cache writes, BaseIndex lifecycle state,
+  and other newly changed status-returning wallet APIs.
