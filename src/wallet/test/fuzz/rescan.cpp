@@ -336,6 +336,14 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
         FuzzRescanChain::Block eb;
         eb.hash = ConsumeUInt256(fdp);
         if (eb.hash.IsNull()) eb.hash = uint256::ONE;
+        // Keep extension hashes unique against the original chain and each
+        // other — same rule as the original blocks (#71 c3/c4: a duplicate
+        // here let a hash-replaced start "resume" at a same-hash extension
+        // block, an unrepresentable chain).
+        while (std::any_of(chain.blocks.begin(), chain.blocks.end(), [&](const auto& prev) { return prev.hash == eb.hash; }) ||
+               std::any_of(chain.extension.begin(), chain.extension.end(), [&](const auto& prev) { return prev.hash == eb.hash; })) {
+            *reinterpret_cast<uint8_t*>(eb.hash.data()) += 1;
+        }
         eb.time = fdp.ConsumeIntegralInRange<int64_t>(1, 1LL << 40);
         eb.active = true;
         eb.has_data = true;
@@ -402,9 +410,15 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
         }
         Assert(result.last_failed_block.IsNull());
         // A triggered extension without max_height must extend the scan to
-        // the grown tip (the wallet's last block advanced mid-scan).
+        // the grown tip (the wallet's last block advanced mid-scan) —
+        // unless the flip deactivated an original block BEFORE the scan
+        // reached it (#71 c4: the flip fires on the first findBlock from
+        // ANY caller, including pre-scan start-path callers; a deactivated
+        // successor stops the scan legitimately one block early via the
+        // wallet.cpp "previous block no longer on the chain" break).
         if (chain.extend_triggered && !use_max_height) {
-            Assert(scanned_upto == n_blocks + n_ext - 1);
+            const int expected{chain.flip_triggered ? chain.flip_idx - 1 : n_blocks + n_ext - 1};
+            Assert(scanned_upto == expected);
         }
     } else if (result.status == CWallet::ScanResult::FAILURE) {
         // A failure must have a reason: unreadable scanned block, an
@@ -467,6 +481,37 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
                     LOCK(wallet->cs_wallet);
                     Assert(wallet->mapWallet.contains(wallet_txs[i]->GetHash()));
                 }
+            }
+        }
+        // ---- Extension-block resume (#71 c4) ----
+        // When the recorded position lies inside the triggered extension
+        // (the mock moved extension blocks into `blocks`), resuming from it
+        // must cover the remaining extension blocks: no tx loss, no FAILURE
+        // (extension blocks are always active and readable), and on SUCCESS
+        // every later extension wallet tx is present.
+        // ---- Extension-block resume (#71 c4) ----
+        // The natural schedule never leaves the recorded position inside
+        // the extension (abort is requested pre-scan, extension blocks are
+        // always active/readable, and the last save lands on the stop/tip),
+        // so force the class deterministically: when the extension
+        // triggered with >= 2 blocks, resume from the FIRST extension block
+        // and require SUCCESS plus every later extension wallet tx (they
+        // are all active and readable, and no abort/shutdown is pending
+        // inside this block).
+        if (chain.extend_triggered && n_ext >= 2) {
+            const uint256& ext_start{chain.blocks[n_blocks].hash};
+            const size_t wallet_size_before{WITH_LOCK(wallet->cs_wallet, return wallet->mapWallet.size())};
+            int64_t now_calls4{0};
+            reserver.setNow([&]() { return SteadyClock::time_point{SteadyClock::duration{2000 + (++now_calls4) * now_step}}; });
+            const auto ext_resume{wallet->ScanForWalletTransactions(ext_start, n_blocks, std::nullopt, reserver, /*save_progress=*/false)};
+            const size_t wallet_size_after{WITH_LOCK(wallet->cs_wallet, return wallet->mapWallet.size())};
+            Assert(wallet_size_after >= wallet_size_before);
+            Assert(ext_resume.status == CWallet::ScanResult::SUCCESS);
+            for (int i = n_blocks + 1; i < static_cast<int>(chain.blocks.size()); ++i) {
+                const CTransactionRef& tx{ext_wallet_txs[i - n_blocks]};
+                if (!tx) continue;
+                LOCK(wallet->cs_wallet);
+                Assert(wallet->mapWallet.contains(tx->GetHash()));
             }
         }
         // ---- Reorged recorded position (#71 c3) ----

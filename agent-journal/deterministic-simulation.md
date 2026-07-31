@@ -211,3 +211,74 @@ guaranteed distinct likewise.
 ## Rotation note
 Three cycles; tip-extension, crash-resume durability, and
 reorged-record resume all delivered with oracles.
+
+## Cycle 4 (2026-07-31): extension-block resume oracle delivered (+ extension-hash uniqueness fix, + c1 oracle correction) — 3000 runs clean
+
+### Draw
+RE-RANK draw 136 over the 6-cell queue: raw=18304798480260019009,
+masked 9081426443405243201 -> idx 5 -> #71 extension-block resume
+(c2/c3 queue). Branch: audit/deterministic-sim-c4 from 7e88645b92.
+
+### Delivered: forced extension-resume oracle (rescan.cpp)
+Natural-schedule analysis (recorded-index histogram probe, n=200):
+the BESTBLOCK record after a save_progress scan is essentially the
+stop/tip — abort is requested pre-scan, extension blocks are always
+active/readable (no mid-extension failure), and max_height stops in
+the original range — so a recorded position INSIDE the extension
+never occurs naturally. Forced deterministically (same pattern as
+c3's reorg classes): when the extension triggered with n_ext >= 2,
+resume from the FIRST extension block and assert SUCCESS plus every
+later extension wallet tx present, wallet size never shrinks.
+Fire-proofed with a temporary counter (fires at the expected few-%
+rate), counter removed for the final campaign.
+
+### Bug 2 found+fixed IN THE HARNESS: extension-block hash duplicates
+Artifact (Base64 FuwnJycncRknJycnJycnJ///lZWVAAAAAJUCAAR1bg==...
+actually the mode-1 seed from the campaign) crashed c3's reorg
+oracle: mode=1 (hash-replaced genesis) resume returned SUCCESS.
+Root cause (findBlock trace): c3's uniqueness fix uniquified only
+ORIGINAL blocks; an EXTENSION block sharing the recorded hash let
+the "unknown start" resume find a same-hash successor at height 15 —
+an unrepresentable chain. Fix: extension hashes are bumped unique
+against chain.blocks and each other at construction. (A real chain
+can never repeat a hash; mock-fidelity class identical to c3's.)
+
+### Bug 3 found+fixed IN THE HARNESS: c1 extension oracle overclaimed
+Second artifact crashed c1's `scanned_upto == n_blocks+n_ext-1`
+assert. Trace: a PRE-SCAN findBlock(tip) caller fired the flip
+before the scan started (deactivating blocks[2]); the scan then
+legitimately stopped at flip_idx-1 via wallet.cpp's "previous block
+no longer on the chain" break (:2014) with SUCCESS, while the
+extension (extend_at=0) had already grown the chain. Corrected
+oracle: under SUCCESS + flip_triggered the scan must stop exactly at
+flip_idx-1; otherwise at the grown tip. (Under SUCCESS the flip can
+only fire pre-reach — firing at the flip iteration yields FAILURE.)
+
+### Verification
+- make -C build_fuzz -j4 fuzz clean (one pre-existing unused-Find
+  warning, not from this change).
+- All three preserved artifacts pass: /tmp/c4_crash_seed (dup-hash),
+  /tmp/c4_crash2 (oracle-overclaim), /tmp/r71_corpus/
+  seed_reorg_resume_dup (c3).
+- FUZZ=wallet_rescan build_fuzz/bin/fuzz -runs=3000 /tmp/r71_corpus:
+  'Done 3000 runs in 192 second(s)', rc=0, zero assert/sanitizer
+  reports (log /tmp/c4_final2.log).
+
+### Verdict
+- Extension-resume fault class DELIVERED, oracle-clean: resuming
+  from inside a tip extension completes the grown chain with no tx
+  loss. No production defect — wallet.cpp's extension/reorg behavior
+  matched its documented contract in every probed class.
+- Two harness-fidelity defects CONFIRMED+FIXED with crashing
+  artifacts preserved (would have weakened/misfired every
+  hash-locating and extension oracle in the harness).
+
+### Limitations / queue
+- Pre-scan findBlock caller identity not pinned down (reserve/start
+  path; irrelevant to the corrected oracle).
+- #71 queue: progress-value fuzzing (guessVerificationProgress) from
+  c1 remains the only open cell.
+
+## Rotation note
+Four cycles; tip-extension, crash-resume, reorged-record, and
+extension-resume all delivered with oracles. Near exhaustion.
