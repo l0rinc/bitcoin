@@ -1,5 +1,70 @@
 # Floating-Point, Sanitizer, and Fuzzer-Exclusion Audit
 
+## Cycle 178 Identity and Fresh Gate
+
+- Draw command: shuf -i 0-98 -n 1
+- Draw: 98
+- Selected goal: float-sanitizer-fuzz-exclusions (Floating-point edge
+  values, sanitizer resurrection, and fuzz-exclusion audit)
+- Branch: uber-cycle-178-float-sanitizer-fuzz-exclusions-20260731
+- Start HEAD: 0e471c4bf955cb03150b10af2a4dc844b01f371b
+- origin/master: 67efced1fc83a0b7215cc1513e7c4754fee0f12f
+- Merge-base: a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b
+- Divergence (origin/master...HEAD): 42 1141
+- Catalog SHA-256: 5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8
+- Prompt SHA-256: 10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec
+- Goals TSV SHA-256: babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb
+- Protocol SHA-256: 954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc
+- Uber-state SHA-256 at gate: f01e6011ac059dcd35dad2d8666eeeb90a0c4838f872527e59f93360df35eb55
+- Tracked/index state was clean at the gate. Persistent untracked agent
+  artifacts, JavaScript scan files, and test/cache were preserved and will
+  remain outside cycle commits.
+- Preserved unrelated long-running tests: PIDs 777094 and 956381; neither
+  was modified.
+- Storage gate: approximately 99 MiB free on root and 50 GiB free on /data.
+
+## Cycle 178 Scope and Prior-Finding Exclusions
+
+Goal 98 was previously selected in Cycle 47 and Cycle 99. Cycle 47
+confirmed that removing the SHA256 SSE4 no_sanitize(address) attribute
+causes a current Clang compile failure and a GCC ASan autodetection crash;
+that guard is closed. Cycle 99 fixed the persisted fee-estimator NaN decay
+acceptance in commit 513c5e4381 and closed the raw float target's IEEE
+vectors, NaN oracle, locale-unavailable precondition, and policy-estimator
+invalid-threshold cells. Those findings are evidence seeds, not targets for
+repetition unless new source or compiler evidence changes their contract.
+
+This cycle starts a new current-tree pass over sanitizer attributes and
+suppression scope, fuzzer gates outside the closed raw-float oracle,
+floating-point conversion paths in public/config/RPC/policy interfaces, and
+the sanitizer CI target/category matrix. The trust boundaries are
+untrusted serialized/config/RPC values, persisted policy data, developer
+test inputs, and compiler/tool diagnostics. Floating point must not be
+introduced into consensus or secret-dependent cryptographic decisions.
+
+Initial queue:
+
+1. Diff current sanitizer attributes, suppressions, CI exclusions, and
+   compiler-version guards against the Cycle 99 inventory; identify a
+   target or diagnostic that is currently hidden without an independently
+   reproduced tool limitation.
+2. Trace fuzzer Assumptions, catches, early returns, clamps, and ignored
+   errors around JSON/config/RPC number parsing, serialization, locale
+   handling, policy values, and public numeric utilities. Classify each as a
+   real precondition or an oracle gap.
+3. Inventory production float/double values and conversions not covered by
+   the closed raw-float target, prioritizing ordering, hashing, integer
+   casts, formatting, persistence, and error-state behavior.
+4. Compare the documented sanitizer matrix with generated CI targets and
+   build scripts; resurrect one excluded path only when a deterministic
+   current compiler/build experiment can prove a missed diagnostic or a
+   necessary compatibility guard.
+
+Each candidate needs an expected value domain and failure-state invariant
+before testing, a source/history trace, a minimal reproducer or static/tool
+proof, and an independent verdict. Preserve raw bits, minimized inputs,
+sanitizer traces, suppression rationale, and rejected hypotheses.
+
 ## Cycle 47
 
 - Goal: `98`, `float-sanitizer-fuzz-exclusions`
