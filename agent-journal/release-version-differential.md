@@ -1,3 +1,52 @@
+## Cycle 191: historical mainnet block differential
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `67` (`release-version-differential`). This is a distinct queued cell after the prior fixed-vector, coinbase-only reorg/restart, and prune/persistence cells; the remaining target is historical mainnet block and transaction behavior.
+- Selected goal: `release-version-differential` (release-to-release behavioral and consensus differential).
+- Branch: `uber-cycle-191-release-version-differential-20260731`.
+- Cycle start HEAD: `166cbc30ae92feb85e8022b870428487d318dda0`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1172 42` (`HEAD...origin/master`).
+- Fresh gate: `git fetch origin master` passed; tracked worktree and index were clean; `git diff --check` passed; known unrelated untracked artifacts were preserved. PIDs `777094` and `956381` were alive and untouched.
+- Gate hashes: catalog `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, prompt `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, corrected TSV `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, protocol `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`, state at gate `d2025699e746ff459811b7251d4912e13349fac345b39df0cdd32fbad856e8c2`.
+
+### Distinct scope and hypothesis
+
+The prior release-differential cells compared current versus v31.1 over fixed script and transaction vectors, deterministic coinbase-only regtest reorg/restart, and identical regtest prune/recovery fixtures. Those cells are closed. This cycle targets historical mainnet block and transaction validation that can exercise activation-era serialization, script, witness, and consensus boundaries not represented by the prior synthetic regtest corpus.
+
+The trust boundary is the exact historical block/transaction bytes, release-tagged `bitcoind` binaries, current `bitcoind`, consensus validation results, and normalized chainstate observations. The hypothesis is that one supported release/current pair may accept or reject an identical historical object differently, or produce a state transition difference not explained by an intentional consensus activation, policy, or known bug fix. Expected version strings, log wording, performance, and storage layout are not findings.
+
+### Investigation plan
+
+1. Inventory locally available release binaries/tags and historical block or transaction fixtures without downloading unbounded chain data.
+2. Select a bounded, provenance-preserving historical corpus spanning pre-SegWit, SegWit, Taproot, and activation-boundary blocks where available; record exact hashes and heights.
+3. Replay the same bytes through release and current validation paths in isolated scratch datadirs, normalize only run-specific fields, and independently compare acceptance, reject reasons, chain tips, UTXO summaries, and restart results.
+4. Classify every difference from release notes and source ancestry before considering a fix. A finding requires a minimal reproducible historical object or a rigorous unexplained compatibility proof.
+
+### Corpus, replay, and controls
+
+The available bounded corpus was `test/functional/data/mainnet_alt.json`. Its README identifies it as an alternate mainnet-parameter chain with 2,016 coinbase-only blocks, deterministic timestamps/nonces, and a deliberately low first retarget. The JSON fixture SHA-256 is `b85576c28ac5b0e5f26a3d4c089fc6693a921530df734f2cd134a4e557dc0681`. This is a provenance-preserving mainnet-style fixture, not a claim to have replayed live historical mainnet data.
+
+The compared daemons were v28.2 (`/data/my_storage/tmp/cycle132-releases/v28.2/bin/bitcoind`), v31.0 (`/data/my_storage/tmp/cycle109-release-differential/v31.0-build/bin/bitcoind`), v31.1 (`/data/my_storage/tmp/cycle109-release-differential/v31.1-build/bin/bitcoind`), and current (`/data/my_storage/tmp/cycle105-clang19-release/bin/bitcoind`). The current functional harness requires the current `test/config.ini`; its v31.0, v31.1, and current runs used separate scratch datadirs, runtime roots, cache, ports, and port seeds. Each run accepted 2,016 blocks, passed the difficulty-adjustment and historical-target checks, and exited successfully.
+
+The framework's v28.2 attempt stopped before replay because the current test runner passes the unsupported `-nologratelimit` option. To keep the release comparison on identical bytes, the v31.0 functional log supplied the extracted block stream to a direct v28.2 RPC replay using an isolated datadir, no peers, DNS, or listener. v28.2 accepted all 2,016 submissions; its older `submitblock` RPC emits an empty response for accepted blocks, so acceptance was counted from successful RPC exit status and the resulting chain height. The v28.2 direct run and the three current-framework runs therefore used the same raw blocks.
+
+The concatenated raw block bytes from each v31.0, v31.1, and current framework log were byte-identical: 2,016 records, first hash `00000000c4b1855527033cd5147128c91538618801fba6b3d08696b6fc732c26`, height-2015 hash `00000000cf987b41e708b347f70db7f154022fdaf02f72bdeaa9ed5edfd59416`, height-2016 hash `000000000c806553811fd3e6c40bc9c279db53643da7d3b401a9882c074c24b2`, and concatenated-byte SHA-256 `71123c11e8b6fc90be12bd72c7035f63d20f19bde641709553ab95c01a804871`. The extracted hex manifest is `/data/my_storage/tmp/cycle191-alt-blocks.hex`, with SHA-256 `ab698116a465b79ee919bfacbad04b42607a3032c889c489d6d15a310a773156`.
+
+### Results
+
+All four releases reached height 2,016 with the same tip `000000000c806553811fd3e6c40bc9c279db53643da7d3b401a9882c074c24b2`, difficulty `4`, median time `1231247828`, and chainwork `00000000000000000000000000000000000000000000000000000000007e407e407e4`. The v31.0/v31.1/current RPC observations also agreed on bits `1c3fffc0`, target `000000003fffc000000000000000000000000000000000000000000000000000`, and block time `1231248621`. Release-specific omission of newer RPC fields (`headers`, `bits`, `target`, and progress fields in v28.2) was treated as API schema evolution, not validation drift.
+
+Each node was stopped and restarted from its preserved scratch datadir. The post-restart height and tip remained 2,016. The v28.2 sample hashes at heights 0, 1, 2, 2,015, and 2,016 matched the common chain, including genesis `000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f` and the common tip.
+
+The independent chainstate check also matched across all four releases: `gettxoutsetinfo` reported height 2,016, 2,016 transactions and outputs, `bogosize=151200`, `total_amount=100800.00000000`, and serialized UTXO hash `fa152d1792f014fd3537236637d83f032c1f5cfa44b116dd55d937b5efa49296`. `disk_size` was 136,085 on v28.2 and 136,120 on v31.0, v31.1, and current; this is a database-layout representation difference with no state digest difference.
+
+Focused unit controls passed independently: current `test_bitcoin --run_test=pow_tests,blockchain_tests --random=19131` passed 25 cases and 1,098 assertions; v28.2 with `--random=19132` passed 22 cases and 1,057 assertions. The source/history sweep found the current target-contract commit `bb3429a9ca` in the comparison ancestry; it adds an explicit postcondition after valid target derivation and does not alter the normal target used by this fixture. No unexplained acceptance, rejection, chainstate, restart, or UTXO divergence was reproduced.
+
+### Verdict and limitations
+
+Verdict: dismissed for this cycle. The mainnet-parameter fixture is a useful additional release cell, but it contains only coinbase-only synthetic blocks. It does not cover live historical mainnet transactions, wallet/database migration, P2P transcripts, external indexes, or release-branch backports. No production or permanent test change is justified. The next distinct queue remains wallet/database migration, P2P transcripts, release-branch backports, and a real historical transaction/block corpus if bounded provenance-preserving inputs become available.
+
 # Release-to-release behavioral and consensus differential
 
 ## Cycle 127: prune and persistence differential (complete)
