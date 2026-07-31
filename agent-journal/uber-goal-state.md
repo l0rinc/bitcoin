@@ -50,6 +50,52 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
   selector. Reroll only if that selector returns a goal explicitly closed in
   the authoritative ledger.
 
+## Cycle 175 Completion
+
+- Cycle 175 retained goal `80` (`fuzz-engine-differential`) from the exact
+  post-Cycle-174 selector `shuf -i 0-98 -n 1` -> `80`, because the prior Goal-80
+  cells were target-specific. The dedicated branch is
+  `uber-cycle-175-fuzz-engine-differential-20260730`; its fresh start HEAD was
+  `f71a04625cb23d54825a5d80a08b8cf729f6175c`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `42 1132`.
+  Catalog, prompt, corrected TSV, and protocol hashes were unchanged. PIDs
+  `777094` and `956381` were preserved, and known untracked artifacts remain
+  excluded from commits.
+- The distinct cell compared current-head libFuzzer, AFL++ 4.04c, and
+  Honggfuzz 2.6 on `p2p_transport_serialization` plus the mixed
+  `p2p_transport_bidirectional_v1v2` family. The closed prior cells were
+  `bech32_roundtrip`, `parse_numbers`, `descriptor_parse`, and the stateful
+  `process_messages`/`process_message` reset campaign. Cycle 139's one-engine
+  transport sanitizer replay was retained as seed evidence, not treated as a
+  prior engine differential.
+- The shared corpus contained 14 deterministic files and 2,834 bytes. The
+  Clang 19 libFuzzer ASan/UBSan build completed 13,319 one-way executions and
+  958 mixed V1/V2 executions with no diagnostic; AFL++ completed 204 and 199
+  executions with 939 and 2,712 edges at 100% stability and no crashes/hangs;
+  Honggfuzz completed 15,092 and 205 iterations with no crashes/timeouts.
+  The V2-initiator libFuzzer control completed 658 executions with no
+  diagnostic. All 17 AFL++ and 59 Honggfuzz one-way outputs, plus 25 AFL++ and
+  96 Honggfuzz mixed outputs, replayed cleanly through the sanitizer oracle.
+  The production `net_tests` control passed 36 cases and 152,142 assertions.
+- The existing Honggfuzz wrapper first selected Clang 14 and failed on
+  `std::source_location`; rebuilding with `HFUZZ_CXX_PATH=/usr/bin/clang++-19`
+  succeeded. The first `afl-showmap` probe captured zero tuples because it was
+  run against the persistent shared-memory entry point; the corrected AFL++
+  runs used `AFL_NO_FORKSRV=1 AFL_SKIP_CPUFREQ=1` and produced stable maps.
+  These are recorded as tool setup limitations, not product findings.
+  FuzzTest was unavailable and no repository integration was found.
+- Journal start commit `c53ab0b6ae` and journal-only close commit
+  `a0b61e96b5` (`journal: close cycle 175 transport engine audit`) are authored
+  as `Lőrinc <pap.lorinc@gmail.com>`. Detailed commands, binary hashes, raw
+  artifact paths, corpus manifest, engine metrics, transfer counts, and
+  limitations are in `agent-journal/fuzz-engine-differential.md`.
+- Verdict: dismissed for a new defect; no source or permanent test change was
+  justified. The broader Goal-80 campaign remains eligible for a genuinely
+  distinct target, engine adapter, compiler, or property-framework cell. The
+  next step is a separate state-only close commit, then a fresh gate and exact
+  selector; reroll only an explicitly closed cell.
+
 ## Cycle 173 Completion
 
 - Cycle 173 selected goal `32` (`history-incomplete-fixes`) after the exact
