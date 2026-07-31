@@ -1,5 +1,98 @@
 # Bindings, FFI, and language-wrapper parity
 
+## Cycle 198: out-of-range ancestor parity at the C ABI
+
+### Selection and gate
+
+- Exact selector after the Cycle 197 state close: `shuf -i 0-98 -n 1` -> `94` (`bindings-ffi-parity`); no reroll was needed.
+- Branch: `uber-cycle-198-bindings-ffi-parity-20260731`.
+- Cycle start: `2026-07-31T08:20:14Z`.
+- Cycle start HEAD: `0b033a6f657812a17d25fb5bd9b9eb7b49ec978f`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence (`origin/master...HEAD`): `42 1186`.
+- Tracked/index state was clean and `git diff --check` passed at entry. Known unrelated untracked agent artifacts, `node_modules/`, package metadata, and `test/cache/` were preserved and excluded from staging.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Corrected TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Uber-goal state SHA-256 at the gate: `1c3138db101b2be6427dedcb820ba16cf53770999fdfa51c74fbe9fb418638a4`.
+- Protected long-running tests with PIDs `777094`, `956381`, `1138182`, and `1157959` were alive and were not touched. Disposable build/runtime files use `/data/my_storage/tmp`.
+
+### New cell and exclusions
+
+This cycle excludes Cycle 70's fixed opaque pointer-array conversion, Cycle 87's
+fixed tracing-demo field omission, and Cycle 186's callback ownership and open
+serialization-failure analysis. The repository does not vendor maintained Rust,
+Python, Java, Go, or C# bindings; the maintained wrapper surface here is the
+`libbitcoinkernel` C API and its C++ `btck` wrapper.
+
+The selected distinct cell is parity for the public ancestor-height boundary:
+`CBlockIndex::GetAncestor` deliberately returns null for negative or too-high
+heights, but `btck_block_tree_entry_get_ancestor` currently asserts that result
+is non-null. The C++ wrapper's existing `View` validation already translates a
+null handle into `std::runtime_error`; the C declaration does not currently
+document the nullable result.
+
+### Working hypothesis and verification plan
+
+An external C caller can pass an out-of-range `int32_t` height without violating
+the non-null handle precondition. On the current Debug kernel build, the public
+adapter aborts the embedding process at `assert(ancestor)` instead of returning
+null. Add raw C assertions for negative and too-high heights, reproduce the
+failure before changing production code, then make the smallest implementation
+and documentation change and verify the C++ exception behavior remains stable.
+
+Detached history refs `04cd1db690` and `6552e3bc05` contain similar prior fixes,
+but neither is an ancestor of the cycle start. They are search leads only; the
+current tree will be reproduced and fixed independently.
+
+### Cycle 198 verification and result
+
+The underlying `CBlockIndex::GetAncestor(int)` contract in `src/chain.cpp`
+returns null when `height < 0` or `height > nHeight`. The public kernel adapter
+then asserted that result at `src/kernel/bitcoinkernel.cpp:955`. The handle
+argument remains a valid non-null precondition; the height is a caller-provided
+`int32_t` and is a normal input value at the C boundary.
+
+The regression assertions were added before the production change. On the
+current Debug Clang 19 kernel build, this exact command rebuilt the test and
+reproduced the failure:
+
+```text
+cmake --build /data/my_storage/tmp/cycle107-kernel-clang19 --target test_kernel -j2
+env TMPDIR=/data/my_storage/tmp/cycle198-kernel-runtime /data/my_storage/tmp/cycle107-kernel-clang19/bin/test_kernel --run_test=btck_block_tree_entry_tests --random=19801 --log_level=test_suite --report_level=short --color_output=false
+```
+
+The pre-fix run exited `201` after `17` of `18` assertions, with
+`Assertion 'ancestor' failed` and `signal: SIGABRT (application abort requested)`
+at the negative-height call. This demonstrates an embedding-process abort from
+an ordinary out-of-range scalar rather than a malformed handle.
+
+The fix changes the adapter to return `nullptr` when the internal lookup has no
+ancestor and documents that nullable result in the public C header. The C++
+wrapper is unchanged: its existing `View` constructor rejects the null handle
+with `std::runtime_error`, preserving the wrapper's established exception
+translation. The test now checks raw C null results for `-1` and `3`, plus the
+C++ exception for `3`; valid heights `2`, `1`, and `0` remain checked against
+the expected entries.
+
+Validation after the change:
+
+- `git diff --check` passed.
+- The same kernel build completed successfully.
+- The focused command with seed `19802` passed 1 case and 20 assertions.
+- The complete `/data/my_storage/tmp/cycle107-kernel-clang19/bin/test_kernel`
+  run with seed `19803` passed all 19 cases and 3,717 assertions.
+- `git grep` found only the public declaration, implementation, C++ wrapper,
+  and the focused regression calls; no in-tree caller assumed a non-null result
+  without the wrapper's existing check.
+
+The source-level fix is independently reproduced and verified despite matching
+the unmerged detached history leads. The remaining limitation is execution on
+the available Linux x86_64 Debug/Clang 19 kernel build; other ABI consumers and
+platform builds were not run, and the repository has no maintained foreign
+language wrapper to exercise in-tree.
+
 ## Cycle 186: kernel wrapper failure and output-state parity
 
 ### Selection and gate

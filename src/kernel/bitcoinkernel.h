@@ -1152,7 +1152,7 @@ BITCOINKERNEL_API int btck_block_tree_entry_equals(
  *
  * @param[in] block_tree_entry Non-null.
  * @param[in] height           The height of the requested ancestor.
- * @return                     The ancestor at the given height.
+ * @return                     The ancestor at the given height, or null if the height is out of bounds.
  */
 BITCOINKERNEL_API const btck_BlockTreeEntry* btck_block_tree_entry_get_ancestor(
     const btck_BlockTreeEntry* block_tree_entry,
