@@ -1147,7 +1147,7 @@ public:
         btck_context_options_set_notifications(
             get(),
             btck_NotificationInterfaceCallbacks{
-                .user_data = heap_notifications.release(),
+                .user_data = heap_notifications.get(),
                 .user_data_destroy = +[](void* user_data) { delete static_cast<user_type>(user_data); },
                 .block_tip = +[](void* user_data, btck_SynchronizationState state, const btck_BlockTreeEntry* entry, double verification_progress) { (*static_cast<user_type>(user_data))->BlockTipHandler(static_cast<SynchronizationState>(state), BlockTreeEntry{entry}, verification_progress); },
                 .header_tip = +[](void* user_data, btck_SynchronizationState state, int64_t height, int64_t timestamp, int presync) { (*static_cast<user_type>(user_data))->HeaderTipHandler(static_cast<SynchronizationState>(state), height, timestamp, presync == 1); },
@@ -1157,6 +1157,7 @@ public:
                 .flush_error = +[](void* user_data, const char* error, size_t error_len) { (*static_cast<user_type>(user_data))->FlushErrorHandler({error, error_len}); },
                 .fatal_error = +[](void* user_data, const char* error, size_t error_len) { (*static_cast<user_type>(user_data))->FatalErrorHandler({error, error_len}); },
             });
+        heap_notifications.release();
     }
 
     template <typename T>
@@ -1168,13 +1169,14 @@ public:
         btck_context_options_set_validation_interface(
             get(),
             btck_ValidationInterfaceCallbacks{
-                .user_data = heap_vi.release(),
+                .user_data = heap_vi.get(),
                 .user_data_destroy = +[](void* user_data) { delete static_cast<user_type>(user_data); },
                 .block_checked = +[](void* user_data, btck_Block* block, const btck_BlockValidationState* state) { (*static_cast<user_type>(user_data))->BlockChecked(Block{block}, BlockValidationStateView{state}); },
                 .pow_valid_block = +[](void* user_data, btck_Block* block, const btck_BlockTreeEntry* entry) { (*static_cast<user_type>(user_data))->PowValidBlock(BlockTreeEntry{entry}, Block{block}); },
                 .block_connected = +[](void* user_data, btck_Block* block, const btck_BlockTreeEntry* entry) { (*static_cast<user_type>(user_data))->BlockConnected(Block{block}, BlockTreeEntry{entry}); },
                 .block_disconnected = +[](void* user_data, btck_Block* block, const btck_BlockTreeEntry* entry) { (*static_cast<user_type>(user_data))->BlockDisconnected(Block{block}, BlockTreeEntry{entry}); },
             });
+        heap_vi.release();
     }
 };
 

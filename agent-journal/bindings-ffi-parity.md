@@ -1,5 +1,94 @@
 # Bindings, FFI, and language-wrapper parity
 
+## Cycle 186: kernel wrapper failure and output-state parity
+
+### Selection and gate
+
+- Exact selector after the Cycle 185 state close: `shuf -i 0-98 -n 1` -> `94` (`bindings-ffi-parity`); no reroll was needed.
+- Branch: `uber-cycle-186-bindings-ffi-parity-20260731`.
+- Cycle start HEAD: `bc846462a38b84d782632d9341775953bb04520a`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- `git rev-list --left-right --count HEAD...origin/master`: `1162 42`.
+- Tracked/index state was clean at entry; known unrelated untracked artifacts were preserved and excluded from all staging.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Corrected TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Uber-goal state SHA-256: `8acd97b1be0790bae551489904cb99bb380dc2d7c76f2101f88bee0176ba36be`.
+- TSV validation: one header plus 99 four-field records, IDs 0 through 98 exactly once.
+- Storage gate: `/` had about 55 MiB free and `/data` about 49 GiB free; disposable build/test files must use `/data/my_storage/tmp`.
+- Unrelated long-running test processes with PIDs 777094 and 956381 were alive and were not touched.
+
+### New cell and exclusions
+
+This cycle excludes Cycle 70's fixed opaque pointer-array conversion, Cycle 87's
+fixed tracing-demo field omission, and the prior source inventory of ordinary
+view lifetime and empty-range precondition cells. The selected distinct cell is
+failure and output-state parity at the `libbitcoinkernel` C API and its C++
+`btck` wrapper: status-to-exception translation, callback exception capture,
+output initialization on failure, and generated/example declarations. The
+repository does not vendor maintained Rust, Python, Java, Go, or C# bindings,
+so those are inventory-only unless a shipped wrapper is found.
+
+### Working hypothesis
+
+The open `write_bytes` candidate may call `std::rethrow_exception(nullptr)`
+when a native C serialization function returns failure without a captured C++
+exception. A related wrapper may also leave an output handle, byte buffer, or
+callback-owned state partially initialized when the C API reports failure. First
+establish the authoritative C header and implementation contracts, then seek a
+valid production-triggerable failure or a proof that the callback always stores
+an exception before any nonzero return. Do not change the bridge on a synthetic
+invalid object or on a C API precondition violation.
+
+### Cycle 186 verification
+
+The `write_bytes` candidate remains unconfirmed. The valid transaction, block,
+script, input, and witness serialization paths return nonzero only after the
+internal `WriterStream` has converted a nonzero writer result into an exception;
+the C++ adapter's writer catches its own allocation failure and stores the
+`std::exception_ptr` before returning nonzero. No valid object path was found
+that returns failure with a null exception, so the bridge was not changed.
+
+A separate exception-safety defect was confirmed in the C++ callback adapters.
+`ContextOptions::SetNotifications` and `SetValidationInterface` allocate a
+heap `std::shared_ptr<T>` and pass it to the C API, whose corresponding setter
+constructs a `std::shared_ptr<KernelNotifications>` or
+`std::shared_ptr<KernelValidationInterface>` with `std::make_shared`. The old
+wrapper released the raw payload before that potentially throwing assignment;
+an allocation failure therefore leaked the callback state. The same ownership
+transfer pattern was checked independently with `git grep`: these two setters
+are the only context callback payload releases, while `Logger` has a distinct
+constructor state machine and remains an open follow-up rather than being
+folded into this fix.
+
+The wrapper now passes `heap_notifications.get()` and `heap_vi.get()`, then
+calls `release()` only after the respective C setter returns. The C API contract
+still receives ownership on successful return, and an exception before the
+assignment leaves the `unique_ptr` responsible for cleanup. This is a source-
+level exception-safety proof; no deterministic allocation-failure injector is
+available in the kernel test harness, so the proof does not claim a measured
+OOM trace.
+
+Validation from the current branch:
+
+- `git diff --check` passed.
+- `cmake --build /data/my_storage/tmp/cycle107-kernel-clang19 --target test_kernel -j2`
+  rebuilt the current kernel library and test binary successfully with Clang
+  19. The build used `/data/my_storage/tmp/cycle186-runtime` for temporary
+  runtime data.
+- `env TMPDIR=/data/my_storage/tmp/cycle186-runtime /data/my_storage/tmp/cycle107-kernel-clang19/bin/test_kernel --run_test=btck_context_tests,logging_tests --log_level=test_suite --report_level=short --color_output=false`
+  passed 2 cases and 20 assertions.
+- The same binary without a filter passed all 19 kernel cases and 3,714
+  assertions, including notification, validation-interface, logger, and
+  chain-manager lifetimes.
+
+The selected source change is ready for one self-contained commit. Remaining
+open cells are logger construction failure cleanup, callback exception
+containment, null shared-pointer misuse, and any valid serialization failure
+that can be demonstrated without violating a C API precondition.
+
 This journal records cycle 70 of the uber investigation. The selected catalog goal is 94, `bindings-ffi-parity`.
 
 ## Cycle 70: opaque pointer-array parity
