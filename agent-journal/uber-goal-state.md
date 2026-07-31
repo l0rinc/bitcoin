@@ -2,6 +2,65 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 184 Completion
+
+- Cycle 184 selected goal 61 (stateful-contract-fuzzer) from the exact
+  selector shuf -i 0-98 -n 1 -> 61; no reroll was needed because the prior
+  AddrMan checkpoint was excluded as a closed cell while a distinct mempool
+  fuzz-execution cell remained eligible. The dedicated branch is
+  uber-cycle-184-stateful-contract-fuzzer-20260731; its fresh start HEAD was
+  5d4a0bb99800f903fe1ce8c276996b9e31024f14, with origin/master
+  67efced1fc83a0b7215cc1513e7c4754fee0f12f, merge-base
+  a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b, and divergence 1158 42.
+  Catalog, prompt, corrected TSV, protocol, and start-state hashes were
+  recorded in agent-journal/stateful-contract-fuzzer.md. Persistent
+  untracked artifacts were preserved, and PIDs 777094 and 956381 were not
+  modified.
+
+- The distinct hypothesis was that the production-backed tx_pool and
+  tx_pool_standard operation sequences could keep mempool graph APIs
+  self-consistent while a raw transaction-input graph described different
+  ancestor/descendant closures. CheckIndependentMempoolGraph now rebuilds
+  direct parent/child maps from current CTxIn::prevout.hash values, computes
+  self-inclusive closures, and independently sums virtual sizes and modified
+  fees. It runs at acceptance, reorg, removal, expiry, block-builder, and
+  cleanup checkpoints. This is a fuzz-execution oracle extension, distinct
+  from Cycle 182's deterministic unit-test graph model.
+
+- Source/evidence commit
+  899fd0e28b74503ed59e48a87753238fd7eb2c5f (fuzz: independently model mempool
+  graph sequences) is authored as Lorinc <pap.lorinc@gmail.com>. It includes
+  the harness and selected journal update. The existing current-source Clang
+  19 address,undefined,fuzzer tree rebuilt the fuzz target. Clean restored
+  tx_pool_standard and tx_pool replays passed under strict ASan/UBSan
+  settings: eight fixed populated-input executions each, followed by
+  12-input libFuzzer mutation-generating replays. The final standard run
+  reached coverage 48,261 with three new units; the final tx_pool run reached
+  coverage 30,524. The retained 109-file standard corpus also completed 110
+  seed executions.
+
+- Independent mutation proof passed. After a disposable ancestor-count
+  mutation was correctly classified as caught first by an older
+  GetTransactionAncestry assertion, a descendant-count-only mutation in
+  CalculateDescendantData failed first at the new
+  CheckIndependentMempoolGraph assertion
+  actual_descendant_count == expected_descendants.size() at
+  src/test/fuzz/tx_pool.cpp:246, exit 77, using seed 18409. The production
+  mutation was restored and src/txmempool.cpp returned to its clean hash. No
+  production defect was reproduced or justified.
+
+- The first clean replay hit the root filesystem's 56 MiB free-space limit
+  before target execution (Disk space is too low during chainstate setup).
+  Replaying with TMPDIR=/data/my_storage/tmp/cycle184-txpool-runtime passed;
+  future fuzz runs must keep scratch datadirs under /data. The target-specific
+  current qa-assets corpus was unavailable, and a full unit suite was not
+  rerun. Exact commands, hashes, outputs, mutation controls, and limitations
+  are in agent-journal/stateful-contract-fuzzer.md. This is the separate
+  state-only close record for Cycle 184. Next action: git fetch origin master,
+  a fresh gate including hashes, dirty state, process preservation, and
+  storage capacity, then the exact selector; reroll only if the draw is
+  explicitly closed in this ledger.
+
 ## Cycle 183 Completion
 
 - Cycle 183 selected goal `90` (`historical-knowledge-recipes`) after the
