@@ -124,9 +124,8 @@ void BenchRunner::RunAll(const Args& args)
             std::cout << bench.complexityBigO() << std::endl;
         }
 
-        if (!bench.results().empty()) {
-            benchmarkResults.push_back(bench.results().back());
-        }
+        // A benchmark can produce multiple results when -asymptote is used or when it calls run() more than once.
+        benchmarkResults.insert(benchmarkResults.end(), bench.results().begin(), bench.results().end());
     }
 
     GenerateTemplateResults(benchmarkResults, args.output_csv, "# Benchmark, evals, iterations, total, min, max, median\n"
