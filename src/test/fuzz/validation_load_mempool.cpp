@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <map>
 #include <optional>
 #include <set>
@@ -211,6 +212,19 @@ void AssertFailedDumpPreservesFile(const CTxMemPool& pool, const fs::path& path,
     Assert(!DumpMempool(pool, path, std::move(mockable_fopen_function)));
     Assert(ReadFileBytes(path) == existing_bytes);
 }
+
+FILE* FopenWithCommitFailure(const fs::path& path, const char* mode)
+{
+#if defined(__linux__)
+    (void)path;
+    (void)mode;
+    return fsbridge::fopen("/dev/full", "wb");
+#else
+    (void)path;
+    (void)mode;
+    return nullptr;
+#endif
+}
 } // namespace
 
 void initialize_validation_load_mempool()
@@ -393,6 +407,8 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
     Assert(!DumpMempool(pool, atomic_path));
     Assert(ReadFileBytes(atomic_path) == existing_dump);
     fs::remove_all(atomic_path + ".new");
+
+    AssertFailedDumpPreservesFile(pool, atomic_path, existing_dump, FopenWithCommitFailure);
 
     const fs::path redirected_path{g_setup->m_args.GetDataDirBase() / "validation_load_mempool_redirected.dat"};
     fs::remove_all(redirected_path);

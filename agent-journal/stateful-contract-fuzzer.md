@@ -315,3 +315,31 @@ Changed files:
 - this journal
 
 `git diff --check` passed before staging. Remaining limitation: the ASan run used the bounded corpus rather than the full 1,437-file qa-assets corpus because the full corpus consumed approximately 851 MB and the serialization control was resource-heavy. Next work must draw a distinct catalog hypothesis after the uber-goal state is updated.
+
+## Cycle 219: nonempty mempool dump commit-failure reachability
+
+### Gate, scope, and prior cells
+
+- Date: 2026-07-31 UTC. Exact selector: `shuf -i 0-98 -n 1` -> `61` (`stateful-contract-fuzzer`); no reroll. Branch: `uber-cycle-219-stateful-contract-fuzzer-20260731`.
+- Start HEAD was `41e21e343c6d02baedd174f89bb33196e95ba236`; `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1225 42`. The pre-cycle uber-state hash was `76e6f95bfaec5fd679201bf82fac360d579e09394e763e19c07a115c30db8d5f`. Catalog, prompt, TSV, and protocol hashes were unchanged. Protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained alive and untouched; `/` had about 5.7 MiB free and `/data` about 34 GiB free.
+- The AddrMan intermediate-round-trip cell, raw `tx_pool` ancestry-model cell, and `process_messages` relay-output cell are closed. The remaining Goal 61 queue identified a separate persistence failure state: `DumpMempool`'s nonempty `FileCommit()` failure path. The target already had a deterministic nonempty mempool fixture from Cycle 188, plus open-failure and rename-failure preservation checks, but its fuzzed `DumpMempool` call passed `skip_file_commit=true`.
+
+### Hypothesis and change
+
+- Hypothesis: the production commit-failure branch at `src/node/mempool_persist.cpp:256-259` was unreachable from the stateful fuzzer's nonempty dump sequence, leaving flush/commit failure behavior without a production-backed fuzz oracle. The expected contract is failure return plus byte-for-byte preservation of the existing destination file and a still-consistent mempool.
+- Baseline LLVM coverage from the unchanged target, using the one-byte QA seed `73b74736664ad85828ce1be2e29fb4a68d24402b`, evaluated the `skip_file_commit` condition four times but recorded zero executions of the `Commit failed` body at lines 257-258. The baseline report for `mempool_persist.cpp` was 86.98% line coverage and 82.35% branch coverage.
+- The harness now adds `FopenWithCommitFailure`. On Linux it opens `/dev/full`, which buffers the dump writes and returns `ENOSPC` on `fflush`; other platforms return null and still exercise the existing failure-preservation contract. `AssertFailedDumpPreservesFile` invokes this provider after the nonempty fixture is prepared, asserts `DumpMempool` returns false, and compares the pre-existing destination bytes unchanged. No production source changed.
+- A closed-descriptor prototype and an invalid-descriptor `fopencookie` prototype were discarded after their coverage showed no `FileCommit()` false result (`EINVAL` is intentionally ignored by the production helper). The final `/dev/full` provider is the smallest current-Linux fault injection that reaches the intended branch.
+
+### Verification
+
+- The LLVM coverage build rebuilt the fuzz target successfully. With the same fixed seed, the final profile recorded lines 257-258 once and improved `mempool_persist.cpp` to 90.51% lines and 83.82% branches. The full QA-assets profile later recorded the commit-failure body 1,450 times, with 98.73% lines and 97.06% branches for `mempool_persist.cpp`.
+- The ASan/UBSan/libFuzzer build rebuilt successfully. The one-byte seed replay completed 2 executions with peak RSS 1,664 MB and no ASan, UBSan, leak, assertion, crash, or hang. The existing 16-file stratified QA sample completed 17 executions in 6 seconds at 1,666 MB RSS with no diagnostic.
+- The full available `validation_load_mempool` corpus completed 1,675 executions in 162 seconds, at 10 executions/second and 1,667 MB peak RSS, with exit 0 and no diagnostic. The merged profile covered malformed input, v1/v2 persistence, metadata options, valid nonempty transactions, partial I/O, open/rename failures, and the new commit-failure path.
+- `git diff --check` passed. The changed file is only `src/test/fuzz/validation_load_mempool.cpp` before this journal update. No online PR was used as an oracle; the contract came from `DumpMempool`, `FileCommit`, the existing preservation helper, and the prior Cycle 188 profile.
+
+### Verdict and handoff
+
+The hypothesis is **confirmed as a stateful fuzz-harness reachability gap, not a production defect**. The fuzzer now drives a nonempty `DumpMempool` through a real commit failure and checks the failure-state contract. The permanent source/test change is limited to the fuzz target and this journal.
+
+Limitations: the direct `/dev/full` injection is Linux-specific; non-Linux builds retain the null-provider failure assertion but do not claim commit-branch coverage. The full unit suite was not rerun because production code was unchanged and the dedicated coverage plus ASan/UBSan corpus replays supplied focused validation. Next distinct Goal 61 cells are deterministic `LoadMempool` validation-interrupt state, then txdownload request/output models after package or reorg transitions. Do not reopen the closed AddrMan, raw tx_pool, or process-message cells without new evidence.
