@@ -9,12 +9,14 @@
 #include <sync.h>
 #include <util/task_runner.h>
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
 #include <list>
 #include <map>
+#include <memory>
 #include <thread>
 #include <utility>
 
@@ -139,6 +141,7 @@ private:
 
 public:
     explicit SerialTaskRunner(CScheduler& scheduler LIFETIMEBOUND) : m_scheduler{scheduler} {}
+    ~SerialTaskRunner();
 
     /**
      * Add a callback to be executed. Callbacks are executed serially
@@ -155,6 +158,12 @@ public:
     void flush() override EXCLUSIVE_LOCKS_REQUIRED(!m_callbacks_mutex);
 
     size_t size() override EXCLUSIVE_LOCKS_REQUIRED(!m_callbacks_mutex);
+
+private:
+    // A scheduler task can outlive this runner when flush() is called after the
+    // scheduler has stopped. Keep the guard alive in the task so it can avoid
+    // dereferencing the runner after destruction.
+    std::shared_ptr<std::atomic<bool>> m_alive{std::make_shared<std::atomic<bool>>(true)};
 };
 
 #endif // BITCOIN_SCHEDULER_H
