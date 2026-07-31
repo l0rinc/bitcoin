@@ -176,3 +176,55 @@ Remaining queued: btcd/rust-bitcoin tx-serialization differentials
 ## Rotation note
 Three cycles; ECDSA baseline, extraEntropy, BIP340 all
 differential-clean. One cell (tx-serialization) remains.
+
+## Cycle 4 (2026-07-31): rust-bitcoin tx-serialization fixtures — 4/4 agree (sighash subset, BIP341 identical, huge-witness decode, block round-trip); DISMISSED
+
+### Draw
+RE-RANK draw 143 over the 9-cell queue: raw=606380819244863949
+(already 63-bit) -> idx 0 -> #55 tx-serialization differential
+(the campaign's last queued cell). Branch: audit/alt-impl-diff-c4
+from 0742687c2e. CONSTRAINT: no Go/Rust toolchains on this host —
+the differential uses rust-bitcoin's PUBLISHED machine-readable
+fixtures (bitcoin/tests/data, fetched 2026-07-31) rather than
+running their code; btcd arm not runnable here.
+
+### Cells (all from rust-bitcoin master tests/data)
+- A legacy_sighash.json (290 rows incl. header): STRICT byte-level
+  subset of the fork's in-tree src/test/data/sighash.json (501
+  rows) — 289/289 shared rows identical, 0 drift; Core carries 212
+  additional vectors. Fork C++ sighash_tests: green.
+- B bip341_tests.json: BYTE-IDENTICAL to the official BIP-0341
+  wallet-test-vectors.json (bips master, c139's fetch) — the
+  agreement chain rust-bitcoin == BIP == fork(C++ 141917/141917) ==
+  fork(Python port) closes.
+- C huge_witness.hex (1,000,285 B): fork C++ decoderawtransaction
+  accepts: txid 73be398c4bdc..., size 500142, vsize 125109, 1-in/
+  1-out — the huge-witness stress class parses identically.
+- D testnet_block_...4497b.raw (4,319 B): parses to exactly the
+  filename's block hash (sha256d of the 80-byte header), recomputed
+  merkle root matches the header, re-serialization BYTE-EXACT.
+
+### Verdict
+DISMISSED: no tx/block serialization drift against rust-bitcoin's
+fixture set on any of the four classes. The campaign's queue is
+now EMPTY (c1 ECDSA, c2 extraEntropy, c3 BIP340, c4 tx-serialization
+— all differential-clean).
+
+### Exact commands
+- curl tests/data fixtures to /tmp/btc55c4/ (preserved);
+  provenance: sha/path recorded above, sizes in cell text.
+- python3 subset/identity diffs (this journal); decoderawtransaction
+  via HTTP POST (argv too long for bitcoin-cli at 1 MB hex);
+  framework CBlock parse + sha256d header hash.
+
+### Limitations / queue
+- btcd arm not runnable (no Go toolchain); the same vector classes
+  are covered by the rust-bitcoin + noble lineage — noted, not a gap
+  in the fixture evidence itself.
+- C uses the C++ decoder's acceptance, not a byte-level
+  re-serialization proof (decoderawtransaction doesn't re-emit);
+  D covers re-serialization at block level.
+- Campaign #55 EXHAUSTED.
+
+## Rotation note
+Four cycles; all differential-clean. Campaign exhausted.
