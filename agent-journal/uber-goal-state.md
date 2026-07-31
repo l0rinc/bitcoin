@@ -2,6 +2,58 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 177 Completion
+
+- Cycle 177 selected goal 44 (secret-copy-compiler) from the exact
+  post-Cycle-176 selector shuf -i 0-98 -n 1 -> 44. This was the deferred
+  wallet-KDF cell of Goal 44, distinct from the already closed HKDF context
+  finding; no reroll was needed. The dedicated branch is
+  uber-cycle-177-secret-copy-compiler-20260730; its fresh start HEAD was
+  eb8cc97047fd4f43f6746ffecd045e39f6b2640c, with origin/master
+  67efced1fc83a0b7215cc1513e7c4754fee0f12f, merge-base
+  a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b, and divergence 42 1138.
+  Catalog, prompt, corrected TSV, and protocol hashes were unchanged.
+  Persistent untracked artifacts were preserved, and PIDs 777094 and
+  956381 were not modified.
+
+- The source dataflow proved that CCrypter::BytesToKeySHA512AES cleansed its
+  derived output buffer and secure key/IV vectors but left its local 200-byte
+  CSHA512 context alive after finalization. A Clang 19 ASan/UBSan placement
+  probe retained a fixed passphrase in the primitive for a one-round input;
+  a KDF-shaped 25,000-round probe retained the final passphrase-derived
+  digest state. History (976f9ec264, 999e4c91c2) and all direct callers
+  were checked. A generic CSHA512 destructor was rejected because the type
+  remains copyable and is used by public-data hashing, random seeding, tests,
+  and benchmarks.
+
+- Optimized GCC -O2 assembly before the fix called memory_cleanse only with
+  length 64 for the output buffer. The repair adds
+  memory_cleanse(&di, sizeof(di)) at the wallet KDF boundary; the same
+  optimized assembly now emits a second non-elidable call with length 200
+  for the context. This preserves KDF output and avoids changing generic
+  hasher performance or copy/move semantics.
+
+- CCACHE_DIR=/data/my_storage/tmp/cycle177-secret-copy/ccache
+  TMPDIR=/data/my_storage/tmp/cycle177-secret-copy/tmp
+  cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j2
+  passed after the initial environment-only /root/.cache/ccache/tmp failure
+  was isolated. wallet_crypto_tests passed 3 cases and 3,335 assertions,
+  including fixed key/IV vectors and encryption/decryption. git diff --check
+  and the per-commit git show --check passed.
+
+- Source/evidence commit 89f82493e2f996411f9df4b4343e99bfef05f3bf
+  (wallet: cleanse SHA512 KDF context) is authored as
+  Lorinc <pap.lorinc@gmail.com>. Full trust-boundary analysis, scratch
+  probe output, pre/post assembly excerpts, commands, limitations, and the
+  confirmed/fixed verdict are in
+  agent-journal/secret-copy-compiler.md.
+
+- Verdict: confirmed and fixed. This is the separate state-only close entry
+  for Cycle 177. The next action is git fetch origin master, a fresh gate
+  including hashes, dirty state, process preservation, and storage capacity,
+  followed by the exact selector; reroll only if the draw is explicitly
+  closed in this authoritative ledger.
+
 ## Cycle 176 Completion
 
 - Cycle 176 selected goal `60` (`historical-knowledge-recipes`) from the exact
