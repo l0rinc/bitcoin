@@ -149,6 +149,98 @@ static void CheckMempoolInputIndexCount(const CTxMemPool& pool)
     BOOST_CHECK_EQUAL(indexed_input_count, input_count);
 }
 
+static void CheckMempoolGraphAccountingModel(const CTxMemPool& pool)
+{
+    LOCK(pool.cs);
+
+    std::map<Txid, const CTxMemPoolEntry*> entries;
+    for (const auto& entry : pool.mapTx) {
+        BOOST_REQUIRE(entries.emplace(entry.GetTx().GetHash(), &entry).second);
+    }
+
+    std::map<Txid, std::set<Txid>> parents;
+    std::map<Txid, std::set<Txid>> children;
+    for (const auto& [txid, entry] : entries) {
+        for (const auto& txin : entry->GetTx().vin) {
+            if (entries.contains(txin.prevout.hash)) {
+                BOOST_REQUIRE(parents[txid].insert(txin.prevout.hash).second);
+                BOOST_REQUIRE(children[txin.prevout.hash].insert(txid).second);
+            }
+        }
+    }
+
+    const auto closure = [](const Txid& root, const std::map<Txid, std::set<Txid>>& links) {
+        std::set<Txid> result{root};
+        std::vector<Txid> pending{root};
+        while (!pending.empty()) {
+            const Txid current{pending.back()};
+            pending.pop_back();
+            const auto next{links.find(current)};
+            if (next == links.end()) continue;
+            for (const Txid& txid : next->second) {
+                if (result.insert(txid).second) pending.push_back(txid);
+            }
+        }
+        return result;
+    };
+
+    const auto connected_component = [&parents, &children](const Txid& root) {
+        std::set<Txid> result{root};
+        std::vector<Txid> pending{root};
+        while (!pending.empty()) {
+            const Txid current{pending.back()};
+            pending.pop_back();
+            const auto add_neighbors = [&](const std::map<Txid, std::set<Txid>>& links) {
+                const auto next{links.find(current)};
+                if (next == links.end()) return;
+                for (const Txid& txid : next->second) {
+                    if (result.insert(txid).second) pending.push_back(txid);
+                }
+            };
+            add_neighbors(parents);
+            add_neighbors(children);
+        }
+        return result;
+    };
+
+    const auto totals = [&entries](const std::set<Txid>& txids) {
+        size_t size{0};
+        CAmount fees{0};
+        for (const Txid& txid : txids) {
+            const auto it{entries.find(txid)};
+            BOOST_CHECK(it != entries.end());
+            if (it == entries.end()) continue;
+            size += it->second->GetTxSize();
+            fees = SaturatingAdd(fees, it->second->GetModifiedFee());
+        }
+        return std::pair{size, fees};
+    };
+
+    for (const auto& [txid, entry] : entries) {
+        const auto expected_ancestors{closure(txid, parents)};
+        const auto expected_descendants{closure(txid, children)};
+        const auto [actual_ancestor_count, actual_ancestor_size, actual_ancestor_fees]{pool.CalculateAncestorData(*entry)};
+        const auto [actual_descendant_count, actual_descendant_size, actual_descendant_fees]{pool.CalculateDescendantData(*entry)};
+        const auto [expected_ancestor_size, expected_ancestor_fees]{totals(expected_ancestors)};
+        const auto [expected_descendant_size, expected_descendant_fees]{totals(expected_descendants)};
+
+        BOOST_CHECK_EQUAL(actual_ancestor_count, expected_ancestors.size());
+        BOOST_CHECK_EQUAL(actual_ancestor_size, expected_ancestor_size);
+        BOOST_CHECK_EQUAL(actual_ancestor_fees, expected_ancestor_fees);
+        BOOST_CHECK_EQUAL(actual_descendant_count, expected_descendants.size());
+        BOOST_CHECK_EQUAL(actual_descendant_size, expected_descendant_size);
+        BOOST_CHECK_EQUAL(actual_descendant_fees, expected_descendant_fees);
+
+        const auto expected_cluster{connected_component(txid)};
+        std::set<Txid> actual_cluster;
+        for (const auto* cluster_entry : pool.GetCluster(txid)) {
+            BOOST_REQUIRE(cluster_entry != nullptr);
+            BOOST_REQUIRE(actual_cluster.insert(cluster_entry->GetTx().GetHash()).second);
+        }
+        BOOST_CHECK(actual_cluster == expected_cluster);
+    }
+}
+
 static void CheckMempoolRandomizedIndex(const CTxMemPool& pool)
 {
     LOCK(pool.cs);
@@ -1510,6 +1602,47 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
     check_cluster(ta);
     check_cluster(td);
     BOOST_CHECK(pool.GetCluster(Txid::FromUint256(uint256::ZERO)).empty());
+}
+
+BOOST_AUTO_TEST_CASE(MempoolGraphAccountingStateMachine)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    LOCK2(cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    const CTransactionRef parent{make_tx(/*output_values=*/{10 * COIN, 10 * COIN})};
+    const CTransactionRef left{make_tx(/*output_values=*/{8 * COIN}, /*inputs=*/{parent}, /*input_indices=*/{0})};
+    const CTransactionRef right{make_tx(/*output_values=*/{8 * COIN}, /*inputs=*/{parent}, /*input_indices=*/{1})};
+    const CTransactionRef merge{make_tx(/*output_values=*/{15 * COIN}, /*inputs=*/{left, right}, /*input_indices=*/{0, 0})};
+    const CTransactionRef unrelated{make_tx(/*output_values=*/{7 * COIN})};
+
+    TryAddToMempool(pool, entry.Fee(10'000).FromTx(parent));
+    TryAddToMempool(pool, entry.Fee(11'000).FromTx(left));
+    TryAddToMempool(pool, entry.Fee(12'000).FromTx(right));
+    TryAddToMempool(pool, entry.Fee(13'000).FromTx(merge));
+    TryAddToMempool(pool, entry.Fee(9'000).FromTx(unrelated));
+    CheckMempoolGraphAccountingModel(pool);
+
+    pool.PrioritiseTransaction(left->GetHash(), 7'000);
+    pool.PrioritiseTransaction(merge->GetHash(), -3'000);
+    CheckMempoolGraphAccountingModel(pool);
+
+    pool.removeRecursive(*left, REMOVAL_REASON_DUMMY);
+    CheckMempoolGraphAccountingModel(pool);
+
+    TryAddToMempool(pool, entry.Fee(11'000).FromTx(left));
+    TryAddToMempool(pool, entry.Fee(13'000).FromTx(merge));
+    CheckMempoolGraphAccountingModel(pool);
+
+    pool.removeForBlock({parent}, /*nBlockHeight=*/1);
+    CheckMempoolGraphAccountingModel(pool);
+
+    TryAddToMempool(pool, entry.Fee(10'000).FromTx(parent));
+    pool.UpdateTransactionsFromBlock({parent->GetHash()});
+    CheckMempoolGraphAccountingModel(pool);
+
+    pool.removeForBlock({merge}, /*nBlockHeight=*/2);
+    CheckMempoolGraphAccountingModel(pool);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
