@@ -2879,3 +2879,43 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   multi-valued option lifecycle paths. The next run must perform a fresh gate
   and exact selector draw, and must not reopen this self-referential settings
   path cell.
+
+## Cycle 225 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `84` (`secp-nonce-session`); no
+  reroll. Branch: `uber-cycle-225-secp-nonce-session-20260731`. Start HEAD
+  was `6a84678d9e2596464d5f1e348e04cd49292a4556`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1236`.
+  The fresh gate passed, catalog/prompt/TSV/protocol hashes were unchanged,
+  and protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained
+  alive.
+- Prior Goal 84 cells for MuSig argument ordering, secret nonce/state reuse,
+  and fail-closed nonce parsing were excluded. The selected distinct cell was
+  ECDH invalid-public-key return propagation. `secp256k1_ecdh()` discarded
+  `secp256k1_pubkey_load()`'s status, so an all-zero opaque public key invoked
+  the non-aborting illegal callback but still returned success after hashing
+  the invalid point.
+- Independent pre-fix Clang 19 ASan/UBSan library control printed
+  `valid ret=1 illegal=0 output=79be667e` and
+  `invalid ret=1 illegal=1 output=00000000`. The fixed control printed the
+  same valid line and `invalid ret=0 illegal=1 output=00000000`.
+- Source/test/journal commit: `e19f8ab3af` (`secp256k1: propagate invalid
+  ECDH public keys`), authored as `Lőrinc <pap.lorinc@gmail.com>`. The fix
+  retains `pubkey_valid` and includes it in the final return condition. The
+  focused `test_invalid_pubkey` regression requires the illegal callback and
+  a zero return; no scalar-invalid or hash-callback behavior changed.
+- A standalone ECDH-enabled build passed the focused test, the ECDH matrix
+  (`-i=4 -j=2 -seed=225`), the full normal suite (`-i=4 -j=2 -seed=225`,
+  21.504 seconds), and the no-`VERIFY` ECDH matrix. A fresh Clang 19
+  ASan/UBSan ECDH-enabled build passed the ECDH matrix at four iterations and
+  the full enabled suite at two iterations with halt-on-error diagnostics.
+  `git diff --check` passed. No protected process was stopped or modified.
+- Verdict: **confirmed ECDH invalid-public-key return defect and fixed**. The
+  disposable probe remains untracked at
+  `agent-journal/secp_ecdh_invalid_pubkey_cycle225_probe.c`; it was not staged.
+  Remaining Goal 84 cells include ECDH output semantics after scalar/hash
+  failure, MuSig nonce-generation public output on invalid secret input,
+  keypair/tweak failure transitions, and aggregate/session output on malformed
+  input. The next run must perform a fresh gate and exact selector draw and
+  must not reopen this invalid-public-key cell.
