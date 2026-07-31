@@ -2,6 +2,52 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 176 Completion
+
+- Cycle 176 selected goal `60` (`historical-knowledge-recipes`) from the exact
+  post-Cycle-175 selector `shuf -i 0-98 -n 1` -> `60`; no reroll was needed
+  because the prior closed draw was `80`. The dedicated branch is
+  `uber-cycle-176-historical-knowledge-recipes-20260730`; its fresh start HEAD
+  was `7809069a54de58c8e6277cf0e6ec866946d17a74`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `42 1135`.
+  Catalog, prompt, corrected TSV, and protocol hashes were unchanged. Known
+  untracked artifacts were preserved, and PIDs `777094` and `956381` were not
+  modified.
+- This cycle opened the distinct recipe fingerprint
+  `resource-owning-move-operation-contract`. Upstream PR `#35120` deleted an
+  unused broken `btcsignals::scoped_connection` move assignment after review
+  rejected a partial Boost-like operation surface: the defaulted assignment
+  overwrote the destination without disconnecting its callback. The review
+  evidence supports a general rule to define the complete ownership surface,
+  including destination cleanup and self-aliasing, before exposing a move
+  operation; deletion is preferable to an incomplete unused operation.
+- Independent held-out PR `#35143` fixed the same ownership class through the
+  other trigger, self-move of `btck::Handle`. Its common `CheckHandle` helper
+  checks pointer identity and serialized bytes for all 16 public derived handle
+  types after self-move. The current Debug `test_kernel` binary passed all 19
+  cases. Current `btcsignals_tests` passed 6 cases and 2,051 assertions;
+  `sock_tests/move_assignment` passed 12 assertions; and `prevector_tests`
+  passed 3 cases and 90 assertions. A Clang 19 ASan/UBSan scratch probe for
+  direct and indirect `prevector` self-move exited 0.
+- The current ownership-operator inventory found no new confirmed defect.
+  `scoped_connection` assignment is explicitly deleted, `btck::Handle` has
+  the guarded move assignment, and `Sock`, `TokenPipe`,
+  `CountingSemaphoreGrant`, and `prevector` have valid close/release/empty
+  moved-from behavior. `ScopedDataStreamUsage` is deliberately non-movable
+  because it borrows and clears a referenced stream. No source or permanent
+  test change was justified.
+- Journal start commit `23f8741fe3` and journal-only close commit
+  `bb6dbbbcaf` (`journal: close cycle 176 historical recipes`) are authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. The full review URLs, source hashes,
+  rejected approaches, current operator audit, commands, controls, and
+  limitations are in `agent-journal/historical-knowledge-recipes.md`.
+- Verdict: recipe confirmed; no new production defect. This is the separate
+  state-only close entry for Cycle 176. The next action is `git fetch origin
+  master`, a fresh gate including hashes, dirty state, process preservation,
+  and storage capacity, followed by the exact selector; reroll only if the
+  draw is explicitly closed in this authoritative ledger.
+
 ## Cycle 174 Completion
 
 - Cycle 174 selected goal `57` (`local-reasoning-domain`) from the exact
