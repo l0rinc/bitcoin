@@ -122,7 +122,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 7 | resource-exhaustion-variants | CYCLE-2 | 2026-07-29 | UTXO-scan/resize race: fixed in-tree (e049f064e1 unique-lock cursor); upstream master verified still racy |
 | 94 | bindings-ffi-parity | CYCLE-2 | 2026-07-29 | enum mapping static_assert tables (073d543f26), reorder tripwire fires at :268 |
 | 64 | finding-dedup-recurrence | CYCLE-1 | 2026-07-29 | findings-index.md built; 5 fixes confirmed NOT in lineage (F1,F2,F3,F7,F9) |
-| 104 | analogical-vulnerability-translation | CYCLE-2 | 2026-07-31 | STALE-AUTHORITY-LATCH fails on pindexBestKnownBlock (FindNextBlocks fails closed, :1531); BLOCK_FAILED_MASK removal = upstream refactor, not mutation |
+| 104 | analogical-vulnerability-translation | CYCLE-3 (queue-empty) | 2026-07-31 | INTERPRETER-CONFUSION: descriptor/miniscript limits agree, all fail closed (valid nest cap 200 via ops 201; parse cap 3600; tr braces 128); DISMISSED |
 | 90 | historical-knowledge-recipes | CYCLE-2 | 2026-07-29 | R15-R22 added (sancov inlining, reindex gating, MiniWallet API, io sampling, mutant-first, pool mechanics, dict fuzzing, flag persistence) |
 | 71 | deterministic-simulation | CYCLE-2 | 2026-07-29 | crash-resume durability invariant delivered (6c6e7d9f87), 3k scans clean |
 | 32 | whole-history-leftovers | CYCLE-1 | 2026-07-29 | multiply-first percentage shape: no exploitable survivor (range/memory-bounded) |
@@ -620,6 +620,19 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Queue after draw 131: (banlist.dat), n=1; re-harvest journal
    "Limitations / queue" tails again before the next draw (verify
    each cell against the journal's LAST cycle).
+   RE-RANK draw 132 (10-cell pool, re-harvested from live journal
+   "Limitations / queue" tails; ledger's 2026-07-28 step-2 queue
+   found STALE — all 9 entries since advanced past their queued
+   cells): raw=13927279158170128312, masked 4703907121315352504 ->
+   idx 4 -> #104 c3 (INTERPRETER-CONFUSION fails on descriptor/
+   miniscript: all limit layers fail closed and agree — valid
+   nesting cap 200 via ops-201, parse cap 3600, tr braces 128, live
+   getdescriptorinfo boundary probe on isolated regtest; campaign
+   queue-empty; DISMISSED).
+   Queue after draw 132: banlist.dat(#41), #109-c2 compact-block
+   matrix, #90 spec-vector cells, #35 CTxUndo semantic differential,
+   #55 schnorr vectors, #34 merkle Assume arms, #47 clang UBSan,
+   #95 flush-windowed kill, #71 extension-block resume (n=9).
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -657,7 +670,7 @@ Cycles done (random-pool state): 0(c1,c2), 1(c1,c2,c3,c4), 4(c1,c2), 6(c1,c2,c3)
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4), 35(c1,c2,c3,c4), 36(c1,c2), 23(c1,c2,c3,c4), 25(c1,c2,c3),
 37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3,c4,c5), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 52(c1,c2), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3,c4), 47(c1,c2,c3,c4), 48(c1,c2), 49(c1,c2,c3,c4,c5,c6,c7,c8,c9), 50(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13), 53(c1), 55(c1,c2), 57(c1,c2,c3,c4), 58(c1,c2,c3), 59(c1,c2), 60(c1,c2,c3,c4,c5,c6,c7,c8), 24(c1,c2,c3,c4,c5,c6),
 61(c1,c2,c3), 63(c1,c2,c3,c4,c5), 64(c1), 65(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 66(c1,c2), 67(c1), 68(c1,c2,c3), 69(c1,c2,c3,c4), 70(c1), 71(c1,c2,c3), 73(c1,c2,c3), 74(c1,c2,c3,c4), 75(c1,c2,c3,c4),
-76(c1,c2,c3), 80(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 81(c1,c2), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1,c2), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4), 99(c1), 100(c1,c2,c3), 101(c1,c2,c3), 102(c1,c2), 103(c1), 104(c1,c2), 105(c1), 106(c1,c2,c3), 107(c1,c2), 108(c1), 109(c1).
+76(c1,c2,c3), 80(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 81(c1,c2), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1,c2), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4), 99(c1), 100(c1,c2,c3), 101(c1,c2,c3), 102(c1,c2), 103(c1), 104(c1,c2,c3), 105(c1), 106(c1,c2,c3), 107(c1,c2), 108(c1), 109(c1).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
 full cross-backend differential in ~35s on this host.
