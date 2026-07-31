@@ -282,3 +282,60 @@ only fire pre-reach — firing at the flip iteration yields FAILURE.)
 ## Rotation note
 Four cycles; tip-extension, crash-resume, reorged-record, and
 extension-resume all delivered with oracles. Near exhaustion.
+
+## Cycle 5 (2026-07-31): progress-value fuzzing (guessVerificationProgress) — monotonic/flat/adversarial schedules, invariant + divide-guard oracles; DISMISSED; campaign EXHAUSTED
+
+### Draw
+RE-RANK draw 146 over the 6-cell queue: raw=15378291577405012317,
+masked 6154919540550236509 -> idx 1 -> #71 progress-value fuzzing
+(c1 queue, the campaign's last open cell). Branch:
+audit/deterministic-sim-c5 from 5e6a60e74b.
+
+### Cell and mechanism
+The rescan mock hardcoded guessVerificationProgress = 1.0, so
+wallet.cpp's progress machinery (:1922-1933) was never exercised:
+m_scanning_progress = (current-begin)/(end-begin) with the zero-
+denominator guard, plus the ShowProgress [1,99] clamp.
+
+### Delivered (rescan.cpp)
+- Mock gVP now returns a per-block fuzzed schedule: monotonic
+  non-decreasing (real-chain contract), flat (end==begin, hits the
+  divide guard), or adversarial non-monotonic (out-of-contract
+  interface; no invariant asserted, crash-only).
+- Oracles (SUCCESS scans): monotonic/flat -> ScanningProgress() in
+  [0,1]; flat -> exactly 0 (guard path).
+- Schedule consumption placed EARLY (right after n_ext, beside the
+  other control flags): the v1 placement (after chain build)
+  starved on exhausted providers — ConsumeIntegralInRange returned
+  the range minimum, so EVERY run degenerated to mode 0 with a
+  zeroed schedule. Distribution probe before/after: 600/0/0 ->
+  ~600/100/100 across modes. Same trap class as c1's "control
+  flags FIRST" note; now recorded twice — check consumption order
+  on any new fuzz harness field.
+- Fire-proofed via mode counters (all 3 modes engaged), counters
+  removed for the final campaign.
+
+### Verification
+- make -C build_fuzz -j4 fuzz clean.
+- All 3 preserved artifacts pass (c3 dup-hash, c4 oracle-overclaim,
+  c4 reorg-resume).
+- FUZZ=wallet_rescan -runs=1500 /tmp/r71_corpus: 'Done 1500 runs in
+  96 second(s)', rc=0, zero assert/sanitizer reports (log
+  /tmp/btc71c5final2.log).
+
+### Verdict
+DISMISSED: progress reporting stays within contract under
+monotonic schedules, the divide guard yields exactly 0 on flat
+schedules, and adversarial schedules cause no crash. Campaign #71
+EXHAUSTED (c1 tip-extension, c2 crash-resume, c3 reorged-record,
+c4 extension-resume + 2 harness fixes, c5 progress fuzzing).
+
+### Limitations / queue
+- ShowProgress [1,99] clamp not separately asserted (GUI-only,
+  code-read; the clamp is std::max/min).
+- Non-monotonic progress >1 or <0 is reachable out-of-contract
+  (documented; real ChainInterfaces are monotonic).
+- #71 queue: EMPTY.
+
+## Rotation note
+Five cycles; campaign exhausted.

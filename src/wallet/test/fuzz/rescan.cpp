@@ -71,6 +71,9 @@ public:
     int extend_at{-1};
     std::vector<Block> extension;
     bool extend_triggered{false};
+    //! #71 c5: per-block verification-progress schedule (monotonic,
+    //! flat, or adversarial non-monotonic per fuzz mode).
+    std::vector<double> progress;
 
 private:
     const Block* Find(const uint256& hash) const
@@ -185,7 +188,12 @@ public:
     }
     bool broadcastTransaction(const CTransactionRef&, const CAmount&, node::TxBroadcast, std::string&) override { return true; }
     void findCoins(std::map<COutPoint, Coin>&) override {}
-    double guessVerificationProgress(const uint256&) override { return 1.0; }
+    double guessVerificationProgress(const uint256& hash) override
+    {
+        if (progress.empty()) return 1.0;
+        const int height{IndexOf(hash)};
+        return height >= 0 ? progress[height] : 1.0;
+    }
     bool hasBlocks(const uint256& block_hash, int min_height, std::optional<int> max_height) override
     {
         const int height{IndexOf(block_hash)};
@@ -294,6 +302,25 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
         chain.extend_at = fdp.ConsumeIntegralInRange<int>(0, n_blocks - 1);
     }
     const int n_ext{chain.extend_at >= 0 ? fdp.ConsumeIntegralInRange<int>(1, 6) : 0};
+    // #71 c5: fuzz the verification-progress schedule EARLY (control-flag
+    // position — late consumption starves on exhausted providers). Modes:
+    // monotonic non-decreasing (the real-chain contract), flat (hits the
+    // divide guard), adversarial non-monotonic (out-of-contract interface).
+    const int prog_mode{fdp.ConsumeIntegralInRange<int>(0, 2)};
+    {
+        const size_t total{static_cast<size_t>(n_blocks + n_ext)};
+        double p{fdp.ConsumeProbability<double>() * 0.5};
+        for (size_t i = 0; i < total; ++i) {
+            if (prog_mode == 0) {
+                p = std::min(1.0, p + fdp.ConsumeProbability<double>() / (total + 1));
+            } else if (prog_mode == 1) {
+                // flat: keep p
+            } else {
+                p = fdp.ConsumeProbability<double>();
+            }
+            chain.progress.push_back(p);
+        }
+    }
     const bool have_mempool_tx{fdp.ConsumeBool()};
     const int64_t now_step{fdp.ConsumeBool() ? 61 : 1};
 
@@ -400,6 +427,14 @@ FUZZ_TARGET(wallet_rescan, .init = initialize_rescan)
 
     if (result.status == CWallet::ScanResult::SUCCESS) {
         Assert(!abort && !chain.shutdown);
+        // #71 c5: with a monotonic or flat progress schedule the wallet's
+        // reported scanning progress stays within [0, 1]; a flat schedule
+        // (zero denominator) yields exactly 0 via the divide guard.
+        if (!chain.progress.empty() && prog_mode <= 1) {
+            const double sp{wallet->ScanningProgress()};
+            Assert(sp >= 0.0 && sp <= 1.0);
+            if (prog_mode == 1) Assert(sp == 0.0);
+        }
         // Every scanned block was active and readable; a deactivation may
         // only happen at blocks the scan never reached (or right at the
         // stop point's successor, which the scan then never processes).
