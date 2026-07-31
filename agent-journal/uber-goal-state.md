@@ -2,6 +2,63 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 178 Completion
+
+- Cycle 178 selected goal `98` (`float-sanitizer-fuzz-exclusions`) from the
+  exact post-Cycle-177 selector `shuf -i 0-98 -n 1` -> `98`; no reroll was
+  needed because the selected float/fuzzer cell had new evidence to examine.
+  The dedicated branch is
+  `uber-cycle-178-float-sanitizer-fuzz-exclusions-20260731`; its fresh start
+  HEAD was `0e471c4bf955cb03150b10af2a4dc844b01f371b`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `42 1141`.
+  Catalog, prompt, corrected TSV, and protocol hashes were unchanged.
+  Persistent untracked artifacts were preserved, and PIDs `777094` and
+  `956381` were not modified.
+
+- The sanitizer matrix re-check found no new project-specific suppression or
+  excluded diagnostic. The existing exclusions remain justified: the SHA256
+  SSE4 path requires its address-sanitizer attribute, the vendored minisketch
+  memory-sanitizer attribute is version-specific, and the benchmark timing
+  header has a narrow integer/undefined-behavior exclusion. Current ASan,
+  fuzz, MSan, TSan, Valgrind, and UBSan suppression/configuration paths were
+  reviewed without a new resurrection defect.
+
+- The fuzzer audit found a distinct harness-quality defect in
+  `src/test/fuzz/strprintf.cpp`: substring and digit-count guards treated
+  literal `$`, `*`, `c`, and digit characters as if they were active
+  tinyformat directives. A specifier-aware parser now limits exclusions to
+  actual large width/precision, positional variable width/precision, variable
+  width/precision, and `%c` conversions. This preserves historical crash/UB
+  exclusions while allowing safe literal-format cases to reach the target.
+  Production format-string callers were separately checked and remain typed
+  `ConstevalFormatString` paths.
+
+- A direct Clang probe showed the old guards rejected safe literal cases such
+  as `cache %f`, `literal * %f`, and `literal c %f`; the corrected guards
+  retain the historical dangerous forms. The final Clang ASan/UBSan fuzz run
+  completed `15,664` runs with coverage `1,738` and peak RSS `469 MiB` with no
+  diagnostic. The focused `util_string_tests` run passed 4 cases and 192
+  assertions. A separate GCC fuzz build completed 282 steps, and its focused
+  seven-file corpus run passed. Historical large-width, positional-star,
+  character-conversion, and variable-width seeds also completed cleanly.
+
+- Source/evidence commit
+  `deab6f244be28c94db62864d82b25e67c4aaaa86` (`fuzz: narrow strprintf
+  format exclusions`) is authored as `Lőrinc <pap.lorinc@gmail.com>` and
+  includes the source change and selected journal update. Exact commands,
+  probe results, source/history trace, controls, limitations, and the
+  confirmed/fixed verdict are in
+  `agent-journal/float-sanitizer-fuzz-exclusions.md`.
+
+- Verdict: confirmed harness defect and fixed; no sanitizer-resurrection or
+  production floating-point defect was confirmed in this cycle. This is the
+  separate state-only close entry for Cycle 178. The next action is
+  `git fetch origin master`, a fresh gate including hashes, dirty state,
+  process preservation, and storage capacity, followed by the exact
+  selector; reroll only if the draw is explicitly closed in this
+  authoritative ledger.
+
 ## Cycle 177 Completion
 
 - Cycle 177 selected goal 44 (secret-copy-compiler) from the exact
