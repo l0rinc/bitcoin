@@ -32,7 +32,77 @@ Initial queue:
 3. Build a placement-storage or post-destruction oracle only if the object contract says cleanup is required; otherwise use a caller-level secret lifetime proof.
 4. Compare the wallet KDF with BIP324, HKDF, AES/ChaCha, and other hash callers to distinguish a local missing cleanup from an intentional value-type design.
 
-No Cycle 177 evidence or source/test changes have been made after this start record.
+## Cycle 177 Evidence and Finding
+
+### Contract and dataflow
+
+`CCrypter::BytesToKeySHA512AES` is the only direct wallet caller of `CSHA512`. Its trust boundary is the `SecureString` wallet passphrase plus the persisted eight-byte salt; the derived key and IV are copied into secure-allocator-backed `vchKey` and `vchIV`. `SetKeyFromPassphrase` is used by both `EncryptMasterKey` and `DecryptMasterKey`, so the local context is created during wallet encryption calibration, final encryption, unlock, and passphrase-change paths.
+
+The function already cleanses its 64-byte `buf` after copying the key and IV, and `CCrypter::~CCrypter` cleanses the secure key and IV vectors. However, `CSHA512` contains `s[8]`, `buf[128]`, and `bytes` (200 bytes total) and has no destructor cleanup. `Finalize` processes padding and leaves the final digest state in `s`; `Reset` overwrites `s` but does not cleanse `buf`. With the normal 25,000 rounds, the final context therefore retains the passphrase-derived digest state until the stack slot is reused. With one round, the final padded block can also retain the original short passphrase bytes. The early null/count return precedes `di` construction, and the successful path has no throwing operation after construction, so a cleanup immediately before return covers every constructed context.
+
+History confirms that the wallet's SHA-512 `BytesToKey` clone was introduced by `976f9ec264` without context cleanup. The later `999e4c91c2` wallet change deliberately moved the long-lived key and IV out of stack storage into secure allocators, but did not address this shorter-lived KDF context. `CHMAC_SHA256`, `CHMAC_SHA512`, and the cycle-149 HKDF context already use explicit type/caller cleanup for secret-bearing hash state. A generic `CSHA512` destructor was rejected for this cell: the class is copied/moved by random seeding, used for public-data hashing and benchmarks, and its destructor would impose a cleanup on every ordinary hasher. The missing ownership is local to the wallet passphrase boundary.
+
+### Independent pre-fix proof
+
+The scratch placement probe `/data/my_storage/tmp/cycle177-secret-copy/csha512_state_probe.cpp`, compiled with Clang 19 and ASan/UBSan, produced:
+
+```text
+sizeof=200 retained_secret=yes
+```
+
+The KDF-shaped probe `/data/my_storage/tmp/cycle177-secret-copy/kdf_state_probe.cpp` performed the same passphrase-plus-salt input and 25,000 `CSHA512` rounds, then compared the object bytes with the final digest's internal 64-byte state. Before the repair it produced:
+
+```text
+sizeof=200 rounds=25000 derived_state_retained=yes
+```
+
+This establishes retention in the primitive independently of wallet output buffers and does not depend on a stale stack byte being sampled after return.
+
+The pre-fix optimized assembly was generated from `src/wallet/crypter.cpp` with GCC `/usr/bin/c++`, `-O2 -fstack-protector-all -fcf-protection=full`, and the cycle-89 include/define set. The `BytesToKeySHA512AES` body called `memory_cleanse` with `esi = 64` for `buf`, then returned; no call covered the context at its stack address. The pre-fix excerpt was:
+
+```text
+mov esi, 64
+mov rdi, rbx
+call _Z14memory_cleansePvm@PLT
+mov eax, 32
+```
+
+### Repair and independent compiler check
+
+Added a caller-specific cleanup after the output copies and existing `buf` wipe:
+
+```cpp
+// Finalize leaves passphrase-derived state in the hashing context.
+memory_cleanse(&di, sizeof(di));
+```
+
+The same optimized compilation now emits both cleanup calls, with the second covering the complete context:
+
+```text
+mov esi, 64
+mov rdi, rbx
+call _Z14memory_cleansePvm@PLT
+mov esi, 200
+mov rdi, rbp
+call _Z14memory_cleansePvm@PLT
+mov eax, 32
+```
+
+The project `memory_cleanse` implementation uses `SecureZeroMemory` on Windows and `memset` plus a compiler memory barrier elsewhere, so the cleanup is not an ordinary dead-store candidate. The caller-specific placement also avoids changing `CSHA512` copy/move semantics or adding a 200-byte wipe to public-data hashers.
+
+### Verification
+
+- First build attempt: `TMPDIR=/data/my_storage/tmp/cycle177-secret-copy/tmp cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j2`; failed before compilation because ccache tried to create `/root/.cache/ccache/tmp` and that environment path was absent.
+- Corrected build: `CCACHE_DIR=/data/my_storage/tmp/cycle177-secret-copy/ccache TMPDIR=/data/my_storage/tmp/cycle177-secret-copy/tmp cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j2`; passed and rebuilt `bitcoin_wallet` plus `test_bitcoin`.
+- `/data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=wallet_crypto_tests --log_level=message --report_level=short --color_output=false`; passed 3 cases and 3,335 assertions, including the fixed wallet key/IV vectors and encryption/decryption paths.
+- The two Clang 19 ASan/UBSan scratch probes passed before the fix and were limited to object-representation evidence; no production data directory, wallet, key, or database was used.
+- `git diff --check`; passed.
+
+Verdict: confirmed, fixed. The prior behavior left passphrase-derived SHA-512 state in ordinary wallet caller storage after KDF completion; the smallest correct repair is the explicit 200-byte cleanse at the KDF boundary. No generic hasher destructor, copy/move restriction, output-format change, or wallet-state behavior change is justified by this cell.
+
+### Cycle 177 Handoff
+
+The source change and this evidence record belong in one self-contained finding commit. After committing it, inspect the exact diff and run the per-commit stack check. Then create the separate uber-goal state close commit, preserving the persistent untracked artifacts and PIDs `777094` and `956381`, and draw the next goal with a fresh gate.
 
 ## Cycle 149
 
