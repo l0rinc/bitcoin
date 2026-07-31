@@ -2607,3 +2607,45 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   The next run must perform a fresh gate, preserve unrelated untracked files,
   draw with the exact selector, and avoid reopening prior core-only, TokenPipe,
   or original GCC-warning cells.
+
+## Cycle 218 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `19` (`benchmark-integrity`); no
+  reroll. Branch: `uber-cycle-218-benchmark-integrity-20260731`. Start HEAD was
+  `57d047def7915f50070e52c94e8a20fb41f08704`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1223 42`.
+  The fresh gate passed, and protected processes `777094`, `956381`, `1138182`,
+  and `1157959` remained untouched.
+- This cycle continued the queued batch/unit audit after Cycle 205. In
+  `BenchFillClearMap`, the timed operation performs 5,000 inserts and one
+  `map.clear()`, but the benchmark left nanobench's unit at the default `op`.
+  The old JSON recorded `unit: "op"` and the table printed `ns/op`, although
+  the result is normalized per inserted element including the amortized clear.
+- The source/test/journal commit is `076ffcc868` (`bench: label pool batches by
+  inserted element`), authored as `Lőrinc <pap.lorinc@gmail.com>`. It adds
+  `.unit("insert")` and asserts both `unit: "insert"` and `batch: 5000` for
+  both pool benchmark variants in `tool_bench_output.py`. Verdict:
+  **confirmed benchmark-interface defect and fixed**; no production runtime
+  behavior changed.
+- The rebuilt benchmark target passed. The focused post-change run exited 0,
+  printed `ns/insert` and `insert/s`, and emitted two JSON records with
+  `unit: "insert"` and `batch: 5000`. The focused `-sanity-check` exited 0.
+  `tool_bench_output.py` passed with random seed `218019` and reported
+  `Tests successful`. The old structured artifact was retained as the
+  pre-change control. Ccache was redirected to `/data/my_storage/tmp` after
+  the first build attempt hit the full root filesystem.
+- The host warned about CPU frequency scaling, so timing values are not used
+  as performance evidence. The full benchmark and unit suites were not run
+  because `/` remained critically full; the build was wallet-disabled, which
+  does not affect this non-wallet benchmark. No online PR was used as an
+  oracle.
+- Selected journal: `agent-journal/benchmark-integrity.md`, Cycle 218 entry.
+  Next distinct queue: remaining default-unit batch sites, especially
+  `asmap.cpp` and the prevector helpers, then return-value barriers in
+  benchmark wrappers. Do not reopen the pool label or the closed Cycle 205 and
+  Cycle 169 cells without new evidence.
+- The state-only close is intentionally separate from the source finding and
+  will be committed next. The next run must perform a fresh gate, preserve
+  unrelated untracked files, draw with the exact selector, and continue the
+  selected campaign.
