@@ -2832,3 +2832,50 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   Guix-versus-host linker metadata, Windows/macOS artifact coverage, and
   LTO/PGO/BOLT behavior. The next run must perform a fresh gate and exact
   selector draw, and must not reopen this x86 relocation cell.
+
+## Cycle 224 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `43` (`option-api-lifecycle`); no
+  reroll. Branch: `uber-cycle-224-option-api-lifecycle-20260731`. Start HEAD
+  was `e0d6264be2ef80c188c294ecf5d56bc1ef0de724`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1234`.
+  The fresh gate passed, catalog/prompt/TSV/protocol hashes were unchanged,
+  and protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained
+  alive.
+- The selected journal was `agent-journal/option-api-lifecycle.md`. The old
+  `-txsendrate` wording cell was excluded. This cycle selected the persistent
+  settings-file path across startup read, runtime write, and restart.
+- With no command-line `-settings`, a default `regtest/settings.json`
+  containing `{"settings":"redirected.json","uacomment":"from-default-file"}`
+  was read by the older daemon, but its generated write went to
+  `regtest/redirected.json`; the original file stayed without `_warning_`.
+  The old functional control failed at the new assertion with the exact
+  mismatch recorded in the selected journal.
+- The fix adds a source-filtered `common::GetSetting` option and makes
+  `GetSettingsPath()` ignore only the `rw_settings` source while resolving the
+  settings path. Command-line/config precedence, empty-value fallback to
+  `settings.json`, path normalization, backup/temp handling, and the existing
+  disable behavior remain unchanged. The functional regression asserts that a
+  self-referential settings value leaves the original file authoritative and
+  does not create `redirected.json`.
+- Source/test/journal commit: `0b2d420a49` (`args: keep settings path stable
+  across rw settings`), authored as `Lőrinc <pap.lorinc@gmail.com>`. The final
+  incremental rebuild of `bitcoind` and `test_bitcoin` passed. Focused unit
+  selections `argsman_tests/util_ReadWriteSettings` and
+  `settings_tests/*` passed, as did `python3 -m py_compile
+  test/functional/feature_settings.py` and the isolated fixed functional run:
+  `feature_settings.py` exited 0 with `Tests successful`. `git diff --check`
+  passed. The older release-like binary failed the new self-reference
+  assertion, providing the failing-before control.
+- Full unit coverage was not rerun. The first build attempt hit the exhausted
+  root filesystem through the default ccache location; the successful rebuild
+  redirected `CCACHE_DIR` and `TMPDIR` under `/data/my_storage/tmp`. Existing
+  unrelated compiler warnings in test sources remained. No protected process
+  was stopped or modified.
+- Verdict: **confirmed settings-path lifecycle bug and fixed**. Remaining Goal
+  43 cells include startup option precedence across restart, load-block and
+  import ordering, dynamic-setting removal/deprecation, and other
+  multi-valued option lifecycle paths. The next run must perform a fresh gate
+  and exact selector draw, and must not reopen this self-referential settings
+  path cell.
