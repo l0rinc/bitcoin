@@ -2510,3 +2510,36 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   selector, and continue with a distinct eligible cell; Goal 27's next queue is
   descriptor top-up failure after prior cache writes, BaseIndex lifecycle state,
   and other newly changed status-returning wallet APIs.
+
+## Cycle 215 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `67` (`release-version-differential`); no reroll.
+- Branch: `uber-cycle-215-release-version-differential-20260731`. Start HEAD:
+  `d567fd49688e4753b26c9fcd672c329e447c3098`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`. Fresh fetch, tracked/index
+  checks, and `git diff --check` passed; the four protected long-running test
+  processes remained alive and untouched.
+- Distinct cell: v28.4/current wallet migration using identical unloaded BDB
+  bytes. Both migrations converted the primary and auxiliary wallets to SQLite,
+  preserved primary descriptors, labels, key material, backups, reloadability,
+  and restart state. The raw-script/P2SH fixture exposed current's additional
+  `addr(2ND8...)` descriptor; this is explained by v29 commit `440ea1ab63`
+  (`legacy spkm: use IsMine() to extract watched output scripts`) and matches
+  the current `test_migrate_raw_p2sh` oracle. Backup placement differs because
+  v28.4 contains `c5d9f75c4b`, which moves the backup inside the migrated wallet
+  directory; current retains walletdir placement. API field differences are
+  expected schema evolution.
+- Current wallet controls passed after correcting a missing scratch temp
+  directory: `/data/my_storage/tmp/cycle214-build/bin/test_bitcoin`
+  `wallet_tests,walletdb_tests,walletload_tests` with seed `21501` passed 29
+  cases and 231 assertions. The initial missing-TMPDIR run was stopped and is
+  setup-only evidence.
+- Selected journal: `agent-journal/release-version-differential.md`, Cycle 215
+  entry. Verdict: **dismissed; no source or permanent test change justified**.
+  No cycle-owned process remains running. Scratch wallet copies, backups,
+  datadirs, and logs remain under `/data/my_storage/tmp/cycle215-release-wallet/`.
+  The next run must perform a fresh gate, preserve unrelated untracked
+  artifacts, draw a distinct eligible goal, and continue the release queue with
+  funded/encrypted wallet migration, P2P transcripts, release-branch backports,
+  or a bounded real historical transaction corpus.
