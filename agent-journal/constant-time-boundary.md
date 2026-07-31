@@ -1,4 +1,57 @@
-# Constant-Time Boundary Cycle 59
+# Constant-Time Boundary Cycle 204
+
+## Identity and Gate
+
+- Cycle: `204`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `45`
+- Goal: `Constant-time boundary and declassification audit`
+- Slug: `constant-time-boundary`
+- Selector output was recorded on the provisional gate branch before this branch was renamed for the selected goal.
+- Branch: `uber-cycle-204-constant-time-boundary-20260731`
+- Base: `origin/master` at `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- HEAD at cycle start: `2637a1dd9a18eef099d50570cab8b5a751128155`
+- `HEAD...origin/master` at the gate: `1198 42`
+- Pre-cycle uber state SHA-256: `cd3f2d3e1d2f5573bdbdb4f03114833f432456b47614ae40b430fa13c7f894cb`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- `goals.tsv` SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Tracked/staged state at the gate: clean. Existing untracked agent artifacts and `test/cache/` were preserved.
+- `goals.tsv` validation remains `validated_rows=99 total_lines=100` from the prior gate.
+- `git diff --check` passed; `src/net_processing.cpp` had no tracked diff.
+- Protected unrelated processes were checked and preserved; no Cycle 203 or held-out test process remained.
+
+This is a distinct current-source cell. Cycles 40 and 59 covered EllSwift auxiliary-input and MuSig/session/keypair declassification boundaries; cycle 44 fixed the MuSig counter public-key boundary; cycle 71 and cycle 110 covered EllSwift XDH and Silent Payments caller/timing cells; cycle 46 covered the GCC/backend/optimization timing matrix. Those cells are excluded unless new source evidence makes them recur.
+
+## Cycle 204 Hypotheses
+
+1. The ECDH API's invalid-secret path may have an incomplete constant-time boundary: zero or overflow scalars are replaced with one before fixed-window multiplication, but the ctime test covers only a valid secret and does not exercise the secret-marked invalid path or its public failure status.
+2. The ECDH hash callback boundary may expose secret-derived intermediate state or leave the output contract under-specified when the callback returns zero, especially because the callback is invoked before the public `!overflow` result is returned.
+3. The ECDH path may be correctly constant-time but its ctime harness may fail to model the documented output/status contract, creating a missing regression oracle rather than a production defect.
+
+For each hypothesis I will trace the public header, scalar replacement, fixed-window multiplication, hash callback, output writes, cleanup, caller assumptions, and existing invalid-input vectors. I will use the current Clang 19 MSan ctime build where possible, add only scratch harness coverage unless a missing permanent oracle is proven, and require a first-invalid-operation diagnostic or independent source/dataflow proof before changing production code.
+
+## Cycle 204 Evidence Log
+
+- Source review of `src/secp256k1/include/secp256k1_ecdh.h:36-57` and `src/secp256k1/src/modules/ecdh/main_impl.h:34-76` found the documented contract: zero and overflow scalars return `0`, but the scalar is replaced with one before `secp256k1_ecmult_const`; the default SHA-256 callback then hashes the derived point before the status is combined with `!overflow`. The only branch on `hashfp` selects a public API argument. The invalidity bit is used by `secp256k1_scalar_cmov` and bitwise return arithmetic, not a secret-dependent branch or memory index. `secp256k1_ecmult_const` uses the fixed-window conditional-move path for the scalar. The implementation clears the derived coordinates, scalar, point, and Jacobian state before returning.
+- A current-source Clang 19 MSan ctime build at `/data/my_storage/tmp/cycle110-statistical-timing/msan` was rebuilt for both `secp256k1` and `ctime_tests` after the temporary source experiments were applied and removed. It is `SECP256K1_ASM=OFF`, ECDH-enabled, and uses `-fsanitize=memory -fno-sanitize-memory-param-retval`. The restored baseline command `TMPDIR=/data/my_storage/tmp/cycle204-ctime-restored MSAN_OPTIONS=halt_on_error=1:exit_code=86:report_umrs=1:print_summary=1 /data/my_storage/tmp/cycle110-statistical-timing/msan/bin/ctime_tests` exited `0` with an empty log.
+- A temporary ctime harness extension initialized an all-zero `invalid_ecdh_key`, marked it undefined, called default `secp256k1_ecdh`, defined the written output and public return, and asserted `ret == 0`. The current-source MSan run exited `0`; the resulting empty log is `/data/my_storage/tmp/cycle204-ctime-invalid/current.log`. This closes the invalid-zero input/status cell and is retained as a permanent ctime regression test in this cycle.
+- Oracle sensitivity was independently checked by temporarily adding `if (overflow) output[0] ^= (unsigned char)overflow;` immediately after `overflow |= secp256k1_scalar_is_zero(&s)` in `ecdh/main_impl.h`. With the same undefined all-zero scalar, MSan exited `86` and reported the first invalid operation at `secp256k1_ecdh`, `main_impl.h:52:9`, called from the temporary ctime case. Removing the mutation, rebuilding, and rerunning restored status `0`. The production source is clean after restoration; the raw mutation report is `/data/my_storage/tmp/cycle204-ctime-overflow/overflow-branch.log` (SHA-256 `8ed48334344fc6949faa46722717ccd121ce619d7d6a97c18814c52bd985c44b`).
+- A temporary custom ECDH callback that branched on `x32[0]` did not produce a diagnostic in the normal ctime build because the project deliberately appends `-fno-sanitize-memory-param-retval` for ctime tests, so an indirect callback ABI boundary does not carry the shadow state. A separate build with `-fsanitize-memory-param-retval` appended failed at the first intentional secret load in `ec_pubkey_create` before reaching ECDH, so it is not evidence about the callback. The callback receives secret-derived coordinates and remains a caller-owned constant-time obligation; no library declassification of those coordinates is justified.
+- Existing independent functional evidence in `agent-journal/backend-differential.md` covers 512 deterministic ECDH vectors, default and custom hash callbacks, zero/overflow invalid scalars, callback failure, output bytes, and status. The recorded Clang 19/GCC 12 and portable/assembly comparisons all returned `vectors=512 failures=0 digest=fe288ea1ddb151fb` where the ECDH cell was enabled. This corroborates the API/status contract but is not a constant-time proof.
+- Valgrind and dudect remain unavailable. No permanent callback test was added because its behavior is outside the library's control and the available ctime ABI configuration cannot observe it. The test-only invalid-scalar case is the smallest sensitive oracle for the library-owned path.
+
+## Cycle 204 Verdict
+
+- **No production constant-time or declassification defect confirmed.** ECDH's invalid scalar is replaced before fixed-window multiplication, the invalid status is returned through constant-time bitwise composition, and the temporary secret-dependent branch was caught by the MSan oracle. The previous harness omission was real and is fixed by one permanent invalid-scalar ctime case. No declassification of the shared point before a caller-supplied hash callback is justified; custom callbacks must preserve the caller's constant-time requirements.
+- The cycle's source/test commit is authored as `Lőrinc <pap.lorinc@gmail.com>`. Remaining limitations are the unavailable Valgrind/dudect tools and inability to observe arbitrary callback parameter taint under the project's intentionally disabled MSan parameter/return instrumentation.
+
+## Cycle 204 Handoff
+
+- Close this cycle after the focused ctime test, libsecp256k1 tests, and diff checks pass. The next selector must draw a fresh goal from `0..98`. Reopen this ECDH cell only for a changed callback contract, a supported parameter-taint ctime configuration, Valgrind/dudect, or new source/history evidence.
+
 
 ## Identity and Gate
 
