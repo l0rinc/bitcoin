@@ -1312,7 +1312,7 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_i
 BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_process_block(
     btck_ChainstateManager* chainstate_manager,
     const btck_Block* block,
-    int* new_block) BITCOINKERNEL_ARG_NONNULL(1, 2, 3);
+    int* new_block) BITCOINKERNEL_ARG_NONNULL(1, 2);
 
 /**
  * @brief Returns the best known currently active chain. Its lifetime is
