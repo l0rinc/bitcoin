@@ -2570,3 +2570,40 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   release variants, and restart-time database duplicate-key/deletion behavior.
   The next run must perform a fresh gate, preserve unrelated untracked files,
   draw with the exact selector, and continue without reopening closed cells.
+
+## Cycle 217 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `36` (`sanitizer-analysis-matrix`);
+  no reroll. Branch: `uber-cycle-217-sanitizer-analysis-matrix-20260731`.
+  Start HEAD was `e4e2bc805c2d5ed7cb422c698a928fb98dc4227b`,
+  `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was
+  `42 1221`. The fresh gate passed; catalog/prompt/TSV/protocol hashes were
+  unchanged; entry state SHA-256 was
+  `5f7d1a05249026ee4d3638da159312091f31fdbb4984f2e75fc84ba96d298f38`.
+- This was a distinct wallet-enabled Clang 19 ASan/UBSan and static-analysis
+  cell, excluding the earlier core-only and TokenPipe/MSan cells. The 510-step
+  wallet build passed. The initial wallet sanitizer matrix passed 8 suites,
+  including `wallet_tests` 26/220 and `wallet_crypto_tests` 3/3335. After the
+  fix, the rebuilt binary passed wallet, walletdb, walletload, wallet RPC, and
+  scriptpubkeyman suites with 26/220, 2/5, 1/6, 1/9, and 20/191.
+- Clang `scan-build` found zero plist reports. Its seven compiler lock warnings
+  were traced to three synchronous transaction callbacks that mutate
+  `cs_wallet`-guarded state. Adding the matching
+  `EXCLUSIVE_LOCKS_REQUIRED(cs_wallet)` lambda annotations removed all seven
+  warnings. A direct GCC 12 `-fanalyzer -O0 -fsyntax-only` check of
+  `wallet.cpp` exited 0 with zero warnings. A full GCC analyzer wallet build
+  was stopped by the system killing `cc1plus` in `rpc/spend.cpp` at `-O2 -j2`;
+  this is recorded as a resource limitation, not a finding. No suppression was
+  changed.
+- Source and selected-journal commit: `d9b0a6bebb` (`wallet: annotate
+  transactional callbacks with wallet lock`), authored as `Lőrinc
+  <pap.lorinc@gmail.com>`. Selected journal: `agent-journal/sanitizer-analysis-matrix.md`,
+  Cycle 217 entry. Verdict: **confirmed static lock-contract gap and fixed**;
+  no sanitizer memory/UB/leak or scan-build defect was confirmed.
+- Next queue: wallet-enabled Clang TSan with IPC disabled, wallet fuzz targets
+  under ASan/UBSan, lower-complexity per-translation-unit GCC analyzer runs,
+  and MSan/Valgrind when the required tool/dependency boundary is available.
+  The next run must perform a fresh gate, preserve unrelated untracked files,
+  draw with the exact selector, and avoid reopening prior core-only, TokenPipe,
+  or original GCC-warning cells.
