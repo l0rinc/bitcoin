@@ -3024,3 +3024,36 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   downgrade fixtures remain limitations. The next run must perform a fresh gate
   and exact selector draw and must not repeat this `#35213` cell without new
   evidence.
+
+## Cycle 229 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `59` (`cpp-supply-chain`); no reroll.
+  Branch: `uber-cycle-229-cpp-supply-chain-20260731`. Start HEAD was
+  `d3e548fadf59a80e098270d7c12031d7537a46ee`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1241 42`.
+  The fresh gate passed, all catalog/prompt/TSV/protocol hashes were unchanged,
+  the source tree was clean before the cycle, and protected PIDs
+  `777094`, `956381`, `1138182`, and `1157959` remained alive.
+- Goal 59's prior mutable action, lint asset, script-vector, Guix archive, and
+  release-signature cells were excluded. The distinct target was the three
+  source clones in `ci/test/01_base_install.sh`: LLVM `llvmorg-22.1.7`, RISC-V
+  `2026.06.06`, and IWYU `clang_22`. Their current peeled/resolved commits were
+  recorded as `a255c1ed36a1d06f79bd2633ba9f8d900153007c`,
+  `81bb1f89664aad156df3d2773195177c92dedc3a`, and
+  `01a091d16b3dedb808db21f32ed3e761737a3691`.
+- The old mutable-ref shape was reproduced with a local moved Git tag: it
+  reached a simulated build at the moved commit. The new helper accepted an
+  unchanged ref and rejected the moved ref before the simulated build. Live
+  `git ls-remote` checks matched all three pins; `bash -n`, `git diff --check`,
+  and a no-op production install-script run passed. Docker, ShellCheck, and
+  actionlint were unavailable, so full containerized CI was not run.
+- Source-and-journal commit: `a67dd8cad7` (`ci: pin toolchain source commits`),
+  authored as `Lőrinc <pap.lorinc@gmail.com>`. The helper checks `git rev-parse
+  HEAD` after clone and before CMake, `configure`, patching, or `make`.
+- Verdict: **confirmed and fixed**. This closes only mutable Git source refs;
+  SDK archive/cache integrity, PyPI installs, apt LLVM key/repository setup,
+  vcpkg inputs, mutable `qa-assets` fuzz-corpus cloning, generated inputs, and
+  license gates remain separate Goal 59 queue cells. The next run must perform
+  a fresh gate and exact selector draw and must not repeat this toolchain-ref
+  cell without new evidence.
