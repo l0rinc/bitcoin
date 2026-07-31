@@ -3191,3 +3191,39 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   `origin/master`, verify stable catalog/prompt/TSV/protocol hashes and protected
   PIDs, draw exactly one selector with `shuf -i 0-98 -n 1`, and create the next
   `uber-cycle-236-*` branch. Preserve all unrelated untracked artifacts.
+
+## Cycle 236 close: Goal 91, ARM64 ELF branch protection
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `91` (`compiler-binary-hardening`);
+  no reroll. Branch: `uber-cycle-236-compiler-binary-hardening-20260731`.
+  Cycle-start HEAD was `7057a8079a14ca7613386cd4539741ee6dacc2bc`;
+  `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1255`.
+  Fresh gate, stable catalog/prompt/TSV/uber-protocol hashes, tracked/index
+  checks, and protected-process checks passed.
+- Confirmed finding: CMake and the Guix GCC toolchain request standard AArch64
+  branch protection, but `contrib/guix/security-check.py` mapped ARM64 ELF
+  outputs to `BASE_ELF` only. A PIE/RELRO/NOW/NX/canary ARM64 artifact built
+  with `-mbranch-protection=none` passed the old checker despite lacking the
+  AArch64 GNU property note; the standard artifact advertised BTI and PAC.
+- Fix commit: `f2dd4fd74f` (`guix: verify ARM64 ELF branch protection`), authored
+  as `Lőrinc <pap.lorinc@gmail.com>`. The checker parses padded GNU property
+  records, requires `GNU_PROPERTY_AARCH64_FEATURE_1_AND` with both BTI and PAC,
+  rejects malformed/zero-sized records, and registers the check for ARM64 ELF.
+  Existing x86 release artifacts remain accepted.
+- Validation: pinned LIEF 0.17.5 checker runs returned 0 for the hardened
+  ARM64 artifact and 1 with `failed BRANCH_PROTECTION` for the unprotected
+  artifact; the old checker had returned 0 for both. Direct predicate controls
+  were `True`/`False`, all seven ARM64 checks passed for the hardened artifact,
+  malformed-note controls returned false without looping, and `readelf -n`
+  independently showed BTI/PAC versus no AArch64 feature note. Python compile,
+  `git diff --check`, existing x86 artifact checks, and Python lint completed;
+  lint skipped mypy because it is unavailable.
+- Limitations: no full Guix cross-build or ARM64 execution was available; the
+  synthetic ARM64 executable used a sysroot-independent unresolved-libc link
+  only to isolate final-ELF checker behavior. Windows/macOS artifact coverage,
+  Guix-versus-host linker metadata, and LTO/PGO/BOLT remain separate Goal 91
+  cells. Do not repeat this ARM64 ELF property cell without new evidence.
+- Next action: after this state-close commit, run the fresh gate and exact
+  selector draw, create `uber-cycle-237-*`, and preserve all unrelated
+  untracked artifacts.
