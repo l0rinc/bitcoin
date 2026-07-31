@@ -252,3 +252,92 @@ The three focused suites completed with `*** No errors detected`. `git diff --ch
 ### Verdict and next queue
 
 Verdict: **dismissed/inconclusive with no source change**. The compact-filter hypothesis was conclusively dismissed by the inclusive cardinality calculation and a passing exact-boundary test. Storage and page-scan concerns were inspected and tested, but the only remaining theoretical wrap is not sufficiently reachable to justify a patch. Next cells: height-loop overflow at impossible integer endpoints, checkpoint vector cardinality at exact interval boundaries, and unreviewed count/offset contracts outside the excluded direct-fetch, CompactSize, wallet-count, and transaction-graph surfaces. Re-read this cycle before selecting a new hypothesis.
+
+## Cycle 237: current count and offset contracts
+
+### Start and scope
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `5` (`boundary-off-by-one`); no reroll.
+- Branch: `uber-cycle-237-boundary-off-by-one-20260731`.
+- Cycle-start HEAD: `7d0c8fe9a440d098b13780315ff364de851309f9`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1257`.
+- The fresh gate passed: tracked/index state was clean, stable catalog/prompt/TSV/protocol hashes matched the recorded values, `origin/master` was fetched, and protected long-running test processes were left untouched.
+
+This cycle deliberately excluded the already audited direct-fetch, CompactSize, compact-filter, flat-file, wallet-count, and transaction-graph cells. The new scope was public count handling, address-manager caps, block-download vector contracts, witness-stack endpoints, descriptor ranges, and nearby inclusive loops.
+
+### Boundary ledger
+
+| Surface | Boundary and evidence | Verdict |
+| --- | --- | --- |
+| `getnodeaddresses` | Default `1`, explicit `0`, `1`, `2`, `8`, per-network counts, negative count, and unknown network | Dismissed: the RPC rejects negative values, documents zero as all, and forwards the nonnegative count to `GetAddressesUnsafe`; `rpc_net.py` passed the exact count/network cases. |
+| `AddrManImpl::GetAddr_` | Empty, exact cap, larger cap, zero/all, percentage cap, and network filtering | Dismissed: the floor/min cap calculation and `addresses.size() >= nNodes` stop condition preserve the requested upper bound; `addrman_tests` passed 28 cases, including result-contract and network cases. |
+| `FindNextBlocks` prefilled vector | `count - vBlocks.size()` is unsigned before conversion in the chunk-size expression | Inconclusive as a general internal contract, not a reachable current defect: the only production top-level call creates an empty `vToDownload`, and historical downloading returns when its vector is already at the count. A future caller that violates the append contract could trigger a bad conversion, but there is no current caller, failing test, or safe behavior change justified by this cycle. |
+| P2WSH witness stack | Empty stack before `back()` and `size() - 1`, plus malformed witness paths | Dismissed: `scriptWitness.IsNull()` skips an empty witness before the P2WSH endpoint checks; `p2p_segwit.py`, `transaction_tests`, and `script_standard_tests` passed. |
+| Descriptor derivation range | Inclusive `i <= range_end`, zero/one/max endpoint, and endpoint above the supported domain | Dismissed: `ParseDescriptorRange` rejects negative and overwide endpoints and bounds the range; `rpc_deriveaddresses.py` passed, including the existing exact maximum and oversized-range cases. |
+| Wallet multisig solution loop | `i = 1; i < solutions_data.size() - 1` | Dismissed: the `MULTISIG` solver contract supplies the required count/pubkey/count shape; no malformed public path can enter this branch with an empty solution vector. |
+| Fee-estimator inclusive loop | `periodsToConfirm` through `confAvg.size()` with access at `i - 1` | Dismissed: `blocksToConfirm < 1` is rejected, the index is one-based, and the inclusive loop maps the final period to `confAvg.back()` without an endpoint overflow. |
+| Coin-selection empty/exact target | Empty pool, exact target, insufficient funds, and clone-skipping at the final element | Dismissed: `coinselection_tests` passed 4 cases and 1005 assertions; the production target preconditions and existing guards prevent the `at(0)`/end-iterator paths from being entered with an invalid domain. |
+
+### Primary contract analysis
+
+`getnodeaddresses` parses `count` as an `int`, rejects values below zero, and treats zero as the documented all-addresses sentinel. `AddrManImpl::GetAddr_` first derives `nNodes` from the available randomized entries, applies the optional percentage floor, then applies the nonzero absolute cap. Its loop stops when the output reaches `nNodes`, while filtered entries do not consume the output budget. Thus a count is a maximum, not a promise to return that many addresses, and filtering does not create an off-by-one overrun.
+
+`FindNextBlocks` deserves a recorded limitation. Its public-in-class comment says `vBlocks` is appended to until it has at most `count` entries. The chunk size is calculated as:
+
+```cpp
+int nToFetch = std::min(nMaxHeight - pindexWalk->nHeight,
+                        std::max<int>(count - vBlocks.size(), 128));
+```
+
+If `vBlocks.size() >= count`, the subtraction occurs in an unsigned type before conversion to `int`. The current production call at `net_processing.cpp:6647` creates an empty vector and passes it first to `FindNextBlocksToDownload`; the only other path that appends historical blocks checks `vBlocks.size() >= count` and returns before calling `FindNextBlocks`. The current call graph therefore preserves the precondition. Adding an untested defensive early return would alter an internal contract without demonstrating a current bug, so no source change was made. This remains the next useful cell if a direct test harness or new caller makes the prefilled-vector case reachable.
+
+The P2WSH concern was a straightforward endpoint check. `IsWitnessStandard` continues when the witness is null, and only then reaches `stack.back()` and `stack.size() - 1`. The malformed and empty witness behavior was exercised through the real P2P standardness path rather than by weakening the production precondition.
+
+### Verification
+
+The following commands used isolated scratch directories under `/data/my_storage/tmp` and completed successfully:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle237-tmp python3 test/functional/rpc_net.py \
+  --configfile=/data/my_storage/tmp/cycle214-build/test/config.ini \
+  --cachedir=/data/my_storage/tmp/cycle89-build/test/cache \
+  --tmpdir=/data/my_storage/tmp/cycle237-rpc-net-run2 \
+  --portseed=2372 --timeout-factor=2 --loglevel=INFO
+
+TMPDIR=/data/my_storage/tmp/cycle237-tmp python3 test/functional/p2p_segwit.py \
+  --configfile=/data/my_storage/tmp/cycle214-build/test/config.ini \
+  --cachedir=/data/my_storage/tmp/cycle89-build/test/cache \
+  --tmpdir=/data/my_storage/tmp/cycle237-p2p-segwit \
+  --portseed=2374 --timeout-factor=2 --loglevel=INFO
+
+TMPDIR=/data/my_storage/tmp/cycle237-tmp python3 test/functional/rpc_deriveaddresses.py \
+  --configfile=/data/my_storage/tmp/cycle214-build/test/config.ini \
+  --cachedir=/data/my_storage/tmp/cycle89-build/test/cache \
+  --tmpdir=/data/my_storage/tmp/cycle237-rpc-deriveaddresses \
+  --portseed=2376 --timeout-factor=2 --loglevel=INFO
+
+TMPDIR=/data/my_storage/tmp/cycle237-unit /data/my_storage/tmp/cycle214-build/bin/test_bitcoin \
+  --run_test=net_tests --log_level=test_suite --report_level=short
+
+TMPDIR=/data/my_storage/tmp/cycle237-addrman-test /data/my_storage/tmp/cycle214-build/bin/test_bitcoin \
+  --run_test=addrman_tests --log_level=test_suite --report_level=short
+
+TMPDIR=/data/my_storage/tmp/cycle237-coinselection-test /data/my_storage/tmp/cycle214-build/bin/test_bitcoin \
+  --run_test=coinselection_tests --log_level=test_suite --report_level=short
+
+TMPDIR=/data/my_storage/tmp/cycle237-txrequest-test /data/my_storage/tmp/cycle214-build/bin/test_bitcoin \
+  --run_test=txrequest_tests --log_level=test_suite --report_level=short
+
+TMPDIR=/data/my_storage/tmp/cycle237-transaction-unit /data/my_storage/tmp/cycle214-build/bin/test_bitcoin \
+  --run_test=transaction_tests --log_level=test_suite --report_level=short
+
+TMPDIR=/data/my_storage/tmp/cycle237-script-standard-unit /data/my_storage/tmp/cycle214-build/bin/test_bitcoin \
+  --run_test=script_standard_tests --log_level=test_suite --report_level=short
+```
+
+The functional suites ended with `Tests successful`. `net_tests` passed 36 cases and 154850 assertions; `addrman_tests` passed 28 cases; `coinselection_tests` passed 4 cases and 1005 assertions; `txrequest_tests` passed 5 cases and 294681 assertions; `transaction_tests` passed 18 cases and 23817 assertions; and `script_standard_tests` passed 8 cases and 199 assertions. The first `rpc_net.py` attempts were scratch setup failures caused by a pre-created target and an empty cache; the corrected cached run above passed and no source state was affected. `git diff --check` remained clean throughout.
+
+### Verdict and handoff
+
+Verdict: **dismissed/inconclusive with no source change**. No reachable off-by-one or endpoint defect was confirmed. The prefilled `FindNextBlocks` arithmetic is a real defensive-review question, but current callers preserve the documented precondition and no regression oracle exists; it is retained as an explicit limitation rather than converted into a speculative patch. The next boundary cycle should select a distinct count/offset surface, preferably one outside the repeated network/address/descriptor cells, and should not reopen these dismissed cases without new reachability evidence.
