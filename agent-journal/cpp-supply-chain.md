@@ -1,3 +1,47 @@
+# C/C++ Supply-Chain Cycle 207
+
+## Cycle 207 Start: mutable Windows CI test asset
+
+### Identity and Gate
+
+- Selector draw: first draw `21` was rejected because Cycle 206 had just closed that exact cell; exact reroll draw `59` selected `cpp-supply-chain`.
+- Branch: `uber-cycle-207-cpp-supply-chain-20260731`.
+- Gate timestamps: `2026-07-31T11:41:39Z` and branch gate `2026-07-31T11:41:58Z`.
+- Start HEAD: `903650fe3e15045327f9a32b857e5a931d6dffdb`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Divergence at gate: `1204` ahead, `42` behind.
+- Pre-cycle state SHA: `d74fda9ddb35f70b9dbc0ec571d9f31f4a148d8243d5186fd670d4bcffa7f7ee`.
+- Catalog SHA: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- TSV SHA: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Pre-existing untracked agent artifacts, catalog files, `node_modules/`, and `test/cache/` were preserved. Protected long-running test processes were observed and not touched.
+
+Prior closed cells excluded from this cycle: immutable GitHub Action refs, pinned lint-tool downloads, Guix cache/archive verification, and release-binary signature-threshold handling. Compiler/SDK downloads, generated inputs, license gates, release manifests, and other `qa-assets` paths remain separate queue cells.
+
+### Scope and Evidence
+
+`test/get_previous_releases.py` downloads release archives from `bitcoincore.org` but validates each archive against the in-tree `SHA256_SUMS` allowlist before extraction. The distinct gap was `test/download_utils.py::download_script_assets`, which fetched `https://github.com/bitcoin-core/qa-assets/raw/main/unit_test_data/script_assets_test.json` and accepted it after HTTP/status and content-length checks only. `.github/ci-windows.py` and `.github/ci-windows-cross.py` call it before unit/functional tests; `ci/test/03_test_script.sh` had a duplicate mutable fetch for container CI.
+
+`src/test/script_assets_tests.cpp:196-222` parses the file as a JSON array and invokes `VerifyScript` for every case. It requires only `tests.size() > 0`, so a replacement can silently remove regression coverage or add pathological work while still producing a nominally passing test. The asset is data, not an executable script, but it is a trusted test oracle on the native test process.
+
+History and upstream provenance support a stable pin: the asset path history ends at `b33d85102d169b54d966ea315ad81a636680aefa` (2022-10-24, `Add case with invalid internal pubkey`), while `qa-assets/main` resolved to `918cdd36fec3c78f8b8f6a1dc0ec6688e7559c9e` on 2026-07-31. The blob at the last-change commit and at current `main` is identical: 9,243,520 bytes, SHA-256 `cd789a58ec45916e1721cdd14e82ca4c93100959f1cef4e229b22e3bf539f095`.
+
+### Independent Verification
+
+- Baseline scratch harness monkeypatched `download_from_url` to write `[{"tampered": true}]`; the old helper returned successfully and accepted the bytes.
+- Post-fix scratch harness used the same substitution, disabled the retry sleep, and observed checksum rejection on both attempts: `post-fix tamper test: rejected after two verified attempts`.
+- An actual download from the pinned raw URL completed and produced the expected digest `cd789a58ec45916e1721cdd14e82ca4c93100959f1cef4e229b22e3bf539f095`.
+- `DIR_UNIT_TEST_DATA=<scratch> /data/my_storage/tmp/cycle203-heldout-35819-build/bin/test_bitcoin --run_test=script_assets_tests --catch_system_error=no --log_level=test_suite -- -printtoconsole=1` ran the `script_assets_test` case over the downloaded vectors in 2.326 seconds and ended with `*** No errors detected`.
+- `python3` compilation via `compile(...)`, `bash -n ci/test/03_test_script.sh`, and `git diff --check` passed. ShellCheck is unavailable. Full Windows/container CI was not run.
+
+### Fix and Verdict
+
+`test/download_utils.py` now pins the URL to the immutable last-change commit and verifies the expected SHA-256 after every download attempt. The Unix CI script now calls this shared helper instead of its independent mutable `curl` path; Windows callers inherit the same check. This is **confirmed and fixed**: before the change, mutable external test data could alter the trusted native test oracle without a repository diff or content-integrity failure; after the change, revision and bytes are bound before tests run.
+
+Source-and-journal commit: pending. Keep `pip install pyzmq`, vcpkg cache/tool inputs, compiler/SDK downloads, and the mutable fuzz-corpus clone as independently verified next candidates. Do not treat this fix as closing all `qa-assets` provenance.
+
 # C/C++ Supply-Chain Cycle 154
 
 ## Cycle 154 Start: Tool Asset Integrity Audit
