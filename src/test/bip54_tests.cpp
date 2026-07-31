@@ -1567,7 +1567,7 @@ BOOST_AUTO_TEST_CASE(bip54_txsize)
         tx_copy.vout.back().scriptPubKey << OP_RETURN << "ab01"_hex_v;
         auto sig{"5a78b5a14a2527feb02c08b8124e74c3b9bcc1bd3dba1fbfa87f1c930f28a46fea2bf375105dfd835e212c9127aad4976c46ef86be02edbb681e6f38f9a9e06f01"_hex_v_u8};
         tx_copy.vin.back().scriptWitness.stack.emplace_back(std::move(sig));
-        auto annex{"4242ffab2121"_hex_v_u8};
+        std::vector<unsigned char> annex{ANNEX_TAG, 0x42, 0xff, 0xab, 0x21, 0x21};
         tx_copy.vin.back().scriptWitness.stack.emplace_back(std::move(annex));
         Assert(GetSerializeSize(TX_NO_WITNESS(tx_copy)) == INVALID_TX_NONWITNESS_SIZE);
         RecordTestCase(test_vectors, CTransaction{tx_copy}, /*valid=*/false, "A 64-byte Segwit transaction (1 p2tr input with annex, 1 OP_RETURN output).");
