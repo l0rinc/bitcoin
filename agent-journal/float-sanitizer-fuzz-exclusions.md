@@ -65,6 +65,94 @@ before testing, a source/history trace, a minimal reproducer or static/tool
 proof, and an independent verdict. Preserve raw bits, minimized inputs,
 sanitizer traces, suppression rationale, and rejected hypotheses.
 
+## Cycle 178 Findings
+
+### Sanitizer and CI matrix re-check
+
+The tracked sanitizer attributes remain limited to the three previously
+identified classes: the x86 SHA256 inline-assembly ASan workaround in
+`src/crypto/sha256_sse4.cpp`, the pre-Clang-11 Minisketch CLMUL MSan workaround
+in `src/minisketch/src/fields/clmul_common_impl.h`, and benchmark-only integer
+and undefined-behavior exclusions in `src/bench/nanobench.h`. The current
+suppression files contain only the documented dependency, test-deadlock,
+intermittent-race, and intentional-arithmetic entries. No new broad source
+attribute, disabled production fuzz target, or suppression masking a current
+diagnostic was found.
+
+The CI configurations still cover `address,float-divide-by-zero,integer,undefined`
+for the native ASan job; `fuzzer,address,undefined,float-divide-by-zero,integer`
+for the native libFuzzer job; separate `memory` jobs for MSan; and `thread` for
+TSan. The fuzzer runner uses the qa-assets corpus and a fixed `--empty_min_time`
+stop condition. The matrix therefore has no sanitizer-resurrection finding in
+this cycle.
+
+### Confirmed finding: strprintf fuzzer guards filtered safe literal text
+
+The current `src/test/fuzz/strprintf.cpp` guards were seeded by history
+`cc668d06fb7` and `470e2ac602e` and the upstream tinyformat issue 70. Before
+the fix, the first guard counted every digit in the entire format string and
+looked for `$` and `*` anywhere. The later guards looked for `c` and `*`
+anywhere after a percent sign. Consequently, these safe inputs were discarded
+before the floating-point or integer formatting cases even though tinyformat
+formatted them successfully with a normal `double`:
+
+```text
+digits 1234567 %f    filtered by the old large-digit guard
+cash $1 * %f         filtered by the old positional-star guard
+literal * %f         filtered by the old variable-width guard
+literal c %f         filtered by the old character-conversion guard
+```
+
+The independent probe command was:
+
+```text
+g++ -std=c++20 -O0 -I src -x c++ -o /data/my_storage/tmp/cycle178-float-strprintf-probe - <<'EOF'
+...tinyformat probe over the four inputs and historical crash forms...
+EOF
+/data/my_storage/tmp/cycle178-float-strprintf-probe
+```
+
+It reported `actual-safe=1` for each literal-text input while the applicable
+old guard reported `old-before=1` or `old-after=1`. The historical large-width,
+positional-star, `%c`, and `*` seeds were kept as exclusions.
+
+The fix adds `InspectFormatString`, a small parser matching tinyformat's
+percent escaping, positional argument prefix, flags, width, precision,
+length modifiers, and conversion position. Large numeric fields and
+positional variable-width fields remain excluded before all type cases;
+variable width/precision and the actual `c` conversion remain excluded only
+from the floating/integer cases that can trigger the known UB. Literal `$`,
+`*`, `c`, and digits no longer suppress unrelated format coverage. Production
+callers audited in `src/index/base.cpp`, `src/netbase.cpp`, and wallet logging
+use `ConstevalFormatString`; this is a fuzz-harness oracle/coverage defect,
+not an attacker-controlled production format-string path.
+
+### Verification
+
+- `git diff --check`: passed.
+- Clang fuzz build:
+  `CCACHE_DIR=/data/my_storage/tmp/cycle178-fuzz-ccache TMPDIR=/data/my_storage/tmp/cycle178-fuzz-tmp cmake --build /data/my_storage/tmp/cycle131-build-libfuzzer --target fuzz -j2`: passed; the changed target compiled and linked.
+- Clang ASan/UBSan fuzz run:
+  `FUZZ=str_printf ASAN_OPTIONS=abort_on_error=1:detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 /data/my_storage/tmp/cycle131-build-libfuzzer/bin/fuzz -max_total_time=5 -rss_limit_mb=768 -max_len=64 /data/my_storage/tmp/cycle178-fuzz-seeds`: exit 0, `Done 15664 runs in 6 second(s)`, peak RSS 469 MiB, coverage 1738, no sanitizer report.
+- Focused unit suite:
+  `/data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=util_string_tests --log_level=test_suite --report_level=short --color_output=false`: exit 0, 4 cases and 192 assertions passed. The suite was run with ASan/UBSan abort options enabled.
+- GCC fuzz build:
+  `CCACHE_DIR=/data/my_storage/tmp/cycle178-gcc-ccache TMPDIR=/data/my_storage/tmp/cycle178-gcc-tmp cmake --build /data/my_storage/tmp/cycle101-build-dead-zones/reduce-exports-fuzz-gcc --target fuzz -j2`: exit 0; all 282 build/link steps completed. Two unrelated pre-existing `-Woverloaded-virtual` warnings appeared in `http_request.cpp` and `pcp.cpp` with that non-Werror configuration.
+- GCC direct corpus run:
+  `FUZZ=str_printf /data/my_storage/tmp/cycle101-build-dead-zones/reduce-exports-fuzz-gcc/bin/fuzz /data/my_storage/tmp/cycle178-fuzz-seeds/literal-digits /data/my_storage/tmp/cycle178-fuzz-seeds/literal-symbols /data/my_storage/tmp/cycle178-fuzz-seeds/literal-star /data/my_storage/tmp/cycle178-fuzz-seeds/literal-c /data/my_storage/tmp/cycle178-fuzz-seeds/large-width /data/my_storage/tmp/cycle178-fuzz-seeds/positional-star /data/my_storage/tmp/cycle178-fuzz-seeds/variable-width`: exit 0, `str_printf: succeeded against 7 files in 0s.`
+- Historical danger seeds were separately executed by the Clang fuzzer; large-width, positional-star, `%c`, and variable-width inputs all completed without `ERROR`, `runtime error`, or `SUMMARY` output.
+
+### Cycle 178 verdict and handoff
+
+**Confirmed and fixed:** the strprintf fuzz harness used whole-string
+substring/count checks for format-specifier hazards, dropping legitimate
+literal-text cases from floating-point and integer exploration. The new
+specifier-aware inspection retains the historical crash/UB exclusions and
+restores safe literal cases. No new sanitizer resurrection or production
+floating-point defect was confirmed. The source change and this evidence must
+be committed together; after the commit, close the cycle gate and draw a
+distinct next goal/cell rather than repeating the closed findings above.
+
 ## Cycle 47
 
 - Goal: `98`, `float-sanitizer-fuzz-exclusions`
