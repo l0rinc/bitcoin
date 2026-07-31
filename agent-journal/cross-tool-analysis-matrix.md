@@ -171,3 +171,56 @@ wanted, is [[maybe_unused]] on the helpers, not deletion.
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted (3
 cells open).
+
+## Cycle 3 (2026-07-31): clang-18 UBSan full unit suite — zero reports; {gcc,clang} x UBSan matrix consistent; DISMISSED
+
+### Draw
+RE-RANK draw 134 over the 8-cell re-harvested queue: raw=
+16057275024291464013, masked 6833902987436688205 -> idx 5 -> clang
+UBSan cell (campaign #36; the harvest shorthand mislabeled it #47 —
+#47 is ci-parallelism; corrected here).
+
+### Hypothesis
+H: clang-18 -fsanitize=undefined over the full unit suite reports
+zero NEW undefined-behavior findings beyond c1's fixed streams.cpp:102
+class — the {gcc-13.3, clang-18.1.3} x UBSan matrix is consistent.
+
+### Method
+cmake -B build-clang-ubsan -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+-DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18
+-DSANITIZERS=undefined; ninja bin/test_bitcoin; UBSAN_OPTIONS=
+print_stacktrace=1:halt_on_error=0 full suite run.
+WORKFLOW TRAP (recorded): configuring the build dir while the
+worktree was on agent/all-findings, then switching to the older
+feature branch, left a stale generate rule
+(xswiftec_inv_test_vectors.csv.h, #108 machinery) that failed the
+first build ([375/537] GenerateHeaderFromRaw: source csv absent on
+this branch). Repair: reconfigure after checkout; rebuild completed
+(158 remaining edges). Lesson: configure AFTER the branch checkout,
+not before.
+
+### Result
+- Suite: 1128 test cases, rc=0, "No errors detected",
+  grep -c 'runtime error' = 0 (log /tmp/btc36c3_suite.log).
+- POSITIVE CONTROL: nm shows 117 __ubsan_* symbols linked (incl.
+  __ubsan_handle_type_mismatch_v1, _out_of_bounds_abort) — the binary
+  is genuinely instrumented; a silent no-op build is excluded.
+- Verdict: DISMISSED. Matrix cell filled: full unit suite x
+  -fsanitize=undefined x clang-18.1.3 = 0 reports, matching the gcc
+  cell post-22aa75a2eb. No clang-only UB surface in the suite.
+
+### Exact commands
+- cmake/ninja lines above; suite: UBSAN_OPTIONS=print_stacktrace=1:
+  halt_on_error=0 build-clang-ubsan/bin/test_bitcoin (rc=0, 1128)
+- control: nm build-clang-ubsan/bin/test_bitcoin | grep -c __ubsan
+  -> 117
+
+### Limitations / queue
+- build-clang-ubsan removed after the run (disk at 100%, 1.5 GB
+  reclaimed; recreate with the cmake line above, ~40 min cold).
+- Remaining open cells: _GLIBCXX_ASSERTIONS, TSan subset,
+  functional-suite-under-clang, warning-as-error CI note (c2).
+
+## Rotation note
+Cycle 3 complete; rotating per uber-goal policy. Not exhausted (3
+open cells).
