@@ -2,6 +2,54 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 174 Completion
+
+- Cycle 174 selected goal `57` (`local-reasoning-domain`) from the exact
+  post-Cycle-173 selector `shuf -i 0-98 -n 1` -> `57`. The dedicated branch is
+  `uber-cycle-174-local-reasoning-domain-20260730`; its fresh start HEAD was
+  `607fb909086c54abb17244996dd34e706e301b68`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `42 1129`.
+  The required fetch, tracked/index diff checks, authoritative input hashes,
+  root-capacity check, and persistent-process check passed. PIDs `777094` and
+  `956381` were preserved; known unrelated untracked artifacts remain
+  excluded from cycle commits.
+- The selected relationship queue first checked chainstate/block storage,
+  mempool/P2P ownership, wallet/descriptor/RPC normalization, and optional
+  interface capability/lifetime cells. The block-storage lead duplicated the
+  prior unlinked-block publication finding (`8e40da2f31` and upstream
+  `0e4b0bacecf`/`fb47793b99`). Settings write-failure rollback was dismissed
+  because there is no rollback contract and restoring a snapshot could undo a
+  concurrent successful update. No new mempool/P2P or optional-interface
+  relationship defect was confirmed.
+- The confirmed defect was in `ChainImpl::hasBlocks`: it inspected the
+  starting block's `BLOCK_HAVE_DATA` bit before recognizing that the starting
+  block can be below `min_height`. A missing block below an empty requested
+  range therefore returned false. `src/interfaces/chain.h:183-186` defines the
+  query over the inclusive requested range without a precondition that
+  `min_height` be at or below the queried block. The normal wallet rescan
+  caller validates ordered bounds, so this is a low-severity direct/partial
+  interface correctness issue rather than a demonstrated wallet or consensus
+  failure.
+- The deterministic regression cleared the data bit for `active[4]` and
+  queried the range `[10,20]`. With the old source, the exact focused test
+  exited 201 at `test/interfaces_tests.cpp:162` with 23/24 assertions. The fix
+  returns true before the status loop when the clamped block is below
+  `min_height`, and returns false if an optional `max_height` clamp has no
+  ancestor. The inclusive lower-bound data check remains unchanged.
+- Source/test/evidence commit `15bda805c6b22b0c0774b76441a4e2ba09c2a324`
+  (`interfaces: honor empty hasBlocks ranges`) is authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. The repaired release build's focused test
+  passed 1 case/24 assertions; the full `interfaces_tests` suite passed 6
+  cases/65 assertions; and the independent Clang UBSan focused replay passed
+  1 case/24 assertions with no diagnostic. Exact commands, source/history
+  trace, limitations, and dismissed candidates are in
+  `agent-journal/local-reasoning-domain.md`.
+- Verdict: confirmed and fixed. The next step is a separate state-only close
+  commit, followed by `git fetch origin master`, the fresh gate, and the exact
+  selector. Reroll only if that selector returns a goal explicitly closed in
+  the authoritative ledger.
+
 ## Cycle 173 Completion
 
 - Cycle 173 selected goal `32` (`history-incomplete-fixes`) after the exact
