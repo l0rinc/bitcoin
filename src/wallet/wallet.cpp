@@ -3891,17 +3891,31 @@ util::Result<std::reference_wrapper<DescriptorScriptPubKeyMan>> CWallet::AddWall
         // A public descriptor that cannot self-expand must use only its serialized range. Private keys in the
         // signing provider can still expand the descriptor during a normal import.
         const int64_t keypool_size{(!signing_provider.keys.empty() || desc.descriptor->CanSelfExpand()) ? m_keypool_size : 0};
-        auto new_spk_man = DescriptorScriptPubKeyMan::CreateFromImport(*this, desc, keypool_size, signing_provider);
-        spk_man = new_spk_man.get();
-
-        // Save the descriptor to memory
-        uint256 id = new_spk_man->GetID();
-        AddScriptPubKeyMan(id, std::move(new_spk_man));
-
-        // Write the existing cache to disk
         WalletBatch batch(GetDatabase());
-        if (!batch.WriteDescriptorCacheItems(id, desc.cache)) {
-            return util::Error{_("Unable to write descriptor cache")};
+        if (!batch.TxnBegin()) {
+            return util::Error{strprintf(_("Error: database transaction cannot be executed for wallet %s"), GetName())};
+        }
+
+        try {
+            auto new_spk_man = DescriptorScriptPubKeyMan::CreateFromImport(*this, batch, desc, keypool_size, signing_provider);
+            spk_man = new_spk_man.get();
+
+            // Write the existing cache in the same transaction as the descriptor and generated cache.
+            uint256 id = new_spk_man->GetID();
+            if (!batch.WriteDescriptorCacheItems(id, desc.cache)) {
+                batch.TxnAbort();
+                return util::Error{_("Unable to write descriptor cache")};
+            }
+            if (!batch.TxnCommit()) {
+                if (batch.HasActiveTxn()) batch.TxnAbort();
+                return util::Error{_("Unable to write descriptor cache")};
+            }
+
+            // Save the descriptor to memory only after all of its database records have committed.
+            AddScriptPubKeyMan(id, std::move(new_spk_man));
+        } catch (...) {
+            if (batch.HasActiveTxn()) batch.TxnAbort();
+            throw;
         }
     }
 

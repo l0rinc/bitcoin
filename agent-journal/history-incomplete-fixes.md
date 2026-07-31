@@ -1,5 +1,107 @@
 # Whole-history incomplete-fix and migration mining
 
+## Cycle 193 start: persisted-field and restart-transition mining
+
+### Fresh selection and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `32` (`history-incomplete-fixes`).
+- Branch: `uber-cycle-193-history-incomplete-fixes-20260731`.
+- Start HEAD: `c5989c28f9e55455f73de9a1ff3aae6c5a6b418e`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1176 42`.
+- `git fetch origin master` passed; tracked/index state was clean;
+  `git diff --check` passed; known untracked agent/user artifacts were
+  preserved. Protected PIDs `777094`, `956381`, and `1138182` were alive and
+  untouched.
+- Catalog, prompt, corrected goals TSV, protocol, and state hashes are
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`,
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`, and
+  `692f79f74b72d63c4727711ad6ac269d9ac41c9e77bf36db0f7bd98abe4eba51`.
+
+### Distinct scope and initial queue
+
+Prior Goal 32 cells are closed and excluded: legacy best-block corruption
+classification, auxiliary-wallet startup settings after failed migration,
+empty `-connect` retry handling, undo output publication, and the earlier
+unchecked wallet migration writes. This cycle mines a different evidence
+source: historical commits that added fields, compatibility readers, or
+restart-visible state, then compares every current writer, reader, serializer,
+cleanup path, and alternate module.
+
+Initial queue:
+
+1. Recent persisted-field and migration follow-ups in wallet, chainstate,
+   indexes, and settings; search for a writer or reader that was updated in
+   only one lifecycle or backend.
+2. Reverted or follow-up fixes involving cache publication, load/restart,
+   optional modules, and compatibility flags; seek a current sibling with the
+   same invariant but a distinct caller or source format.
+3. Historical bug-fix pairs involving accounting or cleanup; use current
+   tests and fault injection to distinguish intentional partial progress from
+   a real incomplete fix.
+
+Each candidate must have a current call path, a source/history rationale, a
+complete expected contract, and an independent reproducer or proof. Do not
+reopen the excluded cells merely because a similar symbol appears; the new
+cell must differ by source, backend, lifecycle, or trust boundary.
+
+### Cycle 193 candidate: descriptor-cache follow-up omitted the import transaction
+
+- Historical seed: `a1c83789a7` (`wallet: Write new descriptor's cache in
+  AddWalletDescriptor`). The fix added persistence for the cache supplied by
+  watch-only descriptor exports, but the current code published the new
+  `DescriptorScriptPubKeyMan` before writing that cache. `CreateFromImport`
+  also wrote the descriptor and generated cache through a separate batch, so a
+  cache write failure could return an error after leaving a descriptor row and
+  a live manager in memory. This is a distinct source/lifecycle cell from the
+  earlier descriptor update/top-up rollback work already recorded elsewhere.
+- Current path and contract: `CWallet::AddWalletDescriptor` receives a
+  serialized descriptor plus cache, calls `DescriptorScriptPubKeyMan::CreateFromImport`,
+  writes the supplied cache, then labels and persists the descriptor. On any
+  initial import failure, neither the descriptor manager nor any of its
+  descriptor, derived-cache, or key records should become visible. A retry
+  after the injected failure must behave like a fresh import.
+- Prior-finding search: `git grep` across `agent-journal`, source, tests, and
+  history found no existing finding for `a1c83789a7` or this new-cache import
+  failure path. Existing cells cover descriptor updates, top-ups, encryption,
+  and migration writes, but not the supplemental cache write introduced by
+  this commit.
+- Independent pre-fix reproducer: added
+  `scriptpubkeyman_tests/add_wallet_descriptor_cache_write_failure_preserves_state`.
+  It imports a ranged `wpkh(xpub/*)` descriptor with a parent cache and uses a
+  SQLite trigger to abort the exact `walletdescriptorcache` row. On the
+  unmodified implementation, the test failed at
+  `!wallet.GetDescriptorScriptPubKeyMan(descriptor)`; 5/6 assertions passed,
+  while the descriptor row remained and the cache row was absent. This proves
+  both premature memory publication and durable partial state, rather than a
+  theoretical ordering concern.
+- Fix: pass one active `WalletBatch` from `AddWalletDescriptor` through
+  `CreateFromImport`, write the supplied cache in that transaction, abort on
+  any failure, and add the manager only after commit. `TopUpWithDB` now delays
+  `TopUpCallback` until transaction commit and uses an explicit no-op abort
+  callback, preventing a failed import or update from publishing a dangling
+  script-cache pointer. The regression drops the trigger, retries the same
+  descriptor, and verifies the descriptor and cache rows are then present.
+- Post-fix evidence: `ninja -C /data/my_storage/tmp/cycle84-build
+  test_bitcoin -j2` passed; the focused regression passed 1 case/11
+  assertions with seed `19302`; `scriptpubkeyman_tests` passed 20 cases/191
+  assertions with seed `19303`; and `wallet_tests` passed 25 cases/216
+  assertions with seed `19304`. Adjacent `wallet_rpc_tests` passed 1 case/9
+  assertions with seed `19305`, `walletload_tests` passed 1 case/6 assertions
+  with seed `19306`, and `walletdb_tests` passed 2 cases/5 assertions with
+  seed `19307`. `git diff --check` passed. Protected test processes remained
+  alive and untouched. The rebuilt wallet functional test
+  `wallet_basic.py` also passed with the scratch `cycle193-wallet-basic`
+  datadir and no cleanup errors.
+- Verdict: confirmed and fixed. The mechanism was an omitted transaction
+  boundary in the historical cache follow-up, with reachable wallet-import
+  impact: an injected storage failure could leave restart-visible descriptor
+  state and stale in-memory publication despite a failed operation. Continue
+  Goal 32 from a fresh historical cell after this commit; do not reopen the
+  already closed descriptor-update or migration cells.
+
 ## Cycle 173 start: distinct follow-up and compatibility mining
 
 ### Fresh selection and gate

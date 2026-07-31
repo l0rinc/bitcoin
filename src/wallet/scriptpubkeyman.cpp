@@ -829,11 +829,10 @@ bool LegacyDataSPKM::DeleteRecordsWithDB(WalletBatch& batch)
     return batch.EraseRecords(DBKeys::LEGACY_TYPES);
 }
 
-std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::CreateFromImport(WalletStorage& storage, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider)
+std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::CreateFromImport(WalletStorage& storage, WalletBatch& batch, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider)
 {
     auto spkm = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(storage, descriptor, keypool_size));
     LOCK(spkm->cs_desc_man);
-    WalletBatch batch(storage.GetDatabase());
     spkm->UpdateWithSigningProvider(batch, provider);
     return spkm;
 }
@@ -1157,7 +1156,14 @@ bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int siz
         m_map_pubkeys[pubkey] = index;
     }
 
-    m_storage.TopUpCallback(new_spks, this);
+    if (batch.HasActiveTxn()) {
+        batch.RegisterTxnListener({
+            .on_commit = [this, new_spks] { m_storage.TopUpCallback(new_spks, this); },
+            .on_abort = [] {},
+        });
+    } else {
+        m_storage.TopUpCallback(new_spks, this);
+    }
     NotifyCanGetAddressesChanged();
     return true;
 }
