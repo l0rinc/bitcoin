@@ -236,3 +236,62 @@ recorded for the fork author; no local defect.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 5 (2026-07-31): write-flush-windowed kill — kill -9 inside every batch commit of a reindex; identical recovery at all 4 windows; DISMISSED
+
+### Draw
+RE-RANK draw 137 over the 5-cell queue: raw=16972436101960705472,
+masked 7749064065105929664 -> idx 4 -> #95 write-flush-windowed kill
+(c4's "harder cell"). Branch: audit/db-semantics-c5 from d44cad1b23.
+
+### Cell and harness (preserved in /tmp/btc95c5/)
+c4 killed load-point-random (height 223-227); c5 kills INSIDE the
+batch commits themselves. Harness: /tmp/btc95c5_chain.py (260-block,
+450-tx MiniWallet chain, --nocleanup), /tmp/btc95c5/run_trial.sh
+(env-targeted kill + recovery check). Fault injection: a TEMPORARY
+hook in CDBWrapper::WriteBatch (atomic counter; _Exit(42) at
+BTC_KILL_AT_WRITE=N, right before pdb->Write), incrementally
+rebuilt, REVERTED after the cell (tree clean; binary rebuilt).
+Calibration: the full reindex+shutdown of this chain performs
+exactly 5 WriteBatch calls: 1=chainstate(obf key), 2=index flush,
+3=chainstate coins flush (end of reindex), 4=index flush, 5=
+chainstate shutdown flush. gdb interposition was tried first and
+abandoned: `silent` suppresses hit messages (blind counting), and
+the chain fits dbcache even at -dbcache=4 (small UTXO set), so the
+only real write windows are the final/shutdown flushes — a mid-run
+flush-window cell needs a multi-GB UTXO chain (queued, disk-bound).
+pkill note: never pkill -f 'build-before/bin/bitcoind' — the pattern
+matches the invoking shell's own cmdline (self-kill); use -x.
+
+### Result (control tip 09844db1e4ab... at height 260, clean reindex)
+- kill at write 2 (index flush #1):  exit=42 mid-commit; restart ->
+  height 260, tip 09844db1..., corruption lines 0.
+- kill at write 3 (coins flush):     exit=42; identical recovery.
+- kill at write 4 (index flush #2):  exit=42; identical recovery.
+- kill at write 5 (shutdown flush):  exit=42; identical recovery.
+All four windows roll forward to the byte-identical tip with zero
+corruption/truncation/checksum log lines.
+
+### Verdict
+DISMISSED (clean): the HEAD_BLOCKS/WriteBatch crash protocol holds
+when the kill lands inside any batch commit of the reindex lifecycle,
+not just at random heights (c4). Combined with #93 c1 (LevelDB
+mid-flush) and c4 (both engines, random timing), the durability
+surface is closed at this scale.
+
+### Exact commands
+- /tmp/btc95c5_chain.py (prep), /tmp/btc95c5/run_trial.sh N for
+  N in 2..5; hook patch: dbwrapper.cpp WriteBatch preamble (reverted;
+  journal records the diff).
+
+### Limitations / queue
+- Mid-RUN flush window (kill while a dbcache-pressure flush commits
+  at height ~200 of 260) needs a multi-GB UTXO chain — same disk
+  constraint as c2's large-UTXO cell; queued together.
+- RocksDB arm of the window kill not run (engine swap not built this
+  cycle); c4's parity result covers the engine question at random
+  timing.
+- rocksdb-brute bulk-ops still unassessed (depends on the swap).
+
+## Rotation note
+Cycle 5 complete; rotating per uber-goal policy. Not exhausted.
