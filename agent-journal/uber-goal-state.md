@@ -2801,3 +2801,34 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   repair/replace the P2P handshake harness and use a larger, more varied
   transaction topology with separate script/crypto and chainstate attribution;
   do not repeat the closed baseline without new evidence.
+
+## Cycle 223 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `91` (`compiler-binary-hardening`);
+  no reroll. Branch: `uber-cycle-223-compiler-binary-hardening-20260731`.
+  Start HEAD was `ee5e8b6e54500181f5c1ec6c70c43cda0f202709`; `origin/master`
+  was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1232`.
+  The fresh gate passed, hashes were unchanged, and protected PIDs
+  `777094`, `956381`, `1138182`, and `1157959` remained alive.
+- The selected journal was `agent-journal/compiler-binary-hardening.md`.
+  The prior libsecp256k1 hardening-propagation cell was closed. This cycle
+  found that `contrib/guix/security-check.py` checked x86-64 CET only at
+  `main`, so a relocation-referenced indirect target without `endbr64` passed
+  the release gate.
+- A GCC scratch binary with an IBT property, protected `main`, an indirect
+  callback, and an unprotected `nocf_check` target passed the old checker. Its
+  `R_X86_64_RELATIVE` relocation materialized the target at `0x11e0`. The
+  checker now resolves relocation addends plus symbol values and checks every
+  referenced known function entry. It rejects the probe while still accepting
+  the existing Clang release-like `bitcoind` and `bench_bitcoin` controls.
+- Source/journal commit: `cba64252bc` (`guix: check relocated control-flow
+  targets`), authored as `Lőrinc <pap.lorinc@gmail.com>`. Direct script
+  compilation and `git diff --check` passed. Python lint exited 0 but skipped
+  mypy because it is not installed; LIEF 0.17.5 was installed in scratch.
+  No runtime Bitcoin source changed.
+- Verdict: **confirmed release-check false negative and fixed**. Remaining
+  Goal 91 cells are ARM64 ELF branch-protection/property coverage,
+  Guix-versus-host linker metadata, Windows/macOS artifact coverage, and
+  LTO/PGO/BOLT behavior. The next run must perform a fresh gate and exact
+  selector draw, and must not reopen this x86 relocation cell.
