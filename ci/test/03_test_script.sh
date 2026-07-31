@@ -74,10 +74,7 @@ if [ "$RUN_FUZZ_TESTS" = "true" ]; then
   )
 elif [ "$RUN_UNIT_TESTS" = "true" ]; then
   export DIR_UNIT_TEST_DATA=${DIR_QA_ASSETS}/unit_test_data/
-  if [ ! -d "$DIR_UNIT_TEST_DATA" ]; then
-    mkdir -p "$DIR_UNIT_TEST_DATA"
-    ${CI_RETRY_EXE} curl --location --fail https://github.com/bitcoin-core/qa-assets/raw/main/unit_test_data/script_assets_test.json -o "${DIR_UNIT_TEST_DATA}/script_assets_test.json"
-  fi
+  python3 -c 'import pathlib, sys; sys.path.insert(0, "test"); from download_utils import download_script_assets; download_script_assets(pathlib.Path(sys.argv[1]))' "$DIR_UNIT_TEST_DATA"
 fi
 
 # Make sure default datadir does not exist and is never read by creating a dummy file

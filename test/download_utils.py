@@ -4,9 +4,14 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/license/mit/.
 
+import hashlib
 import sys
 import time
 import urllib.request
+
+# Update the URL and hash together when the qa-assets test vectors change.
+SCRIPT_ASSETS_URL = "https://raw.githubusercontent.com/bitcoin-core/qa-assets/b33d85102d169b54d966ea315ad81a636680aefa/unit_test_data/script_assets_test.json"
+SCRIPT_ASSETS_SHA256 = "cd789a58ec45916e1721cdd14e82ca4c93100959f1cef4e229b22e3bf539f095"
 
 
 def download_from_url(url, archive):
@@ -52,14 +57,24 @@ def download_from_url(url, archive):
 def download_script_assets(script_assets_dir):
     script_assets_dir.mkdir(parents=True, exist_ok=True)
     script_assets = script_assets_dir / "script_assets_test.json"
-    url = "https://github.com/bitcoin-core/qa-assets/raw/main/unit_test_data/script_assets_test.json"
+
+    def download_and_verify():
+        download_from_url(SCRIPT_ASSETS_URL, script_assets)
+        hasher = hashlib.sha256()
+        with open(script_assets, "rb") as file:
+            for chunk in iter(lambda: file.read(1024 * 1024), b""):
+                hasher.update(chunk)
+        digest = hasher.hexdigest()
+        if digest != SCRIPT_ASSETS_SHA256:
+            raise RuntimeError(f"Checksum {digest} did not match expected {SCRIPT_ASSETS_SHA256}")
+
     try:
-        download_from_url(url, script_assets)
+        download_and_verify()
     except Exception as e:
         print(f"\nDownload failed: {e}", file=sys.stderr)
         print("Retrying download after failure ...", file=sys.stderr)
         time.sleep(12)
         try:
-            download_from_url(url, script_assets)
+            download_and_verify()
         except Exception as e2:
             sys.exit(e2)
