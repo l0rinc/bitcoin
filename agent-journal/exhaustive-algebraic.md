@@ -1,5 +1,53 @@
 # Exhaustive and Algebraic-Invariant Audit
 
+## Cycle 187 start: iterator boundary and status identity matrix
+
+### Fresh gate and selection
+
+- `git fetch origin master` succeeded. The exact selector was
+  `shuf -i 0-98 -n 1` -> `18`, `exhaustive-algebraic`; no reroll was needed
+  because the previous database batch-ownership cell is closed and this is a
+  distinct iterator/status campaign.
+- Dedicated branch:
+  `uber-cycle-187-exhaustive-algebraic-20260731`. Start HEAD:
+  `0201add043189a9f7a6d782b2c08ea139877522a`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence:
+  `1164 42` from `git rev-list --left-right --count HEAD...origin/master`.
+- Catalog SHA-256:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+  Prompt SHA-256:
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+  Corrected TSV SHA-256:
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+  Protocol SHA-256:
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Uber-goal state SHA-256 at the gate:
+  `d6d678d86de6f29c66b89aadba102e05a3cc9d094b8258e458d6519ecb3adf7a`.
+- The TSV has one header and 99 four-field records, IDs 0 through 98 exactly
+  once. The tracked worktree was clean; known unrelated untracked artifacts
+  were preserved and will not be staged. Root storage remained about 54 MiB
+  free and `/data` about 49 GiB free. PIDs `777094` and `956381` were alive
+  and were not touched.
+
+### Distinct cell and working hypothesis
+
+Cycle 181 fixed and closed cross-wrapper `CDBBatch` ownership. This cycle
+excludes that cell, the prior GCS and compact-target identities, and the
+BaseIndex readiness/restart campaign. It targets the `CDBIterator` contract:
+ordered key traversal, `Seek`/`SeekToFirst`/`SeekToLast`, `Next`/`Prev`, the
+empty and end states, and the status returned by failed reads or malformed
+backing data.
+
+The initial hypothesis is that one iterator transition leaves `Valid()` or
+the returned key/value inconsistent with the underlying LevelDB status at an
+empty, end, or read-error boundary. The independent oracle will be a model
+ordered map plus direct LevelDB iterator status, and the campaign will first
+inventory exact `CDBIterator` behavior and existing failure-injection tests.
+Do not infer a Bitcoin wrapper defect from a documented LevelDB invalidation
+state or from an invalid caller sequence; establish the wrapper contract and
+the first invalid operation before changing code.
+
 ## Cycle 181 start: persistence and iterator identity matrix
 
 - Fresh gate: `git fetch origin master` succeeded. Branch:
@@ -187,3 +235,30 @@ The boundary matrix will enumerate compact exponents around 0, 1, 2, 3, 4, 31, 3
 No source defect was confirmed. The compact decoder agrees with the independent bounded arithmetic oracle, canonical re-encoding is stable, and the proof-of-work consumer preserves its existing contracts. The matrix did not exhaust all 2^23 mantissas or every arbitrary 256-bit value, and libFuzzer smoke runs started from empty corpora; existing unit/fuzz coverage remains the evidence outside those domains.
 
 Next queue: draw a fresh goal after rechecking the gate. Do not reopen this compact cell without a new consensus vector, cross-implementation divergence, compiler/architecture result, or production regression.
+
+## Cycle 187: CDBIterator seek, ordering, exhaustion, and status identity
+
+- Gate: branch `uber-cycle-187-exhaustive-algebraic-20260731`; start `HEAD=0201add043189a9f7a6d782b2c08ea139877522a`; `origin/master=67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `1164 42`. The exact selector was `shuf -i 0-98 -n 1` -> `18`. Catalog, prompt, TSV, protocol, and state hashes were recorded in the cycle gate at the top of this file. The tracked worktree was clean apart from this selected-journal update; known untracked artifacts were preserved.
+- Scope decision: the prior Goal 18 CDBBatch parent-ownership cell is closed by `5b32d8965f`. This cycle tested the distinct `CDBIterator` relation: `SeekToFirst`/`Seek` position at the bytewise lower bound, repeated `Next` visits each snapshot entry once in order, exhaustion makes `Valid()` false and rejects key/value reads without mutating outputs, and a non-OK LevelDB iterator status is reported rather than mistaken for clean exhaustion. Both obfuscated and non-obfuscated wrappers were included; the obfuscation metadata entry was treated as an explicit non-user record. The old GCS and compact-target cells were not reopened.
+
+### Contract and independent oracles
+
+The public wrapper is in `src/dbwrapper.h:159-223`; it serializes seek keys through a scoped scratch stream, guards `GetKey`/`GetValue` with `Valid()`, and preserves decoded outputs by committing only after successful deserialization. The implementation at `src/dbwrapper.cpp:394-437` delegates seek/first/next to a LevelDB snapshot iterator and routes a non-OK status through `HandleError` from `Valid()`. The LevelDB contract at `src/leveldb/include/leveldb/iterator.h:33-73` defines validity after first/seek, the `Next` precondition, and status reporting.
+
+The independent fuzz oracle is a `std::map<uint16_t, std::vector<uint8_t>, LevelDBBytewiseU16Cmp>` in `src/test/fuzz/dbwrapper.cpp:146-223`, with serialized-byte ordering rather than numeric ordering. `VerifyIterator` checks lower-bound seek, every returned key/value, obfuscation-key handling, final exhaustion, and unchanged failed-read outputs. `VerifyIteratorRange` checks bounded ranges; the concurrent target repeats seek/range checks through eight reader threads. The hand-written tests additionally cover two-key seek/next transitions, snapshot ordering across all 256 one-byte keys, malformed key/value output preservation, and injected iterator read errors at `src/test/dbwrapper_tests.cpp:348-432` and `537-576`.
+
+### Evidence
+
+- Rebuilt the current tree's `test_bitcoin` target in `/data/my_storage/tmp/cycle170-mempool-build` with `TMPDIR=/data/my_storage/tmp/cycle187-runtime` and `CCACHE_DIR=/data/my_storage/tmp/cycle187-ccache`. The first attempt exposed only a missing root ccache directory (`ccache: error: Failed to create directory /root/.cache/ccache/tmp`); the redirected rebuild completed and linked successfully.
+- `.../bin/test_bitcoin --run_test=dbwrapper_tests --log_level=test_suite --report_level=short --color_output=false -- -testdatadir=/data/my_storage/tmp/cycle187-dbwrapper-tests-2` passed 16 cases and 2,484/2,484 assertions. This includes `dbwrapper_iterator`, `iterator_ordering`, malformed-output checks, and `dbwrapper_iterator_read_error`.
+- Refreshed the current `BUILD_FOR_FUZZING=ON` libFuzzer binary in `/data/my_storage/tmp/cycle131-build-libfuzzer`. With fixed seeds and scratch datadirs, `FUZZ=dbwrapper ... -runs=2000 -seed=187` completed with no crash or sanitizer/assertion output: 2,000 executions, 16,033 coverage counters, 55,264 feature units, 197 corpus files, 200 executions/sec, and 1,030 MiB peak RSS. `FUZZ=dbwrapper_threaded ... -runs=500 -seed=1871` completed cleanly with 500 executions, 18,090 counters, 57,953 feature units, 166 executions/sec, and 1,029 MiB peak RSS. `FUZZ=dbwrapper_concurrent_reads ... -runs=300 -seed=1872` completed cleanly with 300 executions, 17,758 counters, 40,605 feature units, 8 executions/sec, and 1,028 MiB peak RSS; its bounded run took 34 seconds. The generated corpus and test datadirs are under `/data/my_storage/tmp/cycle187-*` and are not repository artifacts.
+- Mutation proof: temporarily changed only `CDBIterator::Next()` from `iter->Next()` to `iter->SeekToFirst()` in `src/dbwrapper.cpp`, rebuilt, and ran `dbwrapper_tests/dbwrapper_iterator` with the same isolated datadir convention. The test exited 201 with 9 failed assertions out of 40, including successor key/value mismatches and failure to become exhausted. The exact failures included `key_res == key2` (`0x6a != 0x6b`), `Valid() == false` (`true != false`), and both unchanged-output checks. Restored the exact implementation, rebuilt, and reran the full 16-case suite successfully.
+- `git diff --check` passed after restoration, and `git diff -- src/dbwrapper.cpp` was empty. Protected long-running processes PID 777094 and PID 956381 remained alive throughout.
+
+### Verdict and limits
+
+No source defect or missing durable test oracle was confirmed. The iterator implementation agrees with the independent bytewise model across deterministic unit tests, fixed-seed mutation/state fuzzing, threaded compaction paths, and concurrent snapshot readers. The status-preservation path also remained correct under the existing injected read failure. The temporary mutation demonstrated that the current oracle detects a broken transition rather than merely executing it.
+
+The evidence does not prove behavior for undefined caller sequences such as `Next()` after `Valid()==false`, does not add `Prev()`/`SeekToLast()` because those methods are not exposed by `CDBIterator`, and does not exhaust all LevelDB storage-engine corruption schedules or all serialized key types. The concurrent fuzz run is a smoke campaign, not a proof of race freedom. No source/test commit is justified; this journal-only handoff records the closed cell and exact remaining limits.
+
+Next queue: select a fresh goal after the separate cycle-state close. For Goal 18, prioritize a new persistence identity such as recovery/index-key reconstruction or a new failure schedule; do not reopen iterator, GCS, compact-target, or batch-parent cells without new evidence.
