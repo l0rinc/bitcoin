@@ -1,5 +1,84 @@
 # Alternative-implementation compatibility audit
 
+## Cycle 202 selection and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `55` (`alternative-implementation`); no reroll was needed. The immediately preceding Goal 55 cell, Cycle 197 raw transaction and CompactBlock serialization, is explicitly closed and is not reopened. The dedicated branch is `uber-cycle-202-alternative-implementation-20260731`.
+- Gate timestamp: `2026-07-31T09:42:41Z`. Start HEAD: `f5e14920c7935f71906c89f178973de13b2d9351`; `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; direct start divergence `1194 42` from `git rev-list --left-right --count HEAD...origin/master`.
+- `git fetch origin master` passed. The tracked/index gate was clean, `git diff --check` passed, and `src/net_processing.cpp` had no residual mutation. Known unrelated untracked artifacts and protected PIDs `777094`, `956381`, `1138182`, and `1157959` were preserved. Pre-cycle uber-state SHA-256: `6d9ab4501cd8d90bc4f7c347d1de5d78f0423faeea4ab6198108d8c854f30da0`.
+- Authoritative catalog, prompt, corrected TSV, and uber protocol hashes were `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+This cycle targets complex Miniscript descriptor compilation and derivation across Core and the pinned Embit snapshot: nested `wsh`/`sh(wsh)`, Taproot script trees, `multi_a` and threshold-like branches, key ordering, wrapper combinations, and CSV/CLTV boundaries. Cycle 155's supported `pkh`, `wpkh`, wrapped SegWit, simple Taproot-keypath, CompactSize/PSBT, descriptor-network, and ADDRv2 cells remain closed. Rust/Go source contracts will be used where executable toolchains are unavailable; Embit's pure-Python implementation and Core's deterministic RPC/test binaries provide the direct execution forms.
+
+### Hypothesis and plan
+
+The falsifiable hypothesis is that a complex, supported descriptor can produce a different witness/redeem script or derived output between Core and an alternative implementation while both accept the descriptor and appear syntactically valid. Such a difference could strand wallet funds or make watch-only/imported descriptors observe the wrong outputs. The trust boundary is descriptor parsing/checksum normalization, key derivation, Miniscript compilation, Taproot leaf/branch hashing, network encoding, and Core's `deriveaddresses` output.
+
+1. Pin and inspect the exact Core, Embit, and available rust-miniscript source contracts; classify unsupported or invalid Miniscript before comparing output.
+2. Generate deterministic complex descriptors from fixed public keys and extended keys, including WSH and Taproot trees, and compare Core's derived addresses plus scriptPubKeys with Embit's compiled scripts and addresses across branch/index values.
+3. Exercise wrapper and numeric boundaries for `older`/`after`, empty/singleton trees, sorted versus unsorted multisig, duplicate keys, and multipath branches. Preserve exact descriptors, checksums, outputs, and hashes.
+4. If a current Core mismatch is reproduced, minimize it and add the narrowest regression. Otherwise close as intentional policy, unsupported reference behavior, invalid-domain behavior, or inconclusive tool evidence with a precise next queue.
+
+## Cycle 202 result: complex Miniscript descriptor differential
+
+### Source inventory and execution boundary
+
+The direct Core oracle was the isolated `/data/my_storage/tmp/cycle202-alt-desc` regtest node, using `/data/my_storage/tmp/cycle84-build/bin/bitcoind` and `bitcoin-cli` version `31.99.0`; it was started with a scratch datadir, RPC port `18602`, no listening P2P socket, and was stopped after the probes. The comparison source was Embit `/data/my_storage/tmp/cycle155-embit`, HEAD `fff7ffa43f6ce088c5ba22cb3877a122bf01dc96` (`2026-06-01`, `bump version and add CHANGELOG.md`). The current Core checkout was at Cycle 202 start HEAD `f5e14920c7935f71906c89f178973de13b2d9351`. The host still has no `rustc`, `cargo`, or `go`, so the pinned rust-bitcoin and btcd trees remained source-only references.
+
+Core's descriptor documentation identifies `wsh()` and `tr()` Miniscript as BIP 379-constrained expressions (`doc/descriptors.md:27,72`). The relevant implementation checks were `src/script/miniscript.cpp:143-205` for fragment typing, `src/script/miniscript.h:1502-1555` and `1735-1747` for recursive duplicate-key detection, and `src/script/descriptor.cpp:1965-1972` for the P2WSH/P2TR compressed-key restriction. The Embit parser has equivalent local type checks in `src/embit/descriptor/miniscript.py:329-335` and `502-511`, but no corresponding recursive duplicate-key check was found in its key/miniscript descriptor path (`src/embit/descriptor/arguments.py:182-197`).
+
+The first fixed-key comparison accidentally compared Embit's CompactSize-prefixed `Script.serialize()` result with Core's raw `scriptPubKey` field. That setup-only mismatch was discarded. The normalized comparison removed the one-byte length prefix before comparing, and all six fixed cases then matched exactly.
+
+### Fixed-key WSH and Taproot matrix
+
+The deterministic compressed keys were:
+
+- `P1 = 03e7d285b4817f83f724cd29394da75dfc84fe639ed147a944e7e6064703b14130`
+- `P2 = 0250863ad64a87ae8a2fe83c1af1a8403cb53f53e486d8511dad8a04887e5b2352`
+- `P3 = 03b8fa5d5959fa4027ccbf0736a86ccde4242e3051ea363437b4ff0d52598d7cec`
+
+For each descriptor, Core `getdescriptorinfo` plus `deriveaddresses` and `validateaddress` were compared with Embit's `Descriptor.from_string(...).derive(0)`, `address(NETWORKS["regtest"])`, and compiled script. Every row matched in both address and raw scriptPubKey:
+
+| Descriptor cell | Address | Raw scriptPubKey |
+| --- | --- | --- |
+| `wsh(or_d(pk(P1),pkh(P2)))` | `bcrt1qwqkr2dgk4q7xnpcnm0cg3zhr6glpnxqpudryf3ertf7mgqujdpkqll556m` | `0020702c353516a83c698713dbf0888ae3d23e199801e34644c7235a7db40392686c` |
+| `wsh(and_v(v:pk(P1),or_d(pk(P2),older(12960))))` | `bcrt1qu9hj0yv5d7juutul4d9zqzmg02256gc4r3jzlf0hpmvzf3fajncs9g5ev5` | `0020e16f2791946fa5ce2f9fab4a200b687a954d23151c642fa5f70ed824c53d94f1` |
+| `wsh(sortedmulti(2,P1,P2,P3))` | `bcrt1qat48925u8glnsfhed3xejjq200ucy5lp8t407e6j9crzdklqqp0sfjgdc2` | `0020eaea72aa9c3a3f3826f96c4d99480a7bf98253e13aeaff67522e0626dbe0005f` |
+| `tr(P1,pk(P2))` | `bcrt1prvfm6n6nrfuyg23gultwcgv5lhzfpycekfcw6j9adg8rw9tmtdmqkgh4va` | `51201b13bd4f531a78442a28e7d6ec2194fdc4909319b270ed48bd6a0e37157b5b76` |
+| `tr(P1,{pk(P2),pk(P3)})` | `bcrt1pvwzs5afkve9hv7r9e965d2f0f47rfpt0ldfq2jfw7xt8wztf9vgqztppaj` | `512063850a7536664b767865c97546a92f4d7c34856ffb5205492ef1967709692b10` |
+| `tr(P1,{and_v(v:multi_a(2,P2,P3),older(3)),multi_a(2,P2,P3)})` | `bcrt1pjurph9faxyn548kvfa72aylv2lgqyyfksyagpg74du3k9nyh457qsh4q47` | `512097061b953d31274a9ecc4f7cae93ec57d0021136813a80a3d56f2362cc97ad3c` |
+
+### Ranged extended-key matrix
+
+To test actual derivation rather than only fixed keys, three valid regtest `tpub` values from the pinned Embit Taproot tests were used with `/0/*`. Core was called with range `[0,2]`; Embit derived indexes 0, 1, and 2. All nine address/script pairs matched.
+
+| Descriptor family | Index 0 | Index 1 | Index 2 |
+| --- | --- | --- | --- |
+| `wsh(sortedmulti(2,tpub1/0/*,tpub2/0/*,tpub3/0/*))` | `bcrt1qknk2kmx748xf6qj9na4wv8wr686276wufacllpy2y8m078pu09vq6yrhde` / `0020b4ecab6cdea9cc9d02459f6ae61dc3d1f4af69dc4f71ff848a21f6ff1c3c7958` | `bcrt1qfuty7gwkmsd9evupzfdgfu0x4qf7c7er63p4rktnlfx6ns350ftsjad6a7` / `00204f164f21d6dc1a5cb381125a84f1e6a813ec7b23d44351d973fa4da9c2347a57` | `bcrt1q75yva8uy533pcltwr6qxl9c9vyv6ktewj7f6ahmepq5nd9wsl52qgx3saq` / `0020f508ce9f84a4621c7d6e1e806f97056119ab2f2e9793aedf7908293695d0fd14` |
+| `wsh(or_d(pk(tpub1/0/*),and_v(v:pkh(tpub2/0/*),older(6))))` | `bcrt1qc44yv2sugauwd3fm62642d79e40s9e6chuspwa6895grqsmjq6nqa8v67f` / `0020c56a462a1c4778e6c53bd2b55537c5cd5f02e758bf201777472d1030437206a6` | `bcrt1qg9mp58xmls39qwhspdppndtlnsnsj5n6ykxf208mj7emdywgxhesu70kpl` / `002041761a1cdbfc22503af00b4219b57f9c2709527a258c953cfb97b3b691c835f3` | `bcrt1qhfgt9fsvx86lxav8j2au2f23287u2wwj0ec4lalxccnxyk7yyceskfqjsm` / `0020ba50b2a60c31f5f3758792bbc525151fdc539d27e715ff7e6c626625bc42633` |
+| `tr(tpub1/0/*,{and_v(v:multi_a(2,tpub2/0/*,tpub3/0/*),older(3)),multi_a(2,tpub2/0/*,tpub3/0/*)})` | `bcrt1pxh4hdawtn85lfcvq45clgnmdxvfw5g67595c4jy5tsnas776duuqdr8he7` / `512035eb76f5cb99e9f4e180ad31f44f6d3312ea235ea1698ac8945c27d87bda6f38` | `bcrt1pxy3gv98clx3aputkcw862twqh3xrh7wc0dy4nzy5ele4wautpfks4nwtel` / `512031228614f8f9a3d0f176c38fa52dc0bc4c3bf9d87b49598894cff357778b0a6d` | `bcrt1pup50llxltt20ut847cs5lcwxgqyu757qkv8vau5qf3qfysuj3zuqr7wgmj` / `5120e068fffcdf5ad4fe2cf5f6214fe1c64009cf53c0b30ecef2804c4092439288b8` |
+
+The three exact tpubs were `tpubD6NzVbkrYhZ4Y18xhod7E8V6Sy3YF36bge8HJb4ww1QgTrdkNvCEzcvUmFGQkTJA32gqr3j94iE8vsUzYpv8Pn29JezD9YiYnxgUREhN3QR`, `tpubD6NzVbkrYhZ4YPAbyf6urxqqnmJF79PzQtyERAmvkSVS9fweCTjxjDh22Z5St9fGb1a5DUCv8G27nYupKP1Ctr1pkamJossoetzws1moNRn`, and `tpubD6NzVbkrYhZ4YMQC15JS7QcrsAyfGrGiykweqMmPxTkEVScu7vCZLNpPXW1XphHwzsgmqdHWDQAfucbM72EEB1ZEyfgZxYvkZjYVXx1xS9p`. Mainnet `xpub` rejection in regtest was not counted as a discrepancy; Core's network-specific extended-key prefix policy is already covered and expected.
+
+### Boundary and acceptance matrix
+
+Both implementations accepted and compiled the unique-key nested `sh(wsh(and_v(or_c(...),pk(...))))` forms, `or_b`, `andor`, nested Taproot leaves, `older(1)`, `older(65535)`, `older(65536)`, `after(1)`, `after(500000000)`, `after(500000001)`, and `sortedmulti` thresholds 1 and 3. Both rejected `older(0)`, `after(0)`, `multi(0,...)`, and a threshold greater than the number of keys. Both also accepted duplicate keys in raw `multi`/`sortedmulti` and duplicate Taproot leaves, so the Core duplicate check is a Miniscript-specific sanity rule rather than a generic key parser rule.
+
+Two differences were reduced to exact external compatibility cases:
+
+1. `wsh(and_v(or_c(pk(P1),or_c(pk(P3),v:older(1000))),pk(P1)))` is accepted by Embit and compiles to scriptPubKey `00204363f8064c0890c49615c645d32e742d8aeee1dbb615a7f4e33aae885b27d8a7`. Core rejects it with `and_v(...) is not sane: contains duplicate public keys`. Replacing the final `P1` with the unique `P2` or `P3` made both implementations accept and match. The initial apparent nested-wrapper mismatch was therefore not a type-system divergence; it was the deliberately duplicated key.
+2. `wsh(pk(04a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd5b8dec5235a0fa8722476c7709c02559e3aa73aa03918ba2d492eea75abea235))` is accepted by Embit and produces witness script `4104a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd5b8dec5235a0fa8722476c7709c02559e3aa73aa03918ba2d492eea75abea235ac` and scriptPubKey `0020000676452ca2b203855a8f56af1a6297bff43c356072e85de974231aa3d3457e`. Core rejects the descriptor with `pk(): Uncompressed keys are not allowed`. This is an alternative-library acceptance/policy gap: Core's descriptor parser intentionally requires compressed keys in witness contexts, even though the raw script can be represented and hashed.
+
+The duplicate-key case is a report-ready Embit interoperability finding because Embit accepts and derives a descriptor that Core's Miniscript descriptor contract rejects; the uncompressed-key case is a separate report-ready compatibility/policy finding. Neither is a local Bitcoin Core defect. No source mutation, regression test, or production patch is justified. The exact Core-side rule is independently supported by `DuplicateKeyCheck` and the compressed-key branch in the source, while the Embit-side acceptance was reproduced by `Descriptor.from_string` and its compiled outputs.
+
+### Validation and verdict
+
+- `PYTHONPATH=/data/my_storage/tmp/cycle155-embit/src python3 -m unittest -v tests.tests.test_descriptor` passed 10/10 tests at the pinned Embit snapshot. The run used its pure-Python ECC fallback because optional system libsecp256k1 bindings were unavailable.
+- `TMPDIR=/data/my_storage/tmp/cycle202-alt-desc/runtime /data/my_storage/tmp/cycle84-build/bin/test_bitcoin --run_test=descriptor_tests --log_level=test_suite` passed 13/13 selected Core descriptor cases with `*** No errors detected`.
+- The same command with `--run_test=miniscript_tests` passed all 3 selected Core Miniscript cases with `*** No errors detected`.
+- The isolated RPC comparison covered six fixed descriptors, three ranged descriptor families at three indexes each, and the boundary/duplicate matrix. The daemon was stopped after use; no protected process was touched.
+
+Verdict: no local Core change. Core and Embit agree on the supported complex descriptors and actual ranged derivation tested here. Preserve the two external Embit compatibility gaps as report-ready seeds, without claiming either is a repository finding. The next cycle must draw a fresh selector and must not reopen Cycle 155's simple descriptor/key-wrapper cell or Cycle 202's now-closed complex Miniscript cell.
+
 ## Cycle 197 selection and gate
 
 - Exact selector: `shuf -i 0-98 -n 1` -> `55` (`alternative-implementation`); no reroll was needed. The dedicated branch is `uber-cycle-197-alternative-implementation-20260731`.
