@@ -2386,3 +2386,35 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   cycle must perform a fresh gate, preserve the unrelated untracked artifacts,
   and select a distinct eligible goal; Goal 8's exact re-registration cell is
   closed.
+
+## Cycle 211 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `13` (`secret-lifetime-zeroization`); no reroll.
+- Branch: `uber-cycle-211-secret-lifetime-zeroization-20260731`. Start HEAD:
+  `f25398b81608873257bfcad42f93d14978f02715`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1213 42`.
+  The four preserved long-running test processes remained alive and untouched.
+- Confirmed finding: the `Poly1305` C++ wrapper had an implicit destructor even
+  though its context contains secret-derived `r`, `h`, and `pad` state plus a
+  partial message buffer. `poly1305_finish()` cleans only finalized state, so
+  abandoned or partially processed contexts retained sensitive bytes. The fix
+  adds a complete-context `memory_cleanse` destructor and a placement test for
+  both abandoned and finalized contexts.
+- Source/test/journal commit: `d1cb46b817` (`crypto: cleanse Poly1305 state on destruction`),
+  authored by `Lőrinc <pap.lorinc@gmail.com>`.
+- The pre-fix placement probe returned `retained` and exit 1 after explicitly
+  destroying a partially updated context. After the repair, the focused
+  destruction test passed. The release `test_bitcoin` target rebuilt
+  successfully; `crypto_tests` passed 27 cases, the Poly1305 vector and
+  ChaCha20-Poly1305 tests passed, `bip324_tests` passed 2 cases, and the
+  `bench_bitcoin` target plus `POLY1305.*` benchmark completed. Clang 19
+  assembly retained a `memory_cleanse` call. `git diff --check` passed. The
+  benchmark reported the repository's existing CPU-frequency stability warning.
+  A combined comma-separated Boost.Test filter was rejected as setup syntax and
+  was discarded; the affected tests were rerun individually and by suite.
+- No MSan, Valgrind, TSan, or fuzz-target run was available for this cell. No
+  cycle-owned process remains running. Final local divergence before the state
+  close is `1214 42` (`origin/master..HEAD`, `HEAD..origin/master`). The next
+  cycle must perform a fresh gate, preserve the unrelated untracked artifacts,
+  and select a distinct eligible goal; Goal 13's exact Poly1305 cell is closed.
