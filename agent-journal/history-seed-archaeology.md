@@ -310,3 +310,62 @@ recorded).
 
 ## Rotation note
 Five cycles; five persistence artifacts, every tier verified.
+
+## Cycle 6 (2026-07-31): banlist.dat/.json (CBanDB dual-format) archaeology — all 6 cells behave as documented; DISMISSED; persistence family CLOSED
+
+### Draw
+RE-RANK draw 138 over the 4-cell queue: raw=2323887634903536520
+(already 63-bit) -> idx 0 -> banlist.dat (the family's last
+artifact, carried since the c4/c5 queue notes). Branch:
+audit/history-seed-c6 from b92b809664.
+
+### The dual-format contract (addrdb.cpp:136-183, banman.cpp)
+- Read: banlist.dat (legacy v22 binary) -> WARNING "ignored ...
+  can only be read by version 22.x" — never migrated, json is
+  authoritative; banlist.json missing/unreadable/unparseable ->
+  false -> BanMan recreates EMPTY and marks dirty.
+- Write: JSON only (common::WriteSettings, key "banned_nets");
+  failure -> error log, m_is_dirty retained, next dump retries.
+- Sweep: expired entries dropped at load and at every dump.
+
+### Experiment (functional matrix, isolated regtest node)
+Harness /tmp/btc41c6/banlist_matrix.py (rc=0):
+- A round-trip: 2 bans (1.2.3.4 abs bantime, 5.6.0.0/16 relative)
+  -> stop (json flushed at BanMan destruction) -> start -> both
+  loaded. json shape: {"banned_nets": [{version, ban_created,
+  banned_until, address}]} — NOT the "banned" key my v1 assumed
+  (KeyError; harness lesson recorded).
+- B truncated mid-JSON: "Cannot load banlist"/"Recreating" warning,
+  zero bans kept, node up.
+- C valid JSON garbage schema ({"banned_nets": 42}): "Cannot parse
+  banlist ... JSON value is not" warning, zero kept, node up.
+- D legacy banlist.dat present (crafted magic+junk): exact "can
+  only be read by ... version 22.x" warning, json bans still
+  loaded (json authoritative).
+- E expired entry (banned_until=2000000) appended to json: swept
+  at load; live ban retained.
+- F write failure (chmod 0555 netdir, setban -> dump fails):
+  m_is_dirty retained — the retry after chmod 0755 persisted BOTH
+  the failed-write ban (8.8.4.4/32) and the new one (8.8.8.8/32).
+  (Script bug along the way: setban requires the node running —
+  no-RPC-connection error, ordering fixed.)
+
+### Verdict
+DISMISSED: every presence/corruption/expiry/write-failure class
+behaves exactly as the documented contract — fail-empty with a
+distinct warning on the read side, dirty-retained retry on the
+write side, never fatal, never silent-keep. The six-artifact
+persistence family (fee_estimates.dat, mempool.dat, xor key,
+anchors.dat, peers.dat, banlist.dat/.json) is now CLOSED: five
+DISMISSED cycles + this one, every tier empirically verified.
+
+### Limitations / queue
+- A REAL v22 banlist.dat (actual migration attempt by v22 binary)
+  not fabricated — the v23+ code path only warns+ignores it (the
+  class is warning-text-only); releases/v22.0 binary could produce
+  one if a future cycle wants the fixture.
+- #41 queue: EMPTY. Campaign exhausted (6/6 artifacts dismissed).
+
+## Rotation note
+Six cycles; six artifacts, every tier verified. Campaign #41
+exhausted.
