@@ -7,6 +7,8 @@
 
 #include <span.h>
 
+#include <support/cleanse.h>
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -52,6 +54,9 @@ public:
         assert(key.size() == KEYLEN);
         poly1305_donna::poly1305_init(&m_ctx, UCharCast(key.data()));
     }
+
+    /** Destructor to clean up private memory. */
+    ~Poly1305() { memory_cleanse(&m_ctx, sizeof(m_ctx)); }
 
     /** Process message bytes. */
     Poly1305& Update(std::span<const std::byte> msg) noexcept
