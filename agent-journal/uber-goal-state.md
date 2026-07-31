@@ -2418,3 +2418,36 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   close is `1214 42` (`origin/master..HEAD`, `HEAD..origin/master`). The next
   cycle must perform a fresh gate, preserve the unrelated untracked artifacts,
   and select a distinct eligible goal; Goal 13's exact Poly1305 cell is closed.
+
+## Cycle 212 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `29` (`dead-stale-code`); no reroll.
+- Branch: `uber-cycle-212-dead-stale-code-20260731`. Start HEAD:
+  `c1c3d6d76a7089fa99ce30672224055ef277e12b`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1215 42`.
+  The four preserved long-running test processes remained alive and untouched.
+- The no-op functional-test candidates were classified as intentional: `create_cache.py`
+  is a cache-builder helper, `example_test.py` is documentation, and
+  `rpc_deprecated.py` is an explicitly retained deprecation hook. The latter's
+  history (`331a5279d2`) removed the last deprecated RPC check while preserving
+  the comment that tells future contributors to use the file and not delete or
+  modify the hook. Its direct release-build run exited 0 with the expected two
+  placeholder log lines.
+- The current TODO/compatibility candidates were dismissed with source/history
+  evidence: TxReconciliation is deliberately incomplete and opt-in; the old
+  CoinStats path has a versioned downgrade-compatibility test; NetBSD 10 support
+  is still listed in CI and build documentation; and macOS `ForceActivation()`
+  remains called by live Qt code and was recently retained in commit
+  `c8b2aeb226`.
+- The RPC metadata follow-up found no current nested `OBJ_NAMED_PARAMS` or
+  `OBJ_USER_KEYS` registration that reaches `RPCArg::ToStringObj()`'s explicit
+  unreachable branch. The release `rpc_tests` suite passed 23 cases, and
+  `rpc_openrpc.py` passed against `/data/my_storage/tmp/cycle89-build/test/cache`
+  after the initial no-cache setup attempt was discarded. Recent deleted-file
+  reference scanning found no current build/test reference to removed source.
+- No source or test change was justified. Selected journal:
+  `agent-journal/dead-stale-code.md`. The journal-only handoff records exact
+  commands, output, dismissed candidates, and limitations. The next cycle must
+  perform a fresh gate, preserve unrelated untracked artifacts, and draw a
+  distinct eligible goal; Goal 29's current stale-code cells are closed.
