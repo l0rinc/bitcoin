@@ -19,7 +19,7 @@ void BenchFillClearMap(benchmark::Bench& bench, Map& map)
     // make sure each iteration of the benchmark contains exactly 5000 inserts and one clear.
     // do this at least 10 times so we get reasonable accurate results
 
-    bench.batch(batch_size).minEpochIterations(10).run([&] {
+    bench.batch(batch_size).unit("insert").minEpochIterations(10).run([&] {
         auto rng = ankerl::nanobench::Rng(1234);
         for (size_t i = 0; i < batch_size; ++i) {
             map[rng()];

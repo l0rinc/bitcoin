@@ -46,6 +46,16 @@ class BenchOutputTest(BitcoinTestFramework):
         results = self.run_benchmark("MerkleRoot", "multiple-runs.json", [])
         assert_equal([result["name"] for result in results], ["MerkleRoot", "MerkleRootWithMutation"])
 
+        results = self.run_benchmark("PoolAllocator_.*", "batch-unit.json", [])
+        assert_equal({result["name"]: result["unit"] for result in results}, {
+            "PoolAllocator_StdUnorderedMap": "insert",
+            "PoolAllocator_StdUnorderedMapWithPoolResource": "insert",
+        })
+        assert_equal({result["name"]: result["batch"] for result in results}, {
+            "PoolAllocator_StdUnorderedMap": 5000,
+            "PoolAllocator_StdUnorderedMapWithPoolResource": 5000,
+        })
+
 
 if __name__ == "__main__":
     BenchOutputTest(__file__).main()
