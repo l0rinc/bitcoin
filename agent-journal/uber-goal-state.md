@@ -203,6 +203,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 106 | semantic-twin-inconsistency | CYCLE-3 | 2026-07-29 | vsize twins agree (formula + 6/6 functional); sighash numerics agree; PSBT DEFAULT\|ALL restriction = intentional policy |
 | 43 | option-api-lifecycle | CYCLE-3 | 2026-07-29 | -v2transport settings.json lifecycle proven: honored, persisted (write-back intact), CLI-overridable |
 | 34 | uncovered-code-classification | CYCLE-4 | 2026-07-29 | dbwrapper boundary layers safe; Cursor warmup asymmetry = author's PR 35654 pending (corrupt-only, parked) |
+| 34 | uncovered-code-classification | CYCLE-5 | 2026-07-31 | BitsToBytes padding arms: dedicated test, 0xff-mutant killed (was sancov-granularity, not behavioral gap); in-tree queue CLOSED |
 | 23 | perf-flamegraph-investigation | CYCLE-4 | 2026-07-29 | CompareMainTransactions = O(1) early-exit comparator; memcmp/atomic shares inherent-by-design; no fix candidate |
 | 95 | database-semantics-differential | CYCLE-3 | 2026-07-29 | RocksDB swap builds+reindexes correctly; CPU parity (validation-bound), wall -43% (write parallelism, directional) |
 | 42 | ci-review-bot-followup | CYCLE-2 | 2026-07-29 | wider DrahtBot sweep (15 PRs, 7 flagged): all failures PR-owned; 35793 shows in-tree assert working as designed |
@@ -656,6 +657,15 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    #35 CTxUndo semantic differential, #55 schnorr vectors, #34
    merkle Assume arms, #95 flush-windowed kill, #71 extension-block
    resume (n=7).
+   RE-RANK draw 135 (7-cell queue): raw=12699529126198122192, masked
+   3476157089343346384 -> idx 4 -> #34 c5 (BitsToBytes padding arms:
+   dedicated arm-level test bits_bytes_padding_arms; 0xff-init
+   mutant killed by both the new test and c1's roundtrip test —
+   c1's <100% branch note was sancov Assume-line granularity, not a
+   behavioral gap; in-tree queue CLOSED; no defect).
+   Queue after draw 135: banlist.dat(#41), #90 spec-vector cells,
+   #35 CTxUndo semantic differential, #55 schnorr vectors, #95
+   flush-windowed kill, #71 extension-block resume (n=6).
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -690,7 +700,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 0(c1,c2), 1(c1,c2,c3,c4), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1,c2,c3), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2,c3,c4), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5),
-28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4), 35(c1,c2,c3,c4), 36(c1,c2,c3), 23(c1,c2,c3,c4), 25(c1,c2,c3),
+28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4,c5), 35(c1,c2,c3,c4), 36(c1,c2,c3), 23(c1,c2,c3,c4), 25(c1,c2,c3),
 37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3,c4,c5), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 52(c1,c2), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3,c4), 47(c1,c2,c3,c4), 48(c1,c2), 49(c1,c2,c3,c4,c5,c6,c7,c8,c9), 50(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13), 53(c1), 55(c1,c2), 57(c1,c2,c3,c4), 58(c1,c2,c3), 59(c1,c2), 60(c1,c2,c3,c4,c5,c6,c7,c8), 24(c1,c2,c3,c4,c5,c6),
 61(c1,c2,c3), 63(c1,c2,c3,c4,c5), 64(c1), 65(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 66(c1,c2), 67(c1), 68(c1,c2,c3), 69(c1,c2,c3,c4), 70(c1), 71(c1,c2,c3), 73(c1,c2,c3), 74(c1,c2,c3,c4), 75(c1,c2,c3,c4),
 76(c1,c2,c3), 80(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 81(c1,c2), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1,c2), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4), 99(c1), 100(c1,c2,c3), 101(c1,c2,c3), 102(c1,c2), 103(c1), 104(c1,c2,c3), 105(c1), 106(c1,c2,c3), 107(c1,c2), 108(c1), 109(c1,c2).

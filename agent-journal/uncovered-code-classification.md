@@ -237,3 +237,47 @@ small, corrupt-only, and owned by the author's pending PR.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 5 (2026-07-31): merkleblock BitsToBytes padding arms — dedicated arm-level test, mutation-killed; cell CLOSED
+
+### Draw
+RE-RANK draw 135 over the 7-cell queue: raw=12699529126198122192,
+masked 3476157089343346384 -> idx 4 -> #34 merkle Assume arms cell.
+
+### Cell
+Branch coverage of BitsToBytes' padding invariant arms
+(merkleblock.cpp:23-26, fork-added Assume): both arms of
+`if (used_bits)` (bit-count % 8 == 0 vs != 0) plus round-trip
+identity and padding-decodes-false.
+
+### Work
+- New test bits_bytes_padding_arms (merkleblock_tests.cpp): sizes
+  0..17, forced set bit adjacent to padding, asserts output size ==
+  CeilDiv, padding mask clear, BytesToBits round-trip, padding
+  positions decode false. Behavior-pinned independently of the
+  Assume macro's build-mode semantics (Release NDEBUG makes Assume a
+  hint; the BOOST checks guard the invariant directly).
+- Suite: merkleblock_tests green (build-before, Release).
+- MUTATION CHECK: ret initialized 0xff instead of 0 (padding bits
+  set) -> killed by BOTH the new test (129 failures incl. the mask
+  check [254 != 0]) AND the pre-existing c1 test
+  merkleblock_bit_byte_roundtrip_padding. So the invariant was
+  already behaviorally covered; the c1 "branch coverage <100%" note
+  was sancov Assume-line granularity, not a behavioral gap. The new
+  test closes it as an explicit, named arm-level test.
+- Mutant reverted; suite re-verified green; tree carries only the
+  test addition.
+
+### Verdict
+Cell CLOSED (coverage gap was instrumentation-granularity, now
+pinned by a dedicated mutation-verified test). No production defect.
+
+### Limitations / queue
+- sancov re-measurement not run (build cost; the mutation kill is
+  the stronger evidence form).
+- #34 queue now: only "re-run 35654 test if the PR lands upstream"
+  (external watch). All in-tree cells closed.
+
+## Rotation note
+Cycle 5 complete; rotating per uber-goal policy. Effectively
+exhausted modulo the external 35654 watch.
