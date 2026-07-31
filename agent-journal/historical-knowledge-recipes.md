@@ -1,5 +1,38 @@
 # Historical Knowledge Recipe Synthesis: Cycle 120
 
+## Cycle 176 Identity and Gate
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `60`
+- Selected goal: `historical-knowledge-recipes` (Whole-PR and commit knowledge-base recipe synthesis)
+- Branch: `uber-cycle-176-historical-knowledge-recipes-20260730`
+- Start HEAD: `7809069a54de58c8e6277cf0e6ec866946d17a74`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Divergence (`origin/master...HEAD`): `42 1135`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc`
+- Tracked/index state was clean at the gate; known untracked agent artifacts were preserved.
+- Preserved unrelated long-running tests: PIDs `777094` and `956381`; neither was modified.
+- Exact selector result: `shuf -i 0-98 -n 1` -> `60`; no reroll was needed because the prior closed draw was `80`.
+
+## Cycle 176 Scope and Exclusions
+
+Mine a technically grounded reviewer recipe from an upstream whole-PR or commit sequence, including accepted and rejected approaches, then validate it against an independent held-out change and at least one negative control. This cycle opens the distinct fingerprint `resource-owning-move-operation-contract`: resource-owning move assignment must define release, transfer, aliasing, and destruction semantics before it is exposed; if no correct supported use exists, deleting the operation is preferable to shipping a partial RAII implementation. The held-out check will use `btck::Handle` self-move assignment, and the negative control will be a non-owning/value-only refactor or a copy-only API that has no resource-transfer contract.
+
+Exclude the closed recipes `presence-vs-verification-before-assertion`, `reservation-conservation-after-deferred-eligibility`, `configurable-parallel-feature-lifecycle`, `provenance-aware-terminal-state-accounting`, `actionable-interface-minimal-schema-boundary-realism`, `resource-bound-backlog-duplicate-suppression-retention-telemetry`, and all previously harvested reviewer-preference cells. Also exclude prior local DynSock ownership, CNode refcount, error-path rollback, exact-helper-reuse, and generic lifetime findings as primary seeds; they may only serve as controls after the upstream evidence is independently established.
+
+Initial queue:
+
+1. Inspect upstream PR #35120 and its commit history/review text for the broken `scoped_connection` move-assignment contract, discarded implementation, and accepted deletion.
+2. Inspect upstream PR #35143 and its tests as a held-out ownership/aliasing case; verify self-move leaves every public handle type valid and unchanged.
+3. Search current resource-owning wrappers and move-assignment operators for an untested aliasing or release contract, then record any candidate as confirmed, dismissed, or inconclusive before considering a production change.
+4. Validate the recipe on focused current tests and mutation-sensitive reasoning; keep this cycle journal-only unless a new defect has its own independent reproducer and self-contained source/test commit.
+
+No Cycle 176 journal evidence or source/test changes have been made after this start record.
+
 ## Cycle 120 Identity and Gate
 
 - Draw command: `shuf -i 0-98 -n 1`
