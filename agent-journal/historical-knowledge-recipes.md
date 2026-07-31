@@ -33,6 +33,88 @@ Initial queue:
 
 No Cycle 176 journal evidence or source/test changes have been made after this start record.
 
+## Cycle 176 Evidence Log
+
+### Seed: scoped connection move assignment and the complete ownership surface
+
+The upstream seed is [PR #35120](https://github.com/bitcoin/bitcoin/pull/35120), merge `3b712b9d0245d0c1692224292123a9601a5ca96b`, with source commit `b83a999b1449c0b0b2eac3173359539323438fde` (`btcsignals: delete broken scoped_connection move assignment`). The old defaulted move assignment overwrote `m_conn` without first disconnecting the destination. A destination connection therefore remained registered with its signal after the assignment, violating the scoped RAII contract. The pull request's concrete trigger was two callbacks, `IncrementCallback` and `SquareCallback`, followed by `sc0 = std::move(sc1)` and a signal invocation: the expected value was `9`, while the leaked old callback produced `16`.
+
+The trust boundary is an internal C++ ownership wrapper used by UI and interface code. The relevant contract is not merely that `scoped_connection` can be moved; it must release the destination's registration, transfer the source registration, and disconnect exactly once at destruction. The original source had a move constructor and defaulted move assignment, but no default constructor. The review discussion records that an earlier revision fixed the operator and added a default constructor, then exposed a partial Boost-like surface without a clear boundary: the broader re-seating operations and compatibility rationale were not addressed. The reviewer asked whether the project wanted full compatibility or a deliberately documented subset, and noted that the operation was unused in the tree.
+
+The accepted approach was to delete move assignment and retain move construction. The PR body states that the operation had no current callers, so deletion was safe and a correct implementation could be added when a real use case required one. The public GitHub review record contains an approval, an ACK, and the explicit alternative of returning to `= delete`; the issue discussion also corrects a mistaken claim about raw `connection&&` assignment before the final ACK. This is technical evidence, not a stylistic preference: exposing only part of a resource-reseating contract was rejected, while removing unused broken behavior was accepted.
+
+### Held-out validation: kernel handle self-move
+
+The independent held-out change is [PR #35143](https://github.com/bitcoin/bitcoin/pull/35143), merge `a7bea426b4a155f4cf29572fcc51caf12b4992df`, source commit `14547eb489243a1991a91447af2919de16b0fc98` (`kernel: guard btck::Handle move-assignment against self-move`). Its old `Handle` move assignment destroyed `m_ptr` before reading the source. For `h = std::move(h)`, `std::exchange` restored the freed pointer and the destructor later double-freed it. The fix mirrors the existing copy-assignment self-check, making self-move a no-op. This is the same ownership rule under a different trigger: aliasing the source and destination must not invalidate the only live resource.
+
+The test expands `CheckHandle` rather than adding one narrow concrete type. It records the original pointer, performs self-move through a reference to avoid a compiler self-move warning, then checks pointer identity and serialized bytes. The helper is used for the 16 public `Handle`-derived types listed in the PR description. The independent review record contains ACKs from three reviewers and specifically describes the double-free mechanism and symmetry with copy assignment.
+
+The current focused commands were run against the current tree and scratch directories:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle176-historical-recipe \
+  /data/my_storage/tmp/cycle89-build/bin/test_bitcoin \
+  --run_test=btcsignals_tests --report_level=short \
+  --catch_system_errors=no --color_output=false
+  6 test cases; 2051 assertions passed
+
+TMPDIR=/data/my_storage/tmp/cycle176-historical-recipe \
+  /data/my_storage/tmp/cycle107-kernel-clang19/bin/test_kernel
+  Running 19 test cases... *** No errors detected
+```
+
+The kernel binary was a Debug `BUILD_KERNEL_LIB=ON` build with a timestamp after the current wrapper and test sources. The btcsignals binary was a current-source RelWithDebInfo test build. The relevant current source still has `scoped_connection::operator=(scoped_connection&&) = delete` and the guarded `Handle` move assignment.
+
+### Current ownership audit and controls
+
+The current operator inventory covered `Handle`, `Sock`, `TokenPipeEnd`, `TokenPipe`, `CountingSemaphoreGrant`, `prevector`, `VecDeque`, `PackageToValidate`, `CKey`, `KeyPair`, `MuSig2SecNonce`, and the explicitly deleted move assignments. `git grep` found no caller assigning a `scoped_connection`; its uses construct scoped objects from returned connections or store them as members. `ScopedDataStreamUsage` is deliberately non-movable because it borrows a stream and clears it at scope exit, which is a useful API-boundary control rather than an incomplete move surface.
+
+The non-matching value-container control is `prevector`: its move assignment may turn a self-move into an empty valid container, but it does not own a callback registration or external resource whose destination must be disconnected. A scratch probe exercised both direct and indirect storage under Clang 19 ASan/UBSan:
+
+```text
+clang++-19 -std=c++20 -O1 -g -fsanitize=address,undefined \
+  -fno-omit-frame-pointer -I src \
+  /data/my_storage/tmp/cycle176-historical-recipe/prevector_self_move.cpp \
+  -o /data/my_storage/tmp/cycle176-historical-recipe/prevector_self_move
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+UBSAN_OPTIONS=halt_on_error=1 \
+  /data/my_storage/tmp/cycle176-historical-recipe/prevector_self_move
+prevector self-move sanitizer probe: exit=0
+```
+
+The current `Sock` move operation is another boundary control with an explicit close-and-transfer contract. Its focused test passed:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle176-historical-recipe \
+  /data/my_storage/tmp/cycle89-build/bin/test_bitcoin \
+  --run_test=sock_tests/move_assignment \
+  --report_level=short --catch_system_errors=no --color_output=false
+1 test case out of 1232 passed; 12 assertions passed
+```
+
+`btcsignals_tests` was run separately above; the comma form was not used as a multi-selector because Boost.Test treated the first path as the selected test.
+
+This is not evidence that every move operator is correct. It bounds the recipe: a close-and-transfer operation can intentionally leave the source empty, while a callback-registration wrapper needs an explicit destination-disconnect rule and a complete supported operation set. `CountingSemaphoreGrant` similarly releases a held permit during self-move and ends in a valid empty state; no double-release or dangling resource was observed, and no no-op contract is documented.
+
+The broader prevector test suite also passed `3` cases and `90` assertions. No current source candidate met the bar for a production fix: the suspicious cases either have an explicit valid moved-from policy, are value-like, or are already deleted/guarded. The `btcsignals` and kernel source/test changes are upstream evidence, not local findings.
+
+### Reusable review recipe
+
+When reviewing a resource-owning C++ type or adding a move operation:
+
+1. Write the ownership state machine before reviewing syntax: destination occupied/empty, source occupied/empty, source and destination aliased, callback/resource registered, and destruction after each operation.
+2. Check every operation as a set: default construction, move construction, move assignment, re-seating from the underlying raw/value type, reset/disconnect, and destruction. A partial compatibility surface can be less safe than deleting an unused operation.
+3. For move assignment, require an explicit rule for the old destination resource and the aliased self-move case. Mirror a proven copy-assignment guard where self-move must preserve the resource; otherwise document and test a valid empty/released result.
+4. Prefer deletion or a narrow non-assignable API when there is no supported caller. Do not add a default constructor or a convenient member-assignment pattern merely to make one broken operation usable.
+5. Test externally observable ownership: callback counts, close/destruction counts, pointer identity, serialized payloads, source validity, and exactly-once cleanup. Exercise every public derived wrapper when the contract lives in a common base.
+6. Validate a held-out resource wrapper and a value-only or deliberately non-movable control so the rule does not collapse into “all move assignment is bad.”
+
+Recipe fingerprint: `resource-owning-move-operation-contract`. It is distinct from `presence-vs-verification-before-assertion` (verified public-input classification), `failed-operation-must-be-local-no-op` (rollback after an operation failure), `provenance-aware-terminal-state-accounting` (source-tagged aggregate state), and `configurable-parallel-feature-lifecycle` (feature option and worker lifecycle).
+
+### Cycle 176 verdict
+
+**Recipe confirmed; no new production defect found on current HEAD.** PR `#35120` supplies the accepted/rejected operation-surface evidence and the resource-level failure oracle. PR `#35143` independently recovers the aliasing/self-move rule across all public handle types. `prevector` and `Sock` provide bounded controls, and the focused test and sanitizer commands pass. No implementation commit is warranted; this cycle needs a journal-only close and state handoff.
+
 ## Cycle 120 Identity and Gate
 
 - Draw command: `shuf -i 0-98 -n 1`
