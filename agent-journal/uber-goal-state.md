@@ -233,6 +233,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 10 | fuzz-target-gaps | CYCLE-3 | 2026-07-29 | load_wallet widened (crypted/ACTIVE*SPK/BESTBLOCK); LoadActiveScriptPubKeyMan assert on corrupt DB documented (upstream-matching) |
 | 80 | fuzz-engine-differential | CYCLE-6 | 2026-07-29 | MuSig2 PSBT seeding: differential clean (A=0, E=100); format-from-source worked first try |
 | 95 | database-semantics-differential | CYCLE-5 | 2026-07-31 | write-flush-windowed kill: _Exit inside all 4 batch commits (idx/coins/shutdown); identical tip recovery, 0 corruption; DISMISSED |
+| 35 | mutation-testing | CYCLE-5 | 2026-07-31 | CTxUndo hostile-field layers classified (decode-reject/apply-reject/trust-boundary); range-check mutant killed fail-before/pass-after |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -723,6 +724,21 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Queue after draw 140: #35 CTxUndo semantic differential (n=1);
    re-harvest journal "Limitations / queue" tails before the next
    draw (this 10-cell pool is now exhausted).
+   RE-RANK draw 141 (n=1): raw=8843838926267607625 (already
+   63-bit) -> idx 0 -> #35 CTxUndo apply-vs-reject -> campaign
+   cycle 5 (decode-reject / apply-reject / trust-boundary
+   classification test delivered; compressor range-check mutant
+   killed fail-before/pass-after; DISMISSED). DUPLICATE-WORK
+   catch: the consumer-side DECODE classification overlapped
+   #35 c3/c4 of 2026-07-29 (journaled into property-oracle-
+   expansion.md — logging-location quirk); the overflow-wrap
+   residual I drafted was already proven VACUOUS by c4
+   (bijection + complete range check) and was withdrawn in the
+   journal; new content = apply-layer classification + ordered
+   mutation kill. Commit messages on the feature/archive say
+   "cycle 3"; the correct campaign ordinal is 5.
+   Queue after draw 141: EMPTY — re-harvest journal
+   "Limitations / queue" tails before the next draw.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -757,7 +773,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 41(c1,c2,c3,c4,c5,c6), 0(c1,c2), 1(c1,c2,c3,c4), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1,c2,c3), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2,c3,c4), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5),
-28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4,c5), 35(c1,c2,c3,c4), 36(c1,c2,c3), 23(c1,c2,c3,c4), 25(c1,c2,c3),
+28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4,c5), 35(c1,c2,c3,c4,c5), 36(c1,c2,c3), 23(c1,c2,c3,c4), 25(c1,c2,c3),
 37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3,c4,c5), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 52(c1,c2), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3,c4), 47(c1,c2,c3,c4), 48(c1,c2), 49(c1,c2,c3,c4,c5,c6,c7,c8,c9), 50(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13), 53(c1), 55(c1,c2,c3), 57(c1,c2,c3,c4), 58(c1,c2,c3), 59(c1,c2), 60(c1,c2,c3,c4,c5,c6,c7,c8), 24(c1,c2,c3,c4,c5,c6),
 61(c1,c2,c3), 63(c1,c2,c3,c4,c5), 64(c1), 65(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 66(c1,c2), 67(c1), 68(c1,c2,c3), 69(c1,c2,c3,c4), 70(c1), 71(c1,c2,c3,c4), 73(c1,c2,c3), 74(c1,c2,c3,c4), 75(c1,c2,c3,c4),
 76(c1,c2,c3), 80(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 81(c1,c2,c3), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1,c2), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4,c5), 99(c1), 100(c1,c2,c3), 101(c1,c2,c3), 102(c1,c2), 103(c1), 104(c1,c2,c3), 105(c1), 106(c1,c2,c3), 107(c1,c2), 108(c1), 109(c1,c2).
