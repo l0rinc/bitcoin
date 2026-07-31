@@ -1,3 +1,71 @@
+## Cycle 190: BIP341/342 Specification and Vector Parity
+
+### Cycle Identity and Fresh Gate
+
+- Draw sequence: `shuf -i 0-98 -n 1` -> `61` (`stateful-contract-fuzzer`), reroll -> `8` (`locking-threading`), reroll -> `81` (`spec-vector-drift`). Goals 61 and 8 were rerolled because their exact AddrMan and `SignalInterrupt` cells were already closed; this cycle uses the distinct BIP341/342 cell left open by the prior Goal 81 audits.
+- Selected goal: `spec-vector-drift` (specification, test-vector, and formal-model drift audit).
+- Worktree: `/data/my_storage/bitcoin`.
+- Branch: `uber-cycle-190-spec-vector-drift-20260731`.
+- Start HEAD: `b3a92ed3e7bb58fd1ec74809391689b71ebbfff8`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Start divergence (`HEAD...origin/master`): `1170 42`.
+- Fresh gate: `git diff --check` passed; tracked worktree clean; known unrelated untracked artifacts were preserved. PIDs `777094` and `956381` were alive and untouched.
+- Gate hashes: catalog `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, prompt `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, corrected TSV `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, protocol `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`, state `bb83d2fd57312fc72612ce6c0e603902a44526fb804d5a18381e0094dfd486dc`.
+
+### Scope and Hypothesis
+
+The prior Goal 81 cells closed BIP340 vector parity, the test-vector generator's `testnet4` metadata drift, and BIP352 silent-payment specification/vector parity. This cycle tests the still-open BIP341/342 Taproot and Tapscript contract: authoritative rules, checked-in vectors, script/interpreter consumers, sighash construction, annex handling, control-block validation, and version/leaf semantics should agree at their exact boundaries.
+
+The trust boundary is the version-pinned BIP341/BIP342 text and vectors, Bitcoin Core's Taproot script and transaction validation code, the functional/unit consumers, and any local vector generator or formal reference. The first hypothesis is that an authoritative rule or edge vector is either absent, stale, generated under a different assumption, or consumed by a path whose behavior is not tested. No consensus change is assumed from a specification difference alone.
+
+### Investigation Plan
+
+1. Pin authoritative BIP341/BIP342 sources and locate all local vectors, generators, script tests, sighash tests, and validation consumers.
+2. Build a contract table for witness-v1 key-path/script-path validation, tagged hashes and sighash fields, annex, control-block parity/depth, leaf versions, `OP_SUCCESSx`, MINIMALIF, resource limits, and failure behavior.
+3. Compare valid/invalid/edge vectors and independently derive selected results with a small reference or direct byte-level calculation. Search history and prior journal cells before treating a discrepancy as new.
+4. Reproduce any mismatch on clean HEAD, classify intentional policy versus drift, and add the smallest regression test or vector fix only when the expected behavior has authoritative provenance.
+
+### Authority and Contract Comparison
+
+- Pinned sources: `https://github.com/bitcoin/bips/blob/9783d61f1b9c81231581fee026c8e8cb9499d265/bip-0341.mediawiki`, `https://github.com/bitcoin/bips/blob/9783d61f1b9c81231581fee026c8e8cb9499d265/bip-0342.mediawiki`, and `https://github.com/bitcoin/bips/blob/9783d61f1b9c81231581fee026c8e8cb9499d265/bip-0341/wallet-test-vectors.json`.
+- The `bitcoin/bips` repository `master` ref was pinned at `9783d61f1b9c81231581fee026c8e8cb9499d265`. The fetched BIP341 and BIP342 raw documents had SHA-256 values `463690d4c409587759c0ff6e8b8fc3a2bf6cb2cdda0c06ff193d317e0ed898ec` and `29641340adec741b695be99ae3dc6e2fd025ea6566f9d6c2544ed5d47db4d822`, respectively.
+- The BIP341 text requires annex detection and CompactSize hashing, control-block lengths `33 + 32m` for `0 <= m <= 128`, leaf-version masking, output-key parity, and success for future leaf versions after commitment validation. BIP342 requires the listed `OP_SUCCESSx` set, pre-execution stack-limit bypass, MINIMALIF, disabled multisig opcodes, tapscript signature ordering, and the per-input sigops budget.
+- `src/script/script.cpp:IsOpSuccess`, `src/script/interpreter.cpp:EvalChecksigTapscript`, `ExecuteWitnessScript`, `VerifyTaprootCommitment`, `SignatureHashSchnorr`, and the `OP_CHECKSIGADD` path match those rules. In particular, `ExecuteWitnessScript` checks `OP_SUCCESSx` before initial stack and element limits, and the tapscript signature helper charges non-empty signatures before accepting known or unknown public-key types.
+- `test/functional/test_framework/script.py:is_op_success` contains the same opcode set. The direct functional Taproot scenario constructs and spends script trees, annexes, control blocks, and tapscript edge cases; its vector-generation switch is intentionally disabled (`GEN_TEST_VECTORS = False`) so it is not an artifact producer.
+
+### Vector Consumer and History Evidence
+
+- The official BIP341 wallet vector file and `src/test/data/bip341_wallet_vectors.json` are byte-identical: both are 29,296 bytes, parse as JSON, and have SHA-256 `403e19fb81dd1f31e745699216308f61fb403774b2aafa87b631b8f7c042d37f`; `cmp` returned 0.
+- The seven `scriptPubKey` cases are consumed by `script_standard_tests/bip341_spk_test_vectors`. Its recursive parser handles null, leaf, and two-child tree nodes, then checks the expected output script, BIP350 address, merkle root, and every expected control block. The one `keyPathSpending` case is consumed separately by `script_tests/bip341_keypath_test_vectors`, which checks all precomputed hashes, the tweak, Schnorr signature, Taproot sighash, and hashed SigMsg.
+- History search found no newer authoritative BIP341/BIP342 vector or rule update missing from these consumers. The earlier Goal 81 entries already closed BIP340, testnet4 metadata, and BIP352 cells; this cycle stayed on the distinct BIP341/342 cell and did not reopen them.
+
+### Reproduction and Verification
+
+The following current-source commands passed:
+
+```text
+CCACHE_DIR=/data/my_storage/tmp/cycle190-ccache cmake --build /data/my_storage/tmp/cycle105-clang19-release --target test_bitcoin -j2
+TMPDIR=/data/my_storage/tmp/cycle190-script-runtime-1 /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=script_standard_tests/bip341_spk_test_vectors --random=190341 --log_level=test_suite --report_level=short
+Running 1 test case ... 46 assertions out of 46 passed
+TMPDIR=/data/my_storage/tmp/cycle190-script-runtime-2 /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=script_standard_tests --random=190342 --log_level=message --report_level=short
+8 test cases out of 1148 passed; 199 assertions out of 199 passed
+TMPDIR=/data/my_storage/tmp/cycle190-script-runtime-3 /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=script_tests/bip341_keypath_test_vectors --random=190343 --log_level=message --report_level=short
+1 test case out of 1148 passed; 55 assertions out of 55 passed
+```
+
+The preceding sanitized script run also passed `script_tests` in full: 27 cases and 505,273 assertions. The direct `test/functional/feature_taproot.py` run passed its unit, activation, 2,800 generated spending cases, and nonstandard spending cases. The release build of `bitcoind` and `bitcoin-cli` also completed successfully. An initial parallel test attempt used nonexistent temporary directories and collided on shared test globals; it was discarded as an environment/setup failure and rerun sequentially with existing per-run `TMPDIR` values.
+
+### Verdict and Handoff
+
+**Dismissed as current BIP341/BIP342 specification or vector drift; no confirmed finding.** The authoritative rules, exact wallet vectors, production consumers, and independent functional scenarios agree on the inspected contract. The apparent script-path consumer gap was a false lead: the complete official `scriptPubKey` section is already checked by `bip341_spk_test_vectors`. No source, vector, or test change is justified by this cycle.
+
+### Limitations and Next Queue
+
+- This cycle did not provide ARM, 32-bit, big-endian, GCC, Valgrind, timing, or compiler-differential evidence; those remain separate platform and implementation campaigns.
+- The BIP341/BIP342 functional run used deterministic local scratch data and the current source, but did not regenerate the disabled JSON producer. The checked-in official artifact was independently compared to the pinned upstream file instead.
+- Next cycle: perform a fresh gate, draw with the exact selector, and exclude this BIP341/BIP342 cell unless the pinned BIP text, vector file, or local consumer changes. Keep BIP327/MuSig and BIP324 as distinct future vector families.
+
 ## Cycle 153: Test-Vector Generator Metadata Drift
 
 ### Cycle Identity
