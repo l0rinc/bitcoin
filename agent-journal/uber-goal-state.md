@@ -2,6 +2,18 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 191 Completion
+
+- Cycle 191 selected goal `67` (`release-version-differential`) from the exact selector `shuf -i 0-98 -n 1` -> `67`. Its dedicated branch is `uber-cycle-191-release-version-differential-20260731`; the fresh start HEAD was `166cbc30ae92feb85e8022b870428487d318dda0`, with `origin/master` `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1172 42`. The fresh gate fetched successfully, found no tracked/index changes, passed `git diff --check`, preserved known untracked artifacts, and left PIDs `777094` and `956381` untouched.
+
+- The distinct cell compared v28.2, v31.0, v31.1, and current against `test/functional/data/mainnet_alt.json`, a bounded mainnet-parameter alternate chain containing 2,016 deterministic coinbase-only blocks. The fixture SHA-256 is `b85576c28ac5b0e5f26a3d4c089fc6693a921530df734f2cd134a4e557dc0681`. The current functional harness replayed it successfully on v31.0, v31.1, and current; its v28.2 attempt stopped before replay because `-nologratelimit` is unsupported by the old binary, so the same extracted raw block stream was replayed directly through an isolated v28.2 RPC node.
+
+- All four releases reached the same height and tip, `000000000c806553811fd3e6c40bc9c279db53643da7d3b401a9882c074c24b2`, and preserved it across restart. The common block stream's concatenated raw-byte SHA-256 was `71123c11e8b6fc90be12bd72c7035f63d20f19bde641709553ab95c01a804871`. `gettxoutsetinfo` matched at height 2,016 with 2,016 transactions/outputs, `bogosize=151200`, total amount `100800.00000000`, and serialized UTXO hash `fa152d1792f014fd3537236637d83f032c1f5cfa44b116dd55d937b5efa49296`. The only storage difference was v28.2 `disk_size=136085` versus `136120` on newer releases, classified as database layout representation.
+
+- Current focused `pow_tests,blockchain_tests` passed 25 cases and 1,098 assertions; v28.2 passed 22 cases and 1,057 assertions. No unexplained acceptance/rejection, consensus, restart, chainstate, or UTXO divergence was reproduced. Selected journal/evidence commit `67eedd40bf` (`journal: close cycle 191 release differential`) is authored as `Lőrinc <pap.lorinc@gmail.com>` and records exact commands, hashes, normalized observations, source classification, and limitations.
+
+- Verdict: dismissed for this cycle; no production or permanent test change is justified. The synthetic fixture does not cover live historical mainnet transactions, wallet/database migration, P2P transcripts, external indexes, or release-branch backports. The next distinct release-differential queue is wallet/database migration, P2P transcripts, release-branch backports, and a bounded real historical block/transaction corpus if available. This state entry is intentionally committed separately from the selected journal commit.
+
 ## Cycle 190 Completion
 
 - Cycle 190 selected goal `81` (`spec-vector-drift`) after the exact selector sequence `shuf -i 0-98 -n 1` -> `61` (`stateful-contract-fuzzer`), reroll -> `8` (`locking-threading`), reroll -> `81` (`spec-vector-drift`). Goals 61 and 8 were excluded because their exact AddrMan and `SignalInterrupt` cells were already closed. The dedicated branch is `uber-cycle-190-spec-vector-drift-20260731`; its fresh start HEAD was `b3a92ed3e7bb58fd1ec74809391689b71ebbfff8`, with `origin/master` `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1170 42`.
