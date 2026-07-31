@@ -202,7 +202,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         # Transactions are tiny in weight
         assert_greater_than(2000, tx_parent.get_weight() + tx_child.get_weight())
 
-    def test_legacy_sigops_stdness(self):
+    def test_legacy_sigops_limit(self):
         self.log.info("Test a transaction with too many legacy sigops in its inputs is invalid.")
 
         # Restart with the default settings
@@ -255,7 +255,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
             self.generate(self.wallet, 1)
 
         self.test_sigops_package()
-        self.test_legacy_sigops_stdness()
+        self.test_legacy_sigops_limit()
 
 
 if __name__ == '__main__':
