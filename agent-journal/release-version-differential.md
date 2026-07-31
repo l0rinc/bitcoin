@@ -298,3 +298,102 @@ Verdict: dismissed for this cycle. The only release differences were documented 
 ### Limitations and next queue
 
 The fixtures were bounded regtest wallets without funded transactions, encrypted passphrases, cross-chain wallet best-block state, external indexes, P2P transcripts, or release-branch cherry-pick comparison. This cycle does not claim complete wallet compatibility. The next distinct release-differential queue remains funded/encrypted wallet migration, P2P transcript behavior, release-branch backports, and a real historical transaction/block corpus when bounded provenance-preserving inputs are available. Scratch datadirs, backups, logs, and raw wallet copies remain under `/data/my_storage/tmp/cycle215-release-wallet/`.
+
+## Cycle 227: v31.1/current P2P transcript differential
+
+Status: complete.
+
+### Selection and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `67` (`release-version-differential`); no reroll.
+- Branch: `uber-cycle-227-release-version-differential-20260731`.
+- Cycle start HEAD: `490e9d60fc62daa3885d873473e1903c41bc721b`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Gate relation: `git rev-list --left-right --count HEAD...origin/master` returned `1239 42`.
+- Catalog, prompt, TSV, and uber-protocol hashes matched their recorded values. The four protected long-running test processes remained alive. No tracked worktree change was present before the cycle; pre-existing untracked probes/catalogs/artifacts were preserved.
+
+The comparison release is the signed local `v31.1` tag at commit
+`9be056a8a72b624dae9623b2f7bded92c2a21c91`. The release binary is
+`/data/my_storage/tmp/cycle109-release-differential/v31.1-build/bin/bitcoind`
+and the current binary is the incrementally rebuilt
+`/data/my_storage/tmp/cycle214-build/bin/bitcoind` from the cycle HEAD. Both
+were exercised with the v31.1 functional test framework so the test oracle,
+message serialization, and timing constants were held constant.
+
+### Hypothesis and scope
+
+The hypothesis was that a P2P handshake, v1 framing, v2 transport transition,
+or transaction-download state transition changed between v31.1 and current in
+an undocumented way: a valid peer could be disconnected unexpectedly, an
+invalid message could be accepted without the expected accounting/penalty, a
+v2 fallback could leave asymmetric state, or an announced transaction could
+be requested incorrectly. The trust boundary is the remote byte stream,
+handshake state, peer service/type flags, connection lifecycle, message
+limits, and transaction-request bookkeeping. The comparison deliberately
+excluded current-only features until their source/history classification was
+available.
+
+### Common functional transcript results
+
+All commands used separate explicit `--tmpdir` directories under
+`/data/my_storage/tmp`, fixed random seeds, and distinct port seeds. Each
+listed command exited 0 with `Tests successful` for both v31.1 and current.
+
+1. `p2p_handshake.py`, `--v1transport`, random seed `22701`, port seeds
+   `22701` and `22702`. The same 3x service/type matrix passed: services
+   `0x00000000`, `0x00000001`, and `0x00000008` disconnected for
+   `outbound-full-relay`, `block-relay-only`, and `addr-fetch`; `0x00000009`
+   connected for all three; `0x00000408` disconnected when the mocktime tip
+   was older than 24 hours and connected inside the 24-hour window. Redundant
+   `verack`, feeler completion, and self-connection disconnect behavior also
+   matched.
+2. `p2p_invalid_messages.py`, `--v1transport`, random seed `22702`, port
+   seeds `22703` and `22704`. Both releases passed fragmented-header input,
+   duplicate version, wrong magic, bad checksum, oversized payload and invalid
+   type handling, all ADDRv2 malformed cases, 50,001-entry `inv`/`getdata`
+   limits, 2,001-header limits, invalid-PoW and non-continuous headers, and
+   80 maximum-valid-size junk messages while keeping the node responsive.
+3. `p2p_v2_transport.py`, random seed `22703`, port seeds `22705` and
+   `22706`. Both passed v2-to-v2 synchronization, v1-to-v1 synchronization,
+   v2/v1 fallback, session-ID equality and zero-session checks, advertised
+   service checks, v1 prefix detection, wrong-network prefix rejection, and
+   missing-garbage-terminator disconnect.
+4. `p2p_tx_download.py`, `--v1transport`, random seed `22704`, port seeds
+   `22707` and `22708`. Both passed the same expiry, disconnect, and notfound
+   fallback paths; preferred-peer selection and tiebreaking; TXID/WTXID relay
+   delay behavior; large inventory handling with and without relay permission;
+   rejection-filter reset after a block; wtxidrelay mismatch filtering; and
+   the multi-peer in-flight request cap.
+
+The corrected runs completed without a daemon, fuzz, or profiling process
+left behind. The first attempts omitted a parent for `TMPDIR`, so Python fell
+back to the full `/tmp` filesystem and both daemons failed before networking
+with a disk-space diagnostic. A full current `net_tests` attempt had the same
+setup issue and was interrupted; after creating the scratch root it passed 36
+test cases and 142,212 assertions. The v31.1 build did not contain a
+`test_bitcoin` executable, so the unit-suite count was not compared there;
+the old functional framework supplied the common release oracle.
+
+### Intentional current-only drift
+
+Current commit `cfcff2e6a00b088fad1387815cec618d4858003` changes V2 long
+message-type validation from accepting bytes through `0x7f` to accepting
+through `0x7e`, matching `CMessageHeader::IsMessageTypeValid()` and rejecting
+the DEL byte `0x7f`. Its source commit adds
+`net_tests/transport_v2_rejects_del_message_type`; the current focused control
+passed 1 case and 1,742 assertions. The old v31.1 functional v2 matrix passed
+because it does not send DEL as a message type. This is an intentional,
+source-backed compatibility hardening change, not an unexplained release
+divergence or a defect in the old node.
+
+### Verdict and next queue
+
+Dismissed for this cycle. No unexplained P2P handshake, framing, v2 fallback,
+invalid-message, peer-accounting, or transaction-download divergence was
+reproduced, so no production or permanent test change is justified. Remaining
+Goal 67 cells are funded/encrypted wallet migration, historical mainnet
+transaction/block replay, release-branch cherry-pick/backport equivalence,
+and new protocol changes with a provenance-preserving common transcript. Do
+not repeat these four v31.1 P2P matrices unless a new source change or fixture
+provides a distinct hypothesis.
