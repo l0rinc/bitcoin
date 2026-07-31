@@ -182,3 +182,45 @@ v1 and v2.
 ## Rotation note
 Three cycles; handshake EOF, replay/reorder, and half-close all
 closed. Slow-drip remains.
+
+## Cycle 4 (2026-07-31): slow-drip ellswift — handshake timeout reaps mid-drip at ~64s, real peer unaffected; DISMISSED
+
+### Draw
+RE-RANK draw 145 over the 7-cell queue: raw=15010669081987093008,
+masked 5787297045132317200 -> idx 3 -> #73 slow-drip ellswift
+(c1/c2 timeout cell). Branch: audit/network-state-c4 from
+83d10f09c9.
+
+### Mechanism (net.cpp InactivityCheck, :2048-2102)
+Inactivity checks start at connect + m_peer_connect_timeout (60s,
+-peertimeout). A drip keeps last_recv fresh, so the 20-minute
+send/recv timeouts never fire — but the final gate is
+!fSuccessfullyConnected -> unconditional disconnect ("V2 handshake
+timeout" for DETECTING/v2, "version handshake timeout" for v1).
+Handshake progress does NOT extend the 60s budget: at 1-2 B/s the
+64-byte ellswift cannot complete in time, by design.
+
+### Experiment (real-socket probe, isolated regtest pair)
+- SLOW-drip (2 s/byte, would need 128s): disconnected at 64s after
+  32 bytes; debug.log line "V2 handshake timeout, disconnecting
+  peer=1"; getpeerinfo = 0 after.
+- CONTROL (second regtest bitcoind, full valid BIP324 handshake):
+  still connected at 65s — the 60s gate is handshake-gated, not a
+  blanket connection-age limit.
+- Harness /tmp/btc73c4_drip.py (preserved). Trap recorded: the
+  inbound node reads before sending (DETECTING transport) — a
+  probe that recv()s first just times out; drip from t=0.
+
+### Verdict
+DISMISSED: the slow-drip class is bounded by the 60s handshake
+budget with an explicit, correctly-labeled disconnect; no
+half-open state, no resource hold, real peers unaffected.
+
+### Limitations / queue
+- FAST-drip garbage (0.4 s/B) completes the ellswift but not a
+  valid version exchange — same 60s class, not separately run.
+- Node-initiated half-close (SHUT_WR toward us, c3's nicety note)
+  remains the only open #73 cell.
+
+## Rotation note
+Cycle 4 complete; rotating per uber-goal policy. Not exhausted.
