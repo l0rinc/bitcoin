@@ -16,6 +16,7 @@
 #include <primitives/transaction.h>
 #include <protocol.h>
 #include <script/script.h>
+#include <streams.h>
 #include <sync.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
@@ -35,7 +36,9 @@
 #include <validation.h>
 #include <validationinterface.h>
 
+#include <algorithm>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -45,6 +48,19 @@
 namespace {
 TestingSetup* g_setup;
 std::vector<std::pair<COutPoint, CAmount>> g_mature_coinbases;
+
+class RecordingSock final : public ZeroSock
+{
+public:
+    mutable std::vector<uint8_t> sent;
+
+    ssize_t Send(const void* data, size_t len, int) const override
+    {
+        const auto* bytes{static_cast<const uint8_t*>(data)};
+        sent.insert(sent.end(), bytes, bytes + len);
+        return len;
+    }
+};
 
 void ResetChainman(TestingSetup& setup)
 {
@@ -98,6 +114,53 @@ void AssertSpecialPeerAddressRelayDisabled(const PeerManager& peerman, const CNo
     if (peerman.GetNodeStateStats(node.GetId(), stats)) {
         Assert(!stats.m_addr_relay_enabled);
     }
+}
+
+std::vector<CInv> GetSentInventory(RecordingSock& sock)
+{
+    std::vector<CInv> inventory;
+    V1Transport transport{NodeId{0}};
+    std::span<const uint8_t> bytes{sock.sent};
+    while (!bytes.empty()) {
+        const size_t bytes_before{bytes.size()};
+        Assert(transport.ReceivedBytes(bytes));
+        Assert(bytes.size() < bytes_before);
+        if (!transport.ReceivedMessageComplete()) continue;
+
+        bool reject_message{false};
+        CNetMessage message{transport.GetReceivedMessage(NodeClock::epoch, reject_message)};
+        Assert(!reject_message);
+        if (message.m_type != NetMsgType::INV) continue;
+        std::vector<CInv> message_inventory;
+        message.m_recv >> message_inventory;
+        Assert(message.m_recv.empty());
+        inventory.insert(inventory.end(), message_inventory.begin(), message_inventory.end());
+    }
+    sock.sent.clear();
+    return inventory;
+}
+
+void AssertSameInventory(std::vector<CInv> actual, std::vector<CInv> expected)
+{
+    const auto sort_inventory = [](std::vector<CInv>& inventory) {
+        std::sort(inventory.begin(), inventory.end(), [](const CInv& lhs, const CInv& rhs) {
+            if (lhs.type != rhs.type) return lhs.type < rhs.type;
+            return lhs.hash < rhs.hash;
+        });
+    };
+    sort_inventory(actual);
+    sort_inventory(expected);
+    Assert(actual.size() == expected.size());
+    for (size_t i{0}; i < actual.size(); ++i) {
+        Assert(actual[i].type == expected[i].type);
+        Assert(actual[i].hash == expected[i].hash);
+    }
+}
+
+CInv ExpectedInventory(bool wtxid_relay, const CTransaction& tx)
+{
+    return wtxid_relay ? CInv{MSG_WTX, tx.GetWitnessHash().ToUint256()} :
+                         CInv{MSG_TX, tx.GetHash().ToUint256()};
 }
 } // namespace
 
@@ -239,13 +302,17 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
         Assert(!node.mempool->GetIter(no_peer_tx->GetWitnessHash()).has_value());
     }
 
+    std::map<NodeId, std::shared_ptr<RecordingSock>> recorded_socks;
+
     // The random-message loop configures tx_send_rate, but normally never creates a valid
     // mempool transaction. Exercise the global relay buckets with deterministic peers and
     // witness-shaped transactions so that known-filter, duplicate, and stale-entry paths are
     // reached independently of wire-message luck.
     auto make_relay_peer = [&](NodeId id, ConnectionType connection_type, bool relay_txs = true) NO_THREAD_SAFETY_ANALYSIS {
+        auto sock = std::make_shared<RecordingSock>();
+        recorded_socks.emplace(id, sock);
         auto peer = std::make_unique<CNode>(
-            id, std::make_shared<ZeroSock>(), CAddress{}, /*nKeyedNetGroupIn=*/0,
+            id, sock, CAddress{}, /*nKeyedNetGroupIn=*/0,
             /*nLocalHostNonceIn=*/0, CService{}, /*addrNameIn=*/"", connection_type,
             /*inbound_onion=*/false, /*network_key=*/static_cast<uint64_t>(id),
             CNodeOptions{.permission_flags = NetPermissionFlags::NoBan});
@@ -272,7 +339,9 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
             peer.fPauseSend = false;
             more_work = connman.ProcessMessagesOnce(peer);
             node.peerman->SendMessages(peer);
+            connman.FlushSendBuffer(peer);
         }
+        (void)GetSentInventory(*recorded_socks.at(peer.GetId()));
     };
 
     process_relay_message(non_relay_peer, NetMsg::Make(NetMsgType::VERACK));
@@ -374,9 +443,10 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
         LOCK(node.mempool->cs);
         Assert(node.mempool->GetIter(tx->GetWitnessHash()).has_value());
     };
-    auto send_relay_inventory = [&](CNode& peer) NO_THREAD_SAFETY_ANALYSIS {
+    auto send_relay_inventory = [&](CNode& peer, std::vector<CInv> expected) NO_THREAD_SAFETY_ANALYSIS {
         node.peerman->SendMessages(peer);
         connman.FlushSendBuffer(peer);
+        AssertSameInventory(GetSentInventory(*recorded_socks.at(peer.GetId())), std::move(expected));
     };
 
     const CTransactionRef mixed_tx{MakeRelayTransaction(g_mature_coinbases[0], /*locktime=*/0)};
@@ -397,7 +467,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     Assert(peer_inv_to_send(inbound_relay_peer) == 1);
     Assert(peer_inv_to_send(outbound_relay_peer) == 1);
     Assert(peer_inv_to_send(legacy_relay_peer) == 1);
-    send_relay_inventory(inbound_relay_peer);
+    send_relay_inventory(inbound_relay_peer, {ExpectedInventory(/*wtxid_relay=*/true, *mixed_tx)});
     Assert(peer_inv_to_send(inbound_relay_peer) == 0);
 
     const PeerManagerInfo before_mixed_retry{node.peerman->GetInfo()};
@@ -417,9 +487,13 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     const PeerManagerInfo after_all_unknown{node.peerman->GetInfo()};
     Assert(after_all_unknown.inbound_bucket.count_bucket == before_all_unknown.inbound_bucket.count_bucket - 1);
     Assert(after_all_unknown.outbound_bucket.count_bucket == before_all_unknown.outbound_bucket.count_bucket - 1);
-    send_relay_inventory(inbound_relay_peer);
-    send_relay_inventory(outbound_relay_peer);
-    send_relay_inventory(legacy_relay_peer);
+    send_relay_inventory(inbound_relay_peer, {ExpectedInventory(/*wtxid_relay=*/true, *all_known_tx)});
+    send_relay_inventory(outbound_relay_peer,
+                         {ExpectedInventory(/*wtxid_relay=*/true, *mixed_tx),
+                          ExpectedInventory(/*wtxid_relay=*/true, *all_known_tx)});
+    send_relay_inventory(legacy_relay_peer,
+                         {ExpectedInventory(/*wtxid_relay=*/false, *mixed_tx),
+                          ExpectedInventory(/*wtxid_relay=*/false, *all_known_tx)});
     Assert(peer_inv_to_send(inbound_relay_peer) == 0);
     Assert(peer_inv_to_send(outbound_relay_peer) == 0);
     Assert(peer_inv_to_send(legacy_relay_peer) == 0);
@@ -456,9 +530,9 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
         node.mempool->removeRecursive(*stale_tx, MemPoolRemovalReason::EXPIRY);
         Assert(!node.mempool->GetIter(stale_tx->GetWitnessHash()).has_value());
     }
-    send_relay_inventory(inbound_relay_peer);
-    send_relay_inventory(outbound_relay_peer);
-    send_relay_inventory(legacy_relay_peer);
+    send_relay_inventory(inbound_relay_peer, {});
+    send_relay_inventory(outbound_relay_peer, {});
+    send_relay_inventory(legacy_relay_peer, {});
     const PeerManagerInfo after_stale{node.peerman->GetInfo()};
     Assert(after_stale.inbound_bucket.backlog_count == 0);
     Assert(after_stale.outbound_bucket.backlog_count == 0);
