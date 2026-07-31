@@ -156,7 +156,8 @@ SettingsValue GetSetting(const Settings& settings,
     const std::string& name,
     bool ignore_default_section_config,
     bool ignore_nonpersistent,
-    bool get_chain_type)
+    bool get_chain_type,
+    bool ignore_rw_settings)
 {
     SettingsValue result;
     bool done = false; // Done merging any more settings sources.
@@ -193,6 +194,8 @@ SettingsValue GetSetting(const Settings& settings,
 
         // Ignore nonpersistent settings if requested.
         if (ignore_nonpersistent && (source == Source::COMMAND_LINE || source == Source::FORCED)) return;
+
+        if (ignore_rw_settings && source == Source::RW_SETTINGS) return;
 
         // Skip negated command line settings.
         if (skip_negated_command_line && span.last_negated()) return;

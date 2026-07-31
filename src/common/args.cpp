@@ -441,7 +441,28 @@ bool ArgsManager::IsArgSet(const std::string& strArg) const
 
 bool ArgsManager::GetSettingsPath(fs::path* filepath, bool temp, bool backup) const
 {
-    fs::path settings = GetPathArg("-settings", BITCOIN_SETTINGS_FILENAME);
+    common::SettingsValue value;
+    {
+        LOCK(cs_args);
+        // The settings file path is an input to reading and writing the
+        // read-write settings file, so a value from that file cannot change
+        // the path selected for the current process.
+        value = common::GetSetting(m_settings, m_network, "settings", !UseDefaultSection("-settings"),
+            /*ignore_nonpersistent=*/false, /*get_chain_type=*/false, /*ignore_rw_settings=*/true);
+    }
+
+    if (value.isFalse()) {
+        return false;
+    }
+
+    fs::path settings;
+    if (const auto path = SettingToString(value); path && !path->empty()) {
+        settings = fs::PathFromString(*path).lexically_normal();
+        // Remove trailing slash, if present.
+        settings = settings.has_filename() ? settings : settings.parent_path();
+    } else {
+        settings = fs::PathFromString(BITCOIN_SETTINGS_FILENAME);
+    }
     if (settings.empty()) {
         return false;
     }
