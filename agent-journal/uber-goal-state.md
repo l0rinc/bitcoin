@@ -2,6 +2,56 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 186 Completion
+
+- Cycle 186 selected goal `94` (`bindings-ffi-parity`) from the exact selector
+  `shuf -i 0-98 -n 1` -> `94`; no reroll was needed. The dedicated branch is
+  `uber-cycle-186-bindings-ffi-parity-20260731`; its fresh start HEAD was
+  `bc846462a38b84d782632d9341775953bb04520a`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1162 42`.
+  Catalog, prompt, corrected TSV, protocol, and start-state hashes are
+  recorded in `agent-journal/bindings-ffi-parity.md`. Persistent unrelated
+  untracked artifacts were preserved, and PIDs `777094` and `956381` were not
+  modified.
+
+- The distinct cell audited failure and output-state parity at the maintained
+  `libbitcoinkernel` C API and C++ `btck` wrapper. The repository has no
+  maintained vendored Rust, Python, Java, Go, or C# wrapper. The open
+  `write_bytes` null-exception hypothesis was not confirmed: every valid
+  serialization path found returns failure only after the wrapper writer has
+  captured its exception, and no valid object path was found that returns a
+  nonzero status with a null exception.
+
+- A concrete C++ adapter exception-safety defect was fixed. Both
+  `ContextOptions::SetNotifications` and `SetValidationInterface` previously
+  released a heap callback payload before the C setter completed its
+  potentially throwing `std::make_shared` assignment. They now pass
+  `unique_ptr::get()` and release only after successful return, preserving
+  cleanup if allocation fails. The complete wrapper `release()` inventory was
+  checked independently; logger construction has a separate partial-register
+  state machine and remains an open follow-up rather than being conflated with
+  this change.
+
+- Source/evidence commit `2285ebb253e648d99c123e4bf6bc70f3eca9cb09`
+  (`kernel: preserve callback ownership on setter failure`) is authored as
+  `Lőrinc <pap.lorinc@gmail.com>` and includes the selected journal. The
+  current Clang 19 kernel build rebuilt `test_kernel`; the focused
+  notification/logger/context run passed 2 cases and 20 assertions, the full
+  kernel suite passed 19 cases and 3,714 assertions, and the post-commit
+  focused rerun passed again. `git diff --check` and the commit check passed.
+  The exception-safety proof is source-level because no deterministic kernel
+  allocation-failure injector exists; no OOM trace is claimed.
+
+- Verdict: one wrapper ownership defect was fixed, with no runtime API or ABI
+  change. Exact source traces, commands, output, and limitations are in the
+  selected journal. The next cycle must perform a fresh gate and exact random
+  selection, preserve the untracked artifacts and long-running PIDs, and avoid
+  reopening this closed callback-setter ownership cell. Remaining distinct
+  candidates include logger construction cleanup, callback exception
+  containment, null shared-pointer misuse, and a valid serialization failure
+  witness for the `write_bytes` bridge.
+
 ## Cycle 185 Completion
 
 - Cycle 185 selected goal `95` (`database-semantics-differential`) from the
