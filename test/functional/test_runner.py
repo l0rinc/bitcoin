@@ -94,10 +94,12 @@ EXTENDED_SCRIPTS = [
 
 # Special script to run each bench sanity check
 TOOL_BENCH_SANITY_CHECK = "tool_bench_sanity_check.py"
+TOOL_BENCH_OUTPUT = "tool_bench_output.py"
 
 BASE_SCRIPTS = [
     # Special scripts that are "expanded" later
     TOOL_BENCH_SANITY_CHECK,
+    TOOL_BENCH_OUTPUT,
     # Scripts that are run by default.
     # Longest test should go first, to favor running tests in parallel
     # vv Tests less than 5m vv
