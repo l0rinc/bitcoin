@@ -3106,3 +3106,40 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   exception or callback-unregistration path. The next cycle must perform a
   fresh gate and exact selector draw, preserve unrelated artifacts, and avoid
   reopening this cell without new backend/restart evidence.
+
+## Cycle 233 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `43` (`option-api-lifecycle`); no
+  reroll. Branch: `uber-cycle-233-option-api-lifecycle-20260731`.
+  Cycle-start HEAD was `c8d69d12f17a8ed7263b4f2d6987449da5408671`;
+  `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1249 42`.
+  The fresh gate passed, catalog/prompt/TSV/protocol hashes were unchanged,
+  and protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained
+  alive.
+- The distinct cell was failed persistence in the public dynamic-settings
+  APIs. Before the fix, `Chain::overwriteRwSetting()` returned false after a
+  failed atomic rename but left the new value in `rw_settings`; the void
+  `Node::updateRwSetting()` ignored the write failure and did the same. A
+  scratch settings path replaced by a directory reproduced both values as
+  `after` after the failed write, despite the prior persisted value being
+  `before`. Includeconf, manually inserted loadblock, datadir self-redirect,
+  and registered/deprecated-option probes produced no separate finding.
+- Commit `323cc31914` (`interfaces: roll back failed settings updates`),
+  authored as `Lőrinc <pap.lorinc@gmail.com>`, snapshots prior and attempted
+  settings values and conditionally restores the prior state after false or
+  throwing writes. It handles both Node and Chain APIs, restores a callback
+  that returns no action, and preserves intentional `SKIP_WRITE` behavior.
+  The regression is `interfaces_tests/settings_update_failure_preserves_previous_value`.
+- Build command `env TMPDIR=/data/my_storage/tmp/cycle233-settings-build-tmp
+  CCACHE_DIR=/data/my_storage/tmp/cycle233-ccache ninja -C
+  /data/my_storage/tmp/cycle214-build test_bitcoin -j2` passed. The fixed
+  focused test passed 1 case/10 assertions; `interfaces_tests` passed 7/75;
+  `argsman_tests/util_ReadWriteSettings` passed 1/1. `git diff --check`
+  passed. Full suite, GUI, and concurrent stress coverage remain limitations.
+- Verdict: **confirmed and fixed**. This cycle closes the failed-write
+  rollback cell. Remaining Goal 43 queue cells are includeconf chain-selection
+  transitions, multi-file loadblock ordering/restart behavior, and option
+  removal/deprecation contracts. The next cycle must perform a fresh gate and
+  exact selector draw, preserve unrelated artifacts, and avoid reopening this
+  cell without new evidence.
