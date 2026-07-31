@@ -1,5 +1,47 @@
 # Cross-Subsystem Bug Shapes Cycle 62
 
+## Cycle 179 Identity and Fresh Gate
+
+- Cycle: `179`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `26`
+- Goal: `bug fixed in one subsystem but present in another`
+- Slug: `cross-subsystem-bug-shapes`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Uber state SHA-256 at the gate: `d69210baae83ed2211fd8d623259e41fe96b20d360ffb321259c938dc70f216b`
+- Branch: `uber-cycle-179-cross-subsystem-bug-shapes-20260731`
+- Base: `origin/master` at `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- HEAD at cycle start: `faea6970280eaba14b9fd8b5783160036c538066`
+- `origin/master...HEAD` at the gate: `42 1144`
+- Tracked and staged state at the gate: clean. Existing untracked agent,
+  package, dependency, and test-cache artifacts were preserved. PIDs
+  `777094` and `956381` were not modified. Root capacity was approximately
+  `98 MiB` free and `/data` capacity was approximately `50 GiB` free.
+- Goals TSV validation: `records=99 ids_0_to_98=yes` with the four-field
+  header row included in the physical `100` lines.
+
+## Cycle 179 Scope and Prior-Finding Exclusions
+
+Cycle 48's wallet-rescan reservation ordering (`9911bb75a8520990a6e9ca6405269dd634a7a50c`), Cycle 62's unreachable shared-chainstate candidate mutation, and Cycle 76's compact-block announcement read-failure assertion (`ddbb88ed12`) are closed cells. Do not report a duplicate of their lock-ordering, shared-candidate-set, or direct block-read assertion shapes unless a new caller, trust boundary, or failure contract is independently demonstrated.
+
+This cycle mines a distinct structural class: a historical fix corrected one subsystem's handling of a failure, accounting rule, validation boundary, or lifecycle transition while an analogous parser, cache, index, queue, RPC wrapper, wallet path, or binding may still expose the old behavior. A resemblance is only a lead. Every candidate needs the seed fix, structural features, exact caller and trust boundary, intended contract, history, an independent reproducer or proof of unreachability, and a deduplicated verdict.
+
+Initial queue:
+
+1. Compare historical persistence and corruption-recovery fixes with current wallet, chainstate, index, settings, and database wrappers; prioritize dropped status values, partial durable publication, and restart asymmetry.
+2. Compare historical public-interface and parser validation fixes across RPC, CLI, descriptors, transaction/package policy, and language-facing wrappers; prioritize values accepted in one boundary but not another.
+3. Compare historical queue/resource-accounting fixes across mempool, P2P, block validation, and indexes; require a reachable sequence and an explicit invariant delta.
+4. Review prior findings and current history for a different lifecycle cleanup shape: disconnect, cancellation, shutdown, retry, or callback failure that leaves an analogous subsystem stateful.
+
+Each candidate will be classified as local code, test, documentation, tool,
+dependency, or other-project behavior before any patch is drafted. Negative
+controls and prior-finding hashes will be recorded so this cycle does not
+reopen the closed cells above.
+
 ## Identity and Gate
 
 - Cycle: `62`
