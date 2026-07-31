@@ -1,5 +1,66 @@
 # Local Reasoning Domain and Relationship Audit
 
+## Cycle 180 start: cross-index persistence and restart relationships
+
+### Fresh selection and gate
+
+- The exact post-Cycle-179 selector was `shuf -i 0-98 -n 1` -> `70`
+  (`compiler-optimization-differential`), but Goal 70's current cell is
+  explicitly closed by Cycle 105. The required exact reroll
+  `shuf -i 0-98 -n 1` -> `57` selected this goal. Cycle 174's Goal 57 work
+  left distinct cross-index persistence-failure and concurrent-restart cells
+  open, so this is a permitted new relationship scope rather than a repeat
+  of its `Chain::hasBlocks` fix.
+- Branch: `uber-cycle-180-local-reasoning-domain-20260731`.
+- Start HEAD: `205803b23c8846666feeeb4fb0cd556634b53d00`; origin/master:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence:
+  `origin/master...HEAD = 42 1147`.
+- Fresh-gate hashes were catalog
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  prompt
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  corrected TSV
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`,
+  protocol
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc`, and
+  start state
+  `046d7176ae529feb4499c3f5ebcbe98dd3dfa9af5d977fe9a6e5742fca80f257`.
+  The TSV schema check reported 99 records with IDs 0 through 98. Tracked
+  and staged state was clean; known untracked artifacts were preserved. The
+  root filesystem had about 99 MiB free and `/data` about 49 GiB free.
+  PIDs `777094` and `956381` are unrelated long-running tests and remain
+  preserved.
+
+### Scope and exclusions
+
+Do not reopen Cycle 65's AddrMan `GetNetwork()` versus `GetNetClass()` or
+linked-IPv4 relationship, Cycle 77's BaseIndex callback serialization and
+transaction-download ownership, Cycle 97's wallet replacement rollback,
+Cycle 135's index file-position/publication relationship, or Cycle 174's
+`Chain::hasBlocks` empty-range fix. Also exclude Cycle 179's empty-`addnode`
+parser boundary. A candidate must use a different object pair, backend,
+failure point, or lifecycle transition with independent evidence.
+
+Initial queue:
+
+1. Cross-index durable state: compare `BaseIndex` best-block publication,
+   per-index database rows, chainstate flush state, and restart/recovery when
+   two index implementations observe the same block transition.
+2. Database failure symmetry: inject a write, batch, flush, or reopen failure
+   at one index boundary and check whether sibling indexes, their in-memory
+   snapshots, and public query results remain mutually consistent.
+3. Physical filter-file corruption and concurrent index restart, but only if
+   the current checks and serialized callback model leave a reachable gap.
+
+For each candidate define the cross-object invariant and exact valid domain,
+then trace callers, locking/serialization, commit ordering, database and
+filesystem boundaries, history, tests, and recovery code. Require a
+deterministic failure/restart fixture, an independently verifiable
+failing-before oracle, and a repaired or invariant-preserving control before
+changing production code. Keep all scratch datadirs and databases under
+`/data/my_storage/tmp`.
+
 ## Cycle 174 start: cross-domain lifecycle and snapshot relationships
 
 ### Fresh selection and gate
