@@ -1,5 +1,84 @@
 # Historical reviewer-preference mining and reusable review skill
 
+## Cycle 203: deterministic edge-evidence and prerequisite-aware review
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `60`
+- Slug: `reviewer-preference-mining`
+- Branch: `uber-cycle-203-reviewer-preference-mining-20260731`
+- Gate timestamp: `2026-07-31T09:59:16Z`
+- HEAD at the cycle gate: `ed5f60dbe94220f77b702c4a7e3ecb08a40fad62`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Explicit `git rev-list --left-right --count HEAD...origin/master`: `1196 42`
+- `git fetch origin master` passed. Tracked/staged state was clean; pre-existing untracked agent artifacts were preserved. The protected long-running test processes were left untouched.
+- State SHA256 at the gate: `8170a4ec4b4680336832091da9354c47ff8e41cf1abfaddbbe875cfcd25ff58b`.
+- Catalog/prompt/TSV/protocol SHA256 values matched the established ledger: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Prior Goal 60 cells explicitly excluded: broad review recipes (Cycles 25/93), current-master RPC/help contract review (Cycle 49), relay-backlog review (Cycle 54), and macOS platform-failure/workaround review (Cycle 146). This cycle targets a distinct current evidence cell: deterministic fuzzer/test edge reachability, exact negative-test oracles, AI-assisted discovery disclosure, and stacked prerequisite ordering.
+
+### Working evidence cell
+
+Primary evidence is open PR [#35759](https://github.com/bitcoin/bitcoin/pull/35759), `fuzz: check http_request body matches framing`, updated 2026-07-31. Its body documents that the old `assert(body.empty())` became false after the libevent-to-native HTTP migration: `POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc` is a valid deterministic reproducer. The proposed assertion mirrors `LoadBody()`'s framing branches instead of deleting the oracle. Review discussion adds two important constraints: wait for HTTP state-machine PR [#35735](https://github.com/bitcoin/bitcoin/pull/35735) before finalizing the harness contract, and treat the missed fuzz crash as a corpus/reachability problem because valid request-line, complete headers, and exact `Content-Length` must co-occur. A dictionary/qa-assets seed was proposed as the coverage remedy.
+
+Independent held-out evidence is open PR [#35819](https://github.com/bitcoin/bitcoin/pull/35819), `test: add coverage for untested descriptor parse error paths`, updated 2026-07-31. Reviewers required exact message vectors for distinct reachable error sites, a minimal `129`-nesting boundary against the `128` limit, and mutation checks that make the test fail when the targeted error message or branch is perturbed. The author corrected an initially misclassified unreachable branch after a structural counterexample and preserved the deterministic vectors even though fuzz corpora already reach the code.
+
+The related RPC review in [#35837](https://github.com/bitcoin/bitcoin/pull/35837) independently shows the current disclosure preference: describe an AI-assisted discovery in generic terms, remove a product/tool link, and lead with the reproducible silent `scanblocks` gap and its contract-level fix. This is evidence about project policy and review framing, not proof that AI assistance itself establishes a finding.
+
+Repository policy supports that interpretation. `doc/AI_POLICY.md` permits AI as a tool only when the human author understands and can explain the change, forbids autonomous-agent-driven PRs, and requires disclosure plus human commentary when AI interaction context is included. `CONTRIBUTING.md` says reviewers expect change-specific manual testing to be described, and that the author must show the improvement warrants review effort. The recipe therefore treats tool identity as secondary metadata and requires a human-readable mechanism, reproducible evidence, and explicit limitations.
+
+Applicability check: the current investigation branch already contains local commit `406262fba7469b2accfded7e0af3731b9e00b29a` (`http: check request body parse contracts`), which predates the public PR and records the same `Content-Length` reproducer, production postconditions, HTTP unit coverage, and fuzz replay. The PR is therefore a semantic recurrence/independent corroboration, not a reason to create a duplicate source commit. The prior commit is retained as evidence of the repository's expected contract; no local HTTP change is justified in this Goal 60 cycle.
+
+### Excluded prior cells
+
+Do not reopen the old broad fuzz reset/realism recipe, generic exact-oracle recipe, or platform-workaround recipe unless this cycle finds a concrete recurrence. The new comparison is narrower: whether a test or fuzz change demonstrates that its input reaches the intended production boundary, preserves a meaningful invariant, and respects an unresolved stacked semantic change.
+
+### History, policy, and applicability verification
+
+The local history search found the important duplicate before any source change was considered. `origin/master` still has the old `assert(body.empty())` at `src/test/fuzz/http_request.cpp:49`. The native HTTP switch was merged as `9c20859b5f` (PR #35182), and the target was converted from the libevent request type by `e427c227fa`; the latter retained the bodyless assertion while changing the parser to call `LoadBody()`. The current branch already contains `406262fba7469b2accfded7e0af3731b9e00b29a`, authored 2026-06-28, titled `http: check request body parse contracts`. Its commit message records the valid `Content-Length: 5` seed, the old assertion failure, matching `LoadBody()` postconditions, an HTTP unit regression, and normal/ASan fuzz replay. This is semantically the same defect class as #35759 and predates that PR. The cycle therefore links #35759 as independent corroboration and does not create a duplicate repair.
+
+The prerequisite-ordering claim is technically grounded in PR #35735 (`0ced8c35ae49f71eb42b549d6a7870e2fab93c49`), whose current diff carries `HTTPRequest` body state across partial reads, accumulates header/trailer size across I/O iterations, and changes the `LoadBody()`/request-state tests. The #35759 reviewer request to wait, rebase, and rerun the five framing cases against that state-machine contract is therefore a semantic dependency, not a workflow preference.
+
+The repository policy check used `git show origin/master:doc/AI_POLICY.md` and the review section of `CONTRIBUTING.md`. The policy allows AI as a tool only with a human author who understands and can explain the change, forbids autonomous-agent-driven PRs, and requires disclosure plus human commentary when AI interaction context is included. The review guide says change-specific manual testing should be described and the author must show that the improvement warrants review effort. The #35837 reviewer request to remove a product/tool link and retain generic ``AI-assisted tool`` wording is consistent with this policy. It does not make an AI-originated report authoritative; the reproduced contract and human explanation remain the evidence.
+
+### Held-out validation
+
+The detached exact PR head `81bd655cc929df54ee999813c61cb87588a25f61` for #35819 was checked out at `/data/my_storage/tmp/cycle203-heldout-35819`. Its diff adds 17 `CheckUnparsable` vectors, including the minimal `std::string(129, '{')` case for the `128` nesting limit and the initially disputed `musig()` delimiter counterexample. The PR review states that the vectors cover 16 distinct error sites, with two `Pubkey '00'` cases intentionally sharing a parser message while exercising different wrapper sites.
+
+The exact detached source was configured with:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle203-heldout-35819-tmp cmake -S /data/my_storage/tmp/cycle203-heldout-35819 -B /data/my_storage/tmp/cycle203-heldout-35819-build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTS=ON -DWITH_GUI=OFF -DWITH_ZMQ=OFF -DWITH_USDT=OFF -DWITH_IPC=OFF -DWITH_BDB=OFF -DWITH_SQLITE=ON -DWITH_MINIUPNPC=OFF -DWITH_NATPMP=OFF -DWITH_QRENCODE=OFF
+CCACHE_DIR=/data/my_storage/tmp/cycle203-ccache TMPDIR=/data/my_storage/tmp/cycle203-heldout-35819-tmp cmake --build /data/my_storage/tmp/cycle203-heldout-35819-build --target test_bitcoin -j2
+```
+
+The first build attempt stopped before compilation because `/root/.cache/ccache/tmp` did not exist; the retry with the scratch `CCACHE_DIR` completed and linked `bin/test_bitcoin`. The focused held-out command passed:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle203-heldout-35819-test-tmp /data/my_storage/tmp/cycle203-heldout-35819-build/bin/test_bitcoin --run_test=descriptor_tests --random=203019 --log_level=message --report_level=short --color_output=false
+4 test cases passed; 30,422 assertions passed; 791 cases skipped.
+```
+
+Independent mutation verification changed `src/script/descriptor.cpp:2041` from `Invalid musig() expression` to `MUTATED musig() expression`, rebuilt the same target, and reran the suite. It exited `201` with exactly one failed assertion: `tr(): MUTATED musig() expression != tr(): Invalid musig() expression`. The mutation was restored, the target rebuilt, and the same suite passed again with 4 cases and 30,422 assertions. `git diff --check --exit-code` and `git status --short` on the detached worktree were clean after restoration; no cycle process remained running.
+
+### Reusable review recipe
+
+1. Search local history, current branches, prior journals, and semantic fingerprints before accepting an external seed. If an equivalent fix already exists locally, classify the new report as recurrence or corroboration and do not duplicate the source change.
+2. Prove input reachability at the real production boundary with a deterministic valid or minimally invalid fixture. For parser fuzzers, show all framing/state preconditions explicitly; a long random fuzz run without the input is not evidence that the branch is unreachable.
+3. Preserve the contract oracle. Mirror the production parser's meaningful postcondition instead of deleting a failing assertion, and add a corpus/dictionary seed when the valid state is structurally difficult for mutation-based fuzzing to reach.
+4. For negative tests, pin the exact externally observable error or state contract, use the smallest boundary fixture, and show that each vector reaches the intended site. A temporary branch/message mutation must fail the test; execution-only coverage is insufficient.
+5. Respect semantic stack order. If a parser/state-machine prerequisite changes the contract, rebase and rerun the focused cases on that prerequisite before deciding whether a follow-up is independent or must land together.
+6. When AI assistance contributed discovery, disclose it only as required by project policy and explain the mechanism, reproduction, relevance, and limitations in human-authored terms. Do not substitute tool branding, a generated summary, or coverage-bot output for verification.
+
+This recipe is reinforced by the independent #35819 test review and the #35759/#35735 HTTP discussion, but it remains contextual where exact error strings, parser limits, merge ordering, or disclosure wording are project-specific. No production or permanent test change is justified in this cycle: the primary HTTP defect is already represented by local commit `406262fba7`, and the descriptor PR is the held-out evidence rather than a local bug report.
+
+### Verdict and handoff
+
+Verdict: reviewer preference confirmed as a technical evidence pattern, with no new local defect. The strongest reusable rule is ``reachability plus contract-sensitive proof plus history/stack deduplication``. The public API evidence is unauthenticated and may omit private or deleted review discussion; #35759, #35735, #35819, and #35837 remain open or externally maintained at the time of capture. No exact HTTP repro was rerun on current HEAD because the branch already contains the equivalent `406262fba7` repair; the exact descriptor held-out run and mutation control supplied the independent executable check.
+
+Next work must perform a new gate, recheck the catalog/protocol/TSV hashes, draw exactly `shuf -i 0-98 -n 1`, and select a distinct evidence cell. Do not reopen this cycle's HTTP body-oracle recurrence, descriptor error-vector mutation proof, or AI-disclosure wording unless a new upstream review or changed contract creates a concrete recurrence.
+
 ## Cycle 146: platform-failure evidence and narrow workaround review
 
 ### Selection and gate
