@@ -207,3 +207,69 @@ For each candidate, write the equation `attacker operations x per-operation cost
 
 - The existing `INV`/`GETDATA` post-deserialization `MAX_INV_SZ` checks and `ADDR`/`ADDRV2` `MAX_ADDR_TO_SEND` check remain bounded protocol-message leads, but the prior resource and memory-pressure ledgers already cover their generic per-connection deserialization allocation. No new caller or cleanup failure was established this cycle, so they are not repeated as findings.
 - Next unchecked cells: inspect RPC/REST scan and serialization endpoints for work multiplied by caller-controlled ranges; then review P2P address/request retry state for retained descriptors or queues after disconnect. Preserve the REST count fix and do not repeat the locator, cfilter, BIP35, relay-backlog, receive-buffer, or transport-send-queue cells without new evidence.
+
+## Cycle 234: BIP37 filter vector bounds before deserialization
+
+### Selection and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `7` (`resource-exhaustion-variants`).
+- Branch: `uber-cycle-234-resource-exhaustion-variants-20260731`.
+- Cycle-start HEAD: `b6819c245b819577ac484b0c16b712309c12b18f` (`agent: close cycle 233 handoff`).
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence from `git rev-list --left-right --count origin/master...HEAD`: `42 1251`.
+- The fresh gate passed: tracked source/index state was clean, `git diff --check` passed, all catalog/prompt/TSV/protocol hashes matched the uber-goal records, and the protected long-running test processes were observed and preserved. Known untracked agent artifacts, package files, `node_modules/`, and test caches were not touched.
+
+### Scope and hypothesis
+
+The prior resource cycles closed the generic INV/GETDATA and ADDR/ADDRV2 message leads, oversized locators, REST `getutxos`, exact duplicate descriptor expansion, cfilter response-watermark, BIP35 response-watermark, relay backlog, receive-buffer, and transport send-queue cells. The new hypothesis was that BIP37's endpoint-specific vector limits were checked after generic vector deserialization. A peer that has negotiated bloom-filter support controls the vector count in `filterload` and `filteradd` messages.
+
+The relevant limits are:
+
+- `MAX_BLOOM_FILTER_SIZE = 36,000` bytes for the filter payload;
+- `MAX_SCRIPT_ELEMENT_SIZE = 520` bytes for one `filteradd` element; and
+- `MAX_PROTOCOL_MESSAGE_LENGTH = 4,000,000` bytes for a complete P2P payload.
+
+Before this cycle, `CBloomFilter` serialized `vData` through the generic `VectorFormatter`, and `FILTERADD` read `std::vector<unsigned char>` through that same formatter. `VectorFormatter` reserves in 5 MiB batches based on the CompactSize count before reading elements. The resource equation for a count-only malformed message was therefore:
+
+```text
+attacker bytes = 5-byte CompactSize(4,000,000)
+old vector capacity = 4,000,000 bytes
+valid filterload/filteradd capacity = 36,000/520 bytes
+```
+
+The old handler then attempted the first element read, caught the EOF at the outer message boundary, and did not record the protocol's existing `Misbehaving` result. The limited formatter rejects the count before reserve, leaving vector capacity at zero; the handler translates only that limit exception to the existing penalty. A complete oversized payload is still bounded by the 4 MB transport limit, but the avoidable post-receive multi-megabyte allocation and parse are removed.
+
+### Independent pre-fix evidence
+
+- A temporary formatter probe compiled with:
+
+  ```text
+  g++ -std=c++20 -O2 -Isrc -Idepends -o /data/my_storage/tmp/filter_bounds_cycle234_probe agent-journal/filter_bounds_cycle234_probe.cpp src/support/cleanse.cpp && /data/my_storage/tmp/filter_bounds_cycle234_probe
+  ```
+
+  For both `filterload` (limit 36,000) and `filteradd` (limit 520), the generic formatter reported `declared=4000000 capacity=4000000 size=4000000 remaining=0 error=DataStream::read(): end of data: iostream error`. The limited formatter reported `capacity=0 size=0 remaining=0 error=Vector length limit exceeded: iostream error`. The temporary probe was removed after the measurement.
+
+- The functional regression was added to `test/functional/p2p_filter.py`. It sends a count-only 5-byte payload declaring 4,000,000 elements for each message type and expects a `Misbehaving` log. On the unmodified binary, the test failed with `Expected message(s) ['Misbehaving'] not found`; the node log instead showed `ProcessMessages(filterload, 5 bytes): Exception 'DataStream::read(): end of data: iostream error' caught`. This establishes the old allocation/catch path independently of the post-fix behavior.
+
+### Fix
+
+- `src/common/bloom.h` now deserializes `CBloomFilter::vData` with `LIMITED_VECTOR(obj.vData, MAX_BLOOM_FILTER_SIZE)`, preserving the existing wire format for valid filters while rejecting the count before allocation.
+- `src/net_processing.cpp` adds a narrow check for the `Vector length limit exceeded` exception. `FILTERLOAD` maps it to `Misbehaving(peer, "too-large bloom filter")`; `FILTERADD` maps its bounded vector rejection to `Misbehaving(peer, "bad filteradd message")`. Other deserialization failures still propagate to the existing generic message-processing catch, preserving malformed/truncated input behavior.
+- `test/functional/p2p_filter.py` covers both count-only oversized declarations before the existing complete-payload size tests. No production helper or broad protocol limit was added.
+
+### Validation
+
+- `env TMPDIR=/data/my_storage/tmp/cycle234-filter-unit-tmp /data/my_storage/tmp/cycle214-build/bin/test_bitcoin --run_test=bloom_tests --log_level=test_suite --report_level=short`: passed 14 cases and 37,687 assertions.
+- `env TMPDIR=/data/my_storage/tmp/cycle234-net-unit-tmp /data/my_storage/tmp/cycle214-build/bin/test_bitcoin --run_test=net_tests --log_level=test_suite --report_level=short`: passed 36 cases and 159,095 assertions.
+- `mkdir -p /data/my_storage/tmp/cycle234-filter-build-tmp /data/my_storage/tmp/cycle234-filter-ccache && env TMPDIR=/data/my_storage/tmp/cycle234-filter-build-tmp CCACHE_DIR=/data/my_storage/tmp/cycle234-filter-ccache ninja -C /data/my_storage/tmp/cycle214-build bitcoind test_bitcoin -j2`: passed all 173 build steps. Existing unrelated warnings appeared in `httpserver_tests.cpp` and `util_tests.cpp`.
+- `env TMPDIR=/data/my_storage/tmp/cycle234-functional-fixed-tmp python3 test/functional/p2p_filter.py --configfile=/data/my_storage/tmp/cycle214-build/test/config.ini --cachedir=/data/my_storage/tmp/cycle234-functional-fixed-cache --tmpdir=/data/my_storage/tmp/cycle234-functional-fixed-tmp/run --loglevel=INFO`: passed all BIP37 size, filtering, mempool, and CVE-2013-5700 checks.
+- `git diff --check` passed after the source and test changes.
+
+### Classification and limitations
+
+Classification: confirmed local remotely reachable resource-exhaustion and input-boundary defect in BIP37 message deserialization. A peer can use five payload bytes to make the old parser materialize four million byte-sized elements, despite valid protocol object limits of 36,000 and 520 bytes; the new parser rejects at the declared count and retains the existing misbehavior accounting. Valid filter serialization and normal BIP37 behavior are unchanged.
+
+The count-only input is intentionally truncated so the old path's allocation can be isolated without sending 4 MB of data. The transport layer still buffers a complete message up to its existing 4 MB limit before dispatch, so this fix does not claim to remove all message-buffer cost. It removes the additional object allocation/element construction and prevents repeated malformed filter attempts from bypassing the existing penalty. No new filter protocol or permission policy was introduced.
+
+### Handoff
+
+The source/test changes are ready for one self-contained finding commit. After committing, append the source commit and exact validation to `agent-journal/uber-goal-state.md`, make the separate state-close commit, then perform the fresh gate and exact selector draw for the next cycle. Do not repeat the closed BIP37 vector cell without a distinct caller, limit, or cleanup failure.

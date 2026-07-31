@@ -225,6 +225,11 @@ bool IsExpectedPeerMessageDeserializationFailure(const std::exception& e) noexce
            what.find("Unknown transaction optional data") != std::string_view::npos;
 }
 
+bool IsVectorLengthLimitExceeded(const std::ios_base::failure& e) noexcept
+{
+    return std::string_view{e.what()}.find("Vector length limit exceeded") != std::string_view::npos;
+}
+
 bool ReadBlockLocator(DataStream& vRecv, CBlockLocator& locator, uint64_t& locator_size)
 {
     int nVersion = CBlockLocator::DUMMY_VERSION;
@@ -5345,7 +5350,13 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             return;
         }
         CBloomFilter filter;
-        vRecv >> filter;
+        try {
+            vRecv >> filter;
+        } catch (const std::ios_base::failure& e) {
+            if (!IsVectorLengthLimitExceeded(e)) throw;
+            Misbehaving(peer, "too-large bloom filter");
+            return;
+        }
 
         if (!filter.IsWithinSizeConstraints())
         {
@@ -5371,7 +5382,13 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             return;
         }
         std::vector<unsigned char> vData;
-        vRecv >> vData;
+        try {
+            vRecv >> LIMITED_VECTOR(vData, MAX_SCRIPT_ELEMENT_SIZE);
+        } catch (const std::ios_base::failure& e) {
+            if (!IsVectorLengthLimitExceeded(e)) throw;
+            Misbehaving(peer, "bad filteradd message");
+            return;
+        }
 
         // Nodes must NEVER send a data item > MAX_SCRIPT_ELEMENT_SIZE bytes (the max size for a script data object,
         // and thus, the maximum size any matched object can have) in a filteradd message
