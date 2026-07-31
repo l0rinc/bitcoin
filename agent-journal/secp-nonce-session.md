@@ -145,3 +145,99 @@ Prefer one self-contained commit per finding, authored as `Lőrinc <pap.lorinc@g
 - Independent verification: `cmake --build /data/my_storage/tmp/cycle92-secp-ellswift --target tests -j2` passed; `bin/tests -t=musig_api_tests -i=64 -j=2 -seed=95 -log=1` passed; the rebuilt standalone probe exited `0`; and `bin/tests -i=16 -j=2 -seed=95 -log=1` passed the complete enabled suite in `47.284 sec`. A no-`VERIFY` build with `cmake --build /data/my_storage/tmp/cycle92-secp-ellswift --target noverify_tests -j2` and `bin/noverify_tests -t=musig -i=32 -j=2 -seed=95 -log=1` also passed. `git diff --check` passed.
 - Neighboring hypotheses were dismissed with evidence: `partial_sign` consumes its secret nonce before later validation as documented and already covered; ECDH writes a hash-fallback output on invalid scalars for constant-time behavior and its API does not promise a zeroed failure output; x-only public-key conversion treats invalid opaque inputs as illegal and documents a successful conversion contract; and all Bitcoin wrapper parse callers check the result. No additional source change is justified for those cells.
 - Verdict: confirmed fail-closed output-state defect in the two public MuSig nonce parsers. The source/test/header change is ready as one self-contained commit; the scratch probe remains untracked and is retained as cycle evidence.
+
+## Cycle 225: ECDH invalid-public-key return cell
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `84`
+- Goal: `secp256k1 nonce, signing, Schnorr, and MuSig state-machine audit`
+- Slug: `secp-nonce-session`
+- Branch: `uber-cycle-225-secp-nonce-session-20260731`
+- Start HEAD: `6a84678d9e2596464d5f1e348e04cd49292a4556`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `42 1236`
+  (`origin/master...HEAD`).
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber prompt SHA256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- The fresh gate passed; the catalog, prompt, TSV, and protocol hashes were
+  unchanged. Protected PIDs `777094`, `956381`, `1138182`, and `1157959`
+  remained alive. Existing untracked artifacts were preserved and excluded
+  from the commit.
+
+### Prior cells excluded and selected hypothesis
+
+Cycles 60 and 72 covered MuSig argument ordering, secret nonce invalidation,
+and state reuse. Cycle 95 fixed fail-closed output state for public and
+aggregate MuSig nonce parsing. This cycle selected a separate ECDH boundary:
+whether an invalid opaque public-key object can make `secp256k1_ecdh` report
+success when the context uses a non-aborting illegal-argument callback.
+
+The ECDH header requires an initialized public key and says the function
+returns `0` for an invalid scalar or a failing hash callback. The shared
+`secp256k1_pubkey_load` helper reports an all-zero opaque key through
+`ARG_CHECK` and returns `0`; neighboring public-key operations propagate that
+status. `secp256k1_ecdh` discarded it, then multiplied the decoded invalid
+point and returned only the hash-callback and scalar status. The expected
+contract for the recognized invalid object is an illegal callback plus a
+zero return, even though callers must still obey the initialized-key input
+precondition.
+
+### Reproduction and fix
+
+- The disposable probe is
+  `agent-journal/secp_ecdh_invalid_pubkey_cycle225_probe.c`. It compares a
+  valid generator point with an all-zero `secp256k1_pubkey`, uses scalar one,
+  a deterministic x-coordinate passthrough hash, a counting illegal callback,
+  and a sentinel output buffer.
+- Independent pre-fix control: the probe linked with the existing Clang 19
+  ASan/UBSan library from `/data/my_storage/tmp/cycle133-secp-sanitized-off`
+  printed `valid ret=1 illegal=0 output=79be667e` and
+  `invalid ret=1 illegal=1 output=00000000`. Thus the illegal callback fired,
+  but ECDH still claimed success from the invalid point.
+- Fixed control printed the same valid line and
+  `invalid ret=0 illegal=1 output=00000000`. The minimal source change stores
+  `secp256k1_pubkey_load`'s result in `pubkey_valid` and includes it in the
+  final return condition. It does not change scalar-invalid or hash-callback
+  behavior, nor add a new curve-validation rule to opaque public keys.
+- `src/secp256k1/src/modules/ecdh/tests_impl.h` adds
+  `test_invalid_pubkey`, which requires `CHECK_ILLEGAL` to observe both the
+  callback and a zero return. Before the source change, the probe was the
+  independent failing-before oracle; after the change, the in-tree test
+  passes.
+
+### Verification
+
+- Standalone `/data/my_storage/tmp/cycle225-ecdh-build` was configured with
+  ECDH and tests enabled, then built `tests`, `secp256k1`, and
+  `noverify_tests` successfully.
+- Fixed focused test:
+  `bin/tests -t=test_invalid_pubkey -i=1 -log=1` passed.
+- Fixed ECDH module matrix:
+  `bin/tests -t=ecdh -i=4 -j=2 -seed=225 -log=0` passed.
+- Fixed full normal suite:
+  `bin/tests -i=4 -j=2 -seed=225 -log=0` passed in `21.504 sec`.
+- Fixed no-`VERIFY` ECDH matrix:
+  `bin/noverify_tests -t=ecdh -i=4 -j=2 -seed=225 -log=0` passed.
+- A fresh Clang 19 ASan/UBSan build under
+  `/data/my_storage/tmp/cycle225-ecdh-asan` passed the ECDH matrix at four
+  iterations and the full enabled suite at two iterations with
+  `ASAN_OPTIONS=halt_on_error=1:detect_leaks=0` and
+  `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`.
+- The fixed probe, `git diff --check`, and all existing valid ECDH/Wycheproof
+  checks passed. No protected process was stopped or modified.
+
+### Verdict and handoff
+
+**Confirmed and fixed.** This was a return-value contract defect on the
+recognized invalid-public-key path, not a claim that callers may pass
+uninitialized public keys. The source/test change is ready as one
+self-contained commit. The probe remains untracked as cycle evidence.
+
+Remaining Goal 84 queue: ECDH output semantics after scalar/hash failure,
+MuSig nonce-generation public output on invalid secret input, keypair/tweak
+failure transitions, and aggregate/session output on malformed input. The
+next run must recheck this journal and history and must not reopen the
+invalid-public-key return cell.

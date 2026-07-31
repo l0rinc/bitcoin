@@ -140,6 +140,16 @@ static void test_bad_scalar(void) {
     CHECK(secp256k1_ecdh(CTX, output, &point, s_overflow, ecdh_hash_function_test_fail, NULL) == 0);
 }
 
+static void test_invalid_pubkey(void) {
+    unsigned char s_one[32] = { 0 };
+    unsigned char output[32];
+    secp256k1_pubkey invalid_point = {{0}};
+
+    s_one[31] = 1;
+    memset(output, 0xa5, sizeof(output));
+    CHECK_ILLEGAL(CTX, secp256k1_ecdh(CTX, output, &invalid_point, s_one, NULL, NULL));
+}
+
 /** Test that ECDH(sG, 1/s) == ECDH((1/s)G, s) == ECDH(G, 1) for a few random s. */
 static void test_result_basepoint(void) {
     secp256k1_pubkey point;
@@ -210,6 +220,7 @@ static const struct tf_test_entry tests_ecdh[] = {
     CASE1(test_ecdh_api),
     CASE1(test_ecdh_generator_basepoint),
     CASE1(test_bad_scalar),
+    CASE1(test_invalid_pubkey),
     CASE1(test_result_basepoint),
     CASE1(test_ecdh_wycheproof),
     CASE1(test_ecdh_ctx_sha256),
