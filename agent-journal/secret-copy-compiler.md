@@ -1,5 +1,39 @@
 # Secret-copy and compiler-optimization audit
 
+## Cycle 177 Identity and Gate
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `44`
+- Selected goal: `secret-copy-compiler` (Secret-copy and compiler-optimization audit)
+- Branch: `uber-cycle-177-secret-copy-compiler-20260730`
+- Start HEAD: `eb8cc97047fd4f43f6746ffecd045e39f6b2640c`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Divergence (`origin/master...HEAD`): `42 1138`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc`
+- Tracked/index state was clean at the gate; persistent untracked agent artifacts were preserved.
+- Preserved unrelated long-running tests: PIDs `777094` and `956381`; neither was modified.
+- Root capacity was approximately `100 MiB` free and `/data` had approximately `50 GiB` free.
+- Exact selector result: `shuf -i 0-98 -n 1` -> `44`; this is a distinct deferred Goal-44 cell, not a rerun of the closed HKDF context finding.
+
+## Cycle 177 Scope and Exclusions
+
+The prior Goal-44 cycle fixed the `CHKDF_HMAC_SHA256_L32` destructor/copy contract. This cycle excludes that finding, the ECDH shared-secret cleanup, RPC-cookie cleanup, MuSig entropy/keypair cells, HMAC stack-buffer cells, compiler/optimization differential work, and constant-time/declassification audits unless new independent evidence changes their status. The deferred queue names `CSHA512` state retained by the wallet passphrase KDF as the first candidate.
+
+Scope the candidate from the wallet passphrase boundary through the KDF and all callers. Determine whether the SHA-512 object ever contains secret or secret-derived bytes after its final digest, whether it is copied or moved, whether the existing cleanse is type-level or caller-specific, and whether optimized code retains or elides the cleanup. Separate state that is public intermediate hashing from passphrase-derived key material. Do not add a generic destructor to a widely copied hasher without proving ownership, performance, and API consequences.
+
+Initial queue:
+
+1. Trace wallet passphrase KDF construction, update, finalization, destruction, copies, and caller lifetimes; record the exact secret-bearing buffers and trust boundary.
+2. Inspect `CSHA512`, secure allocators, `memory_cleanse`, compiler output, and historical cleanup rationale; search for prior findings and review precedent before proposing a fix.
+3. Build a placement-storage or post-destruction oracle only if the object contract says cleanup is required; otherwise use a caller-level secret lifetime proof.
+4. Compare the wallet KDF with BIP324, HKDF, AES/ChaCha, and other hash callers to distinguish a local missing cleanup from an intentional value-type design.
+
+No Cycle 177 evidence or source/test changes have been made after this start record.
+
 ## Cycle 149
 
 Status: confirmed and fixed; the cycle is ready for handoff.
