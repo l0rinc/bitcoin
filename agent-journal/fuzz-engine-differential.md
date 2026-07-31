@@ -66,6 +66,113 @@ engine-specific and will not be treated as equal units.
    source defect appears, close with exact metrics, tool limitations, raw
    artifact paths, and a new untouched transport/property cell.
 
+### Cycle 175 build, corpus, and tool matrix
+
+The shared corpus is `/data/my_storage/tmp/cycle175-corpus/source`: 14 files,
+2,834 bytes total, including one empty seed that the engines omit from their
+nonempty seed count. Its manifest file hash is
+`e92d3ca85604140cf3eefb486e9d5db58478104cecfcfce06a255749669f905b`; every
+engine received the same copied files. The seeds cover empty/truncated input,
+header fragments, checksum/magic selector bytes, known message text, long V2
+key/garbage material, alternating bytes, and deterministic ramps.
+
+All successful builds used current source HEAD, Clang 19.1.7 where applicable,
+`BUILD_FOR_FUZZING=ON`, x86_64 Linux, wallet/IPC/ZMQ disabled, and the same
+fuzz dispatcher. The current binaries and hashes were:
+
+- libFuzzer with `SANITIZERS=address,undefined,fuzzer`:
+  `/data/my_storage/tmp/cycle131-build-libfuzzer/bin/fuzz`,
+  `2218ed5b8e7992b980ebe819424143ca103cd3233d6ee0f957dc8ff785759f8f`.
+- AFL++ 4.04c PCGUARD build:
+  `/data/my_storage/tmp/cycle131-build-afl19d/bin/fuzz`,
+  `4b4999aadd04660f713036ff5031b096e1ebe6827ac4c2e48d3cecc75fbd5f56`.
+- Honggfuzz 2.6 build:
+  `/data/my_storage/tmp/cycle131-build-honggfuzz19/bin/fuzz`,
+  `1089efb7afc95a5e6db510f2bd7e2fe8852e65a889d9417d043c655d06cf0983`.
+  The existing wrapper initially selected Clang 14 and failed on the current
+  `std::source_location` headers. That setup failure was quarantined; the
+  same tree rebuilt successfully with `HFUZZ_CXX_PATH=/usr/bin/clang++-19`.
+  FuzzTest was not installed and no repository integration was found.
+
+The first AFL++ map probe was also quarantined because it used `afl-showmap`
+against the persistent shared-memory entry point and captured zero tuples. The
+corrected `afl-fuzz` run used `AFL_NO_FORKSRV=1` and
+`AFL_SKIP_CPUFREQ=1`; it detected the persistent binary, completed its dry run,
+and produced stable feedback. The host governor was not changed.
+
+### Cycle 175 engine results: one-way transport
+
+The libFuzzer control was:
+
+    TMPDIR=/data/my_storage/tmp/cycle175-runs/lib-tmp FUZZ=p2p_transport_serialization /data/my_storage/tmp/cycle131-build-libfuzzer/bin/fuzz /data/my_storage/tmp/cycle175-runs/lib-serial-input -max_total_time=12 -seed=17511 -max_len=4096 -rss_limit_mb=2048 -timeout=2 -artifact_prefix=/data/my_storage/tmp/cycle175-runs/lib-serial-artifacts/ -print_final_stats=1
+
+It completed 13,319 executions in 13 seconds, reached `cov 4231` and
+`ft 9110`, added 120 units to a 45-entry minimized corpus, and used 817 MiB
+peak RSS. No sanitizer diagnostic, assertion, crash, timeout, or artifact was
+reported. The one-way AFL++ control was:
+
+    FUZZ=p2p_transport_serialization AFL_NO_FORKSRV=1 AFL_SKIP_CPUFREQ=1 afl-fuzz -m none -i /data/my_storage/tmp/cycle175-corpus/source -o /data/my_storage/tmp/cycle175-runs/afl-serial2 -V 12 -- /data/my_storage/tmp/cycle131-build-afl19d/bin/fuzz
+
+AFL++ completed 204 executions at 15.66 executions/sec, found 4 new queue
+inputs for 17 total, measured 939 edges, 100.00% stability, and used 2 MiB
+peak RSS. It saved zero crashes and zero hangs. Honggfuzz used:
+
+    FUZZ=p2p_transport_serialization /data/my_storage/tmp/cycle131-tools/honggfuzz-build/honggfuzz -i /data/my_storage/tmp/cycle175-corpus/source -o /data/my_storage/tmp/cycle175-runs/hong-serial -W /data/my_storage/tmp/cycle175-runs/hong-work -n 1 -t 2 --run_time 12 -v -- /data/my_storage/tmp/cycle131-build-honggfuzz19/bin/fuzz ___FILE___
+
+It completed 15,092 iterations in 13 seconds, added 37 units, reported 300,507
+guards and 0% in its non-normalized branch metric, and used 29 MiB peak RSS.
+It reported zero crashes and zero timeouts. Honggfuzz has no fixed mutation
+seed control in this build, so its run is fixed-corpus evidence rather than a
+byte-for-byte deterministic replay.
+
+The current libFuzzer ASan/UBSan oracle replayed all 17 AFL++ queue inputs and
+all 59 Honggfuzz `.honggfuzz.cov` inputs. The AFL++ replay completed 18 runs
+and the Honggfuzz replay 60 runs, both with exit status 0, no diagnostic, and
+819 MiB peak RSS. No engine-produced input exposed a target semantic mismatch.
+
+### Cycle 175 engine results: mixed V1/V2 transport
+
+The same matrix was repeated for `p2p_transport_bidirectional_v1v2`. The
+libFuzzer run (`-max_total_time=10 -seed=17531`) completed 958 executions,
+reached `cov 10660` and `ft 28489`, added 213 units, and used 820 MiB peak
+RSS. AFL++ (`-V 12`) completed 199 executions at 15.87 executions/sec,
+measured 2,712 edges with 100.00% stability, found 12 new inputs for 25 total,
+and saved no crashes or hangs. Honggfuzz completed 205 iterations in 13
+seconds, added 66 units, reported 300,507 guards, and used 31 MiB peak RSS;
+its crash and timeout counts were zero.
+
+The sanitizer oracle replayed all 25 AFL++ queue inputs and all 96 Honggfuzz
+coverage inputs for this target. The replays completed 26 and 97 runs,
+respectively, with no assertion, sanitizer diagnostic, crash, timeout, or
+artifact. A separate V2-initiator libFuzzer run
+(`FUZZ=p2p_transport_bidirectional_v2`, `-max_total_time=8`, seed `17551`)
+completed 658 executions, reached `cov 12690` and `ft 30807`, added 138 units,
+and used 823 MiB peak RSS without a diagnostic.
+
+The production control
+`/data/my_storage/tmp/cycle170-mempool-build/bin/test_bitcoin --run_test=net_tests`
+passed all 36 selected cases and 152,142 assertions. This independently
+exercises the V1/V2 transport contracts outside the fuzz dispatcher.
+
+### Cycle 175 verdict and handoff
+
+Dismissed for a new repository defect. The one-way transport and mixed V1/V2
+targets exercised the same current production transport implementation under
+libFuzzer, AFL++, and Honggfuzz. Differences in execution rate, corpus growth,
+guard/edge counts, and RSS are expected from the engines' instrumentation and
+scheduling models. Cross-engine sanitizer replay, the V2-initiator run, and the
+focused production suite found no crash, hang, timeout, assertion, corpus
+corruption, or semantic round-trip mismatch. No source or permanent test
+change is justified. The Clang 14 setup failure and the zero-map showmap probe
+remain tool-invocation limitations, not product evidence. Raw artifacts are
+under `/data/my_storage/tmp/cycle175-corpus` and
+`/data/my_storage/tmp/cycle175-runs`.
+
+The transport serialization family is closed for this evidence cell. The
+broader Goal 80 remains eligible for a future distinct target, compiler, engine
+adapter, or property-framework comparison; do not repeat this target family
+without new evidence.
+
 ## Cycle 171 start: stateful process_messages engine comparison
 
 ### Selection and fresh gate
