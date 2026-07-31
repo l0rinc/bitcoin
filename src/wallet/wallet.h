@@ -571,7 +571,9 @@ public:
 
     bool IsLockedCoin(const COutPoint& output) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void LoadLockedCoin(const COutPoint& coin, bool persistent) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool LockCoin(WalletBatch& batch, const COutPoint& output, bool persist) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool LockCoin(const COutPoint& output, bool persist) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool UnlockCoin(WalletBatch& batch, const COutPoint& output) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool UnlockCoin(const COutPoint& output) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool UnlockAllCoins() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void ListLockedCoins(std::vector<COutPoint>& vOutpts) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);

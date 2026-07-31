@@ -1,5 +1,72 @@
-# Cycle 18: error-path partial-state mutation audit
+## Cycle 192: persistent coin-lock failure-state audit
 
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `27` (`error-path-state`). The prior Goal 27 cells closed passphrase changes, address-book publication, spent markers, `setlabel`, temporary-wallet cleanup, transaction/index transitions, and migration-specific records; this cycle selects the separate coin-lock state machine.
+- Selected goal: `error-path-state` (error-path partial-state mutation audit).
+- Branch: `uber-cycle-192-error-path-state-20260731`.
+- Cycle start HEAD: `5d433662ba95eb432f013d0af05b3ef35327cd4f`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1174 42` (`HEAD...origin/master`).
+- Fresh gate: `git fetch origin master` passed; tracked worktree and index were clean; `git diff --check` passed; known unrelated untracked artifacts were preserved. PIDs `777094` and `956381` were alive and untouched.
+- Gate hashes: catalog `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, prompt `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, corrected TSV `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, protocol `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`, state at gate `3f92dc69a870324fa785548eee4b8fce538348bfadf757b959c346440a701270`.
+
+### Distinct scope and contract
+
+The public `lockunspent` contract says persistent locks are written to the wallet database, unlock removes both forms, and the RPC implementation labels the multi-output update as atomic. The lower-level `CWallet` methods return status after database operations and therefore must not leave runtime `m_locked_coins` and durable `LOCKED_UTXO` records disagreeing on failure.
+
+The hypothesis is that a write/erase failure or a later failure in a multi-output request leaves a false runtime lock, a stale durable lock, or a partial batch despite the returned failure. The trust boundary is the public RPC and wallet interface, `m_locked_coins`, serialized `DBKeys::LOCKED_UTXO` records, SQLite/legacy wallet backends, and subsequent restart/coin-selection observations. Existing functional lock tests cover successful and ordinary validation paths, not injected database failures or a failure after an earlier output in the same request.
+
+### Investigation plan
+
+1. Trace `LockCoin`, `UnlockCoin`, `UnlockAllCoins`, `lockunspent`, database key serialization, callers, and restart loading contracts.
+2. Inject deterministic insert/delete failures for exact `LOCKED_UTXO` rows and record complete pre/post memory and database state for one and multiple outputs.
+3. Verify the failure oracle against the public RPC and direct wallet methods, including persistent-to-temporary transitions, all-coins unlock, and a second-output failure.
+4. If confirmed, make the smallest state-first/rollback-preserving change, add focused tests, run wallet and RPC validation, and check the diff against the documented atomicity contract.
+
+### Cycle 192 findings and fix
+
+The audit confirmed four related defects in the persistent coin-lock state machine:
+
+- `CWallet::LockCoin` called `LoadLockedCoin` before `WriteLockedUTXO`, so an injected insert failure returned false while `m_locked_coins` still contained the output.
+- `CWallet::UnlockCoin` erased the runtime entry before `EraseLockedUTXO`, so an injected delete failure returned false while the durable row remained.
+- `CWallet::UnlockAllCoins` used `success = success && batch.EraseLockedUTXO(coin)`, which short-circuited after the first failed row, then cleared every runtime entry regardless of database results.
+- `LoadLockedCoin` used `emplace`; promoting an already-temporary lock with `LockCoin(output, true)` wrote a durable row but left its map value false, so a later unlock did not erase that row.
+
+The RPC loop also claimed atomicity in its source comment while invoking one-operation batches through the lower-level methods. A failure on the second output could therefore leave the first output locked. The existing `WalletBatch` commit-listener pattern used by nearby wallet state publication provides the contract needed here: write or erase first, publish runtime state only after commit, and keep failed rows unchanged. The RPC now uses one explicit transaction and the wallet exposes batch-aware lock/unlock helpers. `UnlockAllCoins` copies the keys, attempts every row without short-circuiting, and removes only successful entries. Promotion assigns the persistence bit instead of using `emplace`.
+
+### Independent pre-fix evidence
+
+Using `/data/my_storage/tmp/cycle84-build/bin/test_bitcoin` against the unmodified implementation and deterministic SQLite `BEFORE INSERT`/`BEFORE DELETE` triggers:
+
+- `wallet_tests/locked_coin_write_failure_preserves_state`, seed `19201`, exited 201: `check !wallet.IsLockedCoin(coin) has failed`.
+- `wallet_tests/locked_coin_erase_failure_preserves_state`, seed `19202`, exited 201: `check wallet.IsLockedCoin(coin) has failed`.
+- `wallet_tests/unlock_all_coins_failure_preserves_state`, seed `19203`, initially had a test-fixture parse error; after correcting the fixture to `uint256{2}`, it exited 201 with the failed coin cleared and the later row still present.
+- `wallet_tests/lock_coin_promotion_clears_persistent_record`, seed `19204`, exited 201: the persistent row remained after promotion followed by unlock.
+
+The exact row keys were serialized through `DBKeys::LOCKED_UTXO`; the failures were deterministic and did not depend on timing, malformed RPC data, or a live wallet directory.
+
+### Fix and verification
+
+- Added batch-aware `LockCoin` and `UnlockCoin` methods. Database mutation precedes runtime mutation; active transactions register commit callbacks with explicit no-op abort callbacks.
+- Changed direct wrappers to use the batch-aware methods, made persistent promotion overwrite the map value, and made `UnlockAllCoins` preserve failed rows while continuing with later rows.
+- Wrapped explicit-output `lockunspent` updates in one `WalletBatch` transaction. Abort paths roll back database changes and commit callbacks prevent partial runtime publication.
+- Added four direct wallet regressions and one two-output RPC regression. The RPC regression injects failure on the second persistent insert and checks both memory and both database rows.
+- The first post-fix RPC run exposed an empty abort `std::function` (`bad_function_call`); explicit no-op abort lambdas fixed that path before final validation.
+- `git diff --check`: passed.
+- `ninja -C /data/my_storage/tmp/cycle84-build test_bitcoin -j2`: passed after the final source/test changes.
+- `TMPDIR=/data/my_storage/tmp/cycle192-wallet-tests-after-full /data/my_storage/tmp/cycle84-build/bin/test_bitcoin --run_test=wallet_tests --log_level=message --report_level=short --random=19208`: passed, 25 cases and 216 assertions.
+- `TMPDIR=/data/my_storage/tmp/cycle192-wallet-tests-after-rpc2 /data/my_storage/tmp/cycle84-build/bin/test_bitcoin --run_test=wallet_tests/lockunspent_write_failure_is_atomic --log_level=message --report_level=short --random=19207`: passed, 1 case and 11 assertions.
+- `test/functional/wallet_basic.py --configfile=/data/my_storage/tmp/cycle192-functional-config.ini --tmpdir=/data/my_storage/tmp/cycle192-functional-wallet --cachedir=/data/my_storage/tmp/cycle192-functional-cache --randomseed=19209 --loglevel=INFO`: passed, including mining, sendmany, reindex, wallet-broadcast, and descriptor checks.
+
+The focused fault hooks use the mock SQLite backend; Berkeley DB and an externally interrupted on-disk transaction were not exercised. The existing restart persistence path passed through `wallet_basic.py`; the new promotion and injected failure contracts are covered directly in the wallet suite. No unrelated tracked changes were staged or reverted.
+
+### Verdict and handoff
+
+- Confirmed and fixed: coin-lock API failures could desynchronize runtime and durable state, bulk unlock could discard failed locks and skip later work, promotion could strand durable rows, and multi-output `lockunspent` was not atomic despite its contract comment.
+- Prior Goal 27 cells for passphrases, address-book publication, transaction/index transitions, spent markers, `setlabel`, temporary-wallet cleanup, and migration remain closed and were not reopened.
+- Commit the source, tests, and this journal as one self-contained finding commit. Then create the separate state-only close commit with the exact final hashes, checks, and next queue. The next cycle must use a fresh gate and a new random draw.
+
+## Cycle 18: error-path partial-state mutation audit
 ## Selection and gate
 
 - Selector command: `shuf -i 0-98 -n 1`
