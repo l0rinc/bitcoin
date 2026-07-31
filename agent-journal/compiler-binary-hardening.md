@@ -144,3 +144,93 @@ Source commit: `guix: check relocated control-flow targets`, authored as
   Guix-versus-host linker metadata, Windows/macOS artifact coverage, and
   LTO/PGO/BOLT behavior. The next selection must avoid reopening this closed
   x86 relocation cell.
+
+## Cycle 236 - ARM64 ELF branch-protection gate
+
+### Identity and scope
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `91` (`compiler-binary-hardening`);
+  no reroll. Branch: `uber-cycle-236-compiler-binary-hardening-20260731`.
+  Cycle-start HEAD was `7057a8079a14ca7613386cd4539741ee6dacc2bc` (`agent:
+  close cycle 235 handoff`); `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1255`.
+  The fresh gate passed, catalog/prompt/TSV/uber-protocol hashes were exact,
+  tracked/index state was clean, and protected PIDs `777094`, `956381`,
+  `1138182`, and `1157959` remained alive.
+- Cycle 122's libsecp256k1 C-object propagation finding and Cycle 223's x86-64
+  relocation-referenced ENDBR finding were excluded. This cycle targets the
+  separate ARM64 ELF release-check coverage cell.
+
+### Contract and old behavior
+
+The current CMake hardening policy adds `-mbranch-protection=standard` on
+non-Darwin AArch64 targets. The Guix GCC package is also configured with
+`--enable-standard-branch-protection=yes`. For the resulting Linux ARM64 ELF,
+the linker property `GNU_PROPERTY_AARCH64_FEATURE_1_AND` must advertise both
+BTI (bit 0) and PAC (bit 1). `readelf -n` on a direct Clang 19
+`-mbranch-protection=standard` artifact reported `AArch64 feature: BTI, PAC`;
+the same source with `-mbranch-protection=none` had no AArch64 feature note.
+
+Before the fix, `contrib/guix/security-check.py` mapped
+`lief.Header.ARCHITECTURES.ARM64` to `BASE_ELF` only. Its positive and
+negative ARM64 PIE artifacts both passed every registered check, so a release
+binary could omit the branch-protection property while the release gate still
+reported success. This is a configuration-gate false negative: the build
+policy already requests the defense, but final-artifact verification did not
+test it.
+
+### Deterministic independent verification
+
+The artifacts were produced without an ARM64 sysroot using Clang 19's
+AArch64 target and LLD, with the same relevant final-binary controls:
+
+```text
+clang --target=aarch64-linux-gnu -O2 -fPIE -fstack-protector-all \
+  -D_FORTIFY_SOURCE=3 -mbranch-protection=standard -nostdlib -nostartfiles \
+  -nodefaultlibs -fuse-ld=/usr/lib/llvm-19/bin/ld.lld -Wl,-e,main \
+  -Wl,-z,relro,-z,now,-z,separate-code \
+  -Wl,--unresolved-symbols=ignore-all -x c \
+  -o /data/my_storage/tmp/cycle236-aarch64-hardened /dev/stdin
+clang --target=aarch64-linux-gnu -O2 -fPIE -fstack-protector-all \
+  -D_FORTIFY_SOURCE=3 -mbranch-protection=none -nostdlib -nostartfiles \
+  -nodefaultlibs -fuse-ld=/usr/lib/llvm-19/bin/ld.lld -Wl,-e,main \
+  -Wl,-z,relro,-z,now,-z,separate-code \
+  -Wl,--unresolved-symbols=ignore-all -x c \
+  -o /data/my_storage/tmp/cycle236-aarch64-unprotected /dev/stdin
+```
+
+The source used a retained `--monolithic` marker so the existing FORTIFY
+exception applied; both artifacts were PIE, RELRO/NOW, NX-stack, and
+stack-canary controls. Before the source change, running the checker with the
+pinned LIEF 0.17.5 environment exited 0 for both binaries. After the change,
+the hardened artifact exited 0 and the unprotected artifact exited 1 with
+`failed BRANCH_PROTECTION`. Direct calls to the new predicate returned
+`True` and `False` respectively. The repaired ARM64 artifact passed all seven
+registered checks; existing Clang 19 x86 `bitcoind` and `bench_bitcoin`
+artifacts also passed unchanged.
+
+The implementation parses GNU property-note descriptors as little-endian
+`type`, `size`, and padded data records, requires the AArch64 feature property
+to be exactly four bytes with both BTI and PAC bits, and rejects truncated or
+zero-sized unknown records. Synthetic malformed-note controls returned false
+without hanging. The property note is the linker-aggregated AND contract, so
+the check verifies the final artifact rather than relying only on compile-log
+flags.
+
+### Fix, validation, and limits
+
+`check_ELF_BRANCH_PROTECTION` is now registered for ARM64 ELF outputs. No
+runtime Bitcoin code or CMake policy was changed: this closes the release
+checker gap while preserving the existing build policy. `python3 -m
+py_compile contrib/guix/security-check.py`, `git diff --check`, and
+`test/lint/lint-python.py` completed; the latter intentionally skipped mypy
+because it is not installed. No full Guix cross-build, ARM64 execution,
+Windows PE artifact, macOS artifact, or LTO/PGO/BOLT build was available.
+Those remain separate queue cells. The current artifact uses an unresolved
+libc/sysroot-independent link only to isolate the checker contract; it is not
+presented as a release binary.
+
+Verdict: **confirmed and fixed**. The next selection must not repeat this
+ARM64 ELF property cell; remaining Goal 91 cells are Guix-versus-host linker
+metadata, Windows/macOS artifact coverage, and LTO/PGO/BOLT behavior.
