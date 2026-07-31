@@ -2,6 +2,60 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 179 Completion
+
+- Cycle 179 selected goal `26` (`cross-subsystem-bug-shapes`) from the exact
+  post-Cycle-178 selector `shuf -i 0-98 -n 1` -> `26`; no reroll was needed
+  because this goal's addnode boundary had new cross-interface evidence. The
+  dedicated branch is
+  `uber-cycle-179-cross-subsystem-bug-shapes-20260731`; its fresh start HEAD
+  was `faea6970280eaba14b9fd8b5783160036c538066`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `42 1144`.
+  Catalog, prompt, corrected TSV, protocol, and start-state hashes were
+  unchanged. Persistent untracked artifacts were preserved, and PIDs
+  `777094` and `956381` were not modified.
+
+- The cross-subsystem queue compared persistence/recovery fixes, public
+  parser and API boundaries, queue/resource accounting, and lifecycle/error
+  cleanup. Historical seeds `69465de447` (startup `-addnode`) and
+  `90ce21e21d` (RPC `addnode`) exposed one remaining local gap: `-addnode`
+  copied empty values into the persistent manual target list, while RPC
+  `addnode` accepted an empty or whitespace-only target. The pre-fix live
+  regtest repro showed `getaddednodeinfo` retaining `"addednode": ""` and
+  the RPC path accepting the empty entry; a duplicate then returned the
+  expected already-added error. The trust boundary is local configuration or
+  authenticated RPC, with impact on invalid persistent state, repeated
+  failed connection work, and delayed fixed-seed fallback discovery.
+
+- Source/evidence commit
+  `538ea11f2311b5b118aa389d38d8fb48b58631b0` (`net: reject empty addnode
+  targets`) is authored as `Lőrinc <pap.lorinc@gmail.com>`. It trims and
+  ignores empty startup values with a warning, rejects empty RPC values with
+  `RPC_INVALID_PARAMETER`, and adds focused functional coverage for empty and
+  whitespace-only inputs. Existing related fixes for `-seednode` and
+  `-connect` were used as controls; no semantic or hash duplicate of this
+  addnode source/test path was found.
+
+- Verification passed: `git diff --check`; Python compilation of both changed
+  functional tests; incremental `bitcoind`/`bitcoin-cli` build; focused
+  `test_empty_addnode` and `test_addnode_getaddednodeinfo`; and the complete
+  `feature_config_args.py` and `rpc_net.py` suites. A second caller audit
+  found only init and RPC as persistent `AddNode` production callers;
+  hidden `addconnection` is a one-shot regtest helper and does not retain or
+  retry a target. Scratch daemons were stopped after the fallback-control
+  probe.
+
+- Verdict: confirmed and fixed; no additional independent cross-subsystem
+  defect was confirmed in this cycle. The selected journal
+  `agent-journal/cross-subsystem-bug-shapes.md` contains the exact source
+  trace, repro, control, validation, limitations, and handoff. This is the
+  separate state-only close record for Cycle 179. The next action is
+  `git fetch origin master`, a fresh gate including hashes, dirty state,
+  process preservation, and storage capacity, followed by the exact
+  selector; reroll only if the draw is explicitly closed in this
+  authoritative ledger.
+
 ## Cycle 178 Completion
 
 - Cycle 178 selected goal `98` (`float-sanitizer-fuzz-exclusions`) from the
