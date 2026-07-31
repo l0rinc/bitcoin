@@ -50,3 +50,97 @@ The clean Clang 19 Release baseline `/data/my_storage/tmp/cycle105-clang19-relea
 ### Verdict and next queue
 
 Confirmed and fixed: libsecp256k1 C objects were outside the unconditional hardening policy even though they are linked into hardened Bitcoin Core executables. The source patch is ready for one self-contained commit. Remaining distinct cells are the LIEF control-flow check's per-function/property coverage, Guix versus local toolchain parity, Windows/macOS hardening metadata, and LTO/PGO/BOLT behavior.
+
+## Cycle 223 - relocation-referenced control-flow targets
+
+### Identity and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `91` (`compiler-binary-hardening`);
+  no reroll. Branch: `uber-cycle-223-compiler-binary-hardening-20260731`.
+  Start HEAD was `ee5e8b6e54500181f5c1ec6c70c43cda0f202709`; `origin/master`
+  was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1232`.
+- Catalog SHA-256 was
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`;
+  prompt, TSV, and uber-protocol hashes were unchanged. Tracked state was
+  clean at the gate apart from known untracked agent artifacts. Protected
+  PIDs `777094`, `956381`, `1138182`, and `1157959` remained alive.
+- The Cycle 122 libsecp256k1 propagation finding was closed and excluded.
+  This cycle selected its independent remaining cell: release checker
+  coverage for control-flow hardening.
+
+### Hypothesis and applicability
+
+`contrib/guix/security-check.py` checked x86-64 control-flow instrumentation by
+reading four bytes only at the `main` symbol. A release binary could therefore
+retain an `endbr64` at `main` while an address-taken function lacked an
+`endbr64`, and the release gate would still pass. This is a real configuration
+failure, not only a pattern-match concern: an indirect call to that function
+is exactly the control-flow transfer that Intel CET IBT is intended to guard.
+
+The repository pins LIEF `0.17.5` in `ci/lint/requirements.txt`; that wheel was
+installed only under `/data/my_storage/tmp/cycle223-lief`. Existing release-like
+`bitcoind` and `bench_bitcoin` binaries were used as positive controls. The
+current checker returned exit 0 for both before and after the change.
+
+### Independent regression probe
+
+The scratch probe
+`/data/my_storage/tmp/cycle223-hardening/indirect-nocf-target` was compiled
+with GCC using `-O2 -fcf-protection=full -fstack-protector-all -fPIE -pie
+-D_FORTIFY_SOURCE=3 -Wl,-z,relro,-z,now,-z,ibt`. It contains a
+`noinline,nocf_check` function stored in a volatile callback and invoked by an
+indirect call. The binary has an IBT GNU property and these entry bytes:
+
+- `main` at `0x1080`: `f3 0f 1e fa` (`endbr64`)
+- `unprotected` at `0x11e0`: `48 83 ec 38` (no `endbr64`)
+- relocation `R_X86_64_RELATIVE` at `0x4010` materializes addend `0x11e0`.
+
+The unmodified checker returned exit 0 for this binary. A second
+`-fcf-protection=none` binary failed the existing `main` check, proving the
+negative control was sensitive to the original condition. The counterexample
+also contains indirect `call *%rax` instructions. Its process returned 0 on
+this host, so no claim is made about kernel CET enforcement; the ELF property,
+relocation, instruction bytes, and call target establish the checker false
+negative independently.
+
+### Fix
+
+`check_ELF_CONTROL_FLOW` still checks `main`, then builds the set of LIEF
+function addresses and resolves each remaining relocation's `addend` plus
+symbol value. When a relocation materializes a known function address, its
+first four bytes must also be `endbr64`. This avoids rejecting `_start`, CRT
+helpers, and PLT stubs that are not represented by address materialization,
+while catching the callback shape above. The implementation is intentionally
+limited to the existing x86-64 check; it does not pretend to prove every
+possible jump-table or architecture-specific indirect target.
+
+Source commit: `guix: check relocated control-flow targets`, authored as
+`Lőrinc <pap.lorinc@gmail.com>`. The diff is 21 insertions and 4 deletions in
+`contrib/guix/security-check.py`; no production Bitcoin runtime code changed.
+
+### Verification
+
+- `PYTHONPATH=/data/my_storage/tmp/cycle223-lief python3
+  contrib/guix/security-check.py /data/my_storage/tmp/cycle122-clang19-release/bin/bitcoind`
+  exited 0 after the change.
+- The same command on
+  `/data/my_storage/tmp/cycle105-clang19-release/bin/bench_bitcoin` exited 0.
+- The indirect callback probe exited 1 with `failed CONTROL_FLOW` after the
+  change; the fully uninstrumented `no-cf-main` probe also exited 1.
+- Direct Python `compile(...)` of the script and `git diff --check` passed.
+  `test/lint/lint-python.py` exited 0 but skipped mypy because it is not
+  installed; LIEF was present at the pinned 0.17.5 version.
+- No full Guix cross-build, PE build, Mach-O build, or ARM64 ELF artifact was
+  available in this environment. These remain explicit limitations rather
+  than inferred passes.
+
+### Verdict and handoff
+
+- **Confirmed and fixed:** the release security gate had a control-flow
+  instrumentation false negative for relocation-referenced indirect targets.
+  The fix is self-contained and preserves positive and negative controls.
+- Remaining distinct cells are ARM64 ELF branch-protection/property checking,
+  Guix-versus-host linker metadata, Windows/macOS artifact coverage, and
+  LTO/PGO/BOLT behavior. The next selection must avoid reopening this closed
+  x86 relocation cell.
