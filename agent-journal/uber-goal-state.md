@@ -3227,3 +3227,36 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - Next action: after this state-close commit, run the fresh gate and exact
   selector draw, create `uber-cycle-237-*`, and preserve all unrelated
   untracked artifacts.
+
+## Cycle 237 close: Goal 5, current count and offset contracts
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `5` (`boundary-off-by-one`); no reroll.
+  Branch: `uber-cycle-237-boundary-off-by-one-20260731`. Cycle-start HEAD was
+  `7d0c8fe9a440d098b13780315ff364de851309f9`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1257`.
+  The fresh gate passed, stable catalog/prompt/TSV/protocol hashes matched,
+  and protected long-running processes remained alive.
+- The cycle audited `getnodeaddresses`, `AddrManImpl::GetAddr_`, the
+  prefilled-vector contract of `FindNextBlocks`, empty P2WSH witness handling,
+  descriptor derivation endpoints, the wallet multisig solution loop, the
+  fee-estimator inclusive loop, and coin-selection endpoints. No reachable
+  off-by-one or endpoint defect was confirmed. The unsigned
+  `count - vBlocks.size()` expression in `FindNextBlocks` remains an explicit
+  internal-contract limitation: current production callers preserve the
+  precondition, so no speculative defensive patch was justified.
+- Functional validation passed for `rpc_net.py`, `p2p_segwit.py`, and
+  `rpc_deriveaddresses.py`. Focused unit validation passed: `net_tests` 36
+  cases/154850 assertions, `addrman_tests` 28 cases, `coinselection_tests` 4
+  cases/1005 assertions, `txrequest_tests` 5 cases/294681 assertions,
+  `transaction_tests` 18 cases/23817 assertions, and
+  `script_standard_tests` 8 cases/199 assertions. `git diff --check` passed.
+  Initial `rpc_net.py` setup/cache failures were scratch-environment failures;
+  the corrected cached run passed and no source state was affected.
+- Verdict: **dismissed/inconclusive; no source change**. The selected journal
+  commit is `8fd666950d` (`journal: close cycle 237 boundary audit`), authored
+  as `Lőrinc <pap.lorinc@gmail.com>`. The next run must perform a fresh gate,
+  preserve unrelated untracked artifacts, draw exactly one selector with
+  `shuf -i 0-98 -n 1`, and choose a distinct count/offset surface without
+  repeating these dismissed network/address/descriptor cases absent new
+  reachability evidence.
