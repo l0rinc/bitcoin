@@ -343,3 +343,31 @@ Changed files:
 The hypothesis is **confirmed as a stateful fuzz-harness reachability gap, not a production defect**. The fuzzer now drives a nonempty `DumpMempool` through a real commit failure and checks the failure-state contract. The permanent source/test change is limited to the fuzz target and this journal.
 
 Limitations: the direct `/dev/full` injection is Linux-specific; non-Linux builds retain the null-provider failure assertion but do not claim commit-branch coverage. The full unit suite was not rerun because production code was unchanged and the dedicated coverage plus ASan/UBSan corpus replays supplied focused validation. Next distinct Goal 61 cells are deterministic `LoadMempool` validation-interrupt state, then txdownload request/output models after package or reorg transitions. Do not reopen the closed AddrMan, raw tx_pool, or process-message cells without new evidence.
+
+## Cycle 220: `LoadMempool` validation-interrupt state
+
+### Gate, scope, and prior cells
+
+- Date: 2026-07-31 UTC. Exact selector: `shuf -i 0-98 -n 1` -> `61` (`stateful-contract-fuzzer`); no reroll. Branch: `uber-cycle-220-stateful-contract-fuzzer-20260731`.
+- Start HEAD was `1ae0016732d99a39fa92b5ca5bc29b03c9a201f2`; `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1227 42`. The pre-cycle uber-state hash was `b1026e5d7cd2152079901acbffa0c4efabe9b0376e98b5929c361bf5d87ec9e3`. Catalog, prompt, TSV, and protocol hashes were unchanged. Protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained alive and untouched; `/` had about 5.7 MiB free and `/data` about 34 GiB free.
+- Cycle 219 closed the nonempty `DumpMempool` commit-failure cell. The next distinct Goal 61 queue item was the interrupt branch in `LoadMempool`, which checks `m_chainman.m_interrupt` after each transaction and before importing fee-delta and unbroadcast metadata.
+
+### Hypothesis and change
+
+- Hypothesis: the production-backed `validation_load_mempool` target could load and round-trip mempool files but never set the real chainman interrupt, leaving partial transaction state and the metadata-not-applied failure contract untested. The expected state is a false return after the first attempted transaction, exactly one accepted transaction in a fresh pool, the first serialized transaction preserved, and no metadata imported when both metadata options are disabled.
+- Baseline LLVM coverage from the pre-cycle full QA profile `/data/my_storage/tmp/cycle219-validation-full-corpus-profile/full-corpus.profdata` showed the interrupt condition at `src/node/mempool_persist.cpp:156` evaluated 492k times but lines 157-158 (`check_disabled_metadata_unchanged()` and `return false`) were hit zero times.
+- After the existing v2 round-trip dump is written, the target now captures its first transaction, creates a fresh `CTxMemPool`, switches the `DummyChainState` to it, raises the real `g_setup->m_interrupt`, and calls `LoadMempool` with `use_current_time=true`, `apply_fee_delta_priority=false`, and `apply_unbroadcast_set=false`. It asserts the false result, resets the signal, checks exactly one entry and the expected first txid, checks empty prioritisation and unbroadcast state, validates the mempool contract, and restores the original pool. No production source changed.
+
+### Verification
+
+- The first build attempt failed only because ccache tried to create the missing `/root/.cache/ccache/tmp`. Rebuilding both fuzz configurations with `CCACHE_DIR=/data/my_storage/tmp/cycle220-ccache` succeeded; the coverage and ASan/UBSan/libFuzzer targets both linked.
+- The fixed one-byte QA seed `73b74736664ad85828ce1be2e29fb4a68d24402b` passed one replay in the coverage build at 1,688 MB peak RSS. Its merged profile hit lines 157-158 once.
+- The full available `validation_load_mempool` corpus, 1,674 files and 122,866,874 bytes, passed 1,675 executions in 161 seconds at 1,688 MB peak RSS with exit 0 and no assertion, crash, or sanitizer diagnostic. Its merged profile hit lines 157-158 1,670 times; the condition was evaluated 494k times.
+- The ASan/UBSan/libFuzzer build passed the fixed seed with `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1` and `UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1`, completing 2 executions at 1,697 MB peak RSS. The 16-file stratified QA sample completed 17 executions in 6 seconds at 1,699 MB peak RSS. Neither run reported ASan, UBSan, leak, assertion, crash, or hang diagnostics.
+- `git diff --check` passed. No online PR or external report was used as an oracle; the contract came from `LoadMempool`, `SignalInterrupt`, the existing snapshot helpers, and the full-corpus baseline.
+
+### Verdict and handoff
+
+The hypothesis is **confirmed as a stateful fuzz-harness reachability gap, not a production defect**. The fuzzer now exercises and checks the real validation-interrupt return path, partial transaction application, metadata preservation, and chainstate cleanup. The permanent source/test change is limited to `src/test/fuzz/validation_load_mempool.cpp` and this journal.
+
+Limitations: the full unit suite was not rerun because production code was unchanged and the dedicated coverage plus sanitizer replays supplied focused validation; root storage remained critically full, so artifacts are under `/data/my_storage/tmp/cycle220-*`. The exact-one-entry oracle depends on the target's deterministic nonempty dump and `use_current_time=true`, and was validated against the full available corpus. Next distinct Goal 61 work is txdownload request/output modeling after package or reorg transitions. Do not reopen the closed dump-commit, AddrMan, raw `tx_pool`, or process-message cells without new evidence.

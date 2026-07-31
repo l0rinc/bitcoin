@@ -314,6 +314,26 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
     Assert(DumpMempool(pool, roundtrip_path));
     Assert(ReadDumpVersion(roundtrip_path) == 2);
 
+    const auto expected_first_txid{pool.infoAll().front().tx->GetHash()};
+    bilingual_str interrupt_error;
+    CTxMemPool interrupt_pool{MemPoolOptionsForTest(g_setup->m_node), interrupt_error};
+    Assert(interrupt_error.empty());
+    chainstate.SetMempool(&interrupt_pool);
+    Assert(g_setup->m_interrupt());
+    Assert(!LoadMempool(interrupt_pool, roundtrip_path, chainstate,
+                        {
+                            .use_current_time = true,
+                            .apply_fee_delta_priority = false,
+                            .apply_unbroadcast_set = false,
+                        }));
+    Assert(g_setup->m_interrupt.reset());
+    Assert(interrupt_pool.size() == 1);
+    Assert(interrupt_pool.infoAll().front().tx->GetHash() == expected_first_txid);
+    Assert(SnapshotPrioritisations(interrupt_pool).empty());
+    Assert(interrupt_pool.GetUnbroadcastTxs().empty());
+    AssertMempoolPersistContracts(interrupt_pool, chainstate);
+    chainstate.SetMempool(&pool);
+
     const fs::path v1_roundtrip_path{g_setup->m_args.GetDataDirBase() / "validation_load_mempool_roundtrip_v1.dat"};
     fs::remove(v1_roundtrip_path);
     fs::remove(v1_roundtrip_path + ".new");
