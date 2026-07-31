@@ -1,5 +1,71 @@
 # Fuzz-engine and property-framework differential
 
+## Cycle 175 start: transport serialization engine comparison
+
+### Selection and fresh gate
+
+- The exact post-Cycle-174 selector was `shuf -i 0-98 -n 1` -> `80`
+  (`fuzz-engine-differential`). The draw was retained because the previous
+  Goal-80 cells are target-specific and this cycle selects the distinct
+  transport serialization family; no closed target cell was rerolled.
+- Branch: `uber-cycle-175-fuzz-engine-differential-20260730`.
+- Start HEAD: `f71a04625cb23d54825a5d80a08b8cf729f6175c`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence:
+  `origin/master...HEAD = 42 1132`.
+- The fresh gate passed the post-close origin fetch, tracked/index diff
+  checks, catalog/prompt/TSV/protocol hash checks, and persistent-process
+  check. PIDs `777094` and `956381` are unrelated long-running tests and must
+  not be stopped. Known untracked agent/user artifacts remain preserved. The
+  root filesystem has about 102 MiB free; all new build, corpus, and log data
+  must stay under `/data/my_storage/tmp` and broad builds are out of scope.
+
+### Scope and exclusions
+
+Cycles 8, 79, and 131 closed the exact `bech32_roundtrip`, `parse_numbers`,
+and `descriptor_parse` engine/corpus cells. Cycle 171 closed the persistent
+`process_messages`/`process_message` reset cell after fixing mocked-socket and
+mempool state leakage. Cycle 139 used a single current-head
+`p2p_transport_serialization` sanitizer replay as part of a network-state
+campaign, but it did not compare libFuzzer, AFL++, and Honggfuzz on a shared
+transport corpus; that replay is evidence for seed reuse only, not a closed
+engine-differential cell. FuzzTest remains unavailable locally and has no
+repository integration, so it will be recorded as an availability result.
+
+The selected family is the current production transport harness in
+`src/test/fuzz/p2p_transport_serialization.cpp`: the one-way V1 parser and
+round-trip path, plus `p2p_transport_bidirectional`,
+`p2p_transport_bidirectional_v2`, and `p2p_transport_bidirectional_v1v2`.
+The falsifiable hypothesis is that engine scheduling, persistent-loop
+handling, input corpus transfer, or harness initialization can expose a
+transport assertion, crash, hang, timeout, or semantic round-trip mismatch
+that is not found by one sanitizer fuzzer. Native coverage counters are
+engine-specific and will not be treated as equal units.
+
+### Cycle protocol and initial queue
+
+1. Build current HEAD with Clang 19 libFuzzer/ASan+UBSan, AFL++, and
+   Honggfuzz where local wrappers support the same dispatcher. Record compiler,
+   target binary hashes, flags, target selector, and tool versions. Reuse
+   existing `/data` build trees only after verifying they are rebuilt from the
+   current source; do not use stale binaries as current-head evidence.
+2. Create one small deterministic corpus covering empty/truncated headers,
+   valid and invalid message types, checksum/magic combinations, fragmented
+   bytes, zero/maximal payloads, V1 round trips, and V2 key/garbage/entropy
+   paths. Use identical copies, max input, worker count, RSS limit, and fixed
+   budgets for every engine. Separate startup/dry-run time from feedback-loop
+   measurements.
+3. Run the one-way target and the three bidirectional variants under each
+   available engine. Preserve executions, native coverage/corpus signals, RSS,
+   crashes, hangs, timeout diagnostics, and repeatability. Transfer every
+   engine-produced input through a current Clang 19 ASan+UBSan oracle and
+   compare the target's explicit round-trip assertions.
+4. If a failure appears, minimize it and replay it in a fresh process and
+   through the smallest production transport boundary. A source change needs a
+   failing-before/passing-after regression or equivalent mutation proof. If no
+   source defect appears, close with exact metrics, tool limitations, raw
+   artifact paths, and a new untouched transport/property cell.
+
 ## Cycle 171 start: stateful process_messages engine comparison
 
 ### Selection and fresh gate
