@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <index/base.h>
 #include <index/coinstatsindex.h>
 #include <interfaces/chain.h>
 #include <script/script.h>
@@ -11,6 +12,62 @@
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
+
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <thread>
+
+namespace {
+
+class ReinitGateIndex final : public BaseIndex
+{
+public:
+    ReinitGateIndex(std::unique_ptr<interfaces::Chain> chain, const fs::path& db_path)
+        : BaseIndex(std::move(chain), "reinit-gate", "reinitgate"),
+          m_db(std::make_unique<DB>(db_path, 1_MiB))
+    {
+    }
+
+    void BlockNextInit()
+    {
+        m_block_init.store(true);
+        m_release_init.store(false);
+        m_init_entered.store(false);
+    }
+
+    void WaitForInit()
+    {
+        while (!m_init_entered.load()) std::this_thread::yield();
+    }
+
+    void ReleaseInit()
+    {
+        m_release_init.store(true);
+    }
+
+protected:
+    bool AllowPrune() const override { return true; }
+
+    bool CustomInit(const std::optional<interfaces::BlockRef>&) override
+    {
+        if (m_block_init.load()) {
+            m_init_entered.store(true);
+            while (!m_release_init.load()) std::this_thread::yield();
+        }
+        return true;
+    }
+
+    DB& GetDB() const override { return *m_db; }
+
+private:
+    std::unique_ptr<DB> m_db;
+    std::atomic<bool> m_block_init{false};
+    std::atomic<bool> m_init_entered{false};
+    std::atomic<bool> m_release_init{false};
+};
+
+} // namespace
 
 // Tests of generic BaseIndex functionality that is independent of which
 // concrete index is being used. CoinStatsIndex is used here merely as a
@@ -57,6 +114,48 @@ BOOST_FIXTURE_TEST_CASE(baseindex_no_commit_ahead_of_flush, TestChain100Setup)
     // state deterministic.
     CreateAndProcessBlock({}, CScript() << OP_TRUE);
     sync_index(false, 101, 100);
+}
+
+// Reinitialization is used while RPC/REST callers remain available during
+// snapshot activation. They must not observe the old synced flag before the
+// index-specific state has been restored by CustomInit().
+BOOST_FIXTURE_TEST_CASE(baseindex_reinit_not_synced_during_custom_init, TestChain100Setup)
+{
+    Chainstate& chainstate = Assert(m_node.chainman)->ActiveChainstate();
+    ReinitGateIndex index{interfaces::MakeChain(m_node),
+                          m_args.GetDataDirNet() / "indexes" / "reinit-gate"};
+    BOOST_REQUIRE(index.Init());
+    index.Sync();
+
+    chainstate.ForceFlushStateToDisk();
+    m_node.chain->context()->validation_signals->SyncWithValidationInterfaceQueue();
+
+    index.Stop();
+    BOOST_CHECK(!index.BlockUntilSyncedToCurrentChain());
+    index.BlockNextInit();
+    std::atomic<bool> init_ok{false};
+    std::thread init_thread{[&] { init_ok.store(index.Init()); }};
+    index.WaitForInit();
+
+    std::atomic<bool> query_done{false};
+    std::atomic<bool> query_result{true};
+    std::thread query_thread{[&] {
+        query_result.store(index.BlockUntilSyncedToCurrentChain());
+        query_done.store(true);
+    }};
+    const auto query_deadline{std::chrono::steady_clock::now() + std::chrono::seconds(1)};
+    while (!query_done.load() && std::chrono::steady_clock::now() < query_deadline) {
+        std::this_thread::yield();
+    }
+    const bool query_completed_during_init{query_done.load()};
+
+    index.ReleaseInit();
+    init_thread.join();
+    query_thread.join();
+    BOOST_REQUIRE(init_ok.load());
+    BOOST_CHECK(query_completed_during_init);
+    BOOST_CHECK(!query_result.load());
+    index.Stop();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

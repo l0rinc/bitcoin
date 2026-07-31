@@ -61,6 +61,94 @@ failing-before oracle, and a repaired or invariant-preserving control before
 changing production code. Keep all scratch datadirs and databases under
 `/data/my_storage/tmp`.
 
+## Cycle 180 finding: stale synced flag during index reinitialization
+
+### Candidate, contract, and caller trace
+
+The reinitialization relationship is `(validation registration, m_synced,
+m_best_block_index, subclass state)`. A stopped or reinitializing index must
+not advertise itself as synchronized until `CustomInit()` has restored its
+database-backed state and `Init()` has completed. If it reports false, the
+public caller may return an index-unavailable response; it must not block on a
+partially initialized index or classify a failed lookup as index corruption.
+
+The current `BaseIndex::Stop()` unregisters the validation interface and joins
+the sync thread but leaves `m_synced` unchanged. On restart, `Init()` reads the
+persisted best-block locator, holds `cs_main` while it calls `CustomInit()`,
+and only assigns the new `m_synced` value after `CustomInit()` returns. Thus a
+previously synced index can remain visibly synced while its subclass state is
+being reconstructed. The snapshot completion callback in `src/init.cpp`
+explicitly performs `Interrupt()`, `Stop()`, `Init()`, and
+`StartBackgroundSync()` while RPC/REST services remain available. Relevant
+readers include the block-filter REST endpoints, `gettxoutsetinfo`, the
+mempool spender lookup, raw-transaction/PSBT/txout-proof paths, and the index
+readiness RPC summary.
+
+This is distinct from `bc3db5ef52` (Cycle 174's earlier restart audit), which
+published `m_chainstate` under `cs_main` and protected block-file opens but did
+not reset the lifecycle flag. The existing index reinit reader stress tests
+only exercised data races and did not force a reader to cross the
+`CustomInit()` readiness boundary.
+
+### Independent pre-fix reproduction
+
+A disposable `ReinitGateIndex` test subclass persisted a best block at height
+100, stopped a synced index, and blocked the second `CustomInit()` while it
+held `cs_main`. A concurrent reader called
+`BlockUntilSyncedToCurrentChain()`. With the production change absent, the
+reader could not complete during reinitialization because the stale true flag
+made it wait for `cs_main`; after the gate was released, it returned true even
+though the read began before initialization completed. The bounded test then
+failed both contract checks: `query_completed_during_init` and
+`!query_result.load()`.
+
+The final pre-fix command was:
+
+    TMPDIR=/data/my_storage/tmp/cycle180-test-tmp /data/my_storage/tmp/cycle89-build/bin/test_bitcoin --run_test=baseindex_tests/baseindex_reinit_not_synced_during_custom_init --catch_system_errors=no --color_output=false --log_level=test_suite --report_level=short
+
+It exited 201 with the two expected assertion failures. An earlier direct
+call was intentionally discarded as a harness setup result: it blocked on
+the same `cs_main` lock and was replaced by the bounded reader control.
+
+### Repair and verification
+
+`BaseIndex::Init()` now clears `m_synced` before registration, database
+loading, and subclass initialization. `BaseIndex::Stop()` clears it before
+unregistration and again after the sync-thread join, covering both the
+stop/restart interval and a worker that exits while stopping. The regression
+test asserts false after `Stop()` and checks that a concurrent readiness call
+completes false while gated `CustomInit()` is still active.
+
+The source/test diff was checked with `git diff --check` and built with:
+
+    CCACHE_DIR=/data/my_storage/tmp/cycle180-ccache TMPDIR=/data/my_storage/tmp/cycle180-build-tmp cmake --build /data/my_storage/tmp/cycle89-build --target test_bitcoin -j2
+
+Normal focused suites passed: `baseindex_tests` 2 cases/17 assertions,
+`coinstatsindex_tests` 2/14, `txindex_tests` 3/129,
+`txospenderindex_tests` 3/1,086, and `blockfilter_index_tests` 5/1,851.
+The current Clang 19 TSan build passed the new gated test with 5 assertions
+and the existing `txindex_reinit_reader_race`,
+`txospenderindex_reinit_reader_race`, and
+`blockfilter_index_tests/index_reinit_reader_race` controls with 2, 3, and 2
+assertions respectively, with no TSan diagnostic. The Clang 19 UBSan build
+passed the new test and all five complete index suites with the same assertion
+counts and no sanitizer diagnostic. The full normal unit run used seed 180:
+1,232 cases passed, one existing filesystem-injection warning was reported,
+and all 27,115,698 assertions passed.
+
+### Verdict and limits
+
+Confirmed and fixed as a local lifecycle/readiness availability defect. The
+trust boundary is authorized local snapshot/index restart activity plus
+concurrent RPC/REST callers; no unauthenticated network trigger, consensus
+effect, wallet/key loss, or persisted-index corruption was demonstrated. The
+test models the production callback's gated subclass initialization rather
+than running a full assumeutxo download/restart integration. The remaining
+distinct Goal 57 cells are cross-index database failure injection and
+physical filter-file corruption beyond the existing block-hash/checksum
+checks. The source, regression test, and this evidence record are ready for
+one self-contained commit.
+
 ## Cycle 174 start: cross-domain lifecycle and snapshot relationships
 
 ### Fresh selection and gate
