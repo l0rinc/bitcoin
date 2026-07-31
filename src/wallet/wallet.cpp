@@ -2794,7 +2794,7 @@ bool CWallet::LockCoin(WalletBatch& batch, const COutPoint& output, bool persist
 
     if (persist && !batch.WriteLockedUTXO(output)) return false;
 
-    auto update_in_memory = [this, output, persist] {
+    auto update_in_memory = [this, output, persist]() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) {
         AssertLockHeld(cs_wallet);
         m_locked_coins[output] = persist;
     };
@@ -2822,7 +2822,7 @@ bool CWallet::UnlockCoin(WalletBatch& batch, const COutPoint& output)
     const bool persisted = locked_coin_it->second;
     if (persisted && !batch.EraseLockedUTXO(output)) return false;
 
-    auto update_in_memory = [this, output] {
+    auto update_in_memory = [this, output]() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) {
         AssertLockHeld(cs_wallet);
         m_locked_coins.erase(output);
     };
@@ -2953,7 +2953,7 @@ bool CWallet::SetAddressPreviouslySpent(WalletBatch& batch, const CTxDestination
 
     if (!batch.WriteAddressPreviouslySpent(dest, used)) return false;
 
-    auto update_in_memory = [this, dest, used] {
+    auto update_in_memory = [this, dest, used]() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) {
         AssertLockHeld(cs_wallet);
         if (used) {
             LoadAddressPreviouslySpent(dest);

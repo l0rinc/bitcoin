@@ -140,3 +140,114 @@ To isolate the production TokenPipe code from that startup boundary, `agent-jour
 The smallest fix maps `EPIPE` to `TS_EOS` before the generic error branch. The POSIX-only `util_tests/tokenpipe_end_of_stream` regression checks successful token transfer, reader EOF after writer close, and writer EOF after reader close while restoring the process `SIGPIPE` handler on setup failure. The fixed focused normal run passed 6/6 assertions, the full `util_tests` suite passed 79 cases and 3,991 assertions, and the focused TSan/UBSan run passed 6/6 assertions without diagnostics. Temporarily removing only the EPIPE mapping rebuilt the parent implementation and made the new regression fail at `-1 != -2`, exit 201, with the other five assertions passing; the mapping was restored before validation continued.
 
 The fixed translation unit passed direct `scan-build-19 --status-bugs` with zero plist diagnostics and GCC 12 `-fanalyzer -fsyntax-only` with no warning. Valgrind, clang-tidy, cppcheck, Semgrep, and CodeQL are unavailable in this environment. No suppression was changed. The finding is confirmed and fixed; no other new sanitizer/analyzer defect was identified in the reopened cells. No relevant process remains running.
+
+## Cycle 217: wallet-enabled sanitizer and lock-contract matrix
+
+### Selection, gate, and distinct scope
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `36` (`sanitizer-analysis-matrix`); no
+  reroll. Branch: `uber-cycle-217-sanitizer-analysis-matrix-20260731`.
+- Start HEAD: `e4e2bc805c2d5ed7cb422c698a928fb98dc4227b`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was 42 behind
+  and 1221 ahead. The fresh gate passed and protected processes remained
+  untouched. Catalog, prompt, TSV, and protocol hashes matched the prior gate;
+  state hash at entry was
+  `5f7d1a05249026ee4d3638da159312091f31fdbb4984f2e75fc84ba96d298f38`.
+- Cycles 26 and 78 already covered the core-only Clang/GCC sanitizer slices,
+  the original GCC analyzer cluster, and the MSan/TokenPipe repair. This cycle
+  selected the current wallet-enabled Clang ASan/UBSan path and a wallet-module
+  static-analysis comparison, excluding those exact cells. IPC stayed off
+  because the prior Clang 19 matrix recorded the Cap'n Proto compatibility
+  boundary.
+
+### Runtime sanitizer matrix
+
+The isolated configuration used Clang 19.1.7, RelWithDebInfo, wallet and
+external signer enabled, IPC disabled, tests enabled, and
+`-DSANITIZERS=address,undefined`. The 510-step build completed and linked
+`/data/my_storage/tmp/cycle217-sanitizer-wallet/bin/test_bitcoin` with no ASan,
+UBSan, LSan, or runtime-error marker. The build log is
+`/data/my_storage/tmp/cycle217-sanitizer-wallet/build.log`.
+
+Before the source change, separate deterministic runs passed under
+`ASAN_OPTIONS=abort_on_error=1:symbolize=1:detect_leaks=1:check_initialization_order=1`
+and the repository UBSan suppressions:
+
+| Suite | Cases | Assertions |
+| --- | ---: | ---: |
+| `wallet_tests` | 26 | 220 |
+| `walletdb_tests` | 2 | 5 |
+| `walletload_tests` | 1 | 6 |
+| `wallet_crypto_tests` | 3 | 3335 |
+| `wallet_transaction_tests` | 1 | 50 |
+| `wallet_rpc_tests` | 1 | 9 |
+| `scriptpubkeyman_tests` | 20 | 191 |
+| `spend_tests` | 6 | 42 |
+
+The annotation-only rebuild then completed six steps, and the post-change
+wallet, walletdb, walletload, wallet RPC, and scriptpubkeyman suites passed:
+`26/220`, `2/5`, `1/6`, `1/9`, and `20/191`. No sanitizer diagnostic appeared
+in any run. Each suite used a separate `TMPDIR` below
+`/data/my_storage/tmp/cycle217-sanitizer-annotated-*`.
+
+### Static-analysis finding: transaction-listener lock contract was implicit
+
+The first current wallet `scan-build-19` pass built all 32 wallet-library
+steps and linked `libbitcoin_wallet.a`. It deposited zero plist reports, but
+Clang emitted seven `-Wthread-safety` warnings at `src/wallet/wallet.cpp`:
+
+- `LockCoin(WalletBatch&, ...)`'s `on_commit` lambda read and wrote
+  `m_locked_coins` without an annotated lock contract at lines 2798-2799;
+- `UnlockCoin(WalletBatch&, ...)` had the same issue at lines 2826-2827;
+- `SetAddressPreviouslySpent(...)`'s callback called the lock-required
+  `LoadAddressPreviouslySpent` and accessed `m_address_book` at lines
+  2957-2960.
+
+The warnings were not a runtime failure. The source contracts declare all
+three functions `EXCLUSIVE_LOCKS_REQUIRED(cs_wallet)`. `WalletBatch::TxnCommit`
+invokes registered listeners synchronously before returning, and current
+registrations are made while that lock is held: `lockunspent` takes
+`LOCK(pwallet->cs_wallet)`, `AddToWallet` takes `LOCK(cs_wallet)`, and the
+existing `RemoveTxs` callback uses the same annotated-lambda pattern. The
+nearby address-book callback already takes an explicit lock. Thus the warning
+identified an unexpressed static contract, not an observed unlocked execution.
+
+The smallest fix adds `() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet)` to the three
+callbacks. It changes no runtime behavior and adds no suppression. The
+incremental scan rebuilt `wallet.cpp` and the wallet library with zero compiler
+warnings, zero plist reports, and exit 0. The direct GCC 12 check of the
+changed translation unit used `-fsyntax-only -fanalyzer -O0`; it exited 0 with
+zero analyzer warnings. Raw logs are:
+
+- `/data/my_storage/tmp/cycle217-scan-wallet/scan-build.log` (before);
+- `/data/my_storage/tmp/cycle217-scan-wallet/scan-build-annotated2.log` (after);
+- `/data/my_storage/tmp/cycle217-gcc-wallet/wallet-fsyntax.log` (after).
+
+### GCC whole-target limitation and classification
+
+A separate GCC 12 `-fanalyzer` wallet configuration reached the wallet RPC
+translation units but was killed by the system at `src/wallet/rpc/spend.cpp`
+while `cc1plus` was analyzing at `-O2` with `-j2`. The final Ninja status was
+`subcommand failed`; this is a resource limit, not a compiler diagnostic. The
+completed warnings were grouped as standard-library modeling artifacts:
+throwing `operator new` modeled as nullable in signal-handler wrappers,
+allocator/vector relocation paths in `migrate.cpp`, `prevector.h`, and
+`signingprovider.h`, and custom secure-allocator initialization at
+`secure.h:72`. The Clang scan plist set was empty, ASan/UBSan wallet suites
+were clean, and the changed `wallet.cpp` GCC analyzer pass was clean. No
+suppression was broadened. The full GCC log is
+`/data/my_storage/tmp/cycle217-gcc-wallet/build.log`.
+
+### Verdict and handoff
+
+The lock-contract warning cluster was **confirmed as a static-analysis gap and
+fixed** by the three annotations. No memory-safety, undefined-behavior, leak,
+or Clang `scan-build` finding was confirmed. The fix and this journal are one
+self-contained change; the source change is ready for a single authored commit.
+
+Remaining distinct queue: a wallet-enabled Clang TSan run with IPC disabled,
+wallet fuzz targets under ASan/UBSan, a lower-complexity per-translation-unit
+GCC analyzer pass, and MSan/Valgrind when instrumented dependencies or tools
+become available. Do not reopen the prior core-only, TokenPipe, or original
+GCC-warning cells without a changed source/configuration boundary.
