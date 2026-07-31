@@ -112,7 +112,10 @@ AuthCookieResult GenerateAuthCookie(const std::optional<fs::perms>& cookie_perms
         return AuthCookieResult::Disabled; // -norpccookiefile
     }
     // The umask is set to 0077 in common/system.cpp.
-    write_cookie(filepath_tmp, COOKIEAUTH_USER + ":" + rand_pwd_hex);
+    if (!write_cookie(filepath_tmp, COOKIEAUTH_USER + ":" + rand_pwd_hex)) {
+        LogWarning("Unable to write cookie authentication file %s", fs::PathToString(filepath_tmp));
+        return AuthCookieResult::Error;
+    }
 
     fs::path filepath = GetAuthCookieFile(false);
     if (!RenameOver(filepath_tmp, filepath)) {

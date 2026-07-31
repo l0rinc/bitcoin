@@ -103,10 +103,10 @@ BOOST_FIXTURE_TEST_CASE(rpc_cookie_write_failure_preserves_existing_file, BasicT
     std::string user, pass;
     const auto result{GenerateAuthCookie(std::nullopt, user, pass, WriteIncompleteCookie)};
 
-    BOOST_CHECK(result == AuthCookieResult::Ok); // TODO: A failed temporary write must return an error
+    BOOST_CHECK(result == AuthCookieResult::Error);
     const auto [read_ok, saved_cookie]{ReadBinaryFile(cookie_path)};
     BOOST_REQUIRE(read_ok);
-    BOOST_CHECK_EQUAL(saved_cookie, ""); // TODO: A failed temporary write must preserve the previous cookie
+    BOOST_CHECK_EQUAL(saved_cookie, previous_cookie);
 }
 
 BOOST_AUTO_TEST_CASE(rpc_namedparams)
