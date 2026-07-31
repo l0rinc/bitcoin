@@ -2767,3 +2767,37 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   specification/vector/formal-model surface rather than replaying this case.
   The next run must perform a fresh gate, draw with the exact selector, preserve
   unrelated untracked files, and continue the selected campaign.
+
+## Cycle 222 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `22` (`full-sync-ibd-profile`); no reroll.
+  Branch: `uber-cycle-222-full-sync-ibd-profile-20260731`. Start HEAD was
+  `82490bcb7e40fc1bc34bcf46c29404d904b14e68`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1231`.
+  The fresh gate passed, all catalog/prompt/TSV/protocol hashes were unchanged,
+  and protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained alive.
+- The selected journal was `agent-journal/full-sync-ibd-profile.md`. The old
+  coinbase-only Goal 22 fixture was excluded. A persisted regtest source with
+  250 mature blocks plus 1,000 one-transaction blocks reached height 1,250,
+  transaction count 2,251, and tip
+  `72798cfb0e7d39a6ea19cd32d69070918a6ee3c972f128689e9d04a774abc073`; clean
+  restart preserved the same state.
+- The local P2P sink could not complete a Core handshake despite raw TCP
+  connectivity, so no P2P/IBD timings were claimed. The source's obfuscated
+  internal block file was also rejected by `-loadblock`; it was converted into
+  a 543,409-byte raw regtest external file through RPC before measurement.
+- Ten isolated imports plus one counter run all reached the exact expected
+  tip and transaction count. Core's external-file load marker was 452--454 ms
+  with `checkblockindex=1` and 37--40 ms with it disabled; 64 versus 256 MiB
+  `dbcache` was inconclusive at this fixture size. `perf stat` completed with
+  981.414 ms task-clock, 2.94 billion cycles, and 6.98 billion instructions.
+  No crash, sanitizer issue, state divergence, or production defect was found.
+- Verdict: **no confirmed production defect and no safe source optimization
+  proven**. This cycle closes as a single journal-only handoff snapshot; no
+  implementation commit was made. Scratch artifacts are under
+  `/data/my_storage/tmp/cycle222-full-sync-txheavy/`.
+- Next run: perform a fresh gate and exact selector draw. If Goal 22 recurs,
+  repair/replace the P2P handshake harness and use a larger, more varied
+  transaction topology with separate script/crypto and chainstate attribution;
+  do not repeat the closed baseline without new evidence.
