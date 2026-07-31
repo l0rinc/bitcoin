@@ -114,6 +114,7 @@ bool BaseIndex::Init()
 
     // May need reset if index is being restarted.
     m_interrupt.reset();
+    m_init = false;
     // Do not let callers observe the previous lifecycle state while the index
     // database and subclass-specific state are being reinitialized.
     m_synced = false;
