@@ -2,6 +2,45 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 187 Completion
+
+- Cycle 187 selected goal `18` (`exhaustive-algebraic`) from the exact selector
+  `shuf -i 0-98 -n 1` -> `18`; no reroll was needed because the prior Goal 18
+  batch-parent cell was closed and the iterator/status cell was distinct. The
+  dedicated branch is `uber-cycle-187-exhaustive-algebraic-20260731`; its
+  fresh start HEAD was `0201add043189a9f7a6d782b2c08ea139877522a`, with
+  `origin/master` `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1164 42`.
+  The catalog, prompt, corrected TSV, protocol, and start-state hashes are
+  recorded in `agent-journal/exhaustive-algebraic.md`. Persistent unrelated
+  untracked artifacts were preserved, and PIDs `777094` and `956381` were not
+  modified.
+
+- The distinct cell audited `CDBIterator` seek lower-bound, bytewise ordering,
+  snapshot traversal, exhaustion/output preservation, and LevelDB status
+  propagation. The existing unit and fuzz oracles were checked against the
+  LevelDB iterator contract and a `std::map` bytewise model. Both obfuscation
+  modes, malformed decode paths, injected read errors, threaded compaction,
+  and concurrent readers were exercised. No implementation defect or missing
+  durable oracle was confirmed.
+
+- The current `test_bitcoin` target was rebuilt with ccache and temporary
+  files redirected under `/data`; the isolated `dbwrapper_tests` run passed
+  16 cases and 2,484 assertions. Current libFuzzer runs completed cleanly for
+  `dbwrapper` (2,000 fixed-seed executions), `dbwrapper_threaded` (500), and
+  `dbwrapper_concurrent_reads` (300), with the exact coverage, corpus, RSS,
+  and command details recorded in `exhaustive-algebraic.md`. A temporary
+  `Next()` mutation failed the focused iterator test with 9 failed assertions
+  out of 40, then was restored; the full 16-case suite passed again.
+
+- Journal-only handoff commit `c2a6823d69`
+  (`uber-goal: record cycle 187 iterator audit`) is authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. No source or test commit is justified.
+  The remaining Goal 18 queue is persistence recovery/index-key reconstruction
+  or a new failure schedule; do not reopen the iterator, GCS, compact-target,
+  or batch-parent cells without new evidence. This state close is separate
+  from the selected journal commit, as required.
+
 ## Cycle 186 Completion
 
 - Cycle 186 selected goal `94` (`bindings-ffi-parity`) from the exact selector
