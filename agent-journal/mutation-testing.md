@@ -64,3 +64,43 @@ Mutation matrix for `src/kernel/bitcoinkernel_wrapper.h`, lines 723-739 in the r
 The focused score was 3/4 killed (75%). M3 is an explicit survivor and limits the conclusion: this test suite proves pointer cardinality and per-input value behavior, but it cannot detect the historical type-punning representation on this architecture. No production or test change is justified by that survivor in this cycle because the explicit bridge is already the correct implementation and the missing distinction is undefined-behavior/ABI evidence, not an observable contract failure.
 
 All mutations were reverted immediately after their runs. The final full build/test passed, and `src/kernel/bitcoinkernel_wrapper.h` has no cycle mutation remaining. No source finding was confirmed; the cycle will close with a journal-only commit and the next selector will choose a new goal.
+
+## Cycle 226: validation-interface generation and dispatch boundary oracles
+
+Status: complete.
+
+- Exact goal selector: `shuf -i 0-98 -n 1` returned `35`.
+- Catalog row: `35 mutation-testing Mutation-testing campaign`.
+- Branch: `uber-cycle-226-mutation-testing-20260731`.
+- Cycle start HEAD: `6695d40d31e3f63aff2f8390dbb1475464de2f13`.
+- `origin/master` at start: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge-base at start: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Start divergence (`HEAD...origin/master`): `42 1238`.
+- Catalog, prompt, and TSV SHA-256 gates matched the authoritative values in the uber journal. Existing untracked catalogs, journals, probes, crash file, node modules, package files, and test cache remained outside the campaign. Protected test processes were not stopped or modified.
+
+### Scope and exclusions
+
+The mutation engine binaries `mull` and `mull-runner` remain unavailable. This cycle again used manually applied, immediately reverted source mutations, with the focused test as the behavioral oracle. The prior kernel-wrapper bridge cell and its surviving type-punning mutant were excluded. The distinct target was the generation snapshot added by `ea38c30a53` in `src/validationinterface.cpp`, tested by `validationinterface_tests/register_during_callback_is_deferred` in `src/test/validationinterface_tests.cpp`.
+
+The target maintains a registration generation for each list entry. `Iterate()` snapshots `m_next_generation`, invokes only entries whose generation is at most that snapshot, and allows a callback to unregister/re-register itself without being invoked again in the same dispatch. This is a compact, deterministic concurrency/state-transition oracle rather than a timing-dependent race test.
+
+### Controls and mutation matrix
+
+The incremental normal build used `/data/my_storage/tmp/cycle214-build`, with `TMPDIR=/data/my_storage/tmp/cycle226-run` and `CCACHE_DIR=/data/my_storage/tmp/cycle226-ccache`. The unmutated focused control passed:
+
+```text
+/data/my_storage/tmp/cycle214-build/bin/test_bitcoin --run_test=validationinterface_tests/register_during_callback_is_deferred --log_level=test_suite
+```
+
+Two source mutants were applied to `src/validationinterface.cpp`, rebuilt as `test_bitcoin`, and reverted immediately after each run:
+
+| ID | Mutation | Result | Evidence |
+| --- | --- | --- | --- |
+| M1 | Change `generation = ++m_next_generation` to `generation = m_next_generation` | Killed | The deferred-registration test observed `2 != 1` on the first dispatch and `3 != 2` on the second; exit 201. The new registration was incorrectly processed in the active iteration. |
+| M2 | Change the `Iterate()` guard from `it->generation <= generation` to `it->generation < generation` | Killed | The deferred-registration test observed `0 != 1` and `0 != 2`; exit 201. The current generation was incorrectly excluded, including the initially registered callback. |
+
+After restoration, the complete `validationinterface_tests` suite passed all 7 test cases with `*** No errors detected`, including payload contracts, invalid payload checks, the unregister race, deferred registration, and unregister-all destruction safety. `git diff --check` passed and the source tree had no tracked diff after restoring the mutants.
+
+### Verdict and next queue
+
+The selected cell produced a focused mutation score of 2/2 killed (100%). Both mutations exercise the exact generation contract introduced by `ea38c30a53`; no missing oracle or production defect was found, so no source/test change is justified. The cycle closes with a journal-only handoff snapshot. Future Goal 35 work should select a different recent behavioral contract, preferably a state/accounting or failure-path branch not covered by the prior kernel-wrapper, validation-interface, or other excluded mutation cells.

@@ -2919,3 +2919,35 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   keypair/tweak failure transitions, and aggregate/session output on malformed
   input. The next run must perform a fresh gate and exact selector draw and
   must not reopen this invalid-public-key cell.
+
+## Cycle 226 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `35` (`mutation-testing`); no reroll.
+  Branch: `uber-cycle-226-mutation-testing-20260731`. Start HEAD was
+  `6695d40d31e3f63aff2f8390dbb1475464de2f13`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1238`.
+  The fresh gate passed, catalog/prompt/TSV/protocol hashes were unchanged,
+  and protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained
+  alive.
+- Prior Goal 35's kernel-wrapper bridge cell was excluded. The distinct target
+  was the validation-interface registration-generation contract introduced by
+  `ea38c30a53`, specifically `validationinterface_tests/register_during_callback_is_deferred`.
+  The clean control passed after rebuilding `test_bitcoin` with scratch
+  `TMPDIR` and `CCACHE_DIR` under `/data/my_storage/tmp`.
+- Manual mutant M1 changed `generation = ++m_next_generation` to
+  `generation = m_next_generation`; the focused test was killed with observed
+  call counts `2 != 1` and `3 != 2`. Mutant M2 changed the dispatch guard from
+  `generation <= snapshot` to `generation < snapshot`; the test was killed with
+  `0 != 1` and `0 != 2`. Both mutations were immediately reverted.
+- The restored source passed all 7 cases in
+  `validationinterface_tests`, including the unregister race and
+  unregister-all destruction-safety tests. `git diff --check` passed and no
+  tracked source diff remained. `mull`/`mull-runner` remain unavailable, so
+  this was a focused manual score of 2/2 killed (100%), not a whole-repository
+  mutation score.
+- Verdict: **no missing behavioral oracle or production defect found**. The
+  cycle closes as a journal-only handoff snapshot. The next run must perform a
+  fresh gate and exact selector draw, preserve unrelated untracked files, and
+  avoid reopening the closed kernel-wrapper and validation-interface mutation
+  cells without new evidence.
