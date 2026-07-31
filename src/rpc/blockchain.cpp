@@ -1310,10 +1310,10 @@ static void SoftForkDescPushBack(const CBlockIndex* blockindex, UniValue& softfo
     softforks.pushKV(DeploymentName(dep), std::move(rv));
 }
 
-static void SoftForkDescPushBack(const CBlockIndex* blockindex, UniValue& softforks, const ChainstateManager& chainman, Consensus::DeploymentPos id)
+static void SoftForkDescPushBack(const CBlockIndex* blockindex, UniValue& softforks, const ChainstateManager& chainman, Consensus::DeploymentPos id, bool include_disabled)
 {
     // For BIP9 deployments.
-    if (!DeploymentEnabled(chainman, id)) return;
+    if (!include_disabled && !DeploymentEnabled(chainman, id)) return;
     if (blockindex == nullptr) return;
 
     UniValue bip9(UniValue::VOBJ);
@@ -1507,8 +1507,8 @@ UniValue DeploymentInfo(const CBlockIndex* blockindex, const ChainstateManager& 
     SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_CLTV);
     SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_CSV);
     SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_SEGWIT);
-    SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_TESTDUMMY);
-    SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP);
+    SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_TESTDUMMY, /*include_disabled=*/false);
+    SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP, /*include_disabled=*/true);
     return softforks;
 }
 } // anon namespace
@@ -1517,7 +1517,9 @@ RPCMethod getdeploymentinfo()
 {
     return RPCMethod{"getdeploymentinfo",
         "Returns an object containing various state info regarding deployments of consensus changes.\n"
-        "Consensus changes for which the new rules are enforced from genesis are not listed in \"deployments\".",
+        "Enabled buried and versionbits deployments are listed in \"deployments\".\n"
+        "Versionbits deployments configured as never active are omitted, except consensuscleanup,\n"
+        "whose disabled state is reported.",
         {
             {"blockhash", RPCArg::Type::STR_HEX, RPCArg::Default{"hash of current chain tip"}, "The block hash at which to query deployment state"},
         },
