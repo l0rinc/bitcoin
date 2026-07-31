@@ -35,6 +35,8 @@ int CCrypter::BytesToKeySHA512AES(const std::span<const unsigned char> salt, con
     memcpy(key, buf, WALLET_CRYPTO_KEY_SIZE);
     memcpy(iv, buf + WALLET_CRYPTO_KEY_SIZE, WALLET_CRYPTO_IV_SIZE);
     memory_cleanse(buf, sizeof(buf));
+    // Finalize leaves passphrase-derived state in the hashing context.
+    memory_cleanse(&di, sizeof(di));
     return WALLET_CRYPTO_KEY_SIZE;
 }
 
