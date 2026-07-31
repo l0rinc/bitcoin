@@ -128,3 +128,51 @@ The c1 entropy-coverage gap is closed.
 
 ## Rotation note
 Two cycles; ECDSA baseline + extraEntropy both differential-clean.
+
+## Cycle 3 (2026-07-31): BIP340 schnorr sibling vectors — official CSV vs Python port, in-tree subset, and noble's copy; byte-exact everywhere; DISMISSED
+
+### Draw
+RE-RANK draw 140 over the 2-cell queue: raw=15293687238298433213,
+masked 6070315201443657405 -> idx 1 -> #55 schnorr/BIP340 sibling
+vectors (c1/c2 queue). Branch: audit/alt-impl-diff-c3 from
+0a4178cb88.
+
+### Sources (fetched 2026-07-31)
+- Official: bips master bip-0340/test-vectors.csv (19 rows:
+  indices 0-14 original + 15-18 variable-message-length added
+  2022-12).
+- Sibling: noble-secp256k1 main test/vectors/secp256k1/schnorr.csv
+  (15 rows) — byte-IDENTICAL to official rows 0-14; noble has not
+  picked up the 2022-12 additions (same vintage as this tree).
+
+### Differentials
+- Python framework (test_framework/key.py schnorr): 19/19 verify
+  with expected TRUE/FALSE, 8/8 sign with exact sig (rows 0-3 plus
+  15-18 — the variable-length messages 0/1/17/100 bytes pass the
+  port). Script /tmp/btc55c2_check.py (preserved; arg order note:
+  verify_schnorr(key, sig, msg)).
+- In-tree C++ (key_tests bip340_test_vectors): suite green;
+  provenance diff — all 14 distinct 64-byte sigs in the file are a
+  byte-exact SUBSET of the official CSV, zero drift; the omitted
+  official indices 15-18 are the 2022-12 variable-message rows,
+  which the in-tree harness cannot express (uint256 msg slot) —
+  upstream selection, not drift; same vintage as noble's copy.
+- Sibling agreement: noble schnorr.csv == official rows 0-14
+  byte-identical (diff shows only the missing 15-18).
+
+### Verdict
+DISMISSED: no drift on any level — C++ subset byte-exact, Python
+superset 19/19+8/8, sibling identical modulo the 2022 additions.
+Remaining queued: btcd/rust-bitcoin tx-serialization differentials
+(heavier).
+
+### Limitations / queue
+- btcd/rust-bitcoin tx-serialization differentials remain the last
+  queued cell of this campaign.
+- Variable-length-message BIP340 cases are Python-covered only in
+  this tree (harness shape); if upstream ever extends key_tests to
+  byte-vector messages, rows 15-18 drop in directly.
+
+## Rotation note
+Three cycles; ECDSA baseline, extraEntropy, BIP340 all
+differential-clean. One cell (tx-serialization) remains.
