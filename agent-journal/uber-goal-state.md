@@ -2,6 +2,52 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 185 Completion
+
+- Cycle 185 selected goal `95` (`database-semantics-differential`) from the
+  exact selector `shuf -i 0-98 -n 1` -> `95`; no reroll was needed. The
+  dedicated branch is
+  `uber-cycle-185-database-semantics-differential-20260731`; its fresh start
+  HEAD was `707d625d557035c78bd0aaecb543639dbea001ef`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and
+  `git rev-list --left-right --count HEAD...origin/master` equal to
+  `1160 42`. Catalog, prompt, corrected TSV, protocol, and start-state hashes
+  are recorded in `agent-journal/database-semantics-differential.md`.
+  Persistent unrelated untracked artifacts were preserved, and PIDs `777094`
+  and `956381` were not modified.
+
+- The distinct cell compared LevelDB's partial synchronous-write contract with
+  the `CDBWrapper::WriteBatch` boundary. It excluded Cycle 45's fixed iterator
+  status path, Cycle 126's broad LevelDB engine matrix, and Cycle 136's
+  dismissed ordinary-reader lifetime path. No alternate RocksDB/Pebble engine
+  or real power-loss device schedule was available.
+
+- A missing wrapper oracle was found, not a production defect. The new
+  memenv-backed `WriteSyncErrorEnv` and `dbwrapper_write_sync_error` test fail
+  only log `Sync()`, verify `dbwrapper_error`, preserved prior reads, absent
+  failed-key state before close, rejection of later writes, and clean reopen
+  of the durable prior key. The test deliberately makes no post-reopen claim
+  about the failed key because LevelDB documents that outcome as indeterminate
+  after a sync error.
+
+- Source/evidence commit `5f1fe06e300017dcfd98d9f8a1dfb2213c33adc1`
+  (`test: cover dbwrapper sync failure contract`) is authored as
+  `Lőrinc <pap.lorinc@gmail.com>` and includes the selected journal. The
+  current LevelDB `db_test` passed 56 tests, its fault-injection target passed
+  2 tests, and the rebuilt Clang 19 release `dbwrapper_tests` passed 16 cases
+  and 2,484 assertions. Five isolated normal repeats of the new case passed
+  all 7 assertions. The current Clang 19 UBSan focused and full wrapper runs
+  also passed 7 and 2,484 assertions with no diagnostic.
+
+- Verdict: no production `CDBWrapper` or LevelDB semantic divergence was
+  confirmed. The permanent test closes an evidence gap without changing
+  runtime behavior. Exact commands, source traces, fault semantics, and
+  limitations are in the selected journal. Root-space pressure was respected
+  by placing disposable runtimes under `/data`; the next cycle must perform a
+  fresh gate, preserve the untracked artifacts and long-running PIDs, and draw
+  the next exact selector rather than reopening this same sync-failure cell.
+
 ## Cycle 184 Completion
 
 - Cycle 184 selected goal 61 (stateful-contract-fuzzer) from the exact
