@@ -2728,3 +2728,42 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   AddrMan, raw `tx_pool`, or process-message cells without new evidence. The
   next run must perform a fresh gate, preserve unrelated untracked files, draw
   with the exact selector, and continue the selected campaign.
+
+## Cycle 221 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `81` (`spec-vector-drift`); no reroll.
+  Branch: `uber-cycle-221-spec-vector-drift-20260731`. Start HEAD was
+  `44c963f44cd3c1f6ba13d5c6d7ac1a1f12f8fc14`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1229 42`.
+  The fresh gate passed, catalog/prompt/TSV/protocol hashes were unchanged,
+  and protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained
+  alive.
+- The selected journal was `agent-journal/spec-vector-drift.md`. Closed cells
+  for BIP340, BIP341/342, BIP324, BIP327, BIP352, and the testnet4 generator
+  were excluded. The distinct BIP371 cell found that local PSBT data matched
+  only 16 of 17 vectors from pinned `bitcoin/bips` commit
+  `9783d61f1b9c81231581fee026c8e8cb9499d265`; the exact invalid
+  `PSBT_IN_TAP_SCRIPT_SIG` too-short vector was absent.
+- Source/test/journal commit: `5c4c8851b2` (`test: sync missing BIP371 PSBT
+  vector`), authored as `Lőrinc <pap.lorinc@gmail.com>`. It adds the exact
+  281-byte authoritative vector while retaining the older 282-byte malformed
+  variant. No production implementation changed. Verdict: **confirmed
+  test-vector drift and fixed**.
+- The complete direct RPC matrix passed: all 64 local invalid vectors returned
+  `-22` with `TX decode failed`, and all 48 valid vectors decoded successfully.
+  The exact new case returned the expected shorter-than-64-byte diagnostic; the
+  adjacent too-long case retained its distinct diagnostic. JSON parsing,
+  pinned-vector equality, SHA-256 checks, and `git diff --check` passed.
+- The full `rpc_psbt.py` harness was also attempted after generating an isolated
+  199-block cache. It stopped on an unrelated source/binary mismatch in an
+  existing `invalid_with_msg` expectation (`SpanReader::read(): end of data` in
+  the older cycle214 binary), before the invalid-vector loop. This limitation is
+  recorded in the selected journal; it does not invalidate the passing direct
+  RPC matrix. The temporary daemon was stopped and no protected process was
+  touched.
+- Next queue for Goal 81: keep the BIP371 cell closed unless its authoritative
+  document or PSBT vector corpus changes; future cycles should select a fresh
+  specification/vector/formal-model surface rather than replaying this case.
+  The next run must perform a fresh gate, draw with the exact selector, preserve
+  unrelated untracked files, and continue the selected campaign.
