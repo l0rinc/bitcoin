@@ -16,6 +16,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 
 namespace {
@@ -46,6 +47,11 @@ public:
         m_release_init.store(true);
     }
 
+    void FailNextInit()
+    {
+        m_fail_next_init.store(true);
+    }
+
 protected:
     bool AllowPrune() const override { return true; }
 
@@ -55,7 +61,7 @@ protected:
             m_init_entered.store(true);
             while (!m_release_init.load()) std::this_thread::yield();
         }
-        return true;
+        return !m_fail_next_init.exchange(false);
     }
 
     DB& GetDB() const override { return *m_db; }
@@ -65,6 +71,7 @@ private:
     std::atomic<bool> m_block_init{false};
     std::atomic<bool> m_init_entered{false};
     std::atomic<bool> m_release_init{false};
+    std::atomic<bool> m_fail_next_init{false};
 };
 
 } // namespace
@@ -155,6 +162,20 @@ BOOST_FIXTURE_TEST_CASE(baseindex_reinit_not_synced_during_custom_init, TestChai
     BOOST_REQUIRE(init_ok.load());
     BOOST_CHECK(query_completed_during_init);
     BOOST_CHECK(!query_result.load());
+    index.Stop();
+}
+
+BOOST_FIXTURE_TEST_CASE(baseindex_failed_reinit_clears_initialized_state, TestChain100Setup)
+{
+    ReinitGateIndex index{interfaces::MakeChain(m_node),
+                          m_args.GetDataDirNet() / "indexes" / "reinit-gate-failure"};
+    BOOST_REQUIRE(index.Init());
+    index.Stop();
+
+    index.FailNextInit();
+    BOOST_CHECK(!index.Init());
+    BOOST_CHECK_THROW((void)index.StartBackgroundSync(), std::logic_error);
+
     index.Stop();
 }
 

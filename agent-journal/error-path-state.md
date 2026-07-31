@@ -1,3 +1,105 @@
+## Cycle 232: failed BaseIndex reinitialization retains initialized state
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `27` (`error-path-state`); no reroll.
+- Branch: `uber-cycle-232-error-path-state-20260731`.
+- Cycle start HEAD: `38bd4ac054f29df280e12f353832ee2fe70331bf`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1247 42`
+  (`HEAD...origin/master`).
+- The fresh gate passed before branch creation: tracked source/index state was
+  clean, catalog/prompt/TSV/protocol hashes were unchanged, and protected test
+  PIDs `777094`, `956381`, `1138182`, and `1157959` remained alive and
+  untouched. Known unrelated untracked artifacts were preserved.
+
+### Distinct scope and contract
+
+Earlier Goal 27 cells already closed wallet passphrase, address-book, spent
+marker, descriptor import, temporary-wallet, transaction/index, migration, and
+persistent coin-lock failure paths. This cycle selected the separate index
+lifecycle cell after mining the current `BaseIndex` restart changes and its
+snapshot callback in `init.cpp`.
+
+`BaseIndex::Init()` resets the interrupt and synced flags before loading the
+index database and invoking subclass `CustomInit()`. It sets `m_init` only on
+success, but did not clear `m_init` at the start of a later attempt. Snapshot
+activation performs `Stop(); Init(); StartBackgroundSync()` on an index that
+was previously running. A corrupt block-filter or coinstats database can make
+`CustomInit()` return false after that prior successful lifecycle. The
+contract is that a failed initialization must not remain startable; otherwise
+the caller can launch a worker against partially restored index-specific state.
+
+### Confirmed finding
+
+After a successful `Init()`, `Stop()`, and failed reinitialization, `m_init`
+remained true. `StartBackgroundSync()` therefore accepted the failed state
+instead of throwing its documented non-initialized `std::logic_error`.
+Because the failed `Init()` had already registered the object and populated
+the best-block pointer, the worker could proceed and eventually publish a
+synced state despite `CustomInit()` rejecting the persistent index state.
+
+The failure is reachable through the production snapshot restart path and the
+same `CustomInit()` failure contract used by the block-filter and coinstats
+indexes. It is distinct from the earlier Goal 27 wallet/migration cells and
+from the existing successful reader-restart tests.
+
+### Independent pre-fix reproduction
+
+The focused test uses a generic `BaseIndex` fixture whose `CustomInit()` is
+made to fail exactly once after a successful initialization. With the one-line
+reset removed from `src/index/base.cpp`, the rebuilt test exited `201`:
+
+```text
+env TMPDIR=/data/my_storage/tmp/cycle232-test-tmp \
+  /data/my_storage/tmp/cycle214-build/bin/test_bitcoin \
+  --run_test=baseindex_tests/baseindex_failed_reinit_clears_initialized_state \
+  --log_level=test_suite --report_level=short --color_output=false
+```
+
+The failure was `exception std::logic_error expected but not raised`, with 2
+of 3 assertions passing. This is a direct lifecycle oracle; it does not rely
+on timing or a live node restart.
+
+### Fix
+
+`BaseIndex::Init()` now clears `m_init` alongside the interrupt and synced
+state before every initialization attempt. The fixture adds a deterministic
+single-use `CustomInit()` failure and asserts that `StartBackgroundSync()`
+rejects the failed reinitialization. Existing `Stop()` behavior remains the
+owner of validation-interface unregistration, including the shutdown path.
+
+### Verification
+
+- Rebuilt the current source in `/data/my_storage/tmp/cycle214-build` with:
+  `env TMPDIR=/data/my_storage/tmp/cycle232-build-tmp CCACHE_DIR=/data/my_storage/tmp/cycle232-ccache ninja -C /data/my_storage/tmp/cycle214-build test_bitcoin -j2`.
+- After restoring the fix, the focused regression passed 1 case and 3
+  assertions.
+- Before the temporary pre-fix mutation, the restored code passed all five
+  index suites (`baseindex_tests`, `blockfilter_index_tests`,
+  `coinstatsindex_tests`, `txindex_tests`, and `txospenderindex_tests`): 16
+  cases and 3,100 assertions.
+- `git diff --check` passed. The four protected test processes remained alive.
+
+The cycle directly proves failed `CustomInit()` after a successful restart;
+it does not inject a `ReadBestBlock()` exception or exercise every concrete
+index's on-disk corruption branch. A failed `Init()` still requires the
+existing `Stop()`/destructor path to unregister its validation callback; this
+cycle found and fixed the separate stale `m_init` state, without broadening
+callback ownership or inventing a new cleanup protocol.
+
+### Verdict and handoff
+
+- **Confirmed and fixed:** a failed `BaseIndex` reinitialization could remain
+  startable and run a background worker with rejected subclass state.
+- Source, test, and this journal are to be committed as one self-contained
+  finding commit authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- The next cycle must perform a fresh gate and exact selector draw. Do not
+  reopen the earlier Goal 27 cells or this `BaseIndex::CustomInit()` state cell
+  without new backend or restart evidence; queued distinct cells include
+  descriptor top-up failure after prior cache writes and other changed
+  status-returning wallet APIs.
+
 ## Cycle 214: failed wallet transaction load leaves a partial map entry
 
 ### Selection and fresh gate
