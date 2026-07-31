@@ -144,3 +144,58 @@ Provenance intact; additions are rule-consistent and localized.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-07-31): BIP341 taproot vector chains — C++ canonical validation set + Python wallet-vector port, both byte-exact; no drift
+
+### Draw
+RE-RANK draw 139 over the 3-cell queue: raw=7507051601152807701
+(already 63-bit) -> idx 0 -> spec-vector cells. Harvest shorthand
+had mislabeled this cell #90; it belongs to #81 (spec-vector-drift) —
+#90 is historical-knowledge-recipes. Corrected here and in the
+ledger. Branch: audit/spec-vector-drift-c3 from agent/all-findings
+(the c2 journal entry lives only on the archive lineage).
+
+### Cell and sources
+BIP-0341's Test vectors section (bips master, fetched 2026-07-31)
+points at two sets: bip-0341/wallet-test-vectors.json (scriptPubKey
+computation + keyPathSpending witnesses) and the canonical
+validation set qa-assets/unit_test_data/script_assets_test.json
+(consumed by src/test/script_assets_tests.cpp via DIR_UNIT_TEST_DATA).
+
+### Oracle A — C++ vs canonical validation set
+curl'd script_assets_test.json (9,243,520 bytes) to
+/tmp/btc81c3/unit_test_data/; DIR_UNIT_TEST_DATA=... 
+build-before/bin/test_bitcoin --run_test=script_assets_tests
+--report_level=detailed: 141917 assertions, 141917 passed, zero
+skips (skip-guard verified not triggered: no "skipping" warnings).
+The fork's C++ script validation — including every BIP341 sighash
+mode, annex, control-block and error case in the canonical set —
+matches the spec vectors exactly.
+
+### Oracle B — Python framework port vs wallet-test-vectors.json
+/tmp/btc81c3/vector_check.py (preserved): all 7 scriptPubKey
+vectors match on scriptPubKey, tweak, merkle root, bech32m address,
+and per-leaf control blocks; all 7 keyPathSpending inputs match on
+sigMsg, sigHash, tweak, tweakedPrivkey, and the final witness
+(schnorr sign with aux=0). Zero mismatches. (The tree_to_scripts
+mapper preserves the BIP's explicit tree pairing; framework
+taproot_construct/TaprootSignatureMsg used unmodified.)
+
+### Verdict
+No drift: the fork is byte-exact against BIP341 on both
+implementation levels. DISMISSED. Remaining unclaimed cells:
+BIP32 (hd001..), BIP143 sighash.json provenance re-check, base58,
+Wycheproof.
+
+### Limitations / queue
+- Oracle B checks the FUNCTIONAL FRAMEWORK's Python port (the
+  project's second implementation), while oracle A covers the C++
+  consensus path — the pair is the two-verifier form for this cell.
+- Control-block ordering maps by leaf id (vector order), not by
+  merkle-sorted order — recorded for reuse.
+- qa-assets fetch is point-in-time (sha not pinned; file byte count
+  recorded above for provenance).
+
+## Rotation note
+Cycle 3 complete; rotating per uber-goal policy. Not exhausted (4
+unclaimed cells).
