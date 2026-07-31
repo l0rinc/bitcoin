@@ -79,3 +79,114 @@ The frequency controls reproduce the documented behavior: the default full consi
 ## Handoff
 
 - Cycle complete with a journal-only handoff. Raw commands, console logs, `perf stat` counters, sampled call stacks, and scratch datadirs are under `/data/my_storage/tmp/full-sync-ibd-profile-cycle61/`. The next run must recheck the gate and select a distinct catalog goal; if this goal recurs, it must use transaction-heavy blocks and separate script/crypto validation from chainstate work rather than repeat the coinbase-only fixture.
+
+## Cycle 222 - transaction-heavy local import profile
+
+### Identity and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `22` (`full-sync-ibd-profile`); no reroll.
+  Branch: `uber-cycle-222-full-sync-ibd-profile-20260731`. Start HEAD was
+  `82490bcb7e40fc1bc34bcf46c29404d904b14e68`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `42 1231`.
+- The fresh gate passed: tracked state was clean apart from the known
+  untracked agent artifacts, catalog/prompt/TSV/protocol hashes were unchanged,
+  root storage remained critically full, `/data` had ample space, and protected
+  PIDs `777094`, `956381`, `1138182`, and `1157959` remained alive. The
+  cycle214 release-like binary was
+  `/data/my_storage/tmp/cycle214-build/bin/bitcoind`, version
+  `v31.99.0-d567fd49688e`.
+- Cycle 61's 20,000 coinbase-only fixture was explicitly excluded. The goal's
+  next queue required transaction-bearing blocks and separate chainstate work
+  from script/crypto validation.
+
+### Fixture and failed transport setup
+
+- A scratch regtest source at
+  `/data/my_storage/tmp/cycle222-full-sync-txheavy/source-persisted` was built
+  with 250 mature coinbase blocks followed by 1,000 blocks each containing one
+  wallet-signed transaction. Generation took 174.468 seconds. After a clean
+  stop and restart, the source still reported height 1,250, transaction count
+  2,251, and tip
+  `72798cfb0e7d39a6ea19cd32d69070918a6ee3c972f128689e9d04a774abc073`.
+  The source used P2P/RPC ports 29632/29832 and was stopped after profiling.
+- A first foreground source attempt died when its controlling tool session
+  ended; no result from it was used. The persisted source/restart check above
+  is the authoritative fixture evidence.
+- Local P2P sinks using `-connect=127.0.0.1:29632` and an `-addnode` probe
+  remained at zero peers even though a raw TCP connection to the source port
+  succeeded. Source and sink network diagnostics showed networking enabled,
+  but no Core peer handshake occurred. No P2P timing was retained and no
+  source change was made; this is an environment/harness limitation for this
+  cycle.
+
+### External-file import preparation
+
+- Passing the source's internal
+  `regtest/blocks/blk00000.dat` directly to `-loadblock` loaded zero blocks.
+  Its first bytes were obfuscated internal block-file data, not the regtest
+  message magic, and Core logged `Loaded 0 blocks from external file in 14ms`
+  before exiting. This was a fixture-format error, not an import finding.
+- The persisted source was converted through RPC: `getblockhash` for heights
+  0 through 1,250, `getblock <hash> 0` for each hash, then each serialized
+  block was framed as regtest magic `fa bf b5 da`, a little-endian uint32
+  length, and the block bytes. The resulting
+  `/data/my_storage/tmp/cycle222-full-sync-txheavy/regtest-raw-1250.dat` was
+  543,409 bytes and began with the expected regtest magic. This raw file is
+  the fixed input for every import run.
+
+### Import measurements
+
+Every run used a fresh scratch datadir, `-loadblock` with the raw fixture,
+`txindex=0`, `coinstatsindex=0`, `persistmempool=0`, no network peers, and
+`checkblockindex`/`dbcache` as shown. All runs reached the exact source tip,
+height 1,250, and transaction count 2,251; each reported 626,403 bytes on
+disk. Core's `Loaded 1250 blocks from external file in ...` log marker is the
+primary import-phase measurement. RPC-ready-to-target wall time was retained
+as a secondary measure, but includes polling and startup overlap.
+
+| Check setting | DB cache | Core load samples (ms) | Median (ms) | Child user time (s) | Peak RSS (KiB) |
+|---|---:|---:|---:|---:|---:|
+| `checkblockindex=1` | 64 MiB | 453, 454, 453 | 453 | 0.837--0.840 | 69,008 |
+| `checkblockindex=1` | 256 MiB | 453, 452 | 452.5 | 0.834--0.857 | 67,084 |
+| `checkblockindex=0` | 64 MiB | 40, 40 | 40 | 0.418--0.424 | 66,656--67,084 |
+| `checkblockindex=0` | 256 MiB | 40, 37, 38 | 38 | 0.423--0.453 | 69,008 |
+
+The corresponding RPC import-only measurements ranged from 0.227 to 0.674
+seconds; the variation is mostly startup/poll timing, while the Core log
+marker was stable within each setting. `checkblockindex=1` therefore adds
+approximately 414--416 ms to this transaction-bearing import, independent of
+the tested cache size. This is a deliberate regtest consistency check, not a
+production IBD default or an observed correctness defect.
+
+One `perf stat` run of the `checkblockindex=1`, 64 MiB case completed with
+return code 0. It measured the whole short Core process, not an isolated
+import interval: 981.414 ms task-clock, 2,939,884,558 cycles,
+6,976,691,189 instructions, 18,763 context switches, 1,136 migrations, and
+3,828 page faults. Child CPU accounting for that run was 0.891726 seconds
+user and 0.119462 seconds system, with 68,860 KiB peak RSS.
+
+### Verification and verdict
+
+- Each matrix run preserved the expected tip, height, transaction count, and
+  disk result. No crash, sanitizer diagnostic, state divergence, or persistence
+  mismatch was observed. The resulting journal diff passed `git diff --check`.
+- The matrix confirms a debug/regtest measurement effect and provides a
+  transaction-bearing import baseline, but it does not prove a production
+  optimization. The source has only one transaction per post-maturity block,
+  the P2P path was unavailable, the host is shared, and no `iostat` binary is
+  installed. Script/crypto scaling and mainnet-like transaction topology remain
+  unmeasured.
+- Verdict: **no confirmed production defect and no safe source optimization
+  proven**. The intentional `checkblockindex` cost is documented evidence, not
+  a reason to weaken regtest invariants. No implementation commit is warranted.
+
+### Handoff
+
+- This cycle closes with one journal-only handoff snapshot. Scratch logs,
+  datadirs, raw fixture, and `perf stat` output are under
+  `/data/my_storage/tmp/cycle222-full-sync-txheavy/`. If Goal 22 is selected
+  again, first repair or replace the local P2P handshake harness, then use a
+  larger and more varied transaction topology with separate script/crypto and
+  chainstate attribution. Do not repeat the coinbase-only or one-transaction-
+  per-block baseline without a new hypothesis.
