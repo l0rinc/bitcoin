@@ -1373,19 +1373,27 @@ BOOST_AUTO_TEST_CASE(bip54_timestamps)
     Assert(tests.read(json_tests::bip54_timestamps));
     const auto test_cases{VisitNode({}, tests)};
 
-    for (const auto& test: test_cases) {
-        // All invalid test vectors fail on rules newly introduced by BIP54, which is a soft fork. Therefore
-        // all cases will pass without the rules active.
-        {
-            auto test_setup{TestingSetup{ChainType::MAIN}};
+    // The cases of each pass share one chainstate: headers accepted for an earlier case are
+    // deduplicated by the block index, so the deep common prefixes are only validated once, and
+    // every invalid header is a leaf, so no case extends another case's rejected header. Skip the
+    // optional block-index consistency check, which otherwise walks the accumulated tree again
+    // for every processed header.
+
+    // All invalid test vectors fail on rules newly introduced by BIP54, which is a soft fork. Therefore
+    // all cases will pass without the rules active.
+    {
+        auto test_setup{TestingSetup{ChainType::MAIN, {.check_block_index = 0}}};
+        for (const auto& test: test_cases) {
             BlockValidationState state;
             BOOST_CHECK(test_setup.m_node.chainman->ProcessNewBlockHeaders(test.header_chain, /*min_pow_checked=*/true, state, /*ppindex=*/nullptr));
             BOOST_CHECK(state.IsValid());
         }
+    }
 
-        // Now assert the validity status of each case under the new rules.
-        {
-            auto test_setup{TestingSetup{ChainType::MAIN, {.extra_args = {"-vbparams=consensuscleanup:-1:-1"}}}};
+    // Now assert the validity status of each case under the new rules.
+    {
+        auto test_setup{TestingSetup{ChainType::MAIN, {.extra_args = {"-vbparams=consensuscleanup:-1:-1"}, .check_block_index = 0}}};
+        for (const auto& test: test_cases) {
             BlockValidationState state;
             const bool res{test_setup.m_node.chainman->ProcessNewBlockHeaders(test.header_chain, /*min_pow_checked=*/true, state, /*ppindex=*/nullptr)};
             BOOST_CHECK_MESSAGE(res == test.valid, test.comment);

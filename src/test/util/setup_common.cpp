@@ -304,7 +304,7 @@ ChainTestingSetup::ChainTestingSetup(const ChainType chainType, TestOpts opts)
         ChainstateManager::Options chainman_opts{
             .chainparams = chainparams,
             .datadir = m_args.GetDataDirNet(),
-            .check_block_index = 1,
+            .check_block_index = opts.check_block_index,
             .notifications = *m_node.notifications,
             .signals = m_node.validation_signals.get(),
             // Use no worker threads while fuzzing to avoid racy non-determinism
