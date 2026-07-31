@@ -92,6 +92,10 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
     unsigned char msg[32];
     unsigned char sig[74];
     unsigned char spubkey[33];
+#ifdef ENABLE_MODULE_ECDH
+    unsigned char invalid_ecdh_key[32];
+    unsigned char invalid_ecdh_output[32];
+#endif
 #ifdef ENABLE_MODULE_RECOVERY
     secp256k1_ecdsa_recoverable_signature recoverable_signature;
     int recid;
@@ -156,6 +160,14 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
     ret = secp256k1_ecdh(ctx, msg, &pubkey, key, NULL, NULL);
     SECP256K1_CHECKMEM_DEFINE(&ret, sizeof(ret));
     CHECK(ret == 1);
+
+    /* The documented invalid-scalar result is public, but the input remains secret. */
+    memset(invalid_ecdh_key, 0, sizeof(invalid_ecdh_key));
+    SECP256K1_CHECKMEM_UNDEFINE(invalid_ecdh_key, sizeof(invalid_ecdh_key));
+    ret = secp256k1_ecdh(ctx, invalid_ecdh_output, &pubkey, invalid_ecdh_key, NULL, NULL);
+    SECP256K1_CHECKMEM_DEFINE(invalid_ecdh_output, sizeof(invalid_ecdh_output));
+    SECP256K1_CHECKMEM_DEFINE(&ret, sizeof(ret));
+    CHECK(ret == 0);
 #endif
 
 #ifdef ENABLE_MODULE_RECOVERY
