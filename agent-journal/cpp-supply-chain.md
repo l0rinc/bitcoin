@@ -1,4 +1,49 @@
-# C/C++ Supply-Chain Cycle 207
+# C/C++ Supply-Chain Cycle 229
+
+## Cycle 229 Start: mutable CI toolchain source refs
+
+### Identity and Gate
+
+- Selector draw: `shuf -i 0-98 -n 1` -> `59`; no reroll. Goal: `C/C++ supply-chain and security-gate audit`; slug: `cpp-supply-chain`.
+- Branch: `uber-cycle-229-cpp-supply-chain-20260731`.
+- Start HEAD: `d3e548fadf59a80e098270d7c12031d7537a46ee`; `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `HEAD...origin/master`: `1241 42`.
+- Catalog, prompt, TSV, and protocol hashes were unchanged: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The tracked source tree was clean at the gate; pre-existing untracked agent artifacts, goal files, probes, `node_modules/`, `test/cache/`, and the crash artifact were preserved. Protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained alive and were not touched.
+
+### Closed Scope and Hypothesis
+
+Previous Goal 59 cycles closed mutable GitHub Action refs, lint-tool assets, script test-vector downloads, Guix cached archives, and release signature threshold behavior. This cycle selected the queued compiler/toolchain source-ref cell. `ci/test/01_base_install.sh` cloned LLVM, RISC-V GNU toolchain, and IWYU by named Git refs, then configured or built the checked-out source. The refs were not bound to the commit that CI was expected to consume.
+
+The trust boundary is the CI image build: LLVM libc++ sources are configured by CMake, RISC-V sources run `configure` and `make`, and IWYU sources are patched, configured, and installed. A moved tag or branch can therefore change build scripts, compiler/runtime sources, or the installed analysis tool without a Bitcoin repository diff.
+
+### Provenance Evidence
+
+- `llvmorg-22.1.7` resolves to annotated tag object `7979ad438a4904e5ff57dc85e962992242f81688`, whose peeled commit is `a255c1ed36a1d06f79bd2633ba9f8d900153007c`.
+- RISC-V `2026.06.06` resolves to commit `81bb1f89664aad156df3d2773195177c92dedc3a`.
+- IWYU `clang_22` resolves to branch commit `01a091d16b3dedb808db21f32ed3e761737a3691`.
+- History confirms these are mutable ref choices rather than immutable content bindings: `324caa8497` deliberately changed LLVM selection to a release tag, `c43b7a1115` added the NetBSD-style CI bootstrap pattern, `d64ea15824` added OpenBSD bootstrap, and `619dc8a1f9` temporarily used a fixed IWYU branch before the current upstream branch was restored.
+
+### Independent Verification
+
+`/data/my_storage/tmp/cycle229_gitref_probe.sh` created a local repository, recorded commit A, moved a `release` tag to commit B, and ran both command shapes. The old production shape cloned B and reached a simulated build. The new helper accepted an unchanged `stable` ref at A, rejected the moved `release` ref, and did not reach the simulated build:
+
+```text
+stable_clone_commit=993df4cbdd5fcdd436c4a2bcf0f8197abf419b8c
+moved_commit=a12619a5f00f0bf265591627913a046f521bf8f1
+old_clone_commit=a12619a5f00f0bf265591627913a046f521bf8f1
+old_build_reached=yes
+post_fix_rejected=1
+post_fix_build_reached=0
+```
+
+The live `git ls-remote` checks matched all three pinned commits. `bash -n ci/test/01_base_install.sh`, `git diff --check`, and a no-op run of the production install script with optional branches disabled passed. Docker, ShellCheck, and actionlint are unavailable, so no containerized base-image build or full cross-toolchain build was run.
+
+### Fix and Verdict
+
+`ci/test/01_base_install.sh` now uses `clone_and_verify_commit` for all three toolchain clones. It retains the existing ref for version selection, checks `git -C <destination> rev-parse HEAD` against the repository-local expected commit, and returns nonzero before any fetched source reaches CMake, `configure`, patching, or `make`.
+
+**Confirmed and fixed.** Before the change, mutable CI toolchain refs could silently change trusted build inputs. The current worktree binds the bytes by Git object ID and fails closed on ref movement. This closes only the mutable Git source-ref finding. SDK archives and their cache reuse, PyPI installs, apt LLVM key/repository setup, vcpkg inputs, mutable `qa-assets` fuzz-corpus cloning, generated inputs, and license gates remain distinct queue cells.
+
 
 ## Cycle 207 Start: mutable Windows CI test asset
 

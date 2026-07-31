@@ -61,8 +61,27 @@ if [ -n "$PIP_PACKAGES" ]; then
   ${CI_RETRY_EXE} pip3 install --user $PIP_PACKAGES
 fi
 
+clone_and_verify_commit() {
+  local repo="$1"
+  local ref="$2"
+  local expected_commit="$3"
+  local destination="$4"
+
+  ${CI_RETRY_EXE} git clone --depth=1 "$repo" -b "$ref" "$destination"
+  local actual_commit
+  actual_commit=$(git -C "$destination" rev-parse HEAD)
+  if [[ "$actual_commit" != "$expected_commit" ]]; then
+    echo "Unexpected commit for ${repo} ${ref}: ${actual_commit} (expected ${expected_commit})" >&2
+    return 1
+  fi
+}
+
 if [[ -n "${USE_INSTRUMENTED_LIBCPP}" ]]; then
-  ${CI_RETRY_EXE} git clone --depth=1 https://github.com/llvm/llvm-project -b "llvmorg-22.1.7" /llvm-project
+  clone_and_verify_commit \
+    https://github.com/llvm/llvm-project \
+    llvmorg-22.1.7 \
+    a255c1ed36a1d06f79bd2633ba9f8d900153007c \
+    /llvm-project
 
 # LLVM is configured with LIBCXXABI_USE_LLVM_UNWINDER=OFF,
 # because libunwind doesn't handle exceptions under MSAN.
@@ -88,7 +107,11 @@ if [[ -n "${USE_INSTRUMENTED_LIBCPP}" ]]; then
 fi
 
 if [[ ${BARE_METAL_RISCV} == "true" ]]; then
-    ${CI_RETRY_EXE} git clone --depth=1 https://github.com/riscv-collab/riscv-gnu-toolchain -b 2026.06.06 /riscv/gcc
+    clone_and_verify_commit \
+      https://github.com/riscv-collab/riscv-gnu-toolchain \
+      2026.06.06 \
+      81bb1f89664aad156df3d2773195177c92dedc3a \
+      /riscv/gcc
     ( cd /riscv/gcc;
       ./configure --prefix=/opt/riscv-ilp32 --with-arch=rv32gc --with-abi=ilp32 --disable-gdb;
       make "$MAKEJOBS"; )
@@ -96,7 +119,11 @@ if [[ ${BARE_METAL_RISCV} == "true" ]]; then
 fi
 
 if [[ "${RUN_IWYU}" == true ]]; then
-  ${CI_RETRY_EXE} git clone --depth=1 https://github.com/include-what-you-use/include-what-you-use -b clang_"${IWYU_LLVM_V}" /include-what-you-use
+  clone_and_verify_commit \
+    https://github.com/include-what-you-use/include-what-you-use \
+    clang_"${IWYU_LLVM_V}" \
+    01a091d16b3dedb808db21f32ed3e761737a3691 \
+    /include-what-you-use
   pushd /include-what-you-use
   patch -p1 < /ci_container_base/ci/test/01_iwyu.patch
   patch -p1 < /ci_container_base/ci/test/02_iwyu_hash.patch
