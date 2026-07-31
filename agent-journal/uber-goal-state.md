@@ -2951,3 +2951,43 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   fresh gate and exact selector draw, preserve unrelated untracked files, and
   avoid reopening the closed kernel-wrapper and validation-interface mutation
   cells without new evidence.
+
+## Cycle 227 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `67` (`release-version-differential`);
+  no reroll. Branch: `uber-cycle-227-release-version-differential-20260731`.
+  Start HEAD was `490e9d60fc62daa3885d873473e1903c41bc721b`; `origin/master`
+  was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `HEAD...origin/master` was
+  `1239 42`. The fresh gate passed, hashes were unchanged, and protected PIDs
+  `777094`, `956381`, `1138182`, and `1157959` remained alive.
+- Goal 67's earlier genesis/RPC, coinbase reorg/restart, prune persistence,
+  fixed-vector, and wallet-migration cells were excluded. This cycle compared
+  the signed local v31.1 tag commit
+  `9be056a8a72b624dae9623b2f7bded92c2a21c91` with current using the same v31.1
+  functional framework and deterministic v1/v2 P2P fixtures.
+- `p2p_handshake.py`, `p2p_invalid_messages.py`, `p2p_v2_transport.py`, and
+  `p2p_tx_download.py` all exited 0 on both binaries. The matrices covered
+  service-filtered handshake/disconnect decisions, mocktime pruned-peer
+  eligibility, redundant verack and self/feeler cleanup, fragmented and
+  malformed v1 messages, ADDRv2 and oversized-message handling, v2 fallback
+  and prefix detection, transaction-request fallback/order/delay/filter
+  behavior, and multi-peer in-flight limits.
+- Current-only commit `cfcff2e6a0` intentionally rejects the DEL byte `0x7f`
+  in V2 message types to match the shared printable-byte contract. The current
+  focused `net_tests/transport_v2_rejects_del_message_type` passed 1 case and
+  1,742 assertions. The current complete `net_tests` suite passed 36 cases and
+  142,212 assertions. The v31.1 build did not include `test_bitcoin`, so the
+  common functional framework was the release-side oracle.
+- Initial runs fell back to a full `/tmp` because their `TMPDIR` parents did
+  not exist and failed before networking with disk-space errors. Corrected
+  runs used explicit `/data/my_storage/tmp/cycle227-*` directories. No
+  daemon or test process remained, and protected jobs were untouched.
+- Verdict: **no unexplained P2P or transaction-download release divergence**.
+  No production or permanent test change is justified; this cycle closes as a
+  journal-only handoff snapshot. Remaining Goal 67 cells are funded/encrypted
+  wallet migration, historical mainnet transaction/block replay,
+  release-branch cherry-pick/backport equivalence, and new protocol changes
+  with a provenance-preserving common transcript. The next run must perform a
+  fresh gate and exact selector draw and must not repeat these four P2P
+  matrices without new evidence.
