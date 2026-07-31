@@ -1,3 +1,112 @@
+## Cycle 214: failed wallet transaction load leaves a partial map entry
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `27` (`error-path-state`); no reroll.
+- Branch: `uber-cycle-214-error-path-state-20260731`.
+- Cycle start HEAD: `d5d3c458f064941c84e1d1d71691f58842c6aef0`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1217 42`
+  (`HEAD...origin/master`).
+- The fresh gate fetched `origin/master`, preserved the known unrelated untracked
+  artifacts, and found no tracked or staged changes before this cycle's edit.
+  `git diff --check` passed. Protected wallet, util, script, and RPC test
+  processes with PIDs `777094`, `956381`, `1138182`, and `1157959` remained
+  alive and untouched.
+- Catalog, prompt, corrected TSV, and protocol hashes remained respectively
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+### Distinct scope and contract
+
+Goal 27 had already closed passphrase, address-book, spent-marker, descriptor
+import, temporary-wallet, transaction/index, and persistent coin-lock cells.
+This cycle mined recent wallet changes and audited `CWallet::LoadToWallet`, the
+internal loader used by `LoadTxRecords` and watch-only/migration copy paths.
+
+`LoadToWallet` inserts a placeholder under the database key before invoking its
+callback. The callback owns filling the `CWalletTx` and returns `false` when the
+record cannot be accepted. The contract is that a failed load must not publish a
+new wallet transaction: neither `mapWallet` nor its ordered/spend indexes should
+retain the rejected object. In the production database path,
+`LoadTxRecords` deserializes a record and returns `false` when the transaction's
+embedded hash differs from the serialized `DBKeys::TX` key. This is a reachable
+persisted-corruption boundary, not a malformed callback invented only for the
+test.
+
+### Confirmed finding
+
+`CWallet::LoadToWallet` emplaced a placeholder before calling `fill_wtx`, but on
+callback failure returned without erasing a newly inserted map entry. The
+production hash-mismatch path therefore left a `CWalletTx` keyed by the database
+hash while its `tx` held the different embedded transaction. The function did
+not yet add ordered or spend indexes, so the map entry was an inconsistent
+caller-visible partial state that could affect later lookups and duplicate-load
+classification during the same wallet load.
+
+### Independent reproduction
+
+The focused regression constructs a transaction whose hash differs from a
+deterministic database key, emulates the `LoadTxRecords` callback by assigning
+the transaction to the inserted `CWalletTx`, and returns `false`. Against the
+unmodified code:
+
+```text
+TMPDIR=/data/my_storage/tmp /data/my_storage/tmp/cycle214-build/bin/test_bitcoin \
+  --run_test=wallet_tests/load_to_wallet_failure_does_not_retain_transaction \
+  --log_level=test_suite --report_level=short --color_output=false
+```
+
+exited `201` with `check !m_wallet.mapWallet.contains(database_hash) has failed`
+(`3` assertions passed, `1` failed). The test is a direct state oracle for the
+production helper and uses no timing, malformed process input, or default
+wallet/datadir.
+
+### Fix
+
+After a failed fill callback, `LoadToWallet` now erases the entry only when the
+call inserted it. Existing entries retain their established duplicate-load
+behavior, while a rejected new record cannot remain in `mapWallet`. The ordered
+and spend indexes are still untouched until the callback succeeds, so erasing at
+this boundary restores the complete pre-call state with the smallest possible
+change.
+
+### Verification
+
+- A separate wallet-enabled current-source build was configured at
+  `/data/my_storage/tmp/cycle214-build` and rebuilt with
+  `TMPDIR=/data/my_storage/tmp CCACHE_DIR=/data/my_storage/tmp/cycle214-ccache
+  ninja -C /data/my_storage/tmp/cycle214-build test_bitcoin -j2`; all 547 build
+  steps completed and linked `bin/test_bitcoin`.
+- The repaired focused regression passed `1` case and `4` assertions.
+- The repaired `wallet_tests` suite passed `26` cases and `220` assertions.
+- `walletload_tests` passed `1` case and `6` assertions; `walletdb_tests` passed
+  `2` cases and `5` assertions.
+- `git diff --check` passed after the source, test, and journal edits.
+
+The regression directly exercises the callback contract and the fix is backend-
+independent. It does not create a full corrupt SQLite record through
+`PopulateWalletFromDB`, exercise Berkeley DB, or test a power-loss boundary; the
+production caller and exact hash-rejection branch were verified by source and
+call-graph inspection. Existing callbacks that reject an already-present entry
+return before mutating it, so no broader snapshot/copy refactor is justified by
+this cycle.
+
+### Verdict and handoff
+
+- Confirmed and fixed: failed wallet transaction loads could retain a new map
+  entry under the wrong hash, exposing partial persisted-corruption state after
+  `LoadToWallet` returned failure.
+- Source/test/journal are to be committed as one self-contained finding commit,
+  authored as `Lőrinc <pap.lorinc@gmail.com>`. A separate state-only close commit
+  must record its final hash, exact test results, limitations, and next queue.
+- Do not reopen earlier Goal 27 cells without new backend/restart evidence. The
+  next cycle must perform a fresh gate and exact random draw; queued Goal 27
+  cells include descriptor top-up failure after prior cache writes, BaseIndex
+  lifecycle state, and other newly changed status-returning wallet APIs.
+
 ## Cycle 192: persistent coin-lock failure-state audit
 
 ### Selection and fresh gate
