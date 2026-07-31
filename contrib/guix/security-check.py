@@ -138,6 +138,34 @@ def check_ELF_CONTROL_FLOW(binary) -> bool:
 
     return True
 
+def check_ELF_BRANCH_PROTECTION(binary) -> bool:
+    '''
+    Check for AArch64 branch protection
+    '''
+    # GNU_PROPERTY_AARCH64_FEATURE_1_AND and its BTI/PAC feature bits.
+    feature_property = 0xc0000000
+    required_features = (1 << 0) | (1 << 1)
+
+    for note in binary.notes:
+        if note.name != 'GNU' or note.type != lief.ELF.Note.TYPE.GNU_PROPERTY_TYPE_0:
+            continue
+        description = bytes(note.description)
+        offset = 0
+        while offset + 8 <= len(description):
+            property_type = int.from_bytes(description[offset:offset + 4], 'little')
+            property_size = int.from_bytes(description[offset + 4:offset + 8], 'little')
+            offset += 8
+            if offset + property_size > len(description):
+                return False
+            property_data = int.from_bytes(description[offset:offset + property_size], 'little')
+            if property_type == feature_property:
+                return property_size == 4 and (property_data & required_features) == required_features
+            property_size_padded = (property_size + 3) & ~3
+            if property_size_padded == 0:
+                return False
+            offset += property_size_padded
+    return False
+
 def check_ELF_FORTIFY(binary) -> bool:
 
     # bitcoin wrapper does not currently contain any fortified functions
@@ -277,7 +305,7 @@ CHECKS = {
     lief.Binary.FORMATS.ELF: {
         lief.Header.ARCHITECTURES.X86_64: BASE_ELF + [('CONTROL_FLOW', check_ELF_CONTROL_FLOW)],
         lief.Header.ARCHITECTURES.ARM: BASE_ELF,
-        lief.Header.ARCHITECTURES.ARM64: BASE_ELF,
+        lief.Header.ARCHITECTURES.ARM64: BASE_ELF + [('BRANCH_PROTECTION', check_ELF_BRANCH_PROTECTION)],
         lief.Header.ARCHITECTURES.PPC64: BASE_ELF,
         lief.Header.ARCHITECTURES.RISCV: BASE_ELF,
     },
