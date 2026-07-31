@@ -2,6 +2,57 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 183 Completion
+
+- Cycle 183 selected goal `90` (`historical-knowledge-recipes`) after the
+  exact selector sequence `shuf -i 0-98 -n 1` -> `40` (closed Goal 40 cell),
+  exact reroll -> `49` (closed Goal 49 cell), exact reroll -> `90`.
+  The dedicated branch is
+  `uber-cycle-183-historical-knowledge-recipes-20260731`; its fresh start
+  HEAD was `47b5a3a73da9b51772443492627e08ccff6b9381`, with origin/master
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `42 1156`.
+  Catalog, prompt, corrected TSV, protocol, and start-state hashes were
+  recorded in `agent-journal/historical-knowledge-recipes.md`. Persistent
+  untracked artifacts were preserved, and PIDs `777094` and `956381` were
+  not modified.
+
+- The distinct history cluster was PR `#35821`, Guix cross-build setup and
+  diagnostic gating. Its five commits factor GCC, LLVM, and MinGW toolchain
+  setup only after preserving per-target flags, add actionable linker
+  warning failures with a documented RISC-V exception, and normalize six
+  daemon/GUI variants. Public review evidence included a real multi-platform
+  artifact hash matrix, a fixed variable-naming nit, and a rejected request
+  to silence a legitimate GUI linker warning. The resulting recipe is
+  `scoped-cross-build-consolidation-and-diagnostic-gating`.
+
+- Independent held-out PR `#35412` (NetBSD Clang cross job) reproduced the
+  recipe through a different CI/sysroot boundary: its initial shebang mode
+  failure was corrected to `100755`, unnecessary dependency changes were
+  removed, and the SDK was pinned to `11.0_RC6` rather than a rolling path.
+  Exact merged shell syntax and `git diff --check` passed; the local smoke
+  verified host/version/no-test settings. The full cross build was not
+  available in this environment, so upstream artifact/run evidence and the
+  local configuration smoke remain separately recorded.
+
+- Exact #35821 merge shell syntax passed for `setup.sh` and all six build
+  variants. A fake-manifest smoke passed the GCC, MinGW, and LLVM setup
+  functions. A matrix check rejected disposable removal of a shared
+  toolchain call and `-Werror=dev`; #35795's one-line universal CMake
+  visibility change was a negative control. Harness fixture and quoting
+  mistakes were corrected and recorded, not counted as code failures.
+
+- Journal-only commit
+  `2501a540ad1a75be37caec61dc56e3dc9bf4d0b9` (`journal: close cycle 183
+  build recipe`) is authored as `Lőrinc <pap.lorinc@gmail.com>`. No
+  production or permanent test source change was justified. The detailed
+  review URLs, exact commands, recipe, controls, limitations, and handoff
+  are in `agent-journal/historical-knowledge-recipes.md`. This is the
+  separate state-only close record for Cycle 183. Next action:
+  `git fetch origin master`, a fresh gate including hashes, dirty state,
+  process preservation, and storage capacity, then the exact selector;
+  reroll only if the draw is explicitly closed in this ledger.
+
 ## Cycle 182 Completion
 
 - Cycle 182 selected goal `87` (`bitcoin-mempool-accounting`) from the exact
