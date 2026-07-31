@@ -1147,7 +1147,7 @@ public:
 template<typename I>
 inline void WriteVarInt(SizeComputer &s, I n)
 {
-    s.seek(GetSizeOfVarInt<I>(n));
+    s.seek(GetSizeOfVarInt<VarIntMode::DEFAULT, I>(n));
 }
 
 inline void WriteCompactSize(SizeComputer &s, uint64_t nSize)

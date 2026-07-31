@@ -202,3 +202,66 @@ be mistaken about). Residual claim WITHDRAWN per that proof.
 
 ## Rotation note
 Cycle 5 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 6 (2026-07-31): WriteVarInt SizeComputer per-line sweep + NONNEGATIVE_SIGNED battery — latent uncompilable overload repaired, 3 mutants killed
+
+### Draw
+RE-RANK draw 142 over a re-harvested 10-cell pool: raw=
+3808635104791433633 (already 63-bit) -> idx 3 -> #35 c1-queue
+(SizeComputer systematic sweep + NONNEGATIVE_SIGNED battery).
+Branch: audit/mutation-testing-c6 from ab027daa83.
+
+### FINDING (latent, trivial): SizeComputer WriteVarInt overload does not compile when instantiated
+serialize.h:1148's `WriteVarInt(SizeComputer&, I)` called
+`GetSizeOfVarInt<I>(n)` — but GetSizeOfVarInt takes TWO template
+parameters (Mode, I) since the NONNEGATIVE_SIGNED introduction. The
+overload has ZERO callers tree-wide (grep), so it is never
+instantiated and never surfaces; any future caller would fail
+loudly at compile time. Upstream-identical (knots origin/master
+carries the same stale line — inherited, not fork-introduced).
+Severity: none today (dead code); it also made the overload
+UNCOVERABLE by tests. Repair (one line, smallest possible):
+`GetSizeOfVarInt<VarIntMode::DEFAULT, I>(n)` — the only mode the
+template<I>-only signature can mean.
+
+### Delivered: varint_sizecomputer_signed_bounds (serialize_tests.cpp)
+- Boundary tables both modes: GetSerializeSize == written size +
+  round-trip exact, incl. dense window 0x3ffe..0x4081 and
+  INT64_MAX/UINT64_MAX.
+- Read-side overflow: 10- and 11-byte all-0xFF floods throw
+  "size too large" in both modes (no sign-bit wrap, no truncation).
+- Maximal-encoding pins: INT64_MAX = 9 bytes, UINT64_MAX = 10.
+- Section 4 pins the repaired SizeComputer overload directly
+  (sc.size() == written size; GetSizeOfVarInt == written size).
+
+### Mutation sweep (with the v1 botch as the lesson)
+M_a (GetSizeOfVarInt drops `-1`): 8 failures (4 window values x 2
+checks) — KILLED. M_b (`<= 0x7F` -> `<`, both loops): 134 failures —
+KILLED. M_c (SizeComputer seek(0)): 15 failures — KILLED. Final
+clean rebuild: green; tree carries repair + battery only.
+V1 BOTCH (recorded): the first sweep ran M_a without the window
+values in the battery (invisible, errors=0) and then `git checkout`
+reverted the REPAIR, so M_b/M_c builds failed on the uncompilable
+overload — empty error counts. Fixes: pattern-assert before
+mutation, marker grep, per-mutant repair re-apply, dense boundary
+windows chosen from the mutant's divergence interval ([0x4000,
+0x407f] for the dropped `-1`).
+
+### Verdict
+- CONFIRMED (latent/trivial): uncompilable-when-instantiated
+  SizeComputer overload, upstream-inherited. REPAIRED + covered.
+- Battery + 3/3 mutants killed: VarInt size/write paths fully
+  pinned, NONNEGATIVE_SIGNED read overflow rejects correctly.
+- Harness notes: GetSerializeSize does NOT route through
+  GetSizeOfVarInt (it runs the writer loop into SizeComputer) —
+  only the direct overload path observes GetSizeOfVarInt mutants.
+
+### Limitations / queue
+- Repair is upstreamable cosmetic (dead code); not submitted
+  (campaign scope: local lineage records it).
+- #35 queue: NONNEGATIVE_SIGNED negative-WRITE semantics (currently
+  silent mangle: -1 -> 0x7f) — contract question, not pinned;
+  upstream-identical, noted only. Remaining: none pressing.
+
+## Rotation note
+Cycle 6 complete; rotating per uber-goal policy.
