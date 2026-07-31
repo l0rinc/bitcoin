@@ -2451,3 +2451,26 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   commands, output, dismissed candidates, and limitations. The next cycle must
   perform a fresh gate, preserve unrelated untracked artifacts, and draw a
   distinct eligible goal; Goal 29's current stale-code cells are closed.
+
+## Cycle 213 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `77` (`symbolic-model-checking`); no reroll.
+- Branch: `uber-cycle-213-symbolic-model-checking-20260731`. Start HEAD:
+  `4428ea1d52d6177c5302f327f7cef8f376a94373`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1216 42`
+  (`HEAD...origin/master`).
+- The six-character grammar-constrained `ParseFixedPoint` model passed CBMC
+  6.10.0 with all 18 properties and unwinding assertions successful. It checked
+  independent status/value equivalence, result bounds, failure output
+  preservation, and null-output behavior. The initial `-20e-3` mismatch was
+  corrected as a reference-model omission of integer trailing-zero handling,
+  not a product defect. A temporary exponent mutation was detected and
+  restored.
+- Native release `util_tests` passed all 81 cases, including both fixed-point
+  parser cases. No source or permanent test change was justified. The exact
+  harness, commands, evidence, limitation, and next queue are recorded in
+  `agent-journal/symbolic-model-checking.md`.
+- State-only close commit: pending. The next cycle must perform a fresh gate,
+  preserve unrelated untracked artifacts, and draw a distinct eligible goal;
+  Goal 77's six-character grammar amount-parser cell is closed.
