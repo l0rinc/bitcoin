@@ -228,4 +228,35 @@ BOOST_AUTO_TEST_CASE(merkleblock_construct_with_bloom_filter_match)
     BOOST_CHECK_EQUAL(merkleBlock.vMatchedTxn.size(), block.vtx.size());
 }
 
+BOOST_AUTO_TEST_CASE(bits_bytes_padding_arms)
+{
+    // Branch coverage for BitsToBytes' padding invariant (merkleblock.cpp):
+    // both arms of `if (used_bits)` — bit counts that are exact multiples
+    // of 8 (skip) and non-multiples (padding mask checked) — plus the
+    // round-trip identity through BytesToBits.
+    for (size_t nbits = 0; nbits <= 17; ++nbits) {
+        std::vector<bool> bits(nbits);
+        for (size_t i = 0; i < nbits; ++i) bits[i] = (i % 3) != 0;
+        if (nbits > 0) bits.back() = true; // force a set bit next to the padding
+
+        const auto bytes{BitsToBytes(bits)};
+        BOOST_CHECK_EQUAL(bytes.size(), (nbits + 7) / 8);
+        if (nbits % 8) {
+            const auto padding_mask{static_cast<unsigned char>(0xffU << (nbits % 8))};
+            BOOST_CHECK_EQUAL(bytes.back() & padding_mask, 0);
+        }
+        const auto roundtrip{BytesToBits(bytes)};
+        BOOST_CHECK_EQUAL(roundtrip.size(), bytes.size() * 8);
+        for (size_t i = 0; i < nbits; ++i) {
+            BOOST_CHECK_EQUAL(roundtrip[i], bits[i]);
+        }
+        if (nbits % 8) {
+            // Padding positions decode as false.
+            for (size_t i = nbits; i < bytes.size() * 8; ++i) {
+                BOOST_CHECK(!roundtrip[i]);
+            }
+        }
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
