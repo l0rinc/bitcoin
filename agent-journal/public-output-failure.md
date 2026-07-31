@@ -1,5 +1,43 @@
 # Public API Output-on-Failure Audit
 
+## Cycle 230
+
+- Selected by the uber loop: `shuf -i 0-98 -n 1` -> `46` (`public-interface-output-failure`); no reroll.
+- Branch: `uber-cycle-230-public-api-output-failure-20260731`.
+- Cycle-start HEAD: `7dbbc778222611a2432500c7d8271b336f78e93a`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1241 42`.
+- The fresh gate found no tracked source diff before this cycle. Catalog, prompt, TSV, and protocol hashes matched the uber ledger. Protected PIDs `777094`, `956381`, `1138182`, and `1157959` stayed alive throughout.
+
+### Scope and prior-cell exclusions
+
+The historical DB wrapper output-on-decode cell from Cycle 56 and all other closed cells listed below were excluded. This cycle focused on the kernel C API's remaining public output contracts: validation state/status outputs, the nullable `new_block` result, fixed-size byte outputs, and callback-stream serialization. Callback-stream partial writes are intentional because the caller owns the stream and the callback is invoked incrementally; `btck_script_pubkey_verify` leaves status `OK` for a script-invalid result because the operation completed and the return value is the validity result. `ProcessNewBlock` initializes its own `new_block` result to false before validation, so its failure path did not expose an uninitialized value.
+
+### Finding: nullable `new_block` was declared non-null
+
+The public documentation for `btck_chainstate_manager_process_block` at `src/kernel/bitcoinkernel.h:1307` says the `[out] new_block` pointer is nullable. The implementation at `src/kernel/bitcoinkernel.cpp:1377-1381` also checks `_new_block` before publishing the result. The underlying `ChainstateManager::ProcessNewBlock` initializes its optional output to false on entry at `src/validation.cpp:4607` and only sets it true after the block has been stored.
+
+However, the exported declaration annotated argument 3 with `BITCOINKERNEL_ARG_NONNULL(1, 2, 3)`. A C consumer following the documented contract therefore received a false compile-time diagnostic. The pre-fix control used the repository header from cycle-start `HEAD` and compiled:
+
+`git show HEAD:src/kernel/bitcoinkernel.h | awk '1; END { print "void probe(btck_ChainstateManager* m, const btck_Block* b) { (void)btck_chainstate_manager_process_block(m, b, 0); }" }' | cc -I src -x c -fsyntax-only -Wall -Wextra -Werror=nonnull - 2>&1`
+
+It exited 1 with `error: argument 3 null where non-null expected`, pointing at the declaration's `ARG_NONNULL(1, 2, 3)`.
+
+The fix removes only argument 3 from the non-null attribute. The C++ wrapper now forwards its own nullable `bool*` as either a real C output pointer or `nullptr`, initializes the local result to zero, and the kernel regression calls `ProcessBlock` with a null output pointer on an invalid block. This verifies that a failing public operation does not require or dereference an output buffer.
+
+### Verification
+
+- The post-fix C compile probe with `-Wall -Wextra -Werror=nonnull` exited 0 with no diagnostics.
+- The dedicated Clang 19 `BUILD_KERNEL_LIB=ON` build compiled `bitcoinkernel.cpp`, the wrapper, and `src/test/kernel/test_kernel.cpp`; `ninja -C /data/my_storage/tmp/cycle107-kernel-clang19 test_kernel -j2` exited 0.
+- Focused `btck_chainman_mainnet_tests` passed 1 case and 40/40 assertions, including valid, invalid, duplicate, and nullable-output calls.
+- The full `test_kernel` suite passed 19/19 cases and 3,718/3,718 assertions.
+- `git diff --check` passed. No protected process was modified or stopped.
+
+### Verdict and handoff
+
+Confirmed public API contract defect: a documented nullable output parameter was exported with a contradictory non-null compiler attribute, making valid C callers fail under `-Werror=nonnull`. The smallest correction is the declaration change, with wrapper forwarding and a runtime regression preserving the documented behavior. Remaining output-on-failure cells stay closed unless a new trust boundary or independent evidence appears.
+
+Source/test/journal commit pending at the end of this cycle. The next run must perform a fresh gate and exact selector draw, preserve unrelated untracked artifacts, and not reopen the Cycle 56 DB wrapper cell without new evidence.
+
 ## Cycle 56
 
 - Selected by the uber loop: `shuf -i 0-98 -n 1` -> `46`

@@ -935,6 +935,7 @@ void chainman_mainnet_validation_test(TestDirectory& test_directory)
     Block invalid_block{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[REGTEST_BLOCK_DATA.size() - 1])};
     BOOST_CHECK(!chainman->ProcessBlock(invalid_block, &new_block));
     BOOST_CHECK(!new_block);
+    BOOST_CHECK(!chainman->ProcessBlock(invalid_block, nullptr));
 
     auto chain{chainman->GetChain()};
     BOOST_CHECK_EQUAL(chain.Height(), 1);

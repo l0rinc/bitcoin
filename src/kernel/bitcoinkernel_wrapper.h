@@ -1378,8 +1378,9 @@ public:
 
     bool ProcessBlock(const Block& block, bool* new_block)
     {
-        int _new_block;
-        int res = btck_chainstate_manager_process_block(get(), block.get(), &_new_block);
+        int _new_block{0};
+        int* c_new_block{new_block ? &_new_block : nullptr};
+        int res = btck_chainstate_manager_process_block(get(), block.get(), c_new_block);
         if (new_block) *new_block = _new_block == 1;
         return res == 0;
     }
