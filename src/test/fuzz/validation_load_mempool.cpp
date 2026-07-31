@@ -7,10 +7,13 @@
 
 #include <node/mempool_args.h>
 #include <node/mempool_persist_args.h>
+#include <node/mining_types.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/fuzz/util/mempool.h>
+#include <test/util/mining.h>
+#include <test/util/script.h>
 #include <test/util/setup_common.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
@@ -34,7 +37,8 @@ using node::LoadMempool;
 using node::MempoolPath;
 
 namespace {
-const TestingSetup* g_setup;
+TestingSetup* g_setup;
+std::vector<std::pair<COutPoint, CAmount>> g_mature_coinbases;
 
 void AssertMempoolPersistContracts(const CTxMemPool& pool, Chainstate& chainstate)
 {
@@ -211,8 +215,23 @@ void AssertFailedDumpPreservesFile(const CTxMemPool& pool, const fs::path& path,
 
 void initialize_validation_load_mempool()
 {
-    static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
+    static const auto testing_setup = MakeNoLogFileContext<TestingSetup>();
     g_setup = testing_setup.get();
+    SetMockTime(WITH_LOCK(g_setup->m_node.chainman->GetMutex(), return g_setup->m_node.chainman->ActiveTip()->Time()));
+    g_mature_coinbases.clear();
+    for (int i{0}; i < 2 * COINBASE_MATURITY; ++i) {
+        const COutPoint coinbase{MineBlock(g_setup->m_node, {
+            .coinbase_output_script = P2WSH_OP_TRUE,
+        })};
+        if (i < COINBASE_MATURITY) {
+            LOCK(cs_main);
+            g_mature_coinbases.push_back({
+                coinbase,
+                g_setup->m_node.chainman->ActiveChainstate().CoinsTip().GetCoin(coinbase)->out.nValue,
+            });
+        }
+    }
+    g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
 }
 
 FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
@@ -237,6 +256,31 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
                           .mockable_fopen_function = fuzzed_fopen,
                       });
     AssertMempoolPersistContracts(pool, chainstate);
+
+    const auto pool_entries{pool.infoAll()};
+    const auto fixture_coinbase{std::ranges::find_if(g_mature_coinbases, [&](const auto& coinbase) {
+        return std::ranges::none_of(pool_entries, [&](const auto& info) {
+            return std::ranges::any_of(info.tx->vin, [&](const auto& txin) {
+                return txin.prevout == coinbase.first;
+            });
+        });
+    })};
+    Assert(fixture_coinbase != g_mature_coinbases.end());
+
+    CMutableTransaction fixture_mut;
+    fixture_mut.vin.emplace_back(fixture_coinbase->first);
+    fixture_mut.vin.back().scriptWitness.stack = {WITNESS_STACK_ELEM_OP_TRUE};
+    fixture_mut.vout.emplace_back(fixture_coinbase->second - 1000, P2WSH_OP_TRUE);
+    const CTransactionRef fixture{MakeTransactionRef(fixture_mut)};
+    {
+        LOCK(cs_main);
+        const auto accepted{AcceptToMemoryPool(chainstate, fixture, GetTime(), /*bypass_limits=*/false, /*test_accept=*/false)};
+        Assert(accepted.m_result_type == MempoolAcceptResult::ResultType::VALID);
+    }
+    pool.PrioritiseTransaction(fixture->GetHash(), 1000);
+    pool.AddUnbroadcastTx(fixture->GetHash());
+    AssertMempoolPersistContracts(pool, chainstate);
+
     if (fuzzed_data_provider.ConsumeBool()) {
         const Txid txid{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
         const bool in_mempool{pool.exists(txid)};
