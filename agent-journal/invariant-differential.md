@@ -1,5 +1,51 @@
 # Invariant, Differential, and Metamorphic Audit
 
+## Cycle 231
+
+- Date: 2026-07-31 UTC
+- Goal index: 51
+- Slug: `invariant-differential`
+- Branch: `uber-cycle-231-invariant-differential-20260731`
+- Base: `origin/master` at `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- HEAD at cycle start: `9d22f97873279e7cdd33362e91f5090352c907ba`
+- Selector command/result: `shuf -i 0-98 -n 1` -> `51`
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Prompt SHA256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+
+### Scope and prior-finding exclusions
+
+The prior Goal 51 cell fixed the `bitcoin-util getchainparams` genesis-hash byte-order mismatch and remains closed. This cycle deliberately excluded that output contract and the already-covered transaction-download/orphanage request and duplicate-hash cells. The fresh scope was state and output equivalence in the lower-level transaction-request tracker and UTXO view/cache layers, with independent executable models rather than another fixture-only oracle.
+
+The initial tracked-source gate was clean. A first transaction-request invocation failed only because two commands raced while creating the scratch `TMPDIR`; that setup result was discarded. Re-running with a pre-created isolated directory passed the full selected unit suite.
+
+### Hypothesis A: transaction-request metamorphic state divergence
+
+`txrequest_tests` passed 5 cases with 294,741 assertions; 1,243 assertions were skipped by the suite. The current Clang 19 Debug ASan/UBSan/libFuzzer binary was rebuilt from this checkout with:
+
+```text
+CCACHE_DIR=/data/my_storage/tmp/cycle231-ccache TMPDIR=/data/my_storage/tmp/cycle231-build-tmp ninja -C /data/my_storage/tmp/cycle131-build-libfuzzer fuzz -j2
+```
+
+All 109 build tasks completed. The fixed-seed smoke run for `FUZZ=txrequest` completed 40 executions with no diagnostic. The 30-second mutation run used seed `23152`, `-max_len=2048`, `-timeout=10`, and `-rss_limit_mb=3000`; it completed 1,454 executions at about 46 executions/sec, grew the corpus from 3 to 484 files, reached 7,860 coverage counters and 43,110 feature units, and peaked at 2,151 MiB RSS. No assertion, sanitizer report, timeout, crash, or artifact occurred.
+
+The request tracker hypothesis was dismissed for the exercised domain. The unit model and fuzz state transitions covered duplicate announcements, timeout/expiry, peer removal, and request cleanup without an observable output or state mismatch. No source or permanent test change was justified.
+
+### Hypothesis B: layered UTXO cache metamorphic state divergence
+
+The independent `FUZZ=coinscache_sim` campaign compared a four-level real cache/overlay stack with a simulated cache and bottom database. It exercised read purity, failed-write no-ops, spent/unspent transitions, uncache idempotence, overlay creation/removal, flush/sync/reset, best-block inheritance, cache statistics, and prevout-fetch worker boundaries. The fixed-seed smoke run completed 7 executions. The 30-second run used seed `231511`, `-max_len=4096`, `-timeout=20`, and `-rss_limit_mb=3000`; it completed 1,287 executions at about 41 executions/sec, grew the corpus from 3 to 427 files (83 KiB), reached 14,463 coverage counters and 67,992 feature units, and peaked at 2,126 MiB RSS. No diagnostic or artifact occurred.
+
+Because this simulator already has explicit relations for the obvious cache operations, a second independent persistence/backend campaign used `FUZZ=coins_view_db_resize_cursor` and `FUZZ=coins_view_stacked`. The resize-cursor smoke run completed 425 executions. Its 30-second run used seed `231513` and completed 4,398 executions at about 141 executions/sec, expanded its output corpus to 209 files (33 KiB), reached 19,579 coverage counters and 49,732 feature units, and peaked at 2,101 MiB RSS. It repeatedly resized a memory-backed LevelDB cache while a cursor iterated persisted coins, then compared the result with the expected map; no cursor, persistence, or resize mismatch occurred.
+
+The stacked-view run used seed `231514` and completed 4,517 executions at about 145 executions/sec with 402 new corpus units and a 532 MiB peak RSS. It exercised a database-backed cache, an overlay with asynchronous input fetching, and the post-overlay backend cache through the shared `TestCoinsView` contract. No assertion, sanitizer report, timeout, crash, or artifact occurred.
+
+### Verdict and limitations
+
+Both hypotheses were dismissed as current defects. The campaigns provide independent model comparisons and broad mutation evidence, but a passing fuzz run is not a proof of exhaustive correctness. The fuzzer was rebuilt after branch checkout so the target binary matched the current source; the build used Clang 19 Debug with address, undefined-behavior, and libFuzzer instrumentation. Docker, AFL++, Honggfuzz, and a full sanitizer-engine matrix were not required for this narrow cell and were not run. The unit suite and fuzz campaigns used isolated scratch directories under `/data/my_storage/tmp`; no default datadir, wallet, key, or production database was used. All four unrelated long-running test processes remained alive.
+
+No source or permanent test change is justified. The next Goal 51 run should select a distinct invariant relation, such as a database batch/cursor failure schedule or a consensus-independent serialization metamorphic pair, rather than repeat these cache and request cells.
+
 ## Cycle 12
 
 - Date: 2026-07-27 UTC
