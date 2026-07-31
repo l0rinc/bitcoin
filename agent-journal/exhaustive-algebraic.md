@@ -1,5 +1,45 @@
 # Exhaustive and Algebraic-Invariant Audit
 
+## Cycle 181 start: persistence and iterator identity matrix
+
+- Fresh gate: `git fetch origin master` succeeded. Branch:
+  `uber-cycle-181-exhaustive-algebraic-20260731`. Start HEAD:
+  `41bc1fee6cc9e1dc7b08421bb1d05f9b468a2d29`; origin/master:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence:
+  `origin/master...HEAD = 42 1150`.
+- Exact selector: `shuf -i 0-98 -n 1` -> `18`,
+  `exhaustive-algebraic`. The prior GCS `MatchAny` and compact-target
+  canonicalization cells are closed; this cycle opens a distinct persistence
+  and iterator identity cell. Catalog, prompt, corrected TSV, protocol, and
+  state hashes are recorded by the fresh gate. The TSV has a header plus 99
+  records with IDs 0 through 98. Known untracked artifacts remain preserved;
+  PIDs `777094` and `956381` remain unrelated long-running tests and must not
+  be stopped. Root storage is critically constrained, so all scratch data
+  stays under `/data/my_storage/tmp`.
+
+### Scope and initial queue
+
+Audit one production persistence relation at a time, stating its exact
+domain, authoritative representation, failure behavior, and independent
+oracle before changing code. Prioritize LevelDB wrapper and index relations
+not already covered by the BaseIndex readiness/restart audit:
+
+1. `CDBWrapper`/`CDBBatch` write-read-delete and iterator ordering across
+   snapshots, overwrites, and restart, with a model map as the oracle.
+2. `CDBIterator` seek/next/prev/validity behavior at empty, singleton,
+   duplicate-overwrite, prefix, and end boundaries, including failed reads.
+3. A database-backed index's durable best-block/cache reconstruction relation
+   after clean close and injected write/flush failure, only if the first two
+   cells do not expose a stronger defect.
+
+Search history, callers, existing tests, and prior journals before each
+candidate. A source finding requires a deterministic failing-before test or
+independent model counterexample, a minimal repair, and a mutation that the
+oracle kills. Do not confuse documented LevelDB semantics with a Bitcoin
+wrapper contract, and do not commit a disposable matrix without a confirmed
+production defect.
+
 ## Cycle 50: GCS `MatchAny` identity and checked reconstruction
 
 - Gate: `HEAD=dd77f06eaf4b2020d9c4cd1692b2d9be0f084999`; `origin/master=7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD=2 867`.
