@@ -35,15 +35,92 @@ The first experiment will inventory the current `CTxMemPool` contracts and exist
 
 | ID | Hypothesis / surface | Status | Evidence and next action |
 |---|---|---|---|
-| H1 | Replacement plus descendant removal leaves graph or aggregate metadata stale | unchecked | Build a minimal parent/child/conflict sequence and compare incremental state with a recomputed oracle. |
+| H1 | Replacement plus descendant removal leaves graph or aggregate metadata stale | not confirmed in tested sequence | The independent diamond/removal oracle passed; keep broader replacement sequences in the queue. |
 | H2 | Package acceptance/rejection leaves secondary state after the primary pool state is unchanged | unchecked | Inspect package admission rollback and rejection caches; use state snapshots around injected rejection paths. |
 | H3 | Trim/expiry/block removal/reorg removal disagree on overlapping-set accounting | unchecked | Map each removal API and test a sequence with shared ancestors, descendants, and conflicts. |
-| H4 | Cluster/package union metadata diverges after replacement | unchecked | Check current cluster code and only retain if it is distinct from prior compact-block/orphan accounting work. |
+| H4 | Cluster/package union metadata diverges after replacement | oracle gap fixed; no defect in tested sequence | The independent connected-component check covers clusters for the representative graph; broader replacement coverage remains useful. |
 
 ## Commands and results
 
 The start gate and selector are recorded above. Detailed source reads, test commands, raw output, independent verifier results, mutations, verdicts, and handoff will be appended as the cycle proceeds.
 
-## Handoff
+## Cycle 182 finding: independent mempool graph/accounting oracle
 
-No candidate has a verdict yet. Continue with source and test inventory before making a change. Do not claim repository completion.
+### Contract and trust boundary
+
+The relevant contract is that the live `CTxMemPool` graph and its aggregate
+queries agree with the raw transaction-input graph after every accepted,
+prioritized, recursively removed, block-removed, and block-reinserted state.
+For an entry, ancestors and descendants include the entry itself; their
+counts, virtual-size sums, and modified-fee sums must be exact. A cluster is
+the undirected connected component, so it also includes cousins connected
+through a shared parent or child. The trust boundary is the production
+`CTxMemPool`/`TxGraph` integration: the oracle must not reuse the graph
+implementation whose wiring it is checking.
+
+### Source and test inventory
+
+`CTxMemPool` maintains `mapTx`, `mapNextTx`, randomized membership, fee and
+usage totals, and a `TxGraph`. `UpdateTransactionsFromBlock()` repairs
+parent-child dependencies after block removal/reinsertion, while entry
+destruction unlinks graph references. Existing ancestry tests and the
+`tx_pool` fuzz target exercise useful direct and API-level properties, but
+the transitive checks compare `GetTransactionAncestry()` with
+`CalculateAncestorData()`, both of which use `TxGraph`. They did not
+independently recompute closures and clusters from the transaction inputs.
+
+The new `CheckMempoolGraphAccountingModel()` in
+`src/test/mempool_tests.cpp` builds independent parent and child maps from
+`mapTx`, computes transitive closures and undirected components, and compares
+them with `CalculateAncestorData()`, `CalculateDescendantData()`, and
+`GetCluster()`. `MempoolGraphAccountingStateMachine` drives a diamond graph
+(parent, two siblings, merging child, and unrelated transaction), fee
+prioritization, recursive removal, re-addition, block removal, dependency
+repair, and merge removal. This is a behavior oracle, not an execution-only
+coverage test.
+
+### Evidence and verdict
+
+- The normal focused run passed 1 case and 588 assertions:
+  `TMPDIR=/data/my_storage/tmp/cycle182-controls /data/my_storage/tmp/cycle170-mempool-build/bin/test_bitcoin --run_test=mempool_tests/MempoolGraphAccountingStateMachine --random=182087 --log_level=test_suite --report_level=short --color_output=false`.
+- The normal combined controls passed 49 cases and 1,624 assertions for
+  `mempool_tests,txgraph_tests` with seed `182089`; the separate controls
+  passed 25/425 and 23/611 for mempool and TxGraph respectively.
+- A disposable mutation removed the `TxGraph::AddDependency` call in
+  `UpdateTransactionsFromBlock()`. The focused test then failed 28 of 564
+  assertions, including ancestor counts/sizes/fees of `3/227/40000` versus
+  `4/259/50000`, descendant counts/sizes/fees of `1/32/10000` versus
+  `4/259/50000`, and cluster mismatches. The mutation was restored and the
+  clean focused test returned to 588/588.
+- The first oracle draft incorrectly modeled a cluster as ancestors union
+  descendants. It failed on the diamond's cousins; changing it to an
+  independent undirected connected-component traversal matched the documented
+  `TxGraph` cluster contract. This is useful evidence that the oracle is
+  semantically independent rather than copied from the implementation.
+- Clang 19 UBSan (`-fsanitize=undefined,alignment,object-size`) passed the
+  focused case with 588/588 assertions and no diagnostic:
+  `/data/my_storage/tmp/cycle106-clang19-ubsan/bin/test_bitcoin --run_test=mempool_tests/MempoolGraphAccountingStateMachine --random=182090 --log_level=message --report_level=short --color_output=false`.
+
+Verdict: confirmed test/oracle gap, fixed by the focused independent model
+and state-machine regression. No production mempool defect was demonstrated
+in the clean source. H1 is not confirmed by this sequence; H4's cluster
+relation is now covered for this representative graph. The change is not a
+production behavior change.
+
+### Remaining cells and limitations
+
+H2 remains open: package acceptance/rejection and secondary-state rollback
+were not independently modeled here. H3 remains open for the broader
+trim/expiry/block/reorg overlap and memory-accounting sequences. The new test
+does not replace fuzzing, does not run the package-admission fuzzer, and does
+not cover every eviction policy or expiry clock path. Existing fuzzer and
+suite controls remain relevant. No sanitizer, tool, or production source
+suppression was added.
+
+### Handoff
+
+Next queue: build a failure-injection or snapshot oracle around package
+rejection and replacement; then exercise trim, expiry, block removal, and
+reorg reinsertion with independent membership, graph, and accounting
+recomputation. Preserve the exact seeds, scratch paths, and unrelated PIDs
+from the cycle gate. Do not claim repository completion.
