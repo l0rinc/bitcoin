@@ -234,6 +234,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 80 | fuzz-engine-differential | CYCLE-6 | 2026-07-29 | MuSig2 PSBT seeding: differential clean (A=0, E=100); format-from-source worked first try |
 | 95 | database-semantics-differential | CYCLE-5 | 2026-07-31 | write-flush-windowed kill: _Exit inside all 4 batch commits (idx/coins/shutdown); identical tip recovery, 0 corruption; DISMISSED |
 | 35 | mutation-testing | CYCLE-5 | 2026-07-31 | CTxUndo hostile-field layers classified (decode-reject/apply-reject/trust-boundary); range-check mutant killed fail-before/pass-after |
+| 35 | mutation-testing | CYCLE-6 | 2026-07-31 | latent uncompilable SizeComputer overload repaired (DEFAULT mode, upstream-inherited); boundary battery; M_a/M_b/M_c killed 8/134/15 |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -739,6 +740,19 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    "cycle 3"; the correct campaign ordinal is 5.
    Queue after draw 141: EMPTY — re-harvest journal
    "Limitations / queue" tails before the next draw.
+   RE-RANK draw 142 (10-cell re-harvested pool, each cell verified
+   against its journal's last cycle): raw=3808635104791433633
+   (already 63-bit) -> idx 3 -> #35 c6 (SizeComputer sweep +
+   NONNEGATIVE_SIGNED battery). CONFIRMED (latent/trivial):
+   SizeComputer WriteVarInt overload called GetSizeOfVarInt with a
+   missing Mode arg — uncompilable when instantiated, zero callers,
+   upstream-inherited; repaired (DEFAULT) and pinned by the new
+   boundary battery; mutants M_a/M_b/M_c killed 8/134/15; final
+   rebuild green. Pool after draw 142 (9): #55 tx-serialization,
+   #81 BIP32/base58/BIP143/Wycheproof, #71 progress-value fuzzing,
+   #36 _GLIBCXX_ASSERTIONS, #73 slow-drip ellswift, #74 locked-arena
+   mlock-failure, #89 v0.21 relay/downgrade differential, #76
+   45-uncacheable itemization, #108 v2 slowloris.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -773,7 +787,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 41(c1,c2,c3,c4,c5,c6), 0(c1,c2), 1(c1,c2,c3,c4), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1,c2,c3), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2,c3,c4), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5),
-28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4,c5), 35(c1,c2,c3,c4,c5), 36(c1,c2,c3), 23(c1,c2,c3,c4), 25(c1,c2,c3),
+28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4,c5), 35(c1,c2,c3,c4,c5,c6), 36(c1,c2,c3), 23(c1,c2,c3,c4), 25(c1,c2,c3),
 37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3,c4,c5), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 52(c1,c2), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3,c4), 47(c1,c2,c3,c4), 48(c1,c2), 49(c1,c2,c3,c4,c5,c6,c7,c8,c9), 50(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13), 53(c1), 55(c1,c2,c3), 57(c1,c2,c3,c4), 58(c1,c2,c3), 59(c1,c2), 60(c1,c2,c3,c4,c5,c6,c7,c8), 24(c1,c2,c3,c4,c5,c6),
 61(c1,c2,c3), 63(c1,c2,c3,c4,c5), 64(c1), 65(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 66(c1,c2), 67(c1), 68(c1,c2,c3), 69(c1,c2,c3,c4), 70(c1), 71(c1,c2,c3,c4), 73(c1,c2,c3), 74(c1,c2,c3,c4), 75(c1,c2,c3,c4),
 76(c1,c2,c3), 80(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 81(c1,c2,c3), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1,c2), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4,c5), 99(c1), 100(c1,c2,c3), 101(c1,c2,c3), 102(c1,c2), 103(c1), 104(c1,c2,c3), 105(c1), 106(c1,c2,c3), 107(c1,c2), 108(c1), 109(c1,c2).

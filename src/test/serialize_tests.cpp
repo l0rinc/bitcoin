@@ -135,6 +135,72 @@ BOOST_AUTO_TEST_CASE(varints)
     }
 }
 
+BOOST_AUTO_TEST_CASE(varint_sizecomputer_signed_bounds)
+{
+    // #35 c6: SizeComputer/write consistency at encoding boundaries +
+    // NONNEGATIVE_SIGNED read-side overflow rejection.
+
+    // 1. Boundary table: GetSerializeSize == written size, round-trip exact.
+    const std::vector<int64_t> sbounds{0, 1, 0x7e, 0x7f, 0x80, 0x81, 0x3fff, 0x4000,
+                                       0x1fffff, 0x200000, 0xfffffff, 0x10000000,
+                                       std::numeric_limits<int64_t>::max() - 1,
+                                       std::numeric_limits<int64_t>::max()};
+    for (int64_t v : sbounds) {
+        DataStream ss{};
+        ss << VARINT_MODE(v, VarIntMode::NONNEGATIVE_SIGNED);
+        BOOST_CHECK_EQUAL(::GetSerializeSize(VARINT_MODE(v, VarIntMode::NONNEGATIVE_SIGNED)), ss.size());
+        int64_t j{-1};
+        ss >> VARINT_MODE(j, VarIntMode::NONNEGATIVE_SIGNED);
+        BOOST_CHECK_EQUAL(j, v);
+    }
+    const std::vector<uint64_t> ubounds{0, 0x7f, 0x80, 0xffff, 0x10000,
+                                        0x3ffe, 0x3fff, 0x4000, 0x4001, 0x407e, 0x407f, 0x4080, 0x4081,
+                                        std::numeric_limits<uint64_t>::max() - 1,
+                                        std::numeric_limits<uint64_t>::max()};
+    for (uint64_t v : ubounds) {
+        DataStream ss{};
+        ss << VARINT(v);
+        BOOST_CHECK_EQUAL(::GetSerializeSize(VARINT(v)), ss.size());
+        uint64_t j{0};
+        ss >> VARINT(j);
+        BOOST_CHECK_EQUAL(j, v);
+    }
+
+    // 2. Read-side overflow: all-continuation-byte streams beyond the
+    //    type's range must throw "size too large" (both modes), never
+    //    wrap into the sign bit or silently truncate.
+    for (int len = 10; len <= 11; ++len) {
+        DataStream flood{};
+        for (int i = 0; i < len; ++i) flood << uint8_t{0xff};
+        int64_t sv{0};
+        BOOST_CHECK_THROW(flood >> VARINT_MODE(sv, VarIntMode::NONNEGATIVE_SIGNED), std::ios_base::failure);
+        uint64_t uv{0};
+        BOOST_CHECK_THROW(flood >> VARINT(uv), std::ios_base::failure);
+    }
+
+    // 3. Maximal legal encodings: INT64_MAX / UINT64_MAX encodings are
+    //    exactly 9 and 10 bytes (63/64 significant bits) — pinned so the
+    //    boundary between (1) and (2) is explicit.
+    DataStream mx{};
+    mx << VARINT_MODE(std::numeric_limits<int64_t>::max(), VarIntMode::NONNEGATIVE_SIGNED);
+    BOOST_CHECK_EQUAL(mx.size(), 9U);
+    DataStream umx{};
+    umx << VARINT(std::numeric_limits<uint64_t>::max());
+    BOOST_CHECK_EQUAL(umx.size(), 10U);
+
+    // 4. SizeComputer overload direct path (serialize.h:1148-1151) and
+    //    GetSizeOfVarInt: no production callers — pinned directly so the
+    //    overload is suite-covered rather than dead code.
+    for (uint64_t v : ubounds) {
+        SizeComputer sc;
+        WriteVarInt(sc, v);
+        DataStream ss{};
+        ss << VARINT(v);
+        BOOST_CHECK_EQUAL(sc.size(), ss.size());
+        BOOST_CHECK_EQUAL((GetSizeOfVarInt<VarIntMode::DEFAULT, uint64_t>(v)), ss.size());
+    }
+}
+
 BOOST_AUTO_TEST_CASE(varints_bitpatterns)
 {
     DataStream ss{};
