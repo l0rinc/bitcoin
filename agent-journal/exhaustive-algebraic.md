@@ -40,6 +40,90 @@ oracle kills. Do not confuse documented LevelDB semantics with a Bitcoin
 wrapper contract, and do not commit a disposable matrix without a confirmed
 production defect.
 
+## Cycle 181 finding: reject cross-wrapper database batches
+
+### Candidate, contract, and source trace
+
+The valid persistence identity is `WriteBatch(P, B_P)`: a `CDBBatch` created
+for wrapper `P` must be submitted to that same wrapper. This is not merely a
+type-level preference. `CDBBatch::WriteImpl()` serializes each value and
+applies `dbwrapper_private::GetObfuscation(parent)` before placing the bytes
+in its LevelDB `WriteBatch`. `CDBWrapper::WriteBatch()` then forwards those
+already-transformed bytes to whichever wrapper receives the call, but before
+this fix never checked that its `this` pointer was the batch's `parent`.
+
+The constructor comment explicitly says that the batch's parent is the
+`CDBWrapper` to which the batch is to be submitted. All current production
+callers satisfy that relationship: index, block-storage, transaction-index,
+chainstate, and fuzz/test call sites construct the batch from the same wrapper
+whose `WriteBatch()` they call. The missing check nevertheless left a future
+helper or refactor able to silently write values encoded with one database's
+obfuscation key into another database. The trust boundary is internal local
+database ownership, so this is a correctness/data-integrity defect rather than
+a remotely reachable or consensus-triggerable vulnerability.
+
+### Independent pre-fix reproduction
+
+The disposable regression created an obfuscated source wrapper and a
+non-obfuscated target wrapper, built a batch from the source, and submitted it
+to the target. A fixed `uint64_t` value was decoded successfully from the
+target but differed because the target did not reverse the source's XOR key:
+
+    expected 81985529216486895
+    actual   12549582698032991898
+
+The first pre-fix command initially failed only because its scratch `TMPDIR`
+did not exist; after creating that directory, the same command entered the
+test and exited 201 with the value assertion failing. This setup failure is
+not part of the product verdict. The independent target-state oracle is
+stronger than comparing random obfuscation bytes: after the repair, the target
+must reject the batch before LevelDB sees it and `target.Exists(key)` must
+remain false.
+
+### Repair and mutation proof
+
+`CDBWrapper::WriteBatch()` now compares `&batch.parent` with `this` before
+logging, memory measurement, or calling LevelDB. A mismatch throws
+`std::logic_error`, preserving the target database and making the ownership
+contract fail closed. The focused regression requires that exception and
+checks that the target key was not created.
+
+With the guard present, the focused test passed 1 case and 2 assertions. A
+temporary mutation removing only the guard was rebuilt and rerun; it failed
+both assertions (`std::logic_error` was not raised and `!target.Exists(key)`
+was false), then the production guard was restored. This proves the oracle is
+sensitive to the exact repair rather than merely exercising the new test.
+
+### Verification
+
+- Normal rebuild: `cmake --build /data/my_storage/tmp/cycle89-build
+  --target test_bitcoin -j2`, with the cycle's isolated ccache/TMPDIR, passed.
+- Normal focused suites passed: `dbwrapper_tests` 15 cases/2,477
+  assertions; `coins_tests` 37/1,218,037; and the related index suites
+  (`baseindex`, `coinstatsindex`, `txindex`, `txospenderindex`, and
+  `blockfilter_index`) 15/3,097.
+- The Clang 19 TSan build passed `dbwrapper_tests` 15/2,477 and
+  `coins_tests` 37/1,218,037 with no race diagnostic. The Clang 19 UBSan
+  build passed the same two suites with no undefined-behavior diagnostic; its
+  existing object-size-at-`-O0` warning was unchanged.
+- The full normal run used `--random=181`: 1,233 cases passed, one existing
+  filesystem-injection case passed with a warning, and all 27,292,778
+  assertions passed. The warning is the repository's intentional failure-path
+  diagnostic, not a batch-parent failure.
+- `git diff --check` passed before finalization.
+
+### Verdict and limits
+
+Confirmed and fixed as a local persistence ownership/integrity defect. The
+change does not alter correctly paired batches, LevelDB bytes, obfuscation
+formats, or any current production call path. It rejects only a previously
+accepted invalid cross-wrapper operation. No remote trigger, wallet/key
+impact, consensus effect, or existing caller violation was demonstrated. The
+remaining Goal 18 queue is a new iterator/database recovery identity or
+index-key reconstruction matrix; do not reopen the closed GCS or compact
+target cells, and do not count this ownership check as a general LevelDB
+corruption repair.
+
 ## Cycle 50: GCS `MatchAny` identity and checked reconstruction
 
 - Gate: `HEAD=dd77f06eaf4b2020d9c4cd1692b2d9be0f084999`; `origin/master=7dea464d6b51a69bd99a0451be8aaf3a26313eb6`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `origin/master...HEAD=2 867`.

@@ -260,6 +260,20 @@ BOOST_AUTO_TEST_CASE(dbwrapper_batch)
     }
 }
 
+BOOST_AUTO_TEST_CASE(dbwrapper_batch_parent_obfuscation)
+{
+    CDBWrapper source{{.path = "dbwrapper_batch_parent_source", .cache_bytes = 1_MiB, .memory_only = true, .obfuscate = true}};
+    CDBWrapper target{{.path = "dbwrapper_batch_parent_target", .cache_bytes = 1_MiB, .memory_only = true, .obfuscate = false}};
+
+    constexpr uint8_t key{0x42};
+    constexpr uint64_t expected{0x0123456789abcdef};
+    CDBBatch batch{source};
+    batch.Write(key, expected);
+    BOOST_CHECK_THROW(target.WriteBatch(batch), std::logic_error);
+
+    BOOST_CHECK(!target.Exists(key));
+}
+
 BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
 {
     // Perform tests both obfuscated and non-obfuscated.

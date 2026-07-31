@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 
 static auto CharCast(const std::byte* data) { return reinterpret_cast<const char*>(data); }
@@ -309,6 +310,9 @@ CDBWrapper::~CDBWrapper() { Close(); }
 
 void CDBWrapper::WriteBatch(CDBBatch& batch, bool fSync)
 {
+    if (&batch.parent != this) {
+        throw std::logic_error{"CDBBatch was created for a different CDBWrapper"};
+    }
     const bool log_memory = util::log::ShouldDebugLog(BCLog::LEVELDB);
     double mem_before = 0;
     if (log_memory) {
