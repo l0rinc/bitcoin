@@ -3057,3 +3057,11 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   license gates remain separate Goal 59 queue cells. The next run must perform
   a fresh gate and exact selector draw and must not repeat this toolchain-ref
   cell without new evidence.
+
+## Cycle 230 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `46` (`public-interface-output-failure`); no reroll. Branch: `uber-cycle-230-public-api-output-failure-20260731`. Cycle-start HEAD was `7dbbc778222611a2432500c7d8271b336f78e93a`; `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1241 42`. The fresh gate passed, catalog/prompt/TSV/protocol hashes were unchanged, and protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained alive.
+- Goal 46's prior DB wrapper output-on-decode cell and all other listed output-contract cells were excluded. The distinct kernel C API cell found `btck_chainstate_manager_process_block` documented `new_block` as nullable and checked null in the implementation, while the public header incorrectly declared argument 3 with `BITCOINKERNEL_ARG_NONNULL(1, 2, 3)`. A C consumer following the documented contract failed a `-Werror=nonnull` compile control before the fix.
+- The declaration now marks only arguments 1 and 2 non-null. The C++ wrapper forwards a null `bool*` as a null C output pointer and initializes its local result. The kernel regression exercises a failing invalid-block call with no output pointer. The old-header compile control exited 1 with `argument 3 null where non-null expected`; the current-header control exited 0.
+- Dedicated Clang 19 `BUILD_KERNEL_LIB=ON` compilation passed. Focused `btck_chainman_mainnet_tests` passed 1 case and 40 assertions. The full `test_kernel` suite passed 19 cases and 3,718 assertions. `git diff --check` passed.
+- Verdict: **confirmed and fixed**. Source/test/journal commit: `47514babcc` (`kernel: honor nullable process block output`), authored as `Lőrinc <pap.lorinc@gmail.com>`. The next run must perform a fresh gate and exact selector draw, preserve unrelated untracked artifacts, and not reopen the closed DB wrapper cell without new evidence.
