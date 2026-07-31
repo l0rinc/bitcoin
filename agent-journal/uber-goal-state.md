@@ -2356,3 +2356,33 @@ Cycle 23 used the existing `build_unit_clang19` tree; rebuilding `test_bitcoin` 
 Cycle 24 used `/data/my_storage/tmp/secp-field-matrix-int128/` and `/data/my_storage/tmp/secp-field-matrix-int64/`, both with assembly disabled and explicit int128/int64 overrides. Their builds and regular/no-VERIFY/exhaustive binaries passed. The scratch probe source and outputs remain under `/data/my_storage/tmp/`; the corrected runs exited 0, emitted 754 records each, and compared with identical SHA256 `315b522a08b0f7c0ab9fbf21a02c8244143c50d8ee911645f54c8e888db92828`. The first probe failures were discarded as harness violations: restricted field-multiply aliasing and lazy reads of uninitialized pairwise entries. No production source changed and no test, fuzz, sanitizer, daemon, or profiling process remains running. The next run must re-check the worktree, branch, base/HEAD, remotes, dirty state, running jobs, this ledger, the catalog, existing findings, journals, relevant history, issues, pull requests, and review precedent before drawing. Record the exact selector command, random draw, selected slug, and cycle evidence here and in the selected per-goal journal.
 
 Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` and `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-build/` for the unpatched-parent control, plus separate scratch directories for serial v1/v2 RPC tests and the outbound relay-rate control. The first selector draw was `48` (`property-oracle-expansion`) and was excluded because cycle 28 closed that property cell; rerunning `shuf -i 0-98 -n 1` drew `43` (`option-api-lifecycle`). Before the source fix, the corrected `rpc_net.py` run against parent `ebe09a67153fe09ba67b03b0cc49f01fa84e2381` reached `getnetworkinfo` and exited 1 because its help lacked the peer-wide description; the old inbound-only wording remained. After changing the startup and RPC descriptions, `build_func_clang19` rebuilt `bitcoind`, serial v1 and v2 `rpc_net.py` runs exited 0, and `p2p_tx_relay_rate_limit_outbound.py` passed. Earlier parallel transport and assertion-typo runs were discarded. `python3 -m py_compile test/functional/rpc_net.py`, `git diff --check`, the standalone startup/RPC probes, and process cleanup passed. No runtime behavior changed. The next run must re-check branch/base/HEAD, dirty state, processes, catalog hashes, existing journals, history, and review precedent before drawing again; exclude this fixed `-txsendrate` metadata cell and choose another distinct option/API lifecycle surface.
+
+## Cycle 210 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `8` (`locking-threading`); no reroll.
+- Branch: `uber-cycle-210-locking-threading-20260731`. Start HEAD:
+  `62cca938b35d3a260fbe57dcf08645e8c30042f7`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1211 42`.
+  The four preserved long-running test processes remained alive and untouched.
+- Confirmed finding: `ValidationSignalsImpl::Iterate()` walked the live
+  callback list after releasing its registry mutex. A subscriber that
+  unregistered and re-registered itself from a `BlockChecked` callback was
+  invoked again for the same event; repeating the transition could keep the
+  dispatch loop alive. The fix assigns each new list entry a generation and
+  bounds an in-flight traversal to the generation present at its start.
+- Source/test/journal commit: `ea38c30a53c6c2712c4bc1344fd0713132095b60`
+  (`validationinterface: defer in-flight re-registrations`), authored by
+  `Lőrinc <pap.lorinc@gmail.com>`.
+- The pre-fix oracle, made by temporarily removing only the generation
+  condition, failed `validationinterface_tests/register_during_callback_is_deferred`
+  with callback counts `2 != 1` and `3 != 2`, exit 201. The repaired release
+  suite passed 7 cases and 43 assertions; `validation_block_tests` passed 8
+  cases and 3,071 assertions; the Clang 19 TSan focused suite passed 7 cases
+  and 45 assertions with no report. The first validation-block invocation used
+  a missing scratch `TMPDIR` and was discarded as setup-only; its rerun passed.
+- Final local divergence is `1212 42` (`origin/master..HEAD`,
+  `HEAD..origin/master`). No cycle-owned process remains running. The next
+  cycle must perform a fresh gate, preserve the unrelated untracked artifacts,
+  and select a distinct eligible goal; Goal 8's exact re-registration cell is
+  closed.
