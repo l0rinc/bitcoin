@@ -65,6 +65,46 @@ public:
     }
 };
 
+class WriteSyncErrorEnv final : public leveldb::EnvWrapper
+{
+    class FailingWritableFile final : public leveldb::WritableFile
+    {
+        WriteSyncErrorEnv& m_env;
+        leveldb::WritableFile* m_file;
+
+    public:
+        FailingWritableFile(WriteSyncErrorEnv& env, leveldb::WritableFile* file) : m_env{env}, m_file{file} {}
+        ~FailingWritableFile() override { delete m_file; }
+
+        leveldb::Status Append(const leveldb::Slice& data) override { return m_file->Append(data); }
+        leveldb::Status Close() override { return m_file->Close(); }
+        leveldb::Status Flush() override { return m_file->Flush(); }
+        leveldb::Status Sync() override
+        {
+            if (m_env.m_fail_sync.load(std::memory_order_acquire)) {
+                return leveldb::Status::IOError("injected log sync failure");
+            }
+            return m_file->Sync();
+        }
+        std::string GetName() const override { return m_file->GetName(); }
+    };
+
+    std::atomic_bool m_fail_sync{false};
+
+public:
+    explicit WriteSyncErrorEnv(leveldb::Env* base) : EnvWrapper{base} {}
+
+    void FailSync() { m_fail_sync.store(true, std::memory_order_release); }
+    void AllowSync() { m_fail_sync.store(false, std::memory_order_release); }
+
+    leveldb::Status NewWritableFile(const std::string& filename, leveldb::WritableFile** result) override
+    {
+        const leveldb::Status status{target()->NewWritableFile(filename, result)};
+        if (status.ok() && filename.ends_with(".log")) *result = new FailingWritableFile{*this, *result};
+        return status;
+    }
+};
+
 } // namespace
 
 BOOST_FIXTURE_TEST_SUITE(dbwrapper_tests, BasicTestingSetup)
@@ -272,6 +312,37 @@ BOOST_AUTO_TEST_CASE(dbwrapper_batch_parent_obfuscation)
     BOOST_CHECK_THROW(target.WriteBatch(batch), std::logic_error);
 
     BOOST_CHECK(!target.Exists(key));
+}
+
+BOOST_AUTO_TEST_CASE(dbwrapper_write_sync_error)
+{
+    const auto memenv{std::unique_ptr<leveldb::Env>{leveldb::NewMemEnv(leveldb::Env::Default())}};
+    WriteSyncErrorEnv error_env{memenv.get()};
+    constexpr uint8_t existing_key{'a'};
+    constexpr uint8_t failed_key{'b'};
+    constexpr uint8_t later_key{'c'};
+
+    {
+        CDBWrapper dbw{{.path = "dbwrapper_write_sync_error", .cache_bytes = 1_MiB, .testing_env = &error_env}};
+        dbw.Write(existing_key, uint8_t{0x01});
+
+        error_env.FailSync();
+        CDBBatch batch{dbw};
+        batch.Write(failed_key, uint8_t{0x02});
+        BOOST_CHECK_THROW(dbw.WriteBatch(batch, /*fSync=*/true), dbwrapper_error);
+
+        uint8_t value{};
+        BOOST_CHECK(dbw.Read(existing_key, value));
+        BOOST_CHECK_EQUAL(value, 0x01);
+        BOOST_CHECK(!dbw.Exists(failed_key));
+        BOOST_CHECK_THROW(dbw.Write(later_key, uint8_t{0x03}), dbwrapper_error);
+    }
+
+    error_env.AllowSync();
+    CDBWrapper dbw{{.path = "dbwrapper_write_sync_error", .cache_bytes = 1_MiB, .testing_env = &error_env}};
+    uint8_t value{};
+    BOOST_CHECK(dbw.Read(existing_key, value));
+    BOOST_CHECK_EQUAL(value, 0x01);
 }
 
 BOOST_AUTO_TEST_CASE(dbwrapper_iterator)

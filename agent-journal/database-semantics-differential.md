@@ -1,5 +1,48 @@
 # Database-engine and persistence-semantics differential
 
+## Cycle 185: wrapper partial-write and sync-failure contract
+
+### Selection and gate
+
+- Exact selector after the Cycle 184 close: `shuf -i 0-98 -n 1` -> `95` (`database-semantics-differential`); no reroll was needed.
+- Branch: `uber-cycle-185-database-semantics-differential-20260731`.
+- Cycle start HEAD: `707d625d557035c78bd0aaecb543639dbea001ef`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- `git rev-list --left-right --count HEAD...origin/master`: `1160 42`.
+- Tracked/index state was clean at entry; known unrelated untracked artifacts were preserved and excluded from all staging.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Corrected TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Uber-goal state SHA-256: `b5da487f36059bf682bdd344912745cf5ae55d8f1915586d1cc5997a0040d299`.
+- TSV validation: 99 records, four fields each, IDs 0 through 98 exactly once.
+- Storage gate: `/` had about 57 MiB free and `/data` about 49 GiB free; disposable test/runtime files must use `/data/my_storage/tmp`.
+- Unrelated long-running test processes with PIDs 777094 and 956381 were alive and were not touched.
+
+### New cell and exclusions
+
+This cycle excludes Cycle 45's fixed iterator-status defect, Cycle 126's broad LevelDB batch/recovery/WAL/MANIFEST/snapshot/comparator/checksum/compaction/sync and v31.1 matrix, and Cycle 136's dismissed ordinary `CCoinsViewDB` reader lifetime cell. No alternative RocksDB/Pebble engine is installed in the current environment, so the selected cell is the narrower wrapper contract when LevelDB reports a partial write or sync failure: whether `CDBWrapper::WriteBatch` exposes the engine's failure, whether a failed batch changes visible state, and whether reopening preserves the documented recovery state.
+
+### Working hypothesis
+
+The current `CDBWrapper::WriteBatch` selects LevelDB's synchronous or asynchronous `WriteOptions`, passes the native `WriteBatch` unchanged, and throws through `HandleError`. The hypothesis is that this wrapper boundary either hides a LevelDB partial-write/recovery distinction or leaves callers with a state that contradicts the chainstate/index write protocol. The LevelDB `WriteSyncError` contract is the comparison oracle, not an assumption that failed writes must roll back atomically.
+
+### Verification and result
+
+LevelDB's `DBImpl::Write()` appends the batch to the log, attempts `Sync()` for a synchronous write, and deliberately does not insert the batch into the memtable when that sync fails. It records a background error because the log record may or may not be durable, so subsequent writes fail until the database is reopened. This is also the contract exercised by the vendored `DBTest.WriteSyncError`: a prior key remains readable, the failed key is absent in the live instance, and later writes fail. A failed synchronous write is therefore not a promise of rollback after restart; recovery must tolerate either durable outcome for the failed record.
+
+The wrapper-specific gap was real but was test-only: `dbwrapper_tests` covered iterator read faults and ordinary batches but had no write-side fault oracle. `src/test/dbwrapper_tests.cpp` now supplies a memenv-backed `WriteSyncErrorEnv` which fails only `.log` `Sync()` calls. `dbwrapper_write_sync_error` verifies that `CDBWrapper::WriteBatch(..., true)` throws `dbwrapper_error`, the preexisting key remains readable, the failed key is absent before close, a later write is rejected by LevelDB's recorded background error, and a clean reopen preserves the preexisting key. It does not assert a particular post-reopen value for the failed key because LevelDB explicitly treats that outcome as indeterminate after a sync error.
+
+Evidence:
+
+- The standalone current LevelDB `db_test` completed all 56 DB tests, including `WriteSyncError`, recovery, non-writable filesystem, manifest-write, and compaction-error cases. The standalone fault-injection target completed both tests.
+- The current-tree Clang 19 release `test_bitcoin` rebuilt successfully, then `TMPDIR=/data/my_storage/tmp/cycle185-bitcoin-full-runtime .../bin/test_bitcoin --run_test=dbwrapper_tests --log_level=message --report_level=short --color_output=false` passed 16 cases and 2,484 assertions. Five isolated repeats of the new case each passed all 7 assertions.
+- The current-tree Clang 19 UBSan target rebuilt successfully. With `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`, the focused case and the complete 16-case `dbwrapper_tests` suite passed 7 and 2,484 assertions respectively, with no sanitizer diagnostic.
+- `git diff --check` passed. The unrelated long-running PIDs 777094 and 956381 remained alive and untouched.
+
+Verdict: no production `CDBWrapper` or LevelDB semantic defect was confirmed. The wrapper already exposes the native failure and its callers use exception-driven abort/replay behavior consistently. The permanent regression test is justified as a missing contract oracle, not as a behavior fix. No alternate RocksDB/Pebble implementation is installed, and the memenv fault cannot model torn sectors or real power loss; those remain future evidence sources.
+
 ## Cycle 136: replaceable chainstate wrapper reader contract
 
 ### Selection and gate
