@@ -3072,3 +3072,37 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - The prior Goal 51 genesis-hash output cell was excluded. The distinct cells were transaction-request state equivalence, layered UTXO cache equivalence, and database-backed cursor/backend substitution. The first txrequest setup failure was discarded because its scratch `TMPDIR` was being created concurrently; the corrected run passed `txrequest_tests` 5 cases with 294,741 assertions.
 - A current-checkout Clang 19 Debug ASan/UBSan/libFuzzer binary was rebuilt successfully in 109 tasks with an explicit `/data/my_storage/tmp` ccache and temp root. The txrequest fuzz run completed 1,454 executions; the layered `coinscache_sim` run completed 1,287; `coins_view_db_resize_cursor` completed 4,398; and `coins_view_stacked` completed 4,517. The runs used fixed seeds `23152`, `231511`, `231513`, and `231514`, grew independent corpora, and produced no assertion, sanitizer, timeout, crash, or artifact. Coverage/features and RSS are recorded in `agent-journal/invariant-differential.md`.
 - Verdict: **dismissed; no current defect found**. The selected journal commit is `c4200c6f61` (`journal: close cycle 231 invariant differential`), authored as `Lőrinc <pap.lorinc@gmail.com>`. No production source or permanent test change was justified. The next run must perform a fresh gate and exact selector draw, preserve unrelated untracked artifacts, and choose a distinct invariant relation rather than repeat these request/cache cells.
+
+## Cycle 232 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `27` (`error-path-state`); no reroll.
+  Branch: `uber-cycle-232-error-path-state-20260731`. Cycle-start HEAD was
+  `38bd4ac054f29df280e12f353832ee2fe70331bf`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1247 42`.
+  The fresh gate passed, catalog/prompt/TSV/protocol hashes were unchanged,
+  and protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained
+  alive.
+- The selected distinct cell was failed `BaseIndex` reinitialization after a
+  successful lifecycle. Snapshot activation executes `Stop(); Init();
+  StartBackgroundSync()`; a failed index-specific `CustomInit()` left
+  `m_init=true`, so a subsequent worker start was accepted despite the failed
+  initialization. Earlier Goal 27 wallet, migration, and coin-lock cells were
+  excluded.
+- A temporary pre-fix mutation removing the new reset rebuilt cleanly and made
+  `baseindex_tests/baseindex_failed_reinit_clears_initialized_state` exit `201`
+  with `std::logic_error expected but not raised`. Restoring
+  `m_init = false` at the start of `BaseIndex::Init()` made the focused test
+  pass with 3 assertions. The generic `ReinitGateIndex` fixture now injects a
+  deterministic one-shot `CustomInit()` failure.
+- The finding commit is `dbfa6b2929` (`index: reset initialization state before retry`),
+  authored as `Lőrinc <pap.lorinc@gmail.com>`, and includes
+  `src/index/base.cpp`, `src/test/baseindex_tests.cpp`, and the selected
+  journal. The restored five-suite index run passed 16 cases and 3,100
+  assertions. `git diff --check` passed; no unrelated untracked files were
+  staged or changed, and protected jobs remained untouched.
+- Verdict: **confirmed and fixed**. This cycle covers the stale initialized
+  flag after failed `CustomInit()`; it does not claim coverage of every DB read
+  exception or callback-unregistration path. The next cycle must perform a
+  fresh gate and exact selector draw, preserve unrelated artifacts, and avoid
+  reopening this cell without new backend/restart evidence.
