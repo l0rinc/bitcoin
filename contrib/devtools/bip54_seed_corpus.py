@@ -19,6 +19,116 @@ if FUNCTIONAL_TEST_DIR not in sys.path:
 from test_framework.messages import CTransaction, CTxOut, from_hex, ser_string  # noqa: E402
 
 
+# Keep the specification limit independent from the framework constant used to construct vectors.
+BIP54_MAX_LEGACY_SIGOPS = 2_500
+MAX_MULTISIG_PUBKEYS = 20
+OP_PUSHDATA1 = 0x4c
+OP_PUSHDATA2 = 0x4d
+OP_PUSHDATA4 = 0x4e
+OP_1 = 0x51
+OP_16 = 0x60
+OP_CHECKSIG = 0xac
+OP_CHECKSIGVERIFY = 0xad
+OP_CHECKMULTISIG = 0xae
+OP_CHECKMULTISIGVERIFY = 0xaf
+
+
+def is_p2sh(script_pub_key):
+    return (
+        len(script_pub_key) == 23
+        and script_pub_key[0] == 0xa9
+        and script_pub_key[1] == 0x14
+        and script_pub_key[-1] == 0x87
+    )
+
+
+def read_opcode(script, cursor):
+    """Decode one opcode without using the test framework's script parser."""
+    if cursor >= len(script):
+        return None
+    opcode = script[cursor]
+    cursor += 1
+    if opcode > OP_PUSHDATA4:
+        return opcode, b"", cursor
+
+    if opcode < OP_PUSHDATA1:
+        pushed_size = opcode
+    else:
+        size_bytes = {
+            OP_PUSHDATA1: 1,
+            OP_PUSHDATA2: 2,
+            OP_PUSHDATA4: 4,
+        }[opcode]
+        if len(script) - cursor < size_bytes:
+            return None
+        pushed_size = int.from_bytes(script[cursor:cursor + size_bytes], "little")
+        cursor += size_bytes
+
+    if len(script) - cursor < pushed_size:
+        return None
+    pushed_data = script[cursor:cursor + pushed_size]
+    return opcode, pushed_data, cursor + pushed_size
+
+
+def count_static_sigops(script):
+    """Count BIP16-style static sigops, stopping at malformed pushes."""
+    sigops = 0
+    previous_opcode = None
+    cursor = 0
+    while cursor < len(script):
+        decoded = read_opcode(script, cursor)
+        if decoded is None:
+            break
+        opcode, _, cursor = decoded
+        if opcode in (OP_CHECKSIG, OP_CHECKSIGVERIFY):
+            sigops += 1
+        elif opcode in (OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY):
+            sigops += (
+                previous_opcode - (OP_1 - 1)
+                if previous_opcode is not None and OP_1 <= previous_opcode <= OP_16
+                else MAX_MULTISIG_PUBKEYS
+            )
+        previous_opcode = opcode
+    return sigops
+
+
+def count_p2sh_sigops(script_sig):
+    """Count sigops in the last push of a push-only P2SH scriptSig."""
+    last_pushed_data = b""
+    cursor = 0
+    while cursor < len(script_sig):
+        decoded = read_opcode(script_sig, cursor)
+        if decoded is None:
+            return 0
+        opcode, last_pushed_data, cursor = decoded
+        if opcode > OP_16:
+            return 0
+    return count_static_sigops(last_pushed_data)
+
+
+def vector_is_valid(vector):
+    """Independently evaluate the BIP54 sigop limit for one JSON vector."""
+    tx = from_hex(CTransaction(), vector["tx"])
+    spent_outputs = [from_hex(CTxOut(), txo) for txo in vector["spent_outputs"]]
+    if len(tx.vin) != len(spent_outputs):
+        raise ValueError(
+            f"transaction has {len(tx.vin)} inputs but vector has "
+            f"{len(spent_outputs)} spent outputs"
+        )
+
+    sigops = 0
+    for txin, spent_output in zip(tx.vin, spent_outputs):
+        script_sig = bytes(txin.scriptSig)
+        script_pub_key = bytes(spent_output.scriptPubKey)
+        sigops += count_static_sigops(script_sig)
+        sigops += (
+            count_p2sh_sigops(script_sig)
+            if is_p2sh(script_pub_key)
+            else count_static_sigops(script_pub_key)
+        )
+    return sigops <= BIP54_MAX_LEGACY_SIGOPS
+
+
 def vector_to_fuzz_input(vector):
     tx = from_hex(CTransaction(), vector["tx"])
     spent_outputs = [from_hex(CTxOut(), txo) for txo in vector["spent_outputs"]]
@@ -57,6 +167,8 @@ def main():
     generated = set()
     for index, vector in enumerate(vectors):
         try:
+            if vector_is_valid(vector) != vector["valid"]:
+                raise ValueError("validity flag does not match independent sigop count")
             fuzz_input = vector_to_fuzz_input(vector)
         except (KeyError, TypeError, ValueError) as e:
             raise ValueError(f"vector {index}: {e}") from e
