@@ -2155,7 +2155,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     connOptions.m_msgproc = node.peerman.get();
     connOptions.nSendBufferMaxSize = static_cast<unsigned int>(static_cast<uint64_t>(args.GetIntArg("-maxsendbuffer", DEFAULT_MAXSENDBUFFER)) * 1000);
     connOptions.nReceiveFloodSize = static_cast<unsigned int>(static_cast<uint64_t>(args.GetIntArg("-maxreceivebuffer", DEFAULT_MAXRECEIVEBUFFER)) * 1000);
-    connOptions.m_added_nodes = args.GetArgs("-addnode");
+    for (const std::string& added_node : args.GetArgs("-addnode")) {
+        // Such a value is not a valid connection target, but would otherwise be
+        // treated as one and retried indefinitely.
+        if (TrimStringView(added_node).empty()) {
+            LogWarning("Ignoring empty -addnode value");
+            continue;
+        }
+        connOptions.m_added_nodes.push_back(added_node);
+    }
     connOptions.nMaxOutboundLimit = *opt_max_upload;
     connOptions.m_peer_connect_timeout = peer_connect_timeout;
     connOptions.whitelist_forcerelay = args.GetBoolArg("-whitelistforcerelay", DEFAULT_WHITELISTFORCERELAY);

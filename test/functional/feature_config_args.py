@@ -291,6 +291,14 @@ class ConfArgsTest(BitcoinTestFramework):
             self.start_node(0, extra_args=['-nonetworkactive=1'])
         self.stop_node(0)
 
+    def test_empty_addnode(self):
+        self.log.info('Test empty -addnode values are ignored')
+        with self.nodes[0].assert_debug_log(
+                expected_msgs=['Ignoring empty -addnode value'],
+                unexpected_msgs=['trying v2 connection (manual) to']):
+            self.start_node(0, extra_args=['-addnode=', '-addnode= '])
+        self.stop_node(0)
+
     def test_seed_peers(self):
         self.log.info('Test seed peers')
         default_data_dir = self.nodes[0].datadir_path
@@ -524,6 +532,7 @@ class ConfArgsTest(BitcoinTestFramework):
     def run_test(self):
         self.test_log_buffer()
         self.test_args_log()
+        self.test_empty_addnode()
         self.test_seed_peers()
         self.test_networkactive()
         self.test_empty_connect()
