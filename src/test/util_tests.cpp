@@ -377,6 +377,8 @@ BOOST_AUTO_TEST_CASE(util_FormatISO8601DateTime)
     BOOST_CHECK_EQUAL(FormatISO8601DateTime(1317425777), "2011-09-30T23:36:17Z");
     BOOST_CHECK_EQUAL(FormatISO8601DateTime(4133980799), "2100-12-31T23:59:59Z");
     BOOST_CHECK_EQUAL(FormatISO8601DateTime(253402300799), "9999-12-31T23:59:59Z");
+    BOOST_CHECK(FormatISO8601DateTime(std::numeric_limits<int64_t>::min()).empty());
+    BOOST_CHECK(FormatISO8601DateTime(std::numeric_limits<int64_t>::max()).empty());
 }
 
 BOOST_AUTO_TEST_CASE(util_FormatISO8601Date)
@@ -386,6 +388,8 @@ BOOST_AUTO_TEST_CASE(util_FormatISO8601Date)
 
     BOOST_CHECK_EQUAL(FormatISO8601Date(0), "1970-01-01");
     BOOST_CHECK_EQUAL(FormatISO8601Date(1317425777), "2011-09-30");
+    BOOST_CHECK(FormatISO8601Date(std::numeric_limits<int64_t>::min()).empty());
+    BOOST_CHECK(FormatISO8601Date(std::numeric_limits<int64_t>::max()).empty());
 }
 
 
