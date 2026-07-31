@@ -119,7 +119,7 @@ class UTXOCacheChange(ctypes.Structure):
         ("txid", ctypes.c_ubyte * 32),
         ("index", ctypes.c_uint32),
         ("height", ctypes.c_uint32),
-        ("value", ctypes.c_uint64),
+        ("value", ctypes.c_int64),
         ("is_coinbase", ctypes.c_bool),
     ]
 
