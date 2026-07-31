@@ -114,12 +114,29 @@ def check_ELF_CONTROL_FLOW(binary) -> bool:
     '''
     Check for control flow instrumentation
     '''
-    main = binary.get_function_address('main')
-    content = binary.get_content_from_virtual_address(main, 4, lief.Binary.VA_TYPES.AUTO)
+    endbr64 = [243, 15, 30, 250]
 
-    if content.tolist() == [243, 15, 30, 250]: # endbr64
-        return True
-    return False
+    def has_endbr64(address):
+        content = binary.get_content_from_virtual_address(address, 4, lief.Binary.VA_TYPES.AUTO)
+        return content.tolist() == endbr64
+
+    main = binary.get_function_address('main')
+    if not has_endbr64(main):
+        return False
+
+    # Compilers may omit ENDBR64 from functions that are only called directly.
+    # A function whose address is materialized by a relocation is a possible
+    # indirect target, so check those entries without rejecting startup code
+    # and PLT stubs that are not represented by such relocations.
+    functions = {function.address for function in binary.functions}
+    for relocation in binary.relocations:
+        target = relocation.addend or 0
+        if relocation.symbol is not None:
+            target += relocation.symbol.value
+        if target in functions and not has_endbr64(target):
+            return False
+
+    return True
 
 def check_ELF_FORTIFY(binary) -> bool:
 
