@@ -330,3 +330,79 @@ The subtree history contains the current vector/generator/header update in `c26d
 1. Draw another eligible catalog goal after a fresh gate and record the exact selector output.
 2. Keep this BIP352 cell closed unless the authoritative BIP or subtree changes.
 3. Preserve the distinction between exact vector synchronization and broader implementation, platform, and constant-time audits.
+
+## Cycle 221: BIP371 PSBT Vector Drift
+
+### Cycle Identity
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `81` (`spec-vector-drift`); no reroll.
+- Branch: `uber-cycle-221-spec-vector-drift-20260731`.
+- Start HEAD: `44c963f44cd3c1f6ba13d5c6d7ac1a1f12f8fc14`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1229 42`.
+- Fresh gate passed: tracked state was clean before the change, `git diff --check`
+  passed, protected processes remained alive, and the catalog/prompt/TSV/protocol
+  hashes were unchanged. Existing BIP340, BIP341/342, BIP324, BIP327, BIP352,
+  and testnet4-generator cells were excluded as already closed.
+
+### Scope and Authority
+
+The distinct cell was PSBT Taproot vector coverage under BIP371. The authoritative
+source was the raw BIP371 document at commit
+`9783d61f1b9c81231581fee026c8e8cb9499d265`:
+
+`https://raw.githubusercontent.com/bitcoin/bips/9783d61f1b9c81231581fee026c8e8cb9499d265/bip-0371.mediawiki`
+
+Its SHA-256 was `f7bde92b1de04c0286c678930dd11fdafbfaa7e72767038e44e12fd4d4b31091`.
+The document contains 17 Base64 vectors: 11 invalid cases and 6 valid cases.
+
+### Evidence
+
+Before the change, `test/functional/data/rpc_psbt.json` contained 63 invalid
+vectors and matched 16 of the 17 authoritative BIP371 strings. The missing
+string was BIP371 invalid case 8, `PSBT_IN_TAP_SCRIPT_SIG` signature too short.
+The local entry introduced by `0ad21e7c558da47f50d6b39974d0d2713e829d25`
+was a nearby but different 282-byte payload: the authoritative payload is 281
+decoded bytes and differs in the signature bytes and terminal serialization.
+It was still a useful independent malformed-input case, so it was retained rather
+than replaced.
+
+The exact BIP371 case was added to the invalid vector list. After the change, the
+JSON parsed successfully, the invalid list contains 64 entries, and all 17
+authoritative BIP371 strings are present exactly once in the local invalid/valid
+corpus. The added vector decodes to 281 bytes with SHA-256
+`894d019736e3319cca99bdae987047e5d8b83ba8b627d0e5a6ec4bd8cdc704c0`.
+
+### Verification
+
+The following independent RPC matrix used the available
+`/data/my_storage/tmp/cycle214-build/bin/bitcoind` on a scratch regtest datadir:
+
+```text
+All 64 local invalid vectors: decodepsbt returned -22 and TX decode failed.
+All 48 local valid vectors: decodepsbt returned 0.
+The exact BIP371 case returned:
+  TX decode failed Input Taproot script path signature is shorter than 64 bytes: iostream error
+The adjacent BIP371 too-long case returned the distinct longer-than-65-bytes error.
+```
+
+The BIP371 cache-generation helper passed. The full `rpc_psbt.py` harness reached
+the vector section after using an isolated 199-block cache, but the older cycle214
+binary stopped first on an unrelated existing `invalid_with_msg` expectation:
+the source test expected `TX decode failed Input Taproot BIP32 keypath has an
+invalid length`, while that binary returned `TX decode failed SpanReader::read():
+end of data`. This is a binary/source-version mismatch, not evidence against the
+new vector; the complete direct RPC matrix above passed. No implementation source
+changed, and no online PR was used as an oracle.
+
+`git diff --check` passed. Scratch datadirs and the temporary daemon were kept
+outside the repository; no default wallet, key, or production database was used.
+
+### Verdict and Handoff
+
+**Confirmed test-vector drift; fixed.** The local PSBT test corpus omitted one
+current authoritative BIP371 invalid vector while retaining a historical nearby
+variant. The missing exact case is now covered without dropping existing malformed
+input coverage. The next cycle must perform a fresh gate, draw with the exact
+selector, preserve unrelated untracked files, and keep this BIP371 cell closed
+unless the pinned BIP371 source or PSBT vector contract changes.
