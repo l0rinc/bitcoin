@@ -1,5 +1,221 @@
 # Historical Knowledge Recipe Synthesis: Cycle 120
 
+## Cycle 183 Identity and Gate
+
+- Draw sequence: `shuf -i 0-98 -n 1` -> `40` (closed Goal 40 cell), exact
+  reroll -> `49` (closed Goal 49 cell), exact reroll -> `90`.
+- Selected goal: `90`, `historical-knowledge-recipes` (Whole-PR and commit
+  knowledge-base recipe synthesis). Goal 90's previous recipe fingerprints
+  are excluded; this cycle must mine a distinct technical history cluster.
+- Branch: `uber-cycle-183-historical-knowledge-recipes-20260731`.
+- Start HEAD: `47b5a3a73da9b51772443492627e08ccff6b9381`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Start divergence (`origin/master...HEAD`): `42 1156`.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Corrected TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc`.
+- Uber-goal state hash at gate:
+  `07928165ec6dc0eb74f7beeefc91dc1f7f26ed8fc654aace09aee0fc59df773d`.
+- TSV schema: `records=99 ids_0_to_98=yes` (header excluded).
+- Tracked/index state was clean; known agent-owned untracked artifacts are
+  preserved and excluded from commits. Root free space was about 93 MiB and
+  `/data` had about 49 GiB free; scratch must stay under `/data/my_storage/tmp`.
+- Preserved unrelated processes: PID 777094 (`wallet_tests`) and PID 956381
+  (`util_tests`); neither may be terminated.
+
+### Scope and exclusions
+
+Mine a whole upstream PR or commit sequence for an accepted technical rule,
+including rejected approaches, regression strategy, review rationale, and a
+held-out validation. Exclude the existing fingerprints
+`presence-vs-verification-before-assertion`,
+`reservation-conservation-after-deferred-eligibility`,
+`configurable-parallel-feature-lifecycle`,
+`provenance-aware-terminal-state-accounting`,
+`actionable-interface-minimal-schema-boundary-realism`,
+`resource-bound-backlog-duplicate-suppression-retention-telemetry`, and
+`resource-owning-move-operation-contract`, plus the prior PSBT, relay,
+generic rollback, exact-helper, and local ownership cells.
+
+Initial queue: inspect recent first-parent and topic history for distinct
+multi-commit fixes involving state-machine transitions, canonical encoding,
+failure cleanup, concurrency, or platform/build behavior; use current
+review/test evidence as seeds rather than as proof. The selected cluster must
+produce a compact recipe with a trigger, invariant, oracle, negative control,
+and a current-tree validation before any source change is considered.
+
+## Cycle 183 Evidence Log
+
+### Selected history cluster: Guix cross-build setup and diagnostic gating
+
+The selected upstream PR is [#35821](https://github.com/bitcoin/bitcoin/pull/35821),
+merged as `7e5952b0aa04429c88d8ad990f35862421c4fa9d` on top of the GUI split
+from PR #35537. Its body states two goals: deduplicate setup code and add
+linker-warning errors now that GUI builds are separate. The five-commit
+sequence is technically coherent rather than a bulk refactor:
+
+1. `b12a70f330d0ffcc3064ecf2643f8cfe765cf9c8` adds
+   `-Wl,--fatal-warnings` to Linux and Windows builds. It leaves
+   `riscv64-linux-gnu` as an explicit exception because Boost's
+   `fedisableexcept`/`feenableexcept` warnings are known unsupported behavior,
+   and records that Darwin needs a separate prerequisite.
+2. `cc9b0f2266d93fd1380a0a6a15d042c3ffad5752` factors the LLVM setup shared
+   by macOS daemon and GUI builds into `llvm_toolchain()`.
+3. `288f76ed0fcb42cca5530e3e1b1a76627c12de79` factors the MinGW setup shared
+   by Windows daemon and GUI builds into `mingw_w64_toolchain()`.
+4. `665f11d04ac0fbc43ee6165ed7f005ffc178b115` factors the GCC setup shared
+   by Linux daemon and GUI builds into `gcc_toolchain()`.
+5. `683ae4c520b17d93e1fe7695506d1815ae200ded` normalizes the CMake flag
+   ordering and keeps each daemon/GUI target's distinct component flags.
+
+The source-to-sink contract is broader than “remove duplicate lines.” Each
+build variant must receive a valid native/cross compiler, include path,
+library path, linker policy, CMake feature set, and packaging/install step.
+The shared functions therefore validate all generated cross paths, while the
+six callers retain their target-specific `NO_QT`, GUI target, static runtime,
+and package-component behavior. Linker diagnostics are promoted only on
+targets where the dependency set is clean; the RISC-V exception is explicit
+rather than a broad warning suppression.
+
+### Review and maintainer evidence
+
+The PR body and commit messages are linked above. The public GitHub API review
+record was queried for the PR, issue comments, reviews, and line comments.
+Maintainer `hebasto` gave a concept ACK, later verified the code with a
+multi-architecture Guix hash matrix, and ACKed the final configuration commit.
+A line review requested consistent local variable naming in all toolchain
+functions; the author changed it. Another review asked why the linker warning
+flag was not also applied to the GUI build. The author declined to silence the
+legitimate GUI dependency warning and preferred a separate static-libgcc
+solution, matching the commit's documented platform boundary. This records a
+general review rule: do not widen a diagnostic gate or hide a warning merely
+to make a matrix green when the dependency contract is different.
+
+The public review trail is incomplete for private or omitted discussion, so
+it is evidence of accepted rationale and likely objections, not an oracle.
+The exact API endpoints used were:
+
+- `https://api.github.com/repos/bitcoin/bitcoin/pulls/35821`
+- `https://api.github.com/repos/bitcoin/bitcoin/pulls/35821/reviews`
+- `https://api.github.com/repos/bitcoin/bitcoin/issues/35821/comments`
+- `https://api.github.com/repos/bitcoin/bitcoin/pulls/35821/comments`
+
+### Independent held-out validation: NetBSD cross CI
+
+PR [#35412](https://github.com/bitcoin/bitcoin/pull/35412), merge
+`297fd1489bbf9cd9085570d854b4545e6e5f7566`, was selected before checking its
+details and was not used to derive the Guix recipe. Its two commits add a
+NetBSD Clang cross job, a `netbsd_LDFLAGS` host entry, and the CI environment
+file. It independently exercises the same review risks at a different
+boundary: target-specific toolchain/sysroot paths, CI file mode, pinned SDK
+version, and whether a cross job is actually runnable rather than merely
+configured.
+
+The review history records an initial lint failure because the new shebang
+file had mode `0644`; the merged file is `100755`. The PR was simplified to
+remove unnecessary `/depends` changes, and `NETBSD_VERSION` was pinned from
+RC5 to `11.0_RC6` instead of using a rolling release path that could make CI
+unstable or non-reproducible. The maintainer's final ACK followed that
+correction and a real cross-job run.
+
+The current-tree held-out checks were:
+
+- `git show 297fd1489b:ci/test/00_setup_env_netbsd_cross.sh | bash -n` and
+  the corresponding base-install script passed.
+- `git ls-tree -l 297fd1489b` reported `100755` for both scripts, and
+  `git diff --check` passed for the four-file PR.
+- Sourcing the exact merged environment with
+  `DEPENDS_DIR=/data/my_storage/tmp/cycle183-netbsd` verified
+  `HOST=x86_64-unknown-netbsd`, `NETBSD_VERSION=11.0_RC6`, and the explicit
+  `RUN_UNIT_TESTS=false`/`RUN_FUNCTIONAL_TESTS=false` cross-job contract.
+  Output: `held-out NetBSD environment smoke: host/version/no-tests passed`.
+
+This environment did not have the Docker/NetBSD SDK capacity to run the full
+cross job, so the upstream real-run evidence and the local configuration
+smoke are recorded separately. The held-out API endpoints were queried with
+the same four endpoint pattern using PR number `35412`; public issue comments
+also record the permission-mode failure and release-pinning discussion.
+
+### Exact-merge validation and mutation oracle
+
+The exact merged #35821 files passed `git diff --check` against parent
+`2d4065d1fe4d9ad802e7c2b996d6cb12d66677a2`. All seven shell files (`setup.sh`
+and six build variants) passed `bash -n`. A matrix check independently
+verified that every variant sources `setup.sh`, calls exactly the expected
+GCC/LLVM/MinGW function, contains no copied `store_path` or
+`check_cross_paths` implementation, retains `-Werror=dev`, and matches the
+documented fatal-warning policy. Output:
+
+```text
+exact-merge matrix check: all six variants use one shared toolchain function, retain local flags, and match fatal-warning policy
+```
+
+A fake-manifest smoke supplied only directories, not compilers, and invoked
+the exact `gcc_toolchain`, `mingw_w64_toolchain`, and `llvm_toolchain`
+functions. It passed all path checks and required exports:
+
+```text
+fake manifest toolchain smoke: gcc, mingw, llvm passed
+```
+
+Two disposable mutations removed a shared toolchain call and `-Werror=dev`;
+the matrix check rejected both. The negative control is PR #35795,
+`3f313a774b` (`build: set CMAKE_VISIBILITY_INLINES_HIDDEN in REDUCE_EXPORTS`),
+which changes one universal CMake setting and has no cross-toolchain setup,
+SDK pin, packaging variant, or artifact matrix. The recipe correctly does
+not force that one-line build-policy change into the cross-build checklist.
+
+The first three fake-manifest attempts had only harness mistakes: an
+unexported scratch root, a mismatch between the returned and created fake
+path roots, and missing synthetic include directories. A separate NetBSD
+smoke first had an unmatched shell quote. Each was corrected before the
+passing evidence above; none changed repository files or was treated as a
+code failure.
+
+### Reusable recipe
+
+Fingerprint: `scoped-cross-build-consolidation-and-diagnostic-gating`.
+
+When reviewing or changing a multi-platform build matrix:
+
+1. Build a target table first: host triple, native/cross compiler, sysroot,
+   include/library search paths, linker diagnostics, CMake feature flags,
+   install/package targets, SDK/version pin, and executable file mode.
+2. Factor only genuinely invariant setup into a shared function. Have it
+   validate derived paths and export every variable consumed by callers; keep
+   daemon, GUI, host, and packaging-specific flags in their variant scripts.
+3. Treat warning-to-error changes as dependency-boundary changes. Promote
+   warnings only where they are actionable, retain narrow documented
+   exceptions for known external defects, and do not silence a legitimate
+   warning to make an unrelated target pass.
+4. Validate the matrix at three levels: shell syntax and mutation-sensitive
+   static invariants, a fake or isolated path smoke for each toolchain branch,
+   and at least one real cross build with artifact hashes. Pin SDKs and fix
+   executable modes before interpreting CI results.
+5. Use a negative control such as a universal CMake flag to ensure the recipe
+   does not turn every build change into a cross-platform refactor.
+
+This is distinct from the existing Guix archive-provenance and supply-chain
+cells: it concerns preserving per-target behavior while consolidating setup
+and gating diagnostics, not source archive trust or dependency provenance.
+It is also distinct from the prior reviewer-preference GUI workaround and
+LineReader held-out review, which concern platform-specific runtime/test
+behavior rather than build-toolchain contracts.
+
+### Cycle 183 verdict
+
+**Recipe confirmed; no current production defect or source change justified.**
+The upstream five-commit sequence supplies accepted design, rejected
+generalization, and artifact evidence. The independent NetBSD change
+recovers the same matrix invariants through a different CI/sysroot boundary,
+including a real mode failure and reproducibility decision. The exact-merge
+shell checks, fake-manifest path smoke, mutation rejections, and negative
+control validate the recipe locally. The selected journal remains a
+journal-only result; the next queue is a fresh gate and exact selector, with
+this fingerprint excluded unless new build/review evidence appears.
+
 ## Cycle 176 Identity and Gate
 
 - Draw command: `shuf -i 0-98 -n 1`
