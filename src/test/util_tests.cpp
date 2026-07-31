@@ -25,6 +25,7 @@
 #include <util/moneystr.h>
 #include <util/overflow.h>
 #include <util/readwritefile.h>
+#include <util/signalinterrupt.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <util/time.h>
@@ -190,6 +191,20 @@ BOOST_AUTO_TEST_CASE(tokenpipe_end_of_stream)
     std::signal(SIGPIPE, previous_sigpipe_handler);
 }
 #endif
+
+BOOST_AUTO_TEST_CASE(signal_interrupt_reset_drains_pending_event)
+{
+    util::SignalInterrupt interrupt;
+    BOOST_CHECK(!interrupt);
+    BOOST_CHECK(interrupt());
+    BOOST_CHECK(interrupt);
+    BOOST_CHECK(interrupt.reset());
+    BOOST_CHECK(!interrupt);
+
+    BOOST_CHECK(interrupt());
+    BOOST_CHECK(interrupt.reset());
+    BOOST_CHECK(!interrupt);
+}
 
 BOOST_AUTO_TEST_CASE(util_criticalsection)
 {

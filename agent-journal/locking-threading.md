@@ -1,4 +1,140 @@
-# Cycle 16: locking, threading, and scheduler audit
+# Cycle 189 start: SignalInterrupt reset/handler wakeup contract
+
+## Fresh gate and selection
+
+- `git fetch origin master` succeeded. The exact selector was
+  `shuf -i 0-98 -n 1` -> `8`, `locking-threading`; no reroll was needed.
+- Dedicated branch: `uber-cycle-189-locking-threading-20260731`. Start HEAD:
+  `69be8957de541093a7c182b7363e81a4e613f3cd`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `1168 42`.
+- Catalog SHA-256:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+  Prompt SHA-256:
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+  Corrected TSV SHA-256:
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+  Protocol SHA-256:
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Uber-goal state SHA-256 at the gate:
+  `0bb91377d55760f26624d45e40a9395a5f1c711a820a038b09900dde24e93560`.
+- The TSV has one header and 99 four-field records, IDs 0 through 98 exactly
+  once. Tracked files were clean at the gate; known unrelated untracked
+  artifacts were preserved. PIDs `777094` and `956381` were alive and were
+  not touched.
+
+## Distinct cell and working hypothesis
+
+Prior Goal 8 cells closed the `DumpAddresses()` periodic/shutdown rename race,
+transaction-download versus mempool and V2 transport lock-order hypotheses,
+normal scheduler-lifetime review, callback-owned peer state, and the mapport
+`std::thread` lifecycle race. This cycle targets a separate process-wide
+interrupt state machine: `util::SignalInterrupt` and the GUI retry path that
+calls `SignalInterrupt::reset()` after a shutdown request.
+
+Trust boundary: an asynchronous POSIX SIGTERM/SIGINT handler or Windows
+console callback sets the shutdown event while the main/UI thread resets the
+event to retry chainstate initialization. The contract is that an interrupt
+that arrives after reset begins must remain observable by `operator bool()` or
+by a wake token; reset must not lose a shutdown request.
+
+Working hypothesis: on Unix, `reset()` calls `wait()` while `m_flag` remains
+true and clears it only afterward. `operator()`, which is intentionally safe
+for a signal handler, uses `m_flag.exchange(true)` and writes a pipe token only
+when the previous value was false. A signal between reset's token drain and
+final store can therefore observe true, write no token, and then be erased by
+reset. The relevant production sequence is the SIGTERM handler in
+`src/init.cpp`, the `g_shutdown` object, and the retry reset at
+`src/init.cpp:1914`; this is distinct from ordinary thread interruption.
+
+## Cycle 189 completion
+
+## Contract and independent source trace
+
+The relevant implementation was unchanged at the gate:
+
+- `SignalInterrupt::operator()` is deliberately usable from the POSIX signal
+  handler. It atomically changes `m_flag` from false to true and writes one
+  byte to the token pipe only when the prior flag was false. This coalesces
+  repeated shutdown requests and avoids condition-variable operations in a
+  signal handler.
+- Unix `SignalInterrupt::reset()` previously called `wait()` while
+  `m_flag` remained true. `wait()` consumed the old pipe token, then reset
+  stored false after returning. Windows `reset()` similarly waited under the
+  condition-variable helper and stored false after the helper released its
+  mutex.
+- `src/init.cpp` installs `HandleSIGTERM`/`HandleSIGINT`, whose only action is
+  `g_shutdown.operator()()`. `InitContext()` publishes that object to the
+  node, and the GUI retry path at `src/init.cpp:1914` calls
+  `node.shutdown_signal->reset()` before retrying chainstate initialization.
+
+The lost-event schedule is deterministic at the state-machine level. Start
+with one pending shutdown token (`m_flag == true`, one `x` byte in the pipe).
+The retry thread enters `reset()` and consumes that byte while leaving the
+flag true. A SIGTERM handler then calls `operator()`: its exchange observes
+true, so it writes no new byte. Reset stores false. The subsequent
+`ShutdownRequested()` check sees false and the shutdown request is lost. A
+signal arriving between the old flag check and the token read has the same
+outcome. On Windows, a console callback can set the flag after the wait helper
+unlocks and before the old reset store clears it. This is a wakeup/lifecycle
+defect, not a TSan-detectable data race.
+
+History confirms the contract rather than introducing it: the class was added
+as a signal-safe interrupt in `e2d680a32d7`, and its non-throwing reset/operator
+API was established by `1d92d89edb`. The current comments explicitly require
+signal-handler safety. The prior Goal 8 cells on peer locks, scheduler
+lifetime, mapport thread ownership, and address-file serialization do not
+cover this process-wide interrupt state machine.
+
+## Fix
+
+On Unix, `reset()` now atomically exchanges the flag to false before draining
+the old token. Any signal after that linearization point sees false, publishes
+a token, and leaves the flag true; the drain consumes only the old token, so
+the new shutdown remains observable. If no interrupt was pending, reset
+returns without reading the pipe. On Windows, reset clears the flag while
+holding the same mutex as `operator()`, preventing a concurrent console
+callback from being cleared after reset's synchronization point. The normal
+single-thread reset behavior and return-value handling are preserved.
+
+Added `util_tests/signal_interrupt_reset_drains_pending_event`, which checks
+the pending-event drain, false postcondition, and reuse of the interrupt for a
+second event. The test intentionally does not attempt to time an actual
+signal-handler interleaving; the exact lost-event schedule is established by
+the atomic/pipe state trace above, while timing stress would be flaky.
+
+## Verification
+
+- `git diff --check`: passed.
+- UBSan/alignment/object-size Clang 19 build:
+  `CCACHE_DIR=/data/my_storage/tmp/cycle189-ccache cmake --build /data/my_storage/tmp/cycle106-clang19-ubsan --target test_bitcoin -j2` passed.
+- Focused UBSan test with `TMPDIR=/data/my_storage/tmp/cycle189-ubsan-runtime`:
+  1 case and 8 assertions passed.
+- Full UBSan `util_tests`: 81 cases and 4,002 assertions passed.
+- TSan Clang 19 build:
+  `CCACHE_DIR=/data/my_storage/tmp/cycle189-ccache cmake --build /data/my_storage/tmp/cycle163-tsan --target test_bitcoin -j2` passed.
+- Focused TSan test with
+  `TSAN_OPTIONS='halt_on_error=1:exitcode=66:report_signal_unsafe=0'`: 1 case
+  and 8 assertions passed with no report.
+- Full TSan `util_tests`: 81 cases and 4,002 assertions passed with no report.
+
+The first focused invocation before creating its `TMPDIR` failed in the test
+fixture with `filesystem_error: temp_directory_path`; it was an environment
+setup failure and was rerun successfully after creating the `/data` directory.
+No Windows or signal-handler execution environment was available, so those
+branches are covered by source inspection and the platform-specific locking
+proof, not by native runtime output.
+
+## Verdict and handoff
+
+**Confirmed interrupt reset lost-wakeup race; fixed locally.** The smallest
+correct change is confined to `src/util/signalinterrupt.cpp`, with the focused
+contract test in `src/test/util_tests.cpp`. The next locking cycle should
+prioritize a fresh worker or callback state machine, and may revisit
+SignalInterrupt only with new evidence about pipe failure or reset lifecycle;
+do not reopen this lost-event interleaving.
+
+## Cycle 16: locking, threading, and scheduler audit
 
 ## Selection and gate
 
