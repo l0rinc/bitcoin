@@ -1,5 +1,116 @@
 # Long-Running Rebuild, Recovery, and Compaction Profiling
 
+## Cycle 206 - full reindex and interrupted index restart
+
+- Date: 2026-07-31 UTC
+- Goal index: 21
+- Slug: `rebuild-recovery-profile`
+- Selector command/result: `shuf -i 0-98 -n 1` -> `21`
+- Branch: `uber-cycle-206-rebuild-recovery-profile-20260731`
+- Gate timestamp: `2026-07-31T11:11:46Z`
+- Start HEAD: `528ba5696a1a9786befb1f8ab779b8d50df86d80`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Start divergence: `1202 42` (`git rev-list --left-right --count HEAD...origin/master`)
+- Pre-cycle state SHA256: `edf283a2fe2c5c09cf0c934f37d149c4016c6c5527d5274ee29723b53f5de46c`
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Prompt SHA256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+
+### Scope and exclusions
+
+This cycle profiles a distinct current-source cell: full `-reindex` scans of block files, compared with `-reindex-chainstate`, followed by an interrupted `txindex`/`coinstatsindex` rebuild restarted without an explicit reindex. The correctness contract is exact chain tip, chain height, and synced index height after each run; the resource contract records wall time, task-clock/instructions/cache counters when available, database directory size, process high-water RSS, and `/proc/<pid>/io` counters. All data, ports, wallets, and logs are scratch-only.
+
+The prior Cycle 14 cells are excluded: its 20,000 coinbase-only chainstate cache-size comparison, tx/coinstats index cache comparison, chainstate crash/restart, and single-sample RSS monitor. This cycle does not claim broad storage or performance conclusions from one synthetic workload. The current `index/base.cpp` restart-readiness changes and the current full-reindex path are evidence seeds, not assumed defects.
+
+### Hypotheses
+
+1. Full block-file reindex and chainstate-only reindex have a measurable, reproducible work split that is not represented by the startup log or final state alone.
+2. Killing an indexed rebuild after chainstate reaches an intermediate height and restarting without `-reindex` either converges to the exact source tip with both indexes synced or exposes a readiness, stale-index, or recovery defect.
+3. The index rebuild's persisted size, I/O counters, and high-water memory remain bounded and logically equivalent after interruption and restart.
+
+### Planned evidence
+
+Use a current-source optimized daemon in `/data/my_storage/tmp/cycle206-bitcoind-build/`, a deterministic regtest source chain under `/data/my_storage/tmp/cycle206-rebuild-recovery/`, separate copied datadirs for each run, explicit ports, and fixed `dbcache`/parallelism. Capture command lines, source tip/hash, timing, `perf stat` output where permitted, `/proc` samples, `du -sb`, logs, `getblockchaininfo`, and `getindexinfo`. A confirmed defect requires a failing-before state or recovery invariant plus a minimized deterministic schedule and a focused regression; a profile-only difference must be repeated and causally attributable before any optimization is considered.
+
+### Build and source fixture
+
+The current start HEAD was built with Clang 19, Release, Ninja, wallet/tests/bench/fuzz/IPC/ZMQ/GUI disabled, and `bitcoind` plus `bitcoin-cli` enabled:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle206-build-tmp cmake -S . -B /data/my_storage/tmp/cycle206-bitcoind-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19 -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DBUILD_FOR_FUZZING=OFF -DBUILD_UTIL=ON -DENABLE_WALLET=OFF -DENABLE_IPC=OFF -DWITH_ZMQ=OFF -DWITH_GUI=OFF
+TMPDIR=/data/my_storage/tmp/cycle206-build-tmp CCACHE_DIR=/data/my_storage/tmp/cycle206-ccache cmake --build /data/my_storage/tmp/cycle206-bitcoind-build --target bitcoind bitcoin-cli -j2
+```
+
+All 298 Ninja steps completed. Existing diagnostics were limited to the libstdc++ deprecation in `node/eviction.cpp` and existing unneeded-declaration/member warnings in `signet.cpp` and `txgraph.cpp`. `bitcoind` SHA256: `e644e56a7609f1a3c0f54d1332bd9291684109cc3ef423499ead16f91ba7ae19`. `bitcoin-cli` SHA256: `d8499ef3a8d59cf7e85641c47f7bcc93a4d0b3dd4f1dc4736edac633160963d1`.
+
+The source node used an explicitly created scratch datadir, regtest ports 18614/18615, no listeners or peers, `-dbcache=32`, `-par=1`, and no indexes. After RPC `setmocktime 1700000000`, 300 batches of 100 `generatetoaddress` calls used the fixed functional-test unspendable address. The stopped fixture was:
+
+```text
+height=30000
+best=5a0fba1ea376063a4d73e5059ff68ad53c9035e94b01f8b84d2b724e0df18478
+source bytes=25734508
+```
+
+The first source launch omitted `mkdir -p "$SRC"`; the daemon correctly rejected the nonexistent explicitly supplied datadir. It was rerun with the directory created. This was a harness invocation error, not a product finding.
+
+### Full reindex versus chainstate-only reindex
+
+Each authoritative run copied the stopped source datadir and used a foreground current-source daemon under `perf stat` with `-dbcache=32`, `-par=1`, no indexes, explicit ports, and either `-reindex=1` or `-reindex-chainstate=1`.
+
+| Run | perf elapsed | task-clock | instructions | cache misses | max RSS/HWM | bytes before restart |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `full-reindex-fixed` | 232.817 s | 233589.85 ms | 2,028,908,781,497 | 2,293,914,447 | 75024/75024 KiB | 32789830 |
+| `chainstate-reindex-fixed` | 2.007 s | 2334.92 ms | 8,693,805,932 | 5,756,662 | 74268/74268 KiB | 35327550 |
+
+Both runs emitted an exact height-30,000 `UpdateTip` with best hash `5a0fba1ea376063a4d73e5059ff68ad53c9035e94b01f8b84d2b724e0df18478`, followed by `initload thread exit`. A clean restart of each completed copy, without either reindex flag, independently returned `blocks=30000`, `headers=30000`, and the same best hash. The authoritative task-clock ratio is 100.04 and the instruction ratio is 233.37. This is a measured block-file versus chainstate work split, not a defect or an optimization target by itself.
+
+The first full-reindex probe was stopped after the wrapper's broken `/proc` default expression produced invalid metric warnings; its console ultimately reached the exact tip, but its counters were discarded. The corrected full rerun completed normally. The corrected wrapper's process sampling was sparse because RPC calls blocked while initialization was in progress; RSS/HWM are observed high-water values, not a statistically complete memory trace. `perf` was available; `iostat` and `strace` were not.
+
+### Interrupted indexed rebuild and restart
+
+The first indexed control completed too quickly for a height-based RPC trigger because the copied block index already covered height 30000; it was stopped cleanly and excluded from the crash result. The distinct `indexed-interrupt-2` run started from the source with `-txindex=1 -coinstatsindex=1 -dbcache=16 -par=1`, waited for `coinstatsidx thread start`, waited exactly one second, captured `getindexinfo`, and sent `SIGKILL` to the foreground daemon. The trigger recorded:
+
+```text
+timestamp=2026-07-31T11:36:31Z
+delay_after_coinstats_thread_start=1s
+txindex: synced=true, best_block_height=30000
+coinstatsindex: synced=false, best_block_height=0
+status=137
+```
+
+No `Shutdown done` line was emitted. The crash monitor observed 8 samples, max RSS/HWM 75356 KiB, 4096 read bytes, and 2936832 write bytes. This was a controlled process interruption, not a filesystem power-loss simulation.
+
+Restarting that exact partial datadir without `-reindex`, with both index flags and the same cache/parallelism, converged independently:
+
+```text
+status=0 ready=1 wall_ms=4630 samples=48 max_rss_kb=76456 max_hwm_kb=76456
+read_bytes=16384 write_bytes=17051648 bytes=36687109
+blocks=30000 headers=30000 best=5a0fba1ea376063a4d73e5059ff68ad53c9035e94b01f8b84d2b724e0df18478
+```
+
+The restart `perf stat` recorded 4368.70 ms task-clock, 17,571,196,170 instructions, and 11,139,047 cache misses. Its log reported `txindex is enabled at height 30000`, `coinstatsindex is enabled at height 30000`, `initload thread exit`, and `Shutdown done`, with no project error/corruption/assertion diagnostic. The exact ready JSON is in `logs/indexed-restart-2.ready`.
+
+### Independent functional controls and history
+
+The current-source functional controls both passed:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle206-functional-tmp python3 test/functional/feature_reindex.py --configfile=/data/my_storage/tmp/cycle206-bitcoind-build/test/config.ini --tmpdir=/data/my_storage/tmp/cycle206-functional-reindex --cachedir=/data/my_storage/tmp/cycle206-functional-cache --randomseed=206021 --loglevel=INFO
+TMPDIR=/data/my_storage/tmp/cycle206-functional-tmp2 python3 test/functional/feature_coinstatsindex.py --configfile=/data/my_storage/tmp/cycle206-bitcoind-build/test/config.ini --tmpdir=/data/my_storage/tmp/cycle206-functional-coinstats --cachedir=/data/my_storage/tmp/cycle206-functional-cache2 --randomseed=206022 --loglevel=INFO
+```
+
+`feature_reindex.py` covered repeated full/chainstate reindex, out-of-order blocks, and its interrupted index restart control. `feature_coinstatsindex.py` covered indexed versus non-indexed UTXO-set results, restart, full reindex, chainstate reindex, reorg, deactivation, and unclean restart. Both reported `Tests successful` and cleaned their scratch directories.
+
+Recent local history made the restart cell high value: `991997bb41` resets index readiness during restart and adds `baseindex_tests`; adjacent commits cover synchronized chainstate publication, flush failure, cursor decoding, and repeated DB cursor resize cycles. These were checked as history seeds and no mismatch appeared in the exercised paths. No online claim or single profile sample was treated as an oracle.
+
+### Verdict and handoff
+
+Hypothesis 1 is confirmed only as a resource characterization: full block-file reindexing is approximately 100x task-clock and 233x instructions versus chainstate-only reindex for this 30,000 coinbase-only fixture. No incorrect state, unexplained error, or actionable performance regression was demonstrated. Hypotheses 2 and 3 are dismissed for a product defect on the deterministic interrupted-index schedule: partial `coinstatsindex` state reopened, converged, and matched the exact chain tip with bounded observed counters.
+
+No production source or test change is warranted. A future distinct cell for this goal should use chained signed transactions with repeated disk-versus-memory samples, or controlled short-write/ENOSPC faults; it must not recycle this coinbase-only full/chainstate/index-restart cell. Raw artifacts remain under `/data/my_storage/tmp/cycle206-rebuild-recovery/`. No cycle-206 process remains running.
+
 ## Cycle 14
 
 - Date: 2026-07-28 UTC
