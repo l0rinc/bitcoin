@@ -40,7 +40,7 @@ History and upstream provenance support a stable pin: the asset path history end
 
 `test/download_utils.py` now pins the URL to the immutable last-change commit and verifies the expected SHA-256 after every download attempt. The Unix CI script now calls this shared helper instead of its independent mutable `curl` path; Windows callers inherit the same check. This is **confirmed and fixed**: before the change, mutable external test data could alter the trusted native test oracle without a repository diff or content-integrity failure; after the change, revision and bytes are bound before tests run.
 
-Source-and-journal commit: pending. Keep `pip install pyzmq`, vcpkg cache/tool inputs, compiler/SDK downloads, and the mutable fuzz-corpus clone as independently verified next candidates. Do not treat this fix as closing all `qa-assets` provenance.
+Source-and-journal commit: `a0aa2a4d93685d72f604ac979ae4d5e94631bcc1` (`ci: verify pinned script test assets`), authored as `Lőrinc <pap.lorinc@gmail.com>`. Keep `pip install pyzmq`, vcpkg cache/tool inputs, compiler/SDK downloads, and the mutable fuzz-corpus clone as independently verified next candidates. Do not treat this fix as closing all `qa-assets` provenance.
 
 # C/C++ Supply-Chain Cycle 154
 
