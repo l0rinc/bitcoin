@@ -16,6 +16,7 @@ from test_framework.test_framework import TEST_EXIT_PASSED, TEST_EXIT_FAILED
 # the output of `git grep unittest.TestCase ./test/functional/test_framework`
 TEST_FRAMEWORK_MODULES = [
     "address",
+    "bip54_seed_corpus",
     "crypto.bip324_cipher",
     "blocktools",
     "compressor",
@@ -52,4 +53,3 @@ def run_unit_tests():
 
 if __name__ == "__main__":
     run_unit_tests()
-
