@@ -2543,3 +2543,30 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   artifacts, draw a distinct eligible goal, and continue the release queue with
   funded/encrypted wallet migration, P2P transcripts, release-branch backports,
   or a bounded real historical transaction corpus.
+
+## Cycle 216 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `64` (`finding-dedup-recurrence`); no
+  reroll. Branch: `uber-cycle-216-finding-dedup-recurrence-20260731`. Start
+  HEAD was `ad38c8416ae58e758ce3794771dfea4b5e58af`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was 42 behind
+  and 1220 ahead. The fresh gate passed and protected test processes remained
+  untouched.
+- The cycle searched the semantic finding index before testing. Sixteen
+  visible gathered-cluster-union copies collapsed to one patch identity, as did
+  fourteen reorg-dependency-repair copies. The apparent cluster/fee-diagram
+  outlier was a context-shifted duplicate after unified-diff comparison, not a
+  distinct finding. Package cache rollback, witness swap, graph state-machine,
+  and diamond ancestry controls were then replayed on current source.
+- After correcting four absent scratch `TMPDIR` directories, the controls all
+  passed: 1/588, 1/35, 1/5, and 1/23 cases/assertions respectively. The initial
+  exit-201 results were harness setup failures only. No source or permanent
+  test change is justified.
+- Selected journal: `agent-journal/finding-dedup-recurrence.md`, Cycle 216
+  entry. Verdict: **dismissed; no new recurrence or independent duplicate**.
+  The next queue is package rejection after secondary state writes, trim/expiry
+  and reorg overlap outside the representative graph sequence, ancestry-aware
+  release variants, and restart-time database duplicate-key/deletion behavior.
+  The next run must perform a fresh gate, preserve unrelated untracked files,
+  draw with the exact selector, and continue without reopening closed cells.
