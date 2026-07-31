@@ -2690,3 +2690,41 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   or process-message cells without new evidence. The next run must perform a
   fresh gate, preserve unrelated untracked files, draw with the exact selector,
   and continue the selected campaign.
+
+## Cycle 220 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `61` (`stateful-contract-fuzzer`);
+  no reroll. Branch: `uber-cycle-220-stateful-contract-fuzzer-20260731`.
+  Start HEAD was `1ae0016732d99a39fa92b5ca5bc29b03c9a201f2`; `origin/master`
+  was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1227 42`.
+  The fresh gate passed, and protected processes `777094`, `956381`,
+  `1138182`, and `1157959` remained untouched.
+- The selected journal was `agent-journal/stateful-contract-fuzzer.md`.
+  This cycle closed the queued `LoadMempool` validation-interrupt cell. The
+  target now raises the real `SignalInterrupt` while loading a fresh mempool,
+  checks the false return after the first transaction, verifies the first
+  serialized txid and exact partial state, confirms disabled fee-delta and
+  unbroadcast metadata were not imported, and restores the original pool.
+- Source/test/journal commit: `527252010a` (`fuzz: cover mempool load
+  interruption`), authored as `Lőrinc <pap.lorinc@gmail.com>`. No production
+  source changed. The pre-cycle profile had zero hits on
+  `src/node/mempool_persist.cpp:157-158`; the fixed-seed profile hit them once,
+  and the full 1,675-run QA profile hit them 1,670 times.
+- The coverage fuzz build and ASan/UBSan/libFuzzer build completed after ccache
+  was redirected to `/data/my_storage/tmp/cycle220-ccache` because the default
+  root ccache directory was missing. The full available
+  `validation_load_mempool` corpus passed 1,675 executions in 161 seconds at
+  1,688 MB peak RSS. The fixed sanitizer seed passed 2 executions and the
+  16-file sanitizer sample passed 17 executions in 6 seconds; neither reported
+  an assertion, sanitizer, leak, crash, or hang diagnostic.
+- The full unit suite was not rerun because production code was unchanged and
+  the dedicated coverage plus sanitizer replays supplied focused validation.
+  Root storage remained critically full, so artifacts are under
+  `/data/my_storage/tmp/cycle220-*`. Verdict: **confirmed stateful fuzz-harness
+  reachability gap and fixed; no production defect**.
+- Next distinct Goal 61 queue: txdownload request/output modeling after package
+  or reorg transitions. Do not reopen the closed dump-commit, interrupt,
+  AddrMan, raw `tx_pool`, or process-message cells without new evidence. The
+  next run must perform a fresh gate, preserve unrelated untracked files, draw
+  with the exact selector, and continue the selected campaign.
