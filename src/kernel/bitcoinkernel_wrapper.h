@@ -686,6 +686,7 @@ bool ScriptPubkeyApi<Derived>::Verify(int64_t amount,
                                       ScriptVerificationFlags flags,
                                       ScriptVerifyStatus& status) const
 {
+    btck_ScriptVerifyStatus c_status{static_cast<btck_ScriptVerifyStatus>(status)};
     auto result = btck_script_pubkey_verify(
         impl(),
         amount,
@@ -693,7 +694,8 @@ bool ScriptPubkeyApi<Derived>::Verify(int64_t amount,
         precomputed_txdata ? precomputed_txdata->get() : nullptr,
         input_index,
         static_cast<btck_ScriptVerificationFlags>(flags),
-        reinterpret_cast<btck_ScriptVerifyStatus*>(&status));
+        &c_status);
+    status = static_cast<ScriptVerifyStatus>(c_status);
     return result == 1;
 }
 
