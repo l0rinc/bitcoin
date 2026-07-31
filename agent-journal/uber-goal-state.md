@@ -2991,3 +2991,36 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   with a provenance-preserving common transcript. The next run must perform a
   fresh gate and exact selector draw and must not repeat these four P2P
   matrices without new evidence.
+
+## Cycle 228 Completion
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `66` (`backport-correctness`); no reroll.
+  Branch: `uber-cycle-228-backport-correctness-20260731`. Start HEAD was
+  `ac3150cc95ae75334e7f3a84e9e1f34d8f70ac94`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1240 42`.
+  The fresh gate passed, all catalog/protocol hashes were unchanged, and the
+  four protected PIDs remained alive.
+- Goal 66's Cycle 165 `#35214` batch audit was excluded. This cycle selected
+  its queued distinct `#35213` validation-lifetime integration cell. Release
+  `076629a3c1` moves `txsdata` before `CCheckQueueControl`; master
+  `1ed799fb21` has the same semantic fix with an evolved optional-control
+  context. The v28.4 parent has the vulnerable opposite order.
+- A clean GCC 12 pre-fix release build completed all targets. Both the pre-fix
+  parent and patched release passed `validation_block_tests` (3 cases). A
+  disposable functional harness submitted 359 setup blocks, then 256 valid
+  ECDSA-heavy transactions followed by a duplicate-spend transaction. Both
+  normal binaries rejected it with `bad-txns-inputs-missingorspent` and the
+  expected peer disconnect.
+- A fresh pre-fix ASan/UBSan build linked `test_bitcoin` and `bitcoind`.
+  `validation_block_tests` passed 3 cases/1,619 assertions, and the strengthened
+  functional harness passed with halt-on-error ASan/UBSan settings. No report
+  or behavior mismatch was observed. The first harness failure was an omitted
+  expected-disconnect flag and was corrected before the successful controls.
+- Verdict: **no current backport defect found; journal-only close**. The exact
+  source-order contract and release ancestry are correct. The historical UAF is
+  schedule-dependent and was not deterministically reproduced; the patched
+  sanitized counterpart, non-x86/Windows/Docker execution, and upgrade/
+  downgrade fixtures remain limitations. The next run must perform a fresh gate
+  and exact selector draw and must not repeat this `#35213` cell without new
+  evidence.

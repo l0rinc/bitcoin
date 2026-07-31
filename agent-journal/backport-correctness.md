@@ -366,3 +366,38 @@ Remaining limitations are 28.x/29.x/30.x and other release batches, Windows and 
 1. Draw another catalog goal with the exact selector command and record the gate before work.
 2. If goal 66 is drawn again, inspect a distinct 28.x/29.x/30.x backport or release batch; do not reopen `#35331` without new source or test evidence.
 3. Preserve the release/upgrade differential and crash-consistency cells for a future draw.
+
+## Cycle 228: 28.x #35213 validation-lifetime integration
+
+### Draw, gate, and scope
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `66` (`backport-correctness`); no reroll. Branch: `uber-cycle-228-backport-correctness-20260731`.
+- Start HEAD was `ac3150cc95ae75334e7f3a84e9e1f34d8f70ac94`; `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; explicit `HEAD...origin/master` divergence was `1240 42`.
+- Catalog, prompt, TSV, protocol, and prior journal hashes were unchanged. Protected PIDs `777094`, `956381`, `1138182`, and `1157959` remained alive. Existing untracked artifacts were preserved.
+- Cycle 165 already audited the 28.x `#35214` batch, whose release tree includes `#35213`, but its evidence focused on Boost/CI integration and full release validation. This cycle reopened only the queued, distinct `#35213` validation-lifetime cell.
+
+### Ancestry and patch contract
+
+- `origin/28.x` is `de328509029d36b0541ddf25700ac19a0de6a5c8`, merging `076629a3c19ceb779ddc251183c09807327efd3d` (`validation: correct lifetime of precomputed tx data`) on the v28.4 parent `b110304705e1e1f97c88c4bb1455ab03c909450a`.
+- The release patch moves `std::vector<PrecomputedTransactionData> txsdata(block.vtx.size());` before `CCheckQueueControl<CScriptCheck> control(...)`. Current master commit `1ed799fb21db51a12cbd5579420a61b9b5b3ee7d` makes the same lifetime change while also using an optional control object. The release-specific raw control constructor and `fScriptChecks && parallel_script_checks` condition are otherwise unchanged.
+- The source contract is exact: local objects are destroyed in reverse construction order; `control` waits for queued script checks in its destructor, so `txsdata` must be constructed first and destroyed last. The pre-fix v28.4 parent has the opposite order.
+
+### Independent verification
+
+- A clean pre-fix v28.x Autotools build at `/data/my_storage/tmp/cycle228-pre-fix-build` used GCC 12, tests enabled, wallet/ZMQ/GUI/bench disabled, and completed `make -j2` with exit 0. The patched release control was the existing full build at `/data/my_storage/tmp/cycle165-backport-28-build`.
+- `validation_block_tests` passed on both normal binaries with the same Boost selection (`3 cases`, `1,638` pre-fix assertions and `1,502` patched assertions; the count variation is from the test's independent `InsecureRand` workload, not a failure).
+- A disposable functional harness at `/data/my_storage/tmp/cycle228_validation_lifetime.py` built 359 regtest blocks, then submitted a block with 256 valid transactions. Each valid transaction performed eight ECDSA checks over a 9,000-NOP script, followed by a duplicate-spend transaction that forces `ConnectBlock` to return while queued checks may still reference `txsdata`. The pre-fix and patched binaries both rejected the final block as `bad-txns-inputs-missingorspent`, disconnected the peer as expected, and exited 0.
+- A fresh pre-fix ASan/UBSan build at `/data/my_storage/tmp/cycle228-asan-build` linked both `test_bitcoin` and `bitcoind`. Its `validation_block_tests` run passed 3 cases and 1,619 assertions with `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1` and `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`. The strengthened functional harness also passed with the same halt-on-error settings and produced no sanitizer report.
+- The first functional harness invocation failed only because it omitted `expect_disconnect=True` for the intentional invalid-peer disconnect; the harness was corrected and both normal controls were rerun successfully. `git diff --check` passed and no tracked source diff remained.
+
+### Verdict and limitations
+
+**Dismissed as a current backport defect; no production or permanent test change is justified.** The release patch preserves the master fix's lifetime contract in the 28.x source context, and the pre-fix/patch controls exercised the relevant early-return queue path without a release-specific mismatch.
+
+The sanitized counterpart of the patched release was not rebuilt because the normal patched control and the sanitized pre-fix control already bracketed the source-order change. The race remains schedule-dependent and the harness did not reproduce a sanitizer report on the pre-fix binary; this is evidence about the tested schedule, not proof that the historical vulnerability was harmless. Windows/i686/Docker execution, other release branches, and upgrade/downgrade fixtures remain queued.
+
+### Next queue
+
+1. Draw another catalog goal with a fresh gate and exact selector command.
+2. If Goal 66 returns, inspect a distinct 29.x/30.x backport batch or an upgrade/downgrade fixture; do not reopen `#35213` without new source or schedule evidence.
+3. Preserve the 28.x source/ASan/functional controls and their limitation that the historical UAF is not deterministically reproduced.
