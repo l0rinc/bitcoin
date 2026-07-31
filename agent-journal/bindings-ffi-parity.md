@@ -1,5 +1,70 @@
 # Bindings, FFI, and language-wrapper parity
 
+## Cycle 208: external Rust MuSig secret-nonce exposure
+
+### Selection and gate
+
+- Exact selector after the Cycle 207 state close: `shuf -i 0-98 -n 1` -> `94` (`bindings-ffi-parity`); no reroll was needed.
+- Branch: `uber-cycle-208-bindings-ffi-parity-20260731`.
+- Cycle start: `2026-07-31T11:53:55Z`.
+- Branch gate: `2026-07-31T11:54:13Z`.
+- Cycle start and branch-gate HEAD: `a34a9fede73301ed7263285e2231a246bf419bdf`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence (`HEAD...origin/master`): `1207 42`.
+- Uber-goal state SHA-256 at the gate: `e8eecf6ed575c396d9d0b2bc359fe581cf4af06cc6ddd2c4f9cc494f034ab7a1`.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Corrected TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The four protected long-running tests (`777094`, `956381`, `1138182`, `1157959`) were alive and were not touched. Disposable external-repository work used `/data/my_storage/tmp`.
+
+### Scope and exclusions
+
+The tree does not ship maintained Rust, Python, Java, Go, or C# bindings. Its in-tree wrapper surface remains the `libbitcoinkernel` C API and C++ `btck` wrapper. Cycle 70's opaque pointer-array conversion, Cycle 87's tracing-demo field omission, Cycle 186's callback ownership and serialization-failure analysis, Cycle 198's nullable ancestor boundary, and Cycle 72's direct C MuSig failure/state-machine probe were searched and excluded as prior cells.
+
+To exercise a maintained ecosystem boundary, I cloned `rust-bitcoin/rust-secp256k1` at `/data/my_storage/tmp/cycle208-rust-secp-fPGt4P`:
+
+- Remote: `https://github.com/rust-bitcoin/rust-secp256k1.git`.
+- HEAD: `9fc86f756f0cd24a5167c131551b31b748c8cdb3` (`2026-02-28`, `Merge rust-bitcoin/rust-secp256k1#895: Introduce radnomness in ElligatorSwift encoding`).
+- Its `secp256k1-sys` vendored revision is `a660a4976efe880bae7982ee410b9e0dc59ac983`.
+- The external wrapper was used as evidence only; no external checkout or unrelated repository artifact is staged in Bitcoin Core.
+
+### Working hypothesis
+
+The libsecp256k1 C header marks `secp256k1_musig_secnonce` as a secret opaque value that MUST NOT be copied or read because copying it can reuse a nonce and leak the signing key. The Rust high-level wrapper correctly makes `SecretNonce` non-`Copy`/non-`Clone`, but its `Debug` implementation and the low-level FFI type may bypass that boundary. Verify the complete trait and byte-access path, construct a report-ready safe-Rust misuse, and distinguish an external-wrapper defect from an in-tree Bitcoin Core defect.
+
+### Cycle 208 verification and result
+
+The candidate is confirmed as an external-wrapper contract violation with two connected exposures:
+
+1. `secp256k1-sys/src/lib.rs:1448-1458` defines public `MusigSecNonce` with `Copy`, `Clone`, `PartialEq`, and `Eq`, and provides `dangerous_into_bytes` as a safe method. `impl_array_newtype!` additionally gives it safe `AsRef<[u8; 132]>` and indexing access. This directly conflicts with the vendored C contract at `secp256k1-sys/depend/secp256k1/include/secp256k1_musig.h:47-57`, which says the secret nonce must not be copied or read and explains the nonce-reuse key leak.
+2. `src/musig.rs:675-677` derives `Debug` for the high-level `SecretNonce`. That delegates to `MusigSecNonce`'s `impl_raw_debug!` at `secp256k1-sys/src/lib.rs:1451`; the macro at `secp256k1-sys/src/macros.rs:68-79` iterates over every byte and writes it as hexadecimal. Therefore `format!("{secret_nonce:?}")`, logging, or a panic containing a `SecretNonce` exposes all 132 bytes of secret nonce state. The crate's own secret-display policy at `src/secret.rs:52-61` says secrets should not implement `Debug` directly, and the nearby `SecretKey` implementation deliberately prints only a short hash.
+
+The shortest report-ready high-level reproduction is:
+
+```rust
+let key = SecretKey::from_secret_bytes([1u8; 32]).unwrap();
+let public = PublicKey::from_secret_key(&key);
+let session = SessionSecretRand::assume_unique_per_nonce_gen([2u8; 32]);
+let (secret_nonce, _public_nonce) = new_nonce_pair(session, None, Some(key), public, None, None);
+println!("{secret_nonce:?}");
+```
+
+`new_nonce_pair` returns the `SecretNonce` at `src/musig.rs:181-188`, and the derived formatter follows the raw-byte path above. The low-level copy reproduction is a safe trait operation once a `MusigSecNonce` exists: `let duplicate = original;` is accepted because of the public `Copy` implementation; subsequent FFI use requires the crate's intended unsafe boundary, but the high-level `Debug` leak does not.
+
+Independent checks:
+
+- `git grep -n -F 'impl_raw_debug!(MusigSecNonce)' -- secp256k1-sys/src/lib.rs`, `git grep -n -F 'pub struct SecretNonce' -- src/musig.rs`, and the C-contract search all returned the expected single definitions.
+- The static contract check passed after confirming the `Copy` derive, raw-debug implementation, public high-level type, and C warning. It is a source-level proof of the formatter path rather than a pattern-only name match.
+- `cargo test` was attempted and a compile-time Rust reproduction was prepared for the toolchain gate, but the environment has neither `cargo` nor `rustc` (`/bin/bash: cargo: command not found`). No runtime claim is made beyond the direct trait/macro expansion.
+- The current Bitcoin Core C header carries the same secret-nonce warning at `src/secp256k1/include/secp256k1_musig.h:47-57`; current direct C MuSig behavior was already covered by the excluded Cycle 72 state-machine campaign. No in-tree Rust consumer exists to patch.
+
+Verdict: confirmed external finding, not a Bitcoin Core source finding. The report should request a redacted `Debug` implementation for `SecretNonce`, removal of `Debug`/`Copy`/`Clone`/byte-reading traits from the low-level secret nonce wrapper, and a regression test asserting that ordinary formatting cannot reveal raw nonce bytes. Any change must preserve the unsafe FFI call representation without exposing the C opaque bytes through safe APIs. A local source commit is not justified because the affected files are in the external clone; this cycle uses one clearly labeled journal-only handoff snapshot.
+
+Limitations: the external checkout is a shallow snapshot at `9fc86f756f0cd24a5167c131551b31b748c8cdb3`, so prior issue/PR history was not available locally; the report must be checked against upstream's current review state. Rust tooling is absent, so the safe-Rust snippet and formatter expansion were not compiled. No Bitcoin Core tracked source, tests, build files, or public ABI were changed.
+
+Next queue: rerun the full gate, draw a distinct catalog goal, search its journal and prior finding index, and retain this external-wrapper finding as a linked non-duplicate rather than reopening the direct C MuSig state-machine cell.
+
 ## Cycle 198: out-of-range ancestor parity at the C ABI
 
 ### Selection and gate
