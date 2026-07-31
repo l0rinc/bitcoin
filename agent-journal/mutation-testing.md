@@ -131,3 +131,74 @@ fuzz-covered by existing targets. No oracle gap; no code change.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 5 (2026-07-31): CTxUndo hostile-field apply-vs-reject differential — three layers classified, range-check mutation killed; DISMISSED
+
+### Draw
+RE-RANK draw 141 (campaign cycle 5 — #35 c3/c4 of 2026-07-29 were journaled into property-oracle-expansion.md; see duplicate-work note below) over the final cell of the re-harvested pool
+(n=1): raw=8843838926267607625 (already 63-bit) -> idx 0 -> #35
+CTxUndo SEMANTIC apply-vs-reject (c1 queue; #51's oracles cover
+undo correctness, not hostile-field semantics). Branch:
+audit/mutation-testing-c3 from 0d9cf5e5fc.
+
+### Delivered: ctxundo_hostile_field_semantics (coins_tests.cpp)
+Four-layer classification of hostile undo fields:
+0. CONTROL: valid-layout CTxUndo stream decodes cleanly (layout
+   provenance for the hostile variants).
+1. Out-of-range compressed amount (CompressAmount(MAX_MONEY+1) =
+   18900000000000001): DECODE layer rejects —
+   AmountCompression::Unser throws ios_base::failure
+   (compressor.h:115-117).
+2. Height-0 undo with no alternate metadata: APPLY layer rejects —
+   ApplyTxInUndo returns DISCONNECT_FAILED (validation.cpp:2193-2203).
+3. Ordinary coin -> DISCONNECT_OK; re-apply over same outpoint ->
+   DISCONNECT_UNCLEAN, value overwritten (overwrite contract).
+4. Huge-but-decodable height (INT_MAX): ACCEPTED by construction —
+   undo data is a trusted self-written artifact; pinned as the
+   documented trust boundary.
+
+### Mutation verification (ordered correctly this time)
+- MUTANT: compressor.h range-check throw removed ->
+  "exception std::ios_base::failure expected but not raised"
+  (KILLED, failing-before).
+- Revert -> green (passing-after). Full coins_tests green.
+- Two harness traps recorded: (a) my first hand-rolled "huge
+  VARINT" (0xFF + 8x0xFF CompactSize-style) threw at the VARINT
+  DECODER ("size too large") — Bitcoin VARINT is MSB base-128, not
+  the 0xFF prefix format; always generate hostile encodings through
+  the stream's own encoder (VARINT(CompressAmount(x))). (b) The
+  first mutant run "passed" because the throw came from the script
+  layer (0x00 script-size = P2PKH special type, underflow) — a
+  mutation check that passes for the wrong reason is worse than
+  none; isolate the layer with a control case FIRST.
+
+### Verdict
+DISMISSED: every hostile undo field is rejected at the decode or
+apply layer, or accepted within the documented trust boundary
+(self-written undo data). No unguarded acceptance found.
+DUPLICATE-WORK NOTE (found pre-archive by semantic-dup sweep):
+the consumer-side DECODE classification above overlaps #35 c3/c4
+from 2026-07-29, which were journaled into
+property-oracle-expansion.md (logging-location quirk of the
+earlier session, cycles tagged #35 there). This cycle's NEW
+content is the APPLY-layer classification (cases 2-4), the
+ordered mutation kill of the compressor throw, and harness traps
+(a)/(b). CORRECTION: the DecompressAmount overflow-wrap corner I
+initially recorded here as an open residual was already resolved
+VACUOUS on 2026-07-29 (#35 c4: decompress is a bijection per
+encoding; the range check answers the only meaningful read-side
+question; there is no "intended" out-of-range value for a read to
+be mistaken about). Residual claim WITHDRAWN per that proof.
+
+### Exact commands
+- ninja -C build-before bin/test_bitcoin; test_bitcoin
+  --run_test='*/ctxundo_hostile_field_semantics' (+coins_tests full)
+- mutant: compressor.h:115-117 throw -> empty, rebuild, run; revert.
+
+### Limitations / queue
+- #35 queue: WriteVarInt SizeComputer systematic per-line sweep
+  (c1 note) and NONNEGATIVE_SIGNED formatter battery remain open.
+  (The overflow-wrap corner is CLOSED — see correction above.)
+
+## Rotation note
+Cycle 5 complete; rotating per uber-goal policy. Not exhausted.

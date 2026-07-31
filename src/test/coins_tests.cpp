@@ -12,6 +12,8 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <txdb.h>
+#include <validation.h>
+#include <compressor.h>
 #include <uint256.h>
 #include <undo.h>
 #include <util/byte_units.h>
@@ -27,6 +29,7 @@
 #include <tuple>
 #include <utility>
 #include <variant>
+#include <limits>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -336,6 +339,77 @@ BOOST_FIXTURE_TEST_CASE(coins_cache_base_simulation_test, CacheTest)
 {
     CCoinsViewTest base{m_rng};
     SimulationTest(&base, false);
+}
+
+BOOST_AUTO_TEST_CASE(ctxundo_hostile_field_semantics)
+{
+    // #35 c3: CTxUndo hostile-field apply-vs-reject differential.
+    // Each hostile field is classified by the layer that handles it.
+
+    // 0. CONTROL: same layout, valid amount — must decode cleanly.
+    {
+        DataStream ok{};
+        ok << VARINT(1U);
+        ok << VARINT(2U);
+        ok << VARINT(0U);
+        ok << VARINT(CompressAmount(1000));
+        ok << VARINT(7U);
+        ok << uint8_t{0x51};
+        CTxUndo undo;
+        ok >> undo;
+        BOOST_CHECK_EQUAL(undo.vprevout.size(), 1);
+        BOOST_CHECK_EQUAL(undo.vprevout[0].out.nValue, 1000);
+    }
+    // 1. Out-of-range compressed amount: DECODE layer rejects
+    //    (AmountCompression::Unser throws, compressor.h).
+    {
+        DataStream hostile{};
+        hostile << VARINT(1U); // vprevout.size() == 1
+        hostile << VARINT(2U); // nCode: height=1, coinbase=0
+        hostile << VARINT(0U); // version dummy
+        hostile << VARINT(18900000000000001ULL); // CompressAmount(MAX_MONEY + 1)
+        hostile << VARINT(7U); // ScriptCompression: raw script, 1 byte follows
+        hostile << uint8_t{0x51}; // OP_TRUE
+        CTxUndo undo;
+        BOOST_CHECK_THROW(hostile >> undo, std::ios_base::failure);
+    }
+
+    // 2. Height-0 undo with no alternate metadata: APPLY layer rejects
+    //    (validation.cpp ApplyTxInUndo -> DISCONNECT_FAILED).
+    {
+        auto& dummy{CoinsViewEmpty::Get()};
+        CCoinsViewCache view{&dummy};
+        Coin zero_height{CTxOut{CAmount{1000}, CScript{} << OP_TRUE}, /*nHeight=*/0, /*fCoinBase=*/false};
+        const COutPoint out{Txid::FromUint256(uint256::ONE), 0};
+        BOOST_CHECK_EQUAL(ApplyTxInUndo(std::move(zero_height), view, out), DISCONNECT_FAILED);
+    }
+
+    // 3. Ordinary coin applies clean; a second apply over the same
+    //    outpoint reports DISCONNECT_UNCLEAN (overwrite contract).
+    {
+        auto& dummy{CoinsViewEmpty::Get()};
+        CCoinsViewCache view{&dummy};
+        const COutPoint out{Txid::FromUint256(uint256::ONE), 1};
+        Coin coin{CTxOut{CAmount{1000}, CScript{} << OP_TRUE}, /*nHeight=*/7, /*fCoinBase=*/false};
+        BOOST_CHECK_EQUAL(ApplyTxInUndo(std::move(coin), view, out), DISCONNECT_OK);
+        Coin dup{CTxOut{CAmount{2000}, CScript{} << OP_TRUE}, 7, false};
+        BOOST_CHECK_EQUAL(ApplyTxInUndo(std::move(dup), view, out), DISCONNECT_UNCLEAN);
+        BOOST_CHECK(view.HaveCoin(out));
+        BOOST_CHECK_EQUAL(view.AccessCoin(out).out.nValue, 2000);
+    }
+
+    // 4. Huge-but-decodable height: accepted by construction — undo
+    //    data is a trusted, self-written artifact and height feeds no
+    //    consensus check on this path. Pinned as the documented
+    //    trust-boundary behavior.
+    {
+        auto& dummy{CoinsViewEmpty::Get()};
+        CCoinsViewCache view{&dummy};
+        const COutPoint out{Txid::FromUint256(uint256::ONE), 2};
+        Coin tall{CTxOut{CAmount{500}, CScript{} << OP_TRUE}, std::numeric_limits<int>::max(), false};
+        BOOST_CHECK_EQUAL(ApplyTxInUndo(std::move(tall), view, out), DISCONNECT_OK);
+        BOOST_CHECK(view.HaveCoin(out));
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
