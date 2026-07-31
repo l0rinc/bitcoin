@@ -3143,3 +3143,16 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   removal/deprecation contracts. The next cycle must perform a fresh gate and
   exact selector draw, preserve unrelated artifacts, and avoid reopening this
   cell without new evidence.
+
+## Cycle 234 close: Goal 7, BIP37 filter vector bounds
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `7` (`resource-exhaustion-variants`).
+- Branch: `uber-cycle-234-resource-exhaustion-variants-20260731`.
+- Cycle-start HEAD: `b6819c245b819577ac484b0c16b712309c12b18f`; `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `origin/master...HEAD`: `42 1251`.
+- Finding: BIP37 `filterload` and `filteradd` accepted attacker-controlled vector counts through generic `VectorFormatter` before checking the valid 36,000-byte bloom-filter and 520-byte filter-element limits. A five-byte count-only payload declaring 4,000,000 elements made the old parser materialize a 4,000,000-byte vector and then hit EOF without recording `Misbehaving`.
+- Fix: `CBloomFilter` now uses `LIMITED_VECTOR` for `vData`; `FILTERADD` uses the same bounded formatter; both handlers translate only the limit exception to their existing misbehavior result. Valid wire behavior and the 4 MB transport message limit are unchanged. The functional regression covers count-only oversized `filterload` and `filteradd` messages.
+- Independent old/new probe: generic capacity `4000000`, limited capacity `0` from the same count-only stream. The pre-fix functional regression failed because no `Misbehaving` log was emitted; the fixed test passed.
+- Source/test/journal commit: `ba05bf48fee665734e5308886d95876675f3748b` (`p2p: bound BIP37 filter vectors before allocation`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- Validation: full `bitcoind`/`test_bitcoin` rebuild with isolated `TMPDIR`/`CCACHE_DIR`; `bloom_tests` passed 14 cases/37,687 assertions; `net_tests` passed 36 cases/159,095 assertions; full `p2p_filter.py` passed; `git diff --check` passed. Existing unrelated compiler warnings in `httpserver_tests.cpp` and `util_tests.cpp` were recorded in the selected journal.
+- Limitations: the transport still buffers complete messages up to 4 MB before dispatch; this cycle removes the avoidable post-receive vector allocation/element construction and closes the penalty bypass for oversized declarations. Do not repeat the closed BIP37 vector cell without a distinct source, limit, or cleanup failure.
+- State-close commit is next; then the uber loop must perform a fresh gate, preserve all unrelated untracked artifacts, and draw the next goal exactly.
