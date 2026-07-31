@@ -175,3 +175,113 @@ cells include includeconf chain-selection transitions, multi-file loadblock
 ordering/restart behavior, and option removal/deprecation contracts. A future
 cycle must choose one of those distinct cells rather than reopen this
 self-referential settings-path case.
+
+## Cycle 233 - failed dynamic-settings persistence rollback
+
+### Identity and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `43` (`option-api-lifecycle`); no
+  reroll. Branch: `uber-cycle-233-option-api-lifecycle-20260731`. Start HEAD
+  was `c8d69d12f17a8ed7263b4f2d6987449da5408671`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1249 42`.
+- Catalog, prompt, TSV, and uber-protocol hashes were unchanged. Tracked state
+  was clean at the gate apart from known untracked agent artifacts. Protected
+  PIDs `777094`, `956381`, `1138182`, and `1157959` remained alive.
+- The prior `-txsendrate` metadata and self-referential settings-path cells
+  were excluded. This cycle selected the distinct failure lifecycle of the
+  public read/write settings APIs: what remains visible in memory when the
+  required settings-file write fails.
+
+### Lifecycle map and hypotheses
+
+`interfaces::Chain::updateRwSetting()` and its `overwriteRwSetting()` helper
+mutate `ArgsManager::Settings::rw_settings` under the settings lock, then call
+`ArgsManager::WriteSettingsFile()` for `SettingsAction::WRITE`. Before this
+cycle, a false return from the file write was returned to the caller while the
+new value remained in memory. `interfaces::Node::updateRwSetting()` had the
+same mutation ordering but ignored the write result entirely. A caller could
+therefore observe a setting as updated during the current process even though
+the next restart reverted it. The trust boundary is local GUI/wallet/IPC code
+using these interfaces and the persistent settings file; no remote or
+consensus behavior is involved.
+
+The relevant source paths are `src/node/interfaces.cpp:179-215` for the Node
+API and `src/node/interfaces.cpp:864-910` for the Chain API. The existing
+`Chain::updateRwSetting()` contract says `WRITE` writes the updated value to
+disk, while `SKIP_WRITE` intentionally changes memory only. The failed-write
+path violated the first contract by exposing an update that was not durable.
+Historical search found commit `1b41d45d46` fixing atomicity of concurrent
+settings callbacks, but no existing rollback for a failed persistence step;
+the older `argsman_tests/util_ReadWriteSettings` only checked the write error
+log.
+
+### Independent controls and negative probes
+
+- The existing functional `feature_includeconf.py` could not start because its
+  shared 199-block cache was absent; this was classified as setup-only. A
+  scratch regtest daemon with `[regtest] includeconf=network.conf` did include
+  the network file, and `getnetworkinfo` reported both `base` and `network`
+  user-agent comments. No includeconf defect was reproduced.
+- A scratch `regtest/settings.json` containing a manually inserted
+  `loadblock` path caused startup to log `Setting file arg: loadblock = ...`,
+  start the init-load thread, report the missing file, and exit that thread.
+  The settings documentation limits this file to GUI/RPC-managed values and
+  no supported API writes `loadblock`, so this was classified as unsupported
+  manual-file behavior rather than a current finding. Multi-file loadblock
+  ordering and restart behavior remain queued.
+- A scratch `settings.json` containing `{"datadir":"...","uacomment":"persisted"}`
+  did not redirect the settings file: the path cache is established before
+  `settings.json` is read. The original settings file was updated and no
+  redirected settings file appeared. This hypothesis was dismissed.
+- Registered/deprecated options including `-walletrbf`, removed hidden options,
+  and `-prevoutfetchthreads` had coherent registration, consumer, warning, and
+  test paths. No independent option-removal defect was found.
+
+### Reproduction and fix
+
+The regression test in `src/test/interfaces_tests.cpp:173-203` first persists
+`settings_lifecycle=before`, replaces `settings.json` with a directory so the
+atomic rename fails, and attempts to write `after` through both APIs. The
+unpatched binary was run with:
+
+```text
+env TMPDIR=/data/my_storage/tmp/cycle233-settings-focused-tmp \
+  /data/my_storage/tmp/cycle214-build/bin/test_bitcoin \
+  --run_test=interfaces_tests/settings_update_failure_preserves_previous_value \
+  --log_level=message --report_level=short --color_output=false --random=23301
+```
+
+It exited `201` with both assertions failing: Chain returned failure but
+`getRwSetting("settings_lifecycle")` was `after`, and Node's
+`getPersistentSetting("node_settings_lifecycle")` was `after`.
+
+The fix snapshots the prior presence/value and the post-callback value, then
+restores the prior state when the write returns false or throws. Restoration is
+conditional on the map still containing the failed update, so a different
+concurrent update is not overwritten. A callback returning no action is also
+rolled back. `SKIP_WRITE` retains its intentional in-memory behavior. The Node
+API now restores state after a failed or throwing write even though its public
+return type is void.
+
+### Verification and verdict
+
+- Build: `env TMPDIR=/data/my_storage/tmp/cycle233-settings-build-tmp
+  CCACHE_DIR=/data/my_storage/tmp/cycle233-ccache ninja -C
+  /data/my_storage/tmp/cycle214-build test_bitcoin -j2` completed and linked
+  `test_bitcoin`.
+- The fixed focused regression passed: 1 case, 10 assertions. The complete
+  `interfaces_tests` suite passed 7 cases and 75 assertions. The existing
+  `argsman_tests/util_ReadWriteSettings` passed 1 case and 1 assertion.
+- `git diff --check` passed. The full test suite, GUI client, and a concurrent
+  stress schedule were not rerun. The conditional restore protects against a
+  changed value but cannot distinguish a concurrent operation that produces
+  exactly the same serialized value; no evidence indicates that limitation is
+  reachable as a separate contract violation here.
+
+Verdict: **confirmed and fixed**. A failed dynamic-settings persistence step no
+longer leaves a misleading unpersisted value visible in the current process.
+The source/test/journal commit for this cycle is recorded in the uber-goal
+state. Remaining Goal 43 cells are includeconf chain-selection transitions,
+multi-file loadblock ordering/restart behavior, and option removal/deprecation
+contracts; do not reopen the failed-write rollback cell without new evidence.

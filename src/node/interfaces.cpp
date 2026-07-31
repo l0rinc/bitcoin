@@ -105,6 +105,12 @@ namespace node {
 // All members of the classes in this namespace are intentionally public, as the
 // classes themselves are private.
 namespace {
+bool SettingsValueMatches(const common::SettingsValue* current,
+                          const std::optional<common::SettingsValue>& expected)
+{
+    return expected ? current && current->write() == expected->write() : current == nullptr;
+}
+
 #ifdef ENABLE_EXTERNAL_SIGNER
 class ExternalSignerImpl : public interfaces::ExternalSigner
 {
@@ -172,14 +178,40 @@ public:
     common::SettingsValue getPersistentSetting(const std::string& name) override { return args().GetPersistentSetting(name); }
     void updateRwSetting(const std::string& name, const common::SettingsValue& value) override
     {
+        bool had_value{false};
+        common::SettingsValue previous_value;
+        std::optional<common::SettingsValue> updated_value;
         args().LockSettings([&](common::Settings& settings) {
+            if (const auto* current = common::FindKey(settings.rw_settings, name)) {
+                had_value = true;
+                previous_value = *current;
+            }
             if (value.isNull()) {
                 settings.rw_settings.erase(name);
             } else {
                 settings.rw_settings[name] = value;
             }
+            if (const auto* current = common::FindKey(settings.rw_settings, name)) {
+                updated_value = *current;
+            }
         });
-        args().WriteSettingsFile();
+        const auto restore = [&] {
+            args().LockSettings([&](common::Settings& settings) {
+                if (!SettingsValueMatches(common::FindKey(settings.rw_settings, name), updated_value)) return;
+                if (had_value) {
+                    settings.rw_settings[name] = previous_value;
+                } else {
+                    settings.rw_settings.erase(name);
+                }
+            });
+        };
+        try {
+            if (args().WriteSettingsFile()) return;
+        } catch (...) {
+            restore();
+            throw;
+        }
+        restore();
     }
     void forceSetting(const std::string& name, const common::SettingsValue& value) override
     {
@@ -832,9 +864,14 @@ public:
     bool updateRwSetting(const std::string& name,
                          const interfaces::SettingsUpdate& update_settings_func) override
     {
+        bool had_value{false};
+        common::SettingsValue previous_value;
+        std::optional<common::SettingsValue> updated_value;
         std::optional<interfaces::SettingsAction> action;
         args().LockSettings([&](common::Settings& settings) {
             if (auto* value = common::FindKey(settings.rw_settings, name)) {
+                had_value = true;
+                previous_value = *value;
                 action = update_settings_func(*value);
                 if (value->isNull()) settings.rw_settings.erase(name);
             } else {
@@ -842,10 +879,34 @@ public:
                 action = update_settings_func(new_value);
                 if (!new_value.isNull()) settings.rw_settings[name] = std::move(new_value);
             }
+            if (const auto* value = common::FindKey(settings.rw_settings, name)) {
+                updated_value = *value;
+            }
         });
-        if (!action) return false;
+        const auto restore = [&] {
+            args().LockSettings([&](common::Settings& settings) {
+                if (!SettingsValueMatches(common::FindKey(settings.rw_settings, name), updated_value)) return;
+                if (had_value) {
+                    settings.rw_settings[name] = previous_value;
+                } else {
+                    settings.rw_settings.erase(name);
+                }
+            });
+        };
+        if (!action) {
+            restore();
+            return false;
+        }
+        if (*action != interfaces::SettingsAction::WRITE) return true;
         // Now dump value to disk if requested
-        return *action != interfaces::SettingsAction::WRITE || args().WriteSettingsFile();
+        try {
+            if (args().WriteSettingsFile()) return true;
+        } catch (...) {
+            restore();
+            throw;
+        }
+        restore();
+        return false;
     }
     bool overwriteRwSetting(const std::string& name, common::SettingsValue value, interfaces::SettingsAction action) override
     {

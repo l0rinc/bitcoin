@@ -5,9 +5,12 @@
 #include <chainparams.h>
 #include <consensus/validation.h>
 #include <interfaces/chain.h>
+#include <interfaces/node.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <script/solver.h>
+#include <univalue.h>
+#include <util/fs.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
@@ -165,6 +168,38 @@ BOOST_FIXTURE_TEST_CASE(hasBlocks, TestChain100Setup)
     BOOST_CHECK(chain->hasBlocks(active.Tip()->GetBlockHash(), 6, 49));
     BOOST_CHECK(!chain->hasBlocks(active.Tip()->GetBlockHash(), 5, 49));
     BOOST_CHECK(!chain->hasBlocks(active.Tip()->GetBlockHash(), 6, 50));
+}
+
+BOOST_FIXTURE_TEST_CASE(settings_update_failure_preserves_previous_value, TestingSetup)
+{
+    auto& chain = m_node.chain;
+    fs::path settings_path;
+    BOOST_REQUIRE(m_node.args->GetSettingsPath(&settings_path));
+    fs::path settings_tmp{settings_path};
+    settings_tmp += ".tmp";
+
+    const auto cleanup_settings_path = [&] {
+        fs::remove(settings_tmp);
+        fs::remove(settings_path);
+    };
+
+    BOOST_REQUIRE(chain->overwriteRwSetting("settings_lifecycle", "before"));
+    BOOST_REQUIRE(fs::remove(settings_path));
+    BOOST_REQUIRE(fs::create_directory(settings_path));
+
+    BOOST_CHECK(!chain->overwriteRwSetting("settings_lifecycle", "after"));
+    BOOST_CHECK_EQUAL(chain->getRwSetting("settings_lifecycle").get_str(), "before");
+    cleanup_settings_path();
+
+    BOOST_REQUIRE(chain->overwriteRwSetting("settings_lifecycle", "before", interfaces::SettingsAction::SKIP_WRITE));
+    auto node = interfaces::MakeNode(m_node);
+    node->updateRwSetting("node_settings_lifecycle", "before");
+    BOOST_REQUIRE(fs::remove(settings_path));
+    BOOST_REQUIRE(fs::create_directory(settings_path));
+
+    node->updateRwSetting("node_settings_lifecycle", "after");
+    BOOST_CHECK_EQUAL(node->getPersistentSetting("node_settings_lifecycle").get_str(), "before");
+    cleanup_settings_path();
 }
 
 BOOST_AUTO_TEST_SUITE_END()
