@@ -2,6 +2,18 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 190 Completion
+
+- Cycle 190 selected goal `81` (`spec-vector-drift`) after the exact selector sequence `shuf -i 0-98 -n 1` -> `61` (`stateful-contract-fuzzer`), reroll -> `8` (`locking-threading`), reroll -> `81` (`spec-vector-drift`). Goals 61 and 8 were excluded because their exact AddrMan and `SignalInterrupt` cells were already closed. The dedicated branch is `uber-cycle-190-spec-vector-drift-20260731`; its fresh start HEAD was `b3a92ed3e7bb58fd1ec74809391689b71ebbfff8`, with `origin/master` `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1170 42`.
+
+- The distinct cell audited BIP341/BIP342 rules and wallet vectors: annex and SigMsg commitments, control-block length/parity and leaf versions, future-version behavior, `OP_SUCCESSx` ordering, Tapscript stack and sigops limits, MINIMALIF, and disabled multisig. The pinned `bitcoin/bips` ref was `9783d61f1b9c81231581fee026c8e8cb9499d265`; the official wallet JSON and local `src/test/data/bip341_wallet_vectors.json` were byte-identical with SHA-256 `403e19fb81dd1f31e745699216308f61fb403774b2aafa87b631b8f7c042d37f`.
+
+- The apparent script-path vector-consumer gap was dismissed. `script_standard_tests/bip341_spk_test_vectors` already consumes all seven official `scriptPubKey` cases and checks output scripts, BIP350 addresses, merkle roots, and control blocks. `script_tests/bip341_keypath_test_vectors` checks the key-path hashes, tweak, Schnorr signature, Taproot sighash, and SigMsg. Production `IsOpSuccess`, Tapscript execution, Taproot commitment, and Schnorr sighash code matched the pinned BIPs; the Python opcode oracle matched as well.
+
+- Source/evidence commit `e53fdb5b71b860af97efadaabb0202afe116d106` (`journal: close cycle 190 spec vector audit`) is authored as `Lőrinc <pap.lorinc@gmail.com>` and contains the full evidence and limitations. The current Clang 19 release `test_bitcoin` build passed; the focused script-path vector run passed 46 assertions, the full `script_standard_tests` run passed 8 cases and 199 assertions, and the key-path vector run passed 55 assertions. The preceding Clang 19 UBSan full `script_tests` run passed 27 cases and 505,273 assertions. The direct Taproot functional run passed its unit, activation, 2,800 generated spending, and nonstandard spending cases. The initial parallel test setup failure was discarded because its temporary directories did not exist and shared globals collided; sequential reruns used dedicated existing `TMPDIR` values.
+
+- Verdict: dismissed as current BIP341/BIP342 specification or vector drift; no source or test change was justified. Limitations include no ARM, 32-bit, big-endian, GCC, Valgrind, timing, or compiler-differential evidence. The next cycle must perform a fresh gate, redraw with the exact selector, and exclude this BIP341/BIP342 cell unless authoritative source, vector, or consumer changes.
+
 ## Cycle 189 Completion
 
 - Cycle 189 selected goal `8` (`locking-threading`) from the exact selector
