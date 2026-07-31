@@ -32,10 +32,17 @@ SignalInterrupt::operator bool() const
 
 bool SignalInterrupt::reset()
 {
-    // Cancel existing interrupt by waiting for it, this will reset condition flags and remove
-    // the token from the pipe.
-    if (*this && !wait()) return false;
+#ifdef WIN32
+    // Keep the flag clear operation under the same mutex as operator() so a concurrent
+    // console callback cannot be cleared after this function returns.
+    std::lock_guard<std::mutex> lock{m_mutex};
     m_flag = false;
+#else
+    // Clear before draining the old token so a concurrent signal handler publishes a new token
+    // instead of observing the old true flag and being lost by the reset.
+    if (!m_flag.exchange(false, std::memory_order_acq_rel)) return true;
+    if (!wait()) return false;
+#endif
     return true;
 }
 
