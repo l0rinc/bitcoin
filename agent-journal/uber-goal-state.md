@@ -2,6 +2,16 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 192 Completion
+
+- Cycle 192 selected goal `27` (`error-path-state`) from the exact selector `shuf -i 0-98 -n 1` -> `27`. Its dedicated branch is `uber-cycle-192-error-path-state-20260731`; the fresh start HEAD was `5d433662ba95eb432f013d0af05b3ef35327cd4f`.
+- The distinct cell audited wallet coin-lock failure state: direct persistent lock/erase, unlock-all row iteration, temporary-to-persistent promotion, and the explicit-output `lockunspent` RPC transaction. The source contract and RPC comment require runtime `m_locked_coins` and durable `DBKeys::LOCKED_UTXO` rows to agree after failure, with multi-output RPC updates atomic.
+- Deterministic SQLite triggers reproduced four pre-fix failures: failed insert left a runtime lock, failed delete removed the runtime lock, unlock-all cleared failed rows and skipped later erases, and promotion stranded a durable row after unlock. A second-output RPC trigger also established the need for one transaction; the first post-fix attempt caught and fixed an empty abort listener that raised `bad_function_call`.
+- Source/test/evidence commit `526d66dc44533977bfd959d9bc3acd4afc28c477` (`Fix wallet coin-lock failure state`) is authored as `Lőrinc <pap.lorinc@gmail.com>`. It adds batch-aware lock/unlock methods with commit-only runtime publication, preserves failed unlock rows, fixes promotion, makes explicit RPC output updates transactional, and adds four direct plus one RPC regression.
+- Final validation passed: `git diff --check`; `ninja -C /data/my_storage/tmp/cycle84-build test_bitcoin -j2`; wallet suite `wallet_tests` 25 cases / 216 assertions; focused RPC rollback 1 case / 11 assertions; and `wallet_basic.py` with isolated patched `bitcoind`, mining, sendmany, wallet-broadcast, reindex, and descriptor checks. The focused fault hooks use mock SQLite; Berkeley DB and externally interrupted on-disk transactions remain untested.
+- The source commit includes the complete selected journal in `agent-journal/error-path-state.md`. The fresh gate fetched `origin/master` at `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, preserved unrelated untracked artifacts, passed tracked/index cleanliness and diff checks, and left protected PIDs `777094`, `956381`, and `1138182` untouched. No external blocker remains.
+- This state-only close commit records the handoff separately. The next cycle must perform a fresh gate, run the exact random selector, and choose a genuinely distinct evidence cell; do not reopen the direct coin-lock defects or earlier Goal 27 cells without new backend/restart evidence.
+
 ## Cycle 191 Completion
 
 - Cycle 191 selected goal `67` (`release-version-differential`) from the exact selector `shuf -i 0-98 -n 1` -> `67`. Its dedicated branch is `uber-cycle-191-release-version-differential-20260731`; the fresh start HEAD was `166cbc30ae92feb85e8022b870428487d318dda0`, with `origin/master` `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1172 42`. The fresh gate fetched successfully, found no tracked/index changes, passed `git diff --check`, preserved known untracked artifacts, and left PIDs `777094` and `956381` untouched.
