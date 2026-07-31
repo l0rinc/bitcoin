@@ -55,4 +55,16 @@ BOOST_AUTO_TEST_CASE(init_test)
     Shutdown(m_node);
 }
 
+BOOST_AUTO_TEST_CASE(blocksonly_help_mentions_relay_permission)
+{
+    const auto help{m_node.args->GetHelpMessage()};
+    const auto start{help.find("-blocksonly")};
+    BOOST_REQUIRE(start != std::string::npos);
+    const auto end{help.find("\n  -", start)};
+    const auto blocksonly_help{help.substr(start, end - start)};
+
+    BOOST_CHECK(blocksonly_help.find("'relay' permission") != std::string::npos);
+    BOOST_CHECK(blocksonly_help.find("'forcerelay' permission") == std::string::npos);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
