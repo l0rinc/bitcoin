@@ -113,3 +113,33 @@ Record exact commands, compiler/flags, CPU and affinity, benchmark filters, data
 - The full unit suite was not run because `/` remains at 99% capacity after the prior cycle's disk guard; no full-suite result is claimed. Persistent unrelated test processes `777094` and `956381` were preserved, and no owned process remains.
 - Close gate after `git fetch origin master`: HEAD `f02853e248dfb20385bc42c416e83315763a40ad`, `origin/master` `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, divergence `42 1120`; `git diff --check` passed. Catalog/prompt/TSV/protocol hashes were `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
 - The next exact selector command `shuf -i 0-98 -n 1` returned `74` (`memory-pressure-allocator`). Next run: create its fresh branch, preserve this benchmark finding as closed, and start from the existing memory-pressure queue without reopening Cycle 53's prevector OOM cell.
+
+## Cycle 218: pool benchmark batch/unit contract
+
+### Fresh gate and scope
+
+- The exact selector command `shuf -i 0-98 -n 1` returned `19`, selecting `benchmark-integrity`. The dedicated branch is `uber-cycle-218-benchmark-integrity-20260731`.
+- The pre-cycle gate recorded start HEAD `57d047def7915f50070e52c94e8a20fb41f08704`, `origin/master` `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `1223 42`. Tracked status and `git diff --check` were clean.
+- Catalog, prompt, goals TSV, and protocol hashes were `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`. The pre-cycle state hash was `2517e87a87524d1ae1f233dad34b8f08403dd780cd1d5523e68c46816cb909f6`.
+- Protected processes `777094`, `956381`, `1138182`, and `1157959` were alive and were not touched. The root filesystem had about 6.7 MiB free; `/data` had about 34 GiB free. All cycle scratch paths are under `/data/my_storage/tmp/cycle218-*`.
+- Cycle 205's multi-result export fix and Cycle 169's WriteBlock, MuHashPrecompute, SHA fixture, and FindByte cells remain excluded. This cycle continued the queued batch/unit audit.
+
+### Inventory and candidate
+
+- The static command `git grep -n -E '\\.(batch|unit)\\(' -- src/bench` found explicit metadata in the benchmark inventory. The default-unit batch sites are `asmap.cpp`, `pool.cpp`, and four prevector helpers; the other batch sites explicitly name byte, block, selection, key, job, script, leaf, cost, number, or similar units.
+- The selected candidate is `BenchFillClearMap` in `src/bench/pool.cpp`, introduced by history commit `b8401c3281978beed6198b2f9782b6a8dd35cbd7`. Its timed lambda performs exactly 5,000 `map[rng()]` inserts and then one `map.clear()`. The runner configured `batch_size` as 5,000 but left nanobench's unit at its default `op`, so structured output and the table reported `ns/op` and `ins/op` even though the normalization is explicitly per inserted element and includes the amortized clear cost.
+- The pre-change control used `/data/my_storage/tmp/cycle169-bench-build2/bin/bench_bitcoin -filter='PoolAllocator_.*' -min-time=50 -output-json=/data/my_storage/tmp/cycle218-pool/results.json` with `TMPDIR=/data/my_storage/tmp/cycle218-pool`. The JSON records showed `unit: "op"` and `batch: 5000`; a shell assertion for `unit: "insert"` failed as expected. The console showed `ns/op` and `ins/op` for both variants.
+
+### Fix and verification
+
+- The narrow source fix changes the shared helper to call `bench.batch(batch_size).unit("insert").minEpochIterations(10)`. The timed operation, batch size, setup, allocator comparison, and clear behavior are unchanged; only the exported measurement unit is made explicit.
+- `CCACHE_DIR=/data/my_storage/tmp/cycle218-ccache TMPDIR=/data/my_storage/tmp/cycle218-build cmake --build /data/my_storage/tmp/cycle169-bench-build2 --target bench_bitcoin -j2` completed all 57 steps and linked `bin/bench_bitcoin`. A first build attempt failed before source compilation because ccache tried to create `/root/.cache/ccache/tmp` on the full root filesystem; rerouting ccache resolved that environment issue.
+- The post-change command `/data/my_storage/tmp/cycle169-bench-build2/bin/bench_bitcoin -filter='PoolAllocator_.*' -min-time=50 -output-json=/data/my_storage/tmp/cycle218-pool-fixed/results.json` with `TMPDIR=/data/my_storage/tmp/cycle218-pool-fixed` exited 0. It printed `ns/insert` and `insert/s`; both JSON records contain `unit: "insert"` and `batch: 5000`. The measured rows were 40.57 ns/insert and 24.42 ns/insert, with the repository's CPU powersave/turbo instability warning.
+- The focused sanity control `/data/my_storage/tmp/cycle169-bench-build2/bin/bench_bitcoin -filter='PoolAllocator_.*' -sanity-check` with `TMPDIR=/data/my_storage/tmp/cycle218-sanity` exited 0.
+- The functional command `python3 test/functional/tool_bench_output.py --configfile=/data/my_storage/tmp/cycle169-bench-build2/test/config.ini --tmpdir=/data/my_storage/tmp/cycle218-functional-01 --randomseed=218019` exited 0 and reported `Tests successful`. It checked the existing asymptote and repeated-run export behavior, plus both pool benchmark names, exact `insert` units, and exact 5,000 batches.
+- This is a confirmed benchmark-interface defect, not a production runtime defect: the old structured artifact proves the prior contract, and the new structured-output assertions fail on that artifact and pass on the rebuilt binary. No online PR was used as an oracle; the source/history evidence was local.
+
+### Limitations and next queue
+
+- The host remained CPU-frequency unstable, so timing values are diagnostic only; this cycle's finding is based on the deterministic unit/batch metadata and regression assertions, not on a performance comparison. The full benchmark suite and full unit suite were not run because the root filesystem is critically full. The build was wallet-disabled, which is irrelevant to the selected non-wallet benchmark.
+- Next distinct cells are the remaining default-unit batch sites, especially `asmap.cpp` and the prevector helpers, followed by return-value barriers in benchmark wrappers. Do not reopen the pool label, Cycle 205 result aggregation, or Cycle 169 cells without new evidence.
