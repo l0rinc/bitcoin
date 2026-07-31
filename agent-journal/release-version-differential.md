@@ -250,3 +250,51 @@ Dismissed for this cycle. No unexplained release-to-release behavioral or consen
 ## Limitations and next queue
 
 This was a fresh-regtest/RPC comparison, not a full historical mainnet replay, wallet migration, network transcript, or every release-branch pair. It did not exercise `submitblock` with a generated historical block, reorg/persistence recovery, or the RPC deprecation override. Future release-differential work should select one of those distinct cells, preferably a consensus block-validation vector or a release-branch backport, rather than repeating this genesis/RPC matrix. Reopen this goal if a new release, migration, protocol change, or unexplained cross-version fixture divergence appears.
+## Cycle 215: v28.4/current wallet migration differential (complete)
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `67` (`release-version-differential`). This is a distinct queued cell after the fixed-vector, coinbase-only reorg/restart, prune/persistence, and synthetic mainnet-parameter cells; the selected scope is wallet/database migration.
+- Selected goal: `release-version-differential` (release-to-release behavioral and consensus differential).
+- Branch: `uber-cycle-215-release-version-differential-20260731`.
+- Cycle start HEAD: `d567fd49688e4753b26c9fcd672c329e447c3098`.
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Fresh gate: `git fetch origin master` passed; tracked worktree and index were clean; `git diff --check` passed; catalog/prompt/TSV/protocol hashes matched; protected processes `777094`, `956381`, `1138182`, and `1157959` were alive and untouched.
+
+### Distinct scope and hypothesis
+
+The prior release-differential cells did not compare a legacy BDB wallet migration. This cycle compares the same unloaded legacy wallet bytes through v28.4 and current v31.99.0 migration paths, including generated key material, labels, an imported raw script, P2SH-related watch paths, backup creation, SQLite conversion, reload, and restart. The trust boundary is the exact BDB fixture, migration result, descriptor records, address ownership, backup bytes/paths, and restart-visible wallet state. The hypothesis is that a release/current pair may differ in an undocumented way that loses wallet material, watch state, labels, backups, or reloadability.
+
+### Fixtures and controls
+
+The legacy fixture was created by `/data/my_storage/tmp/cycle167-release28-wallet/src/bitcoind` (`v28.4.0`) in an isolated regtest datadir with `-deprecatedrpc=create_bdb`, no peers/listener/DNS, and RPC port `28555`. Wallet `legacy` was created with `descriptors=false`; it received a labeled address `mr6FGskS6otRenxAwVrKobhzhxMzyiCFLR`, an internal change address, and a watch-only raw script `51`. After unloading and stopping the source daemon, the BDB directory was copied byte-for-byte to separate v28.4 and current scratch datadirs. The source `wallet.dat` SHA-256 was `5b4950d29e342a9d66a24ea797cf2f4c5a9c31a6323ee9b3204141124cb06dcc`.
+
+The v28.4 migration daemon was `/data/my_storage/tmp/cycle167-release28-wallet/src/bitcoind`; current was built from the cycle HEAD at `/data/my_storage/tmp/cycle214-build/bin/bitcoind` with `ENABLE_WALLET=ON`. Both used isolated regtest roots, no peers, separate RPC ports, and `setmocktime 1785508000`. The migration calls were:
+
+```text
+/data/my_storage/tmp/cycle167-release28-wallet/src/bitcoin-cli -datadir=.../v284-copy -regtest -rpcport=28557 migratewallet legacy
+/data/my_storage/tmp/cycle214-build/bin/bitcoin-cli -datadir=.../current-migrated -regtest -rpcport=28559 migratewallet legacy '' true
+```
+
+Both returned `wallet_name=legacy`, `watchonly_name=legacy_watchonly`, and a successful backup. The backup bytes were identical, with SHA-256 `5b4950d29e342a9d66a24ea797cf2f4c5a9c31a6323ee9b3204141124cb06dcc`. v28.4 returned `/data/my_storage/tmp/cycle215-release-wallet/v284-copy/regtest/wallets/legacy/legacy_1785508000.legacy.bak`; current returned `/data/my_storage/tmp/cycle215-release-wallet/current-migrated/regtest/wallets/legacy_1785508000.legacy.bak`.
+
+For a second independent migration fixture, a donor key from a separate v28.4 wallet was used to build a P2PKH redeem script. The script was imported into the legacy wallet with `p2sh=true` and label `raw_p2sh`; the resulting BDB was copied to v28.4 and current scratch roots. Its v28.4 and current backup bytes were identical, with SHA-256 `098100569c57a5b119ea7ab177c128e14ba9a1009da713d1b854fb167f7b6828`.
+
+### Results
+
+- The primary migrated wallet had the same descriptor set, keypool sizes, label `receive`, derived address metadata, empty transaction/coin state, and regtest best block in both versions. The source public address returned the same `pkh` descriptor and key origin after migration.
+- The watch-only wallet retained `raw(51)` in both versions. Current additionally retained `addr(2ND8PB9RrfCaAcjfjP1Y6nAgFd9zWHYX4DN)` for the P2SH wrapping of the raw `51` script. This was reproducible before and after restart; v28.4 reported that address as `ismine=false`, current reported `ismine=true` with the corresponding `addr(...)` descriptor.
+- On the P2SH fixture, both versions retained the expected P2SH and redeem-script descriptors for the imported P2PKH script. Current additionally retained the `addr(2ND8PB9RrfCaAcjfjP1Y6nAgFd9zWHYX4DN)` descriptor from the pre-existing raw-script watch set. The valid imported P2SH address remained `ismine=true` with label `raw_p2sh` in both versions.
+- Both versions converted the primary and auxiliary wallets to SQLite and returned the same migration wallet names. API schema drift was limited to expected fields: v28.4 returned legacy balance fields and no `flags`, while current returned `flags` and omitted deprecated balance fields in `getwalletinfo`; `listwalletdir` likewise gained current warning arrays.
+- After stopping and restarting both daemons, each auto-loaded `legacy_watchonly`; manually loading `legacy` succeeded on both. The descriptor sets, address ownership, labels, best block, and zero balances remained valid. No backup or SQLite file was lost.
+- Current unit controls passed independently: `env TMPDIR=/data/my_storage/tmp/cycle215-wallet-tests /data/my_storage/tmp/cycle214-build/bin/test_bitcoin --run_test=wallet_tests,walletdb_tests,walletload_tests --random=21501 --log_level=message --report_level=short --color_output=false` reported 29 cases and 231 assertions passed. An earlier attempt with a nonexistent `TMPDIR` was stopped after fixture temp-directory/assertion failures; it was an environment error, not used as product evidence, and the corrected rerun passed.
+
+### Classification and verdict
+
+The backup-path difference is documented release behavior. Commit `c5d9f75c4b` is included in v28.4 and explicitly moves the backup into the migrated wallet directory for file-to-directory migration; current retains the newer walletdir placement. The extra current P2SH-related descriptor is also source-backed: v28.4 predates `440ea1ab63` (`legacy spkm: use IsMine() to extract watched output scripts`, included from v29.0 onward), which constructs a superset of candidate scripts from imported scripts and filters it through legacy `IsMine()`. Its documented purpose is to preserve output scripts and edge cases that the older inverse logic missed. Current's `addr(2ND8...)` result matches that candidate-set behavior, while v28.4's omission is the known historical limitation. The current functional migration oracle in `test/functional/wallet_migration.py::test_migrate_raw_p2sh` independently requires the valid imported P2SH descriptor and rejects invalid nested forms.
+
+Verdict: dismissed for this cycle. The only release differences were documented backup placement, API schema evolution, and the known v29 migration coverage improvement. No unexplained current defect, wallet-data loss, label loss, backup mismatch, reload failure, or restart inconsistency was reproduced. No production or permanent test change is justified.
+
+### Limitations and next queue
+
+The fixtures were bounded regtest wallets without funded transactions, encrypted passphrases, cross-chain wallet best-block state, external indexes, P2P transcripts, or release-branch cherry-pick comparison. This cycle does not claim complete wallet compatibility. The next distinct release-differential queue remains funded/encrypted wallet migration, P2P transcript behavior, release-branch backports, and a real historical transaction/block corpus when bounded provenance-preserving inputs are available. Scratch datadirs, backups, logs, and raw wallet copies remain under `/data/my_storage/tmp/cycle215-release-wallet/`.
