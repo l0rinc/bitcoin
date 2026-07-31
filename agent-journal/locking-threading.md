@@ -1,3 +1,77 @@
+# Cycle 210: validation callback re-registration boundary
+
+## Fresh gate and selection
+
+- Goal index: 8, `locking-threading`; exact selector `shuf -i 0-98 -n 1` -> `8`, with no reroll.
+- Branch: `uber-cycle-210-locking-threading-20260731`.
+- Start HEAD: `62cca938b35d3a260fbe57dcf08645e8c30042f7`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1211 42`.
+- Catalog, prompt, TSV, and protocol hashes matched the persistent uber-goal
+  state. The tracked worktree and index were clean, `git diff --check` passed,
+  and the four preserved long-running test processes were alive and untouched.
+
+## Scope and source trace
+
+The prior Goal 8 cells closed the address dump rename race, transaction-download
+and V2 transport lock order, normal scheduler shutdown lifetime, callback-owned
+peer state, mapport thread lifetime, and the `SignalInterrupt` lost-wakeup
+interleaving. The fresh cell was the validation callback registry, specifically
+registration and unregistration while `ValidationSignalsImpl::Iterate()` is
+dispatching an event.
+
+`CValidationInterface` promises that each subscriber receives events in
+generation order and that one callback completes before the next callback for
+that subscriber. `Iterate()` protected its list only while selecting and
+advancing entries, then released `m_mutex` around the user callback and walked
+the live `std::list`. A callback that unregistered itself removed the map entry,
+then re-registered itself appended a new list entry. After the old callback
+returned, the live iterator reached that new entry and dispatched the same
+event again. Repeating the transition could keep the traversal alive
+indefinitely. This is distinct from the already-reviewed production lock
+serialization: synchronous validation signals are reached under `cs_main`, and
+background signals use `SerialTaskRunner`; this cycle did not claim a separate
+cross-source concurrent-callback defect.
+
+## Reproducer and fix
+
+Added `validationinterface_tests/register_during_callback_is_deferred` with a
+subscriber that unregisters and re-registers itself during the first
+`BlockChecked` callback. The pre-fix oracle temporarily removed only the
+generation condition from the loop. The test then observed 2 callbacks for the
+first event and 3 total after the second, failing with exit code 201. This
+proves the duplicate delivery is caused by the live-list traversal rather than
+by test scheduling.
+
+Each newly created `ListEntry` now receives a monotonically increasing
+generation under `m_mutex`. `Iterate()` snapshots the current generation and
+stops before entries registered during that dispatch. The re-registration
+remains active and receives the next event, while the existing reference-count
+and shared-lifetime behavior is unchanged.
+
+## Verification
+
+- Release build: `env TMPDIR=/data/my_storage/tmp/cycle210-build-tmp CCACHE_DIR=/data/my_storage/tmp/cycle210-ccache cmake --build /data/my_storage/tmp/cycle105-clang19-release --target test_bitcoin -j2` passed.
+- Repaired focused suite: `validationinterface_tests`, 7 cases and 43 assertions passed.
+- `validation_block_tests`, 8 cases and 3,071 assertions passed. Its first
+  invocation used a missing `TMPDIR` and was stopped after fixture setup
+  errors; the rerun created the scratch directory and passed.
+- Clang 19 TSan rebuild of `/data/my_storage/tmp/cycle163-tsan` passed, and the
+  focused validation-interface suite passed 7 cases and 45 assertions with no
+  TSan report.
+- `git diff --check` passed. No default datadir, wallet, key, or production
+  database was used.
+
+## Verdict and handoff
+
+**Confirmed duplicate validation callback on in-flight re-registration; fixed.**
+The source, regression test, and this journal section are committed together.
+The next Goal 8 cycle should use a fresh callback or worker lifecycle cell. A
+separate hypothesis about overlap between synchronous and queued callbacks was
+not promoted: synchronous call sites are under `cs_main` and queued events are
+serialized, but a full cross-source happens-before guarantee was not established.
+Reopen it only with an independent stateful callback witness or new caller.
+
 # Cycle 189 start: SignalInterrupt reset/handler wakeup contract
 
 ## Fresh gate and selection

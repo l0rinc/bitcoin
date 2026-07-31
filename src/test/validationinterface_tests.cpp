@@ -293,6 +293,42 @@ public:
     ValidationSignals& m_signals;
 };
 
+class ReregisteringSubscriber final : public CValidationInterface, public std::enable_shared_from_this<ReregisteringSubscriber>
+{
+public:
+    explicit ReregisteringSubscriber(ValidationSignals& signals) : m_signals{signals} {}
+
+    void BlockChecked(const std::shared_ptr<const CBlock>&, const BlockValidationState&) override
+    {
+        ++m_calls;
+        if (m_reregister) {
+            m_reregister = false;
+            auto self{shared_from_this()};
+            m_signals.UnregisterSharedValidationInterface(self);
+            m_signals.RegisterSharedValidationInterface(std::move(self));
+        }
+    }
+
+    int m_calls{0};
+    bool m_reregister{true};
+    ValidationSignals& m_signals;
+};
+
+BOOST_AUTO_TEST_CASE(register_during_callback_is_deferred)
+{
+    auto sub{std::make_shared<ReregisteringSubscriber>(*m_node.validation_signals)};
+    m_node.validation_signals->RegisterSharedValidationInterface(sub);
+
+    BlockValidationState state;
+    m_node.validation_signals->BlockChecked(std::make_shared<const CBlock>(), state);
+    BOOST_CHECK_EQUAL(sub->m_calls, 1);
+
+    m_node.validation_signals->BlockChecked(std::make_shared<const CBlock>(), state);
+    BOOST_CHECK_EQUAL(sub->m_calls, 2);
+
+    m_node.validation_signals->UnregisterSharedValidationInterface(sub);
+}
+
 // Regression test to ensure UnregisterAllValidationInterfaces calls don't
 // destroy a validation interface while it is being called. Bug:
 // https://github.com/bitcoin/bitcoin/pull/18551
