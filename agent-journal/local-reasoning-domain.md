@@ -47,6 +47,83 @@ callers, history, tests, docs, locks, and failure transitions. Require a
 deterministic fixture or rigorous dataflow proof, independent verification, and
 a failing-before/passing-after oracle before changing production code.
 
+## Cycle 174 finding: `Chain::hasBlocks` empty-range boundary
+
+### Candidate and contract
+
+The chain-interface queue produced a distinct boundary candidate: a caller can
+ask whether the ancestors of a block are present in an inclusive height range
+that starts above that block. For `block_hash = active[4]`, `min_height = 10`,
+and `max_height = 20`, the requested intersection is empty. The `hasBlocks`
+contract in `src/interfaces/chain.h:183-186` says that all ancestors in the
+specified range must have data; an empty intersection therefore satisfies the
+universal condition. A missing `BLOCK_HAVE_DATA` bit below the range must not
+change the result. The trust boundary is a direct Chain-interface, IPC, or
+future partial caller; no malformed internal block index is required.
+
+### Source, history, and caller trace
+
+Before the fix, `ChainImpl::hasBlocks` entered its status loop before checking
+whether the current block was below `min_height`. It therefore returned false
+for a missing starting block even when no block in the requested range existed.
+The implementation was introduced by `2a26771d81`; history and blame showed no
+prior fix for this boundary. The nearby implementation comment promises that a
+`min_height` that is too low will not change the result, but the public header
+does not impose a `min_height <= block_hash height` precondition. The normal
+wallet `rescanblockchain` caller (`src/wallet/rpc/transactions.cpp:883-897`)
+validates nonnegative, ordered bounds and caps them at the wallet tip, so this
+is an API correctness/robustness issue for direct and partial callers rather
+than a demonstrated wallet or consensus failure.
+
+The related settings candidate was dismissed: `updateRwSetting` reports a
+failed settings-file write after mutating the in-memory map, but restoring a
+snapshot would race with another update and there is no rollback contract.
+The block-storage candidate was a duplicate of the prior unlinked-block
+publication finding (`8e40da2f31` and upstream `0e4b0bacecf`/`fb47793b99`).
+Mempool/P2P and optional-interface scans found no new relationship defect;
+their reviewed cells remain closed.
+
+### Independent reproduction and fix
+
+The regression was added to `interfaces_tests/hasBlocks` by clearing the
+`BLOCK_HAVE_DATA` bit in `active[4]->nStatus` and asserting
+`chain->hasBlocks(active[4]->GetBlockHash(), 10, 20)`. With the test-only
+regression and the old production implementation, this exact control was run:
+
+    mkdir -p /data/my_storage/tmp/cycle174-hasblocks-old
+    TMPDIR=/data/my_storage/tmp/cycle174-hasblocks-old /data/my_storage/tmp/cycle170-mempool-build/bin/test_bitcoin --run_test=interfaces_tests/hasBlocks --catch_system_errors=no --color_output=false --log_level=test_suite --report_level=short
+
+It exited 201 with one failure at `test/interfaces_tests.cpp:162` and
+23/24 assertions passed. The minimal production repair first clamps an
+optional `max_height`, returns false if that clamp produces no ancestor, then
+returns true when the clamped block is already below `min_height`, before
+inspecting `BLOCK_HAVE_DATA`. The inclusive lower-bound behavior remains in the
+existing loop, so a block exactly at `min_height` is still required to have
+data.
+
+The repaired release build was rebuilt with:
+
+    CCACHE_DISABLE=1 cmake --build /data/my_storage/tmp/cycle170-mempool-build --target test_bitcoin -j4
+
+The focused test then passed 1 case and 24 assertions. The broader interface
+suite passed 6 cases and 65 assertions. An independent UBSan build was rebuilt
+with:
+
+    CCACHE_DISABLE=1 cmake --build /data/my_storage/tmp/cycle106-clang19-ubsan --target test_bitcoin -j4
+
+The UBSan focused replay used `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`
+and passed 1 case and 24 assertions with no diagnostic. The UBSan build emitted
+only its known `object-size sanitizer has no effect at -O0` warning.
+
+### Verdict and handoff
+
+Confirmed and fixed as one self-contained source/test/journal finding. The
+change is low severity and affects an under-specified partial interface domain;
+no consensus, normal wallet, persistence, or secret-data path was shown to be
+reachable. The exact source/test diff is ready for commit. Remaining work in
+this cycle is commit verification, a state-only close record, the fresh gate,
+and a new random goal draw.
+
 ## Cycle 135: index file-position and publication relationships
 
 ### Cycle identity and gate

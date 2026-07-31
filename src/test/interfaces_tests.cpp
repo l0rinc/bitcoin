@@ -157,6 +157,10 @@ BOOST_FIXTURE_TEST_CASE(hasBlocks, TestChain100Setup)
     BOOST_CHECK(!chain->hasBlocks(active.Tip()->GetBlockHash(), 0, {}));
     BOOST_CHECK(!chain->hasBlocks(active.Tip()->GetBlockHash(), -1000, 1000));
 
+    // A missing block below the requested range must not affect an empty range.
+    active[4]->nStatus &= ~BLOCK_HAVE_DATA;
+    BOOST_CHECK(chain->hasBlocks(active[4]->GetBlockHash(), 10, 20));
+
     // Test edge cases
     BOOST_CHECK(chain->hasBlocks(active.Tip()->GetBlockHash(), 6, 49));
     BOOST_CHECK(!chain->hasBlocks(active.Tip()->GetBlockHash(), 5, 49));
