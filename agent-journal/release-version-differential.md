@@ -112,3 +112,55 @@ divergence.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-08-01): downgrade read — v28.2 opens HEAD datadir clean; v0.20.1 aborts LOUD on XOR-obfuscated block files (upstream #28052, default-on); forward-compat of its mutations verified; DISMISSED
+
+### Draw
+RE-RANK draw 155 over the 7-cell pool: raw=7423517245362505699
+(already 63-bit) -> idx 6 -> #67 chainstate/blocks downgrade read
+(c1 queue). Branch: audit/release-diff-c3 from 82cc86ce7e.
+
+### Fixture
+HEAD writes a 150-block regtest datadir (blocks are
+XOR-obfuscated per -blocksxor default true, upstream PR #28052
+merged 2024-08-05, first in v28.0; xor.dat key in blocksdir).
+
+### Matrix
+- v28.2: clean open, 150/150 blocks+headers, only the known
+  non-fatal "up-version (309900) fee estimate file" skip (#41 c1
+  contract).
+- v0.20.1: ReadBlockFromDisk "Errors in block header" at the tip
+  -> VerifyDB "***" -> "Corrupted block database detected.
+  Please restart with -reindex or -reindex-chainstate" -> ABORT.
+  Retry WITH -reindex-chainstate fails identically (fatal) — the
+  abort is deterministic and loud, not a silent misread.
+- blk-file analysis: blk00000.dat carries no fabfb5da magic — it
+  is XOR-obfuscated (key in blocksdir/xor.dat); v0.20.1 predates
+  the feature entirely.
+- v0.20.1's writes before aborting (banlist.dat recreate,
+  peers.dat v1, mempool.dat, settings.json) are FORWARD-SAFE:
+  HEAD reopens the same datadir at 150 with zero corruption
+  (banlist.dat warning is the #41 c6 contract; old peers.dat
+  readable per #41 c5).
+
+### Verdict
+DISMISSED: the downgrade boundary is exactly at the blocksxor
+feature release (v28.0), fails LOUD with correct reindex advice,
+and cross-mutations are benign. No silent corruption, no
+fork-specific deviation (feature and default are upstream).
+
+### Exact commands
+- fixture + 3-binary matrix above; blk magic scan (xxd/rfind);
+  framework CBlock parse attempt (magic absent -> obfuscation
+  proof); v0.20.1 plain + -reindex-chainstate attempts; HEAD
+  reopen check.
+
+### Limitations / queue
+- Network-resync recovery with the old binary not run (needs a
+  peer; the abort's reindex advice is verified literal on the
+  file level).
+- Remaining #67 cell: feature_backwards_compatibility with these
+  exact binaries.
+
+## Rotation note
+Cycle 3 complete; rotating per uber-goal policy. Not exhausted.

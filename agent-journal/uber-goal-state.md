@@ -119,6 +119,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 48 | property-oracle-expansion | CYCLE-1 | 2026-07-28 | CompactSize exhaustive battery delivered (8b7d8ac878), 1/1 boundary mutant killed |
 | 67 | release-version-differential | CYCLE-1 | 2026-07-28 | v28.2/v0.20.1 ↔ HEAD sync+handshake clean both directions; BIP324 fallback correct |
 | 67 | release-version-differential | CYCLE-2 | 2026-07-31 | wtxid/txid inventory across v0.21 boundary: negotiation/inv/getdata all per BIP339; DISMISSED |
+| 67 | release-version-differential | CYCLE-3 | 2026-08-01 | downgrade read: v28.2 clean; v0.20.1 loud abort on blocksxor-obfuscated blk files (upstream #28052); its mutations forward-safe |
 | 24 | disk-io-amplification | CYCLE-1 | 2026-07-28 | regtest IBD: ~2x byte amplification (undo+index), bounded 16MB prealloc; no pathological growth |
 | 63 | loupe-style-pipeline | CYCLE-1 | 2026-07-28 | fee-estimator zero-state waste confirmed+fixed (675011ba86): 20.4%->0 samples, -34% IBD user |
 | 35 | mutation-testing | CYCLE-1 | 2026-07-28 | ReadVarInt overflow guards test-blind (M2/M3 survived); oracle delivered+verified (083afedbf1) |
@@ -874,6 +875,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    #74 pruning-mode IO, #35 NONNEGATIVE_SIGNED write semantics,
    #50 Taproot/MuSig2 gates, #9 per-seed profiling, #67 downgrade
    read.
+   RE-RANK draw 155 (7-cell pool): raw=7423517245362505699
+   (already 63-bit) -> idx 6 -> #67 c3 (downgrade read: v28.2
+   clean; v0.20.1 loud deterministic abort on blocksxor-
+   obfuscated blk files (upstream #28052, default-on since
+   v28.0); its mutations forward-safe; DISMISSED).
+   Pool after draw 155 (6): #81 Wycheproof, #36 TSan subset,
+   #74 pruning-mode IO, #35 NONNEGATIVE_SIGNED write semantics,
+   #50 Taproot/MuSig2 gates, #9 per-seed profiling.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
