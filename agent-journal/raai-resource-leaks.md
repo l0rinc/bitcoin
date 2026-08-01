@@ -75,3 +75,76 @@ The fix makes the three `GetOptions()` allocations local `unique_ptr`s until all
 - Raw evidence: `/data/my_storage/tmp/raai-cycle73-dbwrapper-before.log`, `/data/my_storage/tmp/raai-cycle73-dbwrapper-after-asan.log`, `/data/my_storage/tmp/raai-cycle73-dbwrapper-mutated.log`, `/data/my_storage/tmp/raai-cycle73-dbwrapper-after-asan-tests.log`, and `/data/my_storage/tmp/raai-cycle73-dependent-tests.log`.
 - Remaining resource cells: socket and callback cancellation, file/mapping failure paths, database iterator/transaction ownership, and secure allocation cleanup. Re-check the deduplication ledger before selecting one in the next cycle.
 - Verdict: cycle 73 confirmed one reachable resource leak and fixed it; no repository-completion claim is made.
+
+# RAII, Smart-Pointer, and Resource-Leak Audit Cycle 246
+
+## Identity and Gate
+
+- Cycle: `246`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `54`
+- Goal: `RAII, smart-pointer, and resource-leak audit`
+- Slug: `raai-resource-leaks`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc`
+- Goal TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Branch: `uber-cycle-246-raii-smart-pointer-resource-leaks-20260731`
+- Base: `origin/master` at `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- HEAD at cycle start: `5eeab93b203c2b6264a1b5e4ebd8865a99b6bb07`
+- `origin/master...HEAD` at the gate: `42 1275`
+- Tracked/staged state at the gate: clean. Existing untracked agent artifacts, probes, package files, crash files, and `test/cache/` were preserved.
+- Several unrelated sanitizer and test processes were already running in protected build directories. They were not stopped or rebuilt; the current IPC and wallet validation used independent scratch builds.
+
+## Prior-Work Exclusions and Risk Map
+
+The Cycle 73 LevelDB `CDBWrapper` constructor leak was already fixed and searched before this cycle. Scheduler shutdown, wallet/database cleanup outside the selected SQLite constructor path, descriptor/provider ownership, Berkeley migration, kernel wrapper ownership, DynSock stack ownership, and selected network queue lifetimes were also excluded from repetition by their prior journals. The remaining high-value cells were socket/callback cancellation, file/mapping failure paths, database iterator/transaction ownership, and secure allocation cleanup.
+
+The cycle ledger covered four distinct ownership boundaries:
+
+1. `mp::ConnectStream` released a loop-thread-owned `Connection` before proxy construction had completed.
+2. `ProxyClientBase` registered a cleanup callback capturing `this` before all constructor operations had succeeded.
+3. `SQLiteBatch::SetupSQLStatements` could leave earlier raw `sqlite3_stmt*` handles prepared when a later statement failed.
+4. `mp::SpawnProcess` created a socketpair before a pre-fork callback and argv construction that could throw.
+
+## Confirmed Findings
+
+### IPC proxy construction released a connection too early
+
+`ConnectStream` previously passed `connection.release()` through the successful proxy construction path. If allocation or `ProxyClient` construction threw after the Cap'n Proto connection had been created, the raw connection and owned socket escaped. A deterministic descriptor replay with the old code kept the descriptor count at `fd_before=17 fd_after=17` after the injected failure, while the corrected ownership path returned `fd_before=17 fd_after=16` and exit status 0. The final fix keeps the `unique_ptr` until proxy construction succeeds and resets it on the event-loop thread in the catch path. Allocation-failure injection under ASan produced no report after the fix.
+
+Commit: `a8621425b454e9f2e85efffd43b92fa67d89ff22` (`ipc: retain connection ownership during proxy construction`).
+
+### Proxy cleanup callback captured a dead object on constructor failure
+
+`ProxyClientBase` registered a `Connection` sync-cleanup callback capturing `this`, then performed an allocating `emplace_front` and `Sub::construct(*this)`. If either operation threw, the object storage was released without running the destructor, but the callback remained and later dereferenced the dead object during connection teardown. The old same-thread ASan replay reported a heap-use-after-free in the generated `foo.capnp.h` callback path, through `proxy-io.h` and `Connection::~Connection`. The fixed rollback removes the callback via `loop.sync`, satisfying `Connection::removeSyncCleanup`'s event-loop-thread requirement. The exact injected registration test then passed under ASan with one test and no sanitizer report.
+
+Commit: `c180456b34b3c4d00bcbbd538e8a034757ae3ad2` (`ipc: unregister cleanup callback on proxy construction failure`).
+
+### SQLite batch construction leaked partially prepared statements
+
+`SQLiteBatch` initialized raw statement members to null and prepared them sequentially in `SetupSQLStatements`. On an authorizer denial of a later `SQLITE_INSERT` prepare, the constructor threw after an earlier statement had been prepared. Because destructors do not run for an object whose constructor throws, the earlier statement remained registered on the database. The focused pre-fix test reported `statement_count == 0` as `[1 != 0]`. The constructor now calls the existing non-throwing `Close()` cleanup path before rethrowing. The same test passed afterward with all three assertions passing.
+
+The permanent regression is `sqlite_batch_constructor_failure_releases_statements` in `src/wallet/test/wallet_tests.cpp`. The source/test commit is `5bc4c07ce0554aed3c0d1ee5f15423f8db93f71a` (`wallet: clean up SQLite batch construction failures`).
+
+### SpawnProcess leaked both socketpair descriptors before fork
+
+`SpawnProcess` created two raw descriptors, then invoked `fd_to_args` and `MakeArgv` before `fork()`. An exception from the callback therefore bypassed every close path. The new libmultiprocess test reproduced the old behavior exactly: `CountOpenFds()` changed from 4 to 6 after the callback threw, with no child process created. Local `ScopedFd` guards now own both descriptors until the parent/child transfer points, and the existing close/error behavior remains in place after `fork()`. The full standalone mptest suite passes after the change.
+
+The source/test commit is `9105c2db16c102bf11245f4306e73203c600d78d` (`ipc: close SpawnProcess descriptors on setup failure`).
+
+## Validation
+
+- `cmake --build /data/my_storage/tmp/cycle246-mp-base --target mptest -j2` passed after both IPC source changes.
+- `ctest --test-dir /data/my_storage/tmp/cycle246-mp-base --output-on-failure` passed: one test target, all tests passed, including the pre-fork exception FD regression and all existing IPC tests.
+- `/data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=sqlite_batch_constructor_failure_releases_statements --log_level=test_suite --report_level=short --color_output=false` passed with `TMPDIR=/data/my_storage/tmp`: one case, three assertions.
+- The same wallet test against the pre-fix SQLite source failed with one remaining prepared statement, proving the regression is sensitive to the old behavior.
+- `cmake --build /data/my_storage/tmp/cycle246-wallet --target test_bitcoin -j2` passed after the SQLite fix. The initial `-fanalyzer` wallet build was killed by host memory pressure while compiling an unrelated file; it was not used as evidence.
+- The standalone libmultiprocess build and test target were separate from protected long-running builds. No protected process was stopped or rebuilt.
+- `git diff --check` passed before each source commit. The two IPC commits, SQLite commit, and this journal close are independent commits intended to build and test alone.
+
+## Residual Queue and Verdict
+
+Remaining cells are file/mapping failure paths, further database iterator/transaction ownership, secure allocation cleanup, and the `echoipc`/spawn lifecycle paths that were inspected but not independently reproduced this cycle. In particular, `echoipc`'s `init.release()` callback registration and the post-fork parent-close failure path need a separate fault-injection harness before any change is justified. Re-check the finding index and prior journals before selecting one.
+
+Verdict: Cycle 246 confirmed and fixed four independent reachable resource-lifetime defects. This is a finite evidence-backed cycle, not a repository-completion claim. The next run must select a new unchecked hypothesis from the accumulated map.
