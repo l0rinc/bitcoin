@@ -7,6 +7,7 @@
 #include <util/strencodings.h>
 #include <wallet/crypter.h>
 
+#include <limits>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -94,6 +95,19 @@ BOOST_AUTO_TEST_CASE(passphrase) {
     if (rounds > 30000)
         rounds = 30000;
     TestCrypter::TestPassphrase(vchSalt, SecureString(hash.begin(), hash.end()), rounds);
+}
+
+BOOST_AUTO_TEST_CASE(passphrase_rounds_limit) {
+    constexpr std::array<uint8_t, WALLET_CRYPTO_SALT_SIZE> salt{"0000deadbeef0000"_hex_u8};
+    CCrypter crypt;
+    // Iteration counts above INT_MAX (e.g. from a crafted or corrupted wallet file) narrow to a
+    // negative count in the KDF and must be rejected instead of making key derivation loop for an
+    // unbounded amount of time.
+    BOOST_CHECK(!crypt.SetKeyFromPassphrase("passphrase", salt, 0, 0));
+    BOOST_CHECK(!crypt.SetKeyFromPassphrase("passphrase", salt, static_cast<unsigned int>(std::numeric_limits<int>::max()) + 1, 0));
+    BOOST_CHECK(!crypt.SetKeyFromPassphrase("passphrase", salt, std::numeric_limits<unsigned int>::max(), 0));
+    // Sane values still work.
+    BOOST_CHECK(crypt.SetKeyFromPassphrase("passphrase", salt, CMasterKey::DEFAULT_DERIVE_ITERATIONS, 0));
 }
 
 BOOST_AUTO_TEST_CASE(encrypt) {
