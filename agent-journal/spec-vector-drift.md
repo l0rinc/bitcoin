@@ -199,3 +199,40 @@ Wycheproof.
 ## Rotation note
 Cycle 3 complete; rotating per uber-goal policy. Not exhausted (4
 unclaimed cells).
+
+## Cycle 4 (2026-07-31): BIP32 spec vectors + base58/sighash provenance — 25/25 xprv/xpub match, engine green, both data files byte-identical to upstream master; no drift
+
+### Draw
+RE-RANK draw 149 over the 3-cell queue: raw=6078230012799546660
+(already 63-bit) -> idx 0 -> #81 remaining spec-vector cells.
+Branch: audit/spec-vector-drift-c4 from 09cff005f3.
+
+### Cells
+- BIP32: extracted all 25 xprv/xpub strings from bips master
+  bip-0032.mediawiki (test vectors 1-5) and from in-tree
+  bip32_tests.cpp — 25/25 common, 0 bip-only, 0 tree-only.
+  Engine: test_bitcoin --run_test=bip32_tests green (5 spec
+  vectors + fork-added keypath-contract/max-depth/invalid-input
+  cases).
+- base58_encode_decode.json: byte-identical to bitcoin/bitcoin
+  master (21 rows).
+- sighash.json: byte-identical to bitcoin/bitcoin master (501
+  rows) — cross-link: rust-bitcoin's legacy_sighash.json was a
+  strict 289-row subset of this file (#55 c4), so the
+  BIP143/sighash provenance chain is upstream master == fork ==
+  rust-bitcoin-subset.
+
+### Verdict
+DISMISSED: no drift on any of the three arms. Remaining #81
+cells: Wycheproof (AES/schnorr-class vectors, heavier).
+
+### Exact commands
+- curl bips/bitcoin raw files to /tmp (bip32.mediawiki,
+  base58, sighash); python3 set/identity diffs above;
+  test_bitcoin --run_test=bip32_tests.
+
+### Limitations / queue
+- Wycheproof remains the last unclaimed #81 cell.
+
+## Rotation note
+Cycle 4 complete; rotating per uber-goal policy. Not exhausted.
