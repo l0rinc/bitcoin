@@ -11,7 +11,9 @@
 #include <condition_variable>
 #include <csignal>
 #include <cstdlib>
+#include <fcntl.h>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <sys/wait.h>
 #include <thread>
@@ -21,6 +23,15 @@
 namespace {
 
 constexpr auto FAILURE_TIMEOUT = std::chrono::seconds{30};
+
+static int CountOpenFds()
+{
+    int count{0};
+    for (int fd{0}; fd < 1024; ++fd) {
+        if (fcntl(fd, F_GETFD) != -1) ++count;
+    }
+    return count;
+}
 
 // Poll for child process exit using waitpid(..., WNOHANG) until the child exits
 // or timeout expires. Returns true if the child exited and status_out was set.
@@ -109,4 +120,20 @@ KJ_TEST("SpawnProcess does not run callback in child")
 
     KJ_EXPECT(exited, "Timeout waiting for child process to exit");
     KJ_EXPECT(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+
+KJ_TEST("SpawnProcess closes socketpair if argument callback throws")
+{
+    const int open_fds_before{CountOpenFds()};
+    int pid{-1};
+    bool threw{false};
+    try {
+        (void)mp::SpawnProcess(pid, [](int) -> std::vector<std::string> {
+            throw std::runtime_error{"argument construction failed"};
+        });
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    KJ_EXPECT(threw);
+    KJ_EXPECT(CountOpenFds() == open_fds_before);
 }

@@ -59,6 +59,22 @@ size_t MaxFd()
     }
 }
 
+class ScopedFd
+{
+public:
+    explicit ScopedFd(int fd) : m_fd(fd) {}
+    ~ScopedFd()
+    {
+        if (m_fd != -1) close(m_fd);
+    }
+
+    int get() const { return m_fd; }
+    int release() { return std::exchange(m_fd, -1); }
+
+private:
+    int m_fd;
+};
+
 } // namespace
 
 std::string ThreadName(const char* exe_name)
@@ -122,6 +138,8 @@ int SpawnProcess(int& pid, FdToArgsFn&& fd_to_args)
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
         throw std::system_error(errno, std::system_category(), "socketpair");
     }
+    ScopedFd fd0{fds[0]};
+    ScopedFd fd1{fds[1]};
 
     // Evaluate the callback and build the argv array before forking.
     //
@@ -129,7 +147,7 @@ int SpawnProcess(int& pid, FdToArgsFn&& fd_to_args)
     // locks at fork time. In that case, running code that allocates memory or
     // takes locks in the child between fork() and exec() can deadlock
     // indefinitely. Precomputing arguments in the parent avoids this.
-    const std::vector<std::string> args{fd_to_args(fds[0])};
+    const std::vector<std::string> args{fd_to_args(fd0.get())};
     const std::vector<char*> argv{MakeArgv(args)};
 
     pid = fork();
@@ -139,15 +157,22 @@ int SpawnProcess(int& pid, FdToArgsFn&& fd_to_args)
     // Parent process closes the descriptor for socket 0, child closes the
     // descriptor for socket 1. On failure, the parent throws, but the child
     // must _exit(126) (post-fork child must not throw).
-    if (close(fds[pid ? 0 : 1]) != 0) {
+    const int close_fd{pid ? fd0.get() : fd1.get()};
+    if (close(close_fd) != 0) {
+        const int close_error{errno};
         if (pid) {
-            (void)close(fds[1]);
-            throw std::system_error(errno, std::system_category(), "close");
+            (void)close(fd1.release());
+            throw std::system_error(close_error, std::system_category(), "close");
         }
         static constexpr char msg[] = "SpawnProcess(child): close(fds[1]) failed\n";
         const ssize_t writeResult = ::write(STDERR_FILENO, msg, sizeof(msg) - 1);
         (void)writeResult;
         _exit(126);
+    }
+    if (pid) {
+        fd0.release();
+    } else {
+        fd1.release();
     }
 
     if (!pid) {
@@ -155,7 +180,7 @@ int SpawnProcess(int& pid, FdToArgsFn&& fd_to_args)
         // socket 0. Do not throw, allocate, or do non-fork-safe work here.
         const int maxFd = MaxFd();
         for (int fd = 3; fd < maxFd; ++fd) {
-            if (fd != fds[0]) {
+            if (fd != fd0.get()) {
                 close(fd);
             }
         }
@@ -168,7 +193,7 @@ int SpawnProcess(int& pid, FdToArgsFn&& fd_to_args)
         perror("execvp failed");
         _exit(127);
     }
-    return fds[1];
+    return fd1.release();
 }
 
 void ExecProcess(const std::vector<std::string>& args)
