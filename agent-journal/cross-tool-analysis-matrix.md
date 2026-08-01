@@ -307,3 +307,62 @@ triaged further this cycle).
 
 ## Rotation note
 Cycle 5 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 6 (2026-08-01, draw 169, raw=13595585722515773213, masked 4372213685660997405, idx 1/4): functional-suite-under-clang 7/7 = gcc baseline; warning-as-error CI gap DISMISSED; campaign COMPLETE
+
+### Draw
+RE-RANK draw 169 over the 4-cell pool: raw=13595585722515773213,
+masked 4372213685660997405 -> idx 1 -> #36 functional-under-clang
+(c2 queue). Branch: audit/cross-tool-c6 from 1796cff899-lineage
+(audit/cross-tool-c5 tip).
+
+### H1: clang-18-built bitcoind diverges behaviorally from gcc-13.3
+on the functional suite (optimizer/codegen-visible). DISMISSED.
+- Build: cmake -B build-clang-func -G Ninja Release,
+  clang-18/clang++-18 18.1.x, -g0 (disk), ENABLE_WALLET/IPC off,
+  tests off; bitcoind+bitcoin-cli only; ccache 58% hit.
+  Version line: v31.99.0-7599fd612942 (HEAD journal lineage).
+- Runner quirk recorded: test_runner.py hardcodes
+  test/config.ini (its --configfile only passes through); point
+  test/config.ini at each build's config in turn, delete after.
+- Subset (consensus/P2P core, MiniWallet-raw only):
+  feature_block, p2p_compactblocks, rpc_blockchain (v1+v2),
+  feature_reindex, p2p_segwit, feature_csv_activation.
+- clang run: ALL 7 Passed, 217s accumulated, 90s wall
+  (/tmp/btc36c6). gcc build-before same-day baseline: ALL 7
+  Passed, 217s, 89s wall (/tmp/btc36c6g). Per-test times within
+  1s. Zero behavioral divergence, zero clang-only failures.
+
+### H2 (c2 queue, warning-as-error CI note): clang-only warnings
+can slip CI. DISMISSED — with a fork-hygiene corollary.
+- ci/test/03_test_script.sh:118: BITCOIN_CONFIG_ALL carries
+  -DCMAKE_COMPILE_WARNING_AS_ERROR=ON for EVERY job; ci.yml runs
+  clang jobs (asan, fuzz, fuzz_with_msan, iwyu, msan, tidy, tsan).
+  No silent-warning channel exists; the literal -Werror in
+  00_setup_env_native_previous_releases.sh is only because that
+  job pins an older CMake lacking the option (comment at :18).
+- Corollary (fork CI hygiene, not a Core defect): the 3 benign
+  c2 -Wunneeded-* helpers (signet.cpp:83, txgraph.cpp:41/57) fire
+  only when FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION/
+  ABORT_ON_FAILED_ASSUME is absent (src/util/check.h:21-35) and
+  that macro is per-target, so the non-fuzz clang jobs would see
+  them under Werror; remedy if wanted is [[maybe_unused]] on the
+  helpers (c2 already recorded). No fix commit: benign by design,
+  out of minimal-defect scope.
+
+### Verdict
+DISMISSED both cells. #36 matrix complete: gcc/clang unit
+differential (c2), UBSan (c3), _GLIBCXX_ASSERTIONS (c4), TSan
+(c5), functional-under-clang + Werror CI note (c6).
+
+### Campaign #36: COMPLETE
+
+### Exact commands
+- cmake/ninja lines above; test_runner subset lines above;
+  test/config.ini copy-delete dance recorded.
+
+### Limitations
+- Subset, not the full functional suite (disk- and time-bounded;
+  the 6 tests were chosen for consensus/P2P density).
+- build-clang-func kept for now (Release -g0, ~small); delete on
+  next disk squeeze. clang version string: Ubuntu clang 18.1.x.
