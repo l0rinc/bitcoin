@@ -247,3 +247,55 @@ by design; native_qt extras verified via the mechanism).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-08-01): 45-uncacheable ccache itemization — zero uncacheable in ALL SIX live build families; lifetime 83 are historical residue; DISMISSED
+
+### Draw
+RE-RANK draw 151 (n=1): raw=3249723470637215331 (already 63-bit)
+-> idx 0 -> #76 45-uncacheable itemization (c2 queue). Branch:
+audit/reproducible-builds-c4 from 0e47dc4623.
+
+### Method
+CCACHE_LOGFILE probe builds across every build family this host
+has seen this session, plus lifetime-stat tracking (ccache -s:
+45 uncacheable at c2's measurement, 83 today — the +38 accrued
+during this session's scratch builds).
+
+### Results (uncacheable calls per family, logfile-verified)
+- gcc Release test_bitcoin + bitcoind (fresh dir, warm cache): 0
+  (1293 read_hits, 7 misses = the absolute--I secp class from c2,
+  correctly visible as MISSES not uncacheables).
+- ASan+UBSan+fuzzer build_fuzz (make): 0.
+- gcc -D_GLIBCXX_ASSERTIONS (fresh dir): 0.
+- clang-18 SANITIZERS=undefined (fresh dir): 0.
+- ccache -s lifetime: 83/39468 uncacheable, but NO live family
+  reproduces a single one — the class is residue from deleted
+  build configurations (prior rotations' clang differential,
+  RocksDB swap, and other removed dirs), not a steady-state
+  property of any current build.
+
+### Verdict
+DISMISSED (itemization complete with a null result): no current
+build family emits uncacheable calls; c2's "likely IPC/capnp"
+guess is refuted (capnp/multiprocess objects in the gcc Release
+probe all cache fine). Policy for the future: any NEW build
+family gets a CCACHE_LOGFILE first-build probe so the counter is
+attributable at accrual time instead of forensically.
+STALE-CONFIGURE TRAP HIT A THIRD TIME (xswiftec rule from the
+all-findings tree failed the first probe build): configure build
+dirs AFTER the feature-branch checkout. Now recorded in three
+journals (#36 c3, #36 c4, #76 c4) — candidate for the recipes
+file.
+
+### Exact commands
+- CCACHE_LOGFILE=/tmp/btc76_{ccprobe,fuzzprobe,gx,ub}.log probe
+  builds above; ccache -s counters quoted; Result:-counter
+  histograms in the log files (preserved in /tmp).
+
+### Limitations / queue
+- Historical attribution impossible post-hoc (ccache 4.9 keeps
+  no per-call history) — the null-current-family result stands.
+- qrencode upstream-watch stands.
+
+## Rotation note
+Cycle 4 complete; rotating per uber-goal policy. Not exhausted.
