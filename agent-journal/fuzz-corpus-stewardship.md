@@ -73,3 +73,48 @@ removed 161 files were true duplicates.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-08-01): per-seed runtime profile — FLAT (max/median 1.05x); no oversized-seed dominance; ~99.5% of per-invocation cost is process startup; hypothesis REFUTED
+
+### Draw
+RE-RANK draw 157 over the 5-cell pool: raw=6943923678126847234
+(already 63-bit) -> idx 4 -> per-seed profiling (c1 queue
+"oversized seeds dominating exec time"). Branch:
+audit/fuzz-corpus-c2 from 2d5dace4db. (Pool shorthand said #9;
+this campaign is #79 — #9 is hit-frequency-coverage.)
+
+### Measurement (preserved corpus /tmp/btc9_corpus, 442 seeds)
+Per-invocation timing (-runs=1 per seed, /tmp/btc9c2_profile.py +
+.json): total 345.6s, mean 781.8ms, median 780.9ms, max 821.4ms —
+max/median = 1.05x. The slowest 10 seeds are SMALL (11-138 B).
+
+### Control (why flat): startup floor vs in-process cost
+- 1-byte seed, -runs=1: 783 ms wall — the per-invocation cost is
+  ~99.5% fixed startup (binary init + harness setup), not seed
+  execution.
+- Whole corpus in ONE process (-runs=0): 497 runs in 1 s (2.4 s
+  wall) -> ~4 ms/seed marginal in-process cost.
+So seed cost is flat across size; the c1 concern is refuted for
+this corpus, and normal campaign mode amortizes the startup
+entirely.
+
+### Verdict
+DISMISSED (hypothesis refuted): no oversized/pathological seed in
+the preserved corpus; runtime-per-seed is uniform. METHOD LESSON:
+per-invocation profiling measures STARTUP, not seed cost — any
+future seed-cost claim must use in-process batch runs (-runs=0)
+or subtract the startup floor (measured with a 1-byte seed).
+
+### Exact commands
+- /tmp/btc9c2_profile.py (per-seed loop, 30s per-seed timeout);
+  FUZZ=process_messages build_fuzz/bin/fuzz -runs=1 /tmp/btc9c2_tiny;
+  FUZZ=process_messages build_fuzz/bin/fuzz -runs=0 /tmp/btc9_corpus.
+
+### Limitations / queue
+- Profile is process_messages-specific; other targets may have
+  heavier per-seed curves (same method applies).
+- Remaining #79 cells: qa-assets selective import (GB-scale),
+  crash-artifact policy (already standing).
+
+## Rotation note
+Cycle 2 complete; rotating per uber-goal policy. Not exhausted.

@@ -249,6 +249,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 35 | mutation-testing | CYCLE-6 | 2026-07-31 | latent uncompilable SizeComputer overload repaired (DEFAULT mode, upstream-inherited); boundary battery; M_a/M_b/M_c killed 8/134/15 |
 | 76 | reproducible-builds | CYCLE-4 | 2026-08-01 | 45-uncacheable itemization: 0 uncacheable in all 6 live families (logfile-verified); lifetime 83 = deleted-config residue; DISMISSED |
 | 45 | constant-time-declassification | CYCLE-4 (COMPLETE) | 2026-08-01 | secp ctime_tests under valgrind memcheck: full suite, 0 errors (production backend params, aarch64) |
+| 79 | fuzz-corpus-stewardship | CYCLE-2 | 2026-08-01 | per-seed profile FLAT (max/median 1.05x); ~99.5% per-invocation cost = startup; oversized-seed hypothesis refuted |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -892,6 +893,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Pool after draw 156 (5): #81 Wycheproof, #74 pruning-mode IO,
    #35 NONNEGATIVE_SIGNED write semantics, #50 Taproot/MuSig2
    gates, #9 per-seed profiling.
+   RE-RANK draw 157 (5-cell pool): raw=6943923678126847234
+   (already 63-bit) -> idx 4 -> #79 c2 (per-seed profile: FLAT
+   max/median 1.05x; ~99.5% per-invocation cost = startup,
+   ~4ms/seed in-process; oversized-seed hypothesis REFUTED;
+   shorthand said #9, campaign is #79). Pool after draw 157 (4):
+   #81 Wycheproof, #74 pruning-mode IO, #35 NONNEGATIVE_SIGNED
+   write semantics, #50 Taproot/MuSig2 gates.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
