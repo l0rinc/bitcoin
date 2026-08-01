@@ -1,5 +1,63 @@
 # CI, Coverage-Bot, and Review-Bot Follow-up Audit
 
+## Cycle 244: macOS GUI follow-up verification
+
+### Cycle identity and gate
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `42`
+- Selected goal: `ci-bot-followup` (CI, coverage-bot, and review-bot follow-up audit)
+- Branch: `uber-cycle-244-ci-bot-followup-20260731`
+- Gate HEAD before cycle work: `f11066832929628c9110d243af7266da417ec830`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Divergence at the gate: local `42`, upstream `1271`
+- The tracked/index tree was clean. The six protected long-running test processes remained alive. The catalog, prompt, TSV, and uber-goal protocol hashes passed the pre-cycle gate.
+
+### Hypotheses
+
+1. The recent `qa: Enable interface_gui.py on macOS` change might be present in source but omitted, skipped, or misconfigured in the macOS CI matrix.
+2. The change might have left an unresolved CI failure or review-bot follow-up after its first macOS failure.
+3. CoreCheck might report a relevant coverage loss or benchmark regression requiring a test or implementation follow-up.
+
+### CI wiring and source evidence
+
+The upstream change was inspected at `45f5609f2ed9e35ae2a109c1e8a7c085e0a78006` and its merge `67efced1fc83a0b7215cc1513e7c4754fee0f12f`. The standard macOS matrix entry uses `ci/test/00_setup_env_mac_native.sh`, whose `--preset=dev-mode` configuration leaves GUI enabled, and the common setup defaults `RUN_FUNCTIONAL_TESTS=true`. The fuzz matrix entry intentionally disables functional tests. The common script invokes the build-directory `test/functional/test_runner.py` when that gate is true.
+
+`interface_gui.py` is explicitly present in `BASE_SCRIPTS` in `test/functional/test_runner.py`, not only in the extended list. Its `skip_if_no_gui()` check is satisfied by the standard macOS GUI build; only Windows remains an explicit platform skip. The test framework selects the GUI wrapper (`bitcoin -m gui` when `BITCOIN_CMD="bitcoin -m"`) and, for GUI nodes on Darwin, sets `QT_QPA_PLATFORM=minimal` and defaults `QT_STYLE_OVERRIDE=fusion`. The latter is the relevant fix for the Cocoa/minimal-platform crash.
+
+The earlier PR discussion supplied a concrete failure, not a speculative lead: `fanquake` reported `interface_gui.py` exiting with status `-11` on macOS when built using depends. The follow-up added the Fusion style workaround, and `maflcko` ACKed the resulting commit. This history explains why the change is a CI repair rather than an unresolved omission.
+
+### Live checks and bot evidence
+
+The GitHub check-runs endpoint for merge `67efced1fc83a0b7215cc1513e7c4754fee0f12f` was queried on 2026-07-31:
+
+```text
+total 29
+28 executed checks: success
+1 check: test ancestor commits, skipped
+macOS native: completed success
+macOS native, fuzz: completed success
+```
+
+The macOS native job `90858907736` completed every reported step successfully, including `CI script`. Its unauthenticated log-download endpoint returned HTTP 403, so raw job-log text was not treated as available evidence; the job-step API, source wiring, and test-list inspection were used instead. The commit-status endpoint reported zero status contexts, so check-runs were the applicable GitHub result source.
+
+CoreCheck report 3393 for PR #35838 (`https://corecheck.dev/bitcoin/bitcoin/pulls/35838`) reported `status=success` and `benchmark_status=success` for commit `45f5609f2ed9e35ae2a109c1e8a7c085e0a78006`, with base commit `9611a356035be531d62bfc40879f388d5dc359c4`. It had no coverage data for new code and no actionable coverage annotation. The report’s listed lost/gained baseline files were unrelated to the two-file PR, and no benchmark table entry was present. An earlier report failed because an essential container exited, but the replacement report was successful and the PR merged only after the fix.
+
+The PR API showed the final state as closed/merged with no unresolved review-bot objection. Human review explicitly documented the initial crash, requested the Fusion-style workaround, and then ACKed the fixed commit. The merge check matrix independently passed afterward.
+
+### Verdict
+
+**Dismissed as a current CI, coverage-bot, or review-bot omission; no confirmed finding.** The only concrete failure found was the macOS GUI crash that motivated the follow-up and was fixed before merge. The current matrix builds the GUI and runs the functional suite on standard macOS, the test is in that suite, the Darwin environment fix is present, and the live job/check/CoreCheck evidence is successful. No repository change is justified by this cycle.
+
+### Limitations and next queue
+
+- The full macOS CI job was not run locally because this Linux environment cannot reproduce the hosted macOS runner and its Cocoa/Qt stack.
+- GitHub denied unauthenticated raw job-log downloads with HTTP 403, so the exact individual `interface_gui.py` pass line was not extracted from the hosted log. Source-level inclusion plus the successful standard macOS job and the resolved failure/review trail are the available independent evidence.
+- CoreCheck reported no line-level coverage data for this two-file change; this is a monitoring limitation, not evidence of a coverage defect.
+- Reopen Goal 42 only with a new workflow or test-list change, a failed/non-skipped check, a new review-bot comment, raw coverage evidence tied to the changed path, or a reproducible macOS GUI failure.
+- Continue the uber loop by drawing another eligible catalog goal and recording its fresh gate.
+
 ## Cycle 143: live bot and coverage follow-up
 
 ### Cycle identity and gate
