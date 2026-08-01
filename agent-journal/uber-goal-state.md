@@ -57,6 +57,61 @@ This ledger is the authoritative handoff state for the continuing 99-goal invest
   state-only close commit is intentionally separate from the selected source
   commit.
 
+## Cycle 255 Completion
+
+- The exact selector `shuf -i 0-98 -n 1` drew goal `71`
+  (`deterministic-simulation`). The dedicated branch is
+  `uber-cycle-255-deterministic-simulation-20260801`. The fresh start HEAD was
+  `377959f714f67b3398f9583e46e813d9b78b4ce1`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence `42 1297`.
+  The selected journal was `agent-journal/deterministic-simulation.md`.
+  Goal 71's Cycle 84 and Cycle 235 lifecycle schedules were excluded as exact
+  prior cells.
+- The distinct schedule tested `LogRateLimiter::Create` periodic reset work
+  after limiter destruction. Four real limiters with one-second windows were
+  created through the production factory and destroyed immediately. A live
+  `CScheduler` service thread, `MockForward`, and condition-variable completion
+  signals replayed four one-second transitions. Callback counts were exactly
+  4, 8, 12, and 16, while the scheduler queue stayed exactly four entries.
+  The weak pointers correctly prevented access to destroyed limiters. This is
+  bounded orphan work per obsolete limiter, not unbounded growth in one task.
+  History and source tracing found no production replacement/reload path:
+  startup creates the limiter once, while replacement calls are test-only.
+- The temporary probe passed 9/9 assertions with seed `255001`, was removed,
+  and left no tracked test change. Restored focused controls with seed `255002`
+  passed all 9 logging cases (164 assertions) and all 5 scheduler cases (29
+  assertions). The full test run's first attempt with seed `255003` was a
+  setup-only failure because its `TMPDIR` did not exist. Corrected seed
+  `255004` reached all 1,253 cases but had one unrelated
+  `validation_block_tests/processnewblock_signals_ordering` assertion failure
+  at line 505, alongside the expected filesystem-failure warning. The exact
+  isolated case with seed `255005` passed 958/958 assertions, and the complete
+  `validation_block_tests` suite passed 8/8 for seeds `255006` through
+  `255013`; therefore no source defect was attributed to this cycle.
+- Verdict: **dismissed as a current local source defect; retained as a
+  lifecycle limitation**. No Bitcoin Core or libsecp256k1 source, permanent
+  test, or build change was justified. The selected journal/evidence commit
+  is `19e4a95f5978a448d9f4375ba0dec1fc07b33308` (`journal: close cycle 255
+  deterministic simulation`), authored by `Lőrinc <pap.lorinc@gmail.com>`.
+  The next Goal 71 queue is a genuinely different production schedule, such
+  as explicit validation-signal task/worker interleaving or a new shutdown or
+  retry seam; do not repeat the destroyed-limiter schedule without a new
+  replacement caller or scheduler contract.
+- At selected-journal close, HEAD was
+  `19e4a95f5978a448d9f4375ba0dec1fc07b33308`, with divergence `42 1298`.
+  Catalog, prompt, goals TSV, and protocol hashes remained
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` remained alive and untouched. `/data` had about
+  26G free and `/` remained full; future scratch data must stay under `/data`.
+- The next cycle must perform a fresh gate, draw with the exact selector,
+  reject only an exact current evidence cell, and continue the loop. This
+  state-only close is intentionally separate from the selected journal commit.
+
 ## Cycle 253 Completion
 
 - The exact selector `shuf -i 0-98 -n 1` drew goal `30` (`security-logging`). The
