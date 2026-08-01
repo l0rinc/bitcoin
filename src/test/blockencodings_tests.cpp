@@ -15,6 +15,9 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <limits>
+#include <numeric>
+
 const std::vector<std::pair<Wtxid, CTransactionRef>> empty_extra_txn;
 
 BOOST_FIXTURE_TEST_SUITE(blockencodings_tests, RegTestingSetup)
@@ -391,6 +394,26 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationMaxTest) {
     stream >> req1;
     BOOST_CHECK_EQUAL(req0.indexes.size(), req1.indexes.size());
     BOOST_CHECK_EQUAL(req0.indexes[0], req1.indexes[0]);
+}
+
+BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationCountLimitTest) {
+    BlockTransactionsRequest req0;
+    req0.blockhash = m_rng.rand256();
+    req0.indexes.resize(BlockTransactionsRequest::MAX_INDEXES);
+    std::iota(req0.indexes.begin(), req0.indexes.end(), uint16_t{0});
+
+    DataStream valid_stream{};
+    valid_stream << req0;
+    BlockTransactionsRequest req1;
+    valid_stream >> req1;
+    BOOST_CHECK_EQUAL(req1.indexes.size(), BlockTransactionsRequest::MAX_INDEXES);
+    BOOST_CHECK_EQUAL(req1.indexes.front(), uint16_t{0});
+    BOOST_CHECK_EQUAL(req1.indexes.back(), std::numeric_limits<uint16_t>::max());
+
+    DataStream oversized_stream{};
+    oversized_stream << m_rng.rand256();
+    WriteCompactSize(oversized_stream, BlockTransactionsRequest::MAX_INDEXES + 1);
+    BOOST_CHECK_THROW(oversized_stream >> req1, std::ios_base::failure);
 }
 
 BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationOverflowTest) {

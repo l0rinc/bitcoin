@@ -9,6 +9,7 @@
 #include <primitives/block.h>
 
 #include <functional>
+#include <limits>
 
 class CTxMemPool;
 class BlockValidationState;
@@ -44,13 +45,17 @@ public:
 
 class BlockTransactionsRequest {
 public:
+    // A request cannot contain more strictly increasing uint16_t indexes than
+    // there are values representable by the index type.
+    static constexpr size_t MAX_INDEXES{static_cast<size_t>(std::numeric_limits<uint16_t>::max()) + 1};
+
     // A BlockTransactionsRequest message
     uint256 blockhash;
     std::vector<uint16_t> indexes;
 
     SERIALIZE_METHODS(BlockTransactionsRequest, obj)
     {
-        READWRITE(obj.blockhash, Using<VectorFormatter<DifferenceFormatter>>(obj.indexes));
+        READWRITE(obj.blockhash, Using<LimitedVectorFormatter<MAX_INDEXES, DifferenceFormatter>>(obj.indexes));
     }
 };
 
