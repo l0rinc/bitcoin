@@ -576,3 +576,120 @@ The production hypothesis is **dismissed**. No engine exposed a minisketch crash
 - Close this cell with a journal/state-only commit; do not claim Goal 80 is exhausted. A future distinct cell may compare another target, engine version, compiler, or corpus with new evidence.
 - Preserve the initial manifest, isolated per-engine copies, binary hashes, AFL forkserver/no-forkserver distinction, FuzzTest absence, and all replay logs above. Do not use the libFuzzer-mutated common directory as a fair initial corpus without restoring the 15-file manifest.
 - Next cycle must recheck the repository/process/storage gate and draw a fresh exact selector from all 99 catalog rows. Do not reopen minisketch without new engine, toolchain, corpus, or regression evidence.
+
+## Cycle 250: p2p_headers_presync engine comparison
+
+### Selection, scope audit, and gate
+
+- Exact selector `shuf -i 0-98 -n 1` drew goal `80` (`fuzz-engine-differential`); no reroll.
+- Branch: `uber-cycle-250-fuzz-engine-differential-20260801`.
+- Start HEAD: `87c371da45f84e0848221a43ed77289e180ba210`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `42/1287`.
+- The tracked clean gate, authoritative catalog/prompt/TSV/protocol hashes,
+  disk/process checks, and branch creation passed. All six protected earlier
+  test processes remained alive. The root filesystem is full, so every fuzz
+  datadir, log, and corpus was directed to `/data/my_storage/tmp`.
+
+An initial exploratory run selected the singular `process_message` target. The
+prior Cycle 171 record was re-read before accepting its result and explicitly
+closes both the `process_messages` and `process_message` reset cell. That
+exploratory run is retained under `/data/my_storage/tmp/cycle250-fuzz-engine-process-message`
+but is excluded from this cycle's verdict. The final scope is the untouched
+Goal 80 target `p2p_headers_presync`; no prior Goal 80 cycle compared this
+target across engines. Other closed cells remain `bech32_roundtrip`,
+`parse_numbers`, `descriptor_parse`, transport serialization,
+`process_messages`/`process_message`, and `minisketch`.
+
+### Target and hypothesis
+
+The selected production harness is `src/test/fuzz/p2p_headers_presync.cpp`.
+It constructs a main-chain testing setup with outbound full-relay, block-relay,
+and inbound peers; sends generated `HEADERS`, `CMPCTBLOCK`, and `BLOCK`
+messages; keeps generated work below `MinimumChainWork`; and asserts that
+low-work pre-sync inputs do not mutate the block index, best header, or active
+tip. It also checks that every peer's node-state statistics overwrite stale
+`presync_height` and in-flight-height output. The falsifiable hypothesis was
+that one engine, persistent-loop adapter, corpus transfer, or initialization
+path could expose a crash, timeout, state mutation, sanitizer diagnostic, or
+target assertion missed by the others.
+
+The current Clang 19 ASan+UBSan libFuzzer binary was
+`/data/my_storage/tmp/cycle248-build-libfuzzer-minisketch/bin/fuzz`, with hash
+`d5b214b1904aa3b07436be6ac1e4ec34178243ab43169c22baa48a8f55d43fa8`. The
+optimized AFL++ and Honggfuzz binaries were respectively
+`/data/my_storage/tmp/cycle131-build-afl19d/bin/fuzz` with hash
+`b70757636b870284e5f2a843c5961d9bac5bc447f141bc5e7fe0fea7adfb4156` and
+`/data/my_storage/tmp/cycle131-build-honggfuzz19/bin/fuzz` with hash
+`dcc7e2896b7aa2af42fb5e15dbf0054bf4eb07b6023bf80da7bd5b257d0e458e`.
+The target source was unchanged since these current-source builds, so reuse
+was valid. All runs were x86_64 Linux, one worker, `max_len=4096`, and no
+default datadir, wallet, key, or production database. FuzzTest remains
+unavailable: no supported package or repository integration exists locally.
+
+The identical initial corpus had 15 files and 9122 bytes. Its manifest
+`/data/my_storage/tmp/cycle250-fuzz-engine-headers-presync/initial-manifest.tsv`
+has SHA256
+`09f69175de81a2f0f7d18f4b560e12ecf851ee30a387a2488366038d3a935f6f`.
+It covered empty, zero, all-ones, short, boundary-sized, repeated, ramp, and
+structured byte streams. Each engine received a separate copy.
+
+### Fixed-budget engine results
+
+The sanitizer run used fixed seed `25021`, `-max_total_time=30`,
+`-rss_limit_mb=4096`, and `-timeout=10`. AFL++ used
+`AFL_NO_FORKSRV=1`, `AFL_SKIP_CPUFREQ=1`, `-V 30`, `-m none`, and one worker;
+its log nevertheless reported that no `-t` option was recognized and used a
+60 ms execution timeout. This is retained as an engine configuration
+limitation, not hidden as target evidence. Honggfuzz used one persistent worker,
+`--run_time 30`, and a 10-second per-input timeout.
+
+| Engine | Executions | Native signal | Corpus signal | Peak RSS | Failures |
+| --- | ---: | --- | --- | ---: | --- |
+| libFuzzer ASan+UBSan | 503 | `cov 26103`, `ft 75523` | 125 new units; 138 final files | 695 MiB | 0 artifacts |
+| AFL++ 4.04c no-forkserver | 553 | 7551 edges; 0.09% bitmap; 100% stability | 14 queue files, 0 found | not reported | 0 crashes, 0 hangs |
+| Honggfuzz 2.6 | 1815; 58/sec | 301388 guards; 1% branch metric | 51 new units; 75 `.cov` files | 88 MiB | 0 crashes, 0 timeouts |
+
+The exact raw logs are `cycle250-fuzz-engine-headers-presync/libfuzzer.log`,
+`afl.log`, and `hong.log` under `/data/my_storage/tmp`. No crash, hang, or
+sanitizer artifact directory contained a file. Native coverage and corpus
+counts are engine-specific and are not treated as equal percentages.
+
+### Independent replay and controls
+
+The Clang 19 ASan+UBSan oracle replayed every retained engine output. The
+libFuzzer corpus replay completed 180 runs with zero new units and 634 MiB
+peak RSS. The 14 AFL++ queue inputs completed 23 runs with zero new units and
+402 MiB peak RSS. The 75 Honggfuzz coverage inputs completed 104 runs with
+zero new units and 534 MiB peak RSS. All three exited zero without an
+assertion, sanitizer diagnostic, timeout, or artifact. Raw replay logs are
+`oracle-libfuzzer.log`, `oracle-afl.log`, and `oracle-hong.log` in the same
+scratch directory.
+
+The focused current-source-equivalent control
+`test_bitcoin --run_test=headers_sync_chainwork_tests --log_level=test_suite`
+passed all 7 cases, including `presync_summary_tracks_headers` and
+`too_little_work`, with `*** No errors detected`. The adjacent `net_tests`
+control used during the discarded duplicate-target audit also passed all 36
+cases. The target source's last relevant commit is
+`ba4411648a` (`fuzz: check low-work presync headers stay unknown`); no source
+change was made in this cycle.
+
+### Verdict and limits
+
+The hypothesis is **dismissed** for a new repository defect. Current
+libFuzzer, AFL++, and Honggfuzz exercised the same header pre-sync harness and
+corpus without a crash, hang, timeout, state mutation, target assertion,
+sanitizer failure, or transferred-input mismatch. The unit suite independently
+covered the node-state and low-work chainwork contracts. Engine-specific
+throughput, coverage, and calibration behavior does not justify a production
+or permanent test change.
+
+Evidence is x86_64-only and does not establish ARM, 32-bit, big-endian,
+LTO/PGO, or cross-toolchain equivalence. The reused binaries were validated
+against unchanged target source, but no fresh full fuzz build was required.
+The root-disk-full condition required `TMPDIR` redirection and is an
+environment limitation. Next queue: a fresh Goal 80 target such as
+`p2p_private_broadcast`, `txdownloadman`, or `package_eval`; do not reopen
+`p2p_headers_presync` without a source, engine, compiler, corpus, or
+reproducible-regression change.
