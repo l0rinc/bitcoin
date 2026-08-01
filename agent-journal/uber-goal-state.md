@@ -2,6 +2,66 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 257 Completion
+
+- The fresh gate fetched `origin/master` successfully before branch creation. The
+  exact selector `shuf -i 0-98 -n 1` drew goal `27` (`error-path-state`). The
+  dedicated branch is `uber-cycle-257-error-path-state-20260801`. The fresh
+  start HEAD was `cbcc8cb2f073d1e1a5dd1c91110527a2c2759028`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence `42 1302`.
+  The selected journal was `agent-journal/error-path-state.md`.
+- Prior Goal 27 cells covering wallet passphrase, address-book, spent-marker,
+  descriptor import, temporary-wallet, transaction/index, migration,
+  persistent coin-lock, and failed `BaseIndex` initialization were excluded.
+  The new cell traced `DescriptorScriptPubKeyMan::TopUpWithDB`: it stages
+  memory state but writes cache rows inside the caller's active transaction. A
+  later expansion can return `false` without publishing the staged state. The
+  public `TopUpInternal` owner committed that transaction anyway.
+- A deterministic test descriptor expanded index 1 and wrote one parent-xpub
+  cache record, then returned `false` at index 2. With the abort block removed,
+  seed `257002` exited `201`: the exact SQLite cache key remained after failure,
+  with 6 of 7 assertions passing. The failure is independent of database write
+  exceptions and demonstrates durable cache state ahead of unchanged range and
+  in-memory maps.
+- Commit `bf10e355af2c0b5d655ec4eb5c46c4c2d6eb803f` (`wallet: abort failed
+  descriptor topups`), authored by `Lőrinc <pap.lorinc@gmail.com>`, aborts the
+  owned `WalletBatch` when `TopUpWithDB` returns `false`, then returns failure.
+  It includes the 7-assertion regression covering the exact cache key, range,
+  keypool, and script-map state. Exception paths remain unchanged.
+- Rebuild with
+  `ninja -C /data/my_storage/tmp/cycle246-wallet bitcoin_wallet test_bitcoin`
+  passed after restoring the fix. The focused `scriptpubkeyman_tests` run with
+  seed `257003` passed 21 cases and 198 assertions. The adjacent
+  `wallet_tests,walletdb_tests,scriptpubkeyman_tests,interfaces_tests,miner_tests`
+  run with seed `257004` passed 60 cases and 1,899 assertions.
+- The full seed `257005` run reached 27,107,097 assertions and passed 1,252 of
+  1,254 cases. Its only test failure was the known flaky
+  `validation_block_tests/processnewblock_signals_ordering`, with an existing
+  filesystem setup error in a fault-injection test; no wallet/descriptor case
+  failed. The isolated `validation_block_tests` seed `257006` run passed all 8
+  cases and 2,651 assertions, including the ordering case. `git diff --check`
+  passed before source commit.
+- The selected journal close is commit `e87de864d4` (`journal: close cycle 257
+  descriptor rollback`), authored by `Lőrinc <pap.lorinc@gmail.com>`. Verdict:
+  **confirmed and fixed**. The remaining Goal 27 queue is to audit the two
+  direct batch-owned callers that ignore `TopUpWithDB` false:
+  `SetupDescriptorGeneration` and `ExternalSignerScriptPubKeyMan::CreateNew`.
+  Their ordinary descriptors are expected to expand every requested index, so
+  this cycle did not claim a production failure for them.
+- The catalog, prompt, goals TSV, and protocol hashes remain
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were left untouched. Scratch data stayed under
+  `/data`; known untracked artifacts were preserved.
+- The next cycle must fetch `origin/master`, perform a fresh exact selector
+  draw, reject only an exact current evidence cell, and continue the loop. Do
+  not reopen this `TopUpInternal` cell absent changed transaction semantics or
+  new evidence.
+
 ## Cycle 256 Completion
 
 - The fresh gate ran `git fetch origin master` successfully at
