@@ -909,3 +909,57 @@ oracle.
 ## Rotation note
 Thirteen cycles; the SignPSBTInput outcome map is complete through
 the programmatic gates with a persistent oracle.
+
+## Cycle 14 (2026-08-01): taproot sighash size-class gates + musig2 partial-sig size contract — 6/6 arms classify correctly; DISMISSED
+
+### Draw
+RE-RANK draw 161 over the 2-cell pool: raw=8672416563413024783
+(already 63-bit) -> idx 1 -> #50 Taproot/MuSig2 sighash-size-class
+gates (c12 queue). Branch: audit/introspector-blockers-c14 from
+405008c571.
+
+### Arms (builder /tmp/btc50c14_gates.py; verifier: walletprocesspsbt
+on a scratch rawtr-key wallet; v1 PSBT — the gates are
+version-agnostic; v2 needs INPUT/OUTPUT_COUNT globals and forbids
+GLOBAL_UNSIGNED_TX, recorded as harness notes)
+- A DEFAULT (field absent) + 65-byte tap_key_sig -> SIGHASH_MISMATCH
+  (psbt.cpp:713-716: DEFAULT requires exactly 64).
+- B ALL + 64-byte sig -> SIGHASH_MISMATCH (:718-721: non-DEFAULT
+  requires 65).
+- C ALL + 65-byte sig trailing 0x02 -> SIGHASH_MISMATCH (:720:
+  trailing byte must equal sighash).
+- D ALL + 65-byte sig trailing 0x01 -> gate PASSES (processed PSBT
+  returned; complete=false for wallet-side reasons, orthogonal).
+- E ALL|ANYONECANPAY + 65-byte sig trailing 0x81 -> gate PASSES
+  (ACP arm).
+- F PSBT_IN_MUSIG2_PARTIAL_SIG with 31-byte value -> parse-level
+  rejection: "Input musig2 partial sig key is not expected size of
+  67 or 99 bytes" — the musig2 keydata size contract fires before
+  any signing.
+
+### Confounder recorded (the interesting part)
+First classification run showed ALL of A-E as SIGHASH_MISMATCH —
+including the D/E pass arms. Cause: walletprocesspsbt's DEFAULT
+sighash PARAMETER (SIGHASH_DEFAULT) collides with any stored
+sighash_type field != DEFAULT (psbt.cpp:703: field and parameter
+must match). The pass arms need the sighash parameter passed
+EXPLICITLY ('ALL', 'ALL|ANYONECANPAY'); with it, D/E pass.
+decodepsbt confirmed the docs themselves were well-formed.
+Lesson: RPC-parameter-vs-PSBT-field mismatch is a distinct gate
+(:703) from the size-class gates (:713-726) — test both with
+explicit parameters, or the field-level results are meaningless.
+
+### Verdict
+DISMISSED: the taproot sighash size-class gates and the musig2
+partial-sig size contract all classify exactly as coded, on the
+public RPC path.
+
+### Limitations / queue
+- Full MuSig2 partial-sig signing arm (nonce/session machinery)
+  not driven — sign.cpp:117-145 exists; needs session setup.
+- D/E complete=false not dissected (inactive-key wallet, gate is
+  the measured surface).
+- #50 queue: empty. Campaign COMPLETE (c1-c14).
+
+## Rotation note
+Fourteen cycles; campaign complete.
