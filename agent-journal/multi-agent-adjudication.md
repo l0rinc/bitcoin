@@ -175,3 +175,41 @@ as designed.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-08-01): L4 executable confirmation — tx-level differential fuzz of HEAD vs branch dup-check: 300k structured cases, ZERO divergences (verdict + reason code)
+
+### Draw
+RE-RANK draw 166 over the 7-cell pool: raw=14119870030197581011,
+masked 4896497993342805203 -> idx 4 -> #40 CheckTransaction
+differential fuzz (c1 queue: "executable confirmation; proof covers
+the partition, fuzz would sample it"). Branch:
+audit/multi-agent-adjudication-c3 from 40102e35cb.
+
+### Differential (/tmp/btc40c4_probe.cpp, branch f3cc8fd27d objects local)
+Both dup-check excerpts compiled verbatim against real CTransaction
+objects (HEAD set-based tx_check.cpp:41-45 + cb/null branches vs
+branch skip-1 / direct-compare-2 / sorted-3+), driven by a seeded
+mt19937_64 corpus (300,000 txs, 1-8 inputs, ~1/3 planted
+duplicates, 1/5 planted null prevouts, random n-values).
+- RESULT: cases=300000 planted_dups=99760 divergences=0.
+- Compared at the Verdict level (OK / bad-txns-inputs-duplicate /
+  bad-txns-prevout-null / bad-cb-length) — accept/reject AND
+  diagnosis identical in every case, exactly matching the c1 proof
+  (1-input null-prevout IS coinbase by definition, so both routes
+  hit bad-cb-length only).
+
+### Verdict
+CONFIRMED (executable second form): the static partition proof
+(c1) now has a differential-fuzz witness with a seeded corpus
+(seed 0xC0FFEE, reproducible). L4 is closed by proof AND by
+sampling. The branch author's perf claim remains unmeasured here
+(AppleClang numbers; adoption is his decision).
+
+### Limitations / queue
+- The corpus covers the check region only (no MoneyRange/size
+  arms — those are HEAD-identical text in the branch).
+- #40 queue: empty (L1 bloom-ctor candidate was c2-covered). 
+  Campaign COMPLETE on current surface.
+
+## Rotation note
+Three cycles; adjudication surface closed.
