@@ -81,3 +81,56 @@ For stale critical-fix work, first establish whether the old PR is duplicate, su
 ### Cycle verdict and next queue
 
 Cycle 94 produced one confirmed, independently reproducible correctness finding. The self-contained source/test/journal commit is `af1995129681c5427e494afe2305ad731bb2689f` (`coins: reject undecodable first cursor key`), authored as `Lőrinc <pap.lorinc@gmail.com>`. No other candidate met the evidence threshold. Remaining queue: #35592 early RPC allowlist enforcement, historical P2P outbound relay-slot accounting (#28538), old libsecp wNAF portability proposals (#1770/#1772), and a fresh closed-PR inventory after the next gate. Recheck the queue only with new current-code or review evidence; do not repeat the dismissed candidates above.
+
+## Cycle 252 results
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `56`
+- Slug: `stale-pr-critical-fix`
+- Branch: `uber-cycle-252-stale-pr-critical-fix-resurrection-20260801`
+- Start HEAD: `666fa84636049bfbad614f2baa8c7ceae0eb1a0b`
+- `origin/master`: `67efced1`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `42 1291` (`HEAD...origin/master`)
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber prompt SHA256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Gate: the branch was created from the recorded close HEAD. Existing untracked artifacts were preserved and excluded. The first test invocation was blocked by the full root filesystem; rerunning with `TMPDIR=/data/my_storage/tmp/...` succeeded in reaching the test and all later work used scratch storage there.
+
+### Candidate ledger
+
+| Candidate | Current evidence | Verdict |
+| --- | --- | --- |
+| [#35473](https://github.com/bitcoin/bitcoin/pull/35473), 64-bit package weight accumulator | `src/policy/packages.cpp` still initialized `std::accumulate` with literal `0`, so the accumulator type was `int`; a large package could narrow intermediate totals before the package-weight check. | **Confirmed and fixed below.** |
+| [#35154](https://github.com/bitcoin/bitcoin/pull/35154), crafted MuSig2 PSBT inputs | A current non-hardened invalid derivation reproduced an `EOF` response and daemon death in a scratch regtest instance. Existing Lőrinc-authored fix `29453e530dc10a8f46797f56ab18111a0b43a58b` is already available on `refs/remotes/l0rinc/detached552`. | Confirmed elsewhere; do not duplicate. |
+| [#35155](https://github.com/bitcoin/bitcoin/pull/35155), nonce-less MuSig2 PSBT retry | The current duplicate-session assertion remains, but existing fixes `543cb625e039e47833baabaf3e949792d590441c` and `8f97284e018e09bd2419339941bbb422aae32ecd` already cover the issue. | Confirmed elsewhere; do not duplicate. |
+| [#35208](https://github.com/bitcoin/bitcoin/pull/35208), future-MTP header commitments | The current arithmetic still has the reviewed signed-to-unsigned risk, but fixes `3a70822391d3d240ef0b526d609940530bda0316` and `9274f925a7ca64d114e1172957a9f94e1ed1796b` already exist on the Lőrinc remote. | Confirmed elsewhere; do not duplicate. |
+| [#32789](https://github.com/bitcoin/bitcoin/pull/32789), compact-block integer overflow | The current loop checks `lastprefilledindex` against `uint16_t::max()` before another increment can approach `int32_t` overflow; history also contains `5b80dfd676`. | Dismissed. |
+| [#33061](https://github.com/bitcoin/bitcoin/pull/33061), always check `close()` | Review identified signal-safety, locking, and error-propagation risks in throwing from this path; the underlying concern was addressed through a different direction. | Dismissed by current design/review evidence. |
+| [#32782](https://github.com/bitcoin/bitcoin/pull/32782), disable secp256 tests by default | The discussion was about test resource usage and iteration counts, not a proven correctness or security defect. | Dismissed. |
+| [#34231](https://github.com/bitcoin/bitcoin/pull/34231), null dereference in sequence locks | The assertion remains, but the production caller contract and invalid `prevHeights` reachability were not independently proven in this cycle. | Inconclusive; retain for a future caller-proof cycle. |
+
+The GitHub API became rate-limited after the relevant PR bodies, files, and review evidence were captured. The #35473 source and test evidence are local and independently reproducible; no unavailable remote metadata is needed for the finding.
+
+### Confirmed finding: package-weight accumulation narrows before validation
+
+`IsWellFormedPackage()` computes package weight with `std::accumulate`. Its `int64_t` lambda did not control the accumulator type because the initial value was the literal `0`; the standard algorithm therefore accumulated as `int` and converted each intermediate result back to `int64_t` only after narrowing. A package whose true combined weight exceeds `INT_MAX` can consequently avoid the intended `MAX_PACKAGE_WEIGHT` rejection and proceed to later package checks, consuming additional validation work and potentially returning a less relevant error.
+
+The regression uses 25 references to one transaction with a 23,000,000-byte input script. The combined weight is greater than `INT32_MAX`. Before the fix, the focused test reached duplicate detection and returned `package-contains-duplicates` instead of the expected `package-too-large`; this is a direct failing-before proof of the wrong validation boundary. The issue is policy-only and does not change consensus validity, but it is reachable through package submission and defeats the intended package-size guard for oversized input.
+
+The minimal fix changes the initial value to `int64_t{0}`, making the accumulator and every intermediate sum 64-bit. The test asserts the large package is rejected with `PCKG_POLICY` and `package-too-large`.
+
+### Verification record
+
+- Pre-fix build: `CCACHE_DISABLE=1 cmake --build /data/my_storage/tmp/cycle243-build --target test_bitcoin -j2`; passed.
+- Pre-fix focused command with scratch `TMPDIR`: `.../cycle243-build/bin/test_bitcoin --run_test=txpackage_tests/package_sanitization_tests --catch_system_error=no --log_level=test_suite`; failed at the new assertion with `package-contains-duplicates != package-too-large`.
+- Post-fix rebuild: `CCACHE_DISABLE=1 cmake --build /data/my_storage/tmp/cycle243-build --target test_bitcoin -j2`; passed.
+- Post-fix focused test: the same test case with `--log_level=message`; passed with `*** No errors detected`.
+- Full `txpackage_tests`: all 15 cases passed with `*** No errors detected`.
+- `git diff --check`: passed.
+
+The source change is one initializer token and the regression is confined to `txpackage_tests`. No broad refactor, timeout, input narrowing, or suppression was used. The first root-filesystem failure was an environment limitation, not a product result; the reproducible commands use the available scratch filesystem.
+
+### Cycle verdict and next queue
+
+Cycle 252 produced one confirmed, independently reproducible policy correctness finding from stale PR #35473. The source/test/journal commit is pending and will be authored as `Lőrinc <pap.lorinc@gmail.com>`. Existing fixes for #35154, #35155, and #35208 are deliberately not duplicated. Remaining queue: #35592 early RPC allowlist enforcement, historical P2P outbound relay-slot accounting (#28538), a caller-proof investigation of #34231, old libsecp wNAF portability proposals (#1770/#1772), and a fresh closed-PR inventory. Re-evaluate after the next cycle gate and do not reopen dismissed candidates without new evidence.
