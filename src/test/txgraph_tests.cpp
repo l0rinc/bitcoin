@@ -563,6 +563,33 @@ BOOST_AUTO_TEST_CASE(txgraph_equal_feerate_prefix_does_not_overflow)
     graph->SanityCheck();
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_memory_usage_accounts_for_retained_entries)
+{
+    static constexpr size_t CHURN_COUNT{1024};
+
+    auto fresh = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+    TxGraph::Ref fresh_ref;
+    fresh->AddTransaction(fresh_ref, FeePerWeight{1, 1});
+    const size_t fresh_usage{fresh->GetMainMemoryUsage()};
+
+    auto churned = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(CHURN_COUNT);
+    for (size_t i{0}; i < CHURN_COUNT; ++i) {
+        churned->AddTransaction(refs.emplace_back(), FeePerWeight{1, 1});
+    }
+    for (const auto& ref : refs) {
+        churned->RemoveTransaction(ref);
+    }
+    BOOST_CHECK_EQUAL(churned->GetTransactionCount(TxGraph::Level::MAIN), 0);
+    refs.clear();
+
+    TxGraph::Ref live_ref;
+    churned->AddTransaction(live_ref, FeePerWeight{1, 1});
+    const size_t churned_usage{churned->GetMainMemoryUsage()};
+    BOOST_CHECK_GT(churned_usage, fresh_usage);
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_getcluster_membership_contracts)
 {
     auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);

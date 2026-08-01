@@ -381,3 +381,116 @@ or a concrete runtime retained-memory discrepancy supplies new evidence.
   are closed; the required reroll returned `80` (`fuzz-engine-differential`).
   A separate state-only close commit follows. The next run must perform a
   fresh gate and open `uber-cycle-171-fuzz-engine-differential-20260730`.
+
+## Cycle 238 start
+
+- Goal: `74`, `memory-pressure-allocator`.
+- Selector: exact `shuf -i 0-98 -n 1` -> `74`.
+- Branch: `uber-cycle-238-memory-pressure-allocator-20260731`.
+- Cycle-start HEAD: `92738468b840942ce0c327aef20e80915365b046`; `origin/master` is
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base is
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; `git rev-list --left-right
+  --count HEAD...origin/master` returned `1259 42` before this cycle's
+  source/test/journal changes.
+- The catalog, random prompt, TSV, and uber-goal protocol hashes matched the
+  stable gate: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  The tracked/index gate was clean, and the protected long-running jobs were
+  alive. Existing untracked goal, journal, package, crash, and test-cache
+  artifacts were preserved outside this cycle.
+
+### Scope and exclusions
+
+This cycle continued the memory-pressure campaign after the closed prevector
+OOM policy (Cycle 53), transport receive-buffer accounting (Cycle 88), and
+the fixed unbroadcast-set accounting omission (Cycle 170). The initial queue
+was package admission/eviction, changeset lifetime, expiry, persistence, and
+retained container capacity. The package submission contract deliberately
+permits temporary over-limit state, but requires a final `LimitMempoolSize()`
+after the changeset is cleared.
+
+The relevant ownership ledger was:
+
+- `CTxMemPool::DynamicMemoryUsage()` counts map nodes, `mapNextTx`, fee
+  deltas, the randomized transaction vector, the unbroadcast set, main
+  `TxGraph` usage, and cached entry-owned allocations.
+- `removeUnchecked()` removes unbroadcast membership, updates the randomized
+  vector, decrements cached entry usage, and erases the map entry. The
+  existing `mempool_tests` accounting and `txgraph` invariants cover these
+  removal transitions.
+- `ChangeSet` owns temporary staged entries, ancestor caches, and staging
+  graph state. `Apply()` clears its staging containers; its destructor aborts
+  staging. Package submission skips trimming only while this bounded temporary
+  state exists, then clears it and trims before returning.
+- `TxGraphImpl::GetMainMemoryUsage()` counted cluster objects and the chunk
+  index, but represented `m_entries` as `sizeof(Entry) * live_count`. The
+  vector is shared by main and staging and `Compact()` removes dead elements
+  with `pop_back()` without reducing vector capacity. Therefore a churned
+  graph could retain allocator memory that the mempool limit did not see.
+
+### Package and lifecycle evidence
+
+The source/history audit covered `ChangeSet::StageAddition`,
+`StageRemoval`, `Apply`, `ClearSubPackageState`, `AcceptSingleTransaction`,
+`AcceptPackage`, `LimitMempoolSize`, `TrimToSize`, and `removeUnchecked`.
+Package policy remains bounded by `MAX_PACKAGE_COUNT = 25` and
+`MAX_PACKAGE_WEIGHT = 404000`. The source contract and current test behavior
+show that package submission may temporarily exceed `-maxmempool`, but the
+final trim occurs after staging is gone and reports transactions that were
+evicted. No package staging leak or post-trim limit bypass was found.
+
+The deterministic runs passed:
+
+- `txpackage_tests`: 15 cases, 302 assertions.
+- pre-fix `mempool_tests`: 26 cases, 1013 assertions.
+- `mempool_package_limits.py`, `mempool_limit.py`,
+  `mempool_packages.py`, `mempool_package_rbf.py`, and `rpc_packages.py`.
+  The limit test covered temporary package overage, immediate eviction, and
+  the final `bytes < maxmempool` contract.
+- `mempool_expiry.py`: default and custom expiry, recursive parent/child
+  removal, and independent transaction retention.
+- `mempool_persist.py`: persistence/reload and fee-delta preservation.
+
+The post-fix `mempool_limit.py` rerun also passed. A concurrent post-fix
+`mempool_tests` attempt was stopped after the fixture reported the known full
+root filesystem condition; it did not produce a source failure. No claim is
+made for a post-fix full mempool unit suite under that storage condition.
+
+### Confirmed finding and independent reproduction
+
+The focused `txgraph_tests/txgraph_memory_usage_accounts_for_retained_entries`
+test builds a fresh one-entry graph and a second graph that adds 1024 entries,
+removes them, clears their `Ref` objects, and adds one live entry. On the old
+code both graphs reported `216` bytes (`churned_usage > fresh_usage` failed as
+`216 <= 216`). This is a direct before/after test of the public memory-usage
+estimate and does not depend on RPC transaction construction.
+
+The fix replaces the live-count approximation with
+`memusage::DynamicUsage(m_entries)`, which uses the vector's retained
+capacity. The allocation is shared by main and staging and remains owned by
+the graph, so it must be included even though staging-only cluster structures,
+queued operations, and temporary caches remain outside this estimate. After
+the fix the same test passed with 1 case and 2 assertions. The complete
+`txgraph_tests` suite passed 24 cases and 613 assertions, and the fixed daemon
+target rebuilt successfully. This closes a real memory-limit accounting
+defect: repeated transaction churn could leave retained `TxGraph::Entry`
+storage invisible to `-maxmempool` and `getmempoolinfo.usage`.
+
+### Cycle 238 verdict and next queue
+
+Verdict: confirmed and fixed in one source/test/journal commit. The package,
+expiry, persistence, and removal-symmetry cells are dismissed for this cycle;
+do not reopen them without a changed contract or new retained-state evidence.
+
+Next unchecked cells:
+
+1. Audit retained capacity in the remaining main-graph container indexes and
+   other newly added `DynamicMemoryUsage()` implementations, separating core
+   ownership from intentionally excluded staging/temporary state.
+2. Exercise repeated chainstate/cache resize and flush cycles with a safe
+   scratch filesystem once storage permits, comparing reported usage with an
+   independent ownership ledger.
+3. Recheck allocation-failure handling only with a distinct non-terminating
+   contract; do not reopen the prevector fatal-allocation policy.
