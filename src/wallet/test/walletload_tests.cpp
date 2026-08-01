@@ -92,5 +92,33 @@ BOOST_FIXTURE_TEST_CASE(wallet_load_descriptors, TestingSetup)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(wallet_load_sanitizes_invalid_purpose_log, TestingSetup)
+{
+    bilingual_str error;
+    std::vector<bilingual_str> warnings;
+    auto database = CreateMockableWalletDatabase();
+    const std::string malicious_address{"not-an-address\nADDR"};
+    const std::string malicious_purpose{"not-standard\nINJECT"};
+    {
+        WalletBatch batch(*database);
+        BOOST_REQUIRE(batch.WritePurpose(malicious_address, malicious_purpose));
+    }
+
+    std::string log_line;
+    {
+        DebugLogHelper log_helper("nonstandard purpose string", [&](const std::string* line) {
+            if (line) log_line = *line;
+            return false;
+        });
+        const std::shared_ptr<CWallet> wallet(new CWallet(m_node.chain.get(), "", std::move(database)));
+        BOOST_CHECK_EQUAL(wallet->PopulateWalletFromDB(error, warnings), DBErrors::LOAD_OK);
+    }
+
+    BOOST_CHECK(log_line.find(malicious_address) == std::string::npos);
+    BOOST_CHECK(log_line.find(malicious_purpose) == std::string::npos);
+    BOOST_CHECK(log_line.find("not-an-addressADDR") != std::string::npos);
+    BOOST_CHECK(log_line.find("not-standardINJECT") != std::string::npos);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 } // namespace wallet

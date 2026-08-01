@@ -1,3 +1,96 @@
+# Cycle 253: wallet database newline injection in load warnings
+
+## Selection and fresh gate
+
+- The exact selector for this cycle was `shuf -i 0-98 -n 1` -> `30`, selecting
+  `security-logging`. This is a distinct cell from Cycle 200's repeated P2P
+  rejection-warning analysis, Cycle 196's fixed RPC whitelist method warning,
+  and Cycle 164's persistent-setting redaction fix. The selected queue item
+  was the remaining RPC/REST and wallet-data error/log surface.
+- The dedicated branch is `uber-cycle-253-security-logging-20260801`. The
+  fresh start HEAD was `7d683075db171a7f8efee2657d23cc642f3561a6`, with
+  `origin/master` at `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence `42 1293`
+  from `git rev-list --left-right --count origin/master...HEAD`.
+- The initial current build at `/data/my_storage/tmp/cycle243-build` had
+  `ENABLE_WALLET=OFF`, so its attempted `walletload_tests` run exited 201 with
+  `no test cases matching filter`. A separate existing wallet-enabled build at
+  `/data/my_storage/tmp/cycle246-wallet` was used instead; no protected binary
+  was rebuilt or stopped. Known unrelated untracked artifacts were preserved.
+- Catalog, prompt, goals TSV, and protocol hashes remained
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+## Scope and hypothesis
+
+Audit wallet load warnings for private metadata, malformed database values,
+newline/control injection, misleading diagnostics, and repeated-output
+amplification. The working hypothesis was that a malformed or tampered wallet
+database can place arbitrary `purpose` and address strings in the
+`LoadAddressBookRecords` path, and that the warning at
+`src/wallet/walletdb.cpp:960` passes those strings directly to
+`WalletLogPrintf`. The logger intentionally preserves newline characters for
+legitimate multiline messages, so this sink could turn local wallet-file data
+into additional physical log records.
+
+The trust boundary is a local wallet database, including a malformed,
+restored, or tampered file; this is not an unauthenticated remote compromise
+and does not by itself expose a secret. The concrete impact is log-integrity
+confusion for line-oriented collection, alerting, and operator review. The
+existing journals and history were searched first; the prior security-logging
+cycles contain no test or fix for this wallet-load sink.
+
+## Evidence and independent verification
+
+`WalletBatch::WritePurpose` accepts arbitrary test/database strings and
+`CWallet::PopulateWalletFromDB` reaches the purpose-record loader. A focused
+regression was added to `src/wallet/test/walletload_tests.cpp`: it writes
+`not-an-address\nADDR` and `not-standard\nINJECT`, captures the warning with
+`DebugLogHelper`, and requires the raw values to be absent while their
+sanitized `not-an-addressADDR` and `not-standardINJECT` forms remain.
+
+On the unmodified implementation, after rebuilding the wallet-enabled
+`test_bitcoin`, this command:
+
+    TMPDIR=/data/my_storage/tmp/cycle253-wallet-log-before /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=walletload_tests/wallet_load_sanitizes_invalid_purpose_log --random=253001 --catch_system_error=no --log_level=all
+
+exited 201 with four assertion failures: both raw strings were present and
+both sanitized strings were absent. This is a failing-before proof at the
+actual wallet-load/logging boundary, not a pattern-only match.
+
+The smallest fix adds the explicit `<util/strencodings.h>` include and passes
+`SanitizeString(purpose_str)` and `SanitizeString(strAddress)` to the warning.
+The first post-fix run with a nonexistent `TMPDIR` was discarded as setup-only
+after a `temp_directory_path` exception. After creating the isolated scratch
+directory, the focused rerun with seed `253003` exited 0 with `*** No errors
+detected`. The broader `walletload_tests` run with seed `253004` passed both
+cases, and the combined `walletdb_tests,walletload_tests` run with seed
+`253005` passed all four cases. `cmake --build
+/data/my_storage/tmp/cycle246-wallet --target test_bitcoin -j2` and
+`git diff --check` also passed.
+
+The sanitization is limited to the diagnostic fields; the database key is
+still decoded normally, and wallet state semantics are unchanged. The test
+does not claim that arbitrary wallet-file corruption is remotely reachable,
+that every log backend has the same parser, or that sanitization replaces
+wallet-file integrity checks.
+
+## Verdict and handoff
+
+Verdict: **confirmed and fixed**. A malformed local wallet database could
+inject newline-bearing address/purpose values into a wallet-load warning,
+creating misleading physical log records. The production fix, regression, and
+this journal belong in one independent commit authored as
+`Lőrinc <pap.lorinc@gmail.com>`. No other logging sink was changed.
+
+The next distinct queue is to audit RPC/REST error text and request URIs for
+sensitive query data or false diagnostics, then revisit wallet destination-data
+and migration warnings only if their sinks or contracts differ. Do not reopen
+the fixed P2P warning, RPC whitelist, or persistent-setting cells without new
+callers, a changed logger, or new evidence.
+
 # Cycle 200: repeated P2P rejection-warning amplification
 
 ## Selection and fresh gate
