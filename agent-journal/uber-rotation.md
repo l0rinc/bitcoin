@@ -100,6 +100,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 2 | assertion-invariant-audit | CYCLE-1 | 2026-07-28 | fork production Assumes all construction-tautologies; cache-overflow fix verified; no input-validation-by-assert |
 | 65 | contributor-branch-radar | CYCLE-2 | 2026-07-28 | perf seam: CheckBlock dup-check 1.85x branch locally absent (equivalence plausible), prevector-36 + serialization seeds recorded |
 | 36 | cross-tool-analysis-matrix | CYCLE-3 | 2026-07-31 | clang-18 UBSan full suite: 1128 cases 0 reports (117 __ubsan syms control); {gcc,clang}xUBSan consistent; DISMISSED |
+| 36 | cross-tool-analysis-matrix | CYCLE-4 | 2026-07-31 | _GLIBCXX_ASSERTIONS full suite: 1128 cases 0 violations (ninja -t commands flag control); DISMISSED |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -135,7 +136,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 96, 97, 98.
 Cycles done (random-pool state): 0(c1,c2), 1(c1), 4(c1,c2), 6(c1),
 7(c1), 2(c1), 9(c1,c2), 16(c1,c2), 17(c1,c2,c3), 22(c1,c2),
-28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2,c3),
+28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 36(c1,c2,c3,c4),
 37(c1), 39(c1), 21(c1,c2), 43(c1), 45(c1), 47(c1,c2), 51(c1), 59(c1), 60(c1),
 61(c1,c2,c3), 65(c1,c2), 66(c1), 68(c1), 71(c1), 73(c1), 75(c1),
 76(c1,c2), 81(c1,c2), 90(c1), 91(c1), 94(c1), 95(c1).
