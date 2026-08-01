@@ -437,3 +437,41 @@ The held-out validation also exposed a pre-existing local test defect in `src/te
 Verdict: **reusable technical review recipe confirmed; one independent test-only oracle defect confirmed and fixed**. The reviewer recipe is supported by three fresh evidence families and survived a held-out chain-parameter change. Source/test/journal commit: `3dc9c0b006ad5523c2e86c79672726a3f34324bb` (`test: correct saturated mempool diagram oracle`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
 
 Next queue: draw another distinct eligible goal. Do not reopen this cell unless new review evidence, a recurrence of the saturated fee oracle, or a separate consumer/harness boundary changes its priority.
+
+### Cycle 245 (Goal 60, historical reviewer-preference mining)
+
+Selection and gate: the exact selector was `shuf -i 0-98 -n 1`, yielding `60` (`reviewer-preference-mining`). The cycle branch is `uber-cycle-245-historical-review-recipes-20260731`, based at `7b51b04cbbeaf2e727310c4f5229a45498921dc9`; `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f` and the merge base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`. The existing Goal 60 cells on broad review recipes, current-master RPC/help contracts, relay backlog, macOS platform workaround, and HTTP/descriptor/AI review evidence were excluded. This cycle mined a distinct build-policy and large scripted-diff review pattern.
+
+#### Accepted recipe: artifact impact plus public ABI proof
+
+The primary accepted sample was [PR #35795](https://github.com/bitcoin/bitcoin/pull/35795), `build: set CMAKE_VISIBILITY_INLINES_HIDDEN in REDUCE_EXPORTS`, source commit `3f313a774bec86c09bd8b7151288306ff615e047`, merge commit `3f313a774bec86c09bd8b7151288306ff615e047`, and parent `3a2c52f9d7`. The PR body described restoring a prior build behavior: hiding inline methods from the DSO export table.
+
+Review evidence from the public PR discussion showed a repeatable expectation rather than a style preference. hebasto supplied measured `libbitcoinkernel.so` size and `.dynstr` reductions under Fedora/GCC, documented the macOS Clang secondary flag `-fvisibility-inlines-hidden-static-local-var`, and posted a Guix hash matrix covering aarch64, arm, arm64 Apple, x86_64 Apple, ppc64, riscv64, x86_64 Linux, and Windows. `151henry151` independently built the parent and tip under Debian/GCC with `REDUCE_EXPORTS=ON`, compared the shared-library size and `nm -D --defined-only` output, confirmed that all 134 public `btck_*` symbols remained, and reported `test_bitcoin` passing. The relevant public API sources were the PR page and the unauthenticated GitHub endpoints for `/pulls/35795`, `/issues/35795/comments`, `/pulls/35795/reviews`, and `/pulls/35795/comments`.
+
+The independent local replay used detached worktrees at the parent and PR commits, separate CMake/Ninja build directories, and:
+
+`cmake -S <worktree> -B <build> -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTS=ON -DBUILD_BENCH=OFF -DBUILD_GUI=OFF -DBUILD_KERNEL_LIB=ON -DBUILD_SHARED_LIBS=ON -DREDUCE_EXPORTS=ON -DENABLE_WALLET=OFF -DWITH_ZMQ=OFF -DWITH_USDT=OFF -DENABLE_IPC=OFF -DWITH_BDB=OFF -DWITH_SQLITE=OFF`
+
+Both `cmake --build <build> --target bitcoinkernel -j2` builds passed. The parent shared library was 63,986,872 bytes; the PR library was 63,965,608 bytes. Defined dynamic symbols changed from 390 to 222, while `btck_*` symbols stayed at 134 on both builds. `.dynstr` changed from `0x8d24` (36,132 bytes) to `0x5651` (22,097 bytes). A name-only comparison of the `btck_*` sets was identical; differing non-public/libstdc++ symbols were expected from the visibility change.
+
+The exact PR test binary also built successfully after an initial environment-only ccache failure (`/root/.cache/ccache/tmp` did not exist). Rerunning with `CCACHE_DIR=/data/my_storage/tmp/cycle245-ccache cmake --build /data/my_storage/tmp/cycle245-heldout-35795-build --target test_bitcoin -j2` completed all 381 actions. `TMPDIR=/data/my_storage/tmp/cycle245-test-runtime /data/my_storage/tmp/cycle245-heldout-35795-build/bin/test_bitcoin --run_test=util_tests,crypto_tests,serialize_tests --log_level=test_suite --report_level=short` passed: 82 selected test cases and 230,448 assertions; 639 of 721 total cases were skipped by selection.
+
+#### Held-out scope oracle: scripted-diff completeness
+
+The held-out sample was current [PR #35852](https://github.com/bitcoin/bitcoin/pull/35852), head `fac8a3a4a68bc7edabaaab6bfb113199792babb4`, `scripted-diff: Use inline const over static const`. It was not used as the accepted recipe source. Review comments required adjacent matching cases in `src/key.h`, `src/qt/guiconstants.h`, `src/util/string.h`, and `src/net_permissions.h`; the author also documented three intentional exclusions in `src/common/bloom.h`. The public review evidence included the PR page, its issue comments, and the `/pulls/35852/reviews` and `/pulls/35852/comments` endpoints.
+
+The detached PR head changed 90 files with 380 additions and 380 deletions, and `git diff --check 67efced1fc83a0b7215cc1513e7c4754fee0f12f...HEAD` was clean. On the exact head, `git grep -n -E '^(static constexpr|constexpr static)' -- '*.h'` produced no non-excluded matches after filtering `src/crc32c`, `src/ipc/libmultiprocess`, and `src/minisketch`; the only remaining matches were in those three documented exclusions. This is a strong held-out oracle for the reviewer rule that a mechanical diff must prove complete scope with a search-based check and explicitly explain exceptions.
+
+#### Reusable reviewer recipe
+
+- For build, linker, visibility, or refactor changes, state the exact semantic, ABI, and toolchain effect instead of describing the patch as cleanup.
+- Measure the claimed artifact effect with file size, section size, dynamic-symbol, or equivalent output, and verify that the public ABI names and counts remain stable when ABI preservation is intended.
+- Validate more than one compiler or architecture when the change is toolchain-sensitive; preserve review-provided matrix evidence and state platform-specific flags explicitly.
+- For large scripted diffs, enumerate every matching site, include adjacent cases, document intentional exclusions, and attach a search-based completeness oracle. Do not leave known matches as unexplained one-off exceptions.
+- Keep generated/API artifacts and tests in the same contract check, run the narrow test target plus an independent reviewer-style build, and record exact commands and limitations.
+
+Fingerprint: `artifact-measurement-public-abi-stability-cross-toolchain-scope-completeness`.
+
+Verdict: **reviewer preference confirmed; no production defect found**. The recipe is supported by accepted PR review rationale, independent local artifact and test measurements, and a held-out scripted-diff scope check. No source or test commit was justified. The initial ccache failure was environmental and was corrected with an explicit scratch cache; raw unauthenticated CI logs remain unavailable, but public review evidence and local replay were sufficient for this cycle.
+
+Next queue: perform the post-cycle gate, draw exactly one fresh selector, and continue with a distinct eligible cell. Do not reopen Goal 60 without new reviewer evidence, a recurrence, or a separate consumer/ABI boundary.
