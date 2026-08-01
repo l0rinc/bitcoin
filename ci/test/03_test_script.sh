@@ -64,8 +64,18 @@ fi
 
 if [ "$RUN_FUZZ_TESTS" = "true" ]; then
   export DIR_FUZZ_IN=${DIR_QA_ASSETS}/fuzz_corpora/
+  # The fuzz corpus content determines test efficacy: a deliberately weakened
+  # corpus passes fuzzers silently, so pin the clone to a reviewed commit
+  # (same trust model as the pinned script_assets_test.json below). Update
+  # QA_ASSETS_COMMIT deliberately when moving the corpus forward.
+  QA_ASSETS_COMMIT="918cdd36fec3c78f8b8f6a1dc0ec6688e7559c9e"
   if [ ! -d "$DIR_FUZZ_IN" ]; then
     ${CI_RETRY_EXE} git clone --depth=1 https://github.com/bitcoin-core/qa-assets "${DIR_QA_ASSETS}"
+    (
+      cd "${DIR_QA_ASSETS}"
+      git fetch --depth=1 origin "${QA_ASSETS_COMMIT}"
+      git checkout --detach "${QA_ASSETS_COMMIT}"
+    )
   fi
   (
     cd "${DIR_QA_ASSETS}"
