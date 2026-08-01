@@ -144,6 +144,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 74 | memory-pressure-allocator | CYCLE-1 (retro) | 2026-07-28 | mempool accounting honest (1.13x RSS/usage @8k); glibc drain retention not a leak (2ef390de05, row restored) |
 | 74 | memory-pressure-allocator | CYCLE-2 | 2026-07-29 | LockedPool oversize alloc -> graceful bad_alloc via RPC (fault-injected); no residue |
 | 74 | memory-pressure-allocator | CYCLE-5 | 2026-07-31 | mlock-failure path live: degraded arena works unlocked (locked=0/total=262144), log-silent (upstream-identical); DISMISSED |
+| 74 | memory-pressure-allocator | CYCLE-6 (COMPLETE) | 2026-08-01 | pruning IO: disk freed exact (-129KB), RSS flat +0 (index retained by design); boundary exact |
 | 105 | project-bug-autopsy-recurrence | CYCLE-1 | 2026-07-29 | txgraph saturation family autopsy: recurrence mapped, no uncovered sibling |
 | 45 | constant-time-declassification | CYCLE-2 | 2026-07-29 | walletpassphrase: KDF-only throttle 0.10s/attempt measured, no lockout by design |
 | 109 | whole-feature-public-path | CYCLE-2 | 2026-07-31 | live compact-block matrix 4/4: hb-synced=cmpctblock only, miss=1x GETBLOCKTXN/BLOCKTXN, v1=v2; static map confirmed |
@@ -896,6 +897,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    count, ~2^31-round unlock hang. FIXED on audit/kdf-rounds-overflow
    (55788c9a76, mechanism probe + boundary test; F16 added; URGENT
    updated). Draw resumes next cycle.
+   RE-RANK draw 160 (3-cell pool): raw=11628138699865233707,
+   masked 2404766663010457899 -> idx 0 -> #74 c6 (pruning-mode IO:
+   disk freed byte-exact (-129KB, files 7->4), RSS flat +0,
+   boundary exact; DISMISSED). Campaign #74 COMPLETE.
+   Pool after draw 160 (2): #35 NONNEGATIVE_SIGNED write
+   semantics, #50 Taproot/MuSig2 gates.
    RE-RANK draw 158 (4-cell pool): raw=15981968078687135964,
    masked 6758596041832360156 -> idx 0 -> #81 c5 (Wycheproof
    AES-CBC-PKCS5: 72/72 after harness-contract fixes; INDEPENDENT
@@ -949,13 +956,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 ## Handoff
 Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 (mechanically rebuilt from table rows 2026-07-28): 3, 5, 6(EXHAUSTED), 8, 11, 12,
-13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 108(COMPLETE 2026-08-01), 73(COMPLETE 2026-08-01), 45(COMPLETE 2026-08-01), 81(EXHAUSTED 2026-08-01), 20, 26, 27, 33, 41(EXHAUSTED 2026-07-31), 52, 55(EXHAUSTED 2026-07-31), 71(EXHAUSTED 2026-07-31),
+13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 108(COMPLETE 2026-08-01), 73(COMPLETE 2026-08-01), 45(COMPLETE 2026-08-01), 81(EXHAUSTED 2026-08-01), 74(COMPLETE 2026-08-01), 20, 26, 27, 33, 41(EXHAUSTED 2026-07-31), 52, 55(EXHAUSTED 2026-07-31), 71(EXHAUSTED 2026-07-31),
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 41(c1,c2,c3,c4,c5,c6), 0(c1,c2), 1(c1,c2,c3,c4), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1,c2,c3), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2,c3,c4), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5,c6),
 28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4,c5), 35(c1,c2,c3,c4,c5,c6), 36(c1,c2,c3,c4,c5), 23(c1,c2,c3,c4), 25(c1,c2,c3),
 37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3,c4,c5), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 52(c1,c2), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3,c4), 47(c1,c2,c3,c4), 48(c1,c2), 49(c1,c2,c3,c4,c5,c6,c7,c8,c9), 50(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13), 53(c1), 55(c1,c2,c3,c4), 57(c1,c2,c3,c4), 58(c1,c2,c3), 59(c1,c2), 60(c1,c2,c3,c4,c5,c6,c7,c8), 24(c1,c2,c3,c4,c5,c6),
-61(c1,c2,c3), 63(c1,c2,c3,c4,c5), 64(c1), 65(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 66(c1,c2), 67(c1,c2), 68(c1,c2,c3), 69(c1,c2,c3,c4), 70(c1), 71(c1,c2,c3,c4,c5), 73(c1,c2,c3,c4,c5), 74(c1,c2,c3,c4,c5), 75(c1,c2,c3,c4),
+61(c1,c2,c3), 63(c1,c2,c3,c4,c5), 64(c1), 65(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 66(c1,c2), 67(c1,c2), 68(c1,c2,c3), 69(c1,c2,c3,c4), 70(c1), 71(c1,c2,c3,c4,c5), 73(c1,c2,c3,c4,c5), 74(c1,c2,c3,c4,c5,c6), 75(c1,c2,c3,c4),
 76(c1,c2,c3,c4), 80(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 81(c1,c2,c3,c4,c5), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1,c2), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4,c5), 99(c1), 100(c1,c2,c3), 101(c1,c2,c3), 102(c1,c2), 103(c1), 104(c1,c2,c3), 105(c1), 106(c1,c2,c3), 107(c1,c2), 108(c1), 109(c1,c2).
 Technique note for future secp cycles: subtree-only scratch builds with
 SECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64 + tests/noverify -j4 give a
