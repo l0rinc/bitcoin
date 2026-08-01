@@ -224,3 +224,39 @@ not before.
 ## Rotation note
 Cycle 3 complete; rotating per uber-goal policy. Not exhausted (3
 open cells).
+
+## Cycle 4 (2026-07-31): _GLIBCXX_ASSERTIONS full unit suite — 1128 cases, zero checked-container violations; DISMISSED
+
+### Draw
+RE-RANK draw 147 over the 5-cell queue: raw=12275778598515865734,
+masked 3052406561661089926 -> idx 1 -> #36 _GLIBCXX_ASSERTIONS
+(c2 queue). Branch: audit/cross-tool-c4 from 0ec6d5e210.
+
+### Method
+cmake -B build-glibcxx -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+-DCMAKE_CXX_FLAGS='-D_GLIBCXX_ASSERTIONS'; reconfigure AFTER the
+branch checkout (the c3 stale-configure trap applies — caught it
+this time); ninja bin/test_bitcoin (536 edges, ~34 min cold);
+full suite.
+
+### Result
+- Suite: 1128 test cases, rc=0, "No errors detected", zero
+  assertion/abort lines (log /tmp/btc36c4_suite.log).
+- POSITIVE CONTROL: CMAKE_CXX_FLAGS cached with the define
+  (CMakeCache.txt) and `ninja -t commands` shows
+  -D_GLIBCXX_ASSERTIONS in the actual compile line — ninja's
+  non-verbose log omits commands, so grep of the build log is NOT
+  a flag-presence check (it printed 0; -t commands is the control).
+- Verdict: DISMISSED. Matrix cell filled: full unit suite x
+  gcc-13.3 x checked libstdc++ = 0 violations (no out-of-bounds
+  vector/string access, no invalid iterator use anywhere the
+  suite reaches).
+
+### Limitations / queue
+- build-glibcxx removed after the run (disk; recreate with the
+  cmake line above, ~35 min cold).
+- Remaining open cells: TSan subset, functional-suite-under-clang,
+  warning-as-error CI note (c2).
+
+## Rotation note
+Cycle 4 complete; rotating per uber-goal policy. Not exhausted.
