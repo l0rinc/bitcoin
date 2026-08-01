@@ -246,6 +246,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 35 | mutation-testing | CYCLE-5 | 2026-07-31 | CTxUndo hostile-field layers classified (decode-reject/apply-reject/trust-boundary); range-check mutant killed fail-before/pass-after |
 | 35 | mutation-testing | CYCLE-6 | 2026-07-31 | latent uncompilable SizeComputer overload repaired (DEFAULT mode, upstream-inherited); boundary battery; M_a/M_b/M_c killed 8/134/15 |
 | 76 | reproducible-builds | CYCLE-4 | 2026-08-01 | 45-uncacheable itemization: 0 uncacheable in all 6 live families (logfile-verified); lifetime 83 = deleted-config residue; DISMISSED |
+| 45 | constant-time-declassification | CYCLE-4 (COMPLETE) | 2026-08-01 | secp ctime_tests under valgrind memcheck: full suite, 0 errors (production backend params, aarch64) |
 
 ## Next-up queue
 1. Random draw (user-mandated policy since 2026-07-28): recorded seed over
@@ -865,6 +866,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    #74 pruning-mode IO, #35 NONNEGATIVE_SIGNED write semantics,
    #50 Taproot/MuSig2 gates, #9 per-seed profiling, #67 downgrade
    read, #45 secp ctime.
+   RE-RANK draw 154 (8-cell pool): raw=9940712460200409047,
+   masked 717340423345633239 -> idx 7 -> #45 c4 (secp ctime_tests
+   under valgrind memcheck: full suite 0 errors at production
+   backend params; DISMISSED). Campaign #45 COMPLETE.
+   Pool after draw 154 (7): #81 Wycheproof, #36 TSan subset,
+   #74 pruning-mode IO, #35 NONNEGATIVE_SIGNED write semantics,
+   #50 Taproot/MuSig2 gates, #9 per-seed profiling, #67 downgrade
+   read.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -895,7 +904,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 ## Handoff
 Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 (mechanically rebuilt from table rows 2026-07-28): 3, 5, 6(EXHAUSTED), 8, 11, 12,
-13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 108(COMPLETE 2026-08-01), 73(COMPLETE 2026-08-01), 20, 26, 27, 33, 41(EXHAUSTED 2026-07-31), 52, 55(EXHAUSTED 2026-07-31), 71(EXHAUSTED 2026-07-31),
+13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 108(COMPLETE 2026-08-01), 73(COMPLETE 2026-08-01), 45(COMPLETE 2026-08-01), 20, 26, 27, 33, 41(EXHAUSTED 2026-07-31), 52, 55(EXHAUSTED 2026-07-31), 71(EXHAUSTED 2026-07-31),
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 41(c1,c2,c3,c4,c5,c6), 0(c1,c2), 1(c1,c2,c3,c4), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1,c2,c3), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2,c3,c4), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5,c6),

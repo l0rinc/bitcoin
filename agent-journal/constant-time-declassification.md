@@ -178,3 +178,44 @@ HMAC-on-match timing shape is de minimis at this trust boundary
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-08-01): secp256k1 ctime_tests under valgrind memcheck — full suite, 0 errors; DISMISSED
+
+### Draw
+RE-RANK draw 154 over the 8-cell pool: raw=9940712460200409047,
+masked 717340423345633239 -> idx 7 -> #45 secp ctime cell (c1
+queue; valgrind confirmed available at /usr/bin/valgrind).
+Branch: audit/constant-time-c4 from 4340ba0f87.
+
+### Method
+Subtree scratch build: cmake -S src/secp256k1 -B /tmp/btc45c4/build
+-DSECP256K1_BUILD_CTIME_TESTS=ON (Valgrind AUTO detected, VALGRIND
+macro defined; window/comb defaults ECMULT_WINDOW_SIZE=15
+COMB_BLOCKS=43 COMB_TEETH=6). Run:
+valgrind [--quiet] --error-exitcode=42 bin/ctime_tests.
+
+### Result
+- Under memcheck: ERROR SUMMARY: 0 errors from 0 contexts; rc=0
+  (exit 42 would fire on any secret-dependent access).
+- Full ctime suite compiled in: sign/recover/ecdh/eckey/ecmult
+  generator paths at production backend parameters.
+- Fire-proof note: run WITHOUT valgrind the binary prints only its
+  usage hint (the tests are memcheck-instrumented, not self-
+  reporting) — the valgrind ERROR SUMMARY line is the correct
+  oracle, and --quiet suppresses it (use rc + non-quiet grep).
+- Verdict: DISMISSED. The shipping secp256k1 backend is
+  memcheck-clean on the entire ctime suite at production
+  parameters on this host (aarch64).
+
+### Exact commands
+- cmake line above; valgrind --error-exitcode=42
+  /tmp/btc45c4/build/bin/ctime_tests (log /tmp/btc45c4_run.log).
+
+### Limitations / queue
+- msan variant not run (needs an instrumented toolchain;
+  memcheck is the valgrind-family gate upstream CI uses).
+- #45 queue: empty (c1 AES/CBC, c2 passphrase throttle, c3 RPC
+  auth, c4 secp ctime). Campaign COMPLETE on current surface.
+
+## Rotation note
+Four cycles; declassification surface closed.
