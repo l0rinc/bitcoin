@@ -281,7 +281,9 @@ static void BackupSettings(const fs::path& filename, const QSettings& src)
 void OptionsModel::Reset()
 {
     // Backup and reset settings.json
-    node().resetSettings();
+    if (gArgs.GetSettingsPath()) {
+        node().resetSettings();
+    }
 
     QSettings settings;
 
