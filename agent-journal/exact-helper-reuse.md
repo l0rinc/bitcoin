@@ -1,5 +1,53 @@
 # Exact helper reuse audit
 
+## Cycle 256: txid and wtxid mempool lookup helper
+
+### Selection and gate
+
+- Fresh gate: `git fetch origin master` passed at `2026-08-01T08:20:00Z`.
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `58`
+- Selected slug: `exact-helper-reuse`
+- Branch: `uber-cycle-256-exact-helper-reuse-20260801`
+- HEAD before the cycle: `2eef3edad3621cb7149e6fc4179695a122285647`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence at the gate: `42 1299`.
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Uber protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- `git diff --check`: passed. Existing untracked agent artifacts and `test/cache/` were preserved. Protected long-running test processes were left untouched.
+
+### Scope and candidate ledger
+
+This cycle excluded the earlier transaction and block serialization helper findings in Cycles 23 and 91. The search covered repeated status/validation helpers, nullable kernel wrappers, RPC scan guards, PCP response validation, wallet/database cleanup, networking limits, and test/fuzz helper pairs. History and call sites were checked before treating repetition as a candidate.
+
+| Candidate | Evidence | Verdict |
+|---|---|---|
+| `MinerImpl::getTransactionsByTxID` and `getTransactionsByWitnessID` | Same result sizing, no-mempool behavior, lock, positional loop, null preservation, assertion, and return contract; only the identifier type and overloaded `CTxMemPool::get` differ. The witness method was added as a parallel implementation in `9784818442`. Existing miner tests exercise both APIs with and without a mempool. | Confirmed and fixed |
+| `CoinsViewScanReserver` and `BlockFiltersScanReserver` | Similar atomic reservation shape, but one resets progress and checks `g_scan_progress`, while the other tracks a height and has different cleanup state. A common RAII helper would hide distinct progress contracts. | Dismissed |
+| Nullable kernel wrapper returns | `GetPrevious`, `GetBlockTreeEntry`, and `ReadBlock` share an `if (!handle)` pattern, but they wrap different borrowed/owned C handles and constructors. A generic optional-handle factory would change ownership boundaries without a proven defect. | Dismissed |
+| PCP/NAT-PMP response checks and result errors | Repeated protocol-level checks intentionally use different packet layouts, offsets, result widths, logging names, and downgrade rules. | Dismissed |
+
+### Change and verification
+
+The two mining interface methods now delegate to one private `getTransactionsByID` template in `src/node/interfaces.cpp`. The helper retains the original `results(ids.size())` allocation, null-filled positional results when the mempool is absent or an ID is missing, the mempool lock, and the exact overloaded lookup. Public txid and wtxid methods remain separate virtual APIs.
+
+Commit `74aadd0c20` (`interfaces: reuse mempool transaction lookup helper`) is authored as `Lőrinc <pap.lorinc@gmail.com>` and contains only the production helper consolidation. No test fixture or interface contract changed.
+
+Validation:
+
+- `ninja -C /data/my_storage/tmp/cycle246-wallet src/CMakeFiles/bitcoin_node.dir/node/interfaces.cpp.o`: passed.
+- `ninja -C /data/my_storage/tmp/cycle246-wallet test_bitcoin`: passed and relinked the test binary.
+- `TMPDIR=/data/my_storage/tmp/cycle256-miner-tests /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=miner_tests --random=256001 --log_level=test_suite`: 4 cases and 1401 assertions passed; no errors detected.
+- `TMPDIR=/data/my_storage/tmp/cycle256-interface-tests /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=miner_tests,interfaces_tests --random=256002 --log_level=test_suite --report_level=detailed`: 11 cases and 1476 assertions passed, including 4 miner cases/1401 assertions and 7 interface cases/75 assertions.
+- `git diff --check`: passed before the source commit and after the test run.
+
+The proof is contract-preserving rather than a new failing regression: both template instantiations compile, and the existing populated/no-mempool lookup tests exercise the old behavior through the shared implementation. No consensus, serialization, ownership, lock-order, or public API behavior changed. Full-suite validation remains outside this narrow maintenance cycle; the broader selected suites passed.
+
+### Handoff
+
+The next cycle must fetch `origin/master`, perform a fresh exact selector draw, and choose a distinct unchecked catalog cell. Do not reopen the RPC scan-reserver or nullable-wrapper candidates unless their progress/ownership contracts change. Preserve the source commit and this journal entry as separate, independently reviewable history.
+
 ## Cycle 23: transaction disk-position size calculation
 
 ### Selection and gate
