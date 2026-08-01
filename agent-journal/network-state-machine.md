@@ -224,3 +224,44 @@ half-open state, no resource hold, real peers unaffected.
 
 ## Rotation note
 Cycle 4 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 5 (2026-08-01): node-initiated half-close — the shape does not exist: zero shutdown() syscalls in net code, peer view is always full close (clean EOF 0.04s); DISMISSED; #73 queue EMPTY
+
+### Draw
+RE-RANK draw 153 over the 9-cell pool: raw=6904656846068345248
+(already 63-bit) -> idx 4 -> #73 node-initiated half-close (c3
+nicety note: "same code path from the other side, unmeasured").
+Branch: audit/network-state-c5 from b7002cc869.
+
+### Mechanism trace
+grep for shutdown(/SHUT_ across src/net*.cpp/h, netbase, compat:
+ZERO socket shutdown syscalls anywhere in the net layer. Every
+disconnect is CloseSocketDisconnect -> close() — the node can
+never produce a SHUT_WR half-close state toward a peer.
+
+### Live confirmation (raw-socket v1 peer, /tmp/btc73c5_halfclose.py)
+Completed a raw v1 handshake (version/verack via
+test_framework.messages helpers — harness traps recorded: MAGIC
+import lives in messages.py not netutil; CAddress fields are
+.ip/.port not .netaddr; strSubVer takes str; the node sends
+wtxidrelay/sendaddrv2 between version and verack, so read until
+verack). Then `disconnectnode` from the node side:
+- peer socket: clean EOF in 0.04 s; tail = 190 bytes of already
+  queued pre-close frames (sendcmpct/feefilter class); no partial
+  frame, no RST, no lingering readable stream.
+
+### Verdict
+DISMISSED: there is no node-initiated half-close shape — the
+peer's view of any node-initiated disconnect is a full, prompt,
+clean close. #73's queue is now EMPTY (c1 replay/reorder, c2 EOF
+sweep, c3 inbound half-close, c4 slow-drip, c5 node-initiated
+close) — campaign COMPLETE on the current surface.
+
+### Limitations / queue
+- The 190-byte tail was classified by size class, not parsed
+  frame-by-frame (pre-close queued traffic; irrelevant to the
+  strand question).
+- #73 exhausted modulo new surfaces (e.g., v3 transport drafts).
+
+## Rotation note
+Five cycles; the disconnect/teardown family is closed.
