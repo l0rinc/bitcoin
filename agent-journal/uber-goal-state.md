@@ -3405,3 +3405,45 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - Next action: perform a fresh gate, preserve unrelated artifacts, draw
   exactly one selector with `shuf -i 0-98 -n 1`, create the next
   `uber-cycle-243-*` branch, and continue with a distinct high-risk cell.
+
+## Cycle 243 close: Goal 57, physical filter-file validation during reinitialization
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `57` (`local-reasoning-domain`); no
+  reroll. Branch: `uber-cycle-243-local-reasoning-domain-20260731`.
+  Cycle-start HEAD was `0b1fc5085ba440e00ae254f8266533fa8c627f6f`; close
+  source HEAD before this state commit is `680bbbe07ec17dd89988cee1dcfd46280087e82b`.
+  `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was
+  42/1269. Catalog, prompt, TSV, and protocol hashes were unchanged.
+  Unrelated untracked artifacts were preserved and protected PIDs
+  `777094`, `956381`, `1138182`, `1157959`, `1312049`, and `1312050` remained
+  alive and untouched.
+- Confirmed finding: after a durable block-filter sync, deleting the current
+  `fltr00000.dat` left `BlockFilterIndex::Init()` successful and
+  `BlockUntilSyncedToCurrentChain()` true, while `LookupFilter()` failed.
+  The pre-fix source-to-sink relation was reproduced with an on-disk scratch
+  index and an explicit chainstate flush. The earlier memory-only probe was
+  discarded because its non-persistent best-block locator correctly left the
+  reinitialized index unsynced.
+- Fix commit: `680bbbe07ec17dd89988cee1dcfd46280087e82b`
+  (`blockfilter: reject missing persisted tip filter`), authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. `CustomInit()` now decodes and hash-checks
+  the persisted tip's `DBVal` through the existing filter reader before the
+  index is published as initialized. The regression is
+  `blockfilter_index_reinit_rejects_missing_current_filter`.
+- Independent mutation control: removing only the new physical-filter check
+  made the permanent test exit 201 with `!filter_index.Init()` failing. The
+  repaired focused test passed 1 case/3 assertions. The adjacent matrix passed
+  17 cases/3,103 assertions: `baseindex_tests`,
+  `blockfilter_index_tests`, `coinstatsindex_tests`, `txindex_tests`, and
+  `txospenderindex_tests`. `git diff --check` and `git show --check` passed.
+- Verdict: **confirmed and fixed**. The check covers the persisted current tip;
+  older filter-file corruption remains a lazy lookup failure and would require
+  a separate full-scan policy. No full historical scan, database-engine fault,
+  or power-loss claim is made. Detailed commands, outputs, exclusions, and
+  limitations are in `agent-journal/local-reasoning-domain.md`.
+- Close state before this entry: source HEAD is
+  `680bbbe07ec17dd89988cee1dcfd46280087e82b`; `/` remains full and `/data`
+  has about 21 GB available. The next action is a fresh gate, exact selector
+  draw, and a new `uber-cycle-244-*` branch; do not reopen the fixed current
+  tip or prior cursor/publication cells without new evidence.
