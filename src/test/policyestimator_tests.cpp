@@ -2,12 +2,14 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <crypto/common.h>
 #include <policy/fees/block_policy_estimator.h>
 #include <policy/fees/block_policy_estimator_args.h>
 #include <policy/policy.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
 #include <uint256.h>
+#include <util/serfloat.h>
 #include <util/time.h>
 #include <validationinterface.h>
 
@@ -15,7 +17,149 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
+#include <array>
+#include <fstream>
+#include <iterator>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace {
+
+uint16_t ReadLE16(const std::vector<unsigned char>& data, size_t& position)
+{
+    const uint16_t value{static_cast<uint16_t>(static_cast<uint16_t>(data[position]) |
+                                              static_cast<uint16_t>(data[position + 1]) << 8)};
+    position += 2;
+    return value;
+}
+
+uint32_t ReadLE32(const std::vector<unsigned char>& data, size_t& position)
+{
+    uint32_t value{0};
+    for (unsigned int i = 0; i < 4; ++i) value |= uint32_t{data[position++]} << (8 * i);
+    return value;
+}
+
+uint64_t ReadLE64(const std::vector<unsigned char>& data, size_t& position)
+{
+    uint64_t value{0};
+    for (unsigned int i = 0; i < 8; ++i) value |= uint64_t{data[position++]} << (8 * i);
+    return value;
+}
+
+uint64_t ReadCompactSize(const std::vector<unsigned char>& data, size_t& position)
+{
+    const unsigned char marker{data[position++]};
+    if (marker < 253) return marker;
+    if (marker == 253) return ReadLE16(data, position);
+    if (marker == 254) return ReadLE32(data, position);
+    return ReadLE64(data, position);
+}
+
+enum class AverageField {
+    FEERATE,
+    TRANSACTION_COUNT,
+    CONFIRMATION,
+    FAILURE,
+};
+
+struct AveragePositions {
+    size_t feerate;
+    size_t transaction_count;
+    size_t confirmation;
+    size_t failure;
+};
+
+AveragePositions FindAveragePositions(const std::vector<unsigned char>& data)
+{
+    size_t position{16}; // version, best height, and historical range
+    const uint64_t bucket_count{ReadCompactSize(data, position)};
+    position += 8 * bucket_count;
+
+    position += 8; // decay
+    (void)ReadLE32(data, position); // scale
+
+    const uint64_t feerate_count{ReadCompactSize(data, position)};
+    const size_t feerate{position};
+    position += 8 * feerate_count;
+
+    const uint64_t transaction_count_count{ReadCompactSize(data, position)};
+    const size_t transaction_count{position};
+    position += 8 * transaction_count_count;
+
+    const uint64_t periods{ReadCompactSize(data, position)};
+    size_t confirmation{0};
+    for (uint64_t period = 0; period < periods; ++period) {
+        const uint64_t period_bucket_count{ReadCompactSize(data, position)};
+        if (period == 0) confirmation = position;
+        position += 8 * period_bucket_count;
+    }
+
+    const uint64_t failure_periods{ReadCompactSize(data, position)};
+    size_t failure{0};
+    for (uint64_t period = 0; period < failure_periods; ++period) {
+        const uint64_t period_bucket_count{ReadCompactSize(data, position)};
+        if (period == 0) failure = position;
+        position += 8 * period_bucket_count;
+    }
+
+    if (feerate_count == 0 || transaction_count_count == 0 || confirmation == 0 || failure == 0) {
+        throw std::runtime_error{"unexpected empty fee-estimator average vector"};
+    }
+    return {feerate, transaction_count, confirmation, failure};
+}
+
+} // namespace
+
 BOOST_FIXTURE_TEST_SUITE(policyestimator_tests, ChainTestingSetup)
+
+BOOST_AUTO_TEST_CASE(RejectNonFinitePersistedAverages)
+{
+    const fs::path path{m_node.args->GetDataDirNet() / "goal98-fee-averages.dat"};
+    CBlockPolicyEstimator writer{path, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+    const std::array<std::pair<const char*, AverageField>, 4> fields{{
+        {"feerate", AverageField::FEERATE},
+        {"transaction count", AverageField::TRANSACTION_COUNT},
+        {"confirmation", AverageField::CONFIRMATION},
+        {"failure", AverageField::FAILURE},
+    }};
+
+    for (const auto& [name, field] : fields) {
+        {
+            AutoFile output{fsbridge::fopen(path, "wb")};
+            BOOST_REQUIRE(!output.IsNull());
+            BOOST_REQUIRE(writer.Write(output));
+            BOOST_REQUIRE_EQUAL(output.fclose(), 0);
+        }
+
+        std::ifstream input{path.utf8string(), std::ios::binary};
+        std::vector<unsigned char> data{std::istreambuf_iterator<char>{input}, {}};
+        BOOST_REQUIRE(input.good() || input.eof());
+        const AveragePositions positions{FindAveragePositions(data)};
+        const size_t position{field == AverageField::FEERATE ? positions.feerate :
+                              field == AverageField::TRANSACTION_COUNT ? positions.transaction_count :
+                              field == AverageField::CONFIRMATION ? positions.confirmation : positions.failure};
+
+        std::array<unsigned char, sizeof(uint64_t)> encoded_nan{};
+        WriteLE64(encoded_nan.data(), EncodeDouble(std::numeric_limits<double>::quiet_NaN()));
+        std::copy(encoded_nan.begin(), encoded_nan.end(), data.begin() + position);
+
+        std::ofstream output{path.utf8string(), std::ios::binary | std::ios::trunc};
+        output.write(reinterpret_cast<const char*>(data.data()), data.size());
+        output.close();
+        BOOST_REQUIRE(output.good());
+
+        CBlockPolicyEstimator reader{fs::path{}, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+        AutoFile mutated{fsbridge::fopen(path, "rb")};
+        BOOST_REQUIRE(!mutated.IsNull());
+        BOOST_CHECK_MESSAGE(!reader.Read(mutated), "accepted non-finite " << name << " average");
+        BOOST_REQUIRE_EQUAL(mutated.fclose(), 0);
+    }
+}
 
 BOOST_AUTO_TEST_CASE(BlockPolicyEstimates)
 {

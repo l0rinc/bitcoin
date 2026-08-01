@@ -439,9 +439,15 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
     if (m_feerate_avg.size() != numBuckets) {
         throw std::runtime_error("Corrupt estimates file. Mismatch in feerate average bucket count");
     }
+    if (!std::all_of(m_feerate_avg.begin(), m_feerate_avg.end(), [](double value) { return std::isfinite(value); })) {
+        throw std::runtime_error("Corrupt estimates file. Non-finite feerate average");
+    }
     filein >> Using<VectorFormatter<EncodedDoubleFormatter>>(txCtAvg);
     if (txCtAvg.size() != numBuckets) {
         throw std::runtime_error("Corrupt estimates file. Mismatch in tx count bucket count");
+    }
+    if (!std::all_of(txCtAvg.begin(), txCtAvg.end(), [](double value) { return std::isfinite(value); })) {
+        throw std::runtime_error("Corrupt estimates file. Non-finite transaction count average");
     }
     filein >> Using<VectorFormatter<VectorFormatter<EncodedDoubleFormatter>>>(confAvg);
     maxPeriods = confAvg.size();
@@ -454,6 +460,9 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
         if (confAvg[i].size() != numBuckets) {
             throw std::runtime_error("Corrupt estimates file. Mismatch in feerate conf average bucket count");
         }
+        if (!std::all_of(confAvg[i].begin(), confAvg[i].end(), [](double value) { return std::isfinite(value); })) {
+            throw std::runtime_error("Corrupt estimates file. Non-finite confirmation average");
+        }
     }
 
     filein >> Using<VectorFormatter<VectorFormatter<EncodedDoubleFormatter>>>(failAvg);
@@ -463,6 +472,9 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
     for (unsigned int i = 0; i < maxPeriods; i++) {
         if (failAvg[i].size() != numBuckets) {
             throw std::runtime_error("Corrupt estimates file. Mismatch in one of failure average bucket counts");
+        }
+        if (!std::all_of(failAvg[i].begin(), failAvg[i].end(), [](double value) { return std::isfinite(value); })) {
+            throw std::runtime_error("Corrupt estimates file. Non-finite failure average");
         }
     }
 
