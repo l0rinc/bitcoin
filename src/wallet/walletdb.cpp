@@ -17,6 +17,7 @@
 #include <util/bip32.h>
 #include <util/check.h>
 #include <util/fs.h>
+#include <util/strencodings.h>
 #include <util/time.h>
 #include <util/translation.h>
 #include <wallet/migrate.h>
@@ -956,7 +957,7 @@ static DBErrors LoadAddressBookRecords(CWallet* pwallet, DatabaseBatch& batch) E
         value >> purpose_str;
         std::optional<AddressPurpose> purpose{PurposeFromString(purpose_str)};
         if (!purpose) {
-            pwallet->WalletLogPrintf("Warning: nonstandard purpose string '%s' for address '%s'\n", purpose_str, strAddress);
+            pwallet->WalletLogPrintf("Warning: nonstandard purpose string '%s' for address '%s'\n", SanitizeString(purpose_str), SanitizeString(strAddress));
         }
         pwallet->m_address_book[DecodeDestination(strAddress)].purpose = purpose;
         return DBErrors::LOAD_OK;
