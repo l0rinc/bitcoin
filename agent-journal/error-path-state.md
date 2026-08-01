@@ -1,3 +1,108 @@
+## Cycle 257: failed descriptor top-up commits partial cache state
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `27` (`error-path-state`); no reroll.
+- Branch: `uber-cycle-257-error-path-state-20260801`.
+- Cycle start HEAD: `cbcc8cb2f073d1e1a5dd1c91110527a2c2759028`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `42 1302`
+  (`HEAD...origin/master`). The selected journal was this file.
+- The fresh gate passed after fetching `origin/master`: the tracked source/index
+  state was clean, catalog/prompt/TSV/protocol hashes were unchanged, and all
+  protected test processes remained alive. Known untracked probes and artifacts
+  were preserved.
+
+### Distinct scope and contract
+
+Earlier Goal 27 cells already closed wallet passphrase, address-book, spent
+marker, descriptor import, temporary-wallet, transaction/index, migration,
+persistent coin-lock, and failed `BaseIndex` initialization paths. This cycle
+selected the separate descriptor keypool path after tracing the current
+`TopUpWithDB` transaction callers and the existing cache-write failure tests.
+
+`DescriptorScriptPubKeyMan::TopUpWithDB` stages the descriptor and in-memory
+maps, but writes each new descriptor-cache item immediately through its active
+`WalletBatch`. If expansion later returns `false`, it intentionally publishes
+none of the staged memory state. `TopUpInternal` owns the transaction, but it
+committed that transaction before returning the `false` result. The contract is
+that a failed top-up must leave the persisted descriptor/cache state unchanged
+as well as the published in-memory state.
+
+### Confirmed finding
+
+An expansion failure after an earlier successful cache write left a parent
+xpub cache record durable while `range_end`, `m_max_cached_index`, script maps,
+and the descriptor cache in memory remained at their prior values. A later
+wallet load or retry could observe a cache that was ahead of the descriptor
+metadata. The affected path is public `TopUp()`/`TopUpInternal()` and does not
+depend on a database write exception.
+
+### Independent pre-fix reproduction
+
+The regression uses a deterministic test-only `Descriptor` whose expansion at
+index 1 succeeds and writes one parent-xpub cache item, while expansion at
+index 2 returns `false`. With the transaction-abort block temporarily removed,
+the rebuilt test exited `201`:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle257-tmp \
+  /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin \
+  --run_test=scriptpubkeyman_tests/topup_return_failure_aborts_prior_cache_writes \
+  --log_level=message --report_level=detailed --color_output=false --random=257002
+```
+
+The cache-presence assertion failed: 6 of 7 assertions passed and the cache key
+remained in SQLite after `TopUp()` returned `false`.
+
+### Fix
+
+Commit `bf10e355af2c0b5d655ec4eb5c46c4c2d6eb803f` (`wallet: abort failed
+descriptor topups`), authored by `Lőrinc <pap.lorinc@gmail.com>`, aborts the
+owned `WalletBatch` whenever `TopUpWithDB` returns `false`, then returns
+failure. The same commit adds the deterministic regression and checks range,
+keypool state, script-map size, and the exact SQLite cache key. Exception paths
+continue to use the existing transaction/destructor handling.
+
+### Verification
+
+- `ninja -C /data/my_storage/tmp/cycle246-wallet bitcoin_wallet test_bitcoin`
+  passed after the fix was restored.
+- The focused `scriptpubkeyman_tests` run with seed `257003` passed 21 cases and
+  198 assertions, including the new 7-assertion regression.
+- The adjacent `wallet_tests,walletdb_tests,scriptpubkeyman_tests,
+  interfaces_tests,miner_tests` run with seed `257004` passed 60 cases and
+  1,899 assertions.
+- The full run with seed `257005` reached 27,107,097 assertions. It passed
+  1,252 of 1,254 cases; the only failure was the known flaky
+  `validation_block_tests/processnewblock_signals_ordering` case, alongside
+  the existing filesystem setup error in a fault-injection test. No wallet or
+  descriptor test failed. An isolated `validation_block_tests` run with seed
+  `257006` passed all 8 cases and 2,651 assertions, including the ordering case.
+- `git diff --check` passed before the source commit. The temporary probe was
+  removed; no default datadir, wallet, key, or production database was used.
+
+### Limitations and next queue
+
+The fix covers the transaction owner used by `TopUp()`. Two direct callers
+passing an externally owned batch still ignore a `false` from `TopUpWithDB`:
+`SetupDescriptorGeneration` and
+`ExternalSignerScriptPubKeyMan::CreateNew`. Their normal production descriptors
+are expected to expand every requested index, so this cycle did not claim a
+production failure for them. The next distinct queue item is to audit those
+callers with a valid production-reachable partial-expansion or fault-injection
+fixture and determine whether they must throw/abort on `false`.
+
+### Verdict and handoff
+
+- **Confirmed and fixed:** `TopUpInternal` could commit partial descriptor-cache
+  writes after a failed expansion and return `false` with inconsistent durable
+  state.
+- Source/test commit: `bf10e355af2c0b5d655ec4eb5c46c4c2d6eb803f`.
+- Next run must fetch `origin/master`, perform a fresh exact selector draw, and
+  reject only an exact already-closed evidence cell. Do not reopen this
+  top-up-owner cell absent changed transaction semantics or new evidence.
+
 ## Cycle 232: failed BaseIndex reinitialization retains initialized state
 
 ### Selection and fresh gate
