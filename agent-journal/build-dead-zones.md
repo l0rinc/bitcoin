@@ -1,3 +1,99 @@
+# Cycle 254: reduced-export inline visibility dead zone
+
+## Selection and fresh gate
+
+- The exact selector `shuf -i 0-98 -n 1` returned `37`, selecting
+  `build-dead-zones`. The dedicated branch is
+  `uber-cycle-254-build-dead-zone-20260801`; the fresh start HEAD was
+  `386fc52130040789439b765573a2a318be4687e2`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence `42 1295`.
+- Prior Goal 37 cells were excluded: Cycle 20's GCC wallet/IPC fuzz target,
+  Cycle 74's wallet/IPC/GUI-off matrix, and Cycle 101's GCC reduced-export
+  matrix. Cycle 101 explicitly left `CMAKE_VISIBILITY_INLINES_HIDDEN`, shared
+  artifacts, and install/export behavior in the queue. The selected journal
+  and current history were searched before choosing this cell.
+- The catalog, prompt, goals TSV, and protocol hashes were unchanged at
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Protected unrelated jobs were observed alive and no source changes existed
+  at the branch gate.
+
+## Scope and hypothesis
+
+Audit the conditional `REDUCE_EXPORTS` build zone. Its contract is to reduce
+symbols exported by produced executables while preserving the supported
+wallet-enabled node/test graph. The local `CMakeLists.txt` set
+`CMAKE_CXX_VISIBILITY_PRESET hidden` and `--exclude-libs,ALL`, but did not set
+`CMAKE_VISIBILITY_INLINES_HIDDEN`. The falsifiable hypothesis was that inline
+C++ definitions would remain externally visible despite the reduced-export
+contract, particularly in a wallet-enabled GCC build.
+
+The upstream accepted commit `3f313a774bec86c09bd8b7151288306ff615e047`,
+merged as `fd7d4f29704cc8735d17870733e0dca261e4b579`, independently confirmed
+the intended one-line setting and its GCC/Clang DSO-export rationale. It was
+not an ancestor of this branch, so it was used as a seed rather than as proof.
+
+## Base configuration and artifact proof
+
+The base configuration used GCC 12.2, RelWithDebInfo, wallet ON, IPC OFF, GUI
+OFF, tests ON, fuzz/bench/ZMQ/ASMap OFF, and `REDUCE_EXPORTS=ON`:
+
+    cmake -S /data/my_storage/bitcoin -B /data/my_storage/tmp/cycle254-build-dead-zones/reduce-base -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DREDUCE_EXPORTS=ON -DENABLE_WALLET=ON -DENABLE_IPC=OFF -DBUILD_GUI=OFF -DBUILD_TESTS=ON -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_ZMQ=OFF -DWITH_EMBEDDED_ASMAP=OFF -DWITH_CCACHE=OFF
+
+The current source configured and built all 501 Ninja steps for
+`test_bitcoin`. Its `build.ninja` compile flags contained
+`-fvisibility=hidden` but no `-fvisibility-inlines-hidden`. The resulting
+`bin/test_bitcoin` had 20 defined dynamic functions, all weak inline
+libstdc++ methods; representative `nm -D --defined-only --demangle` entries
+included `std::string::substr`, `_M_dispose`, `_M_replace`, `append`, and
+`replace`. This is a concrete artifact-level failure of the reduced-export
+setting, not a source pattern or a missing target.
+
+An independent flag-equivalent tree configured with the same matrix plus
+`-DCMAKE_CXX_FLAGS=-fvisibility-inlines-hidden`, built all 501 steps, and
+produced zero defined dynamic functions. The base and flag-equivalent wallet
+load suites both passed, isolating the difference to visibility rather than
+runtime behavior. The build also confirmed that `REDUCE_EXPORTS=OFF` trees do
+not receive the inline-visibility flag.
+
+## Fix and verification
+
+The smallest source repair adds
+`set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)` inside the existing `if(REDUCE_EXPORTS)`
+block. The candidate tree was then reconfigured with an empty
+`CMAKE_CXX_FLAGS` cache, proving the flag came from the repository CMake logic;
+its generated Ninja rules contained both `-fvisibility=hidden` and
+`-fvisibility-inlines-hidden`. The repository-configured fixed tree rebuilt all
+486 affected steps and linked `test_bitcoin` successfully.
+
+The fixed artifact had zero defined dynamic functions versus 20 in the base
+and was 1,272 bytes smaller (`683111608` versus `683112880`). Focused runtime
+validation with seed `254005` passed 11 cases from `walletload_tests` and
+`logging_tests`. The full fixed binary run with seed `254007` completed 1,253
+cases and all 27,280,810 assertions: 1,252 cases passed and one passed with an
+expected warning from the intentional filesystem-write-failure test. The
+isolated `validation_block_tests/processnewblock_new_block_flag_write_failure`
+run with seed `254008` passed 1 case and 7 assertions; its expected fatal I/O
+diagnostic was not a failure. `git diff --check` passed. An initial
+`--run_test=all` invocation was discarded because Boost has no `all` filter and
+returned a setup error before running tests.
+
+## Verdict and handoff
+
+Verdict: **confirmed and fixed**. `REDUCE_EXPORTS=ON` left inline weak
+libstdc++ functions in the dynamic export surface until the conditional
+inline-visibility property was set. The one-line CMake repair and this journal
+belong in one independent commit authored as `Lőrinc <pap.lorinc@gmail.com>`.
+No production runtime or test behavior changed.
+
+Remaining Goal 37 queue: test ZMQ/USDT, GUI/shared/install/export artifacts,
+alternate compilers and architectures, or generated-file parity. Do not repeat
+the reduced-export GCC matrix or reopen this visibility cell without a changed
+linker, platform, target type, or toolchain.
+
 # Build Dead-Zone and Conditional-Compilation Audit
 
 ## Cycle Identity
