@@ -76,6 +76,18 @@ clone_and_verify_commit() {
   fi
 }
 
+verify_sha256() {
+  local file="$1"
+  local expected="$2"
+  local actual
+
+  actual=$(sha256sum "$file" | cut -d' ' -f1)
+  if [[ "$actual" != "$expected" ]]; then
+    echo "Unexpected SHA256 for ${file}: ${actual} (expected ${expected})" >&2
+    return 1
+  fi
+}
+
 if [[ -n "${USE_INSTRUMENTED_LIBCPP}" ]]; then
   clone_and_verify_commit \
     https://github.com/llvm/llvm-project \
@@ -142,6 +154,7 @@ if [ -n "$XCODE_VERSION" ] && [ ! -d "${DEPENDS_DIR}/SDKs/${OSX_SDK_BASENAME}" ]
   if [ ! -f "$OSX_SDK_PATH" ]; then
     ${CI_RETRY_EXE} curl --location --fail "${SDK_URL}/${OSX_SDK_FILENAME}" -o "$OSX_SDK_PATH"
   fi
+  verify_sha256 "$OSX_SDK_PATH" "$OSX_SDK_SHA256"
   tar -C "${DEPENDS_DIR}/SDKs" -xf "$OSX_SDK_PATH"
 fi
 
@@ -152,6 +165,12 @@ if [ -n "$NETBSD_VERSION" ] && [ ! -d "${DEPENDS_DIR}/SDKs/${NETBSD_SDK_BASENAME
     if [ ! -f "$NETBSD_SDK_PATH" ]; then
       ${CI_RETRY_EXE} curl --location --fail "https://cdn.netbsd.org/pub/NetBSD/NetBSD-${NETBSD_VERSION}/amd64/binary/sets/${NETBSD_SDK_FILENAME}" -o "$NETBSD_SDK_PATH"
     fi
+    case "$NETBSD_SDK_FILENAME" in
+      base.tar.xz) NETBSD_SDK_SHA256="$NETBSD_BASE_SHA256" ;;
+      comp.tar.xz) NETBSD_SDK_SHA256="$NETBSD_COMP_SHA256" ;;
+      *) echo "Unexpected NetBSD SDK filename: ${NETBSD_SDK_FILENAME}" >&2; exit 1 ;;
+    esac
+    verify_sha256 "$NETBSD_SDK_PATH" "$NETBSD_SDK_SHA256"
     tar -C "${DEPENDS_DIR}/SDKs/${NETBSD_SDK_BASENAME}" -xf "$NETBSD_SDK_PATH"
   done
 fi
@@ -162,6 +181,7 @@ if [ -n "$FREEBSD_VERSION" ] && [ ! -d "${DEPENDS_DIR}/SDKs/${FREEBSD_SDK_BASENA
   if [ ! -f "$FREEBSD_SDK_PATH" ]; then
     ${CI_RETRY_EXE} curl --location --fail "https://download.freebsd.org/releases/amd64/${FREEBSD_VERSION}-RELEASE/base.txz" -o "$FREEBSD_SDK_PATH"
   fi
+  verify_sha256 "$FREEBSD_SDK_PATH" "$FREEBSD_BASE_SHA256"
   mkdir -p "${DEPENDS_DIR}/SDKs/${FREEBSD_SDK_BASENAME}"
   tar -C "${DEPENDS_DIR}/SDKs/${FREEBSD_SDK_BASENAME}" -xf "$FREEBSD_SDK_PATH"
 fi
@@ -173,6 +193,12 @@ if [ -n "$OPENBSD_VERSION" ] && [ ! -d "${DEPENDS_DIR}/SDKs/${OPENBSD_SDK_BASENA
     if [ ! -f "$OPENBSD_SDK_PATH" ]; then
       ${CI_RETRY_EXE} curl --location --fail "https://cdn.openbsd.org/pub/OpenBSD/${OPENBSD_VERSION}/amd64/${OPENBSD_SDK_FILENAME}" -o "$OPENBSD_SDK_PATH"
     fi
+    case "$OPENBSD_SDK_FILENAME" in
+      base79.tgz) OPENBSD_SDK_SHA256="$OPENBSD_BASE_SHA256" ;;
+      comp79.tgz) OPENBSD_SDK_SHA256="$OPENBSD_COMP_SHA256" ;;
+      *) echo "Unexpected OpenBSD SDK filename: ${OPENBSD_SDK_FILENAME}" >&2; exit 1 ;;
+    esac
+    verify_sha256 "$OPENBSD_SDK_PATH" "$OPENBSD_SDK_SHA256"
     tar -C "${DEPENDS_DIR}/SDKs/${OPENBSD_SDK_BASENAME}" -xf "$OPENBSD_SDK_PATH"
     (
       # The SDK has versioned shared libs, but no unversioned libfoo.so symlink,
