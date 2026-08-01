@@ -260,3 +260,50 @@ full suite.
 
 ## Rotation note
 Cycle 4 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 5 (2026-08-01): TSan concurrency subset — suite green; 2 warnings = the suite's own intentional lock inversions; DISMISSED
+
+### Draw
+RE-RANK draw 156 over the 6-cell pool: raw=15079885369332575445,
+masked 5856513332477799637 -> idx 1 -> #36 TSan subset (c2
+queue). Branch: audit/cross-tool-c5 from 1796cff899.
+
+### Method
+cmake -B build-tsan -G Ninja RelWithDebInfo -DSANITIZERS=thread;
+ninja bin/test_bitcoin; TSAN_OPTIONS=halt_on_error=0 subset run:
+checkqueue_tests, threadpool_tests, scheduler_tests, sync_tests,
+cuckoocache_tests, headers_sync_chainwork_tests.
+BUILD NOTE: the in-tree capnp/kj fails to LINK under TSan
+(kj::_::runCatchingExceptions undefined at final link — the
+external project's objects don't carry the symbol set the
+TSan-instrumented ipc objects expect); sidestepped with
+-DENABLE_IPC=OFF for this subset (IPC has no TSan-relevant unit
+coverage here; recorded as a build-system limitation, not
+triaged further this cycle).
+
+### Result
+- Suite: all 6 concurrency suites green ("No errors detected").
+- 2 TSan warnings, BOTH lock-order-inversion inside
+  TestPotentialDeadLockDetected (sync_tests.cpp:18,84-99) — the
+  test that DELIBERATELY inverts lock order to exercise the
+  DEBUG_LOCKORDER throw ("potential deadlock detected: mutex1 ->
+  mutex2 -> mutex1", the exact string it asserts). TSan reports
+  the intentional inversion — by-design test constructs, not
+  defects. Zero data-race reports anywhere.
+- Verdict: DISMISSED. Matrix cell filled: concurrency suites x
+  gcc-13.3 TSan (aarch64) = 0 real findings.
+
+### Exact commands
+- cmake/ninja/suite lines above; log /tmp/btc36c5_suite.log;
+  TSan report excerpts in-cycle above.
+
+### Limitations / queue
+- build-tsan removed after the run (disk hit 535 MB free; 3.9 GB
+  reclaimed; recreate with the cmake line, ~40 min cold).
+- Full-suite TSan not run (subset per queue; the IPC link failure
+  would also gate it).
+- Remaining #36 cells: functional-suite-under-clang, warning-as-
+  error CI note (c2).
+
+## Rotation note
+Cycle 5 complete; rotating per uber-goal policy. Not exhausted.

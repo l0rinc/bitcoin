@@ -102,6 +102,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 36 | cross-tool-analysis-matrix | CYCLE-2 | 2026-07-28 | clang-18 differential green; 4 clang-only warnings triaged (3 fuzz-only-helper, 1 test-annotation) |
 | 36 | cross-tool-analysis-matrix | CYCLE-3 | 2026-07-31 | clang-18 UBSan full suite: 1128 cases 0 reports (117 __ubsan syms control); {gcc,clang}xUBSan consistent; DISMISSED |
 | 36 | cross-tool-analysis-matrix | CYCLE-4 | 2026-07-31 | _GLIBCXX_ASSERTIONS full suite: 1128 cases 0 violations (ninja -t commands flag control); DISMISSED |
+| 36 | cross-tool-analysis-matrix | CYCLE-5 | 2026-08-01 | TSan concurrency subset green; 2 warnings = intentional sync_tests inversions; 0 races; DISMISSED |
 | 76 | reproducible-builds | CYCLE-1 | 2026-07-28 | A/B rebuild: code bit-identical; 1-byte secp comp_dir DWARF delta attributed; Guix packaging sound |
 | 9 | hit-frequency-coverage | CYCLE-2 | 2026-07-28 | net_processing sancov: all gaps harness-scope; 0/23 alarm resolved as inlining artifact via per-line PC check |
 | 47 | build-ci-parity | CYCLE-2 | 2026-07-28 | install manifest declarative-single-source; 17-file install set exact match |
@@ -883,6 +884,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Pool after draw 155 (6): #81 Wycheproof, #36 TSan subset,
    #74 pruning-mode IO, #35 NONNEGATIVE_SIGNED write semantics,
    #50 Taproot/MuSig2 gates, #9 per-seed profiling.
+   RE-RANK draw 156 (6-cell pool): raw=15079885369332575445,
+   masked 5856513332477799637 -> idx 1 -> #36 c5 (TSan
+   concurrency subset: 6 suites green, 0 data races; 2 warnings =
+   sync_tests' intentional inversions; capnp/kj TSan link failure
+   noted, IPC off; DISMISSED).
+   Pool after draw 156 (5): #81 Wycheproof, #74 pruning-mode IO,
+   #35 NONNEGATIVE_SIGNED write semantics, #50 Taproot/MuSig2
+   gates, #9 per-seed profiling.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/
@@ -917,7 +926,7 @@ Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 41(c1,c2,c3,c4,c5,c6), 0(c1,c2), 1(c1,c2,c3,c4), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1,c2,c3), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2,c3,c4), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5,c6),
-28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4,c5), 35(c1,c2,c3,c4,c5,c6), 36(c1,c2,c3,c4), 23(c1,c2,c3,c4), 25(c1,c2,c3),
+28(c1,c2), 29(c1,c2), 30(c1,c2,c3), 31(c1,c2,c3,c4), 34(c1,c2,c3,c4,c5), 35(c1,c2,c3,c4,c5,c6), 36(c1,c2,c3,c4,c5), 23(c1,c2,c3,c4), 25(c1,c2,c3),
 37(c1), 39(c1,c2), 40(c1,c2), 42(c1,c2,c3,c4,c5), 44(c1,c2), 46(c1,c2), 54(c1), 51(c1,c2,c3), 52(c1,c2), 21(c1,c2,c3,c4), 43(c1,c2,c3), 45(c1,c2,c3,c4), 47(c1,c2,c3,c4), 48(c1,c2), 49(c1,c2,c3,c4,c5,c6,c7,c8,c9), 50(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13), 53(c1), 55(c1,c2,c3,c4), 57(c1,c2,c3,c4), 58(c1,c2,c3), 59(c1,c2), 60(c1,c2,c3,c4,c5,c6,c7,c8), 24(c1,c2,c3,c4,c5,c6),
 61(c1,c2,c3), 63(c1,c2,c3,c4,c5), 64(c1), 65(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 66(c1,c2), 67(c1,c2), 68(c1,c2,c3), 69(c1,c2,c3,c4), 70(c1), 71(c1,c2,c3,c4,c5), 73(c1,c2,c3,c4,c5), 74(c1,c2,c3,c4,c5), 75(c1,c2,c3,c4),
 76(c1,c2,c3,c4), 80(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11), 81(c1,c2,c3,c4), 90(c1,c2), 91(c1,c2,c3,c4), 92(c1,c2), 93(c1), 94(c1,c2), 95(c1,c2,c3,c4,c5), 99(c1), 100(c1,c2,c3), 101(c1,c2,c3), 102(c1,c2), 103(c1), 104(c1,c2,c3), 105(c1), 106(c1,c2,c3), 107(c1,c2), 108(c1), 109(c1,c2).
