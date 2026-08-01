@@ -3308,3 +3308,44 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - Next action: perform a fresh gate, preserve all unrelated artifacts, draw
   exactly one selector with `shuf -i 0-98 -n 1`, create the next
   `uber-cycle-239-*` branch, and continue with a distinct high-risk cell.
+
+## Cycle 239 close: Goal 59, cross-build SDK archive integrity
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `59` (`cpp-supply-chain`); no reroll.
+  Branch: `uber-cycle-239-cpp-supply-chain-20260731`. Cycle-start HEAD was
+  `0e295c72946700e3f06160e104061034bd27196f`; `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`. Catalog, prompt, TSV, and
+  protocol hashes were unchanged. Existing untracked agent artifacts and
+  protected long-running processes were preserved.
+- Confirmed finding: `ci/test/01_base_install.sh` reused or downloaded
+  macOS, NetBSD, FreeBSD, and OpenBSD SDK archives by filename and passed
+  them to `tar` without binding the bytes to the configured SDK versions. A
+  valid wrong tar at the exact macOS cache path made the pre-change script
+  return `before_status=0` and extract a marker; the patched path returned
+  `post_status=1` and `post_extracted=1` before extraction.
+- Fix commit: `94274983ab2bae13cff0b1b31fb88e5a4110289f` (`ci: verify
+  cross-build SDK archives`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
+  It adds `verify_sha256` before each extraction and records version-specific
+  hashes in the macOS, NetBSD, FreeBSD, and OpenBSD cross-build environment
+  files. The downloaded macOS, NetBSD, and FreeBSD archives passed the real
+  production path in a bounded harness; OpenBSD values were taken from its
+  release checksum manifest.
+- Validation: `bash -n` for all six changed shell files, `git diff --check`,
+  `python3 test/lint/lint-shell.py` (which reported ShellCheck unavailable),
+  the pre/post tampered-cache harness, and the post-commit tampered-cache
+  harness passed. Docker, ShellCheck, and complete cross-build jobs were not
+  available or practical in this environment. The check covers archives in
+  the extraction branch; it does not attest an already-existing extracted SDK
+  directory when no archive is extracted.
+- Verdict: **confirmed and fixed**. Keep `pip install pyzmq`, vcpkg inputs and
+  caches, mutable `qa-assets` fuzz corpora, container image provenance,
+  generated inputs, and license gates as distinct next cells. Do not reopen
+  the closed action, lint-tool, test-vector, Guix-archive, release-signature,
+  or compiler-Git-ref findings without new evidence.
+- Close state: HEAD is `94274983ab2bae13cff0b1b31fb88e5a4110289f`, and all
+  unrelated untracked artifacts remain unstaged and untouched. `/` remains
+  full, so broad storage-heavy validation is still limited.
+- Next action: perform a fresh gate, preserve unrelated artifacts, draw
+  exactly one selector with `shuf -i 0-98 -n 1`, create the next
+  `uber-cycle-240-*` branch, and continue with a distinct high-risk cell.
