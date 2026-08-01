@@ -832,19 +832,28 @@ std::unique_ptr<ProxyClient<InitInterface>> ConnectStream(EventLoop& loop, int f
 {
     typename InitInterface::Client init_client(nullptr);
     std::unique_ptr<Connection> connection;
-    loop.sync([&] {
-        auto stream =
-            loop.m_io_context.lowLevelProvider->wrapSocketFd(fd, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
-        connection = std::make_unique<Connection>(loop, kj::mv(stream));
-        init_client = connection->m_rpc_system->bootstrap(ServerVatId().vat_id).castAs<InitInterface>();
-        Connection* connection_ptr = connection.get();
-        connection->onDisconnect([&loop, connection_ptr] {
-            MP_LOG(loop, Log::Warning) << "IPC client: unexpected network disconnect.";
-            delete connection_ptr;
+    try {
+        loop.sync([&] {
+            auto stream =
+                loop.m_io_context.lowLevelProvider->wrapSocketFd(fd, kj::LowLevelAsyncIoProvider::TAKE_OWNERSHIP);
+            connection = std::make_unique<Connection>(loop, kj::mv(stream));
+            init_client = connection->m_rpc_system->bootstrap(ServerVatId().vat_id).castAs<InitInterface>();
+            Connection* connection_ptr = connection.get();
+            connection->onDisconnect([&loop, connection_ptr] {
+                MP_LOG(loop, Log::Warning) << "IPC client: unexpected network disconnect.";
+                delete connection_ptr;
+            });
         });
-    });
-    return std::make_unique<ProxyClient<InitInterface>>(
-        kj::mv(init_client), connection.release(), /* destroy_connection= */ true);
+        auto client{std::make_unique<ProxyClient<InitInterface>>(
+            kj::mv(init_client), connection.get(), /* destroy_connection= */ true)};
+        connection.release();
+        return client;
+    } catch (...) {
+        if (connection) {
+            loop.sync([&] { connection.reset(); });
+        }
+        throw;
+    }
 }
 
 //! Given stream and init objects, construct a new ProxyServer object that
