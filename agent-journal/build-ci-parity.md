@@ -175,3 +175,53 @@ layer is a standard C++-library property, not a defect.
 
 ## Rotation note
 Cycle 3 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 4 (2026-08-01, draw 170, raw=16461226049798957217, masked 7237854012944181409, idx 1/3 -> #10 DESCOPED-confirmed (wallet-only, zero non-wallet refs, same ruling as draw 104a); redraw raw=6266662857617590820 (63-bit) idx 0/2): shared-kernel-lib consumer — downstream compiles, dynamically links with full closure, and RUNS against the installed libbitcoinkernel.so via its .pc; DISMISSED; campaign COMPLETE
+
+### Hypothesis
+H: the SHARED kernel variant's installed export set (header, .so,
+.pc) is incomplete for a downstream consumer (missing symbols,
+under-exported API, bad .pc). Falsifiable by install + compile +
+ldd -r closure + run, mirroring c3's static variant.
+
+### Evidence
+- Build: cmake -B build-kernel-shared -G Ninja Release -g0,
+  BUILD_SHARED_LIBS=ON, BUILD_KERNEL_LIB=ON (defaults OFF via
+  BUILD_UTIL_CHAINSTATE; option at CMakeLists.txt:114), wallet/
+  IPC/tests off. Target: ninja bitcoinkernel ->
+  lib/libbitcoinkernel.so.
+- Install quirk recorded: full `cmake --install` fails wanting
+  bin/bitcoin (not built in this minimal config); component
+  install works: --component libbitcoinkernel (components named
+  at src/kernel/CMakeLists.txt:123-137) -> .pc + .so + header.
+- .pc identical in shape to c3's static one (prefix=/usr/local
+  from configure time; standard pkg-config semantics; used
+  --define-variable=prefix to override).
+- Consumer: c3's preserved /tmp/btc47c3/consumer.c re-pointed to
+  /tmp/btc47c4 (context create -> chainstate_manager_options
+  create with data/blocks dirs -> set worker threads 0 ->
+  destroy both).
+  g++ -O1 consumer.c $(pkg-config --cflags --libs) ->
+  links clean. ldd -r with LD_LIBRARY_PATH: 0 undefined symbols
+  (full closure through the .so). nm -D: 134 btck_* exports.
+  Run: CONSUMER-OK rc=0, chain/blocks dirs auto-created.
+- g++ driver needed exactly as in c3 (C++ runtime); not a defect.
+
+### Verdict
+DISMISSED: shared export set is complete and consumable
+end-to-end, matching the static variant's c3 result and #91 c3's
+export measurement.
+
+### Campaign #47: COMPLETE
+c1 registration/preset cells; c2 install manifest single-source;
+c3 static consumer; c4 shared consumer. No cells remain queued.
+
+### Exact commands
+- cmake/ninja/install lines above; consumer compile/run lines
+  above; ldd -r / nm -D counts above.
+
+### Limitations
+- build-kernel-shared kept (Release -g0); delete on disk squeeze.
+- Consumer exercises create/options/destroy only (same scope as
+  c3); full validation-drive through the C API is a kernel-test
+  matter, not an export-parity one.
