@@ -521,3 +521,58 @@ The hypothesis is **dismissed** for a new repository defect. Current-head libFuz
 - Close the cycle with a journal/state-only commit; no source finding was confirmed.
 - Preserve the initial corpus manifest, current-head build commands, engine-specific metrics, Honggfuzz archive override, stale-build exclusion, default-RSS OOM control, and all ASan/transfer logs above.
 - Next cycle must re-check the repository gate and draw a distinct eligible goal from all 99 catalog rows. Do not repeat cycle 8's `bech32_roundtrip` comparison or this cycle's `parse_numbers` cell without new compiler, engine, corpus, or regression evidence.
+
+## Cycle 248 start: minisketch engine and property-framework comparison
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `80` (`fuzz-engine-differential`); no reroll.
+- Branch: `uber-cycle-248-fuzz-engine-differential-20260801`.
+- Start HEAD: `68de73058c82aedc0a4c8f2eb5c5b93875b59dd0`; `origin/master`:
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence:
+  `origin/master...HEAD = 42 1283`.
+- Fresh gate: tracked/index state was clean, authoritative catalog/prompt/TSV/protocol hashes matched, and protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`, and `1312050` remained alive and untouched. Known untracked agent/user artifacts are preserved. `/` is full; all new build, corpus, and log data stays under `/data/my_storage/tmp`.
+- Exclusions: prior Goal 80 cells for `bech32_roundtrip`, `parse_numbers`, `descriptor_parse`, `process_messages`, and transport serialization are closed and will not be repeated. FuzzTest remains an availability question until a local integration or package exists. Prior minisketch sanitizer/static-analysis observations are seeds only; this cycle compares engines on the current production fuzz harness.
+- Scope and hypothesis: compare libFuzzer, AFL++, and Honggfuzz on `src/test/fuzz/minisketch.cpp`, which selects supported 32-bit implementations, constructs paired sketches, exercises seed setting and duplicate cancellation, serializes/deserializes, merges in both orders, decodes bounded differences, and asserts capacity/implementation/serialization/algebraic invariants. The falsifiable hypothesis is that an engine, persistent-loop adapter, input-corpus transfer, or harness initialization exposes a crash, hang, sanitizer error, invalid state, or reproducible semantic mismatch not found by the other engines.
+- Protocol: build a current Clang 19 ASan+UBSan+libFuzzer oracle plus unsanitized current Clang 19 AFL++ and Honggfuzz targets in isolated scratch directories. Create one shared deterministic corpus covering empty/truncated inputs, capacity and implementation selectors, duplicate entries, boundary values, zero/nonzero seeds, serialized-looking buffers, and long operation streams. Use one worker, fixed input limits, fixed wall-clock budgets where supported, and no default datadir/wallet/key/database. Transfer every engine-produced input through the sanitizer oracle and compare exit status, diagnostics, and target assertions. Treat native coverage counters as engine-specific, not as equivalent units.
+- Do not change production or test code for coverage/throughput differences alone. A source finding requires a minimized failing input, independent sanitizer or semantic reproduction, a failing-before/passing-after regression, and narrow-to-broad validation. FuzzTest is recorded as unavailable if the repository and installed paths still contain no supported integration.
+
+## Cycle 248 close: minisketch engine and property-framework comparison
+
+### Build and corpus evidence
+
+- The selected target was `src/test/fuzz/minisketch.cpp`. The exact target path was chosen after excluding the prior Goal 80 cells for `bech32_roundtrip`, `parse_numbers`, `descriptor_parse`, `process_messages`, and transport serialization.
+- The Clang 19 ASan+UBSan+libFuzzer build used `cmake -S . -B /data/my_storage/tmp/cycle248-build-libfuzzer-minisketch -G Ninja -DENABLE_IPC=OFF -DBUILD_FOR_FUZZING=ON -DSANITIZERS=address,undefined,fuzzer -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/usr/bin/clang-19 -DCMAKE_CXX_COMPILER=/usr/bin/clang++-19 -DWITH_CCACHE=OFF` followed by `ninja -C /data/my_storage/tmp/cycle248-build-libfuzzer-minisketch fuzz -j2`; all 491/491 build steps passed. IPC was disabled because the installed Cap'n Proto 0.9.2 headers are incompatible with this Clang 19 C++20 configuration; this is an external build prerequisite limitation.
+- The current-source AFL++ tree `/data/my_storage/tmp/cycle131-build-afl19d` rebuilt with `ninja -C /data/my_storage/tmp/cycle131-build-afl19d fuzz -j2`; all 202/202 steps passed. The current-source Honggfuzz tree `/data/my_storage/tmp/cycle131-build-honggfuzz19` initially selected a stale Clang 14 wrapper, then rebuilt successfully with `HFUZZ_CC_PATH=/usr/bin/clang-19 HFUZZ_CXX_PATH=/usr/bin/clang++-19 ninja -C /data/my_storage/tmp/cycle131-build-honggfuzz19 fuzz -j2`; all 200/200 steps passed. The stale-wrapper diagnostics were quarantined as scratch-toolchain noise.
+- Binary hashes were `d5b214b1904aa3b07436be6ac1e4ec34178243ab43169c22baa48a8f55d43fa8` for libFuzzer, `b70757636b870284e5f2a843c5961d9bac5bc447f141bc5e7fe0fea7adfb4156` for AFL++, and `dcc7e2896b7aa2af42fb5e15dbf0054bf4eb07b6023bf80da7bd5b257d0e458e` for Honggfuzz.
+- The initial deterministic corpus had 15 files, 9,122 bytes, and manifest SHA256 `258728ff941324afefa0ac50ef7fe64e1796cb9e3e6103ce5c6a015e1136f34d`. It covered empty/truncated input, zero and maximum byte patterns, capacity selectors, structured values, digest-derived values, duplicate-looking repeated streams, and 256/4096-byte operation streams. The fair per-engine copied-input manifest SHA256 was `29ccb02bfd1d01cadda9582a94a9021eadab69aa7a7709390dbaf79382034971`.
+- FuzzTest is unavailable: repository search found only unrelated `RPCFuzzTestingSetup` identifiers, and installed-path search found only `/usr/lib/python3/dist-packages/samba/tests/smbd_fuzztest.py`; no FuzzTest package, library, or integration was found.
+
+### Fixed-budget engine comparison
+
+All runs selected `FUZZ=minisketch`, used one worker, scratch paths, and a 15-second wall-clock budget where supported. Native counters are engine-specific and are not equivalent coverage percentages.
+
+| Engine/run | Input set | Executions | Native signal | Corpus signal | Failures |
+|---|---|---:|---|---|---|
+| libFuzzer, seed `24801` | initial 15 files | 4,462 | coverage 4,537 | 360 new units; 313 final in-memory corpus entries | 0 sanitizer errors |
+| AFL++ forkserver | libFuzzer-expanded 316-file directory, accidental control | calibration aborted on `14-capacity-high` | forkserver process request failed with `OOM?` | none | mode startup failure |
+| AFL++ no-forkserver | fair 14 non-empty files | 228 | 1,360 edges; 0.02% bitmap; 100% stability | 25 queue entries; 11 found | 0 crashes, 0 hangs |
+| Honggfuzz, one thread | fair 15 files | 15,293 | 301,388 guards; branch metric 0% | 164 new units; 184 coverage files | 0 crashes, 0 timeouts |
+| Honggfuzz transfer | libFuzzer-expanded corpus | native count not emitted in quiet mode | 157 coverage files | 157 transferred outputs | exit 0 |
+
+The first AFL++ run accidentally used the libFuzzer input directory after libFuzzer had appended generated units. It is retained only as a control: 315/316 generated inputs were calibrated, two new corpus items were found, and no crash or hang occurred, but the result is not a fair 15-seed comparison. The corrected AFL++ no-forkserver run is the comparison result. A single-seed default forkserver rerun with `14-capacity-high` reproduced the same `Unable to request new process from fork server (OOM?)` abort, while the no-forkserver mode processed that seed normally. This is an AFL++ forkserver/toolchain-mode limitation in the scratch build, not a target failure.
+
+### Transfer and independent verification
+
+- The ASan+UBSan libFuzzer oracle replayed 315 libFuzzer-generated files, 25 AFL++ queue files, 184 isolated Honggfuzz coverage files, and 157 Honggfuzz outputs generated from the libFuzzer corpus. Every replay exited zero with no sanitizer error, assertion, timeout, or crash artifact.
+- Key oracle results were `Done 316 runs`, `Done 26 runs`, `Done 185 runs`, and `Done 158 runs`, respectively. Peak RSS was 305, 278, 300, and 292 MiB. Raw logs are `/data/my_storage/tmp/cycle248-replay-libfuzzer.log`, `/data/my_storage/tmp/cycle248-replay-afl.log`, `/data/my_storage/tmp/cycle248-replay-honggfuzz.log`, and `/data/my_storage/tmp/cycle248-replay-hong-transfer.log`.
+- The libFuzzer run log is `/data/my_storage/tmp/cycle248-libfuzzer.log`; AFL++ fair and anomaly logs are `/data/my_storage/tmp/cycle248-afl-fair-nofork.log`, `/data/my_storage/tmp/cycle248-afl-fair.log`, and `/data/my_storage/tmp/cycle248-afl-single.log`; Honggfuzz logs are `/data/my_storage/tmp/cycle248-hong.log` and `/data/my_storage/tmp/cycle248-hong-transfer.log`. Build logs are `/data/my_storage/tmp/cycle248-hong-build.log` and `/data/my_storage/tmp/cycle248-afl-build.log`.
+
+### Verdict
+
+The production hypothesis is **dismissed**. No engine exposed a minisketch crash, hang, invalid state, semantic mismatch, sanitizer failure, or corrupt transferred input. The AFL++ default forkserver abort is independently reproduced by one seed and avoided by no-forkserver mode; it is classified as an engine/toolchain integration limitation because the same current target and seed pass under the AFL++ no-forkserver path and the ASan oracle. Native coverage/corpus differences are expected engine behavior. No production or test change is justified.
+
+### Handoff
+
+- Close this cell with a journal/state-only commit; do not claim Goal 80 is exhausted. A future distinct cell may compare another target, engine version, compiler, or corpus with new evidence.
+- Preserve the initial manifest, isolated per-engine copies, binary hashes, AFL forkserver/no-forkserver distinction, FuzzTest absence, and all replay logs above. Do not use the libFuzzer-mutated common directory as a fair initial corpus without restoring the 15-file manifest.
+- Next cycle must recheck the repository/process/storage gate and draw a fresh exact selector from all 99 catalog rows. Do not reopen minisketch without new engine, toolchain, corpus, or regression evidence.
