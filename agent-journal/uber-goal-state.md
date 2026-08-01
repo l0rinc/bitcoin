@@ -105,6 +105,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 76 | reproducible-builds | CYCLE-1 | 2026-07-28 | A/B rebuild: code bit-identical; 1-byte secp comp_dir DWARF delta attributed; Guix packaging sound |
 | 9 | hit-frequency-coverage | CYCLE-2 | 2026-07-28 | net_processing sancov: all gaps harness-scope; 0/23 alarm resolved as inlining artifact via per-line PC check |
 | 47 | build-ci-parity | CYCLE-2 | 2026-07-28 | install manifest declarative-single-source; 17-file install set exact match |
+| 47 | build-ci-parity | CYCLE-3 | 2026-08-01 | export-set consumer check: downstream compiles+links(g++, 0 undef)+runs via .pc; static lib self-contained; DISMISSED |
 | 81 | spec-vector-drift | CYCLE-1 (retro) | 2026-07-28 | BIP324+RFC8439 vectors byte-exact (0f6c2640b7, own branch; row restored) |
 | 81 | spec-vector-drift | CYCLE-2 | 2026-07-28 | BIP173/350 bech32(m): no drift across unit/key_io/functional layers |
 | 81 | spec-vector-drift | CYCLE-3 | 2026-07-31 | BIP341 both levels byte-exact: C++ script_assets 141917/141917, Python wallet-vector port 0 mismatches; no drift |
@@ -845,6 +846,15 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    first-build CCACHE_LOGFILE probe per new family; DISMISSED).
    Queue after draw 151: EMPTY — re-harvest journal
    "Limitations / queue" tails before the next draw.
+   RE-RANK draw 152 (10-cell re-harvested pool): raw=
+   1749937186513557252 (already 63-bit) -> idx 2 -> #47 c3
+   (kernel export-set consumer check: downstream compiles + g++
+   links 0-undef + runs via .pc; static lib self-contained; gcc
+   driver failure = standard C++-lib property; DISMISSED).
+   Pool after draw 152 (9): #81 Wycheproof, #36 TSan subset,
+   #74 pruning-mode IO, #35 NONNEGATIVE_SIGNED write semantics,
+   #73 node-initiated half-close, #50 Taproot/MuSig2 gates,
+   #9 per-seed profiling, #67 downgrade read, #45 secp ctime.
    HYGIENE (from #64 c1): DONE 2026-07-29 (#66 c2 backport of all 5).
    SCOPE NOTE (2026-07-28 objective refresh): weight core campaigns
    (consensus/coins/P2P/compact blocks/serialization/crypto/chainstate/

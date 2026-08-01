@@ -129,3 +129,49 @@ no stale, missing, or leaky entries.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-08-01): export-set consumer check — downstream compiles, statically links, and RUNS against the installed kernel via its .pc; DISMISSED
+
+### Draw
+RE-RANK draw 152 over a re-harvested 10-cell pool: raw=
+1749937186513557252 (already 63-bit) -> idx 2 -> kernel export-set
+consumer check (c2 queue). Branch: audit/build-ci-parity-c3 from
+cf949ccfea.
+
+### Experiment
+- cmake --install build-before to a scratch prefix: static
+  libbitcoinkernel.a (14 MB) + include/bitcoinkernel.h +
+  lib/libpkgconfig/libbitcoinkernel.pc.
+- .pc is byte-identical to upstream master (no Libs.private
+  upstream either); prefix=@CMAKE_INSTALL_PREFIX@ (standard
+  pkg-config semantics — installing elsewhere than the configured
+  prefix breaks paths; the honest flow is to configure the prefix,
+  which I did via -DCMAKE_INSTALL_PREFIX re-set + reinstall).
+- Consumer (/tmp/btc47c3/consumer.c, preserved): btck_context_
+  create(NULL) -> btck_chainstate_manager_options_create (with
+  data/blocks dirs) -> set_worker_threads_num(0) -> destroy both.
+- Link with ONLY `pkg-config --cflags --libs libbitcoinkernel`:
+  gcc fails with 12,992 undefined refs (all C++ stdlib — expected:
+  the kernel is C++; the .pc correctly assumes a C++ link driver);
+  g++ links with ZERO undefined references — the static lib is
+  fully self-contained (all dependency objects folded in, no
+  Libs.private needed).
+- Run: CONSUMER-OK, rc=0, chain/blocks dirs auto-created.
+
+### Verdict
+DISMISSED: the installed export set is complete and consumable
+end-to-end (headers, static lib closure, .pc flags). The gcc-vs-g++
+layer is a standard C++-library property, not a defect.
+
+### Exact commands
+- cmake --install build-before --prefix (after
+  -DCMAKE_INSTALL_PREFIX=<prefix> reset); consumer.c compile lines
+  above; link logs /tmp/btc47c3_link{,2}.log.
+
+### Limitations / queue
+- Shared-kernel-lib consumer variant not run (this config builds
+  the static lib; #91 c3 measured the shared variant's exports).
+- Remaining #47 cells: none queued.
+
+## Rotation note
+Cycle 3 complete; rotating per uber-goal policy. Not exhausted.
