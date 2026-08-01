@@ -317,3 +317,43 @@ The log-silence is the only wart and is upstream-identical.
 
 ## Rotation note
 Cycle 5 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 6 (2026-08-01): pruning-mode IO — disk freed exactly by pruned bytes, RSS delta +0 (block index retained by design); DISMISSED; #74 queue EMPTY
+
+### Draw
+RE-RANK draw 160 over the 3-cell pool: raw=11628138699865233707,
+masked 2404766663010457899 -> idx 0 -> #74 pruning-mode IO (from
+#24). Branch: audit/memory-pressure-c6 from 7178260b43.
+
+### Experiment (isolated regtest, -prune=1 -fastprune)
+601 bulk blocks, then pruneblockchain(h-288+5):
+- pruned_to=256 (file-rounded; MIN_BLOCKS_TO_KEEP=288 dominates).
+- Disk (byte-exact): 1,611,476 -> 1,482,041 B (-129,435 B, the
+  pruned early files), blk files 7 -> 4.
+- RSS: 56 -> 56 MiB EXACTLY flat — pruning deletes files only;
+  block index entries stay resident BY DESIGN (no index shedding).
+- Edge datapoint at 301 blocks: pruneheight=-1 — manual prune is
+  a no-op when MIN_BLOCKS_TO_KEEP covers everything (not an error).
+
+### Harness lessons (recorded)
+- The framework owns ports: -rpcport in extra_args desyncs the
+  client (60s connect timeout); never set it.
+- Regtest manual pruning needs -fastprune (nPruneAfterHeight=100;
+  default is 1000) or a >=1000-block chain — the "Blockchain is
+  too short for pruning" error is PruneAfterHeight, NOT
+  MIN_BLOCKS_TO_KEEP (two distinct floors; I hit the wrong one
+  first).
+
+### Verdict
+DISMISSED: pruning-mode IO is exactly as designed — disk freed by
+the pruned bytes, memory untouched, boundary arithmetic exact, no
+spikes or leaks. #74's queue is now EMPTY (c1 accounting, c2
+LockedPool, c3 arena growth, c4 dbcache RSS, c5 mlock-failure, c6
+pruning IO) — campaign COMPLETE.
+
+### Exact commands
+- /tmp/btc74c6_prune.py (framework, MiniWallet bulk, /proc RSS,
+  du -sb byte-exact).
+
+## Rotation note
+Six cycles; campaign complete.
