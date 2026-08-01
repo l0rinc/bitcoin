@@ -3447,3 +3447,34 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   has about 21 GB available. The next action is a fresh gate, exact selector
   draw, and a new `uber-cycle-244-*` branch; do not reopen the fixed current
   tip or prior cursor/publication cells without new evidence.
+
+## Cycle 244 close: Goal 42, CI and bot follow-up
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `42` (`ci-bot-followup`); no reroll.
+  Branch: `uber-cycle-244-ci-bot-followup-20260731`. Cycle-start HEAD was
+  `f11066832929628c9110d243af7266da417ec830`; close journal commit is
+  `a81d70e0508f2ec6e99cf0c84109742e2ea7545f`. `origin/master` remained
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base remained
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was
+  `42/1271`. Catalog, prompt, TSV, and protocol hashes passed the gate.
+- No current CI, coverage-bot, or review-bot defect was confirmed. The recent
+  macOS GUI test follow-up had a real earlier `interface_gui.py` crash under
+  the depends build, but the `QT_STYLE_OVERRIDE=fusion` fix is present. The
+  test is in `BASE_SCRIPTS`; standard macOS leaves GUI and functional tests
+  enabled; fuzz macOS intentionally disables functional tests. The live merge
+  check-runs for `67efced1fc83a0b7215cc1513e7c4754fee0f12f` had 29 runs, 28
+  successes, and only the expected `test ancestor commits` skip. Both macOS
+  jobs and the macOS native CI script completed successfully. CoreCheck report
+  3393 for PR #35838 was successful with no actionable coverage or benchmark
+  signal. The selected-goal journal records the API endpoints, review trail,
+  source inspection, and the unauthenticated raw-log 403 limitation.
+- Journal-only close commit: `a81d70e050` (`uber-goal: record cycle 244 ci bot
+  follow-up`), authored as `Lőrinc <pap.lorinc@gmail.com>`. No source or test
+  change was justified. Unrelated untracked artifacts and all six protected
+  long-running processes were preserved; `/` remains full and `/data` has
+  about 21 GB available.
+- Next action: perform a fresh gate, preserve unrelated artifacts, draw exactly
+  one selector with `shuf -i 0-98 -n 1`, create the next
+  `uber-cycle-245-*` branch, and continue with a distinct high-risk cell. Do
+  not reopen Goal 42 without new CI wiring, bot evidence, or a reproducible
+  failure.
