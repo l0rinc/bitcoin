@@ -347,6 +347,24 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_init_destroy, BasicTestingSetup)
     BOOST_CHECK(filter_index == nullptr);
 }
 
+BOOST_FIXTURE_TEST_CASE(blockfilter_index_reinit_rejects_missing_current_filter, BuildChainTestingSetup)
+{
+    BlockFilterIndex filter_index(interfaces::MakeChain(m_node), BlockFilterType::BASIC, 1_MiB, false);
+    BOOST_REQUIRE(filter_index.Init());
+    filter_index.Sync();
+    m_node.chainman->ActiveChainstate().ForceFlushStateToDisk();
+    m_node.chain->context()->validation_signals->SyncWithValidationInterfaceQueue();
+
+    const fs::path filter_file{
+        m_args.GetDataDirNet() / "indexes" / "blockfilter" /
+        fs::u8path(BlockFilterTypeName(BlockFilterType::BASIC)) / "fltr00000.dat"};
+    BOOST_REQUIRE(fs::remove(filter_file));
+
+    filter_index.Stop();
+    BOOST_CHECK(!filter_index.Init());
+    filter_index.Stop();
+}
+
 class IndexReorgCrash : public BaseIndex
 {
 private:

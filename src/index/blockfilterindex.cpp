@@ -122,7 +122,8 @@ bool BlockFilterIndex::CustomInit(const std::optional<interfaces::BlockRef>& blo
     }
 
     if (block) {
-        auto op_last_header = ReadFilterHeader(block->height, block->hash);
+        BlockFilter last_filter;
+        auto op_last_header = ReadFilterHeader(block->height, block->hash, &last_filter);
         if (!op_last_header) {
             LogError("Cannot read last block filter header; index may be corrupted");
             return false;
@@ -248,7 +249,8 @@ size_t BlockFilterIndex::WriteFilterToDisk(FlatFilePos& pos, const BlockFilter& 
     return data_size;
 }
 
-std::optional<uint256> BlockFilterIndex::ReadFilterHeader(int height, const uint256& expected_block_hash)
+std::optional<uint256> BlockFilterIndex::ReadFilterHeader(int height, const uint256& expected_block_hash,
+                                                          BlockFilter* filter_out)
 {
     std::pair<uint256, DBVal> read_out;
     if (!m_db->Read(index_util::DBHeightKey(height), read_out)) {
@@ -258,6 +260,10 @@ std::optional<uint256> BlockFilterIndex::ReadFilterHeader(int height, const uint
     if (read_out.first != expected_block_hash) {
         LogError("previous block header belongs to unexpected block %s; expected %s",
                  read_out.first.ToString(), expected_block_hash.ToString());
+        return std::nullopt;
+    }
+
+    if (filter_out && !ReadFilterFromDisk(read_out.second.pos, read_out.second.hash, expected_block_hash, *filter_out)) {
         return std::nullopt;
     }
 
