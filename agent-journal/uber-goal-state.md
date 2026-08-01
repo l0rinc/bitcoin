@@ -3365,3 +3365,43 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - Fix commit: `b23292fee5ed2fa56ccf85848c859a8ebdb403e7` (`secp256k1: make MuSig2 vector generation path-independent`), authored as `Lőrinc <pap.lorinc@gmail.com>`. It emits the stable repository-relative generator name directly, leaves `sys.argv[1]` as the input path, and does not alter vector values or the checked-in header. The source commit includes the detailed selected-goal journal.
 - Validation: the three post-fix invocation forms all produced SHA256 `93012d1fb5594ddf741ba3c651b1bf92650206b8178818c5a9f02eafb865bb87` with pairwise `cmp` status 0; `python3 -m py_compile` and `git diff --check` passed. Existing Clang 19 release and GCC release MuSig binaries each passed all 12 groups, including key aggregation, nonce generation/aggregation, sign/verify, tweak, and signature aggregation vector consumers. The full six upstream MuSig2 JSON inputs are absent from this subtree, so the byte-level regeneration proof used a minimal fixture exercising every generator section; no new consumer build was possible because the expected build tree was absent.
 - Verdict: **confirmed and fixed**. Close HEAD is `b23292fee5ed2fa56ccf85848c859a8ebdb403e7`, with divergence 42/1266. The next distinct queue is `makeseeds.py` randomized pre-filter selection/tie behavior, manpage generation under locale/tool-version changes, Wycheproof JSON-to-header regeneration, and generated minisketch/precomputation outputs. Do not reopen the fixed MuSig2 path cell, Silent Payments, or headersync determinism without new evidence. Next action: perform a fresh gate, preserve unrelated artifacts, draw exactly one selector with `shuf -i 0-98 -n 1`, create the next `uber-cycle-242-*` branch, and continue.
+
+## Cycle 242 close: Goal 79, fuzz corpus stewardship
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `79` (`fuzz-corpus-stewardship`); no
+  reroll. Branch: `uber-cycle-242-fuzz-corpus-stewardship-20260731`.
+  Cycle-start and close source before the state commit was
+  `d0f9abef7f55e797d06bea2d08055ebaff16ca2a`; origin/master remained
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, and catalog, prompt, TSV, and
+  protocol hashes were unchanged. Unrelated untracked artifacts and all
+  protected long-running processes were preserved.
+- The selected `dbwrapper` corpus had 267 files, 21,463 bytes, one empty
+  file, and no duplicate content hashes; LibFuzzer loaded 266 non-empty files.
+  A rebuilt current Debug `BUILD_FOR_FUZZING=ON` binary (`-O0 -ftrapv -g3`, no
+  sanitizer runtime) replayed the corpus without a crash or artifact. A
+  fixed-seed-242 merge selected 191 files and 14,942 bytes for `dbwrapper`;
+  the same reduced inputs re-merged and replayed successfully on
+  `dbwrapper_threaded` and `dbwrapper_concurrent_reads`. Target-specific
+  fixed-seed merges selected 175 and 231 files respectively, while the
+  transferred set selected 168 and 173, demonstrating usable cross-target
+  transfer with target-specific retention differences.
+- Two identical fixed-seed replays were crash-free, but final coverage varied
+  slightly: `dbwrapper` 16,033/16,037, threaded 17,953/17,923, and concurrent
+  reads 17,750/17,764. This is an **inconclusive flakiness lead**, likely
+  involving the extra `-runs=1` iteration and/or scheduled/concurrent work;
+  it is not treated as a production defect. Fixed-seed merge file selection
+  was reproducible (the repeated `dbwrapper` source merge had manifest hash
+  `4ea955c094885d144470b66a722d0fd976680ae29a9e09759421ca2bb878a111`).
+- Journal-only commit: `04ea60d4e2` (`uber-goal: record cycle 242 fuzz corpus
+  stewardship`), authored as `Lőrinc <pap.lorinc@gmail.com>`. No source or
+  test change was justified. The selected-goal journal records commands,
+  binary identity, corpus/merge/replay tables, exact scratch artifact paths,
+  limitations, and the next queue: isolate pure corpus replay coverage
+  drift, repeat under sanitizer/high-throughput builds, and inventory
+  `qa-assets` if it becomes available.
+- Close state: HEAD is `04ea60d4e2`, all unrelated untracked artifacts remain
+  unstaged and untouched, and `/data` remains the only usable scratch volume
+  with about 22 GB free while `/` is full. Do not claim corpus exhaustion.
+- Next action: perform a fresh gate, preserve unrelated artifacts, draw
+  exactly one selector with `shuf -i 0-98 -n 1`, create the next
+  `uber-cycle-243-*` branch, and continue with a distinct high-risk cell.
