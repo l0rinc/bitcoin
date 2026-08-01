@@ -3772,8 +3772,10 @@ size_t TxGraphImpl::GetMainMemoryUsage() noexcept
     // Compute memory usage
     size_t usage = /* From clusters */
                    m_main_clusterset.m_cluster_usage +
-                   /* From Entry objects. */
-                   sizeof(Entry) * m_main_clusterset.m_txcount +
+                   /* From the shared Entry vector. Its capacity is retained after compaction and
+                    * can include entries added to staging, but the allocation is still owned by
+                    * the graph and contributes to its actual memory usage. */
+                   memusage::DynamicUsage(m_entries) +
                    /* From the chunk index. */
                    memusage::DynamicUsage(m_main_chunkindex);
     Assume((usage == 0) == (m_main_clusterset.m_txcount == 0));
