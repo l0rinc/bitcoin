@@ -1,3 +1,44 @@
+# C/C++ Supply-Chain Cycle 239
+
+## Cycle 239 Start: cross-build SDK archive integrity
+
+### Identity and Gate
+
+- Selector command: `shuf -i 0-98 -n 1` -> `59`; no reroll. Goal: `C/C++ supply-chain and security-gate audit`; slug: `cpp-supply-chain`.
+- Branch: `uber-cycle-239-cpp-supply-chain-20260731`.
+- Start HEAD: `0e295c72946700e3f06160e104061034bd27196f`; `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- The tracked tree was clean at the gate. Existing untracked agent artifacts, goal files, probes, `node_modules/`, `test/cache/`, and the crash artifact were preserved. Protected long-running test processes were observed and not touched.
+- Catalog, prompt, TSV, and protocol hashes were unchanged: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+### Closed Scope and Hypothesis
+
+Prior Goal 59 cycles closed mutable GitHub Action refs, lint-tool release assets, script test vectors, Guix cached Git archives, release signature thresholds, and compiler/toolchain Git refs. This cycle selected the distinct cross-build SDK archive cell. `ci/test/01_base_install.sh` downloaded or reused macOS, NetBSD, FreeBSD, and OpenBSD SDK archives by path and extracted them without checking their bytes. Docker image layers, host-side CI volumes, or a manually seeded `DEPENDS_DIR` could therefore supply stale or modified archives that reached the cross compiler and linker.
+
+The hypothesis was that the missing pre-extraction digest check was a practical provenance failure, not merely a theoretical URL concern. The trust boundary is the CI image/base-install step: SDK headers, libraries, and startup objects influence the resulting cross-built binaries even though the SDK archives are outside the Bitcoin source tree.
+
+### Artifact Provenance
+
+- The current macOS archive `Xcode-26.1.1-17B100-extracted-SDK-with-libcxx-headers.tar` from the configured `bitcoincore.org` SDK source was 204,748,800 bytes with SHA-256 `9600fa93644df674ee916b5e2c8a6ba8dacf631996a65dc922d003b98b5ea3b1`.
+- NetBSD `11.0_RC6` `base.tar.xz` and `comp.tar.xz` were independently matched to the official `SHA512` manifest (`0323dbb284913cae27f1e67a41c395dc6c7a4160dc65e79866ca8a69e12bad5fd782cc3f5da81a9d718020a857ccbc764e007f6b2696d88d7b9df83baa86f45b` and `a33f9cb6886713a2cc9d3e7bfbecbcb77b82d86cd43fa688531e06b389ad1820f1f63e501a37f899aee700270618b0865aacbf569b65a91fdb77ddd48f23d940`) and recorded with SHA-256 `b1f0ef68d15a0c199d1095139926d0df02f162889d4ed9c8187e757df29422ca` and `d1df700590f12e10d2e85fb43371abae88b3d4d2c2311f3ac6a46e1ae4423f99`.
+- FreeBSD `15.1-RELEASE/base.txz` matched the official release `MANIFEST`, SHA-256 `3768988b151c20f965679062b065c63a977d6bbb9f47fd83695ec2c40790c18f`.
+- OpenBSD `7.9` `SHA256`/`SHA256.sig` lists `base79.tgz` as `923d2e03f06408d50d4848334398c6d04b5514dcac7917badfc178a0eef248de` and `comp79.tgz` as `21a67af20aebcabf85b09f4206fc95b4cae0a35d42b154b976f0159f457724f9`. The values come from the release checksum manifest rather than an uncontrolled bulk download.
+
+### Independent Verification
+
+A scratch directory seeded a valid but wrong tar archive at the exact macOS SDK cache path. Running the pre-change script from `HEAD` returned `before_status=0` and extracted a marker (`before_extracted=0`); the archive was accepted solely because it existed. Running the patched production script against the same shape returned `post_status=1`, `post_extracted=1`, and reported the actual digest versus the expected pinned digest before invoking `tar`.
+
+A second harness supplied the downloaded, correctly hashed macOS, NetBSD, and FreeBSD archives through the real production path while replacing only `tar` with a no-op that created its destination. All four verification calls completed and the script returned `valid_status=0`. `bash -n` for the changed shell files and `git diff --check` passed. Docker, ShellCheck, and complete cross-build jobs are unavailable or too resource-heavy in this environment, so no full image build or target binary build was claimed.
+
+### Fix and Verdict
+
+Added `verify_sha256` to `ci/test/01_base_install.sh`. It runs after download-or-cache lookup and before extraction, so a restored archive must match the version-specific digest just like a fresh download. Added fixed SHA-256 values beside each supported macOS, NetBSD, FreeBSD, and OpenBSD SDK version; a missing or wrong value fails closed. The change covers both fresh downloads and existing archive files without changing archive URLs or extraction layout.
+
+**Confirmed and fixed.** Before the change, a modified SDK archive could be supplied through the CI/base-install cache boundary and influence a cross-build without a repository diff or local integrity failure. The check is intentionally limited to archives entering the extraction branch; it does not attest an already-existing extracted SDK directory when no archive is extracted. SDK-version bumps must update the version and digest together.
+
+### Handoff
+
+Keep `pip install pyzmq`, vcpkg manifest/cache inputs, mutable `qa-assets` fuzz-corpus cloning, container image provenance, generated-input checks, and license gates as distinct next cells. Do not reopen the closed action, lint-tool, test-vector, Guix-archive, release-signature, or compiler-Git-ref findings.
+
 # C/C++ Supply-Chain Cycle 229
 
 ## Cycle 229 Start: mutable CI toolchain source refs
