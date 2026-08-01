@@ -37,6 +37,22 @@ void TestType(FuzzBufferType buffer)
     // Up to 4 std::bitsets with the same corresponding contents.
     std::vector<Sim> sim(2);
 
+    // Fill() is used with the inclusive upper bound by production callers, but the
+    // operation-driven fuzzing below only supplies values below Size().
+    auto check_fill = [](unsigned count) {
+        const S actual = S::Fill(count);
+        Sim expected;
+        for (unsigned i = 0; i < count; ++i)
+            expected.set(i);
+        for (unsigned i = 0; i < S::Size(); ++i) {
+            assert(actual[i] == expected[i]);
+        }
+        assert(actual.Count() == expected.count());
+    };
+    check_fill(0);
+    check_fill(S::Size() - 1);
+    check_fill(S::Size());
+
     /* Compare sim[idx] with real[idx], using all inspector operations. */
     auto compare_fn = [&](unsigned idx) {
         /* iterators and operator[] */
