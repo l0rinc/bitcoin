@@ -282,3 +282,49 @@ regression gate in the standard suite.
 Five cycles; transports, edge-vector verification, and the
 persistent gate are done. Marking #108 QUEUE-COMPLETE except the
 low-value slowloris cell.
+
+## Cycle 6 (2026-08-01): post-handshake v2 slowloris — silent peer reaped at exactly +20.0 real-min (ping timeout + socket sending timeout), control alive; DISMISSED; campaign COMPLETE
+
+### Draw
+RE-RANK draw 150 over the 2-cell queue: raw=14568728326895610543,
+masked 5345356290040834735 -> idx 1 -> #108 post-handshake v2
+slowloris (the campaign's last cell). Branch:
+audit/adversarial-artifact-c6 from af63419c7b.
+
+### Experiment (framework v2 peers, real-time long wall)
+Two framework v2 peers (supports_v2_p2p, full BIP324 handshake,
+transport_protocol_type=v2 verified): SilentPeer (on_ping ->
+never pong) and a normal control. Node with -peertimeout=60 to
+unmask inactivity checks. Sampled getpeerinfo every 30s for 26
+min.
+- RESULT: silent peer disconnected at exactly +20.0 min with BOTH
+  labeled lines: "ping timeout: 1200.064454s" (net_processing
+  :5504) and "socket sending timeout: 1200s" (net.cpp:2078);
+  control peer remains connected.
+
+### Two masking layers found and recorded (why this cell is "long-wall")
+1. setmocktime does NOT move the network inactivity path: peer
+   conntime/lastsend/lastrecv stayed at wall values across a
+   50-mock-minute fast-forward; the silent peer survived.
+2. THE FRAMEWORK SHIPS -peertimeout=999999999 in every test node's
+   config (deterministic tests; InactivityCheck's own comment
+   references exactly this). With it, ShouldRunInactivityChecks
+   never passes: the silent peer survived 25+ REAL minutes in the
+   first run. Command-line -peertimeout=60 overrides the config.
+   Lesson: any timeout-path cell on the framework must override
+   peertimeout explicitly AND run real-time.
+
+### Verdict
+DISMISSED: post-handshake silence on v2 is bounded by the same
+20-minute TIMEOUT_INTERVAL as v1, with correctly-labeled dual
+disconnect reasons. No leak, no exemption. #108's queue is now
+EMPTY (c1 hostile-v1, c2 split/slowloris handshake, c3 v2 hostile,
+c4/c5 xswiftec, c6 post-handshake slowloris) — campaign COMPLETE.
+
+### Limitations / queue
+- Single sample (timeout exactness is code-determined; the dual
+  lines confirm both guards engage on the same schedule).
+- #108 exhausted.
+
+## Rotation note
+Six cycles; campaign complete.
