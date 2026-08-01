@@ -2,6 +2,60 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 256 Completion
+
+- The fresh gate ran `git fetch origin master` successfully at
+  `2026-08-01T08:20:00Z`. The exact selector `shuf -i 0-98 -n 1` drew goal `58`
+  (`exact-helper-reuse`). The dedicated branch is
+  `uber-cycle-256-exact-helper-reuse-20260801`. The fresh start HEAD was
+  `2eef3edad3621cb7149e6fc4179695a122285647`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence `42 1299`.
+  The selected journal was `agent-journal/exact-helper-reuse.md`.
+- Prior Goal 58 cells were excluded: Cycle 23's transaction disk-position size
+  helper and Cycle 91's block total-size helper. This cycle searched distinct
+  status/validation, nullable-wrapper, RPC scan, PCP, wallet/database, network,
+  and test/fuzz helper families. The confirmed duplicate was
+  `MinerImpl::getTransactionsByTxID` versus
+  `MinerImpl::getTransactionsByWitnessID`: the two implementations had the
+  same result sizing, no-mempool behavior, lock, positional lookup, null
+  preservation, and postcondition, differing only in identifier type and the
+  overloaded mempool lookup. History shows the witness method was added as a
+  parallel implementation in `9784818442`.
+- The smallest fix is commit `74aadd0c20` (`interfaces: reuse mempool
+  transaction lookup helper`), authored by `Lőrinc <pap.lorinc@gmail.com>`.
+  It adds one private type-parameterized helper and leaves both public virtual
+  methods and their overload selection intact. The RPC scan-reserver pair,
+  nullable kernel wrappers, and PCP response checks were dismissed because
+  their progress, ownership, packet-layout, or result-error contracts differ.
+- The affected object compiled with
+  `ninja -C /data/my_storage/tmp/cycle246-wallet
+  src/CMakeFiles/bitcoin_node.dir/node/interfaces.cpp.o`; the relinked
+  `test_bitcoin` target also passed. The focused miner run with seed `256001`
+  passed 4 cases and 1,401 assertions. The broader
+  `miner_tests,interfaces_tests` run with seed `256002` passed 11 cases and
+  1,476 assertions, including all 4 miner cases and both populated/no-mempool
+  lookup paths. `git diff --check` passed.
+- The selected journal close is commit `bc8f4945ab` (`journal: close cycle 256
+  exact helper reuse`), authored by `Lőrinc <pap.lorinc@gmail.com>`. The source
+  and journal commits remain separate and independently reviewable. Verdict:
+  **confirmed and fixed**. No public API, consensus, serialization, ownership,
+  or lock-order behavior changed. Full-suite validation was not required for
+  this narrow consolidation; the affected and adjacent contract suites passed.
+- At selected-journal close, HEAD was `bc8f4945ab`, with divergence `42 1301`.
+  The catalog, prompt, goals TSV, and protocol hashes remain
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were left untouched; scratch data stayed under
+  `/data` because `/` remains full.
+- The next cycle must fetch `origin/master`, perform a fresh exact selector
+  draw, reject only an exact current evidence cell, and continue the loop.
+  Do not reopen this helper or the dismissed scan-reserver/wrapper candidates
+  without a changed contract or new evidence.
+
 ## Cycle 254 Completion
 
 - The exact selector `shuf -i 0-98 -n 1` drew goal `37` (`build-dead-zones`). The
