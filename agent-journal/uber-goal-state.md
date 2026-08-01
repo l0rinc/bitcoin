@@ -2,6 +2,59 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 253 Completion
+
+- The exact selector `shuf -i 0-98 -n 1` drew goal `30` (`security-logging`). The
+  dedicated branch is `uber-cycle-253-security-logging-20260801`. The fresh
+  start HEAD was `7d683075db171a7f8efee2657d23cc642f3561a6`, with
+  `origin/master` `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence `42 1293`.
+  The selected journal was `agent-journal/security-logging.md`.
+- The distinct cell audited wallet-load warnings for malformed database values.
+  `WalletBatch::WritePurpose` can place arbitrary purpose/address strings in a
+  mock or malformed wallet database, and `LoadAddressBookRecords` previously
+  passed both directly to `WalletLogPrintf`. Because the logger preserves
+  newlines for legitimate multiline messages, a local malformed/restored/
+  tampered wallet file could create additional physical log records and confuse
+  line-oriented collection and operator review. This is a local-file logging
+  integrity issue, not an unauthenticated remote primitive or a demonstrated
+  secret disclosure.
+- The first available `test_bitcoin` build was node-only (`ENABLE_WALLET=OFF`),
+  so its attempted wallet test exited 201 with no matching test cases. An
+  existing safe wallet-enabled build at
+  `/data/my_storage/tmp/cycle246-wallet` was rebuilt without touching protected
+  processes. The new regression wrote `not-an-address\nADDR` and
+  `not-standard\nINJECT` through `WalletBatch::WritePurpose` and captured the
+  warning. The pre-fix focused run with seed `253001` failed all four raw versus
+  sanitized assertions. The fix adds `<util/strencodings.h>` and applies
+  `SanitizeString` to both diagnostic fields.
+- Post-fix `cmake --build /data/my_storage/tmp/cycle246-wallet --target
+  test_bitcoin -j2` passed. After discarding one setup-only run with a
+  nonexistent `TMPDIR`, the focused test with seed `253003` passed. The full
+  `walletload_tests` suite with seed `253004` passed 2 cases, and combined
+  `walletdb_tests,walletload_tests` with seed `253005` passed 4 cases. `git
+  diff --check` passed. The source, regression, and selected journal were
+  committed independently as `bdf4d690fbed14e2c5330b222be245270d63dbf1`
+  (`wallet: sanitize malformed load warning fields`), authored by
+  `Lőrinc <pap.lorinc@gmail.com>`.
+- At cycle close, HEAD is `bdf4d690fbed14e2c5330b222be245270d63dbf1`, with
+  divergence `42 1294`; tracked/index state is clean and unrelated untracked
+  artifacts remain preserved. Catalog, prompt, goals TSV, and protocol hashes
+  are unchanged at `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were alive and untouched. `/data` has about 32G
+  free; `/` remains full, so future scratch data must stay under `/data`.
+- Verdict: **confirmed and fixed**. The next cycle must perform a fresh gate,
+  draw with the exact selector, choose a genuinely distinct evidence cell, and
+  update both this ledger and the selected journal. Goal 30's fixed P2P,
+  whitelist, persistent-settings, and wallet-purpose warning cells must not be
+  reopened without new callers, logger behavior, or evidence. The selected
+  journal's next queue is RPC/REST error text and request-URI sensitivity or a
+  different wallet migration/destination-data sink.
+
 ## Cycle 209 Completion
 
 - The exact selector `shuf -i 0-98 -n 1` drew goal `50` (`fuzz-introspector`) with no reroll. The dedicated branch is `uber-cycle-209-fuzz-introspector-20260731`. The fresh gate timestamp was `2026-07-31T12:05:36Z`; start HEAD was `cf3fa191a617e7bd83c74d1efb1762f66ce318ea`, `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `1209 42`. The pre-cycle state SHA-256 was `9f5d507e67405fa551f7c4dd5414b76511b3421a57bb0d10aac10ad09f0a3064`. The gate passed fetch, tracked/index and diff checks, preserved unrelated untracked artifacts, and left protected PIDs `777094`, `956381`, `1138182`, and `1157959` untouched.
