@@ -230,3 +230,45 @@ local oracle (fuzz target + unit tests exist upstream-inherited).
 ## Rotation note
 Three cycles; bloom, wire-CompactSize, and txgraph saturation
 families closed. feefrac remainder folded into backend queue.
+
+## Cycle 4 (2026-08-01): feefrac shift/narrowing sinks — Mul/Div (__int128) vs fallback exact over the boundary corpus + UBSan clean; DISMISSED; campaign COMPLETE
+
+### Draw
+RE-RANK draw 165 over the 8-cell pool: raw=10771425690861073957,
+masked 1548053654006298149 -> idx 5 -> #100 feefrac ctime/int64
+backend differential (c3 queue). Branch: audit/sink-reverse-c4
+from 0a4178cb88.
+
+### Mechanism
+util/feefrac.h: native __int128 Mul/Div vs portable MulFallback/
+DivFallback (used on non-__int128 platforms). Suspicious corners
+in the fallback: `a >> 32` and `low >> 32` (signed arithmetic
+shifts of negatives), `(n.first % d) << 32` (left shift of a
+negative mod — UB in C++14/17, DEFINED in C++20).
+
+### Differential (/tmp/btc100c4_probe.cpp)
+Corpus: 23 a-values (0, ±small, ±2^31 edges, ±2^32, INT64_MAX/MIN
+halves and extremes) x 12 b-values (±1, ±2, ±1000, INT32 edges),
+products filtered to int64-range (the documented contract), then
+Div over 8 divisors x both round modes.
+- Mul vs MulFallback: 0 differences (totally-ordered equality,
+  high<<32|low reconstructed).
+- Div vs DivFallback: 0/3200 differences.
+- Same probe under -fsanitize=undefined: zero reports (the shift
+  corners are C++20-defined).
+
+### Verdict
+DISMISSED: the two backends are exactly interchangeable over the
+contracted domain, and the fallback's shift/narrowing shapes carry
+no UB on this standard. #100's sink family is closed (c1 bloom,
+c2 wire-CompactSize allocations, c3 txgraph saturation proof, c4
+feefrac backends) — campaign COMPLETE.
+
+### Limitations / queue
+- The int64-range filter means >int64 products are unexamined —
+  the contract says callers must not produce them (FeeFrac values
+  are fee/size pairs, bounded well below); recorded, not a gap.
+- #100 queue: empty.
+
+## Rotation note
+Four cycles; the sink family is closed.
