@@ -112,13 +112,23 @@ def check_ELF_SEPARATE_CODE(binary):
 
 def check_ELF_CONTROL_FLOW(binary) -> bool:
     '''
-    Check for control flow instrumentation
+    Check for control flow instrumentation.
+
+    An endbr64 instruction is not sufficient by itself: the GNU property note
+    is what enables the loader to enforce indirect branch tracking.
     '''
     main = binary.get_function_address('main')
     content = binary.get_content_from_virtual_address(main, 4, lief.Binary.VA_TYPES.AUTO)
 
-    if content.tolist() == [243, 15, 30, 250]: # endbr64
-        return True
+    if content.tolist() != [243, 15, 30, 250]: # endbr64
+        return False
+
+    for note in binary.notes:
+        if isinstance(note, lief.ELF.NoteGnuProperty):
+            for prop in note.properties:
+                if isinstance(prop, lief.ELF.X86Features):
+                    if any(feature == lief.ELF.X86Features.FEATURE.IBT for _, feature in prop.features):
+                        return True
     return False
 
 def check_ELF_FORTIFY(binary) -> bool:
