@@ -3260,3 +3260,51 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   `shuf -i 0-98 -n 1`, and choose a distinct count/offset surface without
   repeating these dismissed network/address/descriptor cases absent new
   reachability evidence.
+
+## Cycle 238 close: Goal 74, retained TxGraph entry capacity
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `74` (`memory-pressure-allocator`); no
+  reroll. Branch: `uber-cycle-238-memory-pressure-allocator-20260731`.
+  Cycle-start HEAD was `92738468b840942ce0c327aef20e80915365b046`;
+  `origin/master` was `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1259 42`.
+  The fresh gate, stable catalog/prompt/TSV/protocol hashes, tracked/index
+  checks, and protected-process checks passed.
+- The distinct hypothesis was retained `TxGraph::Entry` vector capacity after
+  mempool churn. `GetMainMemoryUsage()` charged `sizeof(Entry)` by live count,
+  while `Compact()` used `pop_back()` and retained the vector allocation. A
+  direct old-code regression with 1,024 add/remove operations reported
+  `fresh_usage=216` and `churned_usage=216`, proving the retained allocation
+  was invisible to the public estimate and therefore to mempool memory
+  limiting.
+- Commit `c516b42ffdee007ecabcb0a406904026a2494c31` (`mempool: account for
+  retained txgraph entries`), authored as `Lőrinc <pap.lorinc@gmail.com>`,
+  replaces the live-count term with `memusage::DynamicUsage(m_entries)` and
+  adds `txgraph_memory_usage_accounts_for_retained_entries`. The source,
+  test, and selected-goal journal are in the same self-contained commit.
+- Validation: old regression failed with `216 <= 216`; fixed regression passed
+  1 case and 2 assertions; full `txgraph_tests` passed 24 cases and 613
+  assertions; `txpackage_tests` passed 15/302; pre-fix `mempool_tests` passed
+  26/1013; package/RBF/RPC/expiry/persistence functional campaigns passed;
+  the post-fix `mempool_limit.py` rerun passed; `bitcoind` rebuilt. A
+  concurrent post-fix mempool unit attempt was stopped after fixture setup
+  reported the full root filesystem, so no post-fix full mempool-suite claim
+  is made. `git diff --check` and commit-level focused validation passed.
+- Verdict: **confirmed and fixed**. The package staging, expiry, persistence,
+  and removal-symmetry cells are dismissed for this cycle. The next memory
+  queue is retained capacity in other main-graph containers and other dynamic
+  usage functions, followed by chainstate/cache resize and flush retention
+  when the scratch filesystem permits. Do not reopen the fixed unbroadcast
+  set, prevector OOM, transport receive accounting, or this exact entry-vector
+  cell without new evidence.
+- Close state: HEAD is `c516b42ffdee007ecabcb0a406904026a2494c31`,
+  `origin/master` remains `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, and
+  `HEAD...origin/master` is `1260 42`. Known unrelated untracked goal,
+  journal, package, crash, node-module, and test-cache artifacts remain
+  unstaged and untouched. Protected PIDs `777094`, `956381`, `1138182`, and
+  `1157959` remained alive; the additional scheduler/validation jobs were
+  also left untouched. `/` is full, so broad storage-heavy validation remains
+  explicitly limited.
+- Next action: perform a fresh gate, preserve all unrelated artifacts, draw
+  exactly one selector with `shuf -i 0-98 -n 1`, create the next
+  `uber-cycle-239-*` branch, and continue with a distinct high-risk cell.
