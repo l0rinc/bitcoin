@@ -573,3 +573,93 @@ uber-goal state with the commit id and fresh-gate result, then select a new
 catalog draw. Do not reopen AddrMan linked-IPv4, BaseIndex callback ordering,
 transaction-download peer cleanup, Taproot key identity, or this
 `MarkReplaced` write-failure cell without new evidence.
+
+## Cycle 243: physical filter-file validation during index reinitialization
+
+### Cycle identity and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `57` (`local-reasoning-domain`); no
+  reroll. Branch: `uber-cycle-243-local-reasoning-domain-20260731`.
+- Cycle-start HEAD: `0b1fc5085ba440e00ae254f8266533fa8c627f6f`; current
+  `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence:
+  `origin/master...HEAD = 42 1269`.
+- The catalog, random prompt, TSV, and protocol hashes matched the durable
+  values. The tracked worktree was clean at the cycle start; unrelated
+  untracked probes and generated artifacts were preserved. Root storage was
+  full, so all build, test, and temporary data stayed under
+  `/data/my_storage/tmp`. Protected PIDs `777094`, `956381`, `1138182`,
+  `1157959`, `1312049`, and `1312050` remained alive and untouched.
+
+### Scope and contract
+
+Earlier Goal 57 cells closed BaseIndex readiness during restart, the
+cursor/row/locator publication ordering, and chainstate/index crash symmetry.
+This cycle uses a different persisted relationship: the block-filter DB's
+best-block and `DBVal` row versus the flat filter bytes referenced by that row.
+The required restart invariant is that a successfully initialized and
+synchronized block-filter index can serve the filter for its persisted tip.
+The RPC and REST callers explicitly classify a ready index whose filter lookup
+fails as unexpected index corruption; initialization should therefore fail
+closed when the persisted current filter is missing or unreadable.
+
+`BlockFilterIndex::CustomInit()` previously read `DB_FILTER_POS` and the last
+filter header row, but did not read the filter bytes for the persisted tip.
+Consequently, deleting `fltr00000.dat` after a durable sync left
+`Init()` successful and `BlockUntilSyncedToCurrentChain()` true, while
+`LookupFilter()` returned false. Existing lookup-time hash and block-hash
+checks detect corruption only after the index has been published as ready.
+
+### Independent reproduction and fix
+
+The temporary probe first used a memory-only DB and was discarded as a fixture
+setup result: no best-block locator survived the stop/reinit boundary, so the
+post-reinit readiness check correctly returned false. The corrected probe used
+an on-disk scratch index, forced the chainstate flush, drained validation
+callbacks, removed the current `fltr00000.dat`, stopped, and reinitialized.
+With the unmodified source, the probe passed `Init()` and readiness but failed
+the filter lookup, establishing the mismatch.
+
+The permanent regression is
+`blockfilter_index_tests/blockfilter_index_reinit_rejects_missing_current_filter`.
+With a temporary source mutation that removed only the new physical-filter
+validation, the exact regression command exited 201 at the `!filter_index.Init()`
+assertion. The mutation was restored with `apply_patch` before final builds.
+
+`CustomInit()` now asks `ReadFilterHeader()` to also decode and hash-check the
+persisted tip's `DBVal` position through the existing `ReadFilterFromDisk()`.
+An absent file, short/corrupt record, block-hash mismatch, or filter-hash
+mismatch returns false before the index becomes initialized. The default
+header-only path used during reorg removal is unchanged, so this adds no disk
+read to steady-state block processing. The repair is one source relationship
+check and one durable restart regression; no rebuild or broad scan was added.
+
+### Verification
+
+- Clang 19 Release build, configured in the isolated
+  `/data/my_storage/tmp/cycle243-build` with IPC and wallet disabled, rebuilt
+  `test_bitcoin` successfully after the source and test changes.
+- The repaired focused command passed 1 case and 3 assertions. The temporary
+  pre-fix mutation of the same source path failed 1 assertion with exit 201.
+- The repaired adjacent matrix passed 17 cases and 3,103 assertions:
+  `baseindex_tests` (3/20), `blockfilter_index_tests` (6/1,854),
+  `coinstatsindex_tests` (2/14), `txindex_tests` (3/129), and
+  `txospenderindex_tests` (3/1,086).
+- `git diff --check` passed. No default datadir, wallet, key, or production
+  database was used.
+
+### Verdict and limits
+
+Confirmed and fixed as a local persistence/readiness defect. The test covers
+the current persisted tip and proves fail-closed restart behavior. It does not
+scan every historical filter file, so corruption in an older file can still
+surface lazily when that block is queried; a full startup audit would impose a
+different performance and recovery policy. It also does not claim a database
+engine fault or power-loss-specific root cause. Those remain separate evidence
+cells.
+
+Status: confirmed and repaired in this cycle. Commit the source, regression
+test, and this journal entry together. After the finding commit, update the
+uber-goal state with the commit id and fresh-gate result, then select a new
+catalog draw. Do not reopen the closed cursor/row publication or readiness
+cells without new backend or restart evidence.
