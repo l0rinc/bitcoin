@@ -164,3 +164,61 @@ fork-specific deviation (feature and default are upstream).
 
 ## Rotation note
 Cycle 3 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 4 (2026-08-01, draw 168, raw=2943418269569493264 (already 63-bit), idx 4/5): cross-version functional suites with exact release binaries — mempool.dat both directions (v0.20.1) + coinstatsindex (v28.2) PASS; catalog cell "feature_backwards_compatibility" absent in fork; campaign COMPLETE
+
+### Hypothesis
+H: HEAD exhibits undocumented persistence/index drift vs released
+binaries on the public upgrade path — falsifiable by running the
+in-tree cross-version functional suites against the EXACT release
+binaries archived under releases/.
+
+### Note on the queued cell
+The c1 queue named "feature_backwards_compatibility with these
+exact binaries". That test does NOT exist in this fork (checked
+test/functional/: only wallet_backwards_compatibility,
+mempool_compatibility, feature_coinstatsindex_compatibility,
+feature_presegwit_node_upgrade). Its in-scope (non-wallet)
+equivalents were run instead; wallet_backwards_compatibility is
+descoped per uber-goal (wallet deprioritized), and
+feature_presegwit_node_upgrade is HEAD-only (no previous releases,
+-testactivationheight emulation) so it is not a version
+differential.
+
+### Evidence (exact commands)
+1. mempool_compatibility.py, old=v0.20.1 (last release without
+   unbroadcast serialization and without XOR), new=HEAD:
+     PREVIOUS_RELEASES_DIR=$PWD/releases python3 \
+       test/functional/mempool_compatibility.py \
+       --tmpdir=/tmp/btc67m --configfile=$PWD/build-before/test/config.ini
+   Live result: mempool.dat moved old->new loads the tx on HEAD;
+   mempool.dat with an unbroadcasted tx moved new->old loads BOTH
+   txs on v0.20.1 (unknown fields ignored forward-compatibly).
+   "Tests successful". Bidirectional persistence compat CONFIRMED.
+2. feature_coinstatsindex_compatibility.py, new=HEAD vs legacy
+   v28.2, both -coinstatsindex:
+     same invocation shape, --tmpdir=/tmp/btc67c.
+   gettxoutsetinfo output identical across index versions AND for
+   the new binary running on the old-version index datadir.
+   "Tests successful". Index-format upgrade compat CONFIRMED.
+
+### Verdict
+DISMISSED (no undocumented drift on these surfaces). Both suites
+pass with the real archived binaries, matching their in-tree
+intent; combined with c1 (wallet/RPC matrix), c2 (chainstate
+upgrade), and c3 (downgrade boundary at blocksxor, loud abort),
+the #67 release-to-release surfaces enumerated by the campaign are
+closed.
+
+### Campaign #67: COMPLETE
+c1 wallet/RPC matrix; c2 chainstate/blocks upgrade; c3 downgrade
+boundary (v28.2 clean, v0.20.1 loud XOR abort, forward-safe
+mutations); c4 mempool.dat bidirectional + coinstatsindex
+cross-version suites with exact binaries.
+
+### Limitations
+- Only the two non-wallet cross-version suites exist in-tree;
+  broader version-pair differentials (v22-v25 chainstate) were
+  covered by c2's reasoning, not re-run live.
+- Network-transcript differential (goal text) not exercised; no
+  harness exists in-tree and building one was out of cycle scope.
