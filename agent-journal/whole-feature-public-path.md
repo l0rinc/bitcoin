@@ -129,3 +129,85 @@ live traffic, not just code reads.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+---
+
+## Cycle 3 (2026-08-01, draw 167, raw=1164948412836237405, masked same, idx 3/6)
+### Cell: short-id collision / READ_STATUS_FAILED -> full-block fallback (last live cell)
+
+### Hypotheses
+H1 (collision attack): a remote peer can force a 48-bit short-id
+collision against a victim's mempool tx to steer compact-block
+reconstruction. Falsifiable by grinder calibration + bound.
+H2 (fallback machinery): the READ_STATUS_FAILED -> full-block
+fallback path that a collision (or any commitment-breaking
+reconstruction) funnels into actually detects and recovers on the
+public P2P path. Falsifiable by a tampered-prefilled drive.
+
+### Evidence — H1: DISMISSED (infeasible, not merely unobserved)
+- Selector keys are per (header, nonce): siphash key derived from
+  SHA256(header || nonce); shortids are 48 bits of SipHash-2-4 over
+  the wtxid. Matching ONE specific shortid is preimage work ~2^48,
+  NOT the 2^24 birthday figure (birthday only applies to colliding
+  two attacker-chosen ids within one block, which still requires
+  both to land in the victim's mempool/reconstruction window).
+- Grinder (C++ at /tmp/btc109c3/grind.cpp, linked against
+  src/crypto/siphash.cpp + build-before libs) validated end-to-end:
+  HIT value=50000 with shortid 0x8c4ad8751aa7 matching an
+  independent Python SipHash-2-4 implementation; captured real
+  cmpctblock shortid 0x46bdb4c6abf9 == computed shortid_of(
+  header, nonce, wtxid(T)) — cross-implementation agreement.
+- 2^26 grind against the real target shortid: MISS, matching
+  prediction (hit probability ~2^-22). Verdict: forced collision is
+  ~2^48 work per target per block (GPU-weeks for a determined
+  attacker); out of practical remote reach, and even success only
+  reaches the H2 gate, not acceptance.
+
+### Evidence — H2: PROVEN LIVE (tampered-prefilled drive)
+Rig (/tmp/btc109c3/tamper_drive.py, regtest, 2 nodes):
+- n1/n2 synced to 101; MiniWallet self-transfer T in BOTH mempools;
+  nodes disconnected; n1 mines B = [coinbase, T].
+- Python peer to n2: sendcmpct(announce, v2), headers(B). n2 issues
+  getdata MSG_CMPCT_BLOCK (type 4) — solicited compact fetch,
+  mapBlocksInFlight entry from our peer (passes the
+  "unsolicited compact block" gate at net_processing.cpp:4702).
+- We answer with a cmpctblock carrying the CORRECT header, nonce,
+  and the CORRECT shortid of T (recomputed with the validated
+  Python siphash under selector sha256(header||nonce)), but a
+  prefilled coinbase with vout[0].nValue + 1.
+- n2 log (debug=cmpctblock, exact lines, run2/node1/regtest/debug.log):
+    InitData   PartiallyDownloadedBlock for block 18cf1bd2...
+    FillBlock  (reconstruction completed structurally)
+    validation.cpp:4199 [IsBlockMutated] Block mutated:
+                bad-txnmrklroot, hashMerkleRoot mismatch
+  -> READ_STATUS_FAILED -> n2 sends getdata MSG_BLOCK|MSG_WITNESS_FLAG
+     (type 1073741826) for B -> we serve the real block -> n2 accepts:
+     getbestblockhash() == B. RESULT line: "tampered cmpctblock drove
+     mutation-detect + full-block fallback; tip==B".
+- Framework deltas needed in this fork (recorded for reuse): no
+  P2PInterface.send_message (use send_without_ping); node rejects
+  cmpctblock without prior sendcmpct and without an in-flight
+  request (net_processing.cpp:4612, 4702); node requests new-tip
+  blocks from a v2 peer as MSG_CMPCT_BLOCK type 4.
+
+### Verdict
+DISMISSED. The collision attack is ~2^48 per target and terminates
+at the IsBlockMutated gate, which is PROVEN to fire on the public
+path (bad-txnmrklroot) and to recover via full-block fallback with
+no misbehavior score consequence beyond a wasted round-trip. The
+worst realistic outcome of a (astronomically expensive) collision
+is one redundant block download — bandwidth noise, not consensus or
+availability impact.
+
+### Campaign #109: COMPLETE
+c1 static map + wrong-vs-malicious partition; c2 live v1/v2 x
+hb/lb matrix; c3 collision-class bound + live fallback proof.
+All cells closed with executable evidence.
+
+### Limitations
+- Grinder miss is a bound, not an impossibility proof (2^48 work is
+  brute-force reachable for nation-state GPU budgets); but impact
+  after success is capped at fallback noise, so severity stays null.
+- Tamper drive used a +1sat coinbase (merkle mismatch). The
+  witness-commitment arm of IsBlockMutated shares the same gate and
+  was covered by the c1 code read; not re-driven live.
