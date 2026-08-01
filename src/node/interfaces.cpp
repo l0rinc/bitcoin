@@ -1028,6 +1028,25 @@ class MinerImpl : public Mining
 public:
     explicit MinerImpl(const NodeContext& node) : m_node(node) {}
 
+private:
+    template <typename TxidType>
+    std::vector<CTransactionRef> getTransactionsByID(const std::vector<TxidType>& txids)
+    {
+        std::vector<CTransactionRef> results(txids.size());
+        if (!m_node.mempool) {
+            Assume(results.size() == txids.size());
+            return results;
+        }
+        LOCK(m_node.mempool->cs);
+        for (size_t i{0}; i < txids.size(); ++i) {
+            results[i] = m_node.mempool->get(txids[i]);
+        }
+        Assume(results.size() == txids.size());
+        return results;
+    }
+
+public:
+
     bool isTestChain() override
     {
         return chainman().GetParams().IsTestChain();
@@ -1100,32 +1119,12 @@ public:
 
     std::vector<CTransactionRef> getTransactionsByTxID(const std::vector<Txid>& txids) override
     {
-        std::vector<CTransactionRef> results(txids.size());
-        if (!m_node.mempool) {
-            Assume(results.size() == txids.size());
-            return results;
-        }
-        LOCK(m_node.mempool->cs);
-        for (size_t i{0}; i < txids.size(); ++i) {
-            results[i] = m_node.mempool->get(txids[i]);
-        }
-        Assume(results.size() == txids.size());
-        return results;
+        return getTransactionsByID(txids);
     }
 
     std::vector<CTransactionRef> getTransactionsByWitnessID(const std::vector<Wtxid>& wtxids) override
     {
-        std::vector<CTransactionRef> results(wtxids.size());
-        if (!m_node.mempool) {
-            Assume(results.size() == wtxids.size());
-            return results;
-        }
-        LOCK(m_node.mempool->cs);
-        for (size_t i{0}; i < wtxids.size(); ++i) {
-            results[i] = m_node.mempool->get(wtxids[i]);
-        }
-        Assume(results.size() == wtxids.size());
-        return results;
+        return getTransactionsByID(wtxids);
     }
 
     const NodeContext* context() override { return &m_node; }
