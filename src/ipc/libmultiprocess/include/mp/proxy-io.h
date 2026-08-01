@@ -553,41 +553,50 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
     // The first case is handled here when m_context.connection is not null. The
     // second case is handled by the disconnect_cb function, which sets
     // m_context.connection to null so nothing happens here.
-    m_context.cleanup_fns.emplace_front([this, destroy_connection, disconnect_cb]{
-    {
-        // If the capnp interface defines a destroy method, call it to destroy
-        // the remote object, waiting for it to be deleted server side. If the
-        // capnp interface does not define a destroy method, this will just call
-        // an empty stub defined in the ProxyClientBase class and do nothing.
-        // Exceptions are caught and logged rather than propagated because
-        // ~ProxyClientBase is noexcept and the peer may be gone by the time
-        // this runs.
-        if (kj::runCatchingExceptions([&]{ Sub::destroy(*this); }) != nullptr) {
-            MP_LOG(*m_context.loop, Log::Warning) << "Remote destroy call failed during cleanup. Continuing.";
+    try {
+        m_context.cleanup_fns.emplace_front([this, destroy_connection, disconnect_cb]{
+        {
+            // If the capnp interface defines a destroy method, call it to destroy
+            // the remote object, waiting for it to be deleted server side. If the
+            // capnp interface does not define a destroy method, this will just call
+            // an empty stub defined in the ProxyClientBase class and do nothing.
+            // Exceptions are caught and logged rather than propagated because
+            // ~ProxyClientBase is noexcept and the peer may be gone by the time
+            // this runs.
+            if (kj::runCatchingExceptions([&]{ Sub::destroy(*this); }) != nullptr) {
+                MP_LOG(*m_context.loop, Log::Warning) << "Remote destroy call failed during cleanup. Continuing.";
+            }
+
+            // FIXME: Could just invoke removed addCleanup fn here instead of duplicating code
+            m_context.loop->sync([&]() {
+                // Remove disconnect callback on cleanup so it doesn't run and try
+                // to access this object after it's destroyed. This call needs to
+                // run inside loop->sync() on the event loop thread because
+                // otherwise, if there were an ill-timed disconnect, the
+                // onDisconnect handler could fire and delete the Connection object
+                // before the removeSyncCleanup call.
+                if (m_context.connection) m_context.connection->removeSyncCleanup(disconnect_cb);
+
+                // Release client capability by move-assigning to temporary.
+                {
+                    typename Interface::Client(std::move(m_client));
+                }
+                if (destroy_connection) {
+                    delete m_context.connection;
+                    m_context.connection = nullptr;
+                }
+            });
         }
-
-        // FIXME: Could just invoke removed addCleanup fn here instead of duplicating code
-        m_context.loop->sync([&]() {
-            // Remove disconnect callback on cleanup so it doesn't run and try
-            // to access this object after it's destroyed. This call needs to
-            // run inside loop->sync() on the event loop thread because
-            // otherwise, if there were an ill-timed disconnect, the
-            // onDisconnect handler could fire and delete the Connection object
-            // before the removeSyncCleanup call.
-            if (m_context.connection) m_context.connection->removeSyncCleanup(disconnect_cb);
-
-            // Release client capability by move-assigning to temporary.
-            {
-                typename Interface::Client(std::move(m_client));
-            }
-            if (destroy_connection) {
-                delete m_context.connection;
-                m_context.connection = nullptr;
-            }
         });
+        Sub::construct(*this);
+    } catch (...) {
+        // The object is not destroyed when its constructor throws, so remove the
+        // callback before Connection destruction can invoke it with a stale this.
+        m_context.loop->sync([&] {
+            if (m_context.connection) m_context.connection->removeSyncCleanup(disconnect_cb);
+        });
+        throw;
     }
-    });
-    Sub::construct(*this);
 }
 
 template <typename Interface, typename Impl>
