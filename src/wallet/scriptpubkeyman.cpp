@@ -1074,8 +1074,12 @@ bool DescriptorScriptPubKeyMan::TopUpInternal(unsigned int size, bool force_desc
     WalletBatch batch(m_storage.GetDatabase());
     if (!batch.TxnBegin()) return false;
     bool res = TopUpWithDB(batch, size, force_descriptor_write);
+    if (!res) {
+        batch.TxnAbort();
+        return false;
+    }
     if (!batch.TxnCommit()) throw std::runtime_error(strprintf("Error during descriptors keypool top up. Cannot commit changes for wallet [%s]", m_storage.LogName()));
-    return res;
+    return true;
 }
 
 bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int size, bool force_descriptor_write)

@@ -55,6 +55,63 @@ static std::optional<std::string> DatabaseReadString(MockableSQLiteDatabase& dat
     return value;
 }
 
+class PartialTopUpDescriptor final : public Descriptor
+{
+private:
+    const CExtPubKey m_xpub;
+
+    static CScript Script(int pos)
+    {
+        return CScript() << OP_0 << pos;
+    }
+
+public:
+    explicit PartialTopUpDescriptor(const CExtPubKey& xpub) : m_xpub(xpub) {}
+
+    bool IsRange() const override { return true; }
+    bool IsSolvable() const override { return true; }
+    std::string ToString(bool) const override { return "raw(00)"; }
+    bool IsSingleType() const override { return true; }
+    bool HavePrivateKeys(const SigningProvider&) const override { return false; }
+    bool ToPrivateString(const SigningProvider&, std::string& out) const override
+    {
+        out = ToString(/*compat_format=*/false);
+        return false;
+    }
+    bool ToNormalizedString(const SigningProvider&, std::string& out, const DescriptorCache*) const override
+    {
+        out = ToString(/*compat_format=*/false);
+        return true;
+    }
+    bool CanSelfExpand() const override { return false; }
+
+    bool Expand(int pos, const SigningProvider&, std::vector<CScript>& output_scripts, FlatSigningProvider&, DescriptorCache* write_cache) const override
+    {
+        if (pos != 1) return false;
+        if (write_cache) write_cache->CacheParentExtPubKey(0, m_xpub);
+        output_scripts = {Script(pos)};
+        return true;
+    }
+
+    bool ExpandFromCache(int pos, const DescriptorCache&, std::vector<CScript>& output_scripts, FlatSigningProvider&) const override
+    {
+        if (pos != 0) return false;
+        output_scripts = {Script(pos)};
+        return true;
+    }
+
+    void ExpandPrivate(int, const SigningProvider&, FlatSigningProvider&) const override {}
+    std::optional<OutputType> GetOutputType() const override { return std::nullopt; }
+    std::optional<int64_t> ScriptSize() const override { return 2; }
+    std::optional<int64_t> MaxSatisfactionWeight(bool) const override { return std::nullopt; }
+    std::optional<int64_t> MaxSatisfactionElems() const override { return std::nullopt; }
+    void GetPubKeys(std::set<CPubKey>&, std::set<CExtPubKey>&) const override {}
+    bool HasScripts() const override { return true; }
+    std::vector<std::string> Warnings() const override { return {}; }
+    uint32_t GetMaxKeyExpr() const override { return 0; }
+    size_t GetKeyCount() const override { return 0; }
+};
+
 BOOST_FIXTURE_TEST_SUITE(scriptpubkeyman_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(DescriptorScriptPubKeyManTests)
@@ -89,6 +146,39 @@ BOOST_AUTO_TEST_CASE(desc_spkm_topup_fail)
     BOOST_CHECK_EXCEPTION(
         CreateDescriptor(keystore, "wpkh(" + EncodeExtPubKey(extkey.Neuter()) + "/*h)", /*success=*/true),
         std::runtime_error, HasReason("Could not top up scriptPubKeys"));
+}
+
+BOOST_AUTO_TEST_CASE(topup_return_failure_aborts_prior_cache_writes)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+
+    WalletDescriptor descriptor{std::make_shared<PartialTopUpDescriptor>(extkey.Neuter()), 1, 0, 1, 0};
+    DescriptorScriptPubKeyMan* spkm;
+    {
+        LOCK(wallet.cs_wallet);
+        wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+        FlatSigningProvider provider;
+        auto result{wallet.AddWalletDescriptor(descriptor, provider, /*label=*/"", /*internal=*/false)};
+        BOOST_REQUIRE(result);
+        spkm = &result.value().get();
+    }
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+    const std::string descriptor_cache_type{"walletdescriptorcache"};
+    DataStream cache_key;
+    cache_key << std::make_pair(std::make_pair(descriptor_cache_type, spkm->GetID()), uint32_t{0});
+    BOOST_CHECK(!DatabaseHasKey(database, cache_key));
+
+    BOOST_CHECK(!spkm->TopUp(3));
+    {
+        LOCK(spkm->cs_desc_man);
+        BOOST_CHECK_EQUAL(spkm->GetWalletDescriptor().range_end, 1);
+    }
+    BOOST_CHECK_EQUAL(spkm->GetEndRange(), 1);
+    BOOST_CHECK_EQUAL(spkm->GetScriptPubKeys().size(), 1);
+    BOOST_CHECK(!DatabaseHasKey(database, cache_key));
 }
 
 BOOST_AUTO_TEST_CASE(add_wallet_descriptor_does_not_extend_non_self_expanding)
