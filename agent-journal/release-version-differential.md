@@ -67,3 +67,48 @@ pgrep empty, THEN delete. Leftover daemons were SIGTERM'd cleanly.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-07-31): wtxid-vs-txid inventory across the v0.21 boundary — all three protocol layers match BIP339; DISMISSED
+
+### Draw
+RE-RANK draw 148 over the 4-cell queue: raw=7620657173068370897
+(already 63-bit) -> idx 1 -> #89 tx-heavy/mempool-relay
+differential (c1 queue). Branch: audit/release-diff-c2 from
+audit/release-diff.
+
+### Setup (isolated regtest, -capturemessages on current HEAD)
+N = build-before HEAD (capture), A = v0.20.1 (pre-wtxid), B =
+v0.21.0 (BIP339). N mines 101 blocks, connects to both, wallet tx
+sent on N (fee_rate=2 named arg; the fork's node does not
+auto-create wallets and regtest needs explicit fee_rate).
+
+### Captured differential (message-capture parser)
+- NEGOTIATION: wtxidrelay handshake present only with B (2 msgs);
+  zero with A.
+- ANNOUNCEMENT: N->A inv type 1 (MSG_TX, txid 9cd5b0e3...);
+  N->B inv type 5 (MSG_WTX, wtxid 348818ba...) — same tx,
+  wtxid != txid as expected with a witness.
+- REQUEST: A's getdata type 1073741825 (MSG_WITNESS_TX);
+  B's getdata type 5 (MSG_WTX) — each side fetches in the
+  negotiated format.
+All three layers agree with the BIP339 contract on both sides of
+the v0.21 boundary.
+
+### Verdict
+DISMISSED: wtxid/txid relay selection is negotiated, announced,
+and fetched correctly per peer version. No cross-version
+divergence.
+
+### Exact commands
+- three-node regtest rig above; capture parse via
+  contrib/message-capture/message-capture-parser.py (types
+  verbatim above); harness notes: cli needs -rpcport per node,
+  argv/port traps as before.
+
+### Limitations / queue
+- Remaining queued: chainstate/blocks downgrade read (current
+  datadir opened by v28.2 and v0.20.1); functional
+  feature_backwards_compatibility with these exact binaries.
+
+## Rotation note
+Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
