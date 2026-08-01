@@ -1,5 +1,64 @@
 # Deterministic Simulation and Failure-Schedule Exploration
 
+## Cycle 255 completion: destroyed logging limiters leave bounded periodic callbacks
+
+- The exact selector `shuf -i 0-98 -n 1` returned `71`, selecting
+  `deterministic-simulation`. The dedicated branch is
+  `uber-cycle-255-deterministic-simulation-20260801`. The fresh start HEAD was
+  `377959f714f67b3398f9583e46e813d9b78b4ce1`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence `42 1297`.
+  The catalog, prompt, goals TSV, and protocol hashes matched the authoritative
+  values recorded by the uber state ledger. Prior Goal 71 cells from Cycle 84
+  (`CConnman::Start` publishing threads before rejecting options) and Cycle 235
+  (`SerialTaskRunner` deferred callback after runner destruction) were excluded.
+- The selected schedule audited the lifecycle of `BCLog::LogRateLimiter` when
+  its scheduler callback outlives the limiter. `LogRateLimiter::Create` uses
+  `scheduleEvery` and captures a `weak_ptr`, so destruction makes each future
+  callback a no-op but does not cancel the recurring scheduler entry. The
+  historical ownership change `acfa83d9d000abd263d8cb5ac3355cfd8cf49ec0`
+  explicitly describes the separate logger and scheduler dependencies. The
+  current production startup creates the limiter once at `init.cpp:1519`; no
+  runtime replacement or reload caller was found. Test-only `SetRateLimiting`
+  resets occur with a scheduler whose lifetime ends with the test fixture.
+- The deterministic probe used the real `LogRateLimiter::Create`, real
+  `CScheduler::scheduleEvery`, `MockForward`, and a live scheduler service
+  thread. It created four limiters with a one-second window, destroyed each
+  immediately, and observed four queued callbacks. Across four one-second
+  `MockForward` transitions, condition-variable completion signals observed
+  exactly 4, 8, 12, and 16 callback invocations, while `getQueueInfo` remained
+  exactly four entries. This proves bounded orphan work per destroyed limiter,
+  not unbounded growth within a single schedule; every callback's weak lock
+  correctly skipped the destroyed limiter. The temporary probe passed 9/9
+  assertions with seed `255001` and was removed without leaving a tracked test.
+- History and source tracing classify the behavior as an API lifecycle/resource
+  limitation rather than a current production defect. Repeated replacement
+  could leave one periodic no-op per obsolete limiter in a long-lived scheduler,
+  but the repository has no production replacement path and adding cancellation
+  handles would broaden the scheduler contract without a reachable failure.
+  Verdict for this cell: **dismissed as a local source defect; retained as a
+  lifecycle limitation**. The next Goal 71 queue is a distinct production
+  schedule, such as full-suite validation-signal batch interleaving with an
+  explicit deterministic task/worker schedule, or a new shutdown/retry seam.
+- The temporary probe build used the existing wallet-enabled GCC build at
+  `/data/my_storage/tmp/cycle246-wallet`; CMake reconfigured and the target
+  rebuilt successfully. The restored tree's focused controls with seed `255002`
+  passed all 9 logging cases (164 assertions) and all 5 scheduler cases (29
+  assertions). A full run with seed `255003` was discarded because its
+  `TMPDIR` did not exist and it failed during fixture setup. The corrected full
+  run with seed `255004` reached 1,253 cases, but reported one unrelated
+  `validation_block_tests/processnewblock_signals_ordering` assertion failure
+  at line 505 after the intentional filesystem-write-failure warning; its
+  final count was 1,251 passed, 1 warning, and 1 failed. The exact isolated
+  case with seed `255005` passed 958/958 assertions, and the complete
+  `validation_block_tests` suite passed 8/8 for seeds `255006` through `255013`.
+  This broad-suite-only result remains an inconclusive test-interaction/flaky
+  schedule signal and is not attributed to this cycle's logging path.
+- No Bitcoin Core source, permanent test, build file, or libsecp256k1 file was
+  changed. `git diff --check` passed after removing the temporary probe. The
+  close is a journal-only handoff authored as `Lőrinc <pap.lorinc@gmail.com>`;
+  the root filesystem remains full, so future artifacts belong under `/data`.
+
 ## Cycle 84 start
 
 - Selected by the uber loop: exact `shuf -i 0-98 -n 1` -> `71` (`deterministic-simulation`).
