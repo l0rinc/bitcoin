@@ -265,3 +265,47 @@ windows chosen from the mutant's divergence interval ([0x4000,
 
 ## Rotation note
 Cycle 6 complete; rotating per uber-goal policy.
+
+## Cycle 7 (2026-08-01): NONNEGATIVE_SIGNED negative-write contract — mangle pinned (-1 -> 0x7f -> 127; INT64_MIN -> 0x00 -> 0), unreachable in production; DISMISSED
+
+### Draw
+RE-RANK draw 162 (n=1): raw=2610058608719210074 (already 63-bit)
+-> idx 0 -> #35 NONNEGATIVE_SIGNED write semantics (c6 queue:
+"contract question, not pinned; upstream-identical"). Branch:
+audit/mutation-testing-c7 from 981e2184e1.
+
+### Mechanism
+WriteVarInt<NONNEGATIVE_SIGNED, I> has no runtime negative guard:
+`tmp[len] = (n & 0x7F) | (len ? 0x80 : 0)`, and any n <= 0x7F ends
+the loop immediately — so a negative value emits ONE byte
+(n & 0x7f) and reads back as a small POSITIVE number. Upstream
+bitcoin/bitcoin carries the identical code (no guard); the mode
+name is the whole contract (caller must pass non-negative).
+
+### Delivered: varint_nonnegative_signed_write_contract (serialize_tests.cpp)
+Pins the exact mangle: -1 -> "7f" -> 127; INT64_MIN -> "00" -> 0.
+Suite green.
+
+### Call-site classification (why the mangle is unreachable)
+Every NONNEGATIVE_SIGNED production use (chain.h:343-349
+CDiskBlockIndex _nVersion=259900 / nHeight / nFile;
+flatfile.h:19 FlatFilePos.nFile) is non-negative BY CONSTRUCTION
+(heights and file numbers are always >= 0). The read side rejects
+sign-bit overflow via the "size too large" guard (c6's flood
+battery) — so a hostile record can't produce a negative either.
+Both directions closed.
+
+### Verdict
+DISMISSED (contract question answered): the mangle exists but is
+(a) pinned suite-visibly, (b) unreachable from any call site,
+(c) upstream-identical — no fix warranted (an Assume would
+diverge from upstream for zero reachable benefit).
+
+### Limitations / queue
+- #35 queue: empty (c1 ReadVarInt, c2 WriteVarInt, c3/c4
+  consumer+wrap (property-oracle file), c5 CTxUndo, c6 SizeComputer
+  + battery, c7 write contract). Campaign COMPLETE modulo the
+  logging-location quirk noted at c5.
+
+## Rotation note
+Seven cycles; the VarInt family is fully closed.

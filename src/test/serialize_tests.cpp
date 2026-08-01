@@ -201,6 +201,31 @@ BOOST_AUTO_TEST_CASE(varint_sizecomputer_signed_bounds)
     }
 }
 
+BOOST_AUTO_TEST_CASE(varint_nonnegative_signed_write_contract)
+{
+    // #35 c7: the NONNEGATIVE_SIGNED mode carries no runtime negative-value
+    // guard (upstream-identical). Pin the current contract: writing a
+    // negative value silently mangles (base-128 magnitude of the wrapped
+    // byte sequence), documented so the behavior is suite-visible rather
+    // than accidental. Every production call site (CDiskBlockIndex
+    // version/height/file, FlatFilePos) is non-negative by construction,
+    // and the read side rejects sign-bit overflow (c6 flood battery), so
+    // the mangle is unreachable in production.
+    DataStream ss{};
+    ss << VARINT_MODE(int64_t{-1}, VarIntMode::NONNEGATIVE_SIGNED);
+    BOOST_CHECK_EQUAL(HexStr(ss), "7f"); // -1 & 0x7f
+    int64_t j{0};
+    ss >> VARINT_MODE(j, VarIntMode::NONNEGATIVE_SIGNED);
+    BOOST_CHECK_EQUAL(j, 127); // reads back as 127, not -1
+
+    DataStream ss2{};
+    ss2 << VARINT_MODE(std::numeric_limits<int64_t>::min(), VarIntMode::NONNEGATIVE_SIGNED);
+    BOOST_CHECK_EQUAL(HexStr(ss2), "00"); // INT64_MIN & 0x7f == 0
+    int64_t j2{-1};
+    ss2 >> VARINT_MODE(j2, VarIntMode::NONNEGATIVE_SIGNED);
+    BOOST_CHECK_EQUAL(j2, 0);
+}
+
 BOOST_AUTO_TEST_CASE(varints_bitpatterns)
 {
     DataStream ss{};
