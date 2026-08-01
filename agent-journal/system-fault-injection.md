@@ -55,3 +55,51 @@ tunable via -dbbatchsize per node/coins_view_args.cpp:13).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-08-01): fs/syscall fault family (permission injection) — both arms fail LOUD and attributed, zero corruption on restore; DISMISSED
+
+### Draw
+RE-RANK draw 164 over the 9-cell pool: raw=10692565713273262,
+masked 1469137528858497454 -> idx 1 -> #93 fault-hook families
+(c1 queue). Branch: audit/system-fault-c2 from 83d10f09c9.
+
+### Hook inventory first
+In-tree crash hooks: ONLY -dbcrashratio (txdb partial-batch, c1's).
+Clock family = MockTime (already covered #73 c4/c5 with its limits
+recorded). Allocator family: no in-tree hook (would need
+RLIMIT/container work; #74 c2/c5 covered LockedPool specifically).
+So the syscall/fs family goes via permission injection on the block
+IO path — distinct from #102's capture-path EISDIR and #41's
+banlist write-fail.
+
+### Arms (scratch 120-block datadir, setpriv nobody)
+- ARM B (blk00000.dat chmod 000 at startup): LOUD attributed abort
+  — "Unable to open file .../blk00000.dat" -> "Error loading block
+  database. Please restart with -reindex..." -> clean shutdown.
+  Restore perms -> full recovery at 120.
+- ARM A (blocks dir chmod 0555 mid-run): generate -> "Unable to
+  open file ... while writing block" -> "fatal internal error:
+  Failed to write block" -> RPC "block not accepted" — loud,
+  attributed, tip untouched at 120. Restore + chown -> node
+  continues, 2 blocks generated (122), blk file intact.
+- SETUP TRAPS (recorded): (1) root ignores chmod permissions
+  (CAP_DAC_OVERRIDE) — arm B as root BOOTED NORMALLY; permission
+  faults need an unprivileged user (setpriv nobody, same lesson as
+  CAP_IPC_LOCK at #74 c5). (2) root-created files are not
+  nobody-writable at 644 — my own chown omission reproduced a real
+  flush fatal on restore until chown -R.
+
+### Verdict
+DISMISSED: fs-level failures on the block IO path fail loudly with
+the correct path in the error, never silently, and the datadir
+survives. Both pre-write (startup) and mid-write (generate) arms
+verified with full recovery.
+
+### Limitations / queue
+- allocator family has no in-tree hook (noted; #74's LockedPool
+  cells cover the secure allocator specifically).
+- #93 queue: empty (c1 crash-mid-flush, c2 fs faults). Campaign
+  COMPLETE on current surface.
+
+## Rotation note
+Two cycles; fault-injection surface closed.
