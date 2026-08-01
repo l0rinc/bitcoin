@@ -123,3 +123,54 @@ pinning".
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-08-01): qa-assets fuzz-corpus clone commit-pin — CONFIRMED gap (c1's "fails loudly" was half the threat model), FIXED
+
+### Draw
+RE-RANK draw 163 over a re-harvested 10-cell pool: raw=
+15618775271313699753, masked 6395403234458923945 -> idx 5 ->
+#59 qa-assets pinning (c1 lead + queue "next pinning decision").
+Branch: audit/supply-chain-c3 from 92458c9398.
+
+### Gap analysis (the missing half of c1's assessment)
+c1 recorded "corpus corruption fails fuzzers loudly (crash
+artifacts), not silently" and did not pin. That covers only
+INJECTION (a crash-inducing input aborts the fuzzer — loud). The
+other arm, WEAKENING (removing coverage-critical inputs or
+substituting inert ones), passes fuzzers SILENTLY with degraded
+coverage — exactly the script_assets_test.json threat c1 fixed.
+Same trust model applies: the corpus content determines test
+efficacy, so it belongs under a reviewed pin.
+
+### Fix (fork-precedent pattern, with deliberate-update comment)
+ci/test/03_test_script.sh fuzz branch: after the --depth=1 clone,
+git fetch --depth=1 origin $QA_ASSETS_COMMIT && git checkout
+--detach $QA_ASSETS_COMMIT (pinned 918cdd36fec3c78f8b8f6a1dc0ec6688
+e7559c9e = main head 2026-07-31). Substituting or weakening the
+corpus now requires a second, reviewed commit touching the pin.
+
+### Verification
+- bash -n clean.
+- LIVE: scratch clone of the exact sequence lands at the pinned
+  commit (git rev-parse HEAD == 918cdd36..., match=1) — GitHub's
+  uploadpack serves fetch-by-hash at depth 1.
+- Trust anchor unchanged in shape: git object identity (SHA-1) is
+  the anchor, same class as c1's sha256 file pin.
+
+### Verdict
+CONFIRMED (silent-weakening gap) + FIXED. Note: the clone is
+retried via CI_RETRY_EXE on the outer clone only; the inner
+fetch/checkout inherit the same network plane (no new failure
+mode).
+
+### Limitations / queue
+- If the clone already exists (CI cache), the pin is not
+  re-enforced per run (checkout only on fresh clone) — a
+  deliberately-rotating pin requires cache invalidation; noted,
+  matches c1's behavior for the JSON pin.
+- Remaining #59 cells: none queued (c1 script_assets pin, c2
+  workflow posture, c3 corpus pin). Campaign COMPLETE on the
+  current surface.
+
+## Rotation note
+Three cycles; supply-chain download surface closed.
