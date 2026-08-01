@@ -338,3 +338,49 @@ vectors=512 failures=0 digest=fe288ea1ddb151fb
 Limitations: execution remains x86_64 little-endian; no ARM cross-compiler/QEMU, 32-bit target, big-endian target, LTO/PGO, Valgrind, or sanitized library build was available. The external probe does not independently implement MuSig or Silent Payments semantics, which were covered by their dedicated current-source test groups. The first link failure and the missing Valgrind dependency are recorded rather than suppressed.
 
 Next queue: close this cycle, preserve the four build trees, probe, and raw logs under `/data/my_storage/tmp/cycle123-backend-differential/`, run a fresh gate, and draw another goal. Reopen backend differential only for ARM/cross-architecture, sanitizer-built libraries, LTO/PGO, or a new backend/module change.
+
+## Cycle 249: bitset and cluster-linearization backend differential
+
+### Selection and gate
+
+- Selector command: `shuf -i 0-98 -n 1`
+- Draw: `69`
+- Selected goal: `backend-differential` (SIMD, assembly, and portable-reference backend differential)
+- Branch: `uber-cycle-249-backend-differential-20260801`
+- HEAD at gate: `27aa0368bd3adf774dff3ba9aa06fa8037aed1c9`
+- `origin/master`: `67efced1fc83a0b7215cc1513e7c4754fee0f12f`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `42 1285`
+
+The tracked clean gate, repository hashes, disk/process checks, and required branch state passed. The six protected earlier test processes remained alive. Prior Goal 69 cells were excluded: libsecp256k1 assembly versus portable API checks, sanitized assembly/portable checks, CRC32C SSE4.2 versus portable behavior, Bitcoin Core SHA256 dispatch, full-module compiler/assembly composition, and earlier ECDH/compiler backend comparisons. No relevant source files changed after those cells; this cycle selected the current Bitcoin Core `util/bitset.h` backend family used by cluster linearization.
+
+### Hypothesis and target
+
+The hypothesis was that equivalent bitset representations could disagree at limb boundaries, in set/test/clear operations, or while driving cluster linearization. The trust boundary was production graph/accounting state represented by the bitset and the resulting transaction ordering, chunking, and costs. The distinct comparison covered `IntBitSet<uint64_t>` against `MultiIntBitSet<uint64_t,1>`, `MultiIntBitSet<uint32_t,2>`, and `MultiIntBitSet<uint8_t,8>` for 64 positions. `src/test/fuzz/bitset.cpp` compares those representations with an independent `std::bitset` model across 16/32/48/64/96/128/192/256-bit cases. `src/test/fuzz/cluster_linearize.cpp` target `clusterlin_backend_equivalence` compares production `BitSet<64>` linearization with all four representations while parsing graph inputs and exercising topological mode, costs, and chunking.
+
+The initial deterministic corpus contained 16 bitset inputs (5589 bytes) and 10 cluster inputs (241 bytes). The combined corpus manifest SHA256 was `8a23e3289130b61ba51b9707f2317cf6b8346386b9906ecc3b89aab00517683`. The libFuzzer runs intentionally used copies only for this cycle, but libFuzzer appends new units to its input directory; therefore the post-run directory counts are not treated as an independent initial-corpus measurement.
+
+### Independent execution
+
+The current Clang 19 ASan+UBSan libFuzzer binary was `/data/my_storage/tmp/cycle248-build-libfuzzer-minisketch/bin/fuzz`; only journal/state commits occurred since its build. The exact target runs used fixed seeds `24901` and `24902`, `-max_total_time=30`, `-max_len=4096`, `-rss_limit_mb=4096`, and `-timeout=2`.
+
+| target | runs | final coverage | new units | peak RSS | result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `bitset` | 3047 | `cov: 18284`, `ft: 63843`, corpus `876/489Kb` | 882 | 389 MB | exit 0, no artifact |
+| `clusterlin_backend_equivalence` | 13188 | `cov: 15091`, `ft: 35458`, corpus `292/6998b` | 319 | 677 MB | exit 0, no artifact |
+
+The existing `cluster_linearize_tests` unit control ran 19 cases in `/data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin` and exited with `*** No errors detected`. This was a pre-existing current-source-equivalent build; the relevant production/test files had no later source commits.
+
+An optimized Clang 19 AFL++ persistent target from `/data/my_storage/tmp/cycle131-build-afl19d/bin/fuzz` was run with one worker for 15 seconds, `AFL_NO_FORKSRV=1`, and copies of the initial corpora. The no-forkserver mode is recorded because the default forkserver mode reproducibly aborted on the high-capacity bitset seed with `Unable to request new process from fork server (OOM?)`; the same seed passed in no-forkserver mode. This is classified as an AFL/toolchain-mode limitation, not a production failure.
+
+| target | execs | exec/s | corpus | found | edges | stability | crashes/hangs |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `bitset` | 243 | 15.18 | 30 | 15 | 3530 | 100.00% | 0/0 |
+| `clusterlin_backend_equivalence` | 202 | 13.27 | 20 | 10 | 4021 | 100.00% | 0/0 |
+
+All 30 optimized AFL bitset queue files and all 20 optimized AFL cluster queue files were replayed through the Clang 19 ASan+UBSan libFuzzer oracle. The bitset replay completed 31 runs with zero new units and 277 MB peak RSS; the cluster replay completed 21 runs with zero new units and 278 MB peak RSS. Both exited 0 with no sanitizer artifact. Raw logs and scratch inputs are preserved under `/data/my_storage/tmp/cycle249-*`, including `cycle249-backend-corpus`, `cycle249-afl-*`, `cycle249-oracle-backend`, and the corresponding replay logs.
+
+### Verdict and limits
+
+**Verdict:** dismissed as a current bitset/backend-equivalence defect. The independent `std::bitset` model, production cluster-linearization comparison, current unit control, optimized AFL++ exploration, and sanitizer oracle replay produced no output, status, accounting, ordering, chunking, crash, hang, or sanitizer divergence. No production repair or permanent test change is justified.
+
+The evidence is x86_64-only and does not establish ARM, 32-bit, big-endian, LTO/PGO, or timing equivalence. The unit control used a pre-existing equivalent build, while the fuzz targets exercised current source with only journal/state commits since compilation. The AFL forkserver failure was not hidden and was independently reproduced as a mode-specific resource/toolchain issue. The libFuzzer corpus directory growth was accounted for rather than misreported as a fresh corpus result. Next action is to close the cycle and draw a fresh catalog goal; reopen this backend cell only for a source change or new architecture, compiler, sanitizer, or optimization evidence.
