@@ -1186,4 +1186,26 @@ BOOST_FIXTURE_TEST_CASE(RemoveTxs, TestChain100Setup)
 }
 
 BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_CASE(sqlite_batch_constructor_failure_releases_statements, BasicTestingSetup)
+{
+    InMemoryWalletDatabase database;
+    BOOST_REQUIRE_EQUAL(sqlite3_set_authorizer(database.m_db,
+        [](void*, int action, const char*, const char*, const char*, const char*) {
+            return action == SQLITE_INSERT ? SQLITE_DENY : SQLITE_OK;
+        }, nullptr), SQLITE_OK);
+
+    BOOST_CHECK_THROW(database.MakeBatch(), std::runtime_error);
+
+    size_t statement_count{0};
+    for (sqlite3_stmt* statement{sqlite3_next_stmt(database.m_db, nullptr)}; statement;
+         statement = sqlite3_next_stmt(database.m_db, statement)) {
+        ++statement_count;
+    }
+    BOOST_CHECK_EQUAL(statement_count, 0);
+
+    while (sqlite3_stmt* statement{sqlite3_next_stmt(database.m_db, nullptr)}) {
+        BOOST_REQUIRE_EQUAL(sqlite3_finalize(statement), SQLITE_OK);
+    }
+}
 } // namespace wallet
