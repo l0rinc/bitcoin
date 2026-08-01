@@ -47,11 +47,18 @@ CTxDestination getNewDestination(CWallet& w, OutputType output_type);
 using MockableData = std::map<SerializeData, SerializeData, std::less<>>;
 
 
+class MockableSQLiteDatabase;
+
 class MockableSQLiteBatch : public SQLiteBatch
 {
+private:
+    MockableSQLiteDatabase& m_database;
+
 public:
-    using SQLiteBatch::SQLiteBatch;
-    using SQLiteBatch::WriteKey;
+    explicit MockableSQLiteBatch(MockableSQLiteDatabase& database);
+
+protected:
+    bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) override;
 };
 
 /** A WalletDatabase whose contents and return values can be modified as needed for testing
@@ -61,12 +68,14 @@ class MockableSQLiteDatabase : public SQLiteDatabase
 public:
     MockableSQLiteDatabase();
 
+    bool m_fail_next_write{false};
+
     bool Backup(const std::string& strDest) const override { return true; }
 
     std::string Filename() override { return "mockable"; }
     std::vector<fs::path> Files() override { return {}; }
     std::string Format() override { return "sqlite-mock"; }
-    std::unique_ptr<DatabaseBatch> MakeBatch() override { return std::make_unique<MockableSQLiteBatch>(*this); }
+    std::unique_ptr<DatabaseBatch> MakeBatch() override;
 };
 
 std::unique_ptr<WalletDatabase> CreateMockableWalletDatabase();

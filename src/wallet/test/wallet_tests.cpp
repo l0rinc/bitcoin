@@ -90,6 +90,24 @@ BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(encrypt_wallet_fails_on_master_key_write, TestingSetup)
+{
+    auto database = CreateMockableWalletDatabase();
+    CWallet wallet(m_node.chain.get(), "", std::move(database));
+    {
+        LOCK(wallet.cs_wallet);
+        wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+        wallet.SetupDescriptorScriptPubKeyMans();
+    }
+
+    auto& mock_database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+    mock_database.m_fail_next_write = true;
+
+    BOOST_CHECK(!wallet.EncryptWallet("passphrase"));
+    BOOST_CHECK(!wallet.HasEncryptionKeys());
+    BOOST_CHECK(!wallet.HaveCryptedKeys());
+}
+
 BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
 {
     // Cap last block file size, and mine new block in a new block file.

@@ -855,7 +855,13 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
             encrypted_batch = nullptr;
             return false;
         }
-        encrypted_batch->WriteMasterKey(nMasterKeyMaxID, master_key);
+        if (!encrypted_batch->WriteMasterKey(nMasterKeyMaxID, master_key)) {
+            encrypted_batch->TxnAbort();
+            mapMasterKeys.erase(nMasterKeyMaxID);
+            delete encrypted_batch;
+            encrypted_batch = nullptr;
+            return false;
+        }
 
         for (const auto& spk_man_pair : m_spk_managers) {
             auto spk_man = spk_man_pair.second.get();

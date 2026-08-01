@@ -115,9 +115,27 @@ CTxDestination getNewDestination(CWallet& w, OutputType output_type)
     return *Assert(w.GetNewDestination(output_type, ""));
 }
 
+MockableSQLiteBatch::MockableSQLiteBatch(MockableSQLiteDatabase& database)
+    : SQLiteBatch(database), m_database(database)
+{}
+
+bool MockableSQLiteBatch::WriteKey(DataStream&& key, DataStream&& value, const bool overwrite)
+{
+    if (m_database.m_fail_next_write) {
+        m_database.m_fail_next_write = false;
+        return false;
+    }
+    return SQLiteBatch::WriteKey(std::move(key), std::move(value), overwrite);
+}
+
 MockableSQLiteDatabase::MockableSQLiteDatabase()
     : SQLiteDatabase(fs::PathFromString("mock/"), fs::PathFromString("mock/wallet.dat"), DatabaseOptions(), SQLITE_OPEN_MEMORY)
 {}
+
+std::unique_ptr<DatabaseBatch> MockableSQLiteDatabase::MakeBatch()
+{
+    return std::make_unique<MockableSQLiteBatch>(*this);
+}
 
 std::unique_ptr<WalletDatabase> CreateMockableWalletDatabase()
 {
