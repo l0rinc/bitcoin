@@ -74,3 +74,73 @@ Grep of all fee arithmetic in src/txgraph.cpp:
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-08-01, draw 171, raw=3220867768142961582 (63-bit), idx 0/1): dbwrapper failed-construction leak family — autopsy + sibling sweep zero; upstream master STILL missing the destructor (fork fix 461c21cbfa offerable, live)
+
+### Family selection
+From `git log --author='pap.lorinc' --oneline HEAD` (non-journal):
+chose 461c21cbfa (F14, raii-resource-leaks c2) — a CORE storage
+family, over the two wallet-area queued candidates (wallet-
+encryption write-failures, BDB overflow-chain; deprioritized per
+uber-goal scope).
+
+### Autopsy narrative (from the fix commit)
+- Shape: throw-out-of-constructor with raw-owned resources held by
+  a PLAIN STRUCT context (LevelDBContext had no destructor) ->
+  partial construction runs no destructor -> option-owned
+  allocations leak (block_cache NewLRUCache dbwrapper.cpp:142,
+  filter_policy :144, info_log :146, penv memenv).
+- Exposure: every failed CDBWrapper construction (corrupt/locked
+  DB, TryCreateDirectories throw) leaked 79,800 B / 361 allocs per
+  19 failed opens under ASan+LSan.
+- Why tests missed it: constructions in tests succeed; the failure
+  path needed deliberate failed-open injection (the LSan probe).
+- Fix: LevelDBContext destructor deletes pdb then the options
+  members then penv; Close() deletes+nulls first so success-path
+  double-free is impossible (deleting nullptr safe). Verified in
+  HEAD: dbwrapper.cpp:202-209 + Close() :295-307.
+- Survival window: feature lifetime until 2026-07-30 fork fix.
+
+### Recurrence sweep (present-day siblings) — ZERO new
+- dbwrapper.cpp remaining raw owns: Logv heap buffer (:74) freed
+  on both arms (:107-109); Close() nulls match the destructor's
+  deletes exactly; no other plain-struct context in the file.
+- Raw `new CDBIterator` return (dbwrapper.cpp:407, declared
+  dbwrapper.h:280): EVERY call site wraps immediately in
+  unique_ptr — dbwrapper.cpp:388, txdb.cpp:40, txdb.cpp:253 (into
+  CCoinsViewDBCursor's unique_ptr member via make_unique),
+  node/blockstorage.cpp:135, index/coinstatsindex.cpp:219,
+  index/blockfilterindex.cpp:296,333, index/txospenderindex.cpp:166.
+  No unwrapped temporary; the make_unique bad_alloc window is the
+  generic C++ caveat, not this family.
+- Wider same-shape scan: no other LevelDBContext-like plain struct
+  holding owned pointers in core storage.
+
+### Upstream cross-check (2026-08-01)
+curl raw.githubusercontent.com/bitcoin/bitcoin/master/src/
+dbwrapper.cpp -> LevelDBContext at :197 STILL has NO destructor
+(grep -c '~LevelDBContext' = 0). The family is LIVE upstream; the
+fork fix remains offerable (as recorded in F14).
+
+### Verdict
+DISMISSED (new sibling): family fully mapped; single site fixed
+in HEAD with a before/after LSan oracle; all raw-own siblings
+immediately RAII-wrapped; upstream exposure re-confirmed live
+today (second verifier form: independent upstream source fetch).
+
+### Author-recurrence stats
+2 families autopsied (txgraph saturation c1, dbwrapper failed-
+construction c2), 0 uncovered siblings; the author's fix pattern
+(RAII-ize the context + null-after-delete + LSan before/after
+probe) validated again.
+
+### Exact commands
+- git show 461c21cbfa; sed/grep line refs above; curl upstream
+  dbwrapper.cpp + grep count above.
+
+### Limitations / queue
+- Wallet-area families (encryption write-failures, BDB overflow-
+  chain) remain queued but descoped unless a core-reachability
+  bridge appears.
+- Next core candidate if re-drawn: serialize SizeComputer
+  WriteVarInt overload family (f6e78b44c0).
