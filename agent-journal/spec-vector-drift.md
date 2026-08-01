@@ -236,3 +236,63 @@ cells: Wycheproof (AES/schnorr-class vectors, heavier).
 
 ## Rotation note
 Cycle 4 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 5 (2026-08-01): Wycheproof AES-CBC-PKCS5 — 72/72 keySize-256 cases (24 valid round-trip exact, 48 invalid all rejected); campaign EXHAUSTED
+
+### Draw
+RE-RANK draw 158 over the 4-cell pool: raw=15981968078687135964,
+masked 6758596041832360156 -> idx 0 -> #81 Wycheproof (last cell).
+Branch: audit/spec-vector-drift-c5 from b3a90532ce.
+
+### Vectors
+C2SP/wycheproof main, testvectors_v1/aes_cbc_pkcs5_test.json (216
+total; 72 at keySize=256: 24 valid, 48 invalid) — the wallet's
+exact primitive family (AES-256-CBC + PKCS7 padding, PKCS5
+equivalent at 16-byte blocks).
+
+### Harness and the debugging detour (recorded honestly)
+Scratch harness (/tmp/btc81c5/harness.cpp) against
+crypto/aes.cpp + ctaes + lockedpool. First run showed 49
+"failures" — ALL harness misreads, not cipher behavior:
+(a) dsz=0 conflation — CBCDecrypt returns 0 for REJECTED padding,
+for empty ciphertext, and for empty plaintext; "accepted" must
+mean non-empty ct AND dsz > 0;
+(b) the fork's CBCEncrypt returns 0 for EMPTY input (upstream-
+shared contract limitation) where Wycheproof expects a padding
+block — tcId 145 is that case;
+(c) THE SED THAT NEVER LANDED: my first patch attempt produced a
+byte-identical rerun — the sed patterns didn't match, so I
+debugged a stale binary. Verified the patch in-file before the
+final build (assert on pattern match this time).
+
+### Result (patched harness)
+72/72: every valid vector round-trips byte-exact (encrypt ==
+expected ct; decrypt == original msg), every invalid vector is
+rejected (no plaintext emitted). The substantive question — can
+any invalid-padding vector slip through — is answered: NO.
+Empty-input encrypt contract limitation documented (tcId 145,
+upstream-identical).
+
+### Verdict
+DISMISSED: the fork's AES-256-CBC + padding is byte-exact and
+padding-strict against Wycheproof. Campaign #81 EXHAUSTED
+(c1 BIP324, c2 bech32(m), c3 BIP341, c4 BIP32/base58/sighash,
+c5 Wycheproof).
+DUPLICATE-WORK NOTE (found pre-archive): #107 c2 (2026-07-30,
+conformance-test-transplant) already ran this exact cell —
+24/24 valid + 48/48 invalid, PLUS an openssl cross-verifier I
+did not use — including the same empty-message edge case. This
+cycle is an independent confirmation (same verdict, second
+harness), not new coverage; the "Wycheproof unclaimed" note in
+this journal's c4 queue was wrong — it was claimed cross-journal.
+Harvest-pool lesson recorded: verify candidate cells against ALL
+journals, not just the owning one (second cross-journal collision
+after #35 c3/c4).
+
+### Exact commands
+- curl C2SP vector file; filter keySize=256 -> /tmp/btc81c5/vec256.txt
+- g++ -std=c++20 -I src -O1 harness.cpp aes.cpp ctaes.c cleanse.cpp
+  lockedpool.cpp; ./harness -> "RESULT: 72 cases, 0 failures"
+
+## Rotation note
+Five cycles; campaign exhausted.
