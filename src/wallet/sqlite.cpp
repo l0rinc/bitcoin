@@ -412,7 +412,12 @@ SQLiteBatch::SQLiteBatch(SQLiteDatabase& database)
     // Make sure we have a db handle
     assert(m_database.m_db);
 
-    SetupSQLStatements();
+    try {
+        SetupSQLStatements();
+    } catch (...) {
+        Close();
+        throw;
+    }
 }
 
 void SQLiteBatch::Close()
