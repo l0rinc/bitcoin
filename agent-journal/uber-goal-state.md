@@ -3478,3 +3478,32 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   `uber-cycle-245-*` branch, and continue with a distinct high-risk cell. Do
   not reopen Goal 42 without new CI wiring, bot evidence, or a reproducible
   failure.
+- Cycle 245 selected Goal 60 (`reviewer-preference-mining`) with the exact
+  `shuf -i 0-98 -n 1` result `60`, on branch
+  `uber-cycle-245-historical-review-recipes-20260731`. The distinct cell mined
+  reviewer expectations for build-policy/visibility changes and large
+  scripted diffs. Accepted PR #35795 showed that artifact-size, section,
+  dynamic-symbol, public-ABI, cross-toolchain, and test evidence are expected;
+  held-out PR #35852 showed that matching cases, explicit exclusions, and a
+  search-based completeness oracle are expected for mechanical changes.
+- Independent local evidence built the parent and PR #35795 shared kernel
+  libraries and the exact PR `test_bitcoin` target. The PR reduced the shared
+  library from 63,986,872 to 63,965,608 bytes and defined dynamic symbols from
+  390 to 222 while retaining all 134 `btck_*` names; `.dynstr` changed from
+  `0x8d24` to `0x5651`. The selected `util_tests,crypto_tests,serialize_tests`
+  run passed 82 cases and 230,448 assertions, with 639 unrelated cases
+  skipped. PR #35852's detached head left only the three documented
+  `crc32c`, IPC multiprocess, and minisketch exclusions, with no non-excluded
+  `static constexpr` header matches and a clean diff check.
+- Verdict was reviewer-preference confirmed with no production defect or
+  source/test change justified. The selected-goal journal records public
+  review/API sources, exact commands and outputs, the ccache environment
+  limitation and corrected scratch-cache rerun, artifact measurements,
+  held-out oracle, recipe fingerprint, and next queue. Journal-only close
+  commit: `77be0b6d12` (`uber-goal: record cycle 245 reviewer preferences`),
+  authored as `Lőrinc <pap.lorinc@gmail.com>`. All protected processes and
+  unrelated untracked artifacts were preserved.
+- Next action: run the post-cycle gate, then draw exactly one fresh selector
+  with `shuf -i 0-98 -n 1`, create the next `uber-cycle-246-*` branch, and
+  continue. Do not reopen Goal 60 without new reviewer evidence, recurrence,
+  or a separate consumer/ABI boundary.
