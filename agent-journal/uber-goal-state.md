@@ -2,6 +2,61 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 254 Completion
+
+- The exact selector `shuf -i 0-98 -n 1` drew goal `37` (`build-dead-zones`). The
+  dedicated branch is `uber-cycle-254-build-dead-zone-20260801`. The fresh start
+  HEAD was `386fc52130040789439b765573a2a318be4687e2`, with `origin/master`
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence `42 1295`.
+  The selected journal was `agent-journal/build-dead-zones.md`.
+- Prior Goal 37 cells were excluded: Cycle 20's GCC wallet/IPC fuzz target,
+  Cycle 74's wallet/IPC/GUI-off matrix, and Cycle 101's GCC reduced-export
+  matrix. Cycle 101 explicitly left `CMAKE_VISIBILITY_INLINES_HIDDEN`,
+  shared artifacts, and install/export behavior in the queue. This cycle
+  selected the distinct `REDUCE_EXPORTS=ON` plus inline-visibility cell.
+- The base GCC 12.2 RelWithDebInfo wallet-enabled, IPC-off, GUI-off,
+  test-enabled reduced-export build completed all 501 Ninja steps. Its rules
+  had `-fvisibility=hidden` but no `-fvisibility-inlines-hidden`, and its
+  `test_bitcoin` dynamic symbol table contained 20 defined weak inline
+  libstdc++ functions. An independent flag-equivalent build produced zero;
+  wallet-load tests passed in both trees. The accepted upstream commit
+  `3f313a774bec86c09bd8b7151288306ff615e047` independently supported the
+  intended CMake contract but was not treated as proof by itself.
+- The smallest fix adds `set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)` inside the
+  existing `if(REDUCE_EXPORTS)` block. Reconfiguring with an empty
+  `CMAKE_CXX_FLAGS` cache generated both visibility flags. The fixed build
+  rebuilt 486 affected steps, had zero defined dynamic functions, and was
+  1,272 bytes smaller (`683111608` versus `683112880`). Focused tests with
+  seed `254005` passed 11 cases; the full run with seed `254007` passed all
+  1,253 cases and 27,280,810 assertions, with one expected warning from the
+  intentional filesystem-write-failure test; the isolated case with seed
+  `254008` passed 1 case and 7 assertions. The initial `--run_test=all`
+  invocation was discarded as a Boost setup-only filter error.
+- The source change and selected journal were committed independently as
+  `b0919852884ee03b153918b8faf1853e17e695f2` (`build: hide inline symbols with
+  reduced exports`), authored by `Lőrinc <pap.lorinc@gmail.com>`. `git
+  diff --check` passed. Verdict: **confirmed and fixed**; no production
+  runtime or test behavior changed. Remaining Goal 37 queue: ZMQ/USDT,
+  GUI/shared/install/export artifacts, alternate compilers and architectures,
+  and generated-file parity. Do not reopen this visibility cell absent a
+  changed linker, platform, target type, or toolchain.
+- At the source-commit close, HEAD was
+  `b0919852884ee03b153918b8faf1853e17e695f2`, with divergence `42 1296`.
+  The catalog, prompt, goals TSV, and protocol hashes remained
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were alive and untouched. `/data` had about 26G
+  free while `/` remained full, so scratch data must stay under `/data` and
+  stale non-running build trees must be managed before another large build.
+- The next cycle must perform a fresh gate, draw with the exact selector,
+  reject only an exact current evidence cell, and continue the loop. The
+  state-only close commit is intentionally separate from the selected source
+  commit.
+
 ## Cycle 253 Completion
 
 - The exact selector `shuf -i 0-98 -n 1` drew goal `30` (`security-logging`). The
