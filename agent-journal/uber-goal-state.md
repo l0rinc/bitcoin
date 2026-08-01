@@ -890,6 +890,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (already 63-bit) -> idx 4 -> #79 c2 (per-seed profile FLAT
    max/median 1.05x; ~99.5% per-invocation cost = startup;
    oversized-seed hypothesis REFUTED).
+   RE-RANK draw 159 (3-cell pool): PREEMPTED by confirmed in-tree
+   defect (user-reported upstream PR bitcoin#35859): KDF iteration
+   count overflow — rounds > INT_MAX narrow into the KDF's signed
+   count, ~2^31-round unlock hang. FIXED on audit/kdf-rounds-overflow
+   (55788c9a76, mechanism probe + boundary test; F16 added; URGENT
+   updated). Draw resumes next cycle.
    RE-RANK draw 158 (4-cell pool): raw=15981968078687135964,
    masked 6758596041832360156 -> idx 0 -> #81 c5 (Wycheproof
    AES-CBC-PKCS5: 72/72 after harness-contract fixes; INDEPENDENT

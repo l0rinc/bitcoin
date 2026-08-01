@@ -8,6 +8,7 @@
 #include <crypto/aes.h>
 #include <crypto/sha512.h>
 
+#include <limits>
 #include <type_traits>
 #include <vector>
 
@@ -19,7 +20,7 @@ int CCrypter::BytesToKeySHA512AES(const std::span<const unsigned char> salt, con
     // greater than the aes256 block size (16b) + aes256 key size (32b),
     // there's no need to process more than once (D_0).
 
-    if(!count || !key || !iv)
+    if(count < 1 || !key || !iv)
         return 0;
 
     unsigned char buf[CSHA512::OUTPUT_SIZE];
@@ -40,7 +41,8 @@ int CCrypter::BytesToKeySHA512AES(const std::span<const unsigned char> salt, con
 
 bool CCrypter::SetKeyFromPassphrase(const SecureString& key_data, const std::span<const unsigned char> salt, const unsigned int rounds, const unsigned int derivation_method)
 {
-    if (rounds < 1 || salt.size() != WALLET_CRYPTO_SALT_SIZE) {
+    // Reject counts that cannot be represented by the KDF's signed count parameter.
+    if (rounds < 1 || rounds > static_cast<unsigned int>(std::numeric_limits<int>::max()) || salt.size() != WALLET_CRYPTO_SALT_SIZE) {
         return false;
     }
 

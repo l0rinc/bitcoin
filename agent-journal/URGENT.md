@@ -5,6 +5,18 @@ change. Legend: 🚨 Critical | 🔴 High | 🟠 Medium/correctness-data-loss
 risk | 🟡 promising-unverified | ⚪ blocked/inconclusive | ✅ fixed +
 independently verified.
 
+## ✅ KDF iteration-count overflow — wallet unlock hang (fixed, audit/kdf-rounds-overflow)
+- Mechanism: nDeriveIterations (unsigned, unbounded on wallet-file
+  deserialize) narrows into the KDF's signed `int count`; rounds >
+  INT_MAX -> negative count passes the `!count` guard -> ~2^31 SHA-512
+  rounds per unlock (~2.4h) + signed-overflow UB. Crafted wallet file
+  -> wallet-scope DoS. Identical to upstream PR bitcoin#35859.
+- Evidence: mechanism probe (guard_accepts=1 while narrowed count =
+  -2147483648); passing-after wallet_crypto_tests/passphrase_rounds_limit
+  (0/INT_MAX+1/UINT_MAX rejected, DEFAULT accepted).
+- Fix: reject rounds > INT_MAX + harden KDF guard !count -> count < 1.
+- Next: offer upstream (already covered by #35859 — track its merge).
+
 ## ✅ PSBT fuzz harness truncation gate (fixed d086164661, #101 c1)
 - Mechanism: psbt fuzz target fed ConsumeRandomLengthString() into
   DecodeRawPSBT; the backslash-escape convention truncated any document

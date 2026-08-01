@@ -300,3 +300,23 @@ for ValidationInterfaceCallbacks (48 B), NotificationInterfaceCallbacks
 static assertion failed at test_kernel.cpp:1498-1499; restore
 green | #92 c2 on audit/abi-alignment-c2 (this cycle) | 32-bit row
 only if such a target ships.
+
+## F16: KDF iteration-count overflow (wallet unlock hang) — FIXED 2026-08-01
+- Mechanism: CMasterKey::nDeriveIterations (unsigned int, unbounded on
+  deserialize) narrows into BytesToKeySHA512AES's signed `int count`;
+  rounds > INT_MAX -> negative count -> guard `!count` passes, loop
+  `for(i=0; i != count-1; i++)` runs ~2^31 SHA-512 rounds (~2.4h at
+  the 0.10s/25k-rounds rate) + signed-overflow UB. Crafted/corrupted
+  wallet file -> every unlock attempt hangs (wallet-scope DoS, no
+  key/consensus impact). Identical to upstream PR bitcoin#35859 (open).
+- Evidence: mechanism probe /tmp/btc159_probe (rounds=0x80000000:
+  guard_accepts=1, narrowed_count=-2147483648 — rc=0 defect present);
+  passing-after wallet_crypto_tests/passphrase_rounds_limit (0,
+  INT_MAX+1, UINT_MAX rejected; DEFAULT accepted; suite completes in
+  ms, proving rejection-before-derivation). E2E failing-before is a
+  ~2.4h hang by construction — mechanism-probe substitute recorded.
+- Fix: audit/kdf-rounds-overflow (crypter.cpp: reject rounds > INT_MAX
+  in SetKeyFromPassphrase + harden KDF guard !count -> count < 1;
+  mirrors PR #35859 exactly).
+- Severity: Low-Medium (wallet-scope availability via crafted wallet
+  file; local/supply-chain delivery only).
