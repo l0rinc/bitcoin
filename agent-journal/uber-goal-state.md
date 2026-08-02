@@ -71,6 +71,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 19 | benchmark-integrity | CYCLE-3 | 2026-07-28 | prevector fix (138ef3c044); mutation-sweep + units/batching + timed-region all honest; queue exhausted |
 | 28 | weak-test-oracles | CYCLE-2 | 2026-07-28 | amount battery 5/5 killed; merkleblock battery 2 survivors fixed (50e9d14750), 1 equivalent |
 | 28 | weak-test-oracles | CYCLE-3 | 2026-08-02 | sighash guard mutant KILLED 409x by script corpus; densely covered; DISMISSED |
+| 28 | weak-test-oracles | CYCLE-4 | 2026-08-02 | mask-arm mutant killed 3x; both guard arms proven; DISMISSED |
 | 16 | api-misuse-resistance | CYCLE-2 | 2026-07-28 | 5+7 kernel C API @pre doc fixes (b6b48987a5, 8b0e92b4a2); #33943 precedent journaled |
 | 16 | api-misuse-resistance | CYCLE-4 | 2026-08-02 | lineage repair x2: journal restored + null-destroy fix (55f1fa334f) re-landed with regression test; upstream still vulnerable; CONFIRMED+REPAIRED |
 | 61 | stateful-contract-fuzzing | CYCLE-3 | 2026-07-28 | sigcache oracle (a4ff67417e); c2/c3 assessments all already-strong; triage guidance updated |
@@ -1007,6 +1008,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 232-redraw (4-cell pool): raw=
+   1432272597518399293 (63-bit) -> idx 1 -> #28 c4 (mask-arm
+   mutant killed 3x; DISMISSED).
+   Pool after 232r (3): v22 real banlist migration, >int64
+   absorption, lineage re-sweep.
    RE-RANK draw 232 (5-cell pool): raw=15445030354089246842,
    masked 6221658317234471034 -> idx 4 -> network-state tail
    parse — VACUOUS (self-classified irrelevant; null

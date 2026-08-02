@@ -177,3 +177,26 @@ factor). No oracle gap; no battery warranted.
   (the positive 0x81-0x83 vectors across the corpus cover it by
   the same depth).
 - undo-data shapes cell remains queued (f11c3ec1a2 lineage).
+
+## Cycle 4 (2026-08-02, draw 232-redraw, raw=1432272597518399293 (63-bit), idx 1/4): mask-arm mutation (drop ~ANYONECANPAY from the hashtype guard) — KILLED 3x by positive ANYONECANPAY vectors; both guard arms now mutation-proven
+
+### Mutation
+M: remove the mask so valid 0x81/0x82/0x83 (ALL/NONE/SINGLE |
+ANYONECANPAY) signatures read as out-of-range types:
+- script_tests: 3 FAILURES (the positive ANYONECANPAY vectors
+  across the corpus reject the unmasked read).
+- Restore -> 'No errors detected'; tree byte-identical.
+
+### Verdict
+DISMISSED: both arms of the hashtype guard are mutation-proven
+(range arm 409x in c3, mask arm 3x here). The guard is fully
+covered; no oracle gap.
+
+### Exact commands
+- sed mutant (backup /tmp/interpreter.cpp.bak2, restored);
+  cmake build; --run_test=script_tests both directions.
+
+### Limitations / queue
+- Taproot-side sighash byte validation (0x00 DEFAULT special
+  case) is a different code path (sigversion-gated), covered by
+  the #50 family.
