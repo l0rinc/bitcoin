@@ -1,3 +1,74 @@
+# Cycle 299 Completion
+
+- The exact selector `shuf -i 0-98 -n 1` drew goal `15`
+  (`public-object-validation`) with no reroll. The dedicated branch is
+  `uber-cycle-299-public-object-validation-20260802`. Cycle-start HEAD was
+  `f30c241b4348a5b72bd6401cab52b635f95d3ec6`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `45 1388`;
+  and the pre-entry state-file SHA-256 was
+  `a23b3f49d33de9ab245159de4192fadf0d0a0c7e7f3ea39df8b4327cf7e1cb55`.
+- The requested rebase was completed with `git fetch origin master` followed
+  by `git rebase origin/master`, replaying 1,390 commits. Conflicts were
+  resolved by preserving current code while migrating verified intent: HTTP
+  fuzz assertions, interface-HTTP error handling, BIP32 `KeyFingerprint`
+  initialization, string-view `LineReader` accounting, `torcontrol`
+  `Consumed()` accounting, the IPC test-file split into `ipc_tests.cpp`, init
+  buffer checks plus empty `-addnode` filtering, and HTTP RPC allow-list test
+  assertions. The PSBT commit also required current-tree adaptations found by
+  the post-rebase build: `CExtPubKey::fingerprint` is a `std::array`, and the
+  RPC path uses the current `HexStr` range API. HTTP and Tor receive-buffer
+  fixtures were moved to a preceding compatibility commit because the current
+  APIs use `std::string`.
+- The selected surface found that `PartiallySignedTransaction::m_xpubs` used
+  `std::set<CExtPubKey>` ordering that ignored serialized xpub version bytes.
+  BIP-174 global-xpub key identity is the complete serialized key, so two valid
+  records with identical depth, fingerprint, child, chain code, and pubkey but
+  different version bytes were collapsed and failed exact PSBT round-tripping.
+  The pre-fix valid PSBT fixture failed its serialized equality assertion.
+- The fix adds `PSBTXPubKeyComparator`, comparing version, depth, fingerprint,
+  child, chain code, and pubkey, and uses it for both parsed duplicate checks
+  and stored global-xpub sets. The regression retains two version variants and
+  requires exact re-encoding. Goal 99, `psbt-serialized-key-identity`, was
+  added to the evolving catalog to extend this finding into a broader
+  serialized-key identity and round-trip campaign.
+- Final evidence commits are `ce033ba7d9` (`test: adapt receive-buffer
+  fixtures to string APIs`), `36bba500fd` (`psbt: preserve distinct global
+  xpub keys`), and `02b916aa8f` (`goal: learn PSBT serialized-key identity
+  campaign`), all authored as `Lőrinc <pap.lorinc@gmail.com>`. The first
+  preserves the current HTTP/Tor test contracts, the second contains the
+  production fix, regression, and selected-goal journal, and the third adds
+  the dynamic catalog, selector, generator, manifest, and uber protocol.
+- Post-rebase validation passed: `ninja -C
+  /data/my_storage/tmp/cycle246-wallet test_bitcoin bitcoin_node -j2` exited
+  zero; the focused PSBT test with seed `29907`, all 15 `psbt_tests` cases with
+  seed `29908`, all 9 `httpserver_tests` cases with seed `29909`, and all 5
+  `torcontrol_tests` cases with seed `29910` reported no errors. The initial
+  pre-fix PSBT run had exited 201 on the exact round-trip assertion. Catalog
+  validation found 100 blocks, contiguous IDs `0..99`, unique slugs, and a
+  maximum prompt size of 3,419 Unicode characters / 3,420 UTF-8 bytes.
+  `git diff --check origin/master...HEAD` passed before this state update.
+- The catalog generator's pre-existing literal-backslash tab split was fixed
+  to parse the manifest's actual tabs. The generator now derives the count,
+  validates contiguous IDs and unique slugs, and the random prompt selects
+  with `secrets.randbelow(len(goals))`; the protocol requires fetching and
+  rebasing, learning from the cycle, and extending or adding a goal before the
+  next draw. Protected PIDs `777094`, `956381`, `1138182`, `1157959`,
+  `1312049`, `1312050`, and `1346200` remained alive and untouched; unrelated
+  untracked artifacts were preserved.
+- Final catalog hashes are: reusable catalog
+  `f605f74d6b48026eefde13c7758831e797f103a9a79f5c261ddc31a0dbdb8748`, random
+  prompt `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`,
+  goals TSV `68d571d6b7605332f5440a4a2cad9dca438e38e21f7956f4bd5f6d57da028066`,
+  generator `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`,
+  and uber protocol `78ca57acf308180c8e195e1f9c669724688b03baca4c423638549b8969f08bf1`.
+- Verdict: **confirmed and fixed**. No repository-completion claim is made.
+  After this state entry is committed separately, perform a fresh post-close
+  gate, draw exactly one selector with `shuf -i 0-99 -n 1`, create a new
+  `uber-cycle-300-*` branch, and continue on a distinct eligible cell. After
+  every future cycle, rebase again and extend the catalog from the new
+  suspicious evidence before selecting the next goal.
+
 # Cycle 296 Completion
 
 - The fresh post-Cycle-295 gate selected goal `40`
