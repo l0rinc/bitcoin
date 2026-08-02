@@ -339,7 +339,8 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_musig_pubkey_xonly_twea
  *  Returns: 0 if the arguments are invalid and 1 otherwise
  *  Args:         ctx: pointer to a context object (not secp256k1_context_static)
  *  Out:     secnonce: pointer to a structure to store the secret nonce
- *           pubnonce: pointer to a structure to store the public nonce
+ *           pubnonce: pointer to a structure to store the public nonce. Set to
+ *                     an invalid value if this function returns 0.
  *  In/Out:
  *  session_secrand32: a 32-byte session_secrand32 as explained above. Must be unique to this
  *                     call to secp256k1_musig_nonce_gen and must be uniformly
@@ -409,7 +410,8 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_musig_nonce_gen(
  *  Returns: 0 if the arguments are invalid and 1 otherwise
  *  Args:         ctx: pointer to a context object (not secp256k1_context_static)
  *  Out:     secnonce: pointer to a structure to store the secret nonce
- *           pubnonce: pointer to a structure to store the public nonce
+ *           pubnonce: pointer to a structure to store the public nonce. Set to
+ *                     an invalid value if this function returns 0.
  *  In:
  *   nonrepeating_cnt: the value of a counter as explained above. Must be
  *                     unique to this call to secp256k1_musig_nonce_gen.

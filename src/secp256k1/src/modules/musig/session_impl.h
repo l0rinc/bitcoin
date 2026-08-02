@@ -439,6 +439,7 @@ static int secp256k1_musig_nonce_gen_internal(const secp256k1_context* ctx, secp
     /* None of the nonce_pts will be infinity because k != 0 with overwhelming
      * probability */
     secp256k1_musig_pubnonce_save(pubnonce, nonce_pts);
+    secp256k1_memczero(pubnonce, sizeof(*pubnonce), !ret);
     return ret;
 }
 
@@ -449,6 +450,7 @@ int secp256k1_musig_nonce_gen(const secp256k1_context* ctx, secp256k1_musig_secn
     ARG_CHECK(secnonce != NULL);
     memset(secnonce, 0, sizeof(*secnonce));
     ARG_CHECK(pubnonce != NULL);
+    memset(pubnonce, 0, sizeof(*pubnonce));
     ARG_CHECK(session_secrand32 != NULL);
 
     /* Check in constant time that the session_secrand32 is not 0 as a
@@ -480,6 +482,8 @@ int secp256k1_musig_nonce_gen_counter(const secp256k1_context* ctx, secp256k1_mu
     VERIFY_CHECK(ctx != NULL);
     ARG_CHECK(secnonce != NULL);
     memset(secnonce, 0, sizeof(*secnonce));
+    ARG_CHECK(pubnonce != NULL);
+    memset(pubnonce, 0, sizeof(*pubnonce));
     ARG_CHECK(keypair != NULL);
 
     secp256k1_write_be64(buf, nonrepeating_cnt);

@@ -241,3 +241,47 @@ MuSig nonce-generation public output on invalid secret input, keypair/tweak
 failure transitions, and aggregate/session output on malformed input. The
 next run must recheck this journal and history and must not reopen the
 invalid-public-key return cell.
+## Cycle 284: MuSig nonce-generation fail-closed public output
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `84`
+- Goal: `secp256k1 nonce, signing, Schnorr, and MuSig state-machine audit`
+- Slug: `secp-nonce-session`
+- Branch: `uber-cycle-284-secp-nonce-session-20260802`
+- HEAD at cycle start: `6ed5da473ad92b63b1c5ffa66076ad62643cf511`
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- `origin/master...HEAD` at the gate: `45 1358`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Gate: `git fetch origin master` passed; tracked/index state was clean; `git diff --check` passed; all seven protected processes were alive. Existing untracked artifacts were preserved and excluded from commits.
+
+### Prior cells excluded and hypothesis
+
+Cycles 60 and 72 covered MuSig argument ordering and secret-nonce invalidation. Cycle 95 fixed malformed public and aggregate nonce parser outputs. Cycle 225 fixed the ECDH invalid-public-key return path. This cycle selected the remaining nonce-generation output transition: a failed `musig_nonce_gen` call must not publish a usable-looking public nonce when its secret nonce is invalidated or when its session randomness is rejected.
+
+The public header describes `pubnonce` as an output corresponding to the secret nonce, while a zero return means the arguments are invalid. The implementation cleared `pubnonce` only inside the internal helper. Consequently, an all-zero `session_secrand32` returned early with a caller's prior valid public nonce untouched, and an invalid `seckey` reached the helper, derived public nonce points, invalidated `secnonce`, and then returned `0` after saving those points into `pubnonce`. In the latter state the two outputs no longer formed a usable pair. The `nonce_gen_counter` entry point also deferred its public-output validation until after the keypair precondition.
+
+### Reproduction and fix
+
+- The existing `musig_api_tests` reached the invalid-secret-key path but checked only that `secnonce` was zeroed. Adding the public-output assertion produced a pre-fix failure at `tests_impl.h:294` with the old library: `test condition failed: memcmp_and_randomize(pubnonce[0].data, zeros132, sizeof(pubnonce[0].data)) == 0`. The pre-fix command was `TMPDIR=/data/my_storage/tmp/cycle284-pre-run /data/my_storage/tmp/cycle92-secp-ellswift/bin/tests -t=musig_api_tests -i=1 -log=1`.
+- The independent probe `agent-journal/secp_nonce_cycle284_probe.cpp` establishes a valid nonce, reuses a valid public-output sentinel with zero session randomness, then uses an invalid all-`0xff` secret key. Linked to the pre-cycle Clang 19 ASan/UBSan library in `/data/my_storage/tmp/cycle133-secp-sanitized-off`, it failed at the zero-random assertion with exit status `134`; linked to the fixed shared library it exited `0`.
+- `secp256k1_musig_nonce_gen` now clears `pubnonce` immediately after validating its required pointer, so the all-zero-random early return is fail closed. The internal helper masks the generated public nonce back to zero when its secret-key validation fails. `secp256k1_musig_nonce_gen_counter` now validates and clears `pubnonce` before its keypair precondition. The two public headers document that `pubnonce` is set to an invalid value whenever either function returns `0`.
+- The regression retains the existing invalid-secret-key assertion and adds a valid-nonce/zero-random sequence using a separate deterministic scratch buffer, then checks the public output is invalid. The valid return path is unchanged.
+
+### Verification
+
+- `CCACHE_DIR=/data/my_storage/tmp/cycle284-ccache TMPDIR=/data/my_storage/tmp/cycle284-post-tmp cmake --build /data/my_storage/tmp/cycle92-secp-ellswift --target tests noverify_tests -j2` passed.
+- Fixed focused tests passed in both configurations: `TMPDIR=/data/my_storage/tmp/cycle284-post-musig /data/my_storage/tmp/cycle92-secp-ellswift/bin/tests -t=musig_api_tests -i=4 -j=2 -seed=284 -log=1` and the corresponding `bin/noverify_tests` command. The MuSig matrices `bin/tests -t=musig -i=16 -j=2 -seed=284 -log=0` and `bin/noverify_tests -t=musig -i=16 -j=2 -seed=284 -log=0` passed.
+- Broader standalone checks passed: `bin/tests -i=16 -j=2 -seed=284 -log=0` and `bin/noverify_tests -i=8 -j=2 -seed=284 -log=0`. The no-VERIFY run reported the expected low-iteration skips only.
+- A fresh Clang 19 Debug ASan/UBSan build under `/data/my_storage/tmp/cycle284-secp-asan` configured and built `tests` and `noverify_tests`. With `ASAN_OPTIONS=halt_on_error=1:detect_leaks=0` and `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`, both `musig_api_tests -i=8 -j=2 -seed=284` runs passed. `git diff --check` passed.
+
+### Verdict and handoff
+
+**Confirmed and fixed.** A failed nonce-generation call could leave `pubnonce` valid-looking while `secnonce` was invalid, or preserve an older public nonce across the early failure. This is a public API state-transition defect distinct from the prior argument-ordering and parser cells. The smallest fix initializes the output at both public entry points and masks the internal invalid-secret path; no valid nonce derivation or session-random invalidation semantics changed. The standalone probe remains untracked as cycle evidence.
+
+Remaining Goal 84 queue: keypair/tweak failure transitions, aggregate/session output after malformed opaque objects, ECDH callback/output semantics, and signing callback failure. The next run must search this journal and history and must not reopen the closed MuSig nonce-output cell.
