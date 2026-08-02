@@ -201,7 +201,7 @@ For independent pre-fix evidence, the same test was built after temporarily rest
 
 ## Commit and Residual Queue
 
-- Source/test commit: to be recorded when this entry is committed; it contains the wrapper, native constructor rollback, public contract, and focused regression.
+- Source/test commit: `56c7ce1254` (`kernel: preserve logging callback ownership on failure`), containing the wrapper, native constructor rollback, public contract, and focused regression.
 - The test exercises deterministic logging-start failure, not allocator failure at the iterator or `LoggingConnection` allocation sites. The exception rollback is established by code-path analysis and the public failure test; an allocation-failure interposer remains a useful future kernel-wrapper cell.
 - Remaining queue: file/mapping failure paths, database iterator/transaction ownership, secure allocation cleanup, IPC `ListenConnections` raw-fd transfer, and allocation-failure coverage for C API wrappers. Search this entry and the deduplication journal before selecting any of them.
 
