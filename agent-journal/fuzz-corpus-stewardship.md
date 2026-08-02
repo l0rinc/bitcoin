@@ -408,3 +408,34 @@ aborts, zero artifacts.
 - Single-pass validation only (throughout).
 - Remaining corpora are wallet/qt/coinselection-scoped
   (descoped per uber-goal).
+
+## Cycle 11 (2026-08-02, draw 251, raw=5490570177768737669 (63-bit), idx 2/3): ephemeral_package_eval 10-min mutation campaign — fresh coverage beyond seed replay (cov 17,519, ft 110,667, corpus 484->913 in-memory), zero crashes; DISMISSED
+
+### Campaign (new evidence class: mutation beyond seed replay)
+FUZZ=ephemeral_package_eval build_fuzz/bin/fuzz
+-max_total_time=580 -timeout=25 <corpus>:
+- pulses: #512 cov 17,167 ft 90,518 corp 484; #1024 cov 17,519
+  ft 110,667 corp 913 — the mutator was finding NEW coverage
+  beyond the 2,098-seed replay (ft 90k -> 110k across 10 min).
+- Interrupted by MY 600s bound (timeout SIGTERM, not a crash);
+  zero crash/timeout artifacts (the 2 pre-existing crash-*
+  files in the repo root predate the session's fuzz work,
+  verified by mtime vs the campaign).
+- Corpus note: the in-memory active corpus grew 484->913 but
+  the on-disk dir is unchanged (2,098) — pending merge-writes
+  were lost on the SIGTERM; the coverage numbers stand as the
+  evidence (recorded for future campaign shapes: use
+  -artifact_prefix + a writable out-dir to retain new units).
+
+### Verdict
+DISMISSED: fresh mutation over the fork's ephemeral-package
+eval found new coverage but no defect in 10 minutes; the
+target is healthy under adversarial mutation, consistent with
+its 4,691-seed replay result (c10).
+
+### Exact commands
+- campaign line above; ls/find corpus checks above.
+
+### Limitations / queue
+- 10 minutes is a smoke-length campaign; the real long-run
+  belongs to qa-assets' continuous infra (c6 note).
