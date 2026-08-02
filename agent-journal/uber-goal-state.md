@@ -137,6 +137,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 94 | bindings-ffi-parity | CYCLE-2 | 2026-07-29 | enum mapping static_assert tables (073d543f26), reorder tripwire fires at :268 |
 | 64 | finding-dedup-recurrence | CYCLE-1 | 2026-07-29 | findings-index.md built; 5 fixes confirmed NOT in lineage (F1,F2,F3,F7,F9) |
 | 104 | analogical-vulnerability-translation | CYCLE-3 (queue-empty) | 2026-07-31 | INTERPRETER-CONFUSION: descriptor/miniscript limits agree, all fail closed (valid nest cap 200 via ops 201; parse cap 3600; tr braces 128); DISMISSED |
+| 104 | analogical-vulnerability-translation | CYCLE-4 (queue-empty) | 2026-08-02 | Coldcard RNG-fallback/32-bit-reseed shape translated: abort-on-failure + 256-bit seeds throughout; NEGATIVE |
 | 90 | historical-knowledge-recipes | CYCLE-2 | 2026-07-29 | R15-R22 added (sancov inlining, reindex gating, MiniWallet API, io sampling, mutant-first, pool mechanics, dict fuzzing, flag persistence) |
 | 71 | deterministic-simulation | CYCLE-2 | 2026-07-29 | crash-resume durability invariant delivered (6c6e7d9f87), 3k scans clean |
 | 71 | deterministic-simulation | CYCLE-3 | 2026-07-30 | reorged-record resume oracle + mock duplicate-hash fidelity fix (7e88645b92); 3k clean (row restored 2026-07-31) |
@@ -959,6 +960,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 185 (48-campaign eligible set): raw=
+   5590414441187505117 (63-bit) -> idx 45 -> #104 c4 (Coldcard
+   RNG shape translation: NEGATIVE; abort-on-failure design).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104}.
    RE-RANK draw 184-redraw (49-campaign pool): raw=
    3428502195126078629 (63-bit) -> idx 20 -> #42 c6 (upstream
    watch @556988790a: quiet; PRs static; F13/F14 offerable).
