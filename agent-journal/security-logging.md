@@ -321,3 +321,53 @@ defend nothing; parked cell closed.
   (none in-tree) would inherit the same log line — contract
   note, not a current leak.
 - AttachChain/init-time rescan context remains queued (c4 note).
+
+## Cycle 6 (2026-08-02, draw 265, raw=4638478224322939426, suspicion-mined from the 26-PR sweep): PR 35833 log-injection — BOTH arms CONFIRMED at HEAD + ADOPTED; failing-before shows a FORGED consensus-error line; passing-after green
+
+### Defect (two arms, both live pre-fix)
+1. RPC whitelist rejection logged the method name UNSANITIZED
+   (httprpc.cpp:118 and :147): a restricted RPC user injects
+   newlines via the method name into WARNING-level logs.
+   FAILING-BEFORE proof: pre-fix httprpc.cpp + the characterize
+   test (rpc_whitelist.py) fails expecting the injected payload
+   'getblock\nERROR: ConnectTip: ConnectBlock 0000...deadbeef
+   failed, bad-txns-inputs-missingorspent' — a FORGED
+   consensus-error-looking line in the node log.
+2. Wallet names accepted control characters (no check at HEAD):
+   they land in paths, UIs, and log lines. Verified live post-
+   fix: createwallet 'bad\nname' -> error -8 (rejected);
+   'goodname' -> created.
+
+### Adoption (audit/adopt-sanitize-logs)
+- Cherry-picked all three PR commits: 9d5fb22f1d (characterize
+  test, rpc_whitelist.py), 6ed8e2af39 (rpc sanitize),
+  ed4eb51e9f (wallet control-char rejection) — clean picks.
+- PASSING-AFTER: rpc_whitelist.py Tests successful;
+  wallet_tests + rpc_tests green; live createwallet pair above.
+
+### Verdict
+CONFIRMED + ADOPTED: newline log-injection via method names was
+live at HEAD with a demonstrable forged-consensus-error payload;
+both arms now closed with the author's minimal fix. Severity:
+low (requires restricted-RPC position or wallet-restore input),
+but the forgery shape (fake consensus errors in operator logs)
+is exactly the class #30 exists for. Upstream vehicle: PR 35833.
+
+### Suspicion-mining
+- S5: the forgery payload in the characterize test is a FAKE
+  CONSENSUS ERROR (ConnectTip bad-txns) — chosen deliberately;
+  operator-facing log trust is the asset under attack.
+- S6: the existing ThreadRPCServer method= debug log
+  (rpc/request.cpp:245-249) was already SanitizeString'd —
+  the whitelist-rejection paths were the missed twins (c5's
+  'same class' note extends).
+
+### Exact commands
+- curl PR head (l0rinc:sanitize-log-inputs ed4eb51e9f);
+  cherry-picks above; rpc_whitelist.py both directions;
+  createwallet live pair above.
+
+### Limitations / queue
+- UIs/qt display paths not audited (out of scope).
+- The 'existing name with control chars' restore arm logs a
+  warning instead of rejecting (PR's documented choice).
