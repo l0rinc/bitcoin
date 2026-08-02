@@ -24,6 +24,17 @@ using node::BlockManager;
 using node::KernelNotifications;
 using node::MAX_BLOCKFILE_SIZE;
 
+namespace {
+struct MalformedBlockIndexValue {
+    uint8_t marker{0};
+
+    SERIALIZE_METHODS(MalformedBlockIndexValue, obj)
+    {
+        READWRITE(obj.marker);
+    }
+};
+} // namespace
+
 // use BasicTestingSetup here for the data directory configuration, setup, and cleanup
 BOOST_FIXTURE_TEST_SUITE(blockmanager_tests, BasicTestingSetup)
 
@@ -58,6 +69,41 @@ BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
     // add another 8 bytes for the second block's serialization header and we get 293 + 8 = 301
     FlatFilePos actual{blockman.WriteBlock(params->GenesisBlock(), 1)};
     BOOST_CHECK_EQUAL(actual.nPos, STORAGE_HEADER_BYTES + ::GetSerializeSize(TX_WITH_WITNESS(params->GenesisBlock())) + STORAGE_HEADER_BYTES);
+}
+
+BOOST_AUTO_TEST_CASE(blockmanager_loadblockindex_malformed_disk_value)
+{
+    const auto params{CreateChainParams(ArgsManager{}, ChainType::MAIN)};
+    const fs::path db_path{m_args.GetDataDirBase() / "blockmanager_malformed_disk_value"};
+    const auto key{std::make_pair(uint8_t{'b'}, uint256{})};
+
+    {
+        kernel::BlockTreeDB db{{
+            .path = db_path,
+            .cache_bytes = 1_MiB,
+            .wipe_data = true,
+            .obfuscate = true,
+        }};
+        db.Write(key, MalformedBlockIndexValue{}, true);
+    }
+    BOOST_REQUIRE(fs::exists(db_path));
+
+    kernel::BlockTreeDB db{{
+        .path = db_path,
+        .cache_bytes = 1_MiB,
+        .obfuscate = true,
+    }};
+    CBlockIndex placeholder;
+    bool inserter_called{false};
+    const auto inserter{[&](const uint256&) {
+        inserter_called = true;
+        return &placeholder;
+    }};
+    util::SignalInterrupt interrupt;
+
+    LOCK(cs_main);
+    BOOST_CHECK(!db.LoadBlockIndexGuts(params->GetConsensus(), inserter, interrupt));
+    BOOST_CHECK(!inserter_called);
 }
 
 BOOST_FIXTURE_TEST_CASE(blockmanager_scan_unlink_already_pruned_files, TestChain100Setup)
