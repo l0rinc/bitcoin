@@ -311,6 +311,7 @@ EXTRA_DIST += src/wycheproof/ecdh_secp256k1_test.json
 EXTRA_DIST += tools/tests_wycheproof_generate_ecdsa.py
 EXTRA_DIST += tools/tests_wycheproof_generate_ecdh.py
 EXTRA_DIST += tools/tests_silentpayments_generate.py
+EXTRA_DIST += tools/wycheproof_utils.py
 
 if ENABLE_MODULE_ECDH
 include src/modules/ecdh/Makefile.am.include

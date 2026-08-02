@@ -12,6 +12,8 @@ import hashlib
 import json
 import sys
 
+from wycheproof_utils import sanitize_c_comment
+
 NUMS_H = bytes.fromhex("50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0")
 MAX_INPUTS_PER_TEST_CASE = 3
 MAX_OUTPUTS_PER_TEST_CASE = 2324  # K_max + 1
@@ -74,7 +76,7 @@ def gen_byte_array(hex):
 
 def maybe_gen_comment(comment):
     if comment:
-        return f" /* {comment} */"
+        return f" /* {sanitize_c_comment(comment)} */"
     else:
         return ""
 
@@ -252,7 +254,7 @@ def gen_test_vectors(test_vectors):
                     pubkey_index += 1
                 # len(pubkey) == 0, it's a NUMS_H input - skip without incrementing
 
-        out += f"    /* ----- {test_vector['comment']} ({test_i + 1}) ----- */\n"
+        out += f"    /* ----- {sanitize_c_comment(test_vector['comment'])} ({test_i + 1}) ----- */\n"
         out +=  "    {\n"
 
         outpoint_L = smallest_outpoint(outpoints).hex()

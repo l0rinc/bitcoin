@@ -5,6 +5,11 @@
 Utility functions for generating C files for testvectors from the Wycheproof project.
 '''
 
+def sanitize_c_comment(comment):
+    """Keep external text inside a C block comment."""
+    return comment.replace("*/", "* /")
+
+
 def to_c_array(x):
     if x == "":
         return ""

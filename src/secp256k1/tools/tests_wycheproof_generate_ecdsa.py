@@ -9,7 +9,7 @@ Generate a C file with ECDSA testvectors from the Wycheproof project.
 import json
 import sys
 
-from wycheproof_utils import to_c_array
+from wycheproof_utils import sanitize_c_comment, to_c_array
 
 filename_input = sys.argv[1]
 
@@ -76,7 +76,7 @@ for i in range(num_groups):
 
         signatures += to_c_array(test_vector['sig'])
 
-        out += "  /" + "* tcId: " + str(test_vector['tcId']) + ". " + test_vector['comment'] + " *" + "/\n"
+        out += "  /" + "* tcId: " + str(test_vector['tcId']) + ". " + sanitize_c_comment(test_vector['comment']) + " *" + "/\n"
         out += f"  {{{pk_offset}, {msg_offset}, {msg_size}, {offset_sig}, {sig_size}, {expected_verify} }},\n"
         if new_msg:
             offset_msg_running += msg_size

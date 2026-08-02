@@ -10,7 +10,7 @@ import json
 import sys
 
 from binascii import hexlify, unhexlify
-from wycheproof_utils import to_c_array
+from wycheproof_utils import sanitize_c_comment, to_c_array
 
 def should_skip_flags(test_vector_flags):
     # skip these vectors because they are for ASN.1 encoding issues and other curves.
@@ -130,7 +130,7 @@ for group in doc['testGroups']:
         shared_secrets += to_c_array(test_vector['shared'])
         wycheproof_tcid = test_vector['tcId']
 
-        test_vectors_out += "  /" + "* tcId: " + str(test_vector['tcId']) + ". " + test_vector['comment'] + " *" + "/\n"
+        test_vectors_out += "  /" + "* tcId: " + str(test_vector['tcId']) + ". " + sanitize_c_comment(test_vector['comment']) + " *" + "/\n"
         test_vectors_out += f"  {{{pk_offset}, {pk_size}, {sk_offset}, {sk_size}, {offset_shared}, {shared_size}, {expected_result}, {wycheproof_tcid} }},\n"
         if new_sk:
             offset_sk_running += sk_size
