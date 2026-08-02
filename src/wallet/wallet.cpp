@@ -2511,7 +2511,7 @@ util::Result<void> CWallet::RemoveTxs(WalletBatch& batch, std::vector<Txid>& txs
         }
 
         MarkDirty();
-    }, .on_abort={}});
+    }, .on_abort=[] {}});
 
     return {};
 }
@@ -2559,7 +2559,7 @@ bool CWallet::SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& add
                                  (fUpdated ? CT_UPDATED : CT_NEW));
     };
     if (batch.HasActiveTxn()) {
-        batch.RegisterTxnListener({.on_commit=std::move(update_in_memory), .on_abort={}});
+        batch.RegisterTxnListener({.on_commit=std::move(update_in_memory), .on_abort=[] {}});
     } else {
         update_in_memory();
     }
@@ -2962,7 +2962,7 @@ bool CWallet::SetAddressPreviouslySpent(WalletBatch& batch, const CTxDestination
         }
     };
     if (batch.HasActiveTxn()) {
-        batch.RegisterTxnListener({.on_commit=std::move(update_in_memory), .on_abort={}});
+        batch.RegisterTxnListener({.on_commit=std::move(update_in_memory), .on_abort=[] {}});
     } else {
         update_in_memory();
     }

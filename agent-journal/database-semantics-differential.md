@@ -1,5 +1,58 @@
 # Database-engine and persistence-semantics differential
 
+## Cycle 272: SQLite transaction-listener abort contract
+
+### Selection and gate
+
+- Exact selector after the Cycle 271 close: `shuf -i 0-98 -n 1` -> `95` (`database-semantics-differential`); no reroll was needed.
+- Branch: `uber-cycle-272-database-semantics-differential-20260802`.
+- Cycle start HEAD: `6458305c8f59650ed1d0dc44bdb6476ee1632626`.
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- `git rev-list --left-right --count HEAD...origin/master`: `1333 45`.
+- The tracked/index state and `git diff --check` were clean at entry. Known unrelated untracked probes, catalogs, crash artifacts, caches, and package files were preserved and excluded from staging.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Corrected TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Uber-goal state SHA-256 at the gate: `004926f21ddae890e5f711a3e87a8ac4bd94f57ac92657546e6fcaec9478550b`.
+- Storage gate: `/` was full and `/data` had about 14 GiB free; all scratch builds and test temporary directories used `/data/my_storage/tmp`.
+- Protected long-running test processes, including PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200`, were alive and were not touched.
+
+### New cell and exclusions
+
+This cycle excludes Cycle 45's fixed LevelDB iterator-status defect, Cycle 126's broad LevelDB batch/recovery/WAL/MANIFEST/snapshot/comparator/checksum/compaction/sync and v31.1 matrix, Cycle 136's dismissed ordinary `CCoinsViewDB` reader-lifetime cell, and Cycle 185's fixed LevelDB write-sync wrapper test. The new cell is the transaction outcome bridge in the SQLite wallet backend: whether wallet transaction listeners receive a valid abort callback when a transaction is rolled back after database writes have been staged.
+
+### Working hypothesis
+
+`WalletBatch::TxnAbort()` unconditionally invokes every listener's `std::function<void()> on_abort`. Four current wallet call sites used `.on_abort = {}`, which creates an empty function rather than a callable no-op. `DescriptorScriptPubKeyMan::Encrypt()` registers one of those listeners only after successfully staging encrypted records. A later rollback therefore could throw `std::bad_function_call` instead of completing the SQLite transaction abort. The trust boundary is the wallet transaction abstraction, SQLite rollback/semaphore release, and in-memory state that must remain unencrypted after an aborted encryption transaction.
+
+### Independent evidence
+
+1. Static contract trace: `WalletBatch::TxnAbort()` calls `listener.on_abort()` without checking it. `DescriptorScriptPubKeyMan::Encrypt()` registers an empty abort function after all of its database writes succeed, and `CWallet::EncryptWallet()` explicitly calls its rollback routine when a later manager or commit fails. The same empty-function construction existed in transaction listeners for transaction removal, address-book updates, and previously-spent address state.
+2. Deterministic pre-fix runtime: the added `scriptpubkeyman_tests/encrypt_descriptor_abort_preserves_state` test creates an in-memory SQLite wallet, starts a transaction, successfully stages `DescriptorScriptPubKeyMan::Encrypt()`, and aborts it. Against the unpatched implementation, `/data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=scriptpubkeyman_tests/encrypt_descriptor_abort_preserves_state --log_level=message --report_level=short --color_output=false --random=272001` exited `201` with `unexpected exception thrown by batch.TxnAbort()`; six state/setup assertions passed and the abort assertion failed.
+3. The failure is backend-driven but deterministic: `SQLiteBatch::TxnAbort()` completes `ROLLBACK TRANSACTION`, clears its active-transaction state, and then `WalletBatch` invokes the listener. The exception is therefore a transaction API failure after the database has already rolled back, not a speculative SQLite syntax issue.
+
+### Fix
+
+Replace all four empty abort `std::function` initializers with explicit `[] {}` no-op callbacks. Add the focused regression to verify descriptor encryption remains in the private-key state and that abort returns normally after all encrypted records were staged.
+
+### Verification
+
+- `ninja -C /data/my_storage/tmp/cycle246-wallet test_bitcoin -j2`: passed with GCC 12.2 after the source and test changes.
+- `TMPDIR=/data/my_storage/tmp/cycle272-post-fix-tmp /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=scriptpubkeyman_tests/encrypt_descriptor_abort_preserves_state --log_level=message --report_level=short --color_output=false --random=272002`: passed 1 case and 7 assertions.
+- `TMPDIR=/data/my_storage/tmp/cycle272-suite-tmp /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=scriptpubkeyman_tests,walletdb_tests --log_level=message --report_level=short --color_output=false --random=272003`: passed 24 cases and 210 assertions.
+- `TMPDIR=/data/my_storage/tmp/cycle272-wallet-suite-tmp /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=wallet_tests --log_level=message --report_level=short --color_output=false --random=272004`: passed 26 cases and 220 assertions.
+- `git grep -n -E 'on_abort[[:space:]]*=[[:space:]]*\\{\\}' -- src/wallet` returned no empty abort callbacks after the fix, and `git diff --check` passed.
+
+### Verdict and limits
+
+Confirmed and fixed: several SQLite-backed wallet rollback paths could throw `std::bad_function_call` after the database rollback had completed because an empty `std::function` was treated as a no-op callback. The regression uses the in-memory SQLite backend and the descriptor-encryption transaction path; it does not exercise a real power-loss schedule, a commit-time filesystem failure, or a removed historical BDB engine. Those remain separate evidence cells. The changed callbacks are behavior-neutral on successful commits and make abort behavior match the existing explicit no-op callback convention.
+
+### Handoff
+
+The source/test/journal finding commit and the separate state-only close commit must be authored as `Lőrinc <pap.lorinc@gmail.com>`. The next cycle must refresh the gate, draw with the exact selector, and avoid reopening this callback cell without new evidence from a different backend or a commit/restart fault schedule.
+
 ## Cycle 185: wrapper partial-write and sync-failure contract
 
 ### Selection and gate

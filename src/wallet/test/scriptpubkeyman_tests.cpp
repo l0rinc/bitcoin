@@ -466,6 +466,28 @@ BOOST_AUTO_TEST_CASE(encrypt_descriptor_erase_failure_preserves_state)
     BOOST_CHECK(!DatabaseHasKey(database, crypted_descriptor_key));
 }
 
+BOOST_AUTO_TEST_CASE(encrypt_descriptor_abort_preserves_state)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    auto spkm = CreateDescriptor(keystore, "wpkh(" + EncodeExtKey(extkey) + "/*)", /*success=*/true);
+    BOOST_REQUIRE(spkm != nullptr);
+    BOOST_REQUIRE(spkm->HavePrivateKeys());
+
+    CKeyingMaterial master_key;
+    master_key.resize(WALLET_CRYPTO_KEY_SIZE, 1);
+
+    WalletBatch batch(keystore.GetDatabase());
+    BOOST_REQUIRE(batch.TxnBegin());
+    BOOST_REQUIRE(spkm->Encrypt(master_key, &batch));
+
+    // Aborting after Encrypt() has staged all records must be a normal no-op callback path.
+    BOOST_CHECK_NO_THROW(batch.TxnAbort());
+    BOOST_CHECK(spkm->HavePrivateKeys());
+    BOOST_CHECK(!spkm->HaveCryptedKeys());
+}
+
 BOOST_AUTO_TEST_CASE(encrypt_wallet_descriptor_write_failure_preserves_state)
 {
     CExtKey extkey;

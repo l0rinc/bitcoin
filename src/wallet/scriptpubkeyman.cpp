@@ -987,7 +987,7 @@ bool DescriptorScriptPubKeyMan::Encrypt(const CKeyingMaterial& master_key, Walle
             m_map_crypted_keys = std::move(crypted_keys);
             m_map_keys.clear();
         },
-        .on_abort = {},
+        .on_abort = [] {},
     });
     return true;
 }
