@@ -216,10 +216,14 @@ void AllocateFileRange(FILE* file, unsigned int offset, unsigned int length)
     HANDLE hFile = (HANDLE)_get_osfhandle(_fileno(file));
     LARGE_INTEGER nFileSize;
     int64_t nEndPos = (int64_t)offset + length;
+    if (!GetFileSizeEx(hFile, &nFileSize) || nEndPos <= nFileSize.QuadPart) {
+        return;
+    }
     nFileSize.u.LowPart = nEndPos & 0xFFFFFFFF;
     nFileSize.u.HighPart = nEndPos >> 32;
-    SetFilePointerEx(hFile, nFileSize, 0, FILE_BEGIN);
-    SetEndOfFile(hFile);
+    if (SetFilePointerEx(hFile, nFileSize, 0, FILE_BEGIN)) {
+        SetEndOfFile(hFile);
+    }
 #elif defined(__APPLE__)
     // OSX specific version
     // NOTE: Contrary to other OS versions, the OSX version assumes that
