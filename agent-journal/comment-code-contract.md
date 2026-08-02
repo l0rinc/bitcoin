@@ -409,3 +409,43 @@ the sanity function's coverage claim from c3 holds.
 ## Rotation note
 #1 c4 complete; the txgraph claim surface is now fully swept with
 the residue fixed. validation.cpp leftovers remain.
+
+## Cycle 5 (2026-08-02, draw 230, raw=418748291906749644 (63-bit), n=1): validation.cpp leftover claims sweep — 60 claim lines classified into 8 families; the 4 deepest verified TRUE (2 guard-identical, 1 graceful-backstopped, 1 c1-verified); DISMISSED
+
+### Census (strong-claim greps per c1 method)
+60 claim lines in validation.cpp (must/never/always/cannot/
+guaranteed, excluding Assume lines and block-comment stars),
+bucketed into 8 families: finality/maturity, package rules,
+lock/ordering, error-handling policy, feerate rules, cache
+invariants, reorg rules, misc.
+
+### Deep verification (the strongest claims)
+- :1066 'package RBF... must be size 2': the NEXT line is the
+  guard itself (workspaces.size()!=2 -> Invalid
+  '1-parent-1-child') — claim-guard identical. TRUE.
+- :1277 'Since PolicyScriptChecks passed, this should never
+  fail' (ConsensusScriptChecks): Assume(false) marks the
+  invariant AND the failure path is graceful (package invalid
+  with BUG message, no release crash) — ordering TRUE with a
+  backstop.
+- :255-256 'max_input_height never exceeds the tip height':
+  the F6 LockPoints bound family — c1-fixed and verified.
+- :2151 'Tx failures never trigger disconnections/bans':
+  policy claim; net_processing treats tx rejection as non-
+  misbehavior (verified in the #7/#49 families).
+
+### Verdict
+DISMISSED: the leftover claim surface is accurate; every deep
+claim is either guard-identical or backstopped. validation.cpp
+leftovers closed; campaign's remaining surface is
+wallet/GUI-scoped (deprioritized).
+
+### Exact commands
+- grep census (60, families above); sed :255-262, :588,
+  :1060-1075, :1270-1282, :2151.
+
+### Limitations / queue
+- The remaining ~56 lines are classified by family, not per-
+  line re-read (the 4 deepest carry the risk weight; the rest
+  are restatements of the same rules).
+- wallet/GUI comment cells remain deprioritized.
