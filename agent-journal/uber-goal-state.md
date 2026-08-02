@@ -232,6 +232,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 34 | uncovered-code-classification | CYCLE-5 | 2026-07-31 | BitsToBytes padding arms: dedicated test, 0xff-mutant killed (was sancov-granularity, not behavioral gap); in-tree queue CLOSED |
 | 23 | perf-flamegraph-investigation | CYCLE-4 | 2026-07-29 | CompareMainTransactions = O(1) early-exit comparator; memcmp/atomic shares inherent-by-design; no fix candidate |
 | 95 | database-semantics-differential | CYCLE-3 | 2026-07-29 | RocksDB swap builds+reindexes correctly; CPU parity (validation-bound), wall -43% (write parallelism, directional) |
+| 95 | database-semantics-differential | CYCLE-6 | 2026-08-02 | kill-during-pressure-flush at -dbcache=4 scale: 3/3 zero-corruption recoveries; durability surface closed; DISMISSED |
 | 42 | ci-review-bot-followup | CYCLE-2 | 2026-07-29 | wider DrahtBot sweep (15 PRs, 7 flagged): all failures PR-owned; 35793 shows in-tree assert working as designed |
 | 44 | secret-copy-optimization | CYCLE-2 | 2026-07-29 | clang cross-check: barrier un-elidable in IR (calloc+barrier+free); cleanse idiom confirmed both compilers |
 | 80 | fuzz-engine-differential | CYCLE-3 | 2026-07-29 | consensus acceptance differential: A=0/300 (no structural over-acceptance); E=53/D=99 agreement, C=148 parse/policy |
@@ -947,6 +948,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 173 (4-cell pool): raw=17651119340599297244,
+   masked 8427747303744521436 -> idx 0 -> STALE (#55 exhausted;
+   pool repair). Redraw (3-cell): raw=2606098433264139421
+   (63-bit) -> idx 1 -> #95 c6 (kill-during-pressure-flush at
+   -dbcache=4 scale: 3/3 zero-corruption; DISMISSED).
+   Pool after draw 173 (2): #80 fuzz-engine-diff musig2
+   cross-field, #78 translation-validation single-TU; #95
+   rocksdb-brute bulk-ops harvested as next-cycle candidate.
    RE-RANK draw 172 (6-cell re-harvested pool): raw=
    184429387142081413 (63-bit) -> idx 1 -> STALE (#108 complete;
    pool repair). Redraw (5-cell): raw=14500292587252405485, masked

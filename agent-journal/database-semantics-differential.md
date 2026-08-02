@@ -295,3 +295,51 @@ surface is closed at this scale.
 
 ## Rotation note
 Cycle 5 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 6 (2026-08-02, draw 173, raw=17651119340599297244, masked 8427747303744521436, idx 0/4 -> STALE (#55 exhausted; pool repair), redraw raw=2606098433264139421 (63-bit) idx 1/3): large-UTXO kill-during-pressure-flush — forced at SMALL scale via -dbcache=4; 3/3 trials zero-corruption; DISMISSED
+
+### Hypothesis
+H (c2/c5 queued): kill -9 while a dbcache-PRESSURE flush commits
+(mid-run, not shutdown) corrupts or loses state. c5 noted it needs
+a multi-GB UTXO chain. Reframed: -dbcache=4 (minimum) + many-
+output txs force the same flush pressure at small scale; disk
+constraint removed.
+
+### Rig (/tmp/btc95c6/pressure_kill.py, preserved)
+- Single node, -dbcache=4 -checkblockindex=1, MiniWallet RAW_P2PK.
+- Pressure: 40 rounds of 8x send_self_transfer_multi(num_outputs=
+  100, confirmed_only=True) + 1 block; then a spam thread keeps
+  pressuring while the main thread sleeps a seeded-random 2-6s and
+  SIGKILLs the daemon mid-connect (seed 0x95C6, recorded).
+- Framework quirks recorded: sqlite wallet flush-warning lines
+  match naive 'corrupt' greps (filtered by 'sqlite' exclusion);
+  gettxoutsetinfo 'transactions' counts TXs not outputs (use
+  'txouts'); immature-coinbase and dust-input failures need
+  confirmed_only=True, not hand-picked max-value UTXOs.
+
+### Results (3/3 trials)
+- Trial 1: kill mid-pressure with 329 flush lines in the log;
+  recovery h2=150 (== pre-kill quiescent height) -> forward-mined
+  tip 160; corruption-lines=0 (keywords corrupt/checksum/truncat/
+  database error/leveldb error, sqlite excluded).
+- Trials 2, 3: identical RESULT lines (zero corruption, height
+  preserved, forward mining clean).
+- Node continues accepting and mining blocks post-recovery —
+  chainstate and block files consistent.
+
+### Verdict
+DISMISSED: the dbcache-pressure flush window is as safe as the
+c4 random-timing and c5 per-batch windows — the HEAD_BLOCKS/
+WriteBatch crash protocol holds under sustained flush pressure;
+the multi-GB chain was never necessary (-dbcache=4 forces the
+same code path). Durability surface closed at this scale.
+
+### Exact commands
+- python3 /tmp/btc95c6/pressure_kill.py --tmpdir=... --configfile=
+  build-before/test/config.ini (x3); RESULT lines above.
+
+### Limitations / queue
+- RocksDB arm of the pressure kill not run (c4 covers engine
+  parity at random timing; the swap build is recreateable per c3).
+- rocksdb-brute bulk-ops remains the last #95 cell (depends on
+  the swap).
