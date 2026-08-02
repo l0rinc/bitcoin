@@ -184,3 +184,26 @@ gate-independent metric. MiniWallet (~80 tx/s, no wallet DB) beats
 wallet-RPC (~0.1-26 tx/s with silent failure modes; fresh regtest
 needs -fallbackfee) for tx-heavy chain construction; the fork's
 framework needs called_by_framework=True on generate().
+
+## Consolidated regression sweep (cycle 250, draw raw=5687290599673046444, 2026-08-02): integrated lineage all-green
+
+### Scope (verification, not a campaign cell)
+With all session fixes integrated (KDF F16, null-destroy F17,
+txgraph test batteries, qa-assets pin, merkle/varint/undo
+batteries, backports):
+- test_bitcoin (full unit suite, build-before): No errors
+  detected.
+- test_kernel (destroy_null incl. btck_chainstate_manager_destroy
+  nullptr + abi_layout battery): No errors detected.
+- Functional subset (feature_block, p2p_compactblocks,
+  rpc_blockchain v1+v2, feature_reindex, p2p_segwit,
+  feature_csv_activation): ALL 7 Passed, 224s accumulated,
+  /tmp/btc250.
+
+### Verdict
+INTEGRATED GREEN: the lineage's cumulative fix set is
+self-consistent at the current archive tip (3501032880).
+
+### Exact commands
+- cmake --build build-before test_bitcoin test_kernel; both
+  suites; test_runner subset above; no processes left.
