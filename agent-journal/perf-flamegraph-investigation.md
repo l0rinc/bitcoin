@@ -242,3 +242,44 @@ the c1/c2 findings, no fix candidate. Hypotheses closed.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 5 (2026-08-02, draw 222, raw=6987695114313435315 (63-bit), idx 3/9): retention attribution — author's characterization test RUN at HEAD (pre-fix semantics confirmed); vector-retention chain closed executable
+
+### Cell
+The #22-c4 RSS measurement's confound (vector retention vs
+allocator slack) resolved via the author's own characterization
+test (b793679ed5, on l0rinc/txgraph-retained-entry-usage).
+
+### Evidence
+- Cherry-picked the test onto HEAD (union conflict with
+  txgraph_main_memory_usage_matches_abort_staging + one labeled
+  brace repair, same shape as 32643f9f98's).
+- txgraph_tests FULL suite green incl. the new case (650us):
+  after 1024 add/remove churns the empty graph reports 0 usage
+  (charge-by-count premise), and after one add the churned and
+  fresh graphs report EQUAL usage — the CURRENT semantics the
+  fix commit (475ab49da6) deliberately changes to capacity-
+  aware charging (its 2-line test edit flips the expectation).
+- Chain closed: mechanism proof (#65 c12) + RSS measurement
+  (#22 c4: ~3.3MB converging) + this executable semantic
+  confirmation. The retained bytes ARE the m_entries vector
+  capacity (charging DynamicUsage(m_entries) is the only thing
+  that changes the number — attribution by the fix's own
+  definition).
+
+### Verdict
+Finding of fact: the attribution is proven without massif; the
+pre/post pair is pre-verified for adoption review (the branch
+test runs at HEAD, its expectation documents exactly what the
+fix must flip). No defect beyond the known 🟡.
+
+### Exact commands
+- cherry-pick b793679ed5 (union + repair commits);
+  --run_test=txgraph_tests[/txgraph_memory_usage_retained_entries]
+  (green above).
+
+### Limitations / queue
+- The perf-campaign's open hypotheses remain closed (c4); this
+  was an attribution cell riding the 🟡.
+- Post-adoption re-run of #22 c4's churn profile is the
+  verification step (#22 c4 queue).
