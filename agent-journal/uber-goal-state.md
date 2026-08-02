@@ -181,6 +181,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 41 | history-seed-archaeology | CYCLE-6 | 2026-07-31 | banlist.dat/.json: all 6 cells as documented (round-trip/corrupt/garbage/legacy-dat/expired/write-fail-retry); persistence family CLOSED; campaign EXHAUSTED |
 | 50 | fuzz-introspector-blockers | CYCLE-1 | 2026-07-29 | PSBT blocker = harness truncation (ConsumeRandomLengthString); ~500 serialize edges unreachable |
 | 57 | local-reasoning-contracts | CYCLE-1 | 2026-07-29 | m_all_zero contracts observable+guarded; broken-discipline mutation caught at bloom_tests:535 |
+| 57 | local-reasoning-contracts | EXHAUSTED | 2026-08-02 | successor cells (FRESH/spent, m_dirty_count) already battery-covered; reopen on new flag domain |
 | 68 | architecture-abi-parity | CYCLE-2 | 2026-07-29 | char-signedness sweep clean: no sign-sensitive plain-char use; serialize forbid guards the class |
 | 93 | system-fault-injection | CYCLE-1 | 2026-07-29 | mid-flush crash injection: recovery rolls forward identically (3 crashes, 415 blocks, no corruption) |
 | 93 | system-fault-injection | CYCLE-2 (COMPLETE) | 2026-08-01 | fs/permission faults: unreadable blk = loud attributed abort; unwritable blocksdir = loud write-fail; full recovery both |
@@ -990,6 +991,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 214 (17-campaign eligible set): raw=
+   8524466033060714935 (63-bit) -> idx 11 -> #57 c5 (successor
+   survey: both covered; EXHAUSTED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57}.
    RE-RANK draw 213 (18-campaign eligible set): raw=
    10746796534152436801, masked 1523424497297660993 -> idx 11 ->
    #51 c4 (BIP30 unconstructability proven live; queue empty).

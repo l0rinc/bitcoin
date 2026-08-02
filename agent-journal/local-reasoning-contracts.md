@@ -289,3 +289,34 @@ contract so a future edit cannot silently drop a set.
 ## Rotation note
 Four cycles; m_all_zero contracts now have a dedicated
 mutation-verified battery. #57 cells all closed.
+
+## Cycle 5 (2026-08-02, draw 214, raw=8524466033060714935 (63-bit), idx 11/17): successor-cell survey — FRESH/spent and m_dirty_count disciplines already battery-covered in-tree; campaign hypothesis space EXHAUSTED
+
+### Survey (the two natural successors to the closed m_all_zero
+cells)
+1. FRESH/spent flush discipline (UTXO-resurrection class):
+   AddCoin's spent-DIRTY no-refresh rule (coins.cpp:130-152) and
+   the parent-propagation rule (:317-322) are battery-tested at
+   the State-matrix level in coins_tests.cpp (:848-875,
+   CLEAN/DIRTY/FRESH/DIRTY_FRESH x SPENT variants). COVERED.
+2. m_dirty_count (fork-added counter): Assume pre/post snapshots
+   at every mutation site (coins.cpp:34-107) + dedicated test
+   ccoins_cursor_dirty_count_contracts (coins_tests.cpp:475) +
+   GetDirtyCount assertion (:466). COVERED.
+
+### Verdict
+EXHAUSTED: every flag/dirty-state contract domain reachable
+from the campaign's discipline has an in-tree battery; the two
+successor candidates are already covered (verified, not
+manufactured). Reopen condition: a NEW flag/counter domain
+lands (e.g., the author's txgraph-retained-capacity branch's
+usage accounting — watch #65's 🟡).
+
+### Exact commands
+- grep/sed line refs above (coins.cpp:34-152, 317-322;
+  coins_tests.cpp:150/466/475/848-875).
+
+### Limitations
+- Coverage is by test-presence census + mutation-verify history
+  (c4 battery), not fresh re-runs (the cells' own journals
+  carry the green evidence).
