@@ -60,3 +60,33 @@ multiply-first overflow (or narrowing after the multiply).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-08-02, draw 209, raw=10310213087096134840, masked 1086841050241359032, idx 8/24): queued-seed absorption audit — all 3 c1-queued families CLOSED by later campaigns (cross-pollination record); campaign queue EMPTY
+
+### Absorption matrix (c1 queue -> closing campaign)
+1. Saturation arithmetic family (3ae78dbd25 lineage): autopsied
+   in #105 c1 (project-bug-autopsy-recurrence.md cycle 1) —
+   recurrence fully mapped (CheckedFeePerWeightSum guards + fuzz
+   oracle), ZERO uncovered siblings. CLOSED.
+2. Fork BDB overflow-chain (71cf0ba593): wallet-BDB scope —
+   descoped per uber-goal (wallet deprioritized absent a core
+   bridge); recorded in #105's own queue as such. CLOSED-by-scope.
+3. 2018 inventory-DoS family (CVE-2024-52915/52920 shapes):
+   marker-verified in #49 c10 — MAX_INV_SZ=50000
+   (net_processing.cpp:128), MAX_GETDATA_SZ=1000 (:130),
+  oversized-reject arms (:4170/:4261), 4MB message cap
+  (net.h:65 + net.cpp:774-777). All present at HEAD. CLOSED.
+
+### Verdict
+Campaign queue EMPTY: every leftover-family seed from c1 is
+closed with evidence (two by direct audit, one by scope rule).
+The multiply-first sweep (c1) stands as the campaign's seed
+method; no further families identified.
+
+### Exact commands
+- grep cross-refs above (assertion-invariant-audit.md,
+  project-bug-autopsy-recurrence.md, critical-history-sweep.md).
+
+### Limitations / queue
+- New leftover families would arrive via new fix commits
+  (standing rule: each new fix seeds a sibling sweep in #105).
