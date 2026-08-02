@@ -1,5 +1,15 @@
 # Uber Goal State
 
+## Cycle 268 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact selector `shuf -i 0-98 -n 1` drew goal `92` (`abi-alignment-aliasing`); distinct evidence remained open, so no reroll was needed. The dedicated branch is `uber-cycle-268-abi-alignment-aliasing-20260802`.
+- Gate HEAD was `c556caf414c143479ae6ca0163944fd182bb0a09`; fetched `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1325 45` (`HEAD...origin/master`). At source close, HEAD was `d716af902ca483ef338c33aa8618c0b6314d8ba3` and divergence was `1326 45`.
+- Catalog, random prompt, goals TSV, and protocol hashes were unchanged: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The fresh ABI cell found that `btck::write_bytes` formed `first + len` before handling zero-length output. Empty scripts, scriptSigs, and witness items can validly pass `len == 0` with a null empty-vector `data()` pointer. GCC 12/libstdc++ and Clang 19/libstdc++ probes reproduced the null data value. The minimal fix returns before pointer formation and adds an explicit empty-script serialization assertion.
+- Source/test/journal commit `d716af902ca483ef338c33aa8618c0b6314d8ba3` (`kernel: avoid empty buffer pointer arithmetic`) was authored as `Lőrinc <pap.lorinc@gmail.com>`. The Clang 19 kernel build passed. The focused `btck_script_pubkey,btck_transaction_input` run passed 2 cases and 108 assertions. The first full run was blocked by the full root `/tmp`; rerunning with `TMPDIR=/data/my_storage/tmp/cycle268-kernel-test` passed all 19 cases and 3719 assertions. `git diff --check` and `git show --check` passed. No 32-bit or alternate-library execution was available, and the sanitizer build did not diagnose the old source expression.
+- Verdict: **confirmed and fixed** for the empty callback buffer boundary. The repository is not considered exhausted. The detailed ABI evidence, exclusions, and limitation are in `agent-journal/abi-alignment-aliasing.md`. Existing untracked agent/user artifacts were preserved; cycle scratch data is under `/data/my_storage/tmp/cycle268-kernel-test`.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` remained alive and untouched. The next cycle must perform a fresh gate, fetch `origin/master`, draw exactly one selector from `0..98`, and create a new dedicated branch. Do not repeat this empty-buffer callback cell without new implementation, compiler/library, or recurrence evidence.
+
 ## Cycle 267 Completion
 
 - The fresh gate fetched `origin/master` before branch creation. The exact selector `shuf -i 0-98 -n 1` drew goal `42` (`ci-bot-followup`); distinct Goal 42 evidence cells remained open, so no reroll was needed. The dedicated branch is `uber-cycle-267-ci-bot-followup-20260802`.
