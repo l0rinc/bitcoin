@@ -304,6 +304,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 60 | reviewer-preference-skill | CYCLE-5 | 2026-07-29 | maintainer merge-rationale mined: M1-M4 (terse depth-honest ACKs, self-contained descriptions, lifecycle, no info-hiding) |
 | 60 | reviewer-preference-skill | CYCLE-9 | 2026-08-02 | watch: 35592/35838 template-conformant; ordering caveat recorded; quiet |
 | 60 | reviewer-preference-skill | CYCLE-10 | 2026-08-02 | watch: master static; 35744 rework exchange, 35859 tested-ACK + CI flags; quiet |
+| 60 | reviewer-preference-skill | CYCLE-11 | 2026-08-02 | watch: 35865 premise-refutation close; template holds; quiet |
 | 58 | helper-reuse | CYCLE-3 | 2026-07-29 | 7th PSBT copy deduplicated: helper moved to rpc/rawtransaction_util (existing shared header); rpc_psbt green |
 | 58 | helper-reuse | CYCLE-4 (queue-empty) | 2026-08-02 | census: DecodeHexTx shared; near-twins binary-separated by design; queue EMPTY |
 | 65 | contributor-branch-radar | CYCLE-4 | 2026-07-29 | rocksdb-brute assessed: bulk-fetch class subsumed by shipped -prevoutfetchthreads; stale WIP, nothing actionable |
@@ -1015,6 +1016,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 242 (3-watch pool): raw=13148362549488644065,
+   masked 3924990512633868257 -> idx 2 -> #60 c11 (watch:
+   35865 premise-refutation; quiet).
+   Pool: #42, #65 (next).
    RE-RANK draw 241 (1-family pool): raw=7943594722486301467
    -> #79 c8 (block/merkle batch: 7,405 seeds; IMPORT PROGRAM
    COMPLETE 87,728 seeds green; DISMISSED).
