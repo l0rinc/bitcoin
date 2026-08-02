@@ -279,6 +279,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 50 | fuzz-introspector-blockers | CYCLE-3 | 2026-07-29 | correlated PSBT signing seed: layout replay byte-exact + walletprocesspsbt complete=True; complete-arm driver |
 | 50 | fuzz-introspector-blockers | CYCLE-14 (COMPLETE) | 2026-08-01 | taproot sighash size-class gates 6/6 (DEFAULT 64B, non-DEFAULT 65B+trailing, musig2 psig parse-reject); RPC-parameter confounder recorded |
 | 51 | differential-metamorphic | CYCLE-3 | 2026-07-29 | fee-diagram incremental-vs-recompute: hook exists (txgraph fuzz sim+CompareChunks), 1000 runs green |
+| 51 | differential-metamorphic | CYCLE-4 | 2026-08-02 | BIP30 dup unconstructable PROVEN LIVE (bad-cb-height + bad-version); queue empty |
 | 42 | ci-review-bot-followup | CYCLE-3 | 2026-07-29 | corecheck endpoint = real oracle; flags 35744 bench regressions (ComplexMemPool +15.6%, OrphanageEraseForPeer +33%) upstream-side |
 | 46 | api-output-on-failure | CYCLE-2 | 2026-07-29 | import_blocks clean; callback reentrancy constraint real (cs_main held, deadlock on reentry) but undocumented (upstream-identical) |
 | 46 | api-output-on-failure | CYCLE-3 | 2026-08-02 | per-callback lock map: block_tip cs_main-held (unique), header_tip asserted lock-free, progress init-thread; same upstream doc gap |
@@ -989,6 +990,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 213 (18-campaign eligible set): raw=
+   10746796534152436801, masked 1523424497297660993 -> idx 11 ->
+   #51 c4 (BIP30 unconstructability proven live; queue empty).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51}.
    RE-RANK draw 212 (19-campaign eligible set): raw=
    6892152841030680972 (63-bit) -> idx 12 -> #54 c3 (subprocess
    sweep: Windows vendored leak, Linux clean; CONFIRMED-LATENT).
