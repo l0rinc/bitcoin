@@ -1,3 +1,64 @@
+# Cycle 304 Completion
+
+- The exact post-Cycle-303 selector was `shuf -i 0-103 -n 1` -> goal `52`
+  (`integer-overflow`). The dedicated branch is
+  `uber-cycle-304-integer-overflow-20260802`. Cycle-start HEAD was
+  `0f220b92529f28210a09ad965f8c49eff29b9297`; `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base equaled
+  `origin/master`; start divergence was `0 1404`; and the entry state-file
+  SHA-256 was
+  `02cb068de9d2aad363d23b1388e659204a419b1fcac4eee2acb844ad64cbb05d`.
+- The prior P2P buffer, signature-cache, and cluster-size cells were excluded.
+  Startup inspection found that `ArgsManager::GetIntArg` returns `int64_t`,
+  while `-maxconnections` was assigned directly to `int` before file
+  descriptor sizing. A pre-fix scratch regtest daemon accepted
+  `-maxconnections=4294967296`, reached `Done loading`, logged `Using at most
+  0 automatic connections (1048576 file descriptors available)`, and reported
+  `"connections": 0` through `getnetworkinfo`. A representable `INT_MAX`
+  value also made the old reserved-descriptor sum too large for the
+  `RaiseFileDescriptorLimit(int)` argument.
+- The source fix rejects negative and above-`INT_MAX` values before parameter
+  interaction, makes the later narrowing explicit, documents the range in
+  help, and computes/caps the descriptor request before the `int` API. The
+  focused `node_init_tests` suite passed 4 cases and 6 assertions, including
+  the new `INT_MAX + 1` regression. The finding commit is `a6abfded86`
+  (`init: reject overflowing maxconnections`), authored by
+  `Lőrinc <pap.lorinc@gmail.com>`.
+- Independent Clang 19 `implicit-conversion` validation completed its rebuild.
+  Direct non-daemon startup with the oversized value returned status 1 and
+  `Error: -maxconnections cannot exceed 2147483647.` A separate `INT_MAX`
+  daemon startup completed and logged reduction to `1048416` connections and
+  `Using at most 1048416 automatic connections (1048576 file descriptors available)`.
+  The broad sanitizer configuration emitted unrelated pre-existing
+  libsecp256k1, crypto, and CRC32C diagnostics; no sanitizer record referenced
+  `src/init.cpp`.
+- Every scratch daemon was stopped through RPC. Protected PIDs `777094`,
+  `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` were
+  alive and untouched. `git diff --check` passed.
+- The learned suspicious surface is integer option narrowing in `-par`,
+  duration options, wallet fee sizes, and block-filter/index height
+  arithmetic. Goal `104`, `integer-option-boundaries`, was added with seed
+  `agent-journal/integer-option-boundaries.md`; its catalog commit is
+  `d93bc4098e` (`goal: add integer option boundary campaign`). The catalog now
+  contains 105 contiguous goals `0..104`. Catalog SHA-256 is
+  `3b62db081945f5375ac7f152e31ace458c1c807f89380f79ac088944aecc3ffa`,
+  manifest SHA-256 is
+  `6f7281d74b0f621ff0f28b50813ebcedeedf0ff3c66bc6e4cebe7aee9e47fd42`, the
+  random selector prompt SHA-256 is
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`, and
+  the generator SHA-256 is
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`.
+- The requested rebase was performed after the finding and goal commits with
+  `git fetch origin master` followed by `git rebase origin/master`; it was a
+  no-op with no conflicts. At this state close, `origin/master` remains
+  `556988790a7f961693a8fd93f73725baea66476a`, divergence is `0 1406` before
+  the state-close commit, and tracked source work is clean. Existing
+  untracked probes, generated artifacts, and user files remain preserved.
+- Verdict: **confirmed and fixed**. No repository-completion claim is made.
+  After this state-close commit, perform a fresh gate, draw exactly one
+  selector with `shuf -i 0-104 -n 1`, create a new
+  `uber-cycle-305-*` branch, and continue with the selected goal.
+
 # Cycle 303 Completion
 
 - The exact post-Cycle-302 selector was `shuf -i 0-102 -n 1` -> goal `15`
