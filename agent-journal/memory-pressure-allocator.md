@@ -1,5 +1,100 @@
 # Memory Pressure, OOM, Allocator, and Fragmentation Audit
 
+## Cycle 263: retained TxGraph container accounting
+
+- Goal: `74`, `memory-pressure-allocator`; exact selector `shuf -i 0-98 -n 1` -> `74`.
+- Branch: `uber-cycle-263-memory-pressure-allocator-20260802`.
+- Start HEAD: `fa8f1f6f860076385e83e41d7ebb1665565f0eab`; `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start `git rev-list --left-right --count HEAD...origin/master`: `1313 45`.
+- Catalog/prompt/TSV/protocol hashes matched the stable gate: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The tracked/index gate was clean at cycle start. Existing untracked goal, journal, probe, package, crash, and test-cache artifacts were preserved. Protected long-running tests were left running. Build and test scratch state used `/data/my_storage/tmp/cycle263-*`; no default datadir, wallet, key, or production database was used.
+
+### Scope and ownership audit
+
+This cycle continued the retained-container queue after Cycle 238's fix for
+`TxGraphImpl::m_entries` capacity. The remaining main-graph ownership ledger
+was:
+
+- `m_cluster_usage` charges each live Cluster's dynamic data and one
+  `sizeof(std::unique_ptr<Cluster>)` slot, but `ClusterSet::m_clusters` uses
+  `pop_back()` and retains vector capacity after Cluster deletion.
+- `m_main_clusterset.m_to_remove` is cleared after removals, but its capacity
+  is retained. `m_unlinked` is also cleared after `Compact()` while retaining
+  the allocation created by Ref destruction.
+- `m_entries` was already covered by `memusage::DynamicUsage(m_entries)` from
+  Cycle 238. The set-like `m_main_chunkindex` was already counted, and
+  `m_main_chunkindex_discarded` is released by `ClearShrink()` before this
+  query. Staging allocations and temporary group-operation state remain
+  outside the documented main-graph estimate.
+
+The source audit confirmed that `GetMainMemoryUsage()` counted only live
+Cluster objects, the shared Entry vector, and the live chunk-index nodes. It
+had no term for the three retained main-graph vector allocations above. This
+underreported memory after transaction churn even when the live transaction
+count and Entry-vector capacity were held constant.
+
+### Reproduction and independent controls
+
+The first regression constructs two graphs with the same retained Entry and
+unlinked-index capacity by adding and aborting 2048 staging transactions. One
+graph then keeps one main transaction. The other adds and removes 1024 main
+transactions before keeping one. The latter retains a large per-quality
+Cluster vector and a main removal-vector allocation, while its counted live
+state is otherwise equivalent. Before the fix both reported `163992` bytes;
+the fixed code reported `172224` versus `200912`.
+
+The second regression constructs two graphs with 2048 live main transactions.
+It removes and compacts 1024 transactions in only one graph, then adds 1024
+replacement transactions. This keeps live count, Entry capacity, Cluster
+vector capacity, and chunk-index cardinality aligned while retaining the
+cleared removal and unlinked buffers only in the churned graph. Before the fix
+both reported `442384` bytes; the fixed code makes the churned value larger.
+
+As an independent mutation check, temporarily removing the new accounting
+terms from `src/txgraph.cpp` and rebuilding made both regression assertions
+fail: the cluster-container case reported `[163992 <= 163992]` and the
+removal-buffer case reported `[442384 <= 442384]`. Restoring the terms made
+both cases pass. This confirms the tests are sensitive to the intended
+allocation classes rather than merely to live transaction count.
+
+### Fix and validation
+
+`GetMainMemoryUsage()` now counts retained `m_to_remove` and `m_unlinked`
+vector allocations. It also walks the main per-quality Cluster vectors and
+charges `DynamicUsage(capacity)` minus the raw pointer slots already included
+by each live Cluster's `TotalMemoryUsage()`. This preserves the existing
+allocator-rounding model without double-counting live vector elements.
+
+Validation completed:
+
+- `CCACHE_DISABLE=1 TMPDIR=/data/my_storage/tmp/cycle263-clean-build-tmp
+  cmake --build /data/my_storage/tmp/cycle243-build --target test_bitcoin -j2`
+  passed. The existing build emitted only two unrelated Clang warnings about
+  unused member functions.
+- `test_bitcoin --run_test=txgraph_tests --log_level=message
+  --report_level=short --color_output=false` passed 26 cases and 617
+  assertions.
+- `test_bitcoin --run_test=mempool_tests --log_level=message
+  --report_level=short --color_output=false` passed 26 cases and 1013
+  assertions, using `TMPDIR=/data/my_storage/tmp`.
+- `git diff --check` passed after the source and test edits.
+
+No sanitizer build, full repository test suite, or production RSS measurement
+was run in this cycle. The result is an allocator-model accounting fix, not a
+claim that `GetMainMemoryUsage()` is an exact process RSS measurement.
+
+### Verdict and next queue
+
+Confirmed: retained main TxGraph container allocations were omitted from the
+reported main memory usage. The fix and focused regressions are ready for one
+self-contained commit with this journal update.
+
+Next distinct memory cells are (1) a fresh `/data`-backed chainstate/cache
+resize and flush workload, (2) allocation-failure behavior outside the closed
+prevector/OOM policy cell, and (3) a source/history review of any remaining
+`DynamicMemoryUsage()` owner added after this commit. Do not reopen the fixed
+Entry, unbroadcast-set, or TxGraph container-capacity omissions without new
+evidence.
+
 ## Cycle 170 start
 
 - Goal: `74`, `memory-pressure-allocator`; exact selector `shuf -i 0-98 -n 1` -> `74`.

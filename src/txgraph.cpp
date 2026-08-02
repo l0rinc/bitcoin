@@ -3772,12 +3772,20 @@ size_t TxGraphImpl::GetMainMemoryUsage() noexcept
     // Compute memory usage
     size_t usage = /* From clusters */
                    m_main_clusterset.m_cluster_usage +
+                   /* From retained ClusterSet vectors. m_cluster_usage includes one pointer-sized
+                    * slot for each live Cluster, so only charge the unaccounted capacity here. */
+                   memusage::DynamicUsage(m_main_clusterset.m_to_remove) +
+                   /* From the retained unlinked-entry index. */
+                   memusage::DynamicUsage(m_unlinked) +
                    /* From the shared Entry vector. Its capacity is retained after compaction and
                     * can include entries added to staging, but the allocation is still owned by
                     * the graph and contributes to its actual memory usage. */
                    memusage::DynamicUsage(m_entries) +
                    /* From the chunk index. */
                    memusage::DynamicUsage(m_main_chunkindex);
+    for (const auto& clusters : m_main_clusterset.m_clusters) {
+        usage += memusage::DynamicUsage(clusters) - clusters.size() * sizeof(std::unique_ptr<Cluster>);
+    }
     Assume((usage == 0) == (m_main_clusterset.m_txcount == 0));
     return usage;
 }
