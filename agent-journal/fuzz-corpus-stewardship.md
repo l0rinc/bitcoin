@@ -268,3 +268,39 @@ skew. Cumulative green: 38,676 + 22,177 = 60,853 seeds.
 - Single-pass validation only.
 - Remaining untested in-scope families: net/P2P-ser, block/
   merkle.
+
+## Cycle 7 (2026-08-02, draw 240, raw=15578937025157429834, masked 6355564988302654026, idx 0/2): net/P2P corpus family — 15 targets, 19,470 seeds, ALL clean; DISMISSED
+
+### Batch (network layer, pinned 918cdd3)
+First pass (300s/target): 13/15 DONE clean — asmap 352,
+asmap_direct 234, banman 1,825, connman 3,391, message 2,551,
+messageheader_deserialize 97, net 1,497, net_permissions 398,
+netaddr_deserialize 141, netaddress 487, netbase_dns_lookup
+655, p2p_handshake 1,315, p2p_headers_presync 726. addrman
+(2,110) and addrman_serdeser (1,437) hit MY bound (stateful
+targets, 1-6 exec/s — timeout kills, not crashes).
+Reruns: addrman 2,110/2,110 DONE (ft 26,207, 1200s);
+addrman_serdeser 1,437/1,437 DONE (ft 20,664, 3600s at
+~1 exec/s — slowest target to date).
+Total: 19,470 seeds, zero crashes/artifacts. Coverage
+highlights: connman ft 64,576, p2p_headers_presync ft 23,676,
+banman ft 22,800.
+
+### Verdict
+DISMISSED: the network-layer corpus (addrman/banman/connman/
+message/handshake/presync) is fully green through the fork's
+hardened build. Cumulative green: 60,853 + 19,470 = 80,323
+seeds.
+
+### Housekeeping
+Validated corpora pruned (1.7G -> 38M; upstream-pinned and
+re-sparse-able per the recorded sparse-checkout lines); disk
+back to 3.4G.
+
+### Exact commands
+- sparse-checkout add (15 dirs); per-target FUZZ runs;
+  1200s/3600s rerun lines above; prune above.
+
+### Limitations / queue
+- Single-pass validation only.
+- Remaining untested in-scope family: block/merkle.
