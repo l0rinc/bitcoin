@@ -729,3 +729,16 @@ local action.
 ### Limitations / queue
 - Dedup-by-serialized-form misses semantically-equal-different-
   spelling objects (the commit's documented scoping; fine).
+
+## Cycle 15 (2026-08-02, draw 249, raw=173496863651005843, n=1): radar — zero delta (864 branches, no new, no force-updates); quiet
+
+### Fetch
+- git fetch l0rinc --prune: nothing new (864 branches, same as
+  c14; the 3 recently-assessed branches unmoved since their
+  assessments).
+
+### Verdict
+Quiet cycle; radar interval produced nothing.
+
+### Exact commands
+- git fetch l0rinc --prune; branch count above.
