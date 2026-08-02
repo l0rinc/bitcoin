@@ -15,9 +15,12 @@
 #include <test/util/random.h>
 #include <test/util/script.h>
 #include <test/util/setup_common.h>
+#include <test/util/transaction_utils.h>
 #include <util/strencodings.h>
 #include <test/util/txmempool.h>
 #include <validation.h>
+
+#include <limits>
 
 #include <boost/test/unit_test.hpp>
 
@@ -158,6 +161,16 @@ BOOST_AUTO_TEST_CASE(package_sanitization_tests)
     BOOST_CHECK(!IsWellFormedPackage(package_too_large, state_too_large));
     BOOST_CHECK_EQUAL(state_too_large.GetResult(), PackageValidationResult::PCKG_POLICY);
     BOOST_CHECK_EQUAL(state_too_large.GetRejectReason(), "package-too-large");
+
+    // A package heavy enough that its total weight does not fit in an int.
+    CMutableTransaction huge_tx;
+    huge_tx.vin.resize(1);
+    BulkTransaction(huge_tx, std::numeric_limits<int>::max() / int{MAX_PACKAGE_COUNT} + 1);
+    const Package package_overflowing_weight(MAX_PACKAGE_COUNT, MakeTransactionRef(std::move(huge_tx)));
+    PackageValidationState state_overflowing_weight;
+    BOOST_CHECK(!IsWellFormedPackage(package_overflowing_weight, state_overflowing_weight));
+    BOOST_CHECK_EQUAL(state_overflowing_weight.GetResult(), PackageValidationResult::PCKG_POLICY);
+    BOOST_CHECK_EQUAL(state_overflowing_weight.GetRejectReason(), "package-contains-duplicates"); // TODO: the accumulated weight wraps, so the size limit is never reached
 
     // Packages can't contain transactions with the same txid.
     Package package_duplicate_txids_empty;
