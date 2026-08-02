@@ -241,3 +241,30 @@ compatible with the fork's build; no skew. Cumulative green:
 - Single-pass validation only (as c3/c4).
 - /tmp/qa-assets now 1.1G; disk 2.5G free — prune older corpora
   on the next squeeze (re-sparse per recorded lines).
+
+## Cycle 6 (2026-08-02, draw 239, raw=13612649842643089771, masked 4389277805788313963, idx 2/3): consensus script/sighash corpus family — 14 targets, 22,177 seeds, ALL clean; DISMISSED
+
+### Batch (script execution layer, pinned 918cdd3)
+script_interpreter 621, script_flags 2,579, script_ops 320,
+script_sigcache 669, script_sign 6,177, script_format 2,541,
+script_parsing 83, miniscript_script 1,042, miniscript_smart
+2,259, miniscript_stable 2,234, miniscript_string 1,169,
+secp256k1_ecdsa_signature_parse_der_lax 102, sighash_cache
+585, signature_checker 1,796 = 22,177 seeds. All DONE clean,
+zero crashes/artifacts; coverage highlights: script_sign ft
+63,864, miniscript_stable ft 59,815, miniscript_smart ft
+57,863, script_flags ft 40,695.
+
+### Verdict
+DISMISSED: the consensus-critical script/miniscript/sighash
+corpus runs fully green through the fork's hardened build; no
+skew. Cumulative green: 38,676 + 22,177 = 60,853 seeds.
+
+### Exact commands
+- git sparse-checkout add (14 dirs); per-target FUZZ runs
+  (counts above).
+
+### Limitations / queue
+- Single-pass validation only.
+- Remaining untested in-scope families: net/P2P-ser, block/
+  merkle.
