@@ -181,6 +181,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 55 | alternative-implementation-diff | CYCLE-3 | 2026-07-31 | BIP340 sibling vectors: Python 19/19+8/8, in-tree subset byte-exact, noble==official rows 0-14; no drift |
 | 55 | alternative-implementation-diff | CYCLE-4 (EXHAUSTED) | 2026-07-31 | rust-bitcoin fixtures 4/4: sighash subset 289/289, BIP341 identical, huge-witness decode, block round-trip byte-exact |
 | 107 | conformance-test-transplant | CYCLE-1 | 2026-07-29 | RFC 4231 case 5 transplanted (0d36c6cd80); all 7 cases both hashes |
+| 107 | conformance-test-transplant | CYCLE-3 | 2026-08-02 | Wycheproof chacha20_poly1305 316/316 (256 valid byte-exact, 60 invalid rejected), OpenSSL 2nd verifier 0 mismatch |
 | 101 | public-characterization-fix | CYCLE-1 | 2026-07-29 | PSBT fuzz hybrid consumption fix (d086164661): 9 starvation-gated functions covered, control re-lists all 9, iso seed 528->2857 edges |
 | 1 | comment-code-contract | CYCLE-2 | 2026-07-29 | net_processing strong claims: 9/9 verified TRUE (prune-read, SetupAddressRelay, diff-encoding, tx-inventory-empty); no defect |
 | 43 | option-api-lifecycle | CYCLE-2 | 2026-07-29 | -capturemessages: append-across-restart proven (488->976 prefix-intact); capture IO failure aborts node (rc=-6), upstream-identical |
@@ -952,6 +953,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 178 (56-campaign eligible set): raw=
+   11916844877793972431, masked 2693472840939196623 -> idx 55 ->
+   #107 c3 (Wycheproof chacha20_poly1305 transplant 316/316;
+   CONFORMANCE CONFIRMED). Pool: eligible minus {#103, #107}.
    RE-RANK draw 177 (57-campaign eligible set rebuilt from the
    handoff DONE list): raw=5480729779092233995 (63-bit) -> idx 52
    -> #103 c2 (cross-session capability indexing F10-F16; all
