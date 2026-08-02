@@ -1,5 +1,59 @@
 # Uber Goal State
 
+## Cycle 278 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact
+  selector `shuf -i 0-98 -n 1` drew goal `54`
+  (`raai-resource-leaks`), with no reroll. The dedicated branch is
+  `uber-cycle-278-raii-resource-leaks-20260802`.
+- Gate HEAD was `8957ad563f60845eaff97b5a7e3a406e97d664e3`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1345` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `1ff34f7ceee52a933c41361f136d8e2f67f9090f9f40e7e20f9af7beeee2dbae`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Existing untracked artifacts and all seven protected long-running
+  processes were preserved and untouched.
+- The selected Goal 54 journal excluded the earlier LevelDB constructor,
+  IPC connection/proxy cleanup, SQLite statement, and `SpawnProcess`
+  descriptor findings. The new cell traced `btck::Logger`'s
+  `std::unique_ptr` transfer through the C API. The wrapper released its
+  object before the C API proved that a logging connection existed, while
+  the native constructor could register a callback before a later allocation
+  or logging operation threw.
+- A deterministic failed-start fixture set internal logging to an invalid
+  file path. The pre-fix replay invoked the user-data destroy callback before
+  returning null (`destructions == 1`), while the fixed path returned null
+  with caller ownership intact (`destructions == 0` before caller cleanup)
+  and no registered callback. The fix passes `get()` until successful C API
+  construction, documents failure ownership, and removes the callback on
+  every native constructor exception.
+- Source/test commit `56c7ce1254`
+  (`kernel: preserve logging callback ownership on failure`) was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It updates the C API contract, C++ wrapper,
+  native rollback, namespace qualification, and adds the focused regression.
+  Selected-goal journal close commit `65a0e2fd26`
+  (`journal: close logging ownership audit`) records the final source hash.
+- Validation passed in a clean Clang 19 Debug kernel build:
+  `test_kernel --run_test=logging_connection_failure_retains_user_data`
+  passed 1 case/4 assertions, the existing `logging_tests` passed, and the
+  full kernel suite passed 20 cases/3723 assertions with `TMPDIR` under
+  `/data/my_storage/tmp`. A separate Clang 19 ASan+UBSan build with leak
+  detection passed the focused test with no sanitizer diagnostic. The first
+  full-suite attempt using host `/tmp` was discarded because the root
+  filesystem was full; the redirected rerun passed. `git diff --check` passed.
+- The test does not inject allocation failure at the iterator or native
+  connection allocation sites; those remain a future wrapper cell. The
+  remaining resource queue includes file/mapping paths, database
+  iterator/transaction ownership, secure allocation cleanup, IPC
+  `ListenConnections` raw-fd transfer, and broader C API allocation-failure
+  coverage.
+- Verdict: **confirmed and fixed**. Post-close HEAD is `65a0e2fd26`, with
+  divergence `45 1347` (`origin/master...HEAD`). The repository is not
+  considered exhausted. Next action: perform a fresh gate, fetch
+  `origin/master`, draw exactly one selector with `shuf -i 0-98 -n 1`, create
+  `uber-cycle-279-*`, and continue with a distinct high-risk cell.
+
 ## Cycle 277 Completion
 
 - The fresh gate fetched `origin/master` before branch creation. The exact
