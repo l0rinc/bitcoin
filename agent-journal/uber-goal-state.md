@@ -154,6 +154,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 74 | memory-pressure-allocator | CYCLE-6 (COMPLETE) | 2026-08-01 | pruning IO: disk freed exact (-129KB), RSS flat +0 (index retained by design); boundary exact |
 | 105 | project-bug-autopsy-recurrence | CYCLE-1 | 2026-07-29 | txgraph saturation family autopsy: recurrence mapped, no uncovered sibling |
 | 105 | project-bug-autopsy-recurrence | CYCLE-2 | 2026-08-01 | dbwrapper failed-construction family: fixed in HEAD, 0 siblings, upstream STILL live (fetched today); offerable |
+| 105 | project-bug-autopsy-recurrence | CYCLE-3 | 2026-08-02 | serialize dead-template family: forced-instantiation sweep 0 siblings, contract guard proven both ways; DISMISSED |
 | 45 | constant-time-declassification | CYCLE-2 | 2026-07-29 | walletpassphrase: KDF-only throttle 0.10s/attempt measured, no lockout by design |
 | 109 | whole-feature-public-path | COMPLETE | 2026-08-01 | c3: shortid collision ~2^48/target (grinder validated, MISS as predicted); tampered-prefilled drive -> IsBlockMutated bad-txnmrklroot -> full-block fallback accepted tip; DISMISSED |
 | 66 | backport-correctness | CYCLE-2 | 2026-07-29 | 5 out-of-lineage fixes backported+verified (e15c4025e5, 84a3913096, 508d9edfca, 75c0616c24, b73b7c5d39) |
@@ -962,6 +963,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 188 (45-campaign eligible set): raw=
+   12902246674943953776, masked 3678874638089177968 -> idx 43 ->
+   #105 c3 (serialize SizeComputer family: 0 siblings, guard
+   proven; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105}.
    RE-RANK draw 187 (46-campaign eligible set): raw=
    17580883877144746278, masked 8357511840289970470 -> idx 40 ->
    #91 c5 (_FORTIFY_SOURCE=3 verified in binaries; fact).

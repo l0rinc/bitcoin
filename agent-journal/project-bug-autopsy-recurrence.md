@@ -144,3 +144,53 @@ probe) validated again.
   bridge appears.
 - Next core candidate if re-drawn: serialize SizeComputer
   WriteVarInt overload family (f6e78b44c0).
+
+## Cycle 3 (2026-08-02, draw 188, raw=12902246674943953776, masked 3678874638089177968, idx 43/45): serialize SizeComputer WriteVarInt overload family (f6e78b44c0) — autopsy + forced-instantiation sibling sweep; ZERO new siblings; contract guard proven both directions
+
+### Autopsy narrative (from the fix commit + HEAD state)
+- Shape: dead template code that CANNOT COMPILE when instantiated
+  — the SizeComputer WriteVarInt overload called
+  GetSizeOfVarInt<I>(n) missing the VarIntMode template argument;
+  zero callers tree-wide meant it was never instantiated, so the
+  defect survived upstream-inherited until #35 c6.
+- Why tests missed it: C++ templates compile bodies only on
+  instantiation; dead code has no compile or runtime oracle.
+- Fix: one-line repair (VarIntMode::DEFAULT, serialize.h:1150
+  today) + boundary battery + mutation sweep (3 mutants killed).
+- Survival window: upstream feature lifetime until 2026-07-31.
+
+### Recurrence sweep (present-day siblings) — ZERO new
+Forced instantiation of the FULL SizeComputer overload surface
+(/tmp/btc105c3/instantiate.cpp, preserved):
+- WriteVarInt(SizeComputer&, {uint8..64}_t) + WriteCompactSize +
+  generic operator<< + explicit-mode instantiations (DEFAULT/
+  uint64, NONNEGATIVE_SIGNED/int64): ALL compile, link, run
+  clean (rc=0) — no second uninstantiable overload exists.
+- Negative control: WriteVarInt(SizeComputer&, int64_t) (signed,
+  implicit DEFAULT) FAILS to compile with the CheckVarIntMode
+  static_assert (serialize.h:406) — the mode/signedness contract
+  is a compile-time guard, not a convention. Both directions
+  proven.
+- Grep census: no other GetSizeOfVarInt single-arg call sites
+  (only the pinned test at serialize_tests.cpp:192-200).
+
+### Verdict
+DISMISSED (new sibling): family fully mapped; single member fixed
+with a boundary battery; the overload set now has a forced-
+instantiation proof of compilability, and the contract guard
+rejects the misuse direction at compile time.
+
+### Author-recurrence stats
+3 families autopsied (txgraph saturation, dbwrapper failed-
+construction, serialize dead-template), 0 uncovered siblings;
+pattern record: the author's fixes pair the minimal repair with
+a boundary/mutation oracle — validated third time.
+
+### Exact commands
+- git show f6e78b44c0; g++ instantiate.cpp (rc=0); negative
+  control via stdin TU (static_assert trace above).
+
+### Limitations / queue
+- Sweep covers serialize.h's SizeComputer surface; other headers'
+  dead-template members would need their own instantiation TUs
+  (no signal for any).
