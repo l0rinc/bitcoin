@@ -193,6 +193,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 57 | local-reasoning-contracts | CYCLE-1 | 2026-07-29 | m_all_zero contracts observable+guarded; broken-discipline mutation caught at bloom_tests:535 |
 | 57 | local-reasoning-contracts | EXHAUSTED | 2026-08-02 | successor cells (FRESH/spent, m_dirty_count) already battery-covered; reopen on new flag domain |
 | 68 | architecture-abi-parity | CYCLE-2 | 2026-07-29 | char-signedness sweep clean: no sign-sensitive plain-char use; serialize forbid guards the class |
+| 68 | architecture-abi-parity | CYCLE-4 | 2026-08-02 | unaligned sweep: memcpy-only wire layer, zero casts; DISMISSED |
 | 93 | system-fault-injection | CYCLE-1 | 2026-07-29 | mid-flush crash injection: recovery rolls forward identically (3 crashes, 415 blocks, no corruption) |
 | 93 | system-fault-injection | CYCLE-2 (COMPLETE) | 2026-08-01 | fs/permission faults: unreadable blk = loud attributed abort; unwritable blocksdir = loud write-fail; full recovery both |
 | 59 | supply-chain-security-gates | CYCLE-2 | 2026-07-29 | workflow byte-identical to upstream (mutable tags, no permissions block); posture upstream-accepted |
@@ -1005,6 +1006,15 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 229 (2-campaign eligible set): raw=
+   8430095800060831913 (63-bit) -> idx 1 -> #68 c4 (unaligned
+   sweep: clean; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58, #21, #28, #69, #61, #22, #23, #39, #64, #2, #7,
+   #37, #29, #68}.
    RE-RANK draw 228 (3-campaign eligible set): raw=
    4931726890564104754 (63-bit) -> idx 1 -> #29 c4 (reverse
    dead-code sample: 9/9 live; DISMISSED).
