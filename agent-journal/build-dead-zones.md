@@ -108,3 +108,34 @@ excluded from the build, not compiled-and-unreachable.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-08-02, draw 227, raw=12394660665079399478, masked 3171288628224623670, idx 2/4): runtime-dead feature options — accepted-but-inert BY DESIGN (hidden registration + value validation retained); DISMISSED
+
+### Probe (ZMQ-less build, /tmp/btc37c3)
+bitcoind -zmqpubhashblock=tcp://127.0.0.1:29999: node STARTS
+normally — no 'unrecognized option' error.
+
+### Mechanism (init.cpp)
+- Without ENABLE_ZMQ the -zmqpub* options are pushed to
+  hidden_args (:654-663) — REGISTERED (so config files stay
+  portable across build variants) but hidden from --help and
+  inert at use.
+- The port-validation table (:1250-1263) still syntax-validates
+  zmqpub* values even with ZMQ off — malformed values get
+  InvalidPortErrMsg regardless of feature state.
+- This is the deliberate upstream pattern (same config works on
+  ZMQ and non-ZMQ builds; no silent-typo channel since values
+  are still validated).
+
+### Verdict
+DISMISSED: runtime-dead feature options are a designed
+config-portability behavior with retained value validation, not
+an accepted-and-ignored gap. Upstream-identical shape.
+
+### Exact commands
+- probe run above; sed init.cpp:641-665, 1250-1275.
+
+### Limitations / queue
+- Other OFF-feature option families (USDT tracepoints) share the
+  pattern (same hidden_args mechanism; not separately probed).
+- Windows/mac-only sources remain out of host scope (c2).
