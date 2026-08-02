@@ -76,13 +76,13 @@ private:
     std::vector<unsigned char, secure_allocator<unsigned char>> vchIV;
     bool fKeySet;
 
-    int BytesToKeySHA512AES(std::span<const unsigned char> salt, const SecureString& key_data, int count, unsigned char* key, unsigned char* iv) const;
+    [[nodiscard]] int BytesToKeySHA512AES(std::span<const unsigned char> salt, const SecureString& key_data, int count, unsigned char* key, unsigned char* iv) const;
 
 public:
-    bool SetKeyFromPassphrase(const SecureString& key_data, std::span<const unsigned char> salt, unsigned int rounds, unsigned int derivation_method);
-    bool Encrypt(const CKeyingMaterial& vchPlaintext, std::vector<unsigned char> &vchCiphertext) const;
-    bool Decrypt(std::span<const unsigned char> ciphertext, CKeyingMaterial& plaintext) const;
-    bool SetKey(const CKeyingMaterial& new_key, std::span<const unsigned char> new_iv);
+    [[nodiscard]] bool SetKeyFromPassphrase(const SecureString& key_data, std::span<const unsigned char> salt, unsigned int rounds, unsigned int derivation_method);
+    [[nodiscard]] bool Encrypt(const CKeyingMaterial& vchPlaintext, std::vector<unsigned char> &vchCiphertext) const;
+    [[nodiscard]] bool Decrypt(std::span<const unsigned char> ciphertext, CKeyingMaterial& plaintext) const;
+    [[nodiscard]] bool SetKey(const CKeyingMaterial& new_key, std::span<const unsigned char> new_iv);
 
     void CleanKey()
     {
