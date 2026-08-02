@@ -1,3 +1,47 @@
+# Cycle 290 Completion
+
+- The fresh gate selected goal `59` (`cpp-supply-chain`) from the exact
+  selector `shuf -i 0-98 -n 1`, with no reroll. The dedicated branch is
+  `uber-cycle-290-cpp-supply-chain-20260802`. Gate and cycle-start HEAD were
+  `150dbb5ae37a80035f321dd0536d355eda4f02ac`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `45 1370`;
+  and entry state SHA-256 was
+  `6bf328a509a95aa68d4081ca35f7fe95f04eda90a0da9e21accba2a855aa50e7`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`,
+  and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The distinct selected cell was container-image provenance. Before the fix,
+  the source inventory reported 24 mutable root CI image assignments and five
+  concrete lint/vendored Dockerfile image stages, all with zero digest pins.
+  Registry tag movement could therefore change C/C++ compilers, linkers,
+  native dependencies, or lint tooling without a Bitcoin tree change.
+- Source/evidence commit `407a95838fb91d08ff64c43ce72ccbf73369e20f`,
+  `ci: pin container image manifests`, was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It pins all 24 root assignments plus the
+  Ubuntu/uv/ruff lint image and minisketch/libsecp256k1 Docker bases to
+  manifest-list digests while retaining release-family tags. Post-fix scans
+  report 24/24 CI assignments and 5/5 concrete image stages pinned. Ten
+  digest-only registry probes returned the exact requested values, and the raw
+  responses were multi-architecture OCI indexes.
+- `bash -n ci/test/00_setup_env_*.sh`, Python compilation of
+  `ci/test/02_run_container.py`, `git diff --check`, and `git show --check`
+  passed. No Docker/buildx daemon, Windows runner, or full CI matrix was
+  available, so no container build was run locally. The source journal records
+  the exact digest matrix, platform coverage, registry-header evidence, and
+  the limitation that image signatures, SBOM verification, and automatic
+  update handling remain outside this finding.
+- Unrelated untracked artifacts were preserved. Protected PIDs
+  `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and
+  `1346200` remained alive and untouched. At this pre-state-close point HEAD
+  is `407a95838fb91d08ff64c43ce72ccbf73369e20f`, with divergence `45 1371`.
+  This state entry is to be committed separately from the source finding. The
+  next action is a fresh post-close gate, one exact selector draw, a new
+  `uber-cycle-291-*` branch, and a distinct unchecked cell; do not reopen the
+  fixed container-image provenance cell without new evidence.
+
 # Cycle 289 Completion
 
 - The fresh gate selected goal `43` (`option-api-lifecycle`) from the exact
