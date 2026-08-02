@@ -273,6 +273,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 60 | reviewer-preference-skill | CYCLE-5 | 2026-07-29 | maintainer merge-rationale mined: M1-M4 (terse depth-honest ACKs, self-contained descriptions, lifecycle, no info-hiding) |
 | 58 | helper-reuse | CYCLE-3 | 2026-07-29 | 7th PSBT copy deduplicated: helper moved to rpc/rawtransaction_util (existing shared header); rpc_psbt green |
 | 65 | contributor-branch-radar | CYCLE-4 | 2026-07-29 | rocksdb-brute assessed: bulk-fetch class subsumed by shipped -prevoutfetchthreads; stale WIP, nothing actionable |
+| 65 | contributor-branch-radar | CYCLE-12 | 2026-08-02 | new author branch txgraph-retained-entry-usage: memory-accounting gap REAL+bounded at HEAD, fix in flight; URGENT 🟡 |
 | 80 | fuzz-engine-differential | CYCLE-5 | 2026-07-29 | rich PSBTv2 differential: A=0/400, E=115, R=4 guard-contained; BIP371 value-layout lesson (6-seed iterations) |
 | 42 | ci-review-bot-followup | CYCLE-4 | 2026-07-29 | corecheck sweep: bench deltas noise-shaped (same +10-33% on unrelated bloom PR); regression reading corrected |
 | 42 | ci-review-bot-followup | CYCLE-6 | 2026-08-02 | watch @556988790a: 5 commits (2 out-of-scope merges), PRs static, F13/F14/F16 offerability re-confirmed |
@@ -972,6 +973,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 198 (35-campaign eligible set): raw=
+   3654393603145900293 (63-bit) -> idx 28 -> #65 c12 (radar:
+   txgraph retained-capacity gap CONFIRMED REAL+bounded, author
+   fix in flight; URGENT 🟡 added).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65}.
    RE-RANK draw 197 (36-campaign eligible set): raw=
    13023617683058369127, masked 3800245646203593319 -> idx 19 ->
    #44 c3 (secret crossing map: clean; DISMISSED).
