@@ -220,6 +220,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 75 | build-throughput-cacheability | CYCLE-3 | 2026-07-29 | clean-build wall: cold 1418.2s vs warm 59.6s (23.8x ccache lever); CI cache keys sound (content-key is the anchor) |
 | 50 | fuzz-introspector-blockers | CYCLE-2 | 2026-07-29 | signing section covers SignPSBTInput/UpdatePSBTOutput/PSBTInputSignedAndVerified; iso seed 528->2857->3048 edges |
 | 25 | performance-regression-bisect | CYCLE-3 | 2026-07-29 | txindex baseline: 3.7s catch-up for 41.4k txs (~validation-path speed); 35531 lineage = branch decision |
+| 25 | performance-regression-bisect | CYCLE-4 | 2026-08-02 | txindex lookup profile: pos/neg symmetric ~0.42ms p50, no collision-walk at 41k txs; DISMISSED |
 | 23 | perf-flamegraph-investigation | CYCLE-3 | 2026-07-29 | EvictionProtection (sort, 34us micro) + ConnectBlockAll (~98% EC verify) profiles clean; no fix candidate |
 | 34 | uncovered-code-classification | CYCLE-3 | 2026-07-29 | ScriptCompression 3 malformed arms closed + mutation-verified (guard-drop kills arm 1) |
 | 35 | mutation-testing | CYCLE-2 | 2026-07-29 | WriteVarInt per-line sweep: M2/M3/M4 all killed (34/137/137 failures); CTxUndo VARINT fuzz-covered |
@@ -955,6 +956,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 181 (53-campaign eligible set): raw=
+   13891094590669444291, masked 4667722553814668483 -> idx 12 ->
+   #25 c4 (txindex lookup profile: symmetric, no cliff;
+   DISMISSED). Pool: eligible minus {#103, #107, #66, #46, #25}.
    RE-RANK draw 180 (54-campaign eligible set): raw=
    676234014466335055 (63-bit) -> idx 25 -> #46 c3 (per-callback
    lock-state map; block_tip uniquely cs_main-held; DISMISSED).
