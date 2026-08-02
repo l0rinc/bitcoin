@@ -243,6 +243,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 34 | uncovered-code-classification | CYCLE-3 | 2026-07-29 | ScriptCompression 3 malformed arms closed + mutation-verified (guard-drop kills arm 1) |
 | 35 | mutation-testing | CYCLE-2 | 2026-07-29 | WriteVarInt per-line sweep: M2/M3/M4 all killed (34/137/137 failures); CTxUndo VARINT fuzz-covered |
 | 48 | property-oracle-expansion | CYCLE-2 | 2026-07-29 | CompactSize 254-class exhaustive (130k+ cases); guard-weakening mutant killed 61440x |
+| 48 | property-oracle-expansion | CYCLE-5 | 2026-08-02 | ByRatio ordering laws: 55,201 checks 0 mismatches incl. cpp_int reference; DISMISSED |
 | 60 | reviewer-preference-skill | CYCLE-4 | 2026-07-29 | template held-out on 35205: 3/3 blind predictions confirmed; R14 added (setter boundary validation) |
 | 106 | semantic-twin-inconsistency | CYCLE-2 | 2026-07-29 | merkle-root twins: 6/6 multi-shape blocks agree; mutation flag C++-only (intentional); Python empty-vector unreachable |
 | 40 | multi-agent-adjudication | CYCLE-2 | 2026-07-29 | A11 adjudicated: kernel input_index assert = defect-classified (policy + author's fix branch 6f23568be8); severity none today; parked |
@@ -987,6 +988,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 211 (20-campaign eligible set): raw=
+   15898866038248710399, masked 6675494001393934591 -> idx 11 ->
+   #48 c5 (ByRatio ordering laws oracle: 0/55,201; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48}.
    RE-RANK draw 210-redraw2 (21-campaign pool): raw=
    1130504839277943065 (63-bit) -> idx 20 -> #76 c5 (qrencode
    fallback verified; URGENT pruned; DISMISSED).
