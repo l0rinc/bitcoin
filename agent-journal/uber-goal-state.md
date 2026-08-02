@@ -266,6 +266,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 34 | uncovered-code-classification | CYCLE-5 | 2026-07-31 | BitsToBytes padding arms: dedicated test, 0xff-mutant killed (was sancov-granularity, not behavioral gap); in-tree queue CLOSED |
 | 34 | uncovered-code-classification | EXHAUSTED | 2026-08-02 | in-tree cells closed; only external watch remains (PR 35654 open @2026-08-02); watch rides #42 |
 | 23 | perf-flamegraph-investigation | CYCLE-4 | 2026-07-29 | CompareMainTransactions = O(1) early-exit comparator; memcmp/atomic shares inherent-by-design; no fix candidate |
+| 23 | perf-flamegraph-investigation | CYCLE-5 | 2026-08-02 | retention attribution: author test run at HEAD, pre-fix semantics confirmed; chain closed |
 | 95 | database-semantics-differential | CYCLE-3 | 2026-07-29 | RocksDB swap builds+reindexes correctly; CPU parity (validation-bound), wall -43% (write parallelism, directional) |
 | 95 | database-semantics-differential | CYCLE-6 | 2026-08-02 | kill-during-pressure-flush at -dbcache=4 scale: 3/3 zero-corruption recoveries; durability surface closed; DISMISSED |
 | 95 | database-semantics-differential | COMPLETE | 2026-08-02 | c7: rocksdb-brute MultiRead autopsy — ASan UAF + 2N/4N misalignment CONFIRMED branch-local; HEAD clean; campaign complete |
@@ -998,6 +999,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 222 (9-campaign eligible set): raw=
+   6987695114313435315 (63-bit) -> idx 3 -> #23 c5 (retention
+   attribution via author test at HEAD; chain closed).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58, #21, #28, #69, #61, #22, #23}.
    RE-RANK draw 221 (10-campaign eligible set): raw=
    521034545174603853 (63-bit) -> idx 3 -> #22 c4 (churn
    memory profile: #65-🟡 empirical baseline).
