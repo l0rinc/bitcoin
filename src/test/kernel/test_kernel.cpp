@@ -1489,7 +1489,6 @@ BOOST_AUTO_TEST_CASE(btck_transaction_check_tests)
         "00000000000000ffffffff010000000000000000015100000000");
 }
 
-<<<<<<< HEAD
 // ---- btck by-value struct layout battery (#92 c2) ----
 // Early-warning tripwire for accidental layout drift in the public by-value
 // C structs. Any field reorder/retype silently breaks the C ABI for
@@ -1529,7 +1528,6 @@ BOOST_AUTO_TEST_CASE(btck_abi_layout_battery)
     BOOST_CHECK_EQUAL(sizeof(btck_ValidationInterfaceCallbacks), 48U);
     BOOST_CHECK_EQUAL(sizeof(btck_NotificationInterfaceCallbacks), 72U);
     BOOST_CHECK_EQUAL(sizeof(btck_LoggingOptions), 20U);
-=======
 BOOST_AUTO_TEST_CASE(btck_destroy_null_tests)
 {
     // All btck_*_destroy functions accept a null pointer, matching the
@@ -1557,5 +1555,4 @@ BOOST_AUTO_TEST_CASE(btck_destroy_null_tests)
     btck_tx_validation_state_destroy(nullptr);
     btck_txid_destroy(nullptr);
     btck_witness_stack_destroy(nullptr);
->>>>>>> 55f1fa334f (kernel: make btck_chainstate_manager_destroy null-tolerant like all other destroys)
 }
