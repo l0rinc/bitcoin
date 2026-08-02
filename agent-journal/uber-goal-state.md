@@ -1,3 +1,47 @@
+# Cycle 294 Completion
+
+- The fresh post-Cycle-293 gate selected goal `80` (`fuzz-engine-differential`)
+  from the exact selector `shuf -i 0-98 -n 1`, with no reroll. The dedicated
+  branch was `uber-cycle-294-fuzz-engine-differential-20260802`. Gate and
+  cycle-start HEAD were `f3d7996c299faf88bb88f02757376640def7126e`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge-base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1378`; and the entry state SHA-256 was
+  `13e546539d30b40e5c8af217d0a1e26d6f9e445acc6db710f205894956e016d6`.
+  Catalog, random prompt, goals TSV, and uber-protocol hashes matched the
+  recorded values. Protected PIDs `777094`, `956381`, `1138182`, `1157959`,
+  `1312049`, `1312050`, and `1346200` remained alive and untouched; unrelated
+  untracked artifacts were preserved.
+- The distinct cell compared current-head `tx_package_eval` and
+  `ephemeral_package_eval` under Clang 19 ASan/UBSan libFuzzer, AFL++ 4.04c,
+  and Honggfuzz 2.6 using a shared 20-file, 11,879-byte corpus. LibFuzzer
+  completed 531 and 362 executions, with 306 and 252 new units and 1,397 and
+  1,390 MiB peak RSS. AFL++ completed 207 and 213 executions with 13,690 and
+  16,964 edges, no crashes or hangs, and persistent-loop calibration
+  instability. Honggfuzz completed 180 and 141 iterations, added 24 and 0
+  units, and saved no crashes or timeouts.
+- The independent Clang 19 ASan/UBSan oracle replayed 20 AFL++ tx inputs, 22
+  AFL++ ephemeral inputs, 79 Honggfuzz tx coverage inputs, and 53 Honggfuzz
+  ephemeral coverage inputs. All four replays exited zero without assertion,
+  sanitizer diagnostic, timeout, crash, or artifact. Current-head
+  `txpackage_tests` passed 15 cases and 306 assertions; `mempool_tests`
+  passed 26 cases and 1,013 assertions. FuzzTest was unavailable locally.
+  The omitted-`TMPDIR` AFL launch and nonexistent-`TMPDIR` package-test launch
+  were corrected and quarantined as scratch environment failures.
+- Verdict: **dismissed for a new repository defect**. No source or permanent
+  test change was justified. Full evidence, exact commands, binary hashes,
+  corpus manifest, replay logs, engine limitations, and next queue are in
+  `agent-journal/fuzz-engine-differential.md`; scratch artifacts are under
+  `/data/my_storage/tmp/cycle294-package`.
+- Evidence/journal commit `70c39b175c607be76d8f79ee53174c3a8954c13c`,
+  `journal: close cycle 294 fuzz engine differential`, was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. At this pre-state-close point HEAD is
+  `70c39b175c607be76d8f79ee53174c3a8954c13c` and divergence is `45 1379`.
+  This state entry is to be committed separately from the evidence journal.
+  The next action is a fresh post-close gate, one exact selector draw, a new
+  `uber-cycle-295-*` branch, and a distinct eligible cell; do not rerun this
+  package target family without changed evidence.
+
 # Cycle 293 Completion
 
 - The fresh post-Cycle-292 gate selected goal `3` (`current-pr-leftovers`) from the exact selector `shuf -i 0-98 -n 1`, with no reroll. The dedicated branch is `uber-cycle-293-current-pr-leftovers-20260802`. Gate and cycle-start HEAD were `b219fa6352c776ba73a90b4c4d8f76bc78503576`; fetched `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `45 1376`; and entry state SHA-256 was `11a06b3ba7f5a55efd4cbaadcda36062c4d5a1530415bcf9bc9fd9b4908836dc`. Catalog, prompt, goals TSV, and uber-protocol hashes matched the recorded values. Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` remained alive and untouched; unrelated untracked artifacts were preserved.
