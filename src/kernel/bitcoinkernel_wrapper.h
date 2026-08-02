@@ -304,6 +304,7 @@ std::vector<std::byte> write_bytes(const T* object, int (*to_bytes)(const T*, bt
         auto& data = *reinterpret_cast<UserData*>(user_data);
         auto& bytes = *data.bytes;
         try {
+            if (len == 0) return 0;
             auto const* first = static_cast<const std::byte*>(buffer);
             auto const* last = first + len;
             bytes.insert(bytes.end(), first, last);

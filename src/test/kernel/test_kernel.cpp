@@ -483,6 +483,7 @@ BOOST_AUTO_TEST_CASE(btck_script_pubkey)
     std::span<std::byte> empty_data{};
     ScriptPubkey empty_script{empty_data};
     CheckHandle(script, empty_script);
+    BOOST_CHECK(empty_script.ToBytes().empty());
 }
 
 BOOST_AUTO_TEST_CASE(btck_transaction_output)
