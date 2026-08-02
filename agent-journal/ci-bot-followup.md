@@ -1,5 +1,68 @@
 # CI, Coverage-Bot, and Review-Bot Follow-up Audit
 
+## Cycle 267: PR check failure and vendored workflow follow-up
+
+### Cycle identity and gate
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `42`
+- Selected goal: `ci-bot-followup` (CI, coverage-bot, and review-bot follow-up audit)
+- Branch: `uber-cycle-267-ci-bot-followup-20260802`
+- Gate HEAD: `bb9a5319cd3638e269fba946343fe9cb8cd74d1a`
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Gate divergence: local `1323`, upstream `45`
+- The worktree had the expected pre-existing untracked artifacts. The protected long-running test processes remained alive. The catalog, prompt, TSV, protocol, and state hashes passed the gate.
+
+### Hypotheses and scope
+
+The live target was bitcoin/bitcoin#35762, `test: optionally run functional tests via CTest`, whose head is `b7ad3bff61c4e466ae6e16c605d6b0aef2e318e6` and base is `26b730cdbf2c77c12f684fd50bd376212b725394`.
+
+1. Its failed RISC-V check might expose a source regression or an omitted CI follow-up.
+2. The new CTest functional-test mode might silently violate an existing runner contract.
+3. Vendored libsecp256k1 CI might still contain mutable external action references despite the earlier root CI pinning work.
+
+The earlier Goal 59 root-workflow pinning was not repeated. The selected journal's prior Goal 42 cycles were also searched; they require a new failed/non-skipped check, workflow/test-list change, raw coverage evidence, review-bot comment, or reproducible job failure before reopening the same evidence cell.
+
+### PR and CTest evidence
+
+The PR has an unresolved `maflcko` review comment on `ci/test/00_setup_env.sh`: enabling CTest mode silently ignores `TEST_RUNNER_EXTRA`, leaving two ways to select functional tests. The PR itself documents the CTest limitations, including missing support for `--coverage`, `--resultsfile`, `--nocleanup`, `--tmpdirprefix`, interactive options, and arbitrary multi-argument test specifications.
+
+The PR head was configured and built in an isolated scratch worktree with `BUILD_TESTS=ON`, `BUILD_FUNCTIONAL_TESTS=ON`, `BUILD_GUI=OFF`, wallet/ZMQ/bench disabled, and debug `-O0 -g0` flags. CMake configuration and the full `all` target completed successfully. CTest discovery produced 295 tests under the `functional` label. With `TEST_RUNNER_EXTRA='--exclude feature_fee_estimation.py'`, discovery still included `functional.feature_fee_estimation`; this is a confirmed CTest-mode contract gap on the PR branch, but it is not a current `origin/master` defect and the PR is not the local source being fixed in this cycle.
+
+### RISC-V check investigation
+
+The PR head check-runs endpoint returned 29 checks: 28 `success` and one `failure`, `riscv32 bare metal, static libbitcoin_consensus` (job `90826618769`, run `30046119080`). Its only failed step was `CI script` (step 11); setup, checkout, environment configuration, cache restore, Docker configuration, teardown, and completion all succeeded. The job page identifies the failure as `Process completed with exit code 1`, but both the raw job-log endpoint and the log-step page require authenticated access; the API returned HTTP 403 for logs and the unauthenticated HTML returned only a sign-in prompt.
+
+The RISC-V environment file and `ci/test/link-riscv.sh` are unchanged between the PR head and `origin/master`. The PR's new `BUILD_FUNCTIONAL_TESTS` option defaults to `OFF`, and its `enable_testing()` condition remains enabled by the existing `BUILD_TESTS=ON` default, so the changed CMake logic is inert for this job. The PR base's same check passed (`89323958957`), and the same check on current master passed (`91386602059`). The PR had only one workflow run for this head. Therefore the failure is a remote, opaque, stale/transient CI result rather than a reproducible source regression. No RISC-V production or CI patch is justified.
+
+### Confirmed nested CI configuration finding
+
+Root `.github` action references had already been pinned by commit `85083424af`, but the vendored libsecp256k1 workflow still used mutable tags in three files: `src/secp256k1/.github/workflows/ci.yml`, `src/secp256k1/.github/actions/run-in-docker-action/action.yml`, and `src/secp256k1/.github/actions/install-homebrew-valgrind/action.yml`. These workflows are independently executable when the vendored subtree is tested, so the root-only inventory missed an applicable CI supply-chain boundary.
+
+The source fix pins every external reference in that subtree to the verified commits below:
+
+- `actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09`
+- `actions/cache@caa296126883cff596d87d8935842f9db880ef25`
+- `docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c`
+- `docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a`
+
+`git diff --check` passed. A repository scan found seven external references in the nested workflow/action files and confirmed `all_external_refs_sha_pinned=true`. PyYAML parsing passed for the workflow and all three action files. Each four tag-to-commit mapping was independently checked with `git ls-remote` against the corresponding GitHub tag dereference. The diff is three files and seven replacements.
+
+This does not make the Homebrew Valgrind source fully immutable: the action still fetches `LouisBrunner/valgrind/valgrind`, and that tap currently points at the mutable `main` branch of `valgrind-macos.git`. That residual is recorded rather than silently treated as fixed.
+
+### Verdict
+
+**Confirmed:** vendored libsecp256k1 CI had mutable external action references outside the root CI pinning inventory; the smallest source fix is the SHA-pinning patch described above.
+
+**Dismissed as a current source regression:** PR #35762's RISC-V failure is isolated to an opaque remote `CI script` step; the unchanged RISC-V path passed on both the PR base and current master. The CTest `TEST_RUNNER_EXTRA` behavior is a real PR review-contract gap, but not a current-tree finding while the PR remains unmerged.
+
+### Limitations and next queue
+
+- GitHub denied unauthenticated raw logs, so the RISC-V command-level failure could not be independently minimized. The exact job, failed step, exit code, unchanged source paths, base result, and current-master result are preserved for a future authenticated follow-up.
+- The vendored Homebrew action's mutable formula/source fetch remains a separate supply-chain lead; do not duplicate it as an action-pin finding.
+- Commit the source fix with this journal, then commit the authoritative uber-goal cycle close separately and continue with a fresh gate and random draw.
+
 ## Cycle 244: macOS GUI follow-up verification
 
 ### Cycle identity and gate

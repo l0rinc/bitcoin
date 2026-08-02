@@ -74,14 +74,14 @@ jobs:
         run: echo "period=$((10#$(date +%V) / 4))" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
         with:
           # See: https://github.com/moby/buildkit/issues/3969.
           driver-opts: |
             network=host
 
       - name: Build container
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           file: ./ci/linux-debian.Dockerfile
           cache-from: type=gha,scope=${{ runner.arch }}-${{ steps.cache_timestamp.outputs.period }}
@@ -123,7 +123,7 @@ jobs:
     steps:
       - &CHECKOUT
         name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
       - &CI_SCRIPT_IN_DOCKER
         name: CI script
