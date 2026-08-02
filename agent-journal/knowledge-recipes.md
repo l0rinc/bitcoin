@@ -173,3 +173,48 @@ state in every round-trip oracle. (#10 c2)
 ## Rotation note
 Cycle 2 additions complete; the index stays additive (never prune
 validated recipes; mark superseded ones explicitly).
+
+## Cycle 3 (2026-08-02, draw 194, raw=16675846116259616253, masked 7452474079404840445, idx 37/39): R23 — the pre-rotation lineage-gap class + bulk repair (28 journals restored)
+
+### Trigger
+Third recurrence this session (#4 c3, #16 c4, now #90): a
+journal read for a drawn campaign found the file absent from
+agent/all-findings. The class: pre-rotation (audit/resurrection-
+era) work lived on campaign branches and was never copied to the
+append-only archive; some CONFIRMED FIXES shared the gap
+(#16 c4's null-destroy).
+
+### Recipe R23: lineage-completeness sweep
+1. Enumerate: git ls-tree <every audit branch> agent-journal/
+   --name-only | sort -u > branch_set; same for the archive;
+   comm -23 = missing set.
+2. Restore: for each missing file, copy the blob from the newest
+   branch tip containing it (for-each-ref --sort=-committerdate),
+   record the source branch per file in the commit message.
+3. NEVER stage user-untracked files (campaign-goals.md here).
+4. Follow with a content-level FIX reachability pass (#66 c3's
+   procedure), because journal gaps and fix gaps co-occur
+   (#16 c4 proved the linkage).
+Cost: one command set; yield this run: 28 journals restored
+(commit 2a147cfb08 with full branch mapping).
+
+### Archive-state correction of record
+Draw 194's premise (#90's own journal missing) was WRONG:
+knowledge-recipes.md was archived all along; the filename guess
+(historical-knowledge-recipes.md) was the error — recorded so
+future sweeps compare EXACT paths, not guesses.
+
+### Verdict
+REPAIR COMPLETE: the archive now holds all 112 journals present
+across branches (83 + 28 restored + 1 false alarm). No defect
+beyond the lineage gap itself.
+
+### Exact commands
+- git for-each-ref/ls-tree/comm pipeline above; bulk restore
+  script (newest-tip blob copy); commit 2a147cfb08.
+
+### Limitations / queue
+- Branch-side fixes inside the restored journals were not
+  re-audited for reachability (the restored journals are from
+  DONE/closed pre-rotation campaigns; #66 c3's matrix covers the
+  post-rotation fix set).
