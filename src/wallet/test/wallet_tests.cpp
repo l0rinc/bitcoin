@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <future>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include <addresstype.h>
@@ -44,6 +45,78 @@ static_assert(DEFAULT_TRANSACTION_MINFEE >= DEFAULT_MIN_RELAY_TX_FEE, "wallet mi
 static_assert(WALLET_INCREMENTAL_RELAY_FEE >= DEFAULT_INCREMENTAL_RELAY_FEE, "wallet incremental fee is smaller than default incremental relay fee");
 
 BOOST_FIXTURE_TEST_SUITE(wallet_tests, WalletTestingSetup)
+
+class AddToWalletFailingSQLiteBatch final : public MockableSQLiteBatch
+{
+    bool& m_fail_writes;
+
+public:
+    AddToWalletFailingSQLiteBatch(SQLiteDatabase& database, bool& fail_writes)
+        : MockableSQLiteBatch(database), m_fail_writes(fail_writes) {}
+
+protected:
+    bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite) override
+    {
+        if (m_fail_writes) return false;
+        return SQLiteBatch::WriteKey(std::move(key), std::move(value), overwrite);
+    }
+
+    bool EraseKey(DataStream&& key) override
+    {
+        if (m_fail_writes) return false;
+        return SQLiteBatch::EraseKey(std::move(key));
+    }
+};
+
+class AddToWalletFailingSQLiteDatabase final : public MockableSQLiteDatabase
+{
+    bool m_fail_writes{false};
+
+public:
+    void SetFailWrites(bool fail_writes) { m_fail_writes = fail_writes; }
+
+    std::unique_ptr<DatabaseBatch> MakeBatch() override
+    {
+        return std::make_unique<AddToWalletFailingSQLiteBatch>(*this, m_fail_writes);
+    }
+};
+
+BOOST_FIXTURE_TEST_CASE(add_to_wallet_write_failure_preserves_retry_state, TestingSetup)
+{
+    auto database{std::make_unique<AddToWalletFailingSQLiteDatabase>()};
+    auto* database_ptr{database.get()};
+    CWallet wallet(m_node.chain.get(), "", std::move(database));
+
+    CMutableTransaction transaction;
+    transaction.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+    transaction.vout.emplace_back(1, CScript{});
+    const CTransactionRef tx{MakeTransactionRef(std::move(transaction))};
+    const Txid txid{tx->GetHash()};
+    const COutPoint prevout{tx->vin.front().prevout};
+
+    database_ptr->SetFailWrites(true);
+    {
+        LOCK(wallet.cs_wallet);
+        BOOST_REQUIRE(wallet.LockCoin(prevout, false));
+        BOOST_CHECK(!wallet.AddToWallet(tx, TxStateInactive{}));
+        BOOST_CHECK(!wallet.GetWalletTx(txid));
+        BOOST_CHECK(wallet.wtxOrdered.empty());
+        BOOST_CHECK(!wallet.IsSpent(prevout));
+        BOOST_CHECK_EQUAL(wallet.nOrderPosNext, 0);
+        BOOST_CHECK(wallet.IsLockedCoin(prevout));
+    }
+
+    database_ptr->SetFailWrites(false);
+    {
+        LOCK(wallet.cs_wallet);
+        BOOST_REQUIRE(wallet.AddToWallet(tx, TxStateInactive{}));
+        BOOST_CHECK(wallet.GetWalletTx(txid));
+        BOOST_CHECK(!wallet.IsLockedCoin(prevout));
+    }
+
+    auto batch{wallet.GetDatabase().MakeBatch()};
+    BOOST_CHECK(batch->Exists(std::make_pair(DBKeys::TX, txid.ToUint256())));
+}
 
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {

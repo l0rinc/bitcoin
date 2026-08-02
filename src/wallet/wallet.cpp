@@ -1047,6 +1047,14 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
     WalletBatch batch(GetDatabase());
 
     Txid hash = tx->GetHash();
+    const int64_t order_pos_next_before = nOrderPosNext;
+    const int64_t birth_time_before = m_birth_time.load();
+    std::vector<std::pair<COutPoint, bool>> locked_coins_before;
+    for (const auto& txin : tx->vin) {
+        if (const auto it = m_locked_coins.find(txin.prevout); it != m_locked_coins.end()) {
+            locked_coins_before.emplace_back(it->first, it->second);
+        }
+    }
 
     if (IsWalletFlagSet(WALLET_FLAG_AVOID_REUSE)) {
         // Mark used destinations
@@ -1132,8 +1140,26 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
 
     // Write to disk
     if (fInsertedNew || fUpdated)
-        if (!batch.WriteTx(wtx))
+        if (!batch.WriteTx(wtx)) {
+            if (fInsertedNew) {
+                // The indexes are published before the final database write. Undo them so a retry can insert the transaction.
+                wtxOrdered.erase(wtx.m_it_wtxOrdered);
+                for (auto it = mapTxSpends.begin(); it != mapTxSpends.end();) {
+                    if (it->second == hash) {
+                        it = mapTxSpends.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+                mapWallet.erase(ret.first);
+                nOrderPosNext = order_pos_next_before;
+                m_birth_time = birth_time_before;
+                for (const auto& [outpoint, persistent] : locked_coins_before) {
+                    m_locked_coins.emplace(outpoint, persistent);
+                }
+            }
             return nullptr;
+        }
 
     // Break debit/credit balance caches:
     wtx.MarkDirty();
