@@ -440,6 +440,8 @@ static int secp256k1_musig_nonce_gen_internal(const secp256k1_context* ctx, secp
      * probability */
     secp256k1_musig_pubnonce_save(pubnonce, nonce_pts);
     secp256k1_memczero(pubnonce, sizeof(*pubnonce), !ret);
+    /* The public output must remain defined after the conditional invalidation. */
+    secp256k1_declassify(ctx, pubnonce, sizeof(*pubnonce));
     return ret;
 }
 

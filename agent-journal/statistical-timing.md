@@ -358,3 +358,66 @@ Source review confirms that `secp256k1_ellswift_xdh` uses `secp256k1_ecmult_cons
 ### Cycle 71 verdict and handoff
 
 **No new source defect; timing-only scan signal dismissed as a declassified public-output path.** The caller cell is closed without a production or test change. The probe and raw logs remain available for a future cycle only if a new API contract, compiler/backend, architecture, or caller setup changes the assumptions. The next uber cycle must draw a distinct goal from the full catalog.
+
+## Cycle 288: MuSig partial-sign timing screen and public-output MSan boundary
+
+- Cycle: `288`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `53`
+- Selected goal: `statistical-timing` / `Statistical timing-side-channel campaign`
+- HEAD at cycle start: `2d03b1a9415b2a9d776af600c1a2a7f2846de11f`
+- Branch: `uber-cycle-288-statistical-timing-side-channel-20260802`
+- Fetched `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Entry divergence: `origin/master...HEAD = 45 1366`
+- Entry state SHA-256: `b6736a853c8b7a63b90b651e37b79c859c74f26bc7c95f48deef86b32337ea00`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Goal TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+
+### Distinct scope and source contract
+
+Prior timing cells covered ECDSA/ecmult, ECDH, Schnorr, MuSig callers, ElligatorSwift/Silent Payments, and GCC compiler/backend/optimization variants. This cycle selected the previously unmeasured `secp256k1_musig_partial_sign` path in `src/secp256k1/src/modules/musig/session_impl.h`. The source review identified two explicit branches in the valid signing path: aggregate-key parity correction and final aggregate-nonce parity correction. Both are derived from public or explicitly declassified state. The path loads secret nonce/key material, performs secret scalar operations, clears secret state, and returns a public partial signature.
+
+The timing probe is `agent-journal/statistical_timing_cycle288_probe.c`. It constructs four valid two-signer states with signer secrets `1`, `2`, `0x7f` repeated, and the exact group-order value `n-1`; the second signer is fixed at `0x42` repeated. It performs 3,000 randomized samples per class for three repetitions, eight successful partial-sign calls per sample, copies secret nonces outside the timed region, pins execution to CPU 2, checks every return and partial-signature verification, and reports means, medians, p95 values, and Welch statistics. The corrected `n-1` fixture was used for the authoritative v3/v4 runs.
+
+### Timing measurements and controls
+
+Fresh repaired-source probe binaries were compiled with Clang 19 `-O2` and GCC 12 `-O2` against current-source libraries, with Clang `SECP256K1_ASM=AUTO` and `SECP256K1_ASM=OFF` cells. Logs are retained under `/data/my_storage/tmp/cycle288-statistical-timing/` as `clang19-auto-v4.log`, `clang19-off-v4.log`, and `gcc12-auto-v4.log`. The class metadata was identical in all builds:
+
+```text
+class=0 label=one key_prefix=01 signer_pub_prefix=02 aggregate_pub_prefix=02 cache_parity=0 branch_parity=0 session_parity=1
+class=1 label=two key_prefix=02 signer_pub_prefix=02 aggregate_pub_prefix=02 cache_parity=0 branch_parity=0 session_parity=0
+class=2 label=high7f key_prefix=7f signer_pub_prefix=03 aggregate_pub_prefix=03 cache_parity=0 branch_parity=1 session_parity=1
+class=3 label=n-minus-one key_prefix=40 signer_pub_prefix=03 aggregate_pub_prefix=02 cache_parity=0 branch_parity=0 session_parity=1
+```
+
+The useful matched-public-branch control is class `0/3`: it has the same `branch_parity=0` and `session_parity=1`, while the secret and public key bytes differ. Its mean differences and Welch statistics were:
+
+| Build | Repetition 0 | Repetition 1 | Repetition 2 |
+|---|---:|---:|---:|
+| Clang 19 AUTO | `8.827 ns, t=6.592` | `10.063 ns, t=7.752` | `8.322 ns, t=10.012` |
+| Clang 19 ASM-OFF | `-1.504 ns, t=-1.164` | `0.035 ns, t=0.035` | `0.971 ns, t=1.151` |
+| GCC 12 AUTO | `0.959 ns, t=0.822` | `3.236 ns, t=2.675` | `1.293 ns, t=1.593` |
+
+The remaining pair differences moved with public parity and session-parity classes, and the AUTO Clang class-0/class-3 shift was not reproduced by ASM-OFF or GCC. Because these classes also have different public keys and precomputation inputs, the measurement is not a secret-only experiment. It does not establish a secret-dependent timing defect. The result is retained as a negative screening control, not as proof of constant-time behavior.
+
+Aggregate `perf stat -e task-clock,cycles,instructions,branches,branch-misses` controls were successful. The three complete probes used `253.22 ms` / `846,214,990` cycles / `2,834,410,643` instructions / `47,557,809` branches / `484,143` misses (Clang AUTO), `241.16 ms` / `825,811,514` / `2,819,498,093` / `49,300,040` / `485,196` (Clang ASM-OFF), and `252.29 ms` / `860,259,576` / `3,051,891,315` / `69,996,340` / `614,377` (GCC AUTO). These are aggregate baselines and do not separate secret classes.
+
+### MSan ctime finding
+
+The fresh current-source Clang 19 MSan build in `/data/my_storage/tmp/cycle288-secp-msan` enabled `SECP256K1_BUILD_CTIME_TESTS=ON`, `SECP256K1_ASM=OFF`, and `-fsanitize=memory -fno-omit-frame-pointer -O1 -g`. The initial ctime run exited `86` with `MSAN_OPTIONS='halt_on_error=1:exit_code=86:report_umrs=1:print_summary=1'`. The first invalid operation was an uninitialized public output read through `secp256k1_musig_pubnonce_load`, called by `secp256k1_musig_sum_pubnonces` and `secp256k1_musig_nonce_agg`, reaching `ctime_tests.c:275`.
+
+The defect was introduced by the current MuSig nonce-generation invalidation path: `secp256k1_musig_memczero(pubnonce, sizeof(*pubnonce), !ret)` conditionally clears a public output based on secret-tainted validity, but the output was not declassified afterward. The minimal repair saves the output, conditionally clears it, and then calls `secp256k1_declassify(ctx, pubnonce, sizeof(*pubnonce))` before returning. The comment documents why this boundary is required.
+
+The repaired MSan ctime run exited `0` with no diagnostic (`msan-ctime-after.log`). As an independent sensitivity control, removing only the new declassification and rebuilding the same target made ctime exit `86` again with the identical first-invalid path (`msan-ctime-mutation.log`). Restoring the declassification and rebuilding returned ctime to exit `0` (`msan-ctime-restored.log`). This is a confirmed memory-initialization/constant-time boundary defect, not a statistical timing finding; the existing ctime test is the regression oracle and the mutation proves it is sensitive to the boundary.
+
+### Correctness validation
+
+The repaired source rebuilt the `tests` and `noverify_tests` targets in all three cells. With seed `0123456789abcdef`, `--iterations=1`, and `--jobs=2`, all six runs exited `0`. The three `tests` logs completed in `76.701`, `76.811`, and `78.015` seconds; the three `noverify_tests` logs completed in `41.001`, `40.862`, and `41.481` seconds. The only reported skips were the expected low-iteration SHA-256 and ecmult constant tests. `git diff --check` passed.
+
+### Verdict and handoff
+
+**Confirmed and fixed:** MuSig public nonce output was not re-declassified after secret-tainted conditional invalidation, and current ctime/MSan caught the resulting undefined public read. The smallest repair is the post-invalidation `secp256k1_declassify` call; no additional permanent test code was needed because the existing ctime test fails under the removed-boundary mutation and passes after repair. The source/evidence commit containing this section is authored as `Lőrinc <pap.lorinc@gmail.com>`.
+
+**Timing screen:** no secret timing defect established for `secp256k1_musig_partial_sign`. dudect and Valgrind are unavailable; the statistical measurements are CPU-pinned but use wall-clock samples, the counter runs are aggregate only, and the campaign remains limited evidence rather than a constant-time proof. No 32-bit, non-x86, LTO, or cross-architecture timing cell was available. The next eligible timing work must use a genuinely new secret-bearing caller, compiler, architecture, or measurement tool; do not repeat this MuSig partial-sign cell without changed evidence.
