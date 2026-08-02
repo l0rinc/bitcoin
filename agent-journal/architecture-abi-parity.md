@@ -153,3 +153,32 @@ sign-sensitive to fix or gate.
 ## Rotation note
 Three cycles; endian, char-signedness, and enum-underlying classes
 all clean. Host-limited cells remain.
+
+## Cycle 4 (2026-08-02, draw 229, raw=8430095800060831913 (63-bit), idx 1/2): unaligned-access parity sweep — wire layer memcpy-only, zero reinterpret_cast in serialize/streams; byte-casts alignment-irrelevant; DISMISSED
+
+### Sweep
+- Endian helpers (crypto/common.h:22-91): every ReadLE/WriteLE/
+  ReadBE/WriteBE is memcpy-based — alignment-safe by
+  construction on any arch (aarch64 unaligned-tolerance never
+  needed).
+- serialize.h / streams.h: ZERO reinterpret_cast — the wire/
+  deserialization layer has no aliasing or alignment hazard.
+- Remaining reinterpret_cast<uint*_t> hits (netaddress.cpp:294/
+  :300, bitcoinkernel.cpp:616): byte-pointer casts over struct
+  members and external buffers — char-width access, alignment-
+  irrelevant on every arch. qt hit out of scope.
+
+### Verdict
+DISMISSED: no unaligned-access assumption in production paths;
+the parity class is empty at the wire layer. Combined with c1
+(endian), c2 (char signedness), c3 (enum underlying): the
+native-host parity surface is clean.
+
+### Exact commands
+- grep memcpy/reinterpret_cast refs above (crypto/common.h,
+  serialize.h, streams.h, netaddress.cpp, bitcoinkernel.cpp).
+
+### Limitations / queue
+- QEMU/x86/s390x cells remain host-limited (c1 note).
+- secp256k1 subtree alignment is its own test matrix's domain
+  (not re-swept).
