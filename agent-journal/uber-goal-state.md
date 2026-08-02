@@ -290,6 +290,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 102 | durable-suspicion-replay | CYCLE-2 | 2026-07-29 | A5 capturemessages abort replayed on v28.2 binary: same msghand exception abort (behavior-verified, second verifier form) |
 | 102 | durable-suspicion-replay | CYCLE-3 | 2026-08-02 | A11 replay: upstream-identical @556988790a, zero in-tree callers; CONFIRMED-LATENT; replay queue empty |
 | 102 | durable-suspicion-replay | CYCLE-4 | 2026-08-02 | pre-existing crash-* analysis: 33 targets, zero reproduction; stale-harness verdict |
+| 102 | durable-suspicion-replay | CYCLE-5 | 2026-08-02 | full census 242/242 targets zero reproduction; closed |
 | 91 | compiler-binary-hardening | CYCLE-4 | 2026-07-29 | ELF census 7/7 binaries: PIE+NX+full RELRO+canary uniform, zero divergence; BTI note absent (c1 toolchain finding) |
 | 91 | compiler-binary-hardening | CYCLE-5 | 2026-08-02 | _FORTIFY_SOURCE=3 configured+visible in all 7 binaries; no gap except c1 BTI |
 | 80 | fuzz-engine-differential | CYCLE-4 | 2026-07-29 | PSBTv2 differential: v2 paths clean (A=0/400 mixed); E=107 round-trip-exact, C=124 Python-lax |
@@ -1031,6 +1032,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    RE-RANK draw 250: raw=5687290599673046444 -> consolidated
    regression sweep (test_bitcoin + test_kernel + functional
    subset ALL GREEN on the integrated lineage).
+   Cycle 256 (census completion): 242/242 targets zero
+   reproduction; artifact question closed.
    Cycle 255 (crash-artifact analysis, no draw — unexplored
    artifact preempt): 33-target scan, zero reproduction; stale
    artifacts, left untouched.

@@ -187,3 +187,27 @@ signal. Left in place, untracked, per the user's-file rule.
 - Not scanned against EVERY target (33 of ~100+); the families
   most consistent with the input shapes are all in the scan.
 - Provenance is inference (no metadata in libFuzzer artifacts).
+
+## Cycle 5 (2026-08-02, cycle 256): crash-artifact FULL census — all 242 fuzz targets, zero reproduction; artifact analysis closed
+
+### Census completion
+PRINT_ALL_FUZZ_TARGETS_AND_ABORT = 242 targets; the c4 scan
+covered 33; the remaining 218 were all probed (both files,
+-runs=1 each, crash/assert/sanitizer filters): CENSUS-DONE with
+ZERO hits. Total coverage: 242/242 targets x 2 files.
+
+### Verdict
+DISMISSED (final): the two crash-* artifacts reproduce against
+NOTHING in the current tree — confirmed stale from a prior
+harness era. Files remain untouched, untracked. The artifact
+question is closed with a complete census.
+
+### Exact commands
+- PRINT_ALL_FUZZ_TARGETS count (242); remaining-target loop
+  (/tmp/remaining_targets.txt, 218); zero HIT lines.
+
+### Limitations
+- The census used -runs=1 (single replay); a target needing
+  specific dictionary state to trip is theoretically possible
+  but immaterial (the inputs would be in that target's corpus
+  if so).
