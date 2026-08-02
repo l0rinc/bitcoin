@@ -1,3 +1,44 @@
+# C/C++ Supply-Chain Cycle 279
+
+## Cycle 279 Completion: pin CI pycapnp installations
+
+### Identity and Gate
+
+- The fresh gate fetched `origin/master` before branch creation. The exact selector `shuf -i 0-98 -n 1` returned `59`; no reroll was needed because the Goal 59 journal retained distinct open cells. Goal: `C/C++ supply-chain and security-gate audit`; slug: `cpp-supply-chain`.
+- Branch: `uber-cycle-279-cpp-supply-chain-20260802`.
+- Start HEAD: `1d351660070c67d4aa0367e43b992f6950449ef4`; `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `45 1348` (`origin/master...HEAD`).
+- The tracked tree and index were clean at the gate, and `git diff --check` passed. Existing untracked agent artifacts, goal files, probes, `node_modules/`, `test/cache/`, and crash/profiling artifacts were preserved. Protected long-running tests were observed and not touched.
+- Catalog, prompt, TSV, protocol, and pre-cycle state hashes were unchanged: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`, and `386e5b3f8d7e5d0a01fd926b67d0cde37432df97aea1ab42c03475069362c519`.
+
+### Closed Scope and Hypothesis
+
+The previous Goal 59 cycle pinned `pyzmq`, leaving unpinned `pycapnp`, vcpkg manifest/cache inputs, container image provenance, generated-input checks, and license gates. Nine active `ci/test/00_setup_env_*.sh` files and the Ubuntu commit-test workflow installed `pycapnp` without a version. `test/README.md` also recommended a bare PyPI install and retained a source fallback at the older `v2.2.1` tag.
+
+The trust boundary is CI and developer test preparation: `pycapnp` is a native extension and parser/RPC binding loaded by the IPC functional tests. An unbounded PyPI resolution lets a future wheel, bundled Cap'n Proto, Python-version compatibility change, or dependency behavior alter code executed by CI without a Bitcoin tree change. This cycle targets the package version and matching documentation only; full artifact hash locking and source-tag verification remain separate concerns.
+
+### Provenance and Compatibility Evidence
+
+- The PyPI JSON endpoint `https://pypi.org/pypi/pycapnp/2.2.4/json` identified the reviewed immutable release. The current project metadata also lists Python 3.9+ support; the local verifier used CPython 3.11. The release changelog includes fixes for malformed Text handling and an async capability-client memory leak.
+- `pip download --no-cache-dir --no-deps --only-binary=:all: pycapnp==2.2.4` retrieved the CPython 3.11 manylinux wheel. Its SHA-256 was `7055771afef9fdfabedcabcde0c11938c016779cd512d93e3bc04d6ac6dd65d2`; it was installed into `/data/my_storage/tmp/cycle279-pycapnp/target` without modifying the host interpreter.
+- Existing repository evidence had already exercised `pycapnp` 2.2.4 in `doc/fuzzing-findings.md`. The prior macOS pin history (`53b34c80c6`) established 2.2.1 compatibility, while the current IPC helper explicitly handles the 2.2.x Data-field behavior. The release tag used by the manual source fallback was advanced to `v2.2.4`.
+
+### Independent Verification
+
+- A repository-wide inventory of CI and test documentation found no remaining bare `pycapnp` package requirement in active install paths. Sourcing each changed environment file and inspecting `PIP_PACKAGES` showed `pycapnp==2.2.4`; `bash -n` passed for all changed shell files and `git diff --check` passed.
+- The isolated 2.2.4 import loaded `echo`, `init`, `mining`, and `proxy` from the current Bitcoin IPC schemas and reported the expected mining schema ID. This checks the package and schema-import boundary independently of the text inventory.
+- The IPC functional test ran against the existing IPC-enabled build with the isolated 2.2.4 module. Echo, mining, deprecated-interface failure, disconnect cancellation, and thread-busy tests all passed. The initial attempt against a build without the standalone `bitcoin` IPC executable was rejected by the harness before test execution and is not treated as a product result.
+- Full container, Windows, sanitizer, and cross-architecture CI were unavailable. The wheel pin is a version constraint, not a complete per-platform `--require-hashes` lock; the Alpine/Chimera source-build paths still need their native environments for end-to-end validation.
+
+### Fix and Verdict
+
+Pinned `pycapnp==2.2.4` in all nine native CI environment bundles and the Ubuntu GitHub Actions install. Updated the IPC test README's direct install and source fallback to the same reviewed release. This keeps every maintained CI and documented installation path on one tested package version without changing IPC protocol code.
+
+**Confirmed and fixed.** Before the change, active CI and documented installs accepted an arbitrary future `pycapnp` release. After the change, all audited package consumers select the reviewed 2.2.4 release, and the IPC functional suite passes with that package. The package pin does not authenticate every platform wheel or the GitHub source tag; a future cycle may evaluate hash-locked Python requirements or immutable source verification as a distinct supply-chain cell.
+
+### Handoff
+
+Keep vcpkg manifest/cache inputs, container image provenance, generated-input checks, and license gates as distinct Goal 59 cells. Do not reopen the closed qa-assets corpus, pyzmq, action-reference, lint-tool, script-vector, Guix-archive, release-signature, compiler-ref, or SDK-archive findings.
+
 # C/C++ Supply-Chain Cycle 265
 
 ## Cycle 265 Completion: pin CI pyzmq installations
