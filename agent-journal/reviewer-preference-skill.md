@@ -597,3 +597,17 @@ Watch quiet; the template predicts the close reason class.
 - The 35865 comment API returned sparse content (2 of N
   comments visible); the premise summary is from the visible
   objection only.
+
+## Cycle 12 (2026-08-02, draw 247, raw=3324739333356707657 (63-bit), idx 2/3): watch — zero delta (master static, same newest closed pair as c11); quiet
+
+### Sample
+- origin/master: 0 new commits.
+- Newest closed: 35592 (merged 08-01) and 35865 (closed 08-02)
+  — same pair as c11; no new review objects to classify.
+
+### Verdict
+Quiet (zero-delta cycle; the interval produced nothing new).
+Next watch on a longer interval or on a merge event.
+
+### Exact commands
+- git fetch origin master; closed-PR sample above.
