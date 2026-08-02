@@ -343,3 +343,71 @@ same code path). Durability surface closed at this scale.
   parity at random timing; the swap build is recreateable per c3).
 - rocksdb-brute bulk-ops remains the last #95 cell (depends on
   the swap).
+
+## Cycle 7 (2026-08-02, draw 175, raw=17804226048192678763, masked 8580854011337902955, idx 1/2): rocksdb-brute bulk-ops assessment — CDBWrapper::MultiRead on the unmerged branch has THREE independent defects, ASan-proven UAF + functional misalignment; CONFIRMED branch-local, ZERO HEAD exposure; campaign COMPLETE
+
+### Scope note
+External branch l0rinc/l0rinc/rocksdb-brute (tip d2cd534521, Oct
+2024, bulked HaveInputs/AddCoins + GetCoins/MultiRead) — a seed,
+not proof; the assessment below produced the runnable proof.
+MultiRead exists ONLY on that branch (absent from rocksdb-
+build-fix and leveldb-to-rocksdb); HEAD has NO MultiRead/GetCoins
+anywhere (grep-verified 2026-08-02).
+
+### Defects (verbatim code, branch:src/dbwrapper.h:241-267)
+1. DANGLING SPANS: the loop builds DataStream ssKey per key, then
+   keySpans.emplace_back(MakeByteSpan(ssKey)) — ssKey dies each
+   iteration; MultiReadImpl receives spans into freed memory.
+2. DOUBLE COUNT: keySpans(keys.size()) value-initializes N empty
+   spans AND appends N real ones — MultiGet gets 2N slices, the
+   first N empty.
+3. RESULTS DOUBLING: results(strValues.size()) default-inserts
+   N' values, then push_back appends N' more — 2N' results; the
+   GetCoins assert(ret.size()==outpoints.size()) can never hold,
+   and release builds index misaligned/default coins (deserial-
+   ization of empty NotFound values throws into assert(false)//
+   TODO in debug, results.clear() in release -> out-of-bounds
+   indexing in AddCoins/HaveInputs).
+
+### Runnable proof (/tmp/btc95c7/multiread_probe.cpp, preserved;
+verbatim template extraction against HEAD headers, Span->std::span
+mechanical substitution, Xor no-op omitted, mock MultiReadImpl)
+- ASan (-fsanitize=address -O1): heap-use-after-free, first-invalid
+  read in MultiReadImpl (probe:28) <- MultiRead (probe:49), freed
+  by DataStream::~DataStream (streams.h:164, probe:42 loop-local),
+  allocated by ssKey.reserve (probe:44). Full 3-frame lifecycle.
+- Non-ASan: 6 slices for 3 keys (2N proof; first 3 EMPTY), and all
+  3 real slices byte-IDENTICAL (c819aeaa0a000000 — freed-buffer
+  reuse makes every key read as the same wrong key); MultiRead
+  returned 12 results for 3 keys (4N; assert-break + misalignment
+  proof).
+
+### Reachability on the branch (severity context, NOT HEAD)
+GetCoins is called by CCoinsViewCache::HaveInputs (every mempool
+tx acceptance) and AddCoins(check_for_overwrite=true) (ConnectBlock
+BIP30 path) — so the branch's bulk paths hit the defects on first
+use: debug builds abort (assert), release builds query wrong/empty
+keys and index out of bounds (UB). Consensus-adjacent ON THE
+BRANCH; the branch was never merged and HEAD is structurally
+unaffected (no MultiRead, per-coin FetchCoin semantics intact —
+see c1/c2 contract rows).
+
+### Verdict
+CONFIRMED (branch-local defect, runnable evidence, two verifier
+forms: sanitizer trace + functional miscount). NOT a HEAD/upstream
+issue — no URGENT entry, no fix commit (superseded experiment;
+repairing it is not a HEAD deliverable). The correct bulk-fetch
+shape (persistent key storage, reserve-not-size, reserve-results)
+recorded here for any future revival.
+
+### Why the branch's own builds missed it
+Release builds don't fire the size assert; the misindexed default
+coins are spent-by-default, so HaveInputs conservatively returns
+false (tx rejection, not acceptance) in the common path — the
+silent-failure direction is availability, and only the BIP30
+overwrite arm reads the wrong boolean in the dangerous direction.
+
+### Campaign #95: COMPLETE
+c1 leveldb exact sync; c2 dbwrapper contracts; c3 engine A/B;
+c4 durability kill; c5 per-batch windows; c6 pressure-flush kill;
+c7 rocksdb-brute bulk-ops autopsy.
