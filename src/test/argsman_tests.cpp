@@ -14,9 +14,10 @@
 #include <util/strencodings.h>
 
 #include <array>
-#include <optional>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <optional>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -189,6 +190,39 @@ BOOST_FIXTURE_TEST_CASE(util_NoIncludeConf, NoIncludeConfTest)
     BOOST_CHECK_EQUAL(Parse("-noincludeconf"), "");
     BOOST_CHECK_EQUAL(Parse("-includeconf"), "-includeconf cannot be used from commandline; -includeconf=\"\"");
     BOOST_CHECK_EQUAL(Parse("-includeconf=file"), "-includeconf cannot be used from commandline; -includeconf=\"file\"");
+}
+
+BOOST_FIXTURE_TEST_CASE(util_ReadConfigFiles_network_noincludeconf, BasicTestingSetup)
+{
+    const fs::path datadir = m_path_root / "includeconf-network-negation";
+    fs::create_directories(datadir);
+    {
+        std::ofstream config{(datadir / BITCOIN_CONF_FILENAME).std_path()};
+        config << "includeconf=common.conf\n"
+                  "[regtest]\n"
+                  "noincludeconf=1\n";
+    }
+    {
+        std::ofstream included{(datadir / "common.conf").std_path()};
+        included << "uacomment=should-not-be-loaded\n";
+    }
+
+    TestArgsManager args;
+    args.SetupArgs({
+        {"-datadir", ArgsManager::ALLOW_ANY},
+        {"-regtest", ArgsManager::ALLOW_ANY},
+        {"-includeconf", ArgsManager::ALLOW_ANY},
+        {"-uacomment", ArgsManager::ALLOW_ANY},
+    });
+    const std::string datadir_arg = "-datadir=" + fs::PathToString(datadir);
+    const char* argv[] = {"ignored", datadir_arg.c_str(), "-regtest"};
+    std::string error;
+    BOOST_REQUIRE(args.ParseParameters(3, argv, error));
+    BOOST_REQUIRE(args.ReadConfigFiles(error));
+    BOOST_CHECK_EQUAL(error, "");
+
+    args.SelectConfigNetwork("regtest");
+    BOOST_CHECK(args.GetArgs("-uacomment").empty());
 }
 
 BOOST_AUTO_TEST_CASE(util_ParseParameters)

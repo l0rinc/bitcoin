@@ -285,3 +285,142 @@ The source/test/journal commit for this cycle is recorded in the uber-goal
 state. Remaining Goal 43 cells are includeconf chain-selection transitions,
 multi-file loadblock ordering/restart behavior, and option removal/deprecation
 contracts; do not reopen the failed-write rollback cell without new evidence.
+
+## Cycle 289 - network-specific noincludeconf precedence
+
+### Identity and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `43` (`option-api-lifecycle`); no
+  reroll. Branch: `uber-cycle-289-option-api-lifecycle-20260802`. Gate HEAD
+  and cycle start HEAD were `fefcef2b8eefaae923407ba32daca32e93d49bc6`.
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; the
+  merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence
+  was `45 1368`.
+- The prior cycle-close state hash was
+  `b12d4c1c9748803f12b9a2bada66029276cfacd1a339af210a837caea3401807`.
+  Catalog hashes were goals
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  prompt `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  TSV `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`,
+  and protocol
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Protected long-running test processes were checked and left untouched. The
+  tracked worktree was clean at the gate apart from known untracked agent
+  artifacts. Prior Goal 43 cells for `-txsendrate`, the self-referential
+  settings path, and failed settings writes were excluded. The distinct cell
+  selected here was precedence between a network-specific `noincludeconf` and
+  a default-section `includeconf`.
+
+### Contract, source, and hypothesis
+
+`doc/bitcoin-conf.md:41-49` states that network-specific options take
+precedence over non-network-specific options. `ArgsManager::ReadConfigFiles()`
+in `src/common/config.cpp:176-240` did not apply that rule to include-file
+selection: it appended the selected network's include files and then appended
+the default section's include files with an unconditional `add_includes({})`.
+The helper did honor the last `noincludeconf` within one section, but the
+manual union ignored a final network-specific negation when deciding whether
+to load default includes.
+
+The relevant implementation was introduced with the config-file extraction in
+`be55f545d53` and its command-line negation handling was refined by
+`db77f87c636`. History and blame contained no test or rationale covering
+cross-section includeconf precedence. The hypothesis was that a default
+include would be loaded even when the active network section ended with
+`noincludeconf=1`, allowing a lower-precedence file to mutate runtime options.
+
+### Independent reproduction and controls
+
+The scratch config at
+`/data/my_storage/tmp/cycle289-includeconf-noinclude/bitcoin.conf` contained:
+
+```text
+server=1
+listen=0
+uacomment=base
+includeconf=common.conf
+
+[regtest]
+noincludeconf=1
+```
+
+`common.conf` set `uacomment=common`. Before the source change, the old
+`bitcoind` was started with:
+
+```text
+/data/my_storage/tmp/cycle214-build/bin/bitcoind -regtest \
+  -datadir=/data/my_storage/tmp/cycle289-includeconf-noinclude \
+  -printtoconsole=1 -rpcuser=cycle289 -rpcpassword=cycle289 \
+  -rpcport=18499 -port=18498 -listen=0 -connect=0 -dnsseed=0 \
+  -fixedseeds=0 -listenonion=0 -discover=0 -natpmp=0 -fallbackfee=0.0001
+```
+
+Startup logged `Included configuration file common.conf`, and
+
+```text
+/data/my_storage/tmp/cycle214-build/bin/bitcoin-cli -regtest -noconf \
+  -rpcconnect=127.0.0.1 -rpcport=18499 -rpcuser=cycle289 \
+  -rpcpassword=cycle289 getnetworkinfo
+```
+
+reported `/Satoshi:31.99.0(base; common)/`. This is a direct process-boundary
+reproduction of the precedence defect. The daemon was stopped through RPC.
+
+The existing `feature_includeconf.py` functional test was also attempted with
+an isolated tmpdir and seed. It stopped in framework setup because the shared
+199-block cache was absent (`AssertionError: not(0 == 199)`); this was
+classified as an environment limitation, not product evidence.
+
+### Regression and fix
+
+`src/test/argsman_tests.cpp` now creates a scratch config and included file,
+parses `-regtest`, calls `ReadConfigFiles()`, selects the network, and asserts
+that `uacomment` is empty. The unpatched control was:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle289-args-focused-before-tmp \
+  /data/my_storage/tmp/cycle214-build/bin/test_bitcoin \
+  --run_test=argsman_tests/util_ReadConfigFiles_network_noincludeconf \
+  --log_level=message --report_level=short --color_output=false --random=28901
+```
+
+It exited `201`: 3 of 4 assertions passed and
+`args.GetArgs("-uacomment").empty()` failed. The test passed after the fix
+with 1 case and 4 assertions.
+
+The implementation records whether the active network's final
+`includeconf` value is negated, skips loading default-section include files
+when that value is `noincludeconf`, and retains the original value counts for
+the recursive-include warning scan. The warning scan uses the same suppression
+decision, so a deliberately suppressed default include is not falsely
+reported as a recursive include. A later network-specific positive
+`includeconf` still overrides an earlier network-specific negation.
+
+### Verification and verdict
+
+- Final-source build commands, both successful:
+  `TMPDIR=/data/my_storage/tmp/cycle289-args-build-tmp
+  CCACHE_DIR=/data/my_storage/tmp/cycle289-ccache cmake --build
+  /data/my_storage/tmp/cycle214-build --target test_bitcoin -j2` and the same
+  command with `--target bitcoind -j2`.
+- Focused fixed test passed: 1 case, 4 assertions. Full
+  `argsman_tests` passed: 18 cases, 220569 assertions. `git diff --check`
+  passed.
+- Final-source daemon positive controls passed. A default `includeconf` loaded
+  `common.conf` and `getnetworkinfo` reported
+  `/Satoshi:31.99.0(base; common)/`. A `[regtest] includeconf=network.conf`
+  control loaded `network.conf` and reported
+  `/Satoshi:31.99.0(base; network)/`. Both daemons stopped cleanly through
+  `bitcoin-cli stop`.
+- No full `test_bitcoin` run, Windows/macOS build, or successful full
+  `feature_includeconf.py` run was available. The daemon binary was a local
+  dirty build from the final source; all scratch datadirs and credentials were
+  isolated under `/data/my_storage/tmp`.
+
+Verdict: **confirmed and fixed**. Network-specific `noincludeconf` now
+suppresses lower-precedence default includes throughout loading and recursive
+warning handling, while ordinary default and network-specific positive
+includes retain their behavior. The next distinct queue is multi-file
+`loadblock` ordering/restart behavior, followed by option removal/deprecation
+contracts; do not reopen this includeconf precedence cell without new
+evidence.
