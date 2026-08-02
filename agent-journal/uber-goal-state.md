@@ -74,6 +74,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 16 | api-misuse-resistance | CYCLE-2 | 2026-07-28 | 5+7 kernel C API @pre doc fixes (b6b48987a5, 8b0e92b4a2); #33943 precedent journaled |
 | 16 | api-misuse-resistance | CYCLE-4 | 2026-08-02 | lineage repair x2: journal restored + null-destroy fix (55f1fa334f) re-landed with regression test; upstream still vulnerable; CONFIRMED+REPAIRED |
 | 61 | stateful-contract-fuzzing | CYCLE-3 | 2026-07-28 | sigcache oracle (a4ff67417e); c2/c3 assessments all already-strong; triage guidance updated |
+| 61 | stateful-contract-fuzzing | CYCLE-4 | 2026-08-02 | undo-data cell absorbed by #35-c5 battery (green); DISMISSED |
 | 30 | security-logging | CYCLE-3 | 2026-07-28 | 2 injection fixes; amplification dismissed by design (0 bytes at default, 14.6KB/round at -debug) |
 | 30 | security-logging | CYCLE-5 | 2026-08-02 | URI-on-exception safe by design (no secret-bearing URIs, body/auth never logged); DISMISSED |
 | 31 | cross-layer-contracts | CYCLE-3 | 2026-07-28 | +gettxoutsetinfo use_index restriction (9396f0b414); 3 doc/RPC layer fixes total |
@@ -996,6 +997,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 220 (11-campaign eligible set): raw=
+   12572157352548436285, masked 3348785315693660477 -> idx 8 ->
+   #61 c4 (undo-data absorbed; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58, #21, #28, #69, #61}.
    RE-RANK draw 219 (12-campaign eligible set): raw=
    16824079916139056791, masked 7600707879284280983 -> idx 11 ->
    #69 c5 (backend census: EXHAUSTED).
