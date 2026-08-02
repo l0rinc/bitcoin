@@ -2,7 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <common/args.h>
 #include <common/system.h>
+#include <node/mempool_args.h>
 #include <policy/policy.h>
 #include <test/util/time.h>
 #include <test/util/txmempool.h>
@@ -17,6 +19,20 @@
 BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
 
 static constexpr auto REMOVAL_REASON_DUMMY = MemPoolRemovalReason::REPLACED;
+
+BOOST_AUTO_TEST_CASE(MempoolExpiryOptionTest)
+{
+    ArgsManager negative_args;
+    negative_args.ForceSetArg("-mempoolexpiry", "-1");
+    CTxMemPool::Options negative_opts;
+    BOOST_CHECK(!ApplyArgsManOptions(negative_args, ::Params(), negative_opts));
+
+    ArgsManager positive_args;
+    positive_args.ForceSetArg("-mempoolexpiry", "1");
+    CTxMemPool::Options positive_opts;
+    BOOST_CHECK(ApplyArgsManOptions(positive_args, ::Params(), positive_opts));
+    BOOST_CHECK_EQUAL(positive_opts.expiry, std::chrono::hours{1});
+}
 
 class MemPoolTest final : public CTxMemPool
 {
