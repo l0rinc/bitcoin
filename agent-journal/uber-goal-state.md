@@ -306,6 +306,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 60 | reviewer-preference-skill | CYCLE-10 | 2026-08-02 | watch: master static; 35744 rework exchange, 35859 tested-ACK + CI flags; quiet |
 | 60 | reviewer-preference-skill | CYCLE-11 | 2026-08-02 | watch: 35865 premise-refutation close; template holds; quiet |
 | 60 | reviewer-preference-skill | CYCLE-12 | 2026-08-02 | watch: zero delta; quiet |
+| 60 | reviewer-preference-skill | CYCLE-13 | 2026-08-02 | zero-delta x3; cadence -> merge-event-triggered |
 | 58 | helper-reuse | CYCLE-3 | 2026-07-29 | 7th PSBT copy deduplicated: helper moved to rpc/rawtransaction_util (existing shared header); rpc_psbt green |
 | 58 | helper-reuse | CYCLE-4 (queue-empty) | 2026-08-02 | census: DecodeHexTx shared; near-twins binary-separated by design; queue EMPTY |
 | 65 | contributor-branch-radar | CYCLE-4 | 2026-07-29 | rocksdb-brute assessed: bulk-fetch class subsumed by shipped -prevoutfetchthreads; stale WIP, nothing actionable |
@@ -1029,6 +1030,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    RE-RANK draw 250: raw=5687290599673046444 -> consolidated
    regression sweep (test_bitcoin + test_kernel + functional
    subset ALL GREEN on the integrated lineage).
+   RE-RANK draw 254 (3-watch pool): raw=6000597539641640036
+   (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
+   merge-event-triggered).
+   Pool: #42, #65 on same event-triggered rule.
    RE-RANK draw 253 (1-target pool): raw=16849002992585107402
    -> #79 c13 (txorphanage_sim campaign: zero crashes).
    Pool: watches/signals only.
