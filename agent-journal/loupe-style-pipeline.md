@@ -220,3 +220,43 @@ excluded by the flat wallet-less curve.
 ## Rotation note
 Five cycles; estimator waste fixed, churn characterized, decay
 pinned (absent under this shape).
+
+## Cycle 6 (2026-08-02, draw 195, raw=13100020088567363976, masked 3876648051712588168, idx 28/38): banlist.dat archaeology — legacy/corrupt/missing are three DISTINCT loud paths; corrupt arm fault-injected live; DISMISSED
+
+### Map (addrdb.cpp CBanDB::Read :155-183 + banman.cpp LoadBanlist :31-48)
+- Legacy banlist.dat (pre-23 format) present: explicit WARNING
+  'banlist.dat ignored ... can only be read by version 22.x'
+  (the #41 c6 contract) — loud, no silent skip.
+- banlist.json missing: Read=false -> INFO 'Recreating the
+  banlist database' (fresh-start line; INFO not warning — the
+  file is expected-absent on first run).
+- banlist.json corrupt JSON: LogWarning 'Cannot load banlist ...
+  does not contain valid JSON ... may be caused by a crash,
+  power loss, full disk, or storage error ... fixed by removing
+  the file' — DISTINCT from fresh-start, names the remediation.
+- Valid-JSON-bad-content: runtime_error -> LogWarning 'Cannot
+  parse banlist ...' — third distinct line.
+- Bans are transient by design (default 24h), so the recreate-
+  on-failure data loss is bounded; upstream-identical paths.
+
+### Live fault injection (/tmp/btc63c6)
+Garbage banlist.json -> node start: [warning] 'Cannot load
+banlist ... does not contain valid JSON ...' followed by
+'Recreating the banlist database' — exact lines above; node
+starts clean. Daemon stopped after.
+
+### Verdict
+DISMISSED: no silent banlist loss class — corruption is warned
+loudly with remediation text, the legacy file has its own
+warning, and only the expected-absent case is INFO-level. The
+family's last artifact is closed.
+
+### Exact commands
+- sed/grep line refs above; bitcoind -datadir=/tmp/btc63c6 run
+  (log lines above); bitcoin-cli stop.
+
+### Limitations / queue
+- Settings-file warning text is shared with other settings.json
+  consumers (same loudness class, fine).
+- #63 artifacts closed: estimator waste fixed, churn
+  characterized, decay pinned, banlist mapped.
