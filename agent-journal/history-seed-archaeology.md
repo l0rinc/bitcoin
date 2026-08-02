@@ -369,3 +369,37 @@ DISMISSED cycles + this one, every tier empirically verified.
 ## Rotation note
 Six cycles; six artifacts, every tier verified. Campaign #41
 exhausted.
+
+## Postscript (2026-08-02, draw 234, raw=2425925052785082083, n=1): REAL 3-version banlist migration chain executed — v0.21.0 dat -> v22.0 silent json migration (timestamps preserved) -> HEAD warning + intact state; archaeology fully executable
+
+### Chain (all with the archived release binaries, /tmp/btc234b)
+1. v0.21.0 (Satoshi:0.21.0): setban 5.6.7.8/32 -> banlist.dat
+   written (the pre-json format).
+2. v22.0 (Satoshi:22.0.0): migrates SILENTLY — banlist.json
+   appears alongside the dat, ban_created 1785645380 PRESERVED
+   (v0.21's original timestamp). No explicit migration log
+   line; the dat is left in place. (Correction of record: v22.0
+   already writes json — the last dat-READING version is 22.x,
+   not 'pre-23' as the #63 c6 shorthand put it.)
+3. HEAD: reads the json (listbanned intact, original timestamp
+   through both migrations) + prints the exact contract line:
+   '[warning] banlist.dat ignored because it can only be read
+   by Bitcoin Core version 22.x. Remove "..." to silence this
+   warning.'
+
+### Verdict
+CONFIRMED (behavioral, 3-binary chain): the banlist migration
+is state-preserving end-to-end and the HEAD warning contract is
+exact as documented (#41 c6, #63 c6 static arms). The queued
+'real v22 banlist.dat' cell is closed with the full chain.
+
+### Exact commands
+- releases/v0.21.0/bin/bitcoind setban (dat written);
+  releases/v22.0/bin/bitcoind (json appears, timestamps
+  preserved); build-before/bin/bitcoind (warning line above);
+  listbanned at each stage; all daemons stopped after.
+
+### Limitations
+- The v22 silent-migration path has no dedicated log line
+  (observed via file + timestamp evidence, not a printed
+  'migrating' message).

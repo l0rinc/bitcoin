@@ -1008,6 +1008,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 234 (1-cell pool): raw=2425925052785082083
+   -> v22 real banlist migration: 3-version chain CONFIRMED
+   (v0.21 dat -> v22 silent json migration, timestamps
+   preserved -> HEAD warning + intact state). Pool EMPTY —
+   deeper harvest next.
    RE-RANK draw 233-redraw (2-cell pool): raw=
    3871160351176686871 (63-bit) -> idx 1 -> lineage re-sweep:
    112/112 present, zero missing; CONFIRMED.
