@@ -960,6 +960,7 @@ BOOST_AUTO_TEST_CASE(txgraph_staging_diagrams_sort_equal_feerate_chunks)
     const FeeFrac staging_sum{staging_diagram[0] + staging_diagram[1]};
     BOOST_CHECK(staging_sum == main_sum);
     graph->SanityCheck();
+}
 BOOST_AUTO_TEST_CASE(txgraph_memory_usage_retained_entries)
 {
     constexpr size_t CHURN_COUNT{1024};
