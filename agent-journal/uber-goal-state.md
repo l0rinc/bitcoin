@@ -1,3 +1,64 @@
+# Cycle 301 Completion
+
+- The exact selector from the 101-goal catalog was `shuf -i 0-100 -n 1` ->
+  goal `69` (`backend-differential`). The dedicated branch is
+  `uber-cycle-301-backend-differential-20260802`. Cycle-start HEAD was
+  `6078e6c8c33514435957cc5a186be5049d9ad1ac`; `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base equaled
+  `origin/master`; start divergence was `0 1395`; and the entry state-file
+  SHA-256 was
+  `944b21f830d4b0888a8bb64b56680419d81c84f73ba3dca79f254d600881812c`.
+- The selected evidence cell was vendored libminisketch's generic field
+  implementation versus CLMUL and trinomial-CLMUL implementations. Previous
+  Goal 69 cells covered CRC32C, Core SHA256 dispatch, and libsecp256k1
+  portable/assembly under Release, sanitizer, and ThinLTO, so those were not
+  repeated. The current source's CPUID-gated runtime-unavailable branch was
+  recorded as a separate next goal rather than inferred from this host.
+- Fresh standalone Clang 19 CMake builds covered all field sizes 2..64 with
+  CLMUL disabled and enabled. The independent public API probe used a
+  deterministic set-XOR model, truncation/high-bit inputs, serialization,
+  bounded decode, cloning, capacity-reducing merges, and C API rejected-merge
+  preservation. Both builds returned
+  `bits=2..64 failures=0 digest=727afd9cb1c74f12`; Release no-VERIFY and VERIFY
+  suites passed at complexity 2 in both configurations.
+- Rebuilding the same matrix with ASan+UBSan and frame pointers produced the
+  same probe digest and four successful sanitized VERIFY/non-VERIFY suites.
+  No sanitizer diagnostics appeared. No production defect, regression, or
+  permanent test change was justified. The result is limited to x86_64,
+  little-endian, Clang 19; ARM/32-bit/big-endian, alternate compilers, timing,
+  and a CLMUL-compiled process on a CPU without PCLMULQDQ remain open.
+  Evidence and commands are recorded in
+  `agent-journal/backend-differential.md`; scratch state is under
+  `/data/my_storage/tmp/cycle301-minisketch/`.
+- The suspicious runtime boundary became Goal 101,
+  `minisketch-runtime-dispatch`, with a seeded journal for compile-time CLMUL
+  inclusion, CPUID selection, fallback availability, disabled-field matrices,
+  and C/C++ status consistency. Catalog extension commit `49bf3f3bab` added
+  the goal and regenerated the catalog. The cycle journal close is
+  `0d499bca26`.
+- The requested rebase was performed after the cycle commits. `git fetch origin
+  master` succeeded; the first rebase attempt was correctly blocked by the
+  unstaged cycle journal, which was then committed as the journal-only close,
+  and `git rebase origin/master` completed as a no-op with no conflicts.
+  `origin/master` remains
+  `556988790a7f961693a8fd93f73725baea66476a`; current pre-state-close
+  divergence is `0 1397`. The catalog now has 102 contiguous goals `0..101`.
+  Catalog SHA-256 is
+  `ab4c15015c475c33d5a74f7113536614b75bf5b301f7de5fa2ffa5820b2a3c52` and
+  manifest SHA-256 is
+  `d05638f851fa94af6bf5a9a5d894cbe7996ac1e86279e81c1b3092a79c546163`.
+  The selector, random prompt, and protocol remain unchanged at
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2` and
+  `78ca57acf308180c8e195e1f9c669724688b03baca4c423638549b8969f08bf1` for
+  the latter two fixed files.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were checked alive and untouched. Existing
+  untracked probes, generated artifacts, and user files remain preserved.
+- Verdict: **dismissed as a current backend defect; learned boundary recorded**.
+  No repository-completion claim is made. After this state-close commit,
+  perform a fresh gate, draw exactly one selector with `shuf -i 0-101 -n 1`,
+  create a new `uber-cycle-302-*` branch, and continue with the selected goal.
+
 # Cycle 300 Completion
 
 - The exact selector from the expanded catalog was `shuf -i 0-99 -n 1` ->
