@@ -118,3 +118,55 @@ or subtract the startup floor (measured with a 1-byte seed).
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-08-01, draw 172, raw=184429387142081413 (63-bit), idx 1/6 -> STALE (#108 complete; pool repair), redraw raw=14500292587252405485, masked 5276920550397629677, idx 2/5): qa-assets selective import — pinned-commit sparse import of 3 in-scope corpora validated clean end-to-end; DISMISSED
+
+### Hypothesis
+H: importing the upstream qa-assets corpora for in-scope targets
+(process_messages, transaction, script) surfaces seeds the fork's
+fuzz build rejects/crashes on (corpus-vs-build skew, e.g. from the
+fork's Assume-hardened validation). Falsifiable by a full single
+pass per seed under the fork's own fuzz binary.
+
+### Import (disk-bounded, provenance exact)
+- Sparse blob-filtered clone: git clone --depth 1 --filter=
+  blob:none --sparse https://github.com/bitcoin-core/qa-assets
+  /tmp/qa-assets -> HEAD 918cdd3 == the CI pin from #59 c3
+  (918cdd36fec3...): the pin is current upstream HEAD.
+- Upstream renamed the corpus dir: fuzz_seed_corpus/ ->
+  fuzz_corpora/ (sparse patterns adjusted; recorded for #59 c3's
+  CI script which references the path — verified ci/test/
+  03_test_script.sh's clone is path-agnostic, no drift).
+- Imported: process_messages 3,783 seeds (56M), transaction 1,527
+  (89M), script 2,536 (24M) — 7,846 seeds, 218M total, disk 4.0G
+  free kept.
+
+### Validation (fork binary, single pass per seed)
+build_fuzz/bin/fuzz -runs=0 <corpus> per target:
+- transaction: 2,530 runs, cov 5136 ft 27865, 325s, DONE clean.
+- script: 2,537 runs, cov 5287 ft 14350, 36s, DONE clean.
+- process_messages: 4,958 runs, cov 18187 ft 58436, 60s, DONE
+  clean.
+Zero crashes, zero timeout/slow-unit/leak artifacts: find
+-newer <import marker> over crash-*/timeout-*/slow-unit-*/
+leak-*/oom-* returns 0; the two untracked crash-* files share
+one identical mtime (the cycle-167 stash/pop instant) and are
+unrelated pre-existing state, untouched.
+
+### Verdict
+DISMISSED: no corpus-vs-build skew; the pinned upstream corpus is
+fully executable by the fork's fuzz build, and the import path
+(sparse, pinned, selective) is proven cheap enough (218M vs
+GB-scale full clone) to repeat per-target on demand.
+
+### Exact commands
+- clone/sparse lines above; per-target FUZZ=<t> build_fuzz/bin/
+  fuzz -runs=0 lines above; du/ls counts above.
+
+### Limitations / queue
+- Single pass only (no mutation campaign this cycle); coverage
+  deltas vs a local corpus not computed (no local baseline corpus
+  for these targets in-tree).
+- /tmp/qa-assets kept (218M); delete on disk squeeze, re-sparse
+  per the lines above.
+- crash-artifact policy cell remains standing (already policy).
