@@ -303,6 +303,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 21 | rebuild-recovery-profile | CYCLE-5 | 2026-08-02 | forcecompactdb: sub-second, chainstate 2MB->1MB, scope=2 validation DBs; fact |
 | 60 | reviewer-preference-skill | CYCLE-5 | 2026-07-29 | maintainer merge-rationale mined: M1-M4 (terse depth-honest ACKs, self-contained descriptions, lifecycle, no info-hiding) |
 | 60 | reviewer-preference-skill | CYCLE-9 | 2026-08-02 | watch: 35592/35838 template-conformant; ordering caveat recorded; quiet |
+| 60 | reviewer-preference-skill | CYCLE-10 | 2026-08-02 | watch: master static; 35744 rework exchange, 35859 tested-ACK + CI flags; quiet |
 | 58 | helper-reuse | CYCLE-3 | 2026-07-29 | 7th PSBT copy deduplicated: helper moved to rpc/rawtransaction_util (existing shared header); rpc_psbt green |
 | 58 | helper-reuse | CYCLE-4 (queue-empty) | 2026-08-02 | census: DecodeHexTx shared; near-twins binary-separated by design; queue EMPTY |
 | 65 | contributor-branch-radar | CYCLE-4 | 2026-07-29 | rocksdb-brute assessed: bulk-fetch class subsumed by shipped -prevoutfetchthreads; stale WIP, nothing actionable |
@@ -1008,6 +1009,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 235 (3-watch pool): raw=4428187949155325621
+   (63-bit) -> idx 2 -> #60 c10 (watch: template holds; CI
+   flags recorded).
+   Pool: #42 upstream watch, #65 branch radar (next draws).
    RE-RANK draw 234 (1-cell pool): raw=2425925052785082083
    -> v22 real banlist migration: 3-version chain CONFIRMED
    (v0.21 dat -> v22 silent json migration, timestamps

@@ -540,3 +540,34 @@ behavior. No update.
 ### Limitations / queue
 - A template-failure objection shape remains the next cell by
   definition; watch continues per rotation.
+
+## Cycle 10 (2026-08-02, draw 235, raw=4428187949155325621 (63-bit), idx 2/3): watch — no new merges (origin/master static at 556988790a); tracked-PR review activity template-conformant; 35859 tested-ACK + CI-ASan failure noted
+
+### Sample
+- origin/master: 0 new commits since the c9 anchor (fetched
+  this cycle; merge count 0).
+- 35744: andrewtoth substantive suggestion (rework + shared-
+  locking idea), author reworked the series around it — the
+  M-class suggestion-rework shape, template-conformant.
+- 35859 (KDF): tested-ACK 2026-08-01 ('Reviewed the diff and
+  tested (wallet_crypto_tests)', fa833d9) — review traction on
+  the F16-mirror PR; DrahtBot flags a CI failure (ASan+LSan
+  task) — recorded; the fork lineage fix (55788c9a76/b606007327)
+  passed all local suites, so no fork action, but the upstream
+  CI failure is worth tracking in case it indicates a test-
+  environment issue with the shared shape.
+- 35818 (bloom): 32-bit ARM CI failure flag — recorded for
+  the #42 watch.
+
+### Verdict
+Watch quiet on shape (template holds); two CI-failure flags
+recorded as PR-state facts, not objection classes.
+
+### Exact commands
+- git fetch origin master (0 new); api.github.com comments for
+  35744/35859/35818 (excerpts above).
+
+### Limitations / queue
+- CI-failure CONTENT (which test failed) not fetched this cycle
+  (upstream-side; next watch can pull the check runs if either
+  PR advances).
