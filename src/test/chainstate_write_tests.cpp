@@ -141,4 +141,24 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
     BOOST_CHECK(sub->m_locator->vHave.front() == second_from_tip->GetBlockHash());
 }
 
+BOOST_FIXTURE_TEST_CASE(chainstate_flush_failure_boundary, TestChain100Setup)
+{
+    const auto inject_file_open_failure{[](const fs::path& file) { Assert(fs::remove(file)); Assert(fs::create_directory(file)); }};
+    auto& chainstate{Assert(m_node.chainman)->ActiveChainstate()};
+    BlockValidationState state{};
+
+    BOOST_REQUIRE(chainstate.FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH) && state.IsValid());
+    const auto* old_flushed{WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock())};
+
+    mineBlocks(1);
+    const auto* new_tip{WITH_LOCK(::cs_main, return chainstate.m_chain.Tip())};
+    BOOST_REQUIRE_NE(old_flushed, new_tip);
+    inject_file_open_failure(WITH_LOCK(::cs_main, return chainstate.m_blockman.GetBlockPosFilename(new_tip->GetBlockPos())));
+
+    const bool flushed{chainstate.FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH)};
+    BOOST_CHECK_EQUAL(m_node.exit_status.load(), EXIT_FAILURE);
+    BOOST_CHECK(!flushed && state.IsError());
+    BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock()), old_flushed);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
