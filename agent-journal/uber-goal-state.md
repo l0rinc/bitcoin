@@ -1,5 +1,53 @@
 # Uber Goal State
 
+## Cycle 277 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact
+  selector `shuf -i 0-98 -n 1` drew goal `32`
+  (`history-incomplete-fixes`), with no reroll. The dedicated branch is
+  `uber-cycle-277-whole-history-migration-20260802`.
+- Gate HEAD was `290da047ed09c1bfe4cc94765b918558bd3eb749`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; and start divergence was
+  `1343 45`. The entry state SHA-256 was
+  `edd3be696b3a44153dd66e3ab3e2104b9d42cbdb1722978763256ce0d63b8884`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Existing untracked artifacts and all protected long-running processes were
+  preserved and untouched.
+- The selected Goal 32 journal searched the prior `ApplyMigrationData` write,
+  auxiliary settings, corrupt best-block, GUI load-policy, empty `-connect`,
+  HTTP queue, and other migration cells before testing the distinct
+  `CWallet::MigrateToSQLite()` replacement-database transaction. The initial
+  release-fallthrough hypothesis was falsified by the build policy:
+  `ProcessConfigurations.cmake` removes `NDEBUG` from every C++ configuration,
+  while `src/util/check.h` rejects compiling with `NDEBUG` defined.
+- Independent product-path fault injection used a daemon-only preload shim on
+  a fresh current regtest datadir containing a copied v28.2 BDB wallet. The
+  shim returned `SQLITE_IOERR` for the first `COMMIT TRANSACTION` and logged
+  `commit=1 sql=COMMIT TRANSACTION`. The foreground daemon logged
+  `SQLiteBatch: Failed to commit the transaction` and exited 134 at the
+  existing `assert(committed)` in `MigrateToSQLite()`. The RPC observed EOF.
+  The legacy source remained at
+  `legacy_1785673789.legacy.bak`, and the replacement `legacy/wallet.dat`
+  was a SQLite file left by the failed transaction. This matches the original
+  implementation's explicit fail-fast comment and backup invariant; it is not
+  a silent success or continuation defect. The first broad preload run was
+  discarded as harness-only because it also preloaded the Python test runner.
+- Selected-goal journal close commit `2e2d76ef9e`
+  (`journal: close migration commit failure audit`) was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. No source or permanent test change was
+  justified. The cycle verdict is **dismissed as a new defect**: changing this
+  intentional assertion policy into a recoverable RPC error would require a
+  separate wallet recovery design. The detailed evidence, commands,
+  limitations, and residual queue are in
+  `agent-journal/history-incomplete-fixes.md`.
+- Post-journal-close HEAD is `2e2d76ef9e37653bb80de3bcaaf5805081d609fe`,
+  with divergence `1344 45`. The next action is a fresh gate, one exact
+  selector draw, and a new `uber-cycle-278-*` branch. Do not reopen these
+  migration assertion lines without a new supported build mode, recovery
+  contract, recurrence, or independent source evidence. The repository is not
+  considered exhausted.
+
 ## Cycle 276 Completion
 
 - The fresh gate fetched `origin/master` before branch creation. The exact
