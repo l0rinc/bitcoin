@@ -346,3 +346,31 @@ Assume aborts, zero artifacts.
 - Remaining corpora on disk: block family + addrman_serdeser +
   utxo_total_supply (~430M); re-sparse any pruned family per
   the recorded lines.
+
+## Cycle 9 (2026-08-02, draw 245, raw=(from pool draw) n=1-family remainder): feefrac/miner/merkle/queue batch — 15 targets, 12,077 seeds, ALL clean; DISMISSED
+
+### Batch (fork-arithmetic + miner + misc core, pinned 918cdd3)
+feefrac 70, feefrac_div_fallback 88, feefrac_mul_div 92,
+mini_miner 1,214 (ft 57,984), merkle 447, eval_script 1,876,
+golomb_rice 319, cuckoocache 208, checkqueue 123, bitset 1,915,
+bloom_filter 1,041, fee_rate 32, fee_rate_deserialize 8,
+http_request 192 = 14 first-pass clean. ephemeral_package_eval
+(2,098) hit MY 300s bound; rerun at 1200s: 2,098/2,098 DONE,
+ft 115,293 — the deepest single-target coverage of the program
+(at ~1 exec/s, the heaviest per-seed validation seen).
+Total 12,077 seeds, zero crashes/artifacts.
+
+### Verdict
+DISMISSED: the fork's feefrac arithmetic, mempool-miner, and
+misc-core corpora are green. Cumulative: 87,728 + 12,077 =
+99,805 seeds.
+
+### Exact commands
+- sparse-checkout add (15 dirs); per-target FUZZ runs;
+  ephemeral rerun line above.
+
+### Limitations / queue
+- Single-pass validation only.
+- Remaining untested corpora are wallet/qt/descoped or small
+  utility families (hex/base encodings, misc deserializers) —
+  one more utility sweep closes the catalog.
