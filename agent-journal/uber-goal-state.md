@@ -1,3 +1,47 @@
+# Cycle 296 Completion
+
+- The fresh post-Cycle-295 gate selected goal `40`
+  (`multi-agent-adjudication`) from the exact selector
+  `shuf -i 0-98 -n 1`, with no reroll. The dedicated branch is
+  `uber-cycle-296-multi-agent-adjudication-20260802`. Gate and cycle-start
+  HEAD were `bcba7ed832576ede2696a10bf186454a94104462`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge-base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1382`; and the entry uber-state SHA-256 was
+  `ec553914d33e2e2a8fd14510db97c6bae4d6e35b48fe848fddf84e0d14f823e5`.
+  Catalog, random prompt, goals TSV, and uber-protocol hashes matched the
+  fixed values. Protected PIDs `777094`, `956381`, `1138182`, `1157959`,
+  `1312049`, `1312050`, and `1346200` remained alive and untouched;
+  unrelated untracked artifacts were preserved.
+- The distinct Goal 40 surface was the Qt `TrafficGraphWidget` rate
+  calculation. Investigator A independently reproduced a zero-range,
+  zero-interval timer and UBSan floating-point division by zero. Investigator
+  B independently traced every current caller and found the production
+  lifecycle installs a 30-minute range before starting the timer, constrains
+  the slider to 5-minute-or-greater values, and supplies the client model only
+  afterward. The final verifier repeated the call-site/order audit and
+  checked the historical branches.
+- A cycle-local Qt 6.4.2 `QCoreApplication` probe reported
+  `interval_ms=0 active=1 rate=inf` plus a UBSan division-by-zero diagnostic.
+  The current-source Qt build, using `/data` for both temp files and ccache,
+  completed `[100%] Built target bitcoin-qt`. An earlier build attempt failed
+  only because reused ccache pointed at the full root filesystem; it was
+  quarantined as environment setup noise. `git diff --check` passed.
+- Verdict: **dismissed for a current repository defect**, with the component
+  level dissent retained. The unsupported zero-range call is a valid future
+  contract concern, but no shipped call graph reaches it. No source or
+  permanent test change is justified. Full evidence and limitations are in
+  `agent-journal/multi-agent-adjudication.md`.
+- Evidence/journal commit `145c4760f49a5d2d96ede1445bc534344a0e3055`,
+  `journal: close cycle 296 multi-agent adjudication`, was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. At this pre-state-close point HEAD is
+  `145c4760f49a5d2d96ede1445bc534344a0e3055` and divergence is `45 1383`.
+  This state entry is to be committed separately from the evidence journal.
+- Next action: commit this state close, then perform a fresh post-close gate,
+  one exact selector draw, a new `uber-cycle-297-*` branch, and a distinct
+  eligible cell. Do not reopen the zero-interval widget sequence without a
+  new production caller, UI path, or explicit public API contract.
+
 # Cycle 295 Completion
 
 - The fresh post-Cycle-294 gate selected goal `98`
