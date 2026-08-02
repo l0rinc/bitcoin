@@ -1,3 +1,46 @@
+# Cycle 295 Completion
+
+- The fresh post-Cycle-294 gate selected goal `98`
+  (`float-sanitizer-fuzz-exclusions`) from the exact selector
+  `shuf -i 0-98 -n 1`, with no reroll. The dedicated branch is
+  `uber-cycle-295-float-sanitizer-fuzz-exclusions-20260802`. Gate and
+  cycle-start HEAD were `e8cd67286f2f8373d0e1a60ed5931e7a243ad45e`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge-base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1380`; and the entry uber-state SHA-256 was
+  `ebd01271fe9172f3bd8c74a70be896ff720c638e9220f89793053d4cecfc3c4e`.
+  Catalog, random prompt, goals TSV, and uber-protocol hashes matched the
+  fixed values. Protected PIDs `777094`, `956381`, `1138182`, `1157959`,
+  `1312049`, `1312050`, and `1346200` remained alive and untouched;
+  unrelated untracked artifacts were preserved.
+- The distinct Goal 98 cell was the current RPC fuzz target's conversion of
+  generated floating-point scalar arguments. The old `%f` formatting rounded
+  to six fractional digits before `RPCConvertValues`; a before-fix probe
+  showed `1.0000004` became JSON `1` and a subnormal became `0`. The same
+  converter after the fix preserved `1.0000004` and the production
+  `estimaterawfee` threshold check rejected it. The full evidence, exact
+  probe output, distribution limitation, and next Goal 98 queue are in
+  `agent-journal/float-sanitizer-fuzz-exclusions.md`.
+- The harness now uses `%g` with
+  `std::numeric_limits<double>::max_digits10`. The Clang 19 fuzz target
+  rebuilt and the final fixed-seed run completed 10,000 executions, added
+  164 units, reached 1,297 MiB peak RSS, and produced no crash, timeout,
+  sanitizer diagnostic, or artifact. `git diff --check` passed.
+- Verdict: **confirmed and fixed** as a fuzz-oracle defect; no production RPC
+  behavior changed. Source/evidence commit
+  `72c22584d4c49d6eac7869403fbd98bc2eee677e`, `fuzz: preserve RPC
+  floating-point arguments`, was authored as `Lőrinc <pap.lorinc@gmail.com>`
+  and includes only `src/test/fuzz/rpc.cpp` plus the Goal 98 journal update.
+  At this pre-state-close point HEAD is
+  `72c22584d4c49d6eac7869403fbd98bc2eee677e` and divergence is `45 1381`.
+  This state entry is to be committed separately from the evidence commit.
+- Next action: commit this state close, then perform a fresh post-close gate,
+  one exact selector draw, a new `uber-cycle-296-*` branch, and a distinct
+  eligible cell. Goal 98's local queue begins with a deterministic input for
+  the float argument lambda, then the Qt traffic-graph zero-interval path and
+  remaining sanitizer/fuzzer exclusions; do not repeat the closed RPC
+  formatting cell without changed evidence.
+
 # Cycle 294 Completion
 
 - The fresh post-Cycle-293 gate selected goal `80` (`fuzz-engine-differential`)
