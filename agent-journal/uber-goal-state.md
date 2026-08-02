@@ -231,6 +231,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 40 | multi-agent-adjudication | CYCLE-2 | 2026-07-29 | A11 adjudicated: kernel input_index assert = defect-classified (policy + author's fix branch 6f23568be8); severity none today; parked |
 | 80 | fuzz-engine-differential | CYCLE-2 | 2026-07-29 | raw-tx parser differential: A=0/300, B=0 round-trip-exact, C=240 all Python-lax; production never over-accepts |
 | 49 | critical-history-sweep | CYCLE-2 | 2026-07-29 | remaining advisory cells: 54604 fork-interaction clean (PRIVBROADCAST rate-limited), 46597 32-bit cap present, 52922/21/13/14 markers verified |
+| 49 | critical-history-sweep | CYCLE-10 | 2026-08-02 | pre-2020 advisory batch: CVE-2018-17144 executable guarded (bad-txns-inputs-duplicate at testmempoolaccept) + 8 marker cells; DISMISSED |
 | 91 | compiler-binary-hardening | CYCLE-3 | 2026-07-29 | shared kernel lib measured: 134 btck_ + std weak only, zero internal/secp exports; full RELRO+NX; no BTI note (c1's toolchain finding) |
 | 106 | semantic-twin-inconsistency | CYCLE-3 | 2026-07-29 | vsize twins agree (formula + 6/6 functional); sighash numerics agree; PSBT DEFAULT\|ALL restriction = intentional policy |
 | 43 | option-api-lifecycle | CYCLE-3 | 2026-07-29 | -v2transport settings.json lifecycle proven: honored, persisted (write-back intact), CLI-overridable |
@@ -957,6 +958,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 183 (51-campaign eligible set): raw=
+   2201154799395572746 (63-bit) -> idx 25 -> #49 c10 (pre-2020
+   advisory batch: CVE-2018-17144 executable guarded + 8 marker
+   cells; DISMISSED). Pool: eligible minus {#103, #107, #66,
+   #46, #25, #99, #49}.
    RE-RANK draw 182 (52-campaign eligible set): raw=
    4137810895725815666 (63-bit) -> idx 46 -> #99 c6 (merkle
    clean-room differential 400/400; DISMISSED).
