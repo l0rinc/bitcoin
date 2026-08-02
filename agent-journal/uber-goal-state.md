@@ -2,6 +2,59 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 261 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact
+  selector `shuf -i 0-98 -n 1` drew goal `32`
+  (`history-incomplete-fixes`). The dedicated branch is
+  `uber-cycle-261-whole-history-migration-mining-20260802`. Start HEAD was
+  `8a826f6659d6c11657a70c6d65ec67d107bdb953`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1311 45`
+  (`HEAD...origin/master`).
+- Catalog, prompt, goals TSV, and protocol hashes were unchanged:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Tracked/index state was clean at the draw and `git diff --check` passed.
+  Existing untracked agent/user artifacts were preserved and excluded.
+- The historical seed was `4acd063ba6` (core optional wallet loading) and
+  the not-yet-ancestor follow-up `492a715d78` (GUI load-policy option). The
+  current core already supported `MigrateLegacyToDescriptor(...,
+  load_wallet=false)`, and `wallet_migration.py` independently exercises the
+  successful no-load and pruned-node contracts. The GUI interface omitted the
+  boolean, called the core default `true`, and always created a wallet model,
+  so GUI users could not perform the supported no-load migration.
+- Commit `8b12eb559d102023dc3215880207989f05961e0b` (`gui: allow wallet
+  migration without loading`) was authored as `Lőrinc <pap.lorinc@gmail.com>`
+  and includes the source and selected-goal journal update. It propagates the
+  policy through `interfaces::WalletLoader`, adds a checked-by-default GUI
+  checkbox, avoids creating a wallet model when unchecked, reports how to open
+  the wallet later, and keeps restore-and-migrate explicitly loading.
+- A clean Qt+wallet Debug configure passed, and clean builds of `bitcoin-qt`,
+  `bitcoind`, and `bitcoin-cli` passed in
+  `/data/my_storage/tmp/cycle261-qt-build`. The full wallet migration test was
+  attempted with the v28.2 previous-release fixture, but stopped before the
+  target no-load cases because the Debug daemon hit the existing
+  `txgraph.cpp:3781` assertion in `GetMainMemoryUsage`; its
+  `RemoteDisconnected` was recorded as a validation limitation, not a product
+  result. `git diff --check` passed after the fix.
+- Verdict: **confirmed and fixed**. This is a cross-layer interface/lifecycle
+  omission, not a new core migration defect. Do not repeat the GUI load-policy,
+  core no-load, HTTP parsed-request queue, or earlier wallet migration cells
+  without a new source, backend, lifecycle, or recurrence. The repository is
+  not considered exhausted.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` remained alive and untouched. No cycle-261 daemon
+  or test process remains. Scratch build/test data is under
+  `/data/my_storage/tmp/cycle261-*`; `/` remains full, so no scratch data was
+  placed there.
+- The next cycle must perform a fresh gate, fetch `origin/master`, draw exactly
+  one selector from `0..98`, and create a new `uber-cycle-262-*` branch. Re-rank
+  remaining current-history, coverage, tooling, and risk-map cells rather than
+  following the prior queue blindly.
+
 ## Cycle 260 Completion
 
 - The fresh gate fetched `origin/master` before branch creation. The exact
