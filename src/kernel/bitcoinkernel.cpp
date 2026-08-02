@@ -244,7 +244,8 @@ struct LoggingConnection {
         auto connection{LogInstance().PushBackCallback([callback, user_data](const std::string& str) { callback(user_data, str.c_str(), str.length()); })};
 
         // Only start logging if we just added the connection.
-        if (LogInstance().NumConnections() == 1 && !LogInstance().StartLogging()) {
+        const bool first_connection{LogInstance().NumConnections() == 1};
+        if (first_connection && !LogInstance().StartLogging()) {
             LogError("Logger start failed.");
             LogInstance().DeleteCallback(connection);
             if (user_data && user_data_destroy_callback) {
@@ -253,9 +254,21 @@ struct LoggingConnection {
             throw std::runtime_error("Failed to start logging");
         }
 
-        m_connection = std::make_unique<std::list<std::function<void(const std::string&)>>::iterator>(connection);
-        m_user_data = user_data;
-        m_deleter = user_data_destroy_callback;
+        try {
+            m_connection = std::make_unique<std::list<std::function<void(const std::string&)>>::iterator>(connection);
+            m_user_data = user_data;
+            m_deleter = user_data_destroy_callback;
+        } catch (...) {
+            if (first_connection) {
+                LogInstance().DisconnectTestLogger();
+            } else {
+                LogInstance().DeleteCallback(connection);
+            }
+            if (user_data && user_data_destroy_callback) {
+                user_data_destroy_callback(user_data);
+            }
+            throw;
+        }
 
         LogDebug(BCLog::KERNEL, "Logger connected.");
     }
