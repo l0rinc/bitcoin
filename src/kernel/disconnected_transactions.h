@@ -58,9 +58,7 @@ public:
 
     /** Add transactions from the block, iterating through vtx in reverse order. Callers should call
      * this function for blocks in descending order by block height.
-     * We assume that callers never pass multiple transactions with the same txid, otherwise things
-     * can go very wrong in removeForBlock due to queuedTx containing an item without a
-     * corresponding entry in iters_by_txid.
+     * Duplicate txids are ignored, so queuedTx and iters_by_txid stay in sync.
      * @returns vector of transactions that were evicted for size-limiting.
      */
     [[nodiscard]] std::vector<CTransactionRef> AddTransactionsFromBlock(const std::vector<CTransactionRef>& vtx);
