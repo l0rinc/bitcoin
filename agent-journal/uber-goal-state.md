@@ -323,6 +323,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 42 | ci-review-bot-followup | CYCLE-8 | 2026-08-02 | watch: static; quiet |
 | 42 | ci-review-bot-followup | CYCLE-9 | 2026-08-02 | variant: 26 author PRs open; radar branches pre-PR; static |
 | 42 | ci-review-bot-followup | CYCLE-10 | 2026-08-02 | event-trigger sweep: all quiet |
+| 42 | ci-review-bot-followup | CYCLE-11 | 2026-08-02 | trigger re-check: all quiet |
 | 10 | fuzz-target-gaps | CYCLE-3 | 2026-07-29 | load_wallet widened (crypted/ACTIVE*SPK/BESTBLOCK); LoadActiveScriptPubKeyMan assert on corrupt DB documented (upstream-matching) |
 | 80 | fuzz-engine-differential | CYCLE-6 | 2026-07-29 | MuSig2 PSBT seeding: differential clean (A=0, E=100); format-from-source worked first try |
 | 95 | database-semantics-differential | CYCLE-5 | 2026-07-31 | write-flush-windowed kill: _Exit inside all 4 batch commits (idx/coins/shutdown); identical tip recovery, 0 corruption; DISMISSED |
@@ -1046,6 +1047,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   RE-RANK draw 262: raw=4778902433768003794 -> trigger
+   re-check (all quiet).
    RE-RANK draw 261: raw=3682198685844657455 -> #79 c17
    (txrequest scratch campaign: zero crashes; sweep 6/6).
    RE-RANK draw 260: raw=10150652524316948765 -> #79 c16
