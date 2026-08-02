@@ -54,3 +54,38 @@ Honest negative result, preserved with the exact schedule.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-08-02, draw 215, raw=18054278019244708601, masked 8830905982389932793, idx 9/16): txindex mid-build kill windows attempted at 41k-tx scale — warm-cache rebuild is SUB-SECOND, kills land post-build; 6/6 resumes clean; honest negative (c2 premise confirmed again)
+
+### Experiment (c2's queued shape, at the scale the disk allows)
+- Fixture: /tmp/btc25_c4 (410 blocks, ~41k txs, txindex synced).
+- Per trial (6, seeded 0x38C3+i offsets 0.39-2.77s): wipe
+  indexes/txindex, start -txindex=1, kill -9 at the offset,
+  restart, wait for getindexinfo best_block_height==410, count
+  corruption lines.
+- Results: 6/6 trials best=410, corruption_lines=0.
+- BUT the premise check: the rebuild completes in <1s with warm
+  page cache ('txindex is enabled at height 410' logged in the
+  SAME second as start, e.g. 03:45:50 flat) — every kill landed
+  POST-build. No true mid-build kill was achieved, same premise
+  failure as c2 at this scale.
+
+### Verdict
+DISMISSED at this scale (again, sharper): the resume mechanics
+are present and every post-build kill/restart is clean; a true
+mid-build kill needs a cold-cache multi-GB chain (~minutes of
+build), which the 3.2G-free disk cannot host. The scaling law
+is now measured at both ends: 800/8000 empty blocks ~3s (c2),
+41k-tx warm ~1s (c3) — the window is never reachable on this
+host.
+
+### Exact commands
+- /tmp/btc38c3.sh (preserved; trial table above); debug.log
+  timestamp evidence above.
+
+### Limitations / queue
+- Multi-GB fixture remains the only path to a true mid-build
+  kill — parked pending disk headroom.
+- coinstatsindex (heavier per block) is the only other index
+  whose build window might widen at the same chain; not tried
+  this cycle (same disk class).

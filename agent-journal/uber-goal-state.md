@@ -194,6 +194,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 99 | clean-room-reimplementation | CYCLE-6 | 2026-08-02 | merkle root+mutation clean-room: 400/400 exact incl. CVE-2012-2459 anchor; DISMISSED |
 | 38 | failure-cleanup-crash-safety | CYCLE-1 (retro) | 2026-07-28 | EncryptWallet mkey rollback fix (9894fb8b6c, row restored) |
 | 38 | failure-cleanup-crash-safety | CYCLE-2 | 2026-07-29 | txindex interrupted-build: empty-block build uninterruptible (~3s); resume mechanics present |
+| 38 | failure-cleanup-crash-safety | CYCLE-3 | 2026-08-02 | mid-build kill attempt: warm rebuild sub-second, 6/6 post-build resumes clean; premise confirmed; DISMISSED at scale |
 | 55 | alternative-implementation-diff | CYCLE-1 | 2026-07-29 | noble-secp256k1 ECDSA differential: 2019/2019+5/5 RFC6979 vectors match |
 | 55 | alternative-implementation-diff | CYCLE-2 | 2026-07-30 | RFC6979+ndata extraEntropy differential: 25/25 + 200/200 byte-identical, three implementations (row restored 2026-07-31) |
 | 55 | alternative-implementation-diff | CYCLE-3 | 2026-07-31 | BIP340 sibling vectors: Python 19/19+8/8, in-tree subset byte-exact, noble==official rows 0-14; no drift |
@@ -991,6 +992,15 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 215 (16-campaign eligible set): raw=
+   18054278019244708601, masked 8830905982389932793 -> idx 9 ->
+   #38 c3 (mid-build kill: sub-second rebuild, premise
+   confirmed; DISMISSED at scale).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38}.
    RE-RANK draw 214 (17-campaign eligible set): raw=
    8524466033060714935 (63-bit) -> idx 11 -> #57 c5 (successor
    survey: both covered; EXHAUSTED).
