@@ -70,6 +70,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 18 | exhaustive-algebraic | CYCLE-2 | 2026-07-28 | script (8e7513bb1c) + Coin composition (4c27dad486) round-trips closed, both mutation-verified; fuzz-gap dismissed |
 | 19 | benchmark-integrity | CYCLE-3 | 2026-07-28 | prevector fix (138ef3c044); mutation-sweep + units/batching + timed-region all honest; queue exhausted |
 | 28 | weak-test-oracles | CYCLE-2 | 2026-07-28 | amount battery 5/5 killed; merkleblock battery 2 survivors fixed (50e9d14750), 1 equivalent |
+| 28 | weak-test-oracles | CYCLE-3 | 2026-08-02 | sighash guard mutant KILLED 409x by script corpus; densely covered; DISMISSED |
 | 16 | api-misuse-resistance | CYCLE-2 | 2026-07-28 | 5+7 kernel C API @pre doc fixes (b6b48987a5, 8b0e92b4a2); #33943 precedent journaled |
 | 16 | api-misuse-resistance | CYCLE-4 | 2026-08-02 | lineage repair x2: journal restored + null-destroy fix (55f1fa334f) re-landed with regression test; upstream still vulnerable; CONFIRMED+REPAIRED |
 | 61 | stateful-contract-fuzzing | CYCLE-3 | 2026-07-28 | sigcache oracle (a4ff67417e); c2/c3 assessments all already-strong; triage guidance updated |
@@ -994,6 +995,17 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 218 (13-campaign eligible set): raw=
+   8871967550067354166 (63-bit) -> idx 5 -> #28 c3 (sighash
+   guard mutant killed 409x; DISMISSED). Side-repair noted:
+   weak-test-oracles.md was written-to-disk by the 2a147cfb08
+   restore but missed from its staging list; the complete file
+   (c1-c3) is now tracked via the c3 commit.
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58, #21, #28}.
    RE-RANK draw 217 (14-campaign eligible set): raw=
    7034722257148739485 (63-bit) -> idx 3 -> #21 c5
    (forcecompactdb profile; fact).
