@@ -1,5 +1,120 @@
 # Whole-history incomplete-fix and migration mining
 
+## Cycle 259: HTTP pipelined-request retention follow-up
+
+### Fresh selection and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `32` (`history-incomplete-fixes`).
+- Branch: `uber-cycle-259-whole-history-migration-mining-20260802`.
+- Start HEAD: `5cc4012b2b84a6a1c2e5c5ec05b23d0d10526601`; `origin/master` after
+  the fresh fetch: `556988790a7f961693a8fd93f73725baea66476a`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `1307 45`
+  from `git rev-list --left-right --count HEAD...origin/master`.
+- The tracked worktree/index was clean at the draw. `git diff --check`, the
+  catalog/prompt/goals TSV/protocol hash gate, and the protected-process check
+  passed. Existing untracked agent artifacts, package files, `node_modules/`,
+  and `test/cache/` were preserved. The protected PIDs were observed and not
+  stopped or rebuilt.
+- The REST `/getutxos` count-bound cell was rejected as a repeat: it is already
+  recorded in `agent-journal/resource-exhaustion-variants.md` Cycle 104 and
+  the bounded formatter is present in the current source. The HTTP pipeline
+  history cell below had no prior finding in the journal search.
+
+### Historical seed and distinct hypothesis
+
+Upstream commit `97b882113e02a5149396c9ed6879e46e6daa1f13`,
+`http: only read one HTTPRequest at a time per client`, is a follow-up to the
+HTTP request-dispatch implementation currently present at the cycle start.
+The old code parsed requests in `while (!client->m_recv_buffer.empty())`,
+appended every complete request to `m_req_queue`, and checked `m_req_busy` only
+after that loop. A slow or blocked first handler therefore allowed a client to
+retain an unbounded number of parsed `HTTPRequest` objects, each keeping a
+shared pointer to the client and potentially a body, before the worker could
+make progress. The accepted upstream patch is corroborating history, not the
+sole proof for this cycle.
+
+The resource equation is:
+
+```text
+retained per client = (complete pipelined requests parsed before dispatch)
+                      * (HTTPRequest + body + queue node)
+```
+
+The request body has an individual limit, but the old parsed-request count had
+no per-client bound and the receive loop could continue across I/O iterations.
+The falsifiable hypothesis was that the first handler would observe all
+pipelined bytes already removed from `m_recv_buffer`, whereas a one-request
+handoff would leave the next request buffered until the first handler completes.
+
+### Independent failing-before evidence
+
+`http_server_pipelined_request_backpressure` sends two complete requests in a
+single `DynSock` receive, blocks the first request handler, and then inspects
+the client receive buffer before releasing the handler. The measured 48 bytes
+are the second request's exact serialized form. In the
+pre-fix worktree, configured with Clang 19 and `-DENABLE_IPC=OFF`, the focused
+command exited 201 and reported:
+
+```text
+check client->m_recv_buffer.size() == remaining.size() has failed [0 != 48]
+check std::ranges::equal(client->m_recv_buffer, remaining) has failed
+2 assertions out of 5 failed
+```
+
+This observes the old loop's actual consumption, not an inferred allocation
+from source inspection. The two-request fixture is intentionally small; the
+same ordering permits additional requests to accumulate while the handler is
+busy.
+
+### Fix and passing evidence
+
+- Replace the unbounded per-client `std::deque<std::unique_ptr<HTTPRequest>>`
+  with one pending `std::unique_ptr<HTTPRequest>`. Parse only when no request
+  is pending, return on incomplete input, and dispatch the single pending
+  request in order.
+- Release a pending request during both graceful and forced client removal so
+  its back-reference cannot keep a disconnected socket alive.
+- Keep the existing receive-buffer and request-body parsing contracts; this
+  change bounds parsed pending request state rather than claiming to solve
+  every raw receive-buffer or worker-queue resource issue.
+- Add the deterministic socket regression described above.
+
+Validation on the fixed worktree:
+
+```text
+git diff --check
+TMPDIR=/data/my_storage/tmp/cycle259-http-build-tmp \
+CCACHE_DIR=/data/my_storage/tmp/cycle259-http-ccache \
+cmake --build /data/my_storage/tmp/cycle243-build --target test_bitcoin -j2
+TMPDIR=/data/my_storage/tmp/cycle259-http-test-tmp \
+/data/my_storage/tmp/cycle243-build/bin/test_bitcoin \
+  --run_test=httpserver_tests --log_level=test_suite \
+  --report_level=short --color_output=false
+```
+
+The build passed. The complete `httpserver_tests` suite passed 9 cases and
+352 assertions, including the new regression and the existing
+`http_socket_error_tests` pipeline/response-state case. The independent
+pre-fix build used the same source revision and test, with IPC disabled after
+the documented Clang 19/Cap'n Proto configure incompatibility; only the
+production/header files were pre-fix in that worktree.
+
+### Verdict and residual queue
+
+Verdict: confirmed and fixed. The old path had a reachable per-client
+parsed-request retention defect caused by an incomplete follow-up to the HTTP
+request state machine. The fix preserves request order and valid pipelining,
+removes the unbounded parsed-request deque, and explicitly releases pending
+ownership on disconnect. The regression does not establish a global memory
+bound for raw socket receive buffers, worker scheduling, or endpoint work; those
+remain separate cells and must not be conflated with this finding.
+
+Next Goal 32 queue: mine the remaining recent HTTP/RPC follow-ups and
+compatibility migrations for a different source-to-sink omission, then move to
+non-HTTP history. Do not repeat the REST count, HTTP parsed-request queue, or
+previous wallet/descriptor/best-block/undo migration cells without a new
+caller, backend, lifecycle, or recurrence.
+
 ## Cycle 193 start: persisted-field and restart-transition mining
 
 ### Fresh selection and gate
