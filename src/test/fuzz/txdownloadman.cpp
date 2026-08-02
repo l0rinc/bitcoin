@@ -157,7 +157,7 @@ void initialize()
     }
 }
 
-void CheckPackageToValidate(const node::PackageToValidate& package_to_validate, NodeId peer)
+void CheckPackageToValidate(const node::PackageToValidate& package_to_validate, NodeId peer, const CTransactionRef& expected_parent)
 {
     Assert(package_to_validate.m_senders.size() == 2);
     Assert(package_to_validate.m_senders.front() == peer);
@@ -168,6 +168,9 @@ void CheckPackageToValidate(const node::PackageToValidate& package_to_validate, 
     Assert(std::all_of(package.cbegin(), package.cend(), [](const auto& tx) { return tx != nullptr; }));
     Assert(IsChildWithParents(package));
     Assert(package.size() == 2);
+    // The package must be the 1p1c candidate for the transaction that triggered the lookup.
+    Assert(package.front()->GetHash() == expected_parent->GetHash());
+    Assert(package.front()->GetWitnessHash() == expected_parent->GetWitnessHash());
 }
 
 void CheckUniqueParents(const std::vector<Txid>& unique_parents, const CTransaction& tx)
@@ -175,6 +178,63 @@ void CheckUniqueParents(const std::vector<Txid>& unique_parents, const CTransact
     Assert(std::is_sorted(unique_parents.begin(), unique_parents.end()));
     Assert(std::adjacent_find(unique_parents.begin(), unique_parents.end()) == unique_parents.end());
     Assert(unique_parents.size() <= tx.vin.size());
+}
+
+void CheckExactUniqueParents(const std::vector<Txid>& unique_parents, const CTransaction& tx)
+{
+    std::set<Txid> expected_parents;
+    for (const auto& txin : tx.vin) expected_parents.emplace(txin.prevout.hash);
+
+    CheckUniqueParents(unique_parents, tx);
+    Assert(unique_parents.size() == expected_parents.size());
+    Assert(std::equal(unique_parents.begin(), unique_parents.end(), expected_parents.begin(), expected_parents.end()));
+}
+
+template <typename TxDownloadManager>
+void ExerciseExactUniqueParentOutput(const CTxMemPool& pool)
+{
+    FastRandomContext rng{true};
+    TxDownloadManager manager{node::TxDownloadOptions{pool, rng, true}};
+    const auto tx{MakeTransactionSpending({COINS[0], COINS[1], COINS[0]}, /*num_outputs=*/1, /*add_witness=*/false)};
+    TxValidationState state;
+    state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "");
+
+    const auto todo{manager.MempoolRejectedTx(tx, state, /*nodeid=*/0, /*first_time_failure=*/true)};
+    CheckExactUniqueParents(todo.m_unique_parents, *tx);
+    manager.MempoolAcceptedTx(tx);
+    manager.CheckIsEmpty();
+}
+
+template <typename TxDownloadManager>
+void ExerciseExactPackageOutput(const CTxMemPool& pool)
+{
+    FastRandomContext rng{true};
+    TxDownloadManager manager{node::TxDownloadOptions{pool, rng, true}};
+    constexpr NodeId peer{0};
+    manager.ConnectedPeer(peer, node::TxDownloadConnectionInfo{
+        .m_preferred = true,
+        .m_relay_permissions = false,
+        .m_wtxid_relay = true,
+    });
+
+    const auto parent{MakeTransactionSpending({COINS[0]}, /*num_outputs=*/1, /*add_witness=*/false)};
+    const auto child{MakeTransactionSpending({COutPoint{parent->GetHash(), 0}}, /*num_outputs=*/1, /*add_witness=*/false)};
+
+    TxValidationState missing_inputs;
+    missing_inputs.Invalid(TxValidationResult::TX_MISSING_INPUTS, "");
+    const auto child_rejected{manager.MempoolRejectedTx(child, missing_inputs, peer, /*first_time_failure=*/true)};
+    CheckExactUniqueParents(child_rejected.m_unique_parents, *child);
+
+    TxValidationState reconsiderable;
+    reconsiderable.Invalid(TxValidationResult::TX_RECONSIDERABLE, "");
+    const auto parent_rejected{manager.MempoolRejectedTx(parent, reconsiderable, peer, /*first_time_failure=*/true)};
+    Assert(parent_rejected.m_package_to_validate.has_value());
+    CheckPackageToValidate(*parent_rejected.m_package_to_validate, peer, parent);
+
+    manager.MempoolAcceptedTx(parent);
+    manager.MempoolAcceptedTx(child);
+    manager.DisconnectedPeer(peer);
+    manager.CheckIsEmpty();
 }
 
 void ExerciseMultipleNotFoundResponse(const CTxMemPool& pool, FastRandomContext& rng, std::chrono::microseconds now)
@@ -242,6 +302,8 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
     FastRandomContext det_rand{true};
     node::TxDownloadManager txdownloadman{node::TxDownloadOptions{pool, det_rand, true}};
+    ExerciseExactUniqueParentOutput<node::TxDownloadManager>(pool);
+    ExerciseExactPackageOutput<node::TxDownloadManager>(pool);
 
     std::chrono::microseconds time{244466666};
 
@@ -311,14 +373,14 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
                 // The only combination that doesn't make sense is validate both tx and package.
                 Assert(!(should_validate && maybe_package.has_value()));
                 if (maybe_package.has_value()) {
-                    CheckPackageToValidate(*maybe_package, rand_peer);
+                    CheckPackageToValidate(*maybe_package, rand_peer, rand_tx);
                     const auto package_hash{GetPackageHash(maybe_package->m_txns)};
                     if (fuzzed_data_provider.ConsumeBool()) {
                         txdownloadman.MempoolRejectedPackage(maybe_package->m_txns);
                         const auto& [validate_after_reject, next_package] = txdownloadman.ReceivedTx(rand_peer, maybe_package->m_txns.front());
                         Assert(!validate_after_reject);
                         if (next_package.has_value()) {
-                            CheckPackageToValidate(*next_package, rand_peer);
+                            CheckPackageToValidate(*next_package, rand_peer, maybe_package->m_txns.front());
                             Assert(GetPackageHash(next_package->m_txns) != package_hash);
                         }
                     }
@@ -449,6 +511,8 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
     FastRandomContext det_rand{true};
     node::TxDownloadManagerImpl txdownload_impl{node::TxDownloadOptions{pool, det_rand, true}};
+    ExerciseExactUniqueParentOutput<node::TxDownloadManagerImpl>(pool);
+    ExerciseExactPackageOutput<node::TxDownloadManagerImpl>(pool);
 
     std::chrono::microseconds time{244466666};
 
@@ -663,7 +727,7 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                     Assert(!txdownload_impl.AlreadyHaveTx(rand_tx->GetWitnessHash(), /*include_reconsiderable=*/true));
                 }
                 if (maybe_package.has_value()) {
-                    CheckPackageToValidate(*maybe_package, rand_peer);
+                    CheckPackageToValidate(*maybe_package, rand_peer, rand_tx);
 
                     const auto& package = maybe_package->m_txns;
                     // Parent is in m_lazy_recent_rejects_reconsiderable and child is in m_orphanage
@@ -681,7 +745,7 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                         const auto& [validate_after_reject, next_package] = txdownload_impl.ReceivedTx(rand_peer, package.front());
                         Assert(!validate_after_reject);
                         if (next_package.has_value()) {
-                            CheckPackageToValidate(*next_package, rand_peer);
+                            CheckPackageToValidate(*next_package, rand_peer, package.front());
                             Assert(GetPackageHash(next_package->m_txns) != package_hash);
                         }
                     }

@@ -1,5 +1,64 @@
 # Stateful Contract-Fuzzer Expansion
 
+## Cycle 262 gate and scope
+
+- Date: 2026-08-02 UTC
+- Goal index: `61`
+- Slug: `stateful-contract-fuzzer`
+- Selector: exact `shuf -i 0-98 -n 1` -> `61`
+- Branch: `uber-cycle-262-stateful-contract-fuzzing-20260802`
+- HEAD at cycle start: `bf9327628e42862513cff3e257bf79c7d73e182b`
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Divergence from `git rev-list --left-right --count HEAD...origin/master`: `1313 45`
+- `git fetch origin master` passed. Tracked/index state was clean at the gate; known untracked agent artifacts are preserved and excluded from staging.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Corrected TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- Pre-cycle uber-state SHA-256: `2526bf628bc94be61f57d9f17468884cb50b05327891f898c11086f2aeb612be`
+- Storage gate: `/` was full while `/data` had about 19 GiB free; all build and runtime temporary paths were placed under `/data/my_storage/tmp`.
+- Protected processes still alive and untouched: PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200`.
+
+The prior Cycle 201 relay-output oracle, Cycle 184 raw-input mempool graph oracle, and Cycles 219-220 `validation_load_mempool` failure-state cells are closed. The remaining stateful-fuzzer queue identified a different cell: txdownload manager request/output behavior after rejection, package formation, and state transitions. Existing `txdownloadman` and `txdownloadman_impl` checks validated returned parent vectors only for sortedness, uniqueness, and an upper bound, and validated returned packages only as any 1-parent-1-child package. They did not verify the exact parent set or that the package parent was the transaction that triggered lookup.
+
+## Cycle 262
+
+### Scope and harness change
+
+The trust boundary is a transaction's raw input outpoints, the `MempoolRejectedTx` result, the reconsiderable-reject filter, the orphanage, and the `ReceivedTx` 1p1c package output. The new independent parent model builds a `std::set<Txid>` directly from the transaction inputs and compares it with the returned sorted vector in a fresh missing-input sequence containing duplicate inputs. The new package oracle compares both txid and wtxid of `PackageToValidate::m_txns.front()` with the transaction that triggered the lookup, while retaining the structural 1p1c and sender checks.
+
+Both fuzz targets now run deterministic production-backed controls before their random operation sequence: a duplicate-parent missing-input rejection and a parent-plus-child orphan followed by a reconsiderable parent rejection. The controls exercise the exact parent set, exact package parent, same-peer orphan selection, cleanup, and empty-state checks on every input. The random sequence remains unchanged apart from passing the triggering parent into the package oracle, so reorg, announcements, requests, rejection filters, and disconnect paths continue to be explored.
+
+An initial attempt to apply exact parent equality to every random `MempoolRejectedTx` call produced a minimized false positive (`7e ff 3e 3e ff 0d 0d 0d 0d`): non-missing failures and repeated/filtered orphans intentionally return an empty parent vector. That check was narrowed to the controlled state where all input parents are expected, while the existing shape-only check remains for arbitrary stateful calls. No production defect was confirmed.
+
+### Validation and independent mutation proof
+
+The current-source Clang 19 fuzz build at `/data/my_storage/tmp/cycle131-build-libfuzzer` rebuilt successfully with ASan, UBSan, and libFuzzer instrumentation:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle262-package-build-tmp cmake --build /data/my_storage/tmp/cycle131-build-libfuzzer --target fuzz -j2
+[1/5] through [3/3] passed; final step linked bin/fuzz
+```
+
+With `TMPDIR` under `/data`, the final clean binary passed both targets on an empty corpus (`-runs=1`), the minimized false-positive artifact on both targets, and the deterministic package controls. A 100-run corpus replay passed for each target. A bounded implementation-backed run passed 1,255 executions in 61 seconds, reaching rejection paths and adding 25 corpus inputs without an assertion, ASan, UBSan, leak, or hang report. The focused unit suite also passed:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle262-txdownload-unit-tmp \
+/data/my_storage/tmp/cycle243-build/bin/test_bitcoin --run_test=txdownload_tests \
+  --log_level=message --report_level=short --color_output=false
+Running 14 test cases...
+605 assertions out of 605 passed
+```
+
+For an independent oracle-sensitivity check, a disposable production mutation added `unique_parents.pop_back()` after `GetUniqueParents` deduplication. With the exact control enabled, an empty-input run failed at `CheckExactUniqueParents` with exit 77. After disabling only the new exact calls, the public and implementation targets both accepted the same mutant on the same empty input, demonstrating that the prior shape-only checks did not detect a dropped valid parent. The mutation and test-call disablement were restored, and the clean fuzz binary was rebuilt and rerun successfully.
+
+### Verdict and handoff
+
+The hypothesis is **confirmed as a stateful fuzz-oracle gap, not as a production defect**. The source/test change is limited to `src/test/fuzz/txdownloadman.cpp`; it adds independent exact output contracts for duplicate parent IDs and 1p1c package parent identity, plus deterministic production-backed coverage for those states. No source behavior change is justified.
+
+Limitations: the random 60-second stream did not independently reach package formation, so the deterministic package control supplies that coverage; the fuzz build is expensive and requires a `/data` temporary directory because the root filesystem is full; and the full repository suite was not rerun because unrelated protected test processes are still active. Next cycle must fetch, redraw exactly once, search this journal and the finding history, and avoid repeating the closed relay, graph, validation-load-mempool, and txdownload exact-output cells.
+
 ## Cycle 201 gate and scope
 
 - Date: 2026-07-31 UTC
