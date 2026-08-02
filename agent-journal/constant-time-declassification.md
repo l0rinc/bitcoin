@@ -269,3 +269,10 @@ vehicle: PR 35688.
 
 ### Limitations / queue
 - Empty-seed fuzz run pending the build_fuzz rebuild.
+
+### Garnish (cycle 266 completion)
+Empty-seed run against the REBUILT fuzz binary (the one carrying
+the dropped guards): FUZZ=crypto -runs=2000 /tmp/empty_seed
+executes clean — the fuzz path now exercises empty inputs
+directly instead of skipping them (previously guard-resized).
+Cycle 266 fully closed.
