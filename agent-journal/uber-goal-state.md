@@ -212,6 +212,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 34 | uncovered-code-classification | CYCLE-2 | 2026-07-29 | backport green at HEAD; blockstorage guards have dedicated tests; MoneyRange asserts unreachable by construction (compressor throws) |
 | 106 | semantic-twin-inconsistency | CYCLE-1 | 2026-07-29 | hex-decode twin map: tx/PSBT strict-by-design (proven), block/header/proof benign-lax; dismissed, no contract violated |
 | 70 | compiler-optimization-differential | CYCLE-1 | 2026-07-29 | LTO+Wodr build green, zero ODR warnings, full unit suite green under LTO binary |
+| 70 | compiler-optimization-differential | CYCLE-2 | 2026-08-02 | clang thin-LTO HOST-BLOCKED at link (no LLVMgold.so/lld); compile proven; ⚪ resume condition recorded |
 | 44 | secret-copy-optimization | CYCLE-1 | 2026-07-29 | key paths secure-container-clean; memory_cleanse elision-resistant at -O3 -flto (2 disassembly probes) |
 | 25 | performance-regression-bisect | CYCLE-1 (retro) | 2026-07-28 | +2.4% MemPoolAddTransactions bisected to 3ae78dbd25 (row restored) |
 | 25 | performance-regression-bisect | CYCLE-2 | 2026-07-29 | regression persists at HEAD (250.75 ms/op); consumer split caps feerate-only fix upside (2/4 need bitsets); journal-only |
@@ -973,6 +974,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 199 (34-campaign eligible set): raw=
+   13766814895528030814, masked 4543442858673255006 -> idx 30 ->
+   #70 c2 (clang thin-LTO: host-blocked at link, ⚪ resume
+   condition recorded).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70}.
    RE-RANK draw 198 (35-campaign eligible set): raw=
    3654393603145900293 (63-bit) -> idx 28 -> #65 c12 (radar:
    txgraph retained-capacity gap CONFIRMED REAL+bounded, author
