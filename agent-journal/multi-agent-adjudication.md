@@ -213,3 +213,23 @@ sampling. The branch author's perf claim remains unmeasured here
 
 ## Rotation note
 Three cycles; adjudication surface closed.
+
+## Cycle 4 (2026-08-02, draw 231, raw=16378166984725965126, masked 7154794947871189318, idx 4/6): corpus-extension tail assessed — VACUOUS (the extension region is HEAD-identical text in the branch; zero possible divergence); campaign stays COMPLETE
+
+### Assessment (the c3 Limitations tail)
+Extending the differential corpus to MoneyRange/size arms was
+assessed: those arms are HEAD-IDENTICAL text in the branch
+(the c1 diff showed the branch touches only the check region),
+so an extended differential can only return 0 by construction —
+it tests nothing the branch changes. The tail is not a cell;
+it is the null experiment. Recorded and closed.
+
+### Verdict
+Cell VACUOUS (provably null); campaign remains COMPLETE on the
+current surface (c1 static proof + c3 300k-case differential).
+
+### Exact commands
+- c1 branch diff scope re-check (check-region-only).
+
+### Limitations
+- None new.
