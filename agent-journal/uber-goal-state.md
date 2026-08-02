@@ -1,5 +1,65 @@
 # Uber Goal State
 
+## Cycle 276 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact
+  selector `shuf -i 0-98 -n 1` drew goal `8` (`locking-threading`), with no
+  reroll. The dedicated branch is
+  `uber-cycle-276-locking-threading-20260802`.
+- Gate HEAD was `ae3e461186f61b061d0edd4350793a273a32cc4c`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; and start divergence was
+  `1341 45` (`HEAD...origin/master`). The entry state SHA-256 was
+  `89d1b4626a852098a80dd70a9d9b2822d4074643436947d0812cab50fb973e0d`.
+- Catalog, random prompt, goals TSV, and protocol hashes were unchanged:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Tracked/index cleanliness and `git diff --check` passed. The seven
+  protected long-running processes remained alive and untouched.
+- The selected Goal 8 journal searched and excluded the exact validation
+  callback re-registration, SignalInterrupt reset, mapport `std::thread`, and
+  deferred scheduler callback lifetime cells. The new cell was concurrent
+  controller-thread shutdown of `ThreadPool` in `src/util/threadpool.h`.
+  `Stop()` swapped out `m_workers` before joining; a second controller could
+  see an empty vector, clear `m_interrupt`, return early, and leave the first
+  stopper's worker waiting forever after its task completed. The existing
+  Start-vs-Stop test did not cover two concurrent Stop calls.
+- The new `threadpool_tests/concurrent_stop_waits_for_first_stop` regression
+  failed on the pre-fix ASan+UBSan binary with the exact command:
+  `ASAN_OPTIONS=detect_leaks=0 /data/my_storage/tmp/cycle274-asan-wallet/bin/test_bitcoin --run_test=threadpool_tests/concurrent_stop_waits_for_first_stop --report_level=short --catch_system_errors=no`.
+  It reported the failed 500 ms timeout assertion, then hung after the
+  semaphore release because the first worker returned to its wait predicate;
+  that intentionally failing probe was terminated with Ctrl-C. This was a
+  direct deterministic lifecycle witness.
+- Source/test/journal commit `270ff329c79120e0865a3929706bc9ce79238757`
+  (`threadpool: serialize concurrent shutdowns`) was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It adds guarded `m_stopping` shutdown
+  ownership, makes concurrent Stop calls wait on the existing condition
+  variable, retains `m_interrupt` through joins, notifies waiters only after
+  restart is safe, documents the contract, and includes the regression and
+  detailed Goal 8 evidence.
+- Verification passed independently in three configurations. The repaired
+  Clang 19 ASan+UBSan build passed the focused test (1 case/4 assertions) and
+  all 18 `threadpool_tests` cases (461 assertions). The separate Clang 19
+  UBSan build at `/data/my_storage/tmp/cycle273-clang19-ubsan` passed the same
+  focused and full results. The Clang 19 TSan build at
+  `/data/my_storage/tmp/cycle163-tsan`, rebuilt after reconfiguration, passed
+  the focused test (1/4) and the full suite (18/462) with no TSan report under
+  `TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1`.
+- No full repository suite was run; validation was scoped to the changed
+  lifecycle and direct ThreadPool tests. The root filesystem remained full
+  and `/data` had about 8.6 GiB available at close. All scratch and unrelated
+  untracked artifacts were preserved and excluded.
+- Verdict: **confirmed and fixed**. Post-source-close HEAD is
+  `270ff329c79120e0865a3929706bc9ce79238757`, with close divergence
+  `1342 45` (`HEAD...origin/master`). The repository is not considered
+  exhausted. Next action: perform a fresh gate, fetch `origin/master`, draw
+  exactly one selector with `shuf -i 0-98 -n 1`, create `uber-cycle-277-*`, and
+  continue with a distinct high-risk cell. Do not reopen this Stop ownership
+  race without a changed contract or recurrence evidence.
+
 ## Cycle 275 Completion
 
 - The fresh gate fetched `origin/master` before branch creation. The exact selector `shuf -i 0-98 -n 1` drew goal `67` (`release-version-differential`) with no reroll. The dedicated branch is `uber-cycle-275-release-version-differential-20260802`.
