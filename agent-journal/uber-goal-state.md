@@ -57,6 +57,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 8 | locking-threading | DONE | 2026-07-27 | all 4 areas dismissed |
 | 15 | public-object-validation | DONE | 2026-07-27 | all paths gate consistently |
 | 4 | public-interface-contracts | CYCLE-2 | 2026-07-27 | RPC bounds consistent; c1 finding RETRACTED (5a16d316af) |
+| 4 | public-interface-contracts | CYCLE-3 | 2026-08-02 | LINEAGE REPAIR: journal restored to archive; c1 retraction re-verified at HEAD; bookkeeping CONFIRMED |
 | 6 | serialization-untrusted-input | CYCLE-1 | 2026-07-27 | compact-block + addrv2 bounded |
 | 27 | error-path-state | DONE | 2026-07-27 | failure contracts clean (2 shapes) |
 | 7 | resource-exhaustion-variants | CYCLE-1 | 2026-07-27 | HTTP accounting bounded |
@@ -963,6 +964,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 189 (44-campaign eligible set): raw=
+   16823264503710230643, masked 7599892466855454835 -> idx 3 ->
+   #4 c3 (lineage repair + retraction re-verified; CONFIRMED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4}.
    RE-RANK draw 188 (45-campaign eligible set): raw=
    12902246674943953776, masked 3678874638089177968 -> idx 43 ->
    #105 c3 (serialize SizeComputer family: 0 siblings, guard
