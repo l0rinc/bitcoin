@@ -227,6 +227,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 46 | api-output-on-failure | CYCLE-1 | 2026-07-29 | kernel C API: 5 surfaces output-on-failure-defined (verify/block_read/process_block/_header/to_bytes); input_index assert = upstream WIP note |
 | 102 | durable-suspicion-replay | CYCLE-1 | 2026-07-29 | suspicion-index A1-A11 delivered; L1 blind replay confirms unreachable (sharper UB split: int 0/0 at bloom.cpp:40, inf-cast at :34) |
 | 54 | raii-resource-leaks | CYCLE-1 | 2026-07-29 | fopen/raw-new sweeps clean: RAII pervasive; readwritefile/dbwrapper manual paths upstream-matching, bad_alloc-theoretical only |
+| 54 | raii-resource-leaks | CYCLE-3 | 2026-08-02 | subprocess: Linux clean; Windows szCmdline leak vendored+upstream-identical; CONFIRMED-LATENT external |
 | 51 | differential-metamorphic | CYCLE-1 (retro) | 2026-07-28 | full-UTXO undo oracle (47e5bf2f95, row restored); backported 4807d408fe |
 | 51 | differential-metamorphic | CYCLE-2 | 2026-07-29 | multi-block undo composition oracle added (negative control fired [101!=102], reverted green); suite green |
 | 76 | reproducible-builds | CYCLE-3 | 2026-07-29 | full depends sweep: 22 URL-verified + 28 cached sources pin-clean + make download green; qrencode primary still dead (fallback exact); xorg.freedesktop.org unreachable=environmental |
@@ -988,6 +989,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 212 (19-campaign eligible set): raw=
+   6892152841030680972 (63-bit) -> idx 12 -> #54 c3 (subprocess
+   sweep: Windows vendored leak, Linux clean; CONFIRMED-LATENT).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54}.
    RE-RANK draw 211 (20-campaign eligible set): raw=
    15898866038248710399, masked 6675494001393934591 -> idx 11 ->
    #48 c5 (ByRatio ordering laws oracle: 0/55,201; DISMISSED).
