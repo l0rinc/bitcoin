@@ -1,3 +1,49 @@
+# Cycle 284 Completion
+
+- The fresh gate fetched `origin/master` before the exact selector. The
+  selector `shuf -i 0-98 -n 1` returned goal `84`
+  (`secp-nonce-session`), with no reroll. The dedicated branch is
+  `uber-cycle-284-secp-nonce-session-20260802`.
+- Gate HEAD was `6ed5da473ad92b63b1c5ffa66076ad62643cf511`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1358` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `28fe279e3bf4ecfc55f4ee38624dd727d085928330d52d8fb69ba1b9a9edfe61`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Tracked/index cleanliness, `git diff --check`, and all seven protected
+  process checks passed; unrelated untracked artifacts were preserved.
+- This cycle excluded the prior MuSig argument-ordering, secret-nonce
+  invalidation, malformed nonce parser, ECDH invalid-public-key, and other
+  closed Goal 84 cells. The selected distinct cell was failed
+  `musig_nonce_gen` output state. With the old source, the focused API test
+  failed after an invalid all-`0xff` secret key: the function returned `0`
+  and zeroed `secnonce`, but `pubnonce` still contained a valid-looking
+  nonce. An independent probe linked to the older sanitized library also
+  failed when a valid public nonce survived an all-zero session-random early
+  return.
+- Source/test/journal commit `de7d2e761e`
+  (`secp256k1: invalidate MuSig public nonce on failure`) was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It clears `pubnonce` at both public nonce
+  generation entry points, masks the internal invalid-secret result back to
+  the invalid opaque value, and documents the failure contract in both
+  public APIs. The regression covers invalid secret input and a valid
+  sentinel followed by zero session randomness. The independent probe is
+  `agent-journal/secp_nonce_cycle284_probe.cpp` and remains untracked.
+- Fixed `musig_api_tests` passed in normal and no-VERIFY builds at four
+  iterations; normal and no-VERIFY MuSig matrices passed at 16 iterations;
+  the broader standalone suites passed at 16 and 8 iterations respectively.
+  A fresh Clang 19 ASan/UBSan build under
+  `/data/my_storage/tmp/cycle284-secp-asan` passed focused normal and
+  no-VERIFY tests at eight iterations with halt-on-error settings. The
+  fixed standalone probe exited `0`; `git diff --check` passed.
+- Verdict: **confirmed and fixed**. Post-source-close HEAD is
+  `de7d2e761eef4ab556f9c3e37361e63cd4a740ca`; divergence is `45 1359`
+  (`origin/master...HEAD`). The next action is a separate state close
+  commit, then a fresh gate, exact selector draw, and new `uber-cycle-285-*`
+  branch. Do not reopen the closed MuSig nonce-output cell without changed
+  source, a different failure backend, or independent evidence. The
+  repository is not considered exhausted.
+
 # Cycle 283 Completion
 
 - The fresh gate fetched `origin/master` before the exact selector. The
