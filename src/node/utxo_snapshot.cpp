@@ -14,6 +14,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <exception>
 #include <optional>
 #include <string>
 
@@ -70,7 +71,13 @@ std::optional<uint256> ReadSnapshotBaseBlockhash(fs::path chaindir)
             read_from_str);
         return std::nullopt;
     }
-    afile >> base_blockhash;
+    try {
+        afile >> base_blockhash;
+    } catch (const std::exception& e) {
+        LogWarning("[snapshot] failed to read base blockhash file %s: %s",
+            read_from_str, e.what());
+        return std::nullopt;
+    }
 
     int64_t position = afile.tell();
     afile.seek(0, SEEK_END);
