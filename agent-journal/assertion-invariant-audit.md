@@ -240,3 +240,43 @@ evidence the tripwires work).
 ## Rotation note
 Three cycles; fork Assumes, config validation (F13), and dynamic
 cluster stress all closed.
+
+## Cycle 4 (2026-08-02, draw 225, raw=16331761350244753227, masked 7108389313389977419, idx 1/6): upstream-side assert() sweep (bounded) — 209 asserts across validation/interpreter/tx_verify/coins/txmempool sampled and classified: ALL construction-tautologies/internal invariants; no input-validation-by-assert; DISMISSED
+
+### Census + sample classification
+- Counts: validation.cpp 124, txmempool.cpp 38, interpreter.cpp
+  30, coins.cpp 12, tx_verify.cpp 5, merkle/tx_check 0 = 209.
+- interpreter.cpp: :416 assert(false) post-enum-switch
+  (unreachable by exhaustion); :950 !'invalid opcode' (dispatch
+  structure); :309/:318 m_stack_size (engine-internal machine
+  invariant, not raw-input).
+- tx_verify.cpp:41 prevHeights.size()==vin.size (caller
+  construction); :135/:157/:176 !coin.IsSpent (cache-contract
+  tautology, coins-test covered).
+- validation.cpp: distribution topped by pindex/tip non-null
+  (chain-structure invariants); :423-440 mempool-side asserts
+  are internal-consistency tautologies (pool.get(hash) returns
+  the matching tx by construction; the fork's Assume at :428
+  guards the spentness separately).
+- ZERO sites where an assert substitutes for input validation —
+  untrusted-input rejections all flow through explicit
+  error/state returns (the c1 classification holds upstream-wide
+  in the sampled consensus surface).
+
+### Verdict
+DISMISSED: the upstream-side sweep (bounded to the consensus/
+mempool/interpreter surface) matches c1's fork-side result —
+asserts are construction-tautologies and internal invariants,
+not input validation. No defect.
+
+### Exact commands
+- grep -c census above; uniq -c distribution above; sed reads
+  interpreter.cpp:309-416/950, tx_verify.cpp:41-176,
+  validation.cpp:223-441.
+
+### Limitations / queue
+- Wallet/net/RPC assert sites not sampled (deprioritized or
+  covered by their own campaigns' sweeps).
+- The full per-site table is a census, not a per-line audit;
+  the classification is by assertion-shape family (enum-
+  exhaustion, non-null, internal-consistency).
