@@ -5255,3 +5255,43 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - Commit `d9002d9a9e` (`policy: keep package weight accumulation 64-bit`) includes the one-line production fix, focused regression, and selected-goal journal. It was authored as `Lőrinc <pap.lorinc@gmail.com>`. Validation passed with the cycle243 `test_bitcoin` rebuild, focused and full `txpackage_tests`, and `git diff --check`. The first root-filesystem test invocation failed before execution for lack of temporary space; scratch `TMPDIR` reruns supplied the recorded evidence.
 - At this pre-state-close point, `/` is full and `/data` has 32 GiB available. Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` remained alive and untouched. No repository-completion claim is made.
 - Next action: commit this state entry separately, perform the post-close gate, draw exactly one selector with `shuf -i 0-98 -n 1`, create `uber-cycle-253-*`, and continue with a distinct high-risk cell. Do not reopen the fixed #35473 path or the already-covered stale PR candidates without new evidence.
+## Cycle 297 Completion
+
+- The fresh post-Cycle-296 gate selected goal `27` (`error-path-state`) from
+  the exact selector `shuf -i 0-98 -n 1`, with no reroll. The dedicated branch is
+  `uber-cycle-297-error-path-state-20260802`. Gate and cycle-start HEAD were
+  `f2e7aaab012a5fe55f7339b3317b390309bd3e1b`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `45 1384`;
+  and the entry uber-state SHA-256 was
+  `ec553914d33e2e2a8fd14510db97c6bae4d6e35b48fe848fddf84e0d14f823e5`.
+  Catalog, random prompt, goals TSV, and uber-protocol hashes matched their
+  fixed values. Protected PIDs `777094`, `956381`, `1138182`, `1157959`,
+  `1312049`, `1312050`, and `1346200` remained alive and untouched; unrelated
+  untracked artifacts were preserved.
+- The distinct cell was the two remaining direct callers of
+  `DescriptorScriptPubKeyMan::TopUpWithDB`: generated descriptor setup and
+  external-signer descriptor creation. Both ignored `false` while operating on
+  a caller-owned transaction, allowing partial descriptor/cache writes to move
+  toward commit. The source history showed these call sites were introduced by
+  the 2023 batching commits `075aa44ceb` and `f053024273`.
+- A deterministic partial-expansion fixture was extended to succeed at index
+  0, write its cache row, and fail at index 1. With the external-signer check
+  temporarily removed, the focused test exited `201` with `check threw has
+  failed`. With the check restored, the same test passed and verified staged
+  rows are removed by transaction abort. This is an independent failing-before
+  and passing-after oracle for the ignored result.
+- Source commit `d790776a6a50013b8e598d0d0d4d0d8280d30d6a`, `wallet: abort failed
+  batched descriptor topups`, was authored as `Lőrinc <pap.lorinc@gmail.com>`.
+  It checks `TopUpWithDB` in both callers, throws the existing top-up error, and
+  adds the external-signer rollback regression plus the cycle journal update.
+  `ninja -C /data/my_storage/tmp/cycle246-wallet test_bitcoin -j2` passed;
+  `scriptpubkeyman_tests` passed 23 cases, and the combined
+  `scriptpubkeyman_tests,wallet_tests,walletdb_tests` run passed 51 cases.
+  `git diff --check` passed.
+- At this pre-state-close point HEAD is `d790776a6a50013b8e598d0d0d4d0d8280d30d6a`
+  and divergence is `45 1385`. This state entry is to be committed separately
+  from the evidence commit. The next action is a fresh post-close gate, one
+  exact selector draw, a new `uber-cycle-298-*` branch, and a distinct eligible
+  cell; do not reopen this descriptor top-up family without changed transaction
+  semantics or new evidence.
