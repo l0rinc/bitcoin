@@ -206,3 +206,37 @@ scratch nodes: regtest, mainnet, signet.
 
 ## Rotation note
 Four bounded cycles complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 5 (2026-08-02, draw 206, raw=13014474695973678266, masked 3791102659118902458, idx 9/27): doc/wallet.md + doc/external-signer.md extraction — zero falsely-parseable descriptor examples; DISMISSED
+
+### Extraction
+- doc/wallet.md: ABSENT in this fork (wallet docs reorganized
+  upstream; recorded, not a gap).
+- doc/external-signer.md (226 lines): all descriptor-ish strings
+  extracted and classified:
+  - :141 hypothetical wildcard form ['pkh("44'/0'/$'/{0,1}/*")...']
+    — explicitly framed as a FUTURE extension ('A future
+    extension could add... Perhaps'), not a current-format
+    example; its non-standard syntax is therefore not doc drift.
+  - :174-183 getdescriptors examples: elided keys (xpub6C...,
+    xpub6B....) — illustrative by design, unparseable by
+    construction, chain-consistent (main/test labeled at :198's
+    tpub displayaddress example).
+- No example presents itself as parseable-but-isn't, and no
+  unlabeled chain-context drift of the c4 (testnet-keys) class.
+
+### Verdict
+DISMISSED: the docs' remaining descriptor surface is honestly
+elided/hypothetical; nothing for getdescriptorinfo to refute.
+The c4 extraction methodology found no second instance.
+
+### Exact commands
+- grep extractions above (patterns + line refs); ls doc/wallet.md
+  (absent).
+
+### Limitations / queue
+- The hypothetical wildcard syntax could confuse a reader who
+  tries it — but it is inside an explicit 'future' paragraph;
+  flagged only if the format ever ships.
+- descriptors.md Reference prose (c4 queue) remains the only
+  open surface.
