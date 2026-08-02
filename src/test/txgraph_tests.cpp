@@ -590,6 +590,25 @@ BOOST_AUTO_TEST_CASE(txgraph_memory_usage_accounts_for_retained_entries)
     BOOST_CHECK_GT(churned_usage, fresh_usage);
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_memory_usage_allows_retained_empty_graph)
+{
+    static constexpr size_t CHURN_COUNT{1024};
+
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(CHURN_COUNT);
+    for (size_t i{0}; i < CHURN_COUNT; ++i) {
+        graph->AddTransaction(refs.emplace_back(), FeePerWeight{1, 1});
+    }
+    for (const auto& ref : refs) {
+        graph->RemoveTransaction(ref);
+    }
+    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 0);
+    refs.clear();
+
+    BOOST_CHECK_GT(graph->GetMainMemoryUsage(), 0U);
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_memory_usage_accounts_for_retained_cluster_containers)
 {
     static constexpr size_t ENTRY_CAPACITY{2048};

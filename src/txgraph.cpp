@@ -3786,7 +3786,8 @@ size_t TxGraphImpl::GetMainMemoryUsage() noexcept
     for (const auto& clusters : m_main_clusterset.m_clusters) {
         usage += memusage::DynamicUsage(clusters) - clusters.size() * sizeof(std::unique_ptr<Cluster>);
     }
-    Assume((usage == 0) == (m_main_clusterset.m_txcount == 0));
+    // Retained graph allocations can keep usage nonzero after the last transaction is removed.
+    Assume(m_main_clusterset.m_txcount == 0 || usage != 0);
     return usage;
 }
 

@@ -1,5 +1,68 @@
 # Bitcoin mempool, package, and eviction-accounting audit
 
+## Cycle 271: retained empty TxGraph memory trips stale zero-usage assertion
+
+### Selection and gate
+
+- Exact selector after the Cycle 270 state close: `shuf -i 0-98 -n 1` -> `87` (`bitcoin-mempool-accounting`); distinct evidence remained open, so no reroll was needed.
+- Branch: `uber-cycle-271-bitcoin-mempool-accounting-20260802`.
+- Gate HEAD was `2b2e79c78cc2516e36d25e780ba25fc043e5adee`; fetched `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1331 45` (`HEAD...origin/master`).
+- The tracked/index state was clean and `git diff --check` passed at entry. Existing untracked agent/user artifacts, package metadata, `node_modules/`, `test/cache/`, crash files, and profiling output were preserved and excluded from staging.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Corrected TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Uber-goal state SHA-256 at the unchanged gate state: `fdd687b1b3fc690dccc796d9d7db7e432d571caad9bfb6020f96630d987d2825`.
+- Protected long-running processes `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` were alive and untouched. Root scratch space was exhausted during the cycle (`/` reported 0 bytes free); all disposable builds and test data were kept under `/data/my_storage/tmp`, which had 14 GiB available at the evidence check.
+
+### Prior cells and scope
+
+The existing Goal 87 ledger's Cycle 182 independent graph/accounting oracle was searched. Its diamond graph/removal sequence and the recorded H1-H4 results were not reopened. The later history and state ledger were also checked for the already-fixed orphanage/global deduplicated accounting, allocator/prevector, compact-block provenance, package test-accept cache cleanup, reorg dependency repair, conflict index, trim no-spends output, randomized index, block-builder, fee-saturation, and retained-memory accounting cells.
+
+The distinct cell for this cycle is the interaction between retained `TxGraph` allocations and the empty-graph accounting invariant. Commits `c516b42ffdee007ecabcb0a406904026a2494c31` and `48652bffd6eb9d21db69402449b42d8be4979a01` intentionally added retained entry, cluster-container, removal-buffer, and unlinked-index allocations to `GetMainMemoryUsage()`. The function still had the older assertion `(usage == 0) == (m_main_clusterset.m_txcount == 0)`, which became invalid once empty graphs were allowed to retain capacity.
+
+### Working hypothesis and pre-fix evidence
+
+After a graph has held and removed many transactions, its main transaction count can be zero while its owned vectors and indexes retain allocated memory. A later mempool `DynamicMemoryUsage()` query must report that memory without aborting. The old assertion treated the zero-count state as proof that usage must be zero, so normal cache/mempool setup and RPC/eviction accounting could terminate a debug/assume-on-failure process after graph churn.
+
+The failure was reproduced independently in a fresh process with the current tree before this cycle's fix:
+
+```text
+mkdir -p /data/my_storage/tmp/cycle271-package-accounting-isolated
+TMPDIR=/data/my_storage/tmp/cycle271-package-accounting-isolated \
+  /data/my_storage/tmp/cycle270-minisketch-build/bin/test_bitcoin \
+  --run_test=txpackage_tests/package_test_accept_preserves_coins_cache \
+  --random=271002 --log_level=test_suite --report_level=detailed --color_output=false
+```
+
+The command exited `201` with:
+
+```text
+txgraph.cpp:3789 virtual size_t (anonymous namespace)::TxGraphImpl::GetMainMemoryUsage(): Assertion `(usage == 0) == (m_main_clusterset.m_txcount == 0)' failed.
+unknown location(0): fatal error: in "txpackage_tests/package_test_accept_preserves_coins_cache": signal: SIGABRT
+```
+
+The broader pre-fix control also reached this first assertion, then produced cascading fixture/argument-registration failures; it was stopped rather than treating those secondary failures as independent findings. The direct package test failure is sufficient evidence because it is deterministic in a clean process and occurs before the package is submitted.
+
+### Fix and independent verification
+
+The invariant now preserves the valid direction only: a nonempty main graph must have nonzero accounted usage. Empty graphs may have nonzero usage because retained allocations are intentionally included. A direct regression in `src/test/txgraph_tests.cpp` creates 1,024 entries, removes them all, confirms `GetTransactionCount(MAIN) == 0`, releases the external refs, and requires `GetMainMemoryUsage() > 0` without an abort.
+
+- Incremental isolated CMake Debug/Clang 19 rebuild of `test_bitcoin` passed after changing `src/txgraph.cpp` and the TxGraph test.
+- The new `txgraph_memory_usage_allows_retained_empty_graph` case passed 2/2 assertions with seed `271003`.
+- The previously failing `txpackage_tests/package_test_accept_preserves_coins_cache` case passed 5/5 assertions with seed `271004`.
+- The fixed combined control `--run_test=mempool_tests,txgraph_tests,txpackage_tests,rbf_tests --random=271005` passed 75 cases and 3,166/3,166 assertions.
+- `git grep` confirmed `GetMainMemoryUsage()` feeds `CTxMemPool::DynamicMemoryUsage()`, RPC `getmempoolinfo` usage, eviction thresholds, chainstate cache sizing, and fuzz/state-machine checks; this is therefore an accounting-invariant fix rather than a test-only workaround.
+- No wallet, key, default datadir, protected process, or root `/tmp` scratch was used. The pre-fix abort and post-fix controls provide independent failing-before/passing-after evidence; no sanitizer rebuild was attempted because the current Clang build was already available and the defect is an explicit assertion transition.
+
+Verdict: confirmed and fixed local mempool/TxGraph accounting defect. The retained allocation accounting was correct; the stale zero-usage equivalence assertion was not. The fix does not change eviction policy or graph membership, and it leaves nonempty-graph sanity checking intact.
+
+Limitations: no full sanitizer rebuild or fuzz-worker run was performed in this cycle, and root filesystem exhaustion prevented use of default temporary paths. The selected focused controls cover the affected accounting and package/RBF/removal paths; `/data` scratch remains available. The next queue is to exercise retained-empty accounting through the RPC/cache-resize and eviction paths, then continue package rejection and replacement state transitions without repeating this exact assertion cell.
+
+## Cycle 271 handoff
+
+The source and state commits for this cycle will be recorded after the fix and journal are validated. The next cycle must perform a fresh gate, draw exactly one selector from `0..98`, and create a new dedicated branch; do not claim repository completion.
+
 ## Cycle 182 start gate
 
 - Cycle: 182
