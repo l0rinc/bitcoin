@@ -1,3 +1,50 @@
+# Cycle 280 Completion
+
+- The fresh gate fetched `origin/master` before the exact selector. The
+  selector `shuf -i 0-98 -n 1` returned goal `67`
+  (`release-version-differential`), with no reroll. The dedicated branch is
+  `uber-cycle-280-release-version-differential-20260802`.
+- Gate HEAD was `54cc096d716613fc31f5ebfa527adc482eb29fc5`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1350` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `07c3e84aa97fe7cadac2d5439269b4ccdcaec92e5f53b9f7fa73438a5097e3af`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Tracked/index cleanliness, `git diff --check`, and all seven protected
+  process checks passed; existing unrelated untracked artifacts were
+  preserved and untouched.
+- Goal 67's completed cells already covered RPC/genesis, fixed vectors,
+  coinbase-only reorg/restart, prune/persistence, synthetic mainnet-style
+  blocks, empty and funded/encrypted wallet migration, and P2P transcripts.
+  This cycle selected a distinct release-branch differential: current commit
+  `6aa5d8d9481f5e06b10095df7f46f0532f7ecdb7` fixes compact-block short-ID
+  collision accounting, but is absent from `origin/31.x` v31.1
+  (`9be056a8a72b624dae9623b2f7bded92c2a21c91`).
+- The fix tracks each reconstruction slot as `NONE`, `MEMPOOL`, `EXTRA`, or
+  `COLLIDED`; it decrements `extra_count` only for an extra-sourced collision
+  and makes collided slots terminal. An adapted 29-assertion regression was
+  run against v31.1's unchanged production implementation in the isolated
+  scratch tree `/data/my_storage/tmp/cycle109-release-differential/v31.1-src`.
+  The rebuilt v31.1 test failed with exit code 201: 26 assertions passed and
+  three source-accounting checks failed (`extra_count` was `0` instead of
+  `1`, then `SIZE_MAX` instead of `0` in the two extra-collision cases).
+  The current fixed binary passed the same behavior with 29/29 assertions and
+  exit code 0. The original v31.1 control had passed 13/13 assertions before
+  the new regression cases were added.
+- This is a confirmed release difference already fixed in current master, not
+  a new defect in the current tree. No production or permanent test change
+  was justified. Selected-goal journal commit `9508e482e1`
+  (`journal: close compact-block release differential`) records the source
+  ancestry, exact commands, old-release failures, current pass, verdict, and
+  limitations. The journal close was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`.
+- Post-journal-close HEAD is `9508e482e1`; divergence is `45 1351`
+  (`origin/master...HEAD`). The next action is a fresh gate, fetch
+  `origin/master`, draw exactly one selector with `shuf -i 0-98 -n 1`, create
+  `uber-cycle-281-*`, and continue with another distinct high-risk cell. Do
+  not claim the repository is exhausted or reopen this cell without a changed
+  release/backport, recurrence, or independent evidence.
+
 # Uber Goal State
 
 ## Cycle 279 Completion
