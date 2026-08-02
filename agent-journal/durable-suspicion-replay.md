@@ -151,3 +151,39 @@ upstream WIP; watch via #42 stands). Replay queue: EMPTY
 ### Limitations / queue
 - The replay queue is empty; new suspicions arrive via other
   campaigns' Limitations tails (standing rule).
+
+## Cycle 4 (2026-08-02, cycle 255): pre-existing crash-* artifact analysis — 30+ targets scanned, ZERO reproduction; stale-harness verdict; files left untouched
+
+### Artifacts
+Two untracked crash files in the repo root (predate this
+session's work; preserved-by-convention, never staged):
+- crash-ad6d...814 (31 B, starts 16 ec 27 27..., 'un' tail)
+- crash-e411...b11 (13 B).
+
+### Reproduction scan (negative)
+Each file against 30+ fuzz targets across all families
+(process_messages, txgraph, txorphanage_sim,
+ephemeral_package_eval, mini_miner, txdownloadman, transaction,
+tx_deserialize, script_flags, merkleblock_deserialize,
+partialmerkletree_deserialize, block, tx_package_ephemeral,
+mini_miner_opreturn, ephemeral, txrequest, txorphan_protected,
+txorphan, utxo_total_supply, coins_view_stacked, coinscache_sim,
+headers_sync_state, p2p_headers_presync, load_wallet, psbt,
+psbt_base64_decode, wallet_fees, crypto, diff_fuzz_chacha20,
+strprintf, num3072_mul, feefrac): ZERO crashes, zero asserts,
+zero sanitizer reports. Nothing current reproduces.
+
+### Verdict
+DISMISSED (stale artifacts): most likely seeds from a prior
+session's custom /tmp harness (the load_wallet bring-up family
+fd74c4a7c2 mentions /tmp/lw_crash_flags_seed) — they reproduce
+nothing against the current build and carry no live-defect
+signal. Left in place, untracked, per the user's-file rule.
+
+### Exact commands
+- xxd dumps above; per-file x per-target -runs=1 loop above.
+
+### Limitations
+- Not scanned against EVERY target (33 of ~100+); the families
+  most consistent with the input shapes are all in the scan.
+- Provenance is inference (no metadata in libFuzzer artifacts).
