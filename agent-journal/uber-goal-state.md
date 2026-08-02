@@ -1,3 +1,52 @@
+# Cycle 287 Completion
+
+- The fresh gate selected goal `90` (`historical-knowledge-recipes`) from the
+  exact selector `shuf -i 0-98 -n 1`, with no reroll. The dedicated branch is
+  `uber-cycle-287-historical-knowledge-recipes-20260802`.
+- Gate HEAD was `654a7b936b6613eea10f9b94403a43c42c01f651`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1364` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `1c3f591b64d91df93ea1f4f054b943c88a23d80c2a342334f0999601f9f3a01a`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Tracked/index cleanliness, `git diff --check`, and all seven protected
+  process checks passed; unrelated untracked artifacts were preserved.
+- The primary history cluster was Bitcoin Core PR #32763, which migrated
+  `CWalletTx::mapValue` and `vOrderForm` to typed fields while preserving the
+  serialized representation through temporary compatibility maps. The
+  resulting recipe requires a field/consumer/serialization matrix, one
+  semantic field group per migration step, explicit unknown-field policy,
+  negative malformed-value tests, round-trip and migration tests, and a
+  held-out cross-domain check. Its fingerprint is
+  `typed-wallet-metadata-migration-with-serialization-boundary`.
+- Review archaeology found a current persistence defect at the same boundary:
+  `CWalletTx::Unserialize` rejected unknown keys but converted malformed
+  `replaces_txid` and `replaced_by_txid` values to empty optionals. A later
+  serialization could therefore silently discard persisted replacement
+  metadata. The old-source control failed both expected-throw assertions;
+  the strict parser now rejects both malformed values with
+  `std::runtime_error`.
+- Source/test/journal commit `1bf5cbf97ed45c4df4519e665e9b3c6af0d42e98`,
+  `wallet: reject malformed replacement transaction ids`, was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It adds the direct serialized-record
+  regression `wallet_transaction_tests/malformed_replacement_txids_throw` and
+  updates `agent-journal/historical-knowledge-recipes.md`. No unrelated files
+  were staged.
+- The old parser was built in `/data/my_storage/tmp/cycle214-build`; the
+  focused test reported `std::runtime_error expected but not raised` for both
+  keys. After the fix, the focused test passed 1 case/2 assertions and the
+  complete `wallet_transaction_tests` suite passed 2 cases/52 assertions.
+  `wallet_bumpfee.py` passed its metadata-persistence coverage, and the
+  held-out `ipc_tests` control passed 2 cases/44 assertions. The legacy wallet
+  migration test remains unavailable because the required previous-release
+  binaries are not installed; this is recorded as an environment limitation.
+- Post-source-close HEAD is `1bf5cbf97ed45c4df4519e665e9b3c6af0d42e98` and
+  divergence is `45 1365` (`origin/master...HEAD`). This state entry is to be
+  committed separately from the source finding. The next action is a fresh
+  post-close gate, one exact selector draw, a new `uber-cycle-288-*` branch,
+  and a distinct unchecked goal/cell; do not reopen the typed wallet metadata
+  recipe without new evidence.
+
 # Cycle 286 Completion
 
 - The fresh gate had selected goal `29` (`dead-stale-code`) with the exact
