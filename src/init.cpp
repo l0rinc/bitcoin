@@ -586,10 +586,10 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
     argsman.AddArg("-forcednsseed", strprintf("Always query for peer addresses via DNS lookup (default: %u)", DEFAULT_FORCEDNSSEED), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-listen", strprintf("Accept connections from outside (default: %u if no -proxy, -connect or -maxconnections=0)", DEFAULT_LISTEN), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-listenonion", strprintf("Automatically create Tor onion service (default: %d)", DEFAULT_LISTEN_ONION), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
-    argsman.AddArg("-maxconnections=<n>", strprintf("Maintain at most <n> automatic connections to peers (default: %u). %u slots of these are reserved for outgoing connections. See -inboundrelaypercent for more information about limits applied to transaction relay inbound peers. "
+    argsman.AddArg("-maxconnections=<n>", strprintf("Maintain at most <n> automatic connections to peers (0 to %d, default: %u). %u slots of these are reserved for outgoing connections. See -inboundrelaypercent for more information about limits applied to transaction relay inbound peers. "
                                                     "This limit does not apply to connections manually added via -addnode or the addnode RPC, which have a separate limit of %u. "
                                                     "It does not apply to short-lived private broadcast connections either, which have a separate limit of %u.",
-                                                    DEFAULT_MAX_PEER_CONNECTIONS, MAX_OUTBOUND_FULL_RELAY_CONNECTIONS + MAX_BLOCK_RELAY_ONLY_CONNECTIONS + MAX_FEELER_CONNECTIONS, MAX_ADDNODE_CONNECTIONS, MAX_PRIVATE_BROADCAST_CONNECTIONS),
+                                                    std::numeric_limits<int>::max(), DEFAULT_MAX_PEER_CONNECTIONS, MAX_OUTBOUND_FULL_RELAY_CONNECTIONS + MAX_BLOCK_RELAY_ONLY_CONNECTIONS + MAX_FEELER_CONNECTIONS, MAX_ADDNODE_CONNECTIONS, MAX_PRIVATE_BROADCAST_CONNECTIONS),
                    ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-inboundrelaypercent=<n>", strprintf("Permit a maximum percent of inbound connections to relay transactions, to limit memory utilization (0 to 100, default: %u).", DEFAULT_FULL_RELAY_INBOUND_PCT), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-maxreceivebuffer=<n>", strprintf("Maximum per-connection receive buffer, <n>*1000 bytes (default: %u)", DEFAULT_MAXRECEIVEBUFFER), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
@@ -969,6 +969,13 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     if (max_receive_buffer < 0 || static_cast<uint64_t>(max_receive_buffer) > MAX_BUFFER_ARG) {
         return InitError(strprintf(_("-maxreceivebuffer must be between 0 and %u."), static_cast<unsigned int>(MAX_BUFFER_ARG)));
     }
+    const int64_t max_connections{args.GetIntArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS)};
+    if (max_connections < 0) {
+        return InitError(Untranslated("-maxconnections must be greater or equal than zero"));
+    }
+    if (max_connections > std::numeric_limits<int>::max()) {
+        return InitError(strprintf(_("-maxconnections cannot exceed %d."), std::numeric_limits<int>::max()));
+    }
 
     // also see: InitParameterInteraction()
 
@@ -1079,7 +1086,7 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     // Number of bound interfaces (we have at least one)
     int nBind = std::max(nUserBind, size_t(1));
     // Maximum number of connections with other nodes, this accounts for all types of outbounds and inbounds except for manual
-    int user_max_connection = args.GetIntArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS);
+    const int user_max_connection{static_cast<int>(args.GetIntArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS))};
     if (user_max_connection < 0) {
         return InitError(Untranslated("-maxconnections must be greater or equal than zero"));
     }
@@ -1090,7 +1097,10 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     int min_required_fds = MIN_CORE_FDS + MAX_ADDNODE_CONNECTIONS + nBind;
 
     // Try raising the FD limit to what we need (available_fds may be smaller than the requested amount if this fails)
-    available_fds = RaiseFileDescriptorLimit(user_max_connection + max_private + min_required_fds);
+    const size_t requested_fds{static_cast<size_t>(user_max_connection) + max_private + static_cast<size_t>(min_required_fds)};
+    available_fds = RaiseFileDescriptorLimit(requested_fds > static_cast<size_t>(std::numeric_limits<int>::max())
+                                                  ? std::numeric_limits<int>::max()
+                                                  : static_cast<int>(requested_fds));
     // If we are using select instead of poll, our actual limit may be even smaller
 #ifndef USE_POLL
     available_fds = std::min(FD_SETSIZE, available_fds);

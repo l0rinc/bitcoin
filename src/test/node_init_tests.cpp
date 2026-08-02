@@ -72,6 +72,16 @@ BOOST_AUTO_TEST_CASE(init_rejects_out_of_range_buffer_arguments)
     BOOST_CHECK(!AppInitParameterInteraction(*m_node.args));
 }
 
+BOOST_AUTO_TEST_CASE(init_rejects_out_of_range_maxconnections)
+{
+    LogInstance().DisconnectTestLogger();
+    m_node.args->ForceSetArg("-server", "0");
+    m_node.args->ForceSetArg("-listen", "0");
+    m_node.args->ForceSetArg("-maxconnections", std::to_string(static_cast<int64_t>(std::numeric_limits<int>::max()) + 1));
+
+    BOOST_CHECK(!AppInitParameterInteraction(*m_node.args));
+}
+
 BOOST_AUTO_TEST_CASE(init_rejects_overflowing_prune_argument)
 {
     LogInstance().DisconnectTestLogger();

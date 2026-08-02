@@ -327,3 +327,118 @@ next arithmetic queue includes cache-size paths and amount/fee conversions not
 covered by the P2P buffer, validation-cache, or cluster-size fixes. The next
 uber cycle must draw again from the full catalog rather than reopening these
 cells without new evidence.
+
+## Cycle 304
+
+- Selector: `shuf -i 0-103 -n 1`
+- Draw: `52`
+- Selected goal: `integer-overflow`
+- Date: 2026-08-02 UTC
+- Repository HEAD at gate: `0f220b92529f28210a09ad965f8c49eff29b9297`
+- Branch: `uber-cycle-304-integer-overflow-20260802`
+- Base: `origin/master` at `556988790a7f961693a8fd93f73725baea66476a`
+- Ahead/behind at gate: `0 1404`
+- Working tree at gate: no tracked changes; unrelated agent artifacts were
+  untracked
+
+The prior P2P buffer, signature-cache, and cluster-size arithmetic cells were
+excluded. This cycle inspected startup options and selected the
+`-maxconnections` representability and file-descriptor sizing boundary.
+
+### Scope and hypothesis
+
+`ArgsManager::GetIntArg` returns `int64_t`, but the startup path assigned
+`-maxconnections` directly to `int`. The value then participated in the file
+descriptor request passed to `RaiseFileDescriptorLimit(int)`. The hypothesis
+was that a valid `int64_t` option outside the `int` domain could silently wrap
+to a different connection limit, and that a large representable `int` could
+make the descriptor request narrow to a negative value.
+
+### Before-fix evidence
+
+The source path was:
+
+```text
+int user_max_connection = args.GetIntArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS);
+available_fds = RaiseFileDescriptorLimit(user_max_connection + max_private + min_required_fds);
+```
+
+On the pre-fix normal binary, a scratch regtest daemon accepted
+`-maxconnections=4294967296` and reached `Done loading` while logging:
+
+```text
+Using at most 0 automatic connections (1048576 file descriptors available)
+```
+
+The matching `getnetworkinfo` response reported `"connections": 0`. The
+argument was therefore neither rejected nor treated as a large request; its
+conversion to `int` changed it to zero on the tested x86_64 build.
+
+The exact probe used no wallet, public network, default datadir, or production
+database:
+
+```text
+/data/my_storage/tmp/cycle246-wallet/bin/bitcoind -regtest \
+  -datadir=/data/my_storage/tmp/cycle304-maxconnections-before \
+  -server=1 -listen=0 -listenonion=0 -connect=0 -dnsseed=0 -discover=0 \
+  -natpmp=0 -daemon=1 -daemonwait -printtoconsole=0 -rpcport=18499 \
+  -maxconnections=4294967296 -disablewallet=1
+```
+
+An independent Clang 19 `implicit-conversion` build also reached startup with
+the same value before the fix, but its daemonized stderr did not preserve a
+conversion diagnostic. That run is recorded as behavior corroboration, not as
+sanitizer proof.
+
+### Fix and verification
+
+`AppInitParameterInteraction` now rejects negative values and values above
+`std::numeric_limits<int>::max()` before parameter interactions. The later
+narrowing is explicit, and the descriptor request is computed in `size_t` and
+capped before calling the `int`-typed `RaiseFileDescriptorLimit`. The help text
+now states the accepted `0` through `INT_MAX` range. A focused node-init test
+covers `INT_MAX + 1`.
+
+Evidence after the fix:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle304-node-init \
+/data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin \
+  --run_test=node_init_tests --log_level=test_suite --report_level=short \
+  --color_output=false
+# 4 cases, 6 assertions passed
+# Error: -maxconnections cannot exceed 2147483647.
+
+CCACHE_DIR=/data/my_storage/tmp/cycle304-ccache-implicit-after \
+cmake --build /data/my_storage/tmp/cycle304-implicit-build --target bitcoind -j2
+# completed [6/6]
+
+/data/my_storage/tmp/cycle304-implicit-build/bin/bitcoind ... \
+  -daemon=0 -printtoconsole=1 -maxconnections=4294967296
+# status 1
+# Error: -maxconnections cannot exceed 2147483647.
+# UBSan log contained no init.cpp diagnostic; its records were pre-existing
+# libsecp256k1/crypto startup diagnostics from this broad configuration.
+
+/data/my_storage/tmp/cycle304-implicit-build/bin/bitcoind ... \
+  -daemon=1 -daemonwait -maxconnections=2147483647
+# started successfully; warning reduced to 1048416 connections
+# debug.log: Using at most 1048416 automatic connections (1048576 file descriptors available)
+# debug.log: init message: Done loading
+```
+
+`git diff --check` passed. The hypothesis is **confirmed and fixed**. The
+source change and regression test are limited to the startup option contract
+and the descriptor-request narrowing boundary. The evidence is Linux x86_64
+with `int` width 32 and does not establish behavior on every supported OS or
+architecture.
+
+### Learned queue
+
+The next configuration-arithmetic campaign should inspect distinct startup
+and resource paths exposed by this audit: `-par`'s `int64_t` to `int` thread
+count, duration options such as `-mempoolexpiry` and `-rpcservertimeout`, the
+wallet fee path's unsigned transaction-size to `int32_t` conversion, and block
+filter index height differences. Keep the repaired `-maxconnections` cell and
+the Cycle 10/29 cells out of the queue unless a new evidence source shows a
+different reachable defect shape.
