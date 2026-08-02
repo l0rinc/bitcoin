@@ -1,5 +1,56 @@
 # Uber Goal State
 
+## Cycle 279 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact
+  selector `shuf -i 0-98 -n 1` returned goal `59`
+  (`cpp-supply-chain`), with no reroll. The dedicated branch is
+  `uber-cycle-279-cpp-supply-chain-20260802`.
+- Gate HEAD was `1d351660070c67d4aa0367e43b992f6950449ef4`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1348` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `386e5b3f8d7e5d0a01fd926b67d0cde37432df97aea1ab42c03475069362c519`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Existing untracked artifacts and all seven protected long-running
+  processes were preserved and untouched.
+- The selected Goal 59 journal retained distinct `pycapnp`, vcpkg
+  manifest/cache, container image, generated-input, and license-gate cells.
+  Nine native CI environment bundles, the Ubuntu commit-test workflow, and
+  the IPC test README accepted an unbounded `pycapnp` release. The trust
+  boundary is CI/developer test preparation because this native extension and
+  its bundled/system Cap'n Proto code execute in IPC functional tests.
+- PyPI release metadata for `pycapnp 2.2.4` was checked at the immutable
+  version endpoint. A CPython 3.11 manylinux wheel downloaded into
+  `/data/my_storage/tmp/cycle279-pycapnp` had SHA-256
+  `7055771afef9fdfabedcabcde0c11938c016779cd512d93e3bc04d6ac6dd65d2`.
+  The isolated install loaded the current `echo`, `init`, `mining`, and
+  `proxy` IPC schemas. The release also contains relevant malformed-field and
+  async-lifetime fixes, and repository evidence had already exercised 2.2.4.
+- Source/test commit `dde6a6d639a0e042648b2978fc2bd4a0df57c775`
+  (`ci: pin pycapnp test dependency`) was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It pins `pycapnp==2.2.4` in all nine
+  native CI bundles and the GitHub Actions install, and updates the direct
+  install and source fallback in `test/README.md` to the same release. No
+  IPC production code changed.
+- Independent validation passed: `bash -n` for all changed shell files;
+  environment expansion and static inventory checks; `git diff --check`;
+  isolated `pycapnp 2.2.4` schema loading; and the IPC functional suite
+  against an IPC-enabled build. The suite passed echo, mining,
+  deprecated-interface failure, disconnect cancellation, and thread-busy
+  cases. It was run both before and after the source commit. Full container,
+  Windows, sanitizer, and cross-architecture jobs were unavailable.
+- Verdict: **confirmed and fixed**. This is a version pin, not a complete
+  per-platform `--require-hashes` lock or immutable Git source-tag check.
+  Those are separate future supply-chain questions. The repository is not
+  considered exhausted. Post-source-close HEAD is `dde6a6d639`, with
+  divergence `45 1349` (`origin/master...HEAD`).
+- Next action: commit this state entry separately, perform a fresh gate,
+  fetch `origin/master`, draw exactly one selector with
+  `shuf -i 0-98 -n 1`, create `uber-cycle-280-*`, and continue with a
+  distinct high-risk cell. Do not reopen the pycapnp cell without a changed
+  release, platform-specific failure, hash/provenance evidence, or recurrence.
+
 ## Cycle 278 Completion
 
 - The fresh gate fetched `origin/master` before branch creation. The exact
