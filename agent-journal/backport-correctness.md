@@ -129,3 +129,46 @@ green; bash -n ci/test/03_test_script.sh — OK.
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-08-02, draw 179, raw=7791267694587749993 (63-bit), idx 38/55): post-c2 fix-lineage reachability audit — all confirmed fixes PRESENT in the ledger lineage; hash-ancestry is insufficient (cherry-pick copies), content-level verification required; CONFIRMED+RESOLVED
+
+### Hypothesis
+H (c1 lesson, recurrence check): post-c2 confirmed fixes may
+again be unreachable from the ledger lineage tip.
+
+### Method note (the c1 lesson, proceduralized)
+`git merge-base --is-ancestor <fix> agent/all-findings` reports
+MISSING for fixes that ride the archive as CHERRY-PICKED COPIES
+(different hashes). Reachability must be checked at content
+level; the hash test alone is a known false-negative (c1).
+
+### Matrix (12 post-c2 fix commits checked)
+- Missing-by-hash but PRESENT as archive copies:
+  83f9989a68 (F12) -> 94fa7fcd4c; 5e0a80ade5 (F13) ->
+  0d9f3ca811; 55788c9a76 (F16) -> b606007327.
+- Reachable by hash directly: 461c21cbfa (F14), 3afdc24bc7
+  (#59 c3 pin), a9d7be8c11 (F15), 0d9f3ca811, 62bd4923d2 (F11),
+  f6e78b44c0, 4a3a6b09dd, b606007327.
+- Content spot checks on the archive worktree: F13 bound at
+  node/mempool_args.cpp:113-115 ('must be at least 1'); F16 guard
+  at wallet/crypter.cpp:23 (count<1) + :45 (rounds INT_MAX cap);
+  F12 gate via txmempool.cpp G_ABORT_ON_FAILED_ASSUME blocks.
+- Regression spot checks on build-before: wallet_crypto_tests
+  green; dbwrapper_tests green.
+
+### Verdict
+CONFIRMED+RESOLVED: every confirmed fix is present in the ledger
+lineage; the c1 "18/18 unreachable" class has not recurred. The
+audit method (content-level, not hash-level) is now recorded as
+the standing procedure for this cell.
+
+### Exact commands
+- git merge-base --is-ancestor loop (12 hashes, output above);
+  git log grep for archive copies; grep line refs above;
+  test_bitcoin --run_test=wallet_crypto_tests,dbwrapper_tests.
+
+### Limitations / queue
+- Spot-checked 2 of 6 fix regression suites (cheapest); the rest
+  carry their own cycle's green evidence.
+- Standing rule unchanged: future fixes land on campaign branches
+  and ride the lineage; re-audit on any new fix batch.
