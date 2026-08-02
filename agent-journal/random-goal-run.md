@@ -36,6 +36,39 @@
 - Generator SHA-256: `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`
 - Random-run prompt SHA-256: `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`
 
+## Cycle 306 Result
+
+- Finding: all three libsecp256k1 vector generators copied external JSON
+  comments into C block comments without escaping `*/`. Minimal hostile
+  ECDSA, ECDH, and Silent Payments fixtures emitted a live `int
+  generated_marker` into the generated test-vector initializer and failed C
+  syntax compilation before the fix.
+- Verdict: confirmed and fixed.
+- Finding commit: `1ec5c95460` (`secp256k1: sanitize generated vector comments`)
+- Fix: shared `sanitize_c_comment()` replaces `*/` with `* /`; all three
+  generators use it, and `tools/wycheproof_utils.py` is now listed in
+  `Makefile.am` distribution inputs.
+- Focused verification: hostile generated headers compiled under `cc
+  -std=c11 -fsyntax-only` after the fix; all three returned `compile=0`.
+- Regeneration verification: ECDSA, ECDH, and Silent Payments production
+  headers remained byte-identical before and after the fix. Hashes were
+  `1e3c11ff4c5c83cbd0d79b3ede6a47309e2074f0f9432f3aef09e3bb2c9004c5`,
+  `040085b0859e4cc41105bfecec825c76c616fe89a703f8221807c6433ba9f3d2`, and
+  `8d88aead1f2f359aca31ac8c803001c55b1231be187839cafbe9c6959cedbbcc`.
+- Consumer validation: Clang 19 and GCC ECDSA/Silent Payments modules passed;
+  a fresh Clang 14 Release ECDH-enabled CMake build passed all ECDH tests,
+  including `test_ecdh_wycheproof`.
+- Learned suspicious surface: generated-source escaping and provenance across
+  C/C++, Rust, shell, manpage, build, and metadata generators. Extend the
+  catalog with goal `106`, `generated-source-boundaries`, and seed journal
+  `agent-journal/generated-source-boundaries.md`.
+- Goal/catalog commit: `72c09f6e2c` (`goal: add generated source boundary campaign`)
+- Catalog count after extension: 107 goals, IDs `0..106`
+- Catalog SHA-256: `fb4f3f314db4d15105120db4109ddb2bcfda208e26290a400ddb9028644d7a62`
+- Manifest SHA-256: `5769fb6a16ca00af236d50c081377375d6c1bb1a2642fab182b4b7e99bc18573`
+- Generator SHA-256: `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`
+- Random-run prompt SHA-256: `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`
+
 ## Cycle 305
 
 - Selected index: `69`

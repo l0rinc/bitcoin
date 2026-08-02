@@ -1,3 +1,56 @@
+# Cycle 306 Completion
+
+- The exact selector from the 105-goal catalog was `shuf -i 0-105 -n 1` ->
+  goal `39` (`deterministic-artifacts`). The dedicated branch is
+  `uber-cycle-306-deterministic-artifacts-20260802`. Cycle-start HEAD was
+  `ed71bceff261929dc735765286c95445bb89327d`; `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base equaled
+  `origin/master`; start divergence was `0 1411`; and the entry state-file
+  SHA-256 was
+  `6bf12a1ad8a24d884d684b1643389436d47f0f2095c73a66e9b571530c1e8d51`.
+- The selected Goal 39 queue excluded the fixed Silent Payments, headersync,
+  and MuSig2 determinism cells. The remaining vector-generator boundary had
+  unescaped external JSON comments. A hostile comment containing `*/`, a live
+  declaration, and `/*` broke out of generated C comments in ECDSA, ECDH, and
+  Silent Payments fixtures; each pre-fix generated header failed C syntax
+  compilation at the injected declaration.
+- The fix adds `sanitize_c_comment()` to `src/secp256k1/tools/wycheproof_utils.py`,
+  routes every external comment emission in the three generators through it,
+  and adds the already-required helper to `Makefile.am`'s `EXTRA_DIST`.
+  Finding commit `1ec5c95460` (`secp256k1: sanitize generated vector comments`)
+  is authored by `Lőrinc <pap.lorinc@gmail.com>`.
+- The same hostile fixtures compiled with `cc -std=c11 -fsyntax-only` after
+  the fix. Regenerating the trusted ECDSA, ECDH, and Silent Payments corpora
+  before and after was byte-identical. `py_compile` and `git diff --check`
+  passed. Clang 19 and GCC ECDSA/Silent Payments modules passed, and a fresh
+  Clang 14 Release ECDH-enabled CMake build passed all ECDH tests, including
+  `test_ecdh_wycheproof`.
+- The learned suspicious surface is generated-source escaping and provenance
+  across C/C++, Rust, shell, manpage, build, and metadata artifacts. Goal
+  `106`, `generated-source-boundaries`, was added with seed
+  `agent-journal/generated-source-boundaries.md`; its catalog commit is
+  `72c09f6e2c` (`goal: add generated source boundary campaign`). The catalog
+  now contains 107 contiguous goals `0..106`. Catalog SHA-256 is
+  `fb4f3f314db4d15105120db4109ddb2bcfda208e26290a400ddb9028644d7a62`,
+  manifest SHA-256 is
+  `5769fb6a16ca00af236d50c081377375d6c1bb1a2642fab182b4b7e99bc18573`, the
+  random selector prompt SHA-256 is
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`, and
+  the generator SHA-256 is
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`.
+- `git fetch origin master` followed by `git rebase origin/master` was a
+  no-op after the finding and goal commits. At this close before the state
+  commit, HEAD is `72c09f6e2c1eabdad8c319c42e61400114a962b2`,
+  `origin/master` remains `556988790a7f961693a8fd93f73725baea66476a`, and
+  divergence is `0 1414`. Tracked source work is clean. Existing untracked
+  probes, generated artifacts, and user files remain preserved.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were alive and untouched. No repository-completion
+  claim is made.
+- Verdict: **confirmed and fixed**. After this state-close commit, perform a
+  fresh gate, draw exactly one selector with `shuf -i 0-106 -n 1`, create a new
+  `uber-cycle-307-*` branch, and continue with the selected goal.
+
 # Cycle 305 Completion
 
 - The exact post-Cycle-304 selector was `shuf -i 0-104 -n 1` -> goal `69`
