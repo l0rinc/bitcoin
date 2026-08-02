@@ -554,3 +554,34 @@ Verdict: confirmed. The historical transaction rewrite introduced an unchecked f
 1. Review remaining migration-side writes and historical follow-ups for any unchecked persistence operation outside `ApplyMigrationData`.
 2. Compare current address-book and transaction migration behavior with old `c98fc...`, `7c9076...`, and `342c45...` transaction-boundary changes.
 3. Re-rank against non-wallet history cells after this cycle; do not repeat prior secret-lifetime, address-book-state, or public-validation campaigns.
+
+## Cycle 277: SQLite migration commit failure is an intentional fail-fast path
+
+### Selection and gate
+
+- Selector: exact `shuf -i 0-98 -n 1` draw `32`, `history-incomplete-fixes`.
+- Branch: `uber-cycle-277-whole-history-migration-20260802`.
+- Gate HEAD: `290da047ed09c1bfe4cc94765b918558bd3eb749`; `origin/master` at `556988790a7f961693a8fd93f73725baea66476a`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence `1343 45`.
+- Catalog, protocol, and corrected goal TSV hashes matched the uber state. The prior migration cells for `ApplyMigrationData` write returns, auxiliary settings cleanup, corrupt best-block handling, GUI load policy, empty `-connect`, and HTTP request retention were searched and excluded.
+
+### Hypothesis and independent evidence
+
+The historical migration bridge in `CWallet::MigrateToSQLite()` uses assertions for new-database creation, transaction begin, record writes, and the final `TxnCommit()`. The initial hypothesis was that a failed SQLite commit could fall through as success in a release build, allowing `MigrateLegacyToDescriptor()` to continue with a partially written replacement wallet. This would be a distinct migration-side persistence failure outside `ApplyMigrationData()`.
+
+The source and build policy falsify the release-fallthrough premise. `cmake/module/ProcessConfigurations.cmake` removes `NDEBUG` from every C++ configuration, and `src/util/check.h` has a compile-time error when `NDEBUG` is defined. The supported RelWithDebInfo binary therefore retains the assertion. The original implementation commit `e7b16f925ae` also explicitly documents each assertion as a critical condition where the original database is already deleted but a backup exists and execution must not continue. No later history or journal entry changes that contract.
+
+The product-path fault injection independently exercised the final commit failure. A legacy BDB wallet copied from the v28.2 migration fixture was opened in a fresh current regtest datadir. A daemon-only `LD_PRELOAD` shim returned `SQLITE_IOERR` for the first `COMMIT TRANSACTION`, and logged `commit=1 sql=COMMIT TRANSACTION`. The exact command used the wallet-enabled RelWithDebInfo `bitcoind` and `bitcoin-cli`; no default datadir or production wallet was touched. The daemon logged `SQLiteBatch: Failed to commit the transaction`, then the foreground run exited 134 with:
+
+`bitcoind: ./wallet/wallet.cpp:4020: bool wallet::CWallet::MigrateToSQLite(bilingual_str&): Assertion `committed' failed.`
+
+The migration RPC consequently returned EOF because the process intentionally terminated. The original BDB remained at `legacy_1785673789.legacy.bak`; the replacement `legacy/wallet.dat` was a SQLite file left by the failed transaction. This confirms the documented fail-fast behavior and the backup invariant, not a silent success or continuation bug. The first broad functional preload attempt was discarded as harness-only evidence because it preloaded the Python test runner and stopped before the target wallet; the corrected daemon-only run avoided that contamination.
+
+### Verdict and handoff
+
+Verdict: dismissed as a new defect. The observed process termination is severe for an injected local I/O failure, but it is the explicit fail-fast contract of the historical migration implementation, and supported builds cannot disable the assertion. Replacing it with a recoverable RPC error would be a policy change requiring a separate wallet recovery design, not an evidence-backed incomplete-fix patch for this cycle. No source or test commit is warranted. The next cycle should mine a different historical migration or compatibility cell and should not reopen these assertion lines unless a new supported build mode or a recurrence changes the contract.
+
+Next queue:
+
+1. Review historical migration changes outside `MigrateToSQLite()` and `ApplyMigrationData()`, especially reload, backup, path, and cleanup follow-ups not covered by cycles 167, 173, 193, 259, or 261.
+2. Compare current wallet migration tests with failure schedules that stop after the replacement database is created but before descriptor loading, excluding the already closed settings and auxiliary-wallet cleanup cell.
+3. Re-rank against the whole-history queue after the next fresh selector draw; do not manufacture a fix when the only evidence is an intentional assertion policy.
