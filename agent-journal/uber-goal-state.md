@@ -1,3 +1,65 @@
+# Cycle 302 Completion
+
+- The exact selector from the 102-goal catalog was `shuf -i 0-101 -n 1` ->
+  goal `100` (`append-only-file-allocation`). The dedicated branch is
+  `uber-cycle-302-append-only-file-allocation-20260802`. Cycle-start HEAD was
+  `61d868e7f6c5e26a1151d91ca8ec7c300735bc96`; `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base equaled
+  `origin/master`; start divergence was `0 1398`; and the entry state-file
+  SHA-256 was
+  `27a80656e342a14ba778fd2983450ec70bd99782649c61571de8c533a672ee69`.
+- The prior Linux/POSIX fallback fix was not repeated. Current `WIN32`
+  `AllocateFileRange()` still sought to `offset + length` and unconditionally
+  called `SetEndOfFile`, so a physical flat file longer than its logical append
+  point could be truncated. History commit `fdec41914f` independently records
+  the same missing physical-size guard as a public fix shape. A faithful
+  Windows-handle model reproduced `legacy_size=200 fixed_size=256
+  failed_seek_size=256` for a 256-byte file and a target end of 200.
+- The fix checks `GetFileSizeEx`, returns when the requested end is already
+  within the physical file, and checks `SetFilePointerEx` before
+  `SetEndOfFile`. The production-path regression
+  `flatfile_allocate_preserves_data_beyond_logical_end` uses a 256-byte file,
+  logical offset 100, and a one-byte extension across a 100-byte chunk. Finding
+  commit `c827a33a01` contains the Windows repair, regression, and selected-goal
+  journal, authored by `Lőrinc <pap.lorinc@gmail.com>`.
+- Rebuilding `/data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin` passed.
+  With a pre-created `/data/my_storage/tmp/cycle302-flatfile` scratch
+  directory, the focused test passed 10/10 assertions and `flatfile_tests`
+  passed 6/6 cases and 48/48 assertions. An earlier run without that `TMPDIR`
+  used the nearly-full/default temporary filesystem and failed in test setup
+  and disk-space preparation; it was explicitly rerun under the recorded
+  scratch directory and was not treated as product evidence. Linux compiled
+  and exercised the already-fixed POSIX branch; Windows execution was
+  unavailable, so the model plus cross-platform regression provide the Windows
+  evidence. `git diff --check` passed.
+- The learned risk shape is **physical state versus logical position across
+  platform-specific allocation APIs**. Goal 102,
+  `macos-preallocation-semantics`, was added to examine `F_PREALLOCATE`, its
+  ignored fallback/result, unconditional `ftruncate`, `off_t` conversion, and
+  exFAT/sparse/recovery behavior. Catalog extension commit `9e89cc23a3` added
+  the goal and seed journal. The source/fix commit is `c827a33a01`.
+- The requested rebase was performed after the source and goal commits with
+  `git fetch origin master` followed by `git rebase origin/master`; it was a
+  no-op with no conflicts. `origin/master` remains
+  `556988790a7f961693a8fd93f73725baea66476a`; current pre-state-close
+  divergence is `0 1400`. The catalog now has 103 contiguous goals `0..102`.
+  Catalog SHA-256 is
+  `210db13a445c13a00447bc460d115c5a1eba414e9058eb2373d86679b3c2bb7c` and
+  manifest SHA-256 is
+  `65766ed92bbfe1763c434b74ffa1667cc55de1cb1f7d4e4cd01f95a9a2710f80`.
+  The random prompt, generator, and protocol remain unchanged at
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`,
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  `78ca57acf308180c8e195e1f9c669724688b03baca4c423638549b8969f08bf1`.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were alive at close and untouched. Existing
+  untracked probes, model sources, generated artifacts, and user files remain
+  preserved.
+- Verdict: **confirmed and fixed**. No repository-completion claim is made.
+  After this state-close commit, perform a fresh gate, draw exactly one
+  selector with `shuf -i 0-102 -n 1`, create a new `uber-cycle-303-*` branch,
+  and continue with the selected goal.
+
 # Cycle 301 Completion
 
 - The exact selector from the 101-goal catalog was `shuf -i 0-100 -n 1` ->
