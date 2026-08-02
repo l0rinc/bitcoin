@@ -548,3 +548,26 @@ ephemeral_package_eval (c11), txgraph (c12), txorphanage_sim
 - mini_miner / txrequest mutation runs remain available (same
   shape, diminishing returns; queued only if a new signal
   appears).
+
+## Cycle 16 (2026-08-02, draw 260, raw=10150652524316948765): mini_miner mutation campaign — 4,400 runs, corpus 1,214->1,437 (+223 retained), zero crashes/artifacts; DISMISSED
+
+### Campaign
+FUZZ=mini_miner -max_total_time=640 -artifact_prefix=
+/tmp/mm_artifacts/ <corpus>:
+- 4,400 runs in 641s; corpus grew 1,214 -> 1,437 (+223 units).
+- Zero crashes, zero artifacts — notable: this is the target
+  that EXPOSED the original txgraph saturation bug
+  (3ae78dbd25's family, #105 c1); its CheckedFeePerWeightSum
+  guards + fuzz oracle held on every fresh case.
+
+### Verdict
+DISMISSED: the saturation-guard target is robust under fresh
+mutation. Mutation cells: 5/5 clean (ephemeral_package_eval,
+txgraph, txorphanage_sim, coinscache_sim, mini_miner).
+
+### Exact commands
+- campaign line above; census above.
+
+### Limitations / queue
+- txrequest remains the last available mutation target (queued
+  only on a new signal; the 5-cell sweep suffices).
