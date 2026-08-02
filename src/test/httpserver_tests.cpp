@@ -1197,6 +1197,52 @@ BOOST_AUTO_TEST_CASE(http_server_socket_tests)
     server.StopListening();
 }
 
+BOOST_AUTO_TEST_CASE(http_server_pipelined_request_backpressure)
+{
+    constexpr std::string_view first_request{"GET /first HTTP/1.1\r\nConnection: close\r\n\r\n"};
+    constexpr std::string_view second_request{"GET /second HTTP/1.1\r\nConnection: keep-alive\r\n\r\n"};
+
+    std::atomic_bool handler_started{false};
+    std::atomic_bool release_handler{false};
+    std::shared_ptr<HTTPRemoteClient> client;
+    HTTPServer server{[&](std::unique_ptr<HTTPRequest>&& req) {
+        client = req->m_client;
+        handler_started.store(true, std::memory_order_release);
+        while (!release_handler.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+        req->WriteReply(HTTP_OK);
+    }};
+
+    CService addr_bind{Lookup("0.0.0.0", /*portDefault=*/0, /*fAllowLookup=*/false).value()};
+    BOOST_REQUIRE(server.BindAndStartListening(addr_bind));
+    server.StartSocketsThreads();
+
+    const std::string pipelined_requests{std::string{first_request} + std::string{second_request}};
+    ConnectClient(std::as_bytes(std::span{pipelined_requests}));
+
+    int attempts{6000};
+    while (!handler_started.load(std::memory_order_acquire)) {
+        std::this_thread::sleep_for(10ms);
+        BOOST_REQUIRE(--attempts > 0);
+    }
+
+    const std::vector<std::byte> remaining{ToBytes(second_request)};
+    BOOST_CHECK_EQUAL(client->m_recv_buffer.size(), remaining.size());
+    BOOST_CHECK(std::ranges::equal(client->m_recv_buffer, remaining));
+
+    release_handler.store(true, std::memory_order_release);
+    attempts = 6000;
+    while (server.GetConnectionsCount() != 0) {
+        std::this_thread::sleep_for(10ms);
+        BOOST_REQUIRE(--attempts > 0);
+    }
+
+    server.InterruptNet();
+    server.JoinSocketsThreads();
+    server.StopListening();
+}
+
 BOOST_AUTO_TEST_CASE(http_socket_error_tests)
 {
     // Create a tiny threadpool for the HTTPRequest handler
