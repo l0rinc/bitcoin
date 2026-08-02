@@ -1,3 +1,58 @@
+# Cycle 303 Completion
+
+- The exact post-Cycle-302 selector was `shuf -i 0-102 -n 1` -> goal `15`
+  (`public-object-validation`). The dedicated branch is
+  `uber-cycle-303-public-object-validation-20260802`. Cycle-start HEAD was
+  `9f9184f137b66e20962b4b6042dc548bdd47c597`; `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base equaled
+  `origin/master`; start divergence was `0 1401`; and the entry state-file
+  SHA-256 was
+  `35e9452749f55b5e5f06743ba20007f2438dd1d68508d43d0c0c23dbfb03fcf3`.
+- The prior PSBT serialized-key identity, Taproot x-only metadata,
+  compact-header, and descriptor-inference cells were excluded. Direct BIP32
+  extended-public-key decoding already clears a serialized key unless
+  `IsFullyValid()` succeeds. A temporary malformed Base58Check xpub probe was
+  rebuilt in `/data/my_storage/tmp/cycle246-wallet` and passed its focused
+  `bip32_tests` case with no errors. The first run failed only because the
+  isolated `TMPDIR` did not exist; after creating it, the rerun passed. The
+  temporary probe was removed before close.
+- A second temporary probe established the intentional P2PK boundary. A
+  syntactically valid but off-curve compressed key in a P2PK script remains a
+  `PubKeyDestination`, is not fully curve-valid, round-trips through
+  `GetScriptForDestination()`, and has no address encoding. The focused
+  `script_standard_tests` case passed all five checks after creating
+  `/data/my_storage/tmp/cycle303-p2pk-probe`; the modified `test_bitcoin`
+  target rebuilt cleanly, and the probe was removed. This is raw consensus
+  script representation, not a defect, so no source commit was made.
+- The learned suspicious surface is the no-error-channel constructor
+  `XOnlyPubKey(const CPubKey&)`, which uses `std::span{pubkey}.subspan(1, 32)`.
+  Goal 103, `xonly-cpubkey-preconditions`, maps every caller for empty, short,
+  syntax-only, and off-curve inputs while preserving raw script semantics.
+  Its catalog/seed commit is `82f4e88b80`; the selected-goal journal close is
+  `d36e6cd194`. The adjacent wallet `fSkipCheck` observation remains a later
+  queue item because existing history makes that load-time optimization
+  intentional and no supported defect was independently reproduced.
+- The requested rebase was performed after the cycle journal and goal commits
+  with `git fetch origin master` followed by `git rebase origin/master`; it was
+  a no-op with no conflicts. At this state close, `origin/master` remains
+  `556988790a7f961693a8fd93f73725baea66476a`, divergence is `0 1403`, and the
+  tracked source worktree is clean. Catalog count is 104 contiguous goals
+  `0..103`. Catalog SHA-256 is
+  `6ab27a9d21d866210694348713a6cecc2c4bf407fa4615986c8f482fba95747f` and
+  manifest SHA-256 is
+  `6e9293b051a131b95b4023d846ce3a05f25f11f86c727ce8fe68e45a0fa1137b`.
+  The random selector prompt and generator remain
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2` and
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were alive and untouched. Existing untracked
+  probes, generated artifacts, and user files remain preserved.
+- Verdict: **dismissed as a current parser/representation defect; learned
+  boundary recorded**. No repository-completion claim is made. After this
+  state-close commit, perform a fresh gate, draw exactly one selector with
+  `shuf -i 0-103 -n 1`, create a new `uber-cycle-304-*` branch, and continue
+  with the selected goal.
+
 # Cycle 302 Completion
 
 - The exact selector from the 102-goal catalog was `shuf -i 0-101 -n 1` ->
