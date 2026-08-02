@@ -74,6 +74,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 16 | api-misuse-resistance | CYCLE-4 | 2026-08-02 | lineage repair x2: journal restored + null-destroy fix (55f1fa334f) re-landed with regression test; upstream still vulnerable; CONFIRMED+REPAIRED |
 | 61 | stateful-contract-fuzzing | CYCLE-3 | 2026-07-28 | sigcache oracle (a4ff67417e); c2/c3 assessments all already-strong; triage guidance updated |
 | 30 | security-logging | CYCLE-3 | 2026-07-28 | 2 injection fixes; amplification dismissed by design (0 bytes at default, 14.6KB/round at -debug) |
+| 30 | security-logging | CYCLE-5 | 2026-08-02 | URI-on-exception safe by design (no secret-bearing URIs, body/auth never logged); DISMISSED |
 | 31 | cross-layer-contracts | CYCLE-3 | 2026-07-28 | +gettxoutsetinfo use_index restriction (9396f0b414); 3 doc/RPC layer fixes total |
 | 29 | dead-stale-code | CYCLE-2 | 2026-07-28 | util/common + node/wallet/script scans clean; SAFE_CHARS_FILENAME parked |
 | 17 | build-matrix-modules | CYCLE-3 | 2026-07-28 | c1-c3 all clean (fbe821c003, own branch) |
@@ -981,6 +982,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 207 (26-campaign eligible set): raw=
+   4599885279918200254 (63-bit) -> idx 8 -> #30 c5 (URI-on-
+   exception: safe by construction; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30}.
    RE-RANK draw 206 (27-campaign eligible set): raw=
    13014474695973678266, masked 3791102659118902458 -> idx 9 ->
    #31 c5 (docs extraction: zero falsely-parseable; DISMISSED).
