@@ -1008,6 +1008,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 233 (3-cell pool): raw=17388002019312348372,
+   masked 8164629982457572564 -> idx 1 -> #100 >int64 tail —
+   ABSORBED by #48 c5 (postscript recorded).
+   Pool after 233 (2): v22 real banlist migration, lineage
+   re-sweep.
    RE-RANK draw 232-redraw (4-cell pool): raw=
    1432272597518399293 (63-bit) -> idx 1 -> #28 c4 (mask-arm
    mutant killed 3x; DISMISSED).
