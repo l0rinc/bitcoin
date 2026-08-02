@@ -2,6 +2,66 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 259 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact
+  selector `shuf -i 0-98 -n 1` drew goal `32`
+  (`history-incomplete-fixes`). The dedicated branch is
+  `uber-cycle-259-whole-history-migration-mining-20260802`. Start HEAD was
+  `5cc4012b2b84a6a1c2e5c5ec05b23d0d10526601`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1307 45`
+  (`HEAD...origin/master`).
+- Catalog, prompt, goals TSV, and protocol hashes were unchanged:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  The tracked/index gate and `git diff --check` passed. Existing untracked
+  agent/user artifacts, package files, `node_modules/`, and `test/cache/` were
+  preserved and excluded.
+- The historical seed was upstream commit
+  `97b882113e02a5149396c9ed6879e46e6daa1f13`, which followed up the old HTTP
+  dispatcher by reading one request at a time. On this branch's old code,
+  `MaybeDispatchRequestsFromClient` parsed every complete pipelined request
+  into an unbounded per-client `m_req_queue` before checking `m_req_busy`.
+  A blocked first handler could therefore retain request objects, bodies, and
+  client back-references without a per-client parsed-request bound.
+- The independent regression `http_server_pipelined_request_backpressure`
+  sent two complete requests through one `DynSock` receive and blocked the
+  first handler. The pre-fix Clang 19 worktree failed with
+  `m_recv_buffer.size() == 0` instead of `48`, and the second byte comparison
+  failed; the process exited 201 with 2 of 5 assertions failed. The fixed
+  worktree left the second request buffered until the first handler was
+  released.
+- Finding commit
+  `fe663933283969898f10ab4bf2a5fa7a17691397` (`http: bound parsed pipelined
+  requests per client`) was authored as `Lőrinc <pap.lorinc@gmail.com>` and
+  includes the source, regression, and selected-journal update. It replaces
+  the parsed-request deque with one pending request, dispatches in order, and
+  releases pending ownership on graceful and forced disconnect. It does not
+  claim a global raw receive-buffer, worker-queue, or endpoint-work bound.
+- Fixed validation rebuilt `test_bitcoin` in the isolated Clang 19 build with
+  `cmake --build /data/my_storage/tmp/cycle243-build --target test_bitcoin -j2`.
+  `httpserver_tests` then passed all 9 cases and 352 assertions, including the
+  new regression and existing socket-error/pipeline coverage. The pre-fix
+  worktree used a separate Clang 19 build with `-DENABLE_IPC=OFF`; the initial
+  configure's Cap'n Proto incompatibility was resolved by that documented
+  option and was not a product failure.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` remained alive and untouched. The fixed test process
+  and pre-fix test process have exited; disposable build/worktree artifacts
+  remain under `/data/my_storage/tmp/cycle259-*`. `/` remains full, so no
+  scratch data was placed there.
+- Selected-goal journal close is included in `fe66393328` at
+  `agent-journal/history-incomplete-fixes.md`. Verdict: **confirmed and
+  fixed**. Do not repeat the REST count or parsed HTTP-request queue cells
+  without a new caller, backend, lifecycle, or recurrence.
+- The next cycle must perform a fresh gate, fetch `origin/master`, draw exactly
+  one selector from `0..98`, and create a new `uber-cycle-260-*` branch. Keep
+  the remaining raw HTTP receive-buffer and worker scheduling questions as
+  separate evidence cells.
+
 ## Cycle 258 Completion
 
 - The fresh gate fetched `origin/master` successfully before branch creation. The
