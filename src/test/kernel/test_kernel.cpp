@@ -1528,6 +1528,7 @@ BOOST_AUTO_TEST_CASE(btck_abi_layout_battery)
     BOOST_CHECK_EQUAL(sizeof(btck_ValidationInterfaceCallbacks), 48U);
     BOOST_CHECK_EQUAL(sizeof(btck_NotificationInterfaceCallbacks), 72U);
     BOOST_CHECK_EQUAL(sizeof(btck_LoggingOptions), 20U);
+}
 BOOST_AUTO_TEST_CASE(btck_destroy_null_tests)
 {
     // All btck_*_destroy functions accept a null pointer, matching the
