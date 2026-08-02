@@ -322,6 +322,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 42 | ci-review-bot-followup | CYCLE-7 | 2026-08-02 | watch: static; F13/F14/F17 offerable, accumulate hygiene offer noted; PRs open |
 | 42 | ci-review-bot-followup | CYCLE-8 | 2026-08-02 | watch: static; quiet |
 | 42 | ci-review-bot-followup | CYCLE-9 | 2026-08-02 | variant: 26 author PRs open; radar branches pre-PR; static |
+| 42 | ci-review-bot-followup | CYCLE-10 | 2026-08-02 | event-trigger sweep: all quiet |
 | 10 | fuzz-target-gaps | CYCLE-3 | 2026-07-29 | load_wallet widened (crypted/ACTIVE*SPK/BESTBLOCK); LoadActiveScriptPubKeyMan assert on corrupt DB documented (upstream-matching) |
 | 80 | fuzz-engine-differential | CYCLE-6 | 2026-07-29 | MuSig2 PSBT seeding: differential clean (A=0, E=100); format-from-source worked first try |
 | 95 | database-semantics-differential | CYCLE-5 | 2026-07-31 | write-flush-windowed kill: _Exit inside all 4 batch commits (idx/coins/shutdown); identical tip recovery, 0 corruption; DISMISSED |
@@ -1042,6 +1043,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   RE-RANK draw 258: raw=12724671350429090044 -> event-trigger
+   sweep (master/radar/qa-assets: all quiet).
    RE-RANK draw 257: raw=12184613341022450052 -> #79 c14
    (txgraph corpus stewardship: 3,468 units, cov measured).
    RE-RANK draw 253 (1-target pool): raw=16849002992585107402

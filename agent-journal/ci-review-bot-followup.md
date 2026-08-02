@@ -384,3 +384,17 @@ tracked cells; the radar branches remain pre-PR.
 ### Limitations / queue
 - PR-body alignment of the 26 against our journals not swept
   (only the tracked 5 + radar branches checked).
+
+## Cycle 10 (2026-08-02, draw 258, raw=12724671350429090044): event-trigger sweep — all three quiet (master 556988790a, radar 864 unchanged, qa-assets pin 918cdd3 still == upstream HEAD)
+
+### Sweep
+- origin/master: static (0 new since c8).
+- l0rinc branches: 864, no new, no force-updates since c15.
+- qa-assets upstream HEAD: still 918cdd3 == the CI pin (#59
+  c3's pin remains current; no review-forward needed).
+
+### Verdict
+Quiet across all triggers; nothing actionable.
+
+### Exact commands
+- git fetch origin master / l0rinc / qa-assets (lines above).
