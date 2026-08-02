@@ -588,3 +588,50 @@ When reviewing a configurable parallel or asynchronous feature, apply this seque
 **Recipe confirmed; no new production defect found on current HEAD.** PR `#35295` supplies the complete lifecycle and independent review evidence; `c7af7477` demonstrates the incomplete-parser-only control; and `3873d90` demonstrates why worker-count boundary coverage must be added separately. The focused chainstate tests passed all 2068 assertions. No implementation commit is warranted in this history-only cycle.
 
 Next queue: draw another eligible goal. If goal 90 repeats, select a fourth history cluster unrelated to PSBT verification, relay reservations, and configurable parallel features, and preserve this recipe under the fingerprint `configurable-parallel-feature-lifecycle`.
+
+## Cycle 287 close: typed wallet metadata migration and malformed replacement-ID rejection
+
+### Gate and selection
+
+The exact selector `shuf -i 0-98 -n 1` returned `90`. The cycle branch was `uber-cycle-287-historical-knowledge-recipes-20260802`. The gate started at `654a7b936b6613eea10f9b94403a43c42c01f651`, with `origin/master` at `556988790a7f961693a8fd93f73725baea66476a`, merge base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and divergence `45 1364`. The gate state hash was `1c3f591b64d91df93ea1f4f054b943c88a23d80c2a342334f0999601f9f3a01a`. Catalog, prompt, TSV, and protocol hashes matched the uber-goal state. Protected long-running test processes were present and were left untouched.
+
+The prior-finding search excluded the recently used recipes for scoped cross-build diagnostics, configurable parallel feature lifecycle, resource-bound duplicate suppression, and the immediately preceding stale-code campaign. This cycle used PR #32763, `wallet: Replace CWalletTx::mapValue and vOrderForm with explicit class members`, as the primary history cluster. The GitHub evidence endpoints were the PR, commit, review, review-comment, and issue-comment API views for `bitcoin/bitcoin#32763`.
+
+### History recipe
+
+PR #32763 migrated opaque `CWalletTx::mapValue` and `vOrderForm` entries to typed members while preserving the serialized representation through temporary compatibility maps. Its ten-commit sequence separated semantic field groups, removed old writers, and ended by making order-form fields explicit. Review evidence established reusable rules:
+
+1. Convert one semantic field group at a time and search every producer, consumer, RPC, GUI, test, and serializer path.
+2. Preserve the wire format deliberately during migration, but record which unknown or obsolete fields are allowed to disappear and which must fail closed.
+3. Treat reviewer objections as contract evidence. The request to reject unknown metadata prevented silent loss, while the request to validate malformed replacement IDs was left unresolved in the merged code.
+4. Test round trips, old-wallet migration, malformed known values, unknown keys, output behavior after failure, and at least one held-out typed-migration surface.
+5. Re-evaluate forward and backward compatibility after every conversion step; do not infer correctness from typed storage or a passing happy-path test alone.
+
+The recipe fingerprint is `typed-wallet-metadata-migration-with-serialization-boundary`. A future migration touching map-backed metadata should begin with a field/consumer/serialization matrix, then add negative tests before deleting the old representation.
+
+### Confirmed current defect
+
+The current `CWalletTx::Unserialize` path rejected unknown string-map keys but handled known `replaces_txid` and `replaced_by_txid` values by assigning `Txid::FromHex(value)` directly to an optional. A malformed persisted value therefore became `nullopt`, and a later serialization silently omitted the metadata. This is a data-loss behavior at the wallet persistence boundary, not merely a review-style discrepancy.
+
+The old-source control was built in `/data/my_storage/tmp/cycle214-build` and the focused test failed twice with `std::runtime_error expected but not raised`, once for each replacement-ID key. The fix now checks both parses and throws a specific `std::runtime_error` when either value is invalid. `wallet_transaction_tests/malformed_replacement_txids_throw` constructs the serialized record directly and verifies both keys fail closed. The complete `wallet_transaction_tests` suite also exercises the existing round-trip case.
+
+The source/test change is intentionally independent of the historical recipe: it is one small parser contract fix with its regression oracle. No compatibility behavior outside malformed known replacement IDs was changed.
+
+### Held-out evidence and validation
+
+PR #35084, `ipc: Add nonunix platform support`, was used as a held-out cross-domain control. Its review pattern covered staged type aliases, lifecycle ordering, platform includes, moved tests, and documentation updates. The current IPC test command passed 2 test cases and 44 assertions, so the history recipe was not overfit to wallet serialization.
+
+Validation completed for this cycle:
+
+```text
+wallet_transaction_tests/malformed_replacement_txids_throw: 1 test case, 2 assertions passed
+wallet_transaction_tests: 2 test cases, 52 assertions passed
+wallet_bumpfee.py: full functional test passed, including metadata persistence
+ipc_tests: 2 test cases, 44 assertions passed
+```
+
+The legacy wallet migration functional test could not run because the required previous-release binaries were unavailable; it exited with the test framework's missing-release status. That is an environment limitation, not evidence against the parser fix. The initial old-source test attempt also lacked its `TMPDIR`; after creating isolated scratch directories, the old failure and repaired pass were reproduced cleanly.
+
+### Verdict and handoff
+
+The history recipe is confirmed, and one current production defect was independently verified and fixed. The selected journal, source, and regression test belong in one source commit. The uber-goal state close must be a separate commit so another cycle can identify the exact source and state checkpoints. Next queue: run the exact selector again, exclude `typed-wallet-metadata-migration-with-serialization-boundary`, and choose a distinct eligible goal.

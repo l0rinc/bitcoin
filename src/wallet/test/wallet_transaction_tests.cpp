@@ -4,6 +4,7 @@
 
 #include <wallet/transaction.h>
 
+#include <streams.h>
 #include <test/util/common.h>
 #include <wallet/test/wallet_test_fixture.h>
 
@@ -20,6 +21,30 @@ BOOST_AUTO_TEST_CASE(roundtrip)
             BOOST_CHECK_EQUAL(TxStateSerializedBlockHash(state), uint256{hash});
             BOOST_CHECK_EQUAL(TxStateSerializedIndex(state), index);
         }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(malformed_replacement_txids_throw)
+{
+    const CTransactionRef tx{MakeTransactionRef(CMutableTransaction{})};
+    const TxState state{TxStateInactive{}};
+
+    for (const char* key : {"replaces_txid", "replaced_by_txid"}) {
+        DataStream stream{};
+        stream << TX_WITH_WITNESS(tx)
+               << TxStateSerializedBlockHash(state)
+               << std::vector<uint8_t>{}
+               << TxStateSerializedIndex(state)
+               << std::vector<uint8_t>{}
+               << std::map<std::string, std::string>{{key, "not-a-txid"}}
+               << std::vector<std::pair<std::string, std::string>>{}
+               << uint32_t{0}
+               << 0U
+               << false
+               << false;
+
+        CWalletTx wtx{nullptr, TxStateInactive{}};
+        BOOST_CHECK_THROW(stream >> wtx, std::runtime_error);
     }
 }
 

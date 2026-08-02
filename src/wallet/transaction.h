@@ -321,8 +321,15 @@ public:
             else if (key == "message") m_message = value;
             else if (key == "comment") m_comment = value;
             else if (key == "to") m_comment_to = value;
-            else if (key == "replaces_txid") m_replaces_txid = Txid::FromHex(value);
-            else if (key == "replaced_by_txid") m_replaced_by_txid = Txid::FromHex(value);
+            else if (key == "replaces_txid") {
+                const auto txid{Txid::FromHex(value)};
+                if (!txid) throw std::runtime_error("Invalid replaces_txid value in CWalletTx string value map");
+                m_replaces_txid = *txid;
+            } else if (key == "replaced_by_txid") {
+                const auto txid{Txid::FromHex(value)};
+                if (!txid) throw std::runtime_error("Invalid replaced_by_txid value in CWalletTx string value map");
+                m_replaced_by_txid = *txid;
+            }
             else {
                 throw std::runtime_error("Unexpected value in CWalletTx strings value map");
             }
