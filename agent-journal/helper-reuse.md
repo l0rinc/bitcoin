@@ -182,3 +182,37 @@ finding per campaign charter; minimal-diff, no new dependencies.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-08-02, draw 216, raw=6114129767934136255 (63-bit), idx 10/15): duplicate-family census — DecodeHexTx all-shared; the AmountFromValue/ParseHexUV near-twins are binary-separated by design (CLI vs RPC error envelopes); queue EMPTY
+
+### Census (post c1-c3 closures)
+- DecodeHexTx: 13 call sites across 8 files, ALL through the
+  shared core_io helper — no local copies.
+- AmountFromValue: TWO implementations with identical 6-line
+  logic — bitcoin-tx.cpp:555-563 (static, runtime_error,
+  decimals=8 inline) and rpc/util.cpp:98-108 (JSONRPCError,
+  decimals param). NOT an exact duplicate: the exception types
+  differ by binary contract (CLI tool errors vs RPC envelope),
+  and bitcoin-tx does not link the RPC util TU — sharing would
+  ADD a cross-binary dependency for 6 lines, against the
+  minimal-helper-extension rule. Classified: near-twin by
+  design, not a dedup candidate.
+- ParseHexUV: same shape (per-binary copies, CLI/RPC error
+  split) — same classification.
+- ParseFixedPoint: single strencodings implementation, both
+  wrappers call it (no logic duplication at the parse layer).
+
+### Verdict
+Queue EMPTY: every exact-duplicate family found by the census
+is already closed (mempool c1, PSBT x7 c2+c3); the surviving
+near-twins are contract-separated per binary. No commit
+manufactured (journal-only per policy).
+
+### Exact commands
+- grep DecodeHexTx/ParseFixedPoint censuses above; sed reads
+  bitcoin-tx.cpp:550-575, rpc/util.cpp:96-115.
+
+### Limitations / queue
+- qt/GUI helper copies remain deprioritized.
+- A future shared CLI-RPC error-mapping helper would only pay
+  off if a THIRD copy appears (standing rule from c3).
