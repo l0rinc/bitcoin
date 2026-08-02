@@ -1632,6 +1632,22 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    CI cache keys, header-cost -ftime-report).
 
 ## Handoff
+Updated after every rotation. PROGRAM STATE 2026-08-02 (session
+summary): the full 110-goal catalog has been cycled; the corpus
+import program is COMPLETE (112,382 upstream qa-assets seeds
+validated through the fork's hardened build across 8 families,
+zero crashes/Assume aborts, plus 3 mutation campaigns clean:
+ephemeral_package_eval ft 110,667, txgraph 420,878 runs
+scratch->4,586-unit corpus, txorphanage_sim 67,241 runs);
+consolidated regression sweep green (test_bitcoin + test_kernel
++ 7-instance functional subset on the integrated lineage);
+watches (#42/#65/#60) moved to merge-event-triggered cadence
+after 3 consecutive zero-deltas. Open items: URGENT.md (10
+entries: 1 🔴 UTXO-scan race upstream-only, 1 🟡 txgraph
+retained capacity with author fix in flight, rest ✅/fixed);
+offerable-upstream set F13/F14/F17 + hygiene accumulate;
+adoption watch on l0rinc/txgraph-retained-entry-usage.
+## Handoff
 Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 (mechanically rebuilt from table rows 2026-07-28): 3, 5, 6(EXHAUSTED), 8, 11, 12,
 13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 108(COMPLETE 2026-08-01), 73(COMPLETE 2026-08-01), 45(COMPLETE 2026-08-01), 81(EXHAUSTED 2026-08-01), 74(COMPLETE 2026-08-01), 50(COMPLETE 2026-08-01), 35(COMPLETE 2026-08-01), 59(COMPLETE 2026-08-01), 93(COMPLETE 2026-08-01), 100(COMPLETE 2026-08-01), 40(COMPLETE 2026-08-01), 109(COMPLETE 2026-08-01), 67(COMPLETE 2026-08-01), 36(COMPLETE 2026-08-01), 47(COMPLETE 2026-08-01), 78(COMPLETE 2026-08-02), 95(COMPLETE 2026-08-02), 80(COMPLETE 2026-08-02), 24(COMPLETE per its own journal: 6 cycles, 2026-07-30), 101(EXHAUSTED 2026-08-02), 34(EXHAUSTED 2026-08-02), 57(EXHAUSTED 2026-08-02), 69(EXHAUSTED 2026-08-02), 7(EXHAUSTED 2026-08-02), 20, 26, 27, 33, 41(EXHAUSTED 2026-07-31), 52, 55(EXHAUSTED 2026-07-31), 71(EXHAUSTED 2026-07-31),
