@@ -714,6 +714,26 @@ BOOST_AUTO_TEST_CASE(ccoins_access)
     }
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_access_by_txid_multi_output)
+{
+    CCoinsViewTest base{m_rng};
+    CCoinsViewCache cache{&base};
+    const Txid txid{Txid::FromUint256(m_rng.rand256())};
+
+    // The first output is spent, while the first unspent output is sparse and
+    // has a nonzero index. AccessByTxid must not assume vout 0 is representative.
+    const COutPoint spent{txid, 0};
+    cache.AddCoin(spent, Coin{CTxOut{1, CScript{}}, 1, false}, /*possible_overwrite=*/false);
+    BOOST_CHECK(cache.SpendCoin(spent));
+
+    const COutPoint unspent{txid, 1};
+    const Coin expected{CTxOut{2, CScript{}}, 1, false};
+    cache.AddCoin(unspent, Coin{expected}, /*possible_overwrite=*/false);
+
+    const Coin& actual{AccessByTxid(cache, txid)};
+    BOOST_CHECK(actual == expected);
+}
+
 static void CheckSpendCoins(const CAmount base_value, const MaybeCoin& cache_coin, const MaybeCoin& expected)
 {
     SingleEntryCacheTest test{base_value, cache_coin};
