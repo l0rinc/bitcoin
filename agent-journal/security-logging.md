@@ -287,3 +287,37 @@ only log assertion was the success path (DebugLogHelper
 
 ## Rotation note
 Four bounded cycles complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 5 (2026-08-02, draw 207, raw=4599885279918200254 (63-bit), idx 8/26): httpserver URI-on-exception — safe by design (no Core endpoint accepts secrets via URI; body/auth never logged); DISMISSED
+
+### Question (parked since c1)
+On an RPC/REST handler exception, httpserver.cpp:178/181 logs
+req->GetURI() at WARNING level — could the URI carry secrets
+into the log?
+
+### Evidence
+- RPC: all calls POST to target '/' with JSON in the BODY; the
+  URI is constant and secret-free. Auth is the Authorization
+  header — the failure path (httprpc.cpp:216-217) logs ONLY
+  peerAddr, never the header/credentials.
+- REST (rest.cpp): URI paths carry block/tx HASHES and heights
+  only — public chain data, no secret class.
+- The parse-error arms (:1097-1118) log origin/id/e.what() —
+  e.what() is the parser's own message, not client data.
+- The exception reply body (:183-186) echoes e.what() to the
+  AUTHENTICATED caller only (same trust domain).
+
+### Verdict
+DISMISSED: the URI-on-exception log is safe by construction —
+no Core endpoint accepts secrets via URI, and the body/auth
+channels are never logged. Belt-and-braces suppression would
+defend nothing; parked cell closed.
+
+### Exact commands
+- sed httpserver.cpp:170-195, 1094-1118; httprpc.cpp:213-223.
+
+### Limitations / queue
+- Third-party handlers registered via RegisterHTTPHandler
+  (none in-tree) would inherit the same log line — contract
+  note, not a current leak.
+- AttachChain/init-time rescan context remains queued (c4 note).
