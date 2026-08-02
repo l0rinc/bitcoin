@@ -49,6 +49,62 @@ Verdict: dismissed for this cycle. The mainnet-parameter fixture is a useful add
 
 # Release-to-release behavioral and consensus differential
 
+## Cycle 275: funded and encrypted wallet migration
+
+### Selection, gate, and distinct scope
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `67` (`release-version-differential`); no reroll.
+- Branch: `uber-cycle-275-release-version-differential-20260802`.
+- Cycle-start HEAD: `d8744a048b4c8160c459e984e94f98285aa1a85a`; `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1339 45`; state hash at gate: `07ef6a3f7e533610d5819ad7711b3bb84c01f8a4685d425674a350b8ee8efcb5`.
+- Catalog, prompt, goals TSV, and protocol hashes passed unchanged. Protected processes `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` were alive and untouched.
+- Prior Goal 67 cells excluded: the current/v31.1 RPC and genesis matrix, v28.4/current empty legacy-wallet migration, current/v31.1 P2P transcripts, v28.2/v31.0/v31.1/current synthetic mainnet-style blocks, and prune/persistence. This cycle selected the previously open funded/encrypted wallet migration cell.
+
+### Hypothesis and controls
+
+The hypothesis was that migrating a non-empty, encrypted v28.4 BDB wallet could lose matured funding, outgoing transactions, labels, keypool state, encrypted keys, backup bytes, descriptor ownership, or post-restart spendability in current relative to v28.4. The trust boundary was the exact BDB wallet bytes, the two release-tagged/current migration implementations, wallet RPC state, SQLite descriptor records, transaction/block fixtures, and restart behavior.
+
+The fixture producer was `/data/my_storage/tmp/cycle167-release28-wallet/src/bitcoind` at source commit `de328509029d36b0541ddf25700ac19a0de6a5c8` (`v28.4-6-gde32850902`). The current wallet-enabled pair was `/data/my_storage/tmp/cycle246-wallet/bin/{bitcoind,bitcoin-cli}`, built from the cycle HEAD. All datadirs, credentials, ports, and logs were under `/data/my_storage/tmp/cycle275-release-wallet/`; no default datadir, mainnet key, or protected process was used.
+
+An initial fixture attempt was retained as setup control: mocktime was set after wallet creation, so the wallet birth time correctly excluded the generated blocks, and the recipient wallet had private keys disabled. A corrected fixture set mocktime `1786000000` before wallet creation and used private-key-enabled wallets. A restart without explicit mocktime also correctly rejected the synthetic future-dated blocks; all comparison restarts used `-mocktime=1786000000`. The current daemon's initial `-upnp=0` launch was rejected before initialization because that option is no longer accepted; the corrected current launch omitted it. These controls were not release findings.
+
+### Fixture and byte identity
+
+The corrected v28.4 `legacy` BDB wallet mined 110 blocks to `bcrt1qlx236m9y8va4kzrj3557alk595wwukyjd9c6fj`, sent `1.25` BTC to the private-key-enabled recipient address `bcrt1qm7hk33ruz3787xa8c6auzujtz6ht69ac4t0ssg`, and mined one confirmation. The source wallet then had height 111, `txcount=112`, balance `548.74998590`, immature balance `5000.00001410`, the `funding` label, a `pre-encryption` key, and a populated keypool with 1,000 external and 999 internal entries. The outgoing transaction was `19fdd36e8937af1bf2b4c313625b8ef0f85c9cd1425d7575892c701477e951a1`.
+
+`encryptwallet cycle275-passphrase` succeeded, flushed the keypool, and generated a new HD seed as documented by v28.4. The encrypted source `wallet.dat` was 1,294,336 bytes with SHA-256 `28cafe7fd9036aa05bd4d5fc08b0208dad0880238f6d5f886e1cc284c77cb912`. The same file bytes were copied into independent v28.4 and current migration datadirs; both copies retained that exact hash. An explicit pre-migration `backupwallet` control was also created (`v284-encrypted-backup.dat`, 1,294,336 bytes, SHA-256 `062f4e8ae5494b123078a4399b1702c80a048a44a3f22dea34dd21e2be661598`).
+
+### Migration execution and normalized results
+
+The v28.4 RPC accepts `migratewallet wallet_name passphrase`; passing the current third `load_wallet` argument returned its help text without mutating the wallet. Current accepts the third argument and completed with `load_wallet=true`. The v28.4 and current migrations both returned `wallet_name=legacy` and produced a 1,294,336-byte backup with SHA-256 `28cafe7fd9036aa05bd4d5fc08b0208dad0880238f6d5f886e1cc284c77cb912`. The release reported the backup as `.../wallets/legacy/legacy_1786000000.legacy.bak`; current reported `.../wallets/legacy_1786000000.legacy.bak`.
+
+After unlocking both wallets, each reported SQLite format, descriptor mode, `txcount=112`, `keypoolsize=4000`, `keypoolsize_hd_internal=4000`, trusted balance `548.74998590`, immature balance `5000.00001410`, and the same last processed block at height 111. Each exposed 14 descriptors. Canonical `listdescriptors false` output matched at SHA-256 `0473dccd79476112297a4a4d54b6282ccf65a77a93bae6f4a710ac0b9934a7c6`; a normalized 20-entry `listtransactions` projection matched at `40c75d857640fea6348c5858cab8a1e8ca81c493c72c170f41d9159230f05acb`. `listunspent` had 11 entries totaling `548.74998590`, with the same two owned addresses and `funding` label. `getbalances` differed only by current's additional `nonmempool: 0.00000000` field.
+
+Both wallets generated the same labeled post-migration address `bcrt1q6tte73e4tx5qsu04hly5vdhkec3cgrjjahqk77`. Sending `0.5` BTC to the common recipient produced the same txid `e865af52574e3c84621ee8c5bc928d79bcd109ee4c1bb3d429d74402c0844680` and fee `0.00001410`; each independently mined a confirming height-112 block and reached trusted balance `598.24997180` with immature balance `5000.00002820`.
+
+Both daemons were stopped, restarted from their migrated datadirs, and explicitly loaded `legacy`. After unlocking, both retained 114 transactions, the same private descriptor output hash `c25eb848efc04134b56e506992923fcd77090afdcfdf954b8dcf3242c6b8fca0`, the same post-migration label/address, and the same normalized balance/UTXO semantics. A second post-restart `0.25` BTC spend succeeded on both (`0bb64744b00562bde5dba010fe6c78edba572c762337e6b69effecd82e20ed3c` on v28.4 and `60c54536f5af6245a80583f921cdf54b3f668f366c2b5e198e93267b35266c94` on current), with equal amount, fee, one confirmation at height 113, and final trusted balance `647.99995770`. The txids differ because the independent nodes mined different block hashes and selected independent transaction state; the wallet-level result and decoded details match.
+
+### Source/history classification
+
+The backup-path difference is intentional implementation evolution. v28.4 initially creates the backup beside the legacy BDB file and moves it into the new SQLite wallet directory after `MigrateToSQLite`; current constructs the backup in the wallet directory from the start. Current commit `fee79e70d933bb74feadc7cbf1bad8e25b1efe32` (`wallet: Fix migration of wallets with pathnames`, backported from `70f1c99c90`) explains the current path/name derivation. Current commit `b98dd63da7b9b14a3655f00021cc5a35826ccc15` (`rpc: Add load_wallet argument to migratewallet RPC`) explains the third-argument interface difference. Neither change alters the migrated wallet state in this fixture.
+
+### Verdict, evidence, and next queue
+
+Verdict: dismissed for this cycle. No unexplained release/current difference was found in encrypted key material, descriptor generation, labels, transaction history, balances, UTXOs, backups, restart loading, or post-restart spending. No production or permanent test change is justified. The next distinct Goal 67 queue is release-branch cherry-pick/backport equivalence, followed by any new bounded historical transaction corpus or version-specific migration evidence. The scratch datadirs, raw wallet copies, backup files, RPC outputs, and debug logs remain under `/data/my_storage/tmp/cycle275-release-wallet/` for recurrence checks.
+
+## Cycle 275 start: funded and encrypted wallet migration
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `67` (`release-version-differential`); no reroll.
+- Branch: `uber-cycle-275-release-version-differential-20260802`.
+- Cycle-start HEAD: `d8744a048b4c8160c459e984e94f98285aa1a85a`; `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1339 45`; state hash at gate: `07ef6a3f7e533610d5819ad7711b3bb84c01f8a4685d425674a350b8ee8efcb5`.
+- Catalog, prompt, goals TSV, and protocol hashes passed unchanged. Protected processes `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` were alive and remain out of scope.
+- Prior Goal 67 cells excluded: current/v31.1 fixed RPC and genesis matrix, v28.4/current empty legacy-wallet migration, current/v31.1 P2P transcripts, v28.2/v31.0/v31.1/current synthetic mainnet-style blocks, and prune/persistence. The prior wallet migration journal explicitly left funded and encrypted wallets open.
+
+### Hypothesis and trust boundary
+
+Create one deterministic v28.4 BDB legacy wallet with matured funding, an outgoing transaction, labels, keypool activity, encryption, and a restart-visible transaction history. Copy the exact BDB bytes into independent v28.4 and current datadirs, migrate each with the same passphrase, restart, unlock, inspect descriptors/key ownership/labels/transactions/balances/backups, and perform a post-migration spend. The hypothesis is that release/current migration differs in a way that loses encrypted key material, transaction/confirmation metadata, labels, keypool continuity, backup bytes, or spendability.
+
+Use v28.4 `create_bdb` as fixture producer, `/data/my_storage/tmp/cycle167-release28-wallet/src/bitcoind` and `bitcoin-cli` as the release pair, and the current wallet-enabled `/data/my_storage/tmp/cycle246-wallet/bin/bitcoind` and `bitcoin-cli` built from this HEAD. Keep all daemons loopback-only with explicit RPC credentials, ports, datadirs, and scratch logs. Record exact wallet files, transaction/block bytes, RPC JSON, backup hashes, restart results, and source/history explanations for every difference. No mainnet keys, default datadirs, or production databases.
+
 ## Cycle 127: prune and persistence differential (complete)
 
 ### Selection and gate
