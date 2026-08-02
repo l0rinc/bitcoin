@@ -17,6 +17,22 @@ independently verified.
 - Fix: reject rounds > INT_MAX + harden KDF guard !count -> count < 1.
 - Next: offer upstream (already covered by #35859 — track its merge).
 
+## ✅ btck_chainstate_manager_destroy null deref — lineage fix restored (#16 c4)
+- Mechanism: 22 btck_*_destroy functions, 21 are delete-only (null-safe
+  free() convention); btck_chainstate_manager_destroy flushed chainstates
+  through btck_ChainstateManager::get(chainman) first — destroy(nullptr)
+  was a null dereference. FFI error-path cleanup after a failed create
+  hits it directly.
+- Evidence: HEAD had the unguarded deref (the c3 fix 55f1fa334f lived
+  only on audit/api-misuse — #66-c1 lineage class, second recurrence);
+  cherry-picked onto audit/api-misuse-c4 (union conflict + 2 labeled
+  repairs); test_kernel destroy_null green (crashes pre-fix), full
+  suite green. Upstream master @556988790a still unguarded (:1126-1130).
+- Branch/commits: fix 55f1fa334f -> restored 32643f9f98 + repairs on
+  audit/api-misuse-c4; archive commit this cycle; journal #16 c4.
+- Next: offer upstream (still vulnerable); sweep other pre-rotation
+  journals/fixes missing from the lineage.
+
 ## ✅ PSBT fuzz harness truncation gate (fixed d086164661, #101 c1)
 - Mechanism: psbt fuzz target fed ConsumeRandomLengthString() into
   DecodeRawPSBT; the backslash-escape convention truncated any document
@@ -100,19 +116,6 @@ independently verified.
   upper-bound error); re-verified NOT duplicated upstream @
   9611a35603 (#42 c5 — file is src/node/mempool_args.cpp there).
 
-## ✅ CompactSize exhaustive boundary battery (oracle delivered 8b7d8ac878)
-- Mechanism: consensus wire-length primitive canonicality; existing
-  tests sampled 8 non-canonical strings — no exhaustive or
-  length-class coverage.
-- Evidence: boundary round-trips all four width classes + exhaustive
-  253-form rejection (253/253) + MAX_SIZE both sides; injected
-  mutation (serialize.h:345 <253 -> <252) killed; restore green.
-- Branch/commits: audit/property-oracle @ 8b7d8ac878, journal
-  e9020948c7; archived on agent/all-findings (content-verified
-  2026-07-29).
-- Next: 254/255-form sampling widened; independent-deserializer
-  differential (functional framework) in a c2.
-
 ## ✅ load_wallet fuzz harness delivered; bring-up crash = harness bug (fd74c4a7c2)
 - Mechanism: WalletBatch::LoadWallet (wallet-db record application)
   had zero fuzz coverage; new harness pre-seeds in-memory SQLite with
@@ -126,18 +129,6 @@ independently verified.
   journal 90416bd242.
 - Next: widen record classes (crypted keys, ACTIVE*SPK, BESTBLOCK);
   descriptor/TX semantic apply-vs-reject oracle.
-
-## ✅ ReadVarInt overflow-rejection oracle (delivered 083afedbf1)
-- Mechanism: both ReadVarInt overflow guards were test-blind —
-  deletion mutants survived the full suite (undo-data VARINT parsing
-  is consensus-adjacent via CTxUndo).
-- Evidence: mutation sweep M1 killed / M2 M3 survived; battery added
-  (both guards x uint8/16/32/64 + legal-max controls + signed mode);
-  M2/M3 then killed; repaired green.
-- Branch/commits: audit/mutation-testing @ 083afedbf1, journal
-  a2c5cf8935; archive c0bd287a31 + 726959bae1.
-- Next: WriteVarInt per-line sweep; CTxUndo consumer-side fuzzed
-  VARINT fields.
 
 ## 🔴 UTXO-scan/resize race — upstream master (fixed in-tree e049f064e1)
 - Mechanism: gettxoutsetinfo/scantxoutset create a LevelDB cursor
