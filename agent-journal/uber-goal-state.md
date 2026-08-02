@@ -248,6 +248,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 106 | semantic-twin-inconsistency | CYCLE-3 | 2026-07-29 | vsize twins agree (formula + 6/6 functional); sighash numerics agree; PSBT DEFAULT\|ALL restriction = intentional policy |
 | 106 | semantic-twin-inconsistency | CYCLE-4 | 2026-08-02 | amount-parse twin 26/26: exponent accepted, tzero compression, 21M exact; DISMISSED |
 | 43 | option-api-lifecycle | CYCLE-3 | 2026-07-29 | -v2transport settings.json lifecycle proven: honored, persisted (write-back intact), CLI-overridable |
+| 43 | option-api-lifecycle | CYCLE-4 | 2026-08-02 | deprecated ancestor opts: wallet-report-only, acceptance cluster-based; docs accurate; DISMISSED |
 | 34 | uncovered-code-classification | CYCLE-4 | 2026-07-29 | dbwrapper boundary layers safe; Cursor warmup asymmetry = author's PR 35654 pending (corrupt-only, parked) |
 | 34 | uncovered-code-classification | CYCLE-5 | 2026-07-31 | BitsToBytes padding arms: dedicated test, 0xff-mutant killed (was sancov-granularity, not behavioral gap); in-tree queue CLOSED |
 | 23 | perf-flamegraph-investigation | CYCLE-4 | 2026-07-29 | CompareMainTransactions = O(1) early-exit comparator; memcmp/atomic shares inherent-by-design; no fix candidate |
@@ -977,6 +978,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 203 (30-campaign eligible set): raw=
+   5711495130052899885 (63-bit) -> idx 15 -> #43 c4 (deprecated
+   ancestor opts lifecycle: docs accurate; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43}.
    RE-RANK draw 202 (31-campaign eligible set): raw=
    4615193276133132286 (63-bit) -> idx 3 -> #9 c7 (clusterlin
    corpus family validated: 3,436 seeds clean; DISMISSED).
