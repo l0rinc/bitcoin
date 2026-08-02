@@ -1,3 +1,63 @@
+# Cycle 281 Completion
+
+- The fresh gate fetched `origin/master` before the exact selector. The
+  selector `shuf -i 0-98 -n 1` returned goal `49`
+  (`critical-history-must-fix`), with no reroll. The dedicated branch is
+  `uber-cycle-281-critical-whole-history-20260802`.
+- Gate HEAD was `162354fe1400981e7ac90b2b450a00d7076df6a9`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1352` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `56059a944a5b7eb6fe66342c883c9a46c0fe1257653a757e67592d56186d4029`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Tracked/index cleanliness, `git diff --check`, and all seven protected
+  process checks passed; existing unrelated untracked artifacts were
+  preserved and untouched.
+- Goal 49's historical sweep found a distinct `SpawnProcess` child-cleanup
+  variant. The prior Cycle 73 finding `9105c2db16` covered descriptor
+  ownership when setup failed; this cell covered the successful fork path
+  before `execvp()`. Vendored
+  `src/ipc/libmultiprocess/src/mp/util.cpp` returned `rlim_cur - 1` from a
+  `size_t MaxFd()` and assigned it to `int`, leaving the finite-limit endpoint
+  open and allowing `RLIM_INFINITY` or oversized limits to narrow to a value
+  that could skip cleanup. The production IPC caller is
+  `src/ipc/process.cpp:36`.
+- A deterministic pre-fix scratch probe set the soft limit to 64, opened
+  `/dev/null` at descriptor 63, freed two lower descriptors for the
+  `socketpair()`, and execed `/bin/sh` to inspect `/proc/self/fd/63`. The
+  unmodified helper returned `child_exit=0 sentinel_fd=63`, proving the
+  inherited descriptor survived. The fixed helper returned
+  `child_exit=1 sentinel_fd=63`.
+- Source/test commit `72b1ecbe97`
+  (`ipc: close highest inherited descriptor`) was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It clamps `RLIM_INFINITY` and values at or
+  above `INT_MAX`, returns an exclusive finite upper bound without the
+  off-by-one subtraction, updates the fallback bound, and adds a Linux
+  regression test for the descriptor-63 boundary. The commit includes the
+  selected-goal journal update in
+  `agent-journal/critical-history-must-fix.md`.
+- Validation passed after rebuilding with
+  `CCACHE_DIR=/data/my_storage/tmp/cycle281-ccache ninja -C
+  /data/my_storage/tmp/cycle246-mp-base mptest -j2`. The focused command
+  `TMPDIR=/data/my_storage/tmp/cycle281-mptest-final
+  /data/my_storage/tmp/cycle246-mp-base/test/mptest
+  --filter=spawn_tests.cpp --verbose` passed 3/3 tests. With a created
+  scratch `TMPDIR`, the complete libmultiprocess binary passed 18/18 tests.
+  `git diff --check` and the committed tree check passed.
+- The finite boundary is runtime-confirmed independently before and after.
+  The infinity and oversized finite branches are source-proven from the
+  conversion path and corroborated by the historical upstream RLIMIT clamp;
+  they were not forced in this host because scanning to a clamped
+  `INT_MAX` would be impractical. No full Bitcoin daemon build was needed for
+  the helper-level proof, and no further source change is justified in this
+  cell.
+- Verdict: **confirmed and fixed**. Post-source-close HEAD is
+  `72b1ecbe97a5861ff830ddfb6fd6eb59b2aa6a51`, with divergence `45 1353`
+  (`origin/master...HEAD`). The next action is a separate state close commit,
+  then a fresh gate, exact selector draw, and new `uber-cycle-282-*` branch.
+  Do not reopen the earlier setup-failure descriptor cell without a distinct
+  phase or new evidence. The repository is not considered exhausted.
+
 # Cycle 280 Completion
 
 - The fresh gate fetched `origin/master` before the exact selector. The
