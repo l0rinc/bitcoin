@@ -1,5 +1,16 @@
 # Uber Goal State
 
+## Cycle 265 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact selector `shuf -i 0-98 -n 1` drew goal `59` (`cpp-supply-chain`); no reroll was needed because distinct Goal 59 cells remained open. The dedicated branch is `uber-cycle-265-cpp-supply-chain-pyzmq-20260802`.
+- Gate HEAD was `546eb9d130600f8674434b6441711580e402261f`; fetched `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1319 45` (`HEAD...origin/master`). Catalog, prompt, goals TSV, and protocol hashes were unchanged: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The open cell covered unpinned `pyzmq` installations in four native CI environment files and both Windows test helpers. `ci/lint/requirements.txt` already pinned `pyzmq==27.1.0`; the separate `pycapnp` installs were left for a later cell.
+- PyPI metadata for `pyzmq==27.1.0` listed 92 release artifacts and the existing lint pin provided project precedent. A downloaded CPython 3.11 Linux wheel matched metadata SHA-256 `5bbf8d3630bf96550b3be8e1fc0fea5cbdc8d5466c1192887bd94869da17a63e`. Installing that wheel into scratch imported version `27.1.0` and passed a ZMQ socket/context lifecycle check without modifying the host environment.
+- Commit `169532fb593f7368d57137c57a1becc84d052907` (`ci: pin pyzmq test dependency`) was authored as `Lőrinc <pap.lorinc@gmail.com>`. It pins all repository-maintained CI and macOS README pyzmq installs to `27.1.0`, matching the lint environment. The selected journal contains the detailed provenance, independent checks, and limitations.
+- Post-commit `bash -n` passed for all four changed environment files; Python compilation passed for both Windows helpers; `git diff --check` passed; and a repository-wide check found no remaining unpinned pyzmq install in the audited CI/README surfaces. Full Windows/container CI was unavailable. This is a version pin, not a `--require-hashes` lock for every platform wheel; pycapnp remains open.
+- Verdict: **confirmed and fixed**. Do not repeat the exact unpinned pyzmq cell without new package, platform, or recurrence evidence. The repository is not considered exhausted.
+- The next cycle must perform a fresh gate, fetch `origin/master`, draw exactly one selector from `0..98`, and create a new `uber-cycle-266-*` branch. Re-rank the remaining Goal 59 cells and full risk map rather than following this handoff blindly.
+
 ## Cycle 264 Completion
 
 - The fresh gate fetched `origin/master` before branch creation. The exact selector `shuf -i 0-98 -n 1` first drew goal `61`, but its exact stateful-contract-fuzzer evidence cell had just closed in Cycle 262, so the protocol rerolled exactly once; the reroll drew goal `59` (`cpp-supply-chain`). The dedicated branch is `uber-cycle-264-cpp-supply-chain-security-gate-20260802`.
