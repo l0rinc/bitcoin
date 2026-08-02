@@ -571,3 +571,27 @@ txgraph, txorphanage_sim, coinscache_sim, mini_miner).
 ### Limitations / queue
 - txrequest remains the last available mutation target (queued
   only on a new signal; the 5-cell sweep suffices).
+
+## Cycle 17 (2026-08-02, draw 261, raw=3682198685844657455): txrequest scratch mutation campaign — 235,767 runs, corpus 0->1,662 units, zero crashes/artifacts; mutation sweep 6/6 clean
+
+### Campaign
+txrequest has NO upstream corpus (pathspec absent from
+qa-assets, recorded); scratch corpus per the c12 shape:
+- 235,767 runs in 641s; generated 1,662 units
+  (/tmp/txrequest_corpus, preserved — first txrequest corpus).
+- Zero crashes, zero artifacts: the fork's Assume-hardened
+  txrequest/TxDownloadManager state (c1's ActiveTipChange
+  snapshot family) held on every accepted case.
+
+### Verdict
+DISMISSED: txrequest is robust under from-scratch mutation.
+Mutation sweep complete: 6/6 clean (ephemeral_package_eval,
+txgraph, txorphanage_sim, coinscache_sim, mini_miner,
+txrequest) — every fork-hardened fuzz target has both
+seed-replay AND fresh-mutation evidence.
+
+### Exact commands
+- campaign line above; census above.
+
+### Limitations / queue
+- Smoke-length throughout; long-run is qa-assets' infra.
