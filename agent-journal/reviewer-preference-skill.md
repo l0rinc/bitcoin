@@ -512,3 +512,31 @@ behavior. No update needed.
 
 ## Rotation note
 Eight cycles; watch quiet.
+
+## Cycle 9 (2026-08-02, draw 208, raw=15795260889241617676, masked 6571888852386841868, idx 18/25): watch — 2 newest merges sampled, template holds (tested-ACK + lgtm-ACK + CI-feedback loop); quiet
+
+### Sample (actual newest merges, anchors from #42 c6)
+- 35592 (http rpcallowip): tested-ACK with local verification
+  ('Tested this locally and it works correctly' + sha), author
+  push-notes naming feedback hashes, DrahtBot CI-failure
+  report, rebase-with-silent-conflict note (#35614) — the M1-M4
+  shapes exactly.
+- 35838 (qa gui macOS): 'lgtm ACK c5692586' (M1 terse), then a
+  post-merge depends-build failure thread (fanquake logs ->
+  maflcko fix ref -> hebasto confirm) — standard feedback loop,
+  no novel objection class.
+- api.github.com search is:merged returns update-ordered old
+  PRs (recorded: the endpoint sorts by updated, so the merge-
+  anchored pairs from #42 are the reliable newest set).
+
+### Verdict
+Watch quiet: R1-R15/M1-M5 still predicts the observed seam
+behavior. No update.
+
+### Exact commands
+- curl search/issues is:merged (ordering caveat above);
+  issues/{35592,35838}/comments excerpts above.
+
+### Limitations / queue
+- A template-failure objection shape remains the next cell by
+  definition; watch continues per rotation.
