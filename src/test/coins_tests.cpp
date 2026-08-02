@@ -5,6 +5,8 @@
 #include <addresstype.h>
 #include <clientversion.h>
 #include <coins.h>
+#include <dbwrapper.h>
+#include <script/script.h>
 #include <streams.h>
 #include <test/util/common.h>
 #include <test/util/poolresourcetester.h>
@@ -18,6 +20,7 @@
 #include <util/strencodings.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
@@ -1083,6 +1086,23 @@ BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
 
     BOOST_CHECK(*Assert(base.GetCoin(outpoint)) == coin);
     BOOST_CHECK_EQUAL(base.GetBestBlock(), block_hash);
+}
+
+BOOST_AUTO_TEST_CASE(malformed_first_coin_key_cursor_invalid)
+{
+    const fs::path path{m_args.GetDataDirBase() / "malformed_first_coin_key_cursor_invalid"};
+    {
+        CDBWrapper dbw({.path = path, .cache_bytes = 1_MiB, .wipe_data = true, .obfuscate = false});
+        dbw.Write(uint8_t{'C'}, Coin{CTxOut{1, CScript{}}, 1, false});
+    }
+
+    CCoinsViewDB view({.path = path, .cache_bytes = 1_MiB, .wipe_data = false, .obfuscate = false}, {});
+    std::unique_ptr<CCoinsViewCursor> cursor{view.Cursor()};
+    BOOST_REQUIRE(cursor);
+
+    COutPoint outpoint;
+    BOOST_CHECK(!cursor->Valid());
+    BOOST_CHECK(!cursor->GetKey(outpoint));
 }
 
 BOOST_AUTO_TEST_CASE(coins_resource_is_used)
