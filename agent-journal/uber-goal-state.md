@@ -1,5 +1,17 @@
 # Uber Goal State
 
+## Cycle 264 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact selector `shuf -i 0-98 -n 1` first drew goal `61`, but its exact stateful-contract-fuzzer evidence cell had just closed in Cycle 262, so the protocol rerolled exactly once; the reroll drew goal `59` (`cpp-supply-chain`). The dedicated branch is `uber-cycle-264-cpp-supply-chain-security-gate-20260802`.
+- Gate HEAD was `419fed9c60c7372270d925a3ae850c27712475b4`; fetched `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1317 45` (`HEAD...origin/master`). Catalog, prompt, goals TSV, and protocol hashes were unchanged: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The selected journal's current open cells were `pip install pyzmq`, vcpkg inputs/cache, mutable `qa-assets` fuzz-corpus cloning, container image provenance, generated inputs, and license gates. Closed Goal 59 cells were not reopened.
+- `ci/test/03_test_script.sh` cloned the mutable `qa-assets` default branch and skipped validation when a cached `fuzz_corpora` directory existed. `.github/ci-windows.py` also followed the moving default branch and only printed its HEAD. The fuzz corpus is input data rather than executable source, but it controls fuzz coverage, runtime, memory use, and which existing defects are exercised at the CI boundary.
+- `git ls-remote https://github.com/bitcoin-core/qa-assets refs/heads/main` resolved the reviewed current commit `918cdd36fec3c78f8b8f6a1dc0ec6688e7559c9e`. A local two-commit bare-remote probe showed the old Unix guard accepted stale cached commit A after the remote moved to B; the new HEAD comparison rejected it. A fresh clone of moved `main` also failed the expected-commit comparison. A Windows `prepare_tests("fuzz")` harness accepted a matching fake HEAD and rejected a mismatched one.
+- Commit `d06b2f8d26431e41d19768ffb0c8ce340bbd0372` (`ci: pin qa-assets fuzz corpus commit`) was authored as `Lőrinc <pap.lorinc@gmail.com>`. It pins and verifies the same Git object ID in the Unix and Windows consumers and fails closed before fuzz execution on a missing, stale, or moved corpus. The selected journal contains the detailed evidence and handoff.
+- `bash -n ci/test/03_test_script.sh`, `python3 -m py_compile .github/ci-windows.py`, `git diff --check`, and the live `git ls-remote` verification passed after commit. Full container, Windows, and fuzz runs were not executed because the required environments were unavailable; protected long-running tests were observed and untouched. Existing untracked agent/user artifacts were preserved.
+- Verdict: **confirmed and fixed**. Do not repeat the exact qa-assets commit/cache cell without new source, corpus, or recurrence evidence. The repository is not considered exhausted.
+- The next cycle must perform a fresh gate, fetch `origin/master`, draw exactly one selector from `0..98`, and create a new `uber-cycle-265-*` branch. Re-rank remaining Goal 59 cells and the full risk map rather than following this handoff blindly.
+
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
 ## Cycle 263 Completion
