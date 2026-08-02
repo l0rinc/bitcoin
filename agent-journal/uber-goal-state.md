@@ -145,6 +145,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 32 | whole-history-leftovers | CYCLE-1 | 2026-07-29 | multiply-first percentage shape: no exploitable survivor (range/memory-bounded) |
 | 69 | backend-differential | CYCLE-1 | 2026-07-29 | secp wide-multiply int128-vs-int64 differential: 4/4 suites pass, no divergence |
 | 103 | finding-composition | CYCLE-1 | 2026-07-29 | capability graph: no realizable chain; 3 edges tested broken (L2 fixed, F4+F5 fixed, F8 bounded) |
+| 103 | finding-composition | CYCLE-2 | 2026-08-02 | F10-F16 indexed, #95-c7 excluded (not in HEAD); all edges broken-by-repair; no realizable chain |
 | 53 | timing-side-channel | CYCLE-1 | 2026-07-29 | AES-CBC padding dudect: Welch t 1.53/1.69/-1.14 (no leak), confirms #45 code-read |
 | 74 | memory-pressure-allocator | CYCLE-1 (retro) | 2026-07-28 | mempool accounting honest (1.13x RSS/usage @8k); glibc drain retention not a leak (2ef390de05, row restored) |
 | 74 | memory-pressure-allocator | CYCLE-2 | 2026-07-29 | LockedPool oversize alloc -> graceful bad_alloc via RPC (fault-injected); no residue |
@@ -951,6 +952,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 177 (57-campaign eligible set rebuilt from the
+   handoff DONE list): raw=5480729779092233995 (63-bit) -> idx 52
+   -> #103 c2 (cross-session capability indexing F10-F16; all
+   edges broken; DISMISSED). Pool: eligible set minus #103.
    RE-RANK draw 176 (1-cell pool): raw=2446543444696896762
    (63-bit) -> idx 0 -> #80 c12 (musig2 cross-field: unchecked
    membership, informational, foreign-K3 accepted; DISMISSED).
