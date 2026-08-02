@@ -48,6 +48,18 @@
 - Timestamp: `2026-08-02T22:50:50Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-69`
 
+## Cycle 306
+
+- Selected index: `39`
+- Goal slug: `deterministic-artifacts`
+- Goal title: Generated-artifact and test-vector determinism audit
+- Selection command: `shuf -i 0-105 -n 1`
+- Catalog SHA-256: `ae927e6bca7b2406e318ac893962e481862f22ff46443228e6908131ff7dca13`
+- Base commit: `ed71bceff261929dc735765286c95445bb89327d`
+- Branch: `uber-cycle-306-deterministic-artifacts-20260802`
+- Timestamp: `2026-08-02T23:07:27Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-39`
+
 ## Cycle 305 Result
 
 - Finding: `minisketch_decode()` narrowed its public `size_t max_elements`
