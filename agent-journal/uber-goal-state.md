@@ -110,6 +110,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 36 | cross-tool-analysis-matrix | CYCLE-5 | 2026-08-01 | TSan concurrency subset green; 2 warnings = intentional sync_tests inversions; 0 races; DISMISSED |
 | 76 | reproducible-builds | CYCLE-1 | 2026-07-28 | A/B rebuild: code bit-identical; 1-byte secp comp_dir DWARF delta attributed; Guix packaging sound |
 | 9 | hit-frequency-coverage | CYCLE-2 | 2026-07-28 | net_processing sancov: all gaps harness-scope; 0/23 alarm resolved as inlining artifact via per-line PC check |
+| 9 | hit-frequency-coverage | CYCLE-7 | 2026-08-02 | upstream clusterlin corpus x12: 3,436 seeds clean through hardened build; DISMISSED |
 | 47 | build-ci-parity | CYCLE-2 | 2026-07-28 | install manifest declarative-single-source; 17-file install set exact match |
 | 47 | build-ci-parity | CYCLE-3 | 2026-08-01 | export-set consumer check: downstream compiles+links(g++, 0 undef)+runs via .pc; static lib self-contained; DISMISSED |
 | 47 | build-ci-parity | COMPLETE | 2026-08-01 | c4: shared .so consumer full closure (0 undef, 134 exports), runs CONSUMER-OK; DISMISSED; campaign complete |
@@ -976,6 +977,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 202 (31-campaign eligible set): raw=
+   4615193276133132286 (63-bit) -> idx 3 -> #9 c7 (clusterlin
+   corpus family validated: 3,436 seeds clean; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9}.
    RE-RANK draw 201 (32-campaign eligible set): raw=
    7541771897718507552 (63-bit) -> idx 0 -> #0 c3 (TODO
    re-sweep: 56/56 identical; DISMISSED).
