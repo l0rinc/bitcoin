@@ -2,6 +2,61 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 262 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact
+  selector `shuf -i 0-98 -n 1` drew goal `61`
+  (`stateful-contract-fuzzer`). The dedicated branch is
+  `uber-cycle-262-stateful-contract-fuzzing-20260802`. Start HEAD was
+  `bf9327628e42862513cff3e257bf79c7d73e182b`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1313 45`
+  (`HEAD...origin/master`).
+- Catalog, prompt, goals TSV, and protocol hashes were unchanged:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Tracked/index state was clean at the draw; existing untracked agent/user
+  artifacts were preserved and excluded.
+- The selected journal and prior-finding search identified the open
+  txdownload output cell after the closed relay-output, raw mempool graph,
+  and validation-load-mempool stateful-fuzzer cells. Existing fuzz checks
+  validated parent-vector shape and package shape, but not exact parent
+  identity or the triggering parent of a returned 1p1c package.
+- The test-only change adds an independent `std::set<Txid>` parent model,
+  exact txid/wtxid comparison for package parents, and deterministic
+  production-backed duplicate-parent and same-peer 1p1c controls to both
+  `txdownloadman` targets. The initial all-random exact-parent assertion
+  found a minimized harness false positive because non-missing and filtered
+  rejection paths legitimately return no parents; the exact check was
+  narrowed to a fresh state with an explicit missing-input contract.
+- Source/test/journal commit `95d45d174c724a7edc2e7951e41212b7052b010c`
+  (`fuzz: model txdownload output contracts`) was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It contains no production behavior change.
+- The Clang 19 ASan/UBSan/libFuzzer build in
+  `/data/my_storage/tmp/cycle131-build-libfuzzer` passed. Both fuzz targets
+  passed clean empty-input controls, the minimized false-positive input, 100
+  corpus runs each, and the deterministic package setup. A bounded
+  implementation-target run passed 1,255 executions in 61 seconds with no
+  assertion, sanitizer, leak, or hang report. The focused `txdownload_tests`
+  suite passed all 14 cases and 605 assertions.
+- Independent mutation proof: temporarily dropping one parent in production
+  `GetUniqueParents` failed at the new exact assertion with exit 77. With
+  only the new exact calls disabled, both prior shape-only targets accepted
+  that mutant. The mutation and control disablement were restored, and the
+  clean fuzz binary and smoke runs passed.
+- Verdict: **confirmed as a stateful fuzz-oracle gap, not a production
+  defect**. The repository is not considered exhausted. Root filesystem
+  pressure remains; all scratch paths must stay under `/data`. Protected PIDs
+  `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and
+  `1346200` remained alive and untouched.
+- The next cycle must perform a fresh gate, fetch `origin/master`, draw
+  exactly one selector from `0..98`, and create a new `uber-cycle-263-*`
+  branch. Do not repeat the exact txdownload parent/package oracle, relay
+  output, raw graph, or validation-load-mempool cells; re-rank all remaining
+  evidence sources and risk-map surfaces.
+
 ## Cycle 261 Completion
 
 - The fresh gate fetched `origin/master` before branch creation. The exact
