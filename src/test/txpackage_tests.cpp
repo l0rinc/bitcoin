@@ -170,7 +170,7 @@ BOOST_AUTO_TEST_CASE(package_sanitization_tests)
     PackageValidationState state_overflowing_weight;
     BOOST_CHECK(!IsWellFormedPackage(package_overflowing_weight, state_overflowing_weight));
     BOOST_CHECK_EQUAL(state_overflowing_weight.GetResult(), PackageValidationResult::PCKG_POLICY);
-    BOOST_CHECK_EQUAL(state_overflowing_weight.GetRejectReason(), "package-contains-duplicates"); // TODO: the accumulated weight wraps, so the size limit is never reached
+    BOOST_CHECK_EQUAL(state_overflowing_weight.GetRejectReason(), "package-too-large");
 
     // Packages can't contain transactions with the same txid.
     Package package_duplicate_txids_empty;
