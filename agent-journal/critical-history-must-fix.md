@@ -1,5 +1,73 @@
 # Critical whole-history must-fix sweep
 
+## Cycle 281
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `49`
+- Goal: `Critical whole-history must-fix sweep`
+- Slug: `critical-history-must-fix`
+- Branch: `uber-cycle-281-critical-whole-history-20260802`
+- Start HEAD: `162354fe1400981e7ac90b2b450a00d7076df6a9`
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `45 1352` (`origin/master...HEAD`)
+- Catalog SHA256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Uber prompt SHA256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goals TSV SHA256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Protocol SHA256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`
+- State SHA256 at gate: `56059a944a5b7eb6fe66342c883c9a46c0fe1257653a757e67592d56186d4029`
+- Gate: `git fetch origin master` passed; tracked worktree and index were clean; `git diff --check` passed; all protected long-running test processes remained alive. Existing untracked artifacts are preserved and excluded from commits.
+
+### Scope and historical seed
+
+This cycle searched recent critical fixes, whole-history variants, backports, callers, and prior journals. The earlier Cycle 73 `SpawnProcess` finding (`9105c2db16`) concerned descriptor ownership when setup failed before or around `fork()`. That cell was explicitly excluded from reopening. The current candidate is a different phase: descriptor cleanup in the forked child after a successful `socketpair()` and before `execvp()`.
+
+The seed was upstream merge `1a2523e901a6c7c876c8a0817601e77d83f394b9`, especially `4afbabdcef86c095b19b3b42b70a2483db8cab4a` and `8ab4b9fc856433ebcaaefb31524cb71ef8ff8089`. Those fixes establish that `RLIM_INFINITY` and values at or above `INT_MAX` must be clamped before converting an OS resource limit to `int`. The upstream PR description records the observed `-1` startup failure from `RLIM_INFINITY` and the analogous overflow for a large finite limit.
+
+### Candidate: `SpawnProcess` closes neither the highest finite descriptor nor unrepresentable limits correctly
+
+Trust boundary: `mp::SpawnProcess()` is used by the Bitcoin IPC child path (`src/ipc/process.cpp:36`) and receives the parent process's inherited descriptor table. After `fork()`, the child must close every descriptor from 3 through the OS soft `RLIMIT_NOFILE` boundary except the IPC socket retained as `fd0`, before executing the requested program.
+
+Before this cycle, `src/ipc/libmultiprocess/src/mp/util.cpp` implemented:
+
+```cpp
+size_t MaxFd()
+{
+    struct rlimit nofile;
+    if (getrlimit(RLIMIT_NOFILE, &nofile) == 0) {
+        return nofile.rlim_cur - 1;
+    } else {
+        return 1023;
+    }
+}
+```
+
+The caller assigned that result to `int maxFd` and used `for (int fd = 3; fd < maxFd; ++fd)`. This has two independently demonstrated defects:
+
+1. With a finite soft limit of 64, `MaxFd()` returned 63 and the exclusive loop stopped at 62, leaving inherited descriptor 63 open.
+2. With `RLIM_INFINITY` or a value above `INT_MAX`, the `size_t` result can narrow to a negative `int` (or otherwise implementation-defined value), so the loop can close no inherited descriptors. This is the same conversion class already fixed in the main Bitcoin startup path, but the vendored IPC helper had no corresponding clamp.
+
+The finite case is directly reachable without special privileges. A scratch process set its soft limit to 64, opened `/dev/null` until descriptor 63, freed two lower descriptors for `socketpair()`, and spawned `/bin/sh -c 'test -e /proc/self/fd/63'`. The unmodified current helper produced `child_exit=0 sentinel_fd=63`, proving that the inherited descriptor survived `execvp()`. This differs from the earlier setup-failure leak: the child was successfully created and the leak occurred during the normal cleanup loop.
+
+### Fix and independent verification
+
+`MaxFd()` now returns an exclusive upper bound as `int`. It clamps `RLIM_INFINITY` and values at or above `std::numeric_limits<int>::max()` using `std::cmp_greater_equal`, returns the finite soft limit without subtracting one, and uses 1024 rather than 1023 for the `getrlimit()` failure fallback. The new Linux `spawn_tests.cpp` regression creates the exact descriptor-63 boundary and asserts that the executed child cannot see `/proc/self/fd/63`.
+
+Evidence:
+
+- Original-source scratch command, linked against the pre-fix helper: `.../cycle281-spawn-fd-build/current/spawn-fd` -> `child_exit=0 sentinel_fd=63`.
+- Fixed-source scratch command, linked against rebuilt `cycle246-mp-base/libmultiprocess.a`: `.../cycle281-spawn-fd-build/fixed/spawn-fd` -> `child_exit=1 sentinel_fd=63`.
+- Rebuilt with `CCACHE_DIR=/data/my_storage/tmp/cycle281-ccache ninja -C /data/my_storage/tmp/cycle246-mp-base mptest -j2`.
+- Focused command: `mkdir -p /data/my_storage/tmp/cycle281-mptest-final && TMPDIR=/data/my_storage/tmp/cycle281-mptest-final /data/my_storage/tmp/cycle246-mp-base/test/mptest --filter=spawn_tests.cpp --verbose` -> all 3 spawn tests passed, including the new regression.
+- Full command: `mkdir -p /data/my_storage/tmp/cycle281-mptest-all && TMPDIR=/data/my_storage/tmp/cycle281-mptest-all /data/my_storage/tmp/cycle246-mp-base/test/mptest` -> all 18 libmultiprocess tests passed.
+- `git diff --check` passed after the source and test changes.
+
+The finite boundary is runtime-confirmed before and after with an independent standalone probe and the permanent test. The infinity and large-finite branches are proven by the exact source conversion path and the historical upstream clamp rationale; they were not forced in this host because the resulting cleanup loop would require scanning an impractically large descriptor range. No full Bitcoin build or daemon IPC startup test was required to establish the helper-level defect.
+
+### Handoff
+
+This cycle has one confirmed reachable finding and one self-contained source/test commit. Next queue: fresh gate and selector draw; do not reopen the earlier `SpawnProcess` setup-failure ownership cell unless new evidence shows a distinct phase or invariant.
+
 ## Cycle 96
 
 ### Selection and gate

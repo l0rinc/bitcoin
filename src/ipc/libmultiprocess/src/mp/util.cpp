@@ -11,6 +11,7 @@
 #include <iostream>
 #include <kj/common.h>
 #include <kj/string-tree.h>
+#include <limits>
 #include <pthread.h>
 #include <sstream>
 #include <string>
@@ -48,14 +49,20 @@ std::vector<char*> MakeArgv(const std::vector<std::string>& args)
     return argv;
 }
 
-//! Return highest possible file descriptor.
-size_t MaxFd()
+//! Return one past the highest possible file descriptor.
+int MaxFd()
 {
     struct rlimit nofile;
     if (getrlimit(RLIMIT_NOFILE, &nofile) == 0) {
-        return nofile.rlim_cur - 1;
+        // RLIM_INFINITY and values above INT_MAX cannot be represented by the
+        // int used by the descriptor-closing loop.
+        if (nofile.rlim_cur == RLIM_INFINITY ||
+            std::cmp_greater_equal(nofile.rlim_cur, std::numeric_limits<int>::max())) {
+            return std::numeric_limits<int>::max();
+        }
+        return static_cast<int>(nofile.rlim_cur);
     } else {
-        return 1023;
+        return 1024;
     }
 }
 

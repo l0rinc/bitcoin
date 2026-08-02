@@ -15,6 +15,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
@@ -136,4 +137,83 @@ KJ_TEST("SpawnProcess closes socketpair if argument callback throws")
     }
     KJ_EXPECT(threw);
     KJ_EXPECT(CountOpenFds() == open_fds_before);
+}
+
+KJ_TEST("SpawnProcess closes the highest allowed inherited descriptor")
+{
+#if defined(__linux__)
+    constexpr rlim_t TEST_LIMIT{64};
+    struct rlimit old_limit;
+    if (::getrlimit(RLIMIT_NOFILE, &old_limit) != 0 || old_limit.rlim_max < TEST_LIMIT) {
+        return;
+    }
+    if (::fcntl(static_cast<int>(TEST_LIMIT - 1), F_GETFD) != -1) {
+        return;
+    }
+
+    struct RestoreLimit {
+        struct rlimit limit;
+        ~RestoreLimit() { ::setrlimit(RLIMIT_NOFILE, &limit); }
+    } restore{old_limit};
+
+    const struct rlimit test_limit{TEST_LIMIT, old_limit.rlim_max};
+    if (::setrlimit(RLIMIT_NOFILE, &test_limit) != 0) {
+        KJ_EXPECT(false);
+        return;
+    }
+
+    std::vector<int> descriptors;
+    auto close_descriptors = [&] {
+        for (int& fd : descriptors) {
+            if (fd != -1) {
+                ::close(fd);
+                fd = -1;
+            }
+        }
+    };
+
+    int sentinel{-1};
+    while (true) {
+        const int fd{::open("/dev/null", O_RDONLY)};
+        if (fd == -1) {
+            close_descriptors();
+            KJ_EXPECT(false);
+            return;
+        }
+        descriptors.push_back(fd);
+        if (fd == static_cast<int>(TEST_LIMIT - 1)) {
+            sentinel = fd;
+            break;
+        }
+    }
+
+    int freed{0};
+    for (int& fd : descriptors) {
+        if (fd > STDERR_FILENO && fd != sentinel && freed < 2) {
+            ::close(fd);
+            fd = -1;
+            ++freed;
+        }
+    }
+    KJ_EXPECT(freed == 2);
+    if (freed != 2) {
+        close_descriptors();
+        return;
+    }
+
+    int pid{-1};
+    const int parent_fd{mp::SpawnProcess(pid, [sentinel](int) {
+        return std::vector<std::string>{"/bin/sh", "-c", "test ! -e /proc/self/fd/" + std::to_string(sentinel)};
+    })};
+    ::close(parent_fd);
+
+    int status{0};
+    KJ_EXPECT(::waitpid(pid, &status, 0) == pid);
+    close_descriptors();
+
+    KJ_EXPECT(WIFEXITED(status));
+    if (WIFEXITED(status)) {
+        KJ_EXPECT(WEXITSTATUS(status) == 0);
+    }
+#endif
 }
