@@ -960,6 +960,28 @@ BOOST_AUTO_TEST_CASE(txgraph_staging_diagrams_sort_equal_feerate_chunks)
     const FeeFrac staging_sum{staging_diagram[0] + staging_diagram[1]};
     BOOST_CHECK(staging_sum == main_sum);
     graph->SanityCheck();
+BOOST_AUTO_TEST_CASE(txgraph_memory_usage_retained_entries)
+{
+    constexpr size_t CHURN_COUNT{1024};
+
+    auto fresh = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+    TxGraph::Ref fresh_ref;
+    fresh->AddTransaction(fresh_ref, FeePerWeight{1, 1});
+
+    auto churned = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+    for (size_t i{0}; i < CHURN_COUNT; ++i) {
+        TxGraph::Ref ref;
+        churned->AddTransaction(ref, FeePerWeight{1, 1});
+        churned->RemoveTransaction(ref);
+    }
+    BOOST_CHECK_EQUAL(churned->GetMainMemoryUsage(), 0);
+
+    TxGraph::Ref churned_ref;
+    churned->AddTransaction(churned_ref, FeePerWeight{1, 1});
+    BOOST_CHECK_EQUAL(churned->GetTransactionCount(TxGraph::Level::MAIN), fresh->GetTransactionCount(TxGraph::Level::MAIN));
+
+    // Compact() pops the churned entries but never shrinks m_entries.
+    BOOST_CHECK_EQUAL(churned->GetMainMemoryUsage(), fresh->GetMainMemoryUsage()); // TODO: Retained allocations bypass -maxmempool accounting
 }
 
 BOOST_AUTO_TEST_SUITE_END()
