@@ -617,3 +617,56 @@ BIP-conformant (no parse-time consistency requirement).
 ## Rotation note
 Eleven cycles; semantics cell closed with behavioral evidence.
 #80 quiets pending new fields/signals.
+
+## Cycle 12 (2026-08-02, draw 176, raw=2446543444696896762 (63-bit), idx 0/1): musig2 nonce/sig vs participant-key cross-field consistency — parser stores unchecked, only decodepsbt consumes, foreign-K3 doc ACCEPTED live; DISMISSED; campaign COMPLETE
+
+### Hypothesis
+A PSBT whose MUSIG2_PUB_NONCE / MUSIG2_PARTIAL_SIG are keyed
+under a part_pub NOT in MUSIG2_PARTICIPANT_PUBKEYS might be
+parser-rejected — or trusted downstream into a bad aggregate
+signature (the c11 merkle-root shape, last open cross-field
+class).
+
+### Code evidence (HEAD)
+- Parser (src/psbt.h:870-906): nonce/partial-sig values land in
+  m_musig2_pubnonces / m_musig2_partial_sigs maps keyed by
+  (agg_pub, leaf_hash) -> part_pub; NO check that part_pub is in
+  m_musig2_participants (parsed at :864-868 via
+  DeserializeMuSig2ParticipantPubkeys, which validates only key
+  VALIDITY, psbt.h:221-248 — the aggregate and participants must
+  be fully-valid curve points, but no membership cross-check).
+- Consumers: grep of m_musig2_* across src/ finds ONLY the
+  decodepsbt RPC printer (rpc/rawtransaction.cpp:1372-1405) and a
+  test — Core's wallet/finalizer never aggregates musig2; the
+  fields are pure pass-through (BIP373 signer-side data).
+
+### Behavioral probe (/tmp/btc80c12/musig2_probe.py, preserved)
+PSBTv0 doc, one input: PARTICIPANT_PUBKEYS = valid compressed
+[K1,K2] under AGG; PUB_NONCE and PARTIAL_SIG keyed under (AGG,
+K3) with K3 a valid-but-FOREIGN key. decodepsbt (base64):
+ACCEPTED, input keys = musig2_participant_pubkeys,
+musig2_pubnonces, musig2_partial_sigs, K3 hex surfaced in the
+dump. RESULT line printed.
+Construction traps recorded: decodepsbt wants base64 not hex;
+participant value is RAW 33-byte concatenation (no CompactSize
+count — the count byte makes chunk 0 invalid); keys must be
+fully-valid points (ECKey-generated).
+
+### Verdict
+DISMISSED (semantics understood, no trust path): BIP373 fields
+are informational to Core; a foreign-key partial sig cannot
+redirect any signature because no Core path consumes it for
+signing. Parser acceptance is BIP-conformant (validation of key
+format only). Matches c11's merkle-root precedent exactly.
+
+### Campaign #80: COMPLETE
+Structured families (c1-c10), cross-field semantics (c11 merkle
+root, c12 musig2) all closed; quiets pending new PSBT fields.
+
+### Exact commands
+- python3 /tmp/btc80c12/musig2_probe.py --tmpdir=... --configfile=
+  build-before/test/config.ini (RESULT above); sed refs above.
+
+### Limitations
+- External signers (hardware wallets) may enforce membership;
+  only Core's path was tested (c11 same caveat).
