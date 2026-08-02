@@ -129,6 +129,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 67 | release-version-differential | COMPLETE | 2026-08-01 | c4: mempool.dat v0.20.1<->HEAD bidirectional + coinstatsindex v28.2/HEAD suites PASS with exact binaries; feature_backwards_compatibility absent in fork |
 | 24 | disk-io-amplification | CYCLE-1 | 2026-07-28 | regtest IBD: ~2x byte amplification (undo+index), bounded 16MB prealloc; no pathological growth |
 | 63 | loupe-style-pipeline | CYCLE-1 | 2026-07-28 | fee-estimator zero-state waste confirmed+fixed (675011ba86): 20.4%->0 samples, -34% IBD user |
+| 63 | loupe-style-pipeline | CYCLE-6 | 2026-08-02 | banlist.dat archaeology: 3 distinct loud paths (legacy/corrupt/missing), corrupt arm fault-injected; DISMISSED |
 | 35 | mutation-testing | CYCLE-1 | 2026-07-28 | ReadVarInt overflow guards test-blind (M2/M3 survived); oracle delivered+verified (083afedbf1) |
 | 92 | abi-alignment-aliasing | CYCLE-1 | 2026-07-28 | kernel enum name-maps value-independent; by-value structs static-linkage contract; aliasing sweep clean |
 | 92 | abi-alignment-aliasing | CYCLE-3 | 2026-08-02 | user_data_destroy lifetime proven executable vs shared .so (once-at-context-destroy / NULL-user-owned); DISMISSED |
@@ -969,6 +970,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 195 (38-campaign eligible set): raw=
+   13100020088567363976, masked 3876648051712588168 -> idx 28 ->
+   #63 c6 (banlist.dat archaeology: 3 loud paths, corrupt arm
+   live; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63}.
    RE-RANK draw 194 (39-campaign eligible set): raw=
    16675846116259616253, masked 7452474079404840445 -> idx 37 ->
    #90 c3 (R23 lineage sweep: 28 journals restored in 2a147cfb08;
