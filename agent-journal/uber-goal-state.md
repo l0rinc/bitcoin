@@ -1,3 +1,48 @@
+# Cycle 285 Completion
+
+- The fresh gate fetched `origin/master` before the exact selector. The
+  selector `shuf -i 0-98 -n 1` returned goal `57`
+  (`local-reasoning-domain`), with no reroll. The dedicated branch is
+  `uber-cycle-285-local-reasoning-domain-20260802`.
+- Gate HEAD was `8a5b80481e3c626118ef7d621b87b9d9d40beb99`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1360` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `a33c106886e46bb664f06860e5fb34c2aa3e72fa6ae332564ec5be3e844e2832`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Tracked/index cleanliness, `git diff --check`, and all seven protected
+  process checks passed; unrelated untracked artifacts were preserved.
+- This cycle selected the distinct relationship between a persisted
+  `TxoSpenderIndex` SipHash key, its keyed spender entries, and
+  `BaseIndex` readiness during restart after database corruption. The old
+  constructor treated a malformed serialized key as absent because
+  `CDBWrapper::Read` returns false for both missing and decode-failure cases.
+  It generated a new random key, leaving existing entries unreachable while
+  the old best-block locator could still make the index ready.
+- The independent temporary old-source control ran
+  `txospenderindex_rejects_corrupt_siphash_key` and exited 201 with
+  `check !index.Init() has failed` at line 232; 4 of 5 assertions passed.
+  The repaired source loads the key in `CustomInit`, rejects decode failure
+  when committed state or an existing key is present, and generates a key
+  only for a genuinely new index. The selected-goal journal is included in
+  source/test commit `f1f5758cd6`
+  (`index: reject corrupt txospender hash key`), authored as
+  `Lőrinc <pap.lorinc@gmail.com>`.
+- The repaired build completed with `[100%] Built target test_bitcoin`.
+  The focused regression passed 1 case and 5 assertions. The related
+  `txospenderindex_tests,txindex_tests,baseindex_tests,blockfilter_index_tests,coinstatsindex_tests`
+  run passed 18 cases and 3,108 assertions. `git diff --check` passed after
+  source close. No consensus, wallet/key, or unauthenticated network impact
+  was demonstrated; the defect requires local persisted-state corruption or
+  an equivalent storage fault.
+- Verdict: **confirmed and fixed**. Post-source-close HEAD is
+  `f1f5758cd6814143f0f004b0bda7f6e37c7edbbf`; divergence is `45 1361`
+  (`origin/master...HEAD`). The next action is a separate state close commit,
+  then a fresh gate, exact selector draw, and new `uber-cycle-286-*` branch.
+  Do not claim the repository is exhausted or reopen this key/data/readiness
+  cell without changed source, a different persistence backend, or
+  independent evidence.
+
 # Cycle 284 Completion
 
 - The fresh gate fetched `origin/master` before the exact selector. The
