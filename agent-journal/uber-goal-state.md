@@ -1,3 +1,47 @@
+# Cycle 292 Completion
+
+- The fresh gate selected goal `42` (`ci-bot-followup`) from the exact
+  selector `shuf -i 0-98 -n 1`, with no reroll. The dedicated branch is
+  `uber-cycle-292-ci-bot-followup-20260802`. Gate and cycle-start HEAD were
+  `6b574d31651b5563839e061f0f01355713ef943a`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `45 1374`;
+  and entry state SHA-256 was
+  `e0f1cabf9f08f3c5b19659508eada7e3fce8a4e8535b523e0e595779f88ba4c0`.
+  Catalog, random prompt, goals TSV, and uber-protocol hashes matched the
+  recorded gate values. Protected processes remained alive and untouched.
+- The distinct cell was a live failed-check follow-up on open PR #35704,
+  `windows: remove deprecated codecvt via UTF-8 narrow APIs`. Current
+  `origin/master` had 28 successful checks plus the expected skipped ancestor
+  check, including successful Windows native and Windows fuzz VS jobs. The PR
+  head had 26 successes, one skip, and two failed Windows VS jobs; both failed
+  in Build before tests and manifest checks. GitHub exposed only exit-code
+  annotations and denied unauthenticated job logs with HTTP 403.
+- The PR changed `CreateProcessW`/`STARTUPINFOW` and a wide command line to
+  generic `CreateProcess`/`STARTUPINFO` with a `char` command line, while the
+  repository's MSVC interface still defines `_UNICODE` and `UNICODE`. A local
+  Clang 19 type probe independently failed on the resulting generic-to-W
+  conversion; an explicit `CreateProcessA` control passed. The PR diff passed
+  `git diff --check`. Review discussion and CoreCheck were searched; CoreCheck
+  reported success, pending benchmark, and no current-head coverage data.
+- Verdict: **confirmed remote-only PR build defect; no current-tree finding**.
+  The hosted compiler diagnostic is unavailable, so the exact build error is
+  inferred from the failed Build step plus the source/configuration contract
+  and independent type probe. No current source or permanent test change is
+  justified for an unmerged PR. The full evidence and limitations are in
+  `agent-journal/ci-bot-followup.md`.
+- Evidence journal commit
+  `4c8bcc7b77be24f7898fccd5ced6fff58d8790e2`, `journal: close cycle 292 ci bot
+  follow-up`, was authored as `Lőrinc <pap.lorinc@gmail.com>`. The cycle used
+  no production fix; validation was metadata, source-contract inspection, and
+  the focused compiler type probe rather than a repository test change.
+- Unrelated untracked artifacts were preserved. At this pre-state-close point
+  HEAD is `4c8bcc7b77be24f7898fccd5ced6fff58d8790e2` and divergence is `45 1375`.
+  This state entry is to be committed separately from the evidence journal.
+  The next action is a fresh post-close gate, one exact selector draw, a new
+  `uber-cycle-293-*` branch, and a distinct eligible cell; do not reopen this
+  PR's Windows source path without new evidence.
+
 # Cycle 291 Completion
 
 - The fresh gate selected goal 70 (compiler-optimization-differential) from the exact selector shuf -i 0-98 -n 1, with no reroll. The dedicated branch is uber-cycle-291-compiler-optimization-differential-20260802. Gate and cycle-start HEAD were 18c2a3d36059e805403dd9729f28491d79280ac6; fetched origin/master was 556988790a7f961693a8fd93f73725baea66476a; merge-base was a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b; start divergence was 45 1372; and entry state SHA-256 was dc712135acba3f2bc6dbfc9d2060c7a25643e8756bf51615e5afabb09ca6ea06. Catalog, random prompt, goals TSV, and uber-protocol hashes were unchanged: 5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8, 10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec, babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb, and 954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0.
