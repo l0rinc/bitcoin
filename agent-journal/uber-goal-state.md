@@ -251,6 +251,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 102 | durable-suspicion-replay | CYCLE-2 | 2026-07-29 | A5 capturemessages abort replayed on v28.2 binary: same msghand exception abort (behavior-verified, second verifier form) |
 | 102 | durable-suspicion-replay | CYCLE-3 | 2026-08-02 | A11 replay: upstream-identical @556988790a, zero in-tree callers; CONFIRMED-LATENT; replay queue empty |
 | 91 | compiler-binary-hardening | CYCLE-4 | 2026-07-29 | ELF census 7/7 binaries: PIE+NX+full RELRO+canary uniform, zero divergence; BTI note absent (c1 toolchain finding) |
+| 91 | compiler-binary-hardening | CYCLE-5 | 2026-08-02 | _FORTIFY_SOURCE=3 configured+visible in all 7 binaries; no gap except c1 BTI |
 | 80 | fuzz-engine-differential | CYCLE-4 | 2026-07-29 | PSBTv2 differential: v2 paths clean (A=0/400 mixed); E=107 round-trip-exact, C=124 Python-lax |
 | 50 | fuzz-introspector-blockers | CYCLE-3 | 2026-07-29 | correlated PSBT signing seed: layout replay byte-exact + walletprocesspsbt complete=True; complete-arm driver |
 | 50 | fuzz-introspector-blockers | CYCLE-14 (COMPLETE) | 2026-08-01 | taproot sighash size-class gates 6/6 (DEFAULT 64B, non-DEFAULT 65B+trailing, musig2 psig parse-reject); RPC-parameter confounder recorded |
@@ -961,6 +962,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 187 (46-campaign eligible set): raw=
+   17580883877144746278, masked 8357511840289970470 -> idx 40 ->
+   #91 c5 (_FORTIFY_SOURCE=3 verified in binaries; fact).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91}.
    RE-RANK draw 186 (47-campaign eligible set): raw=
    8926299595551660088 (63-bit) -> idx 44 -> #102 c3 (A11
    replay: CONFIRMED-LATENT, upstream-identical, zero callers;

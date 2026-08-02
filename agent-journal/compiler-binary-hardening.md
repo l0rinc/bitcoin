@@ -247,3 +247,37 @@ Journal-only.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 5 (2026-08-02, draw 187, raw=17580883877144746278, masked 8357511840289970470, idx 40/46): _FORTIFY_SOURCE axis — level 3 configured with optimization guard, _chk symbols present in all 7 binaries, canary confirmed; finding of fact, no defect
+
+### Cell
+The one unchecked hardening axis after c1-c4 (PIE/NX/RELRO/
+canary/BTI/exports): fortification of libc call sites.
+
+### Evidence
+- Config: CMakeLists.txt:541-555 — try_append_cxx_flags
+  '-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3' gated on an
+  __OPTIMIZE__ probe (level 0 builds skip fortify rather than
+  warn); applied via core_interface -> all targets uniformly.
+  Stack protector flags at :558-559.
+- Binary census (nm -D): bitcoind 6 _chk imports
+  (__fprintf/__memcpy/__memset/__read/__snprintf/__vsnprintf_chk),
+  bitcoin-cli 2, bitcoin-tx 3, bitcoin-util 3, test_bitcoin 8,
+  bench_bitcoin 6 — count varies with the set of fortifiable call
+  sites per binary (usage-driven, not flag divergence; same
+  interface flags). __stack_chk_fail imported (canary active).
+
+### Verdict
+Findings of fact: fortification is configured at level 3 and
+visible in every shipped binary; combined with c4's uniform
+PIE/NX/full-RELRO/canary, the host-build hardening posture has
+no gap on any inspectable axis except toolchain-inactive BTI
+(c1, aarch64 crt note-less).
+
+### Exact commands
+- sed CMakeLists.txt:538-560; nm -D per binary (counts above).
+
+### Limitations
+- _chk presence proves flag-active, not call-site completeness
+  (glibc fortifies only known-unsafe prototypes).
+- Windows/macOS fortify posture uninspectable here (c1 note).
