@@ -235,7 +235,7 @@ btck_Warning cast_btck_warning(kernel::Warning warning)
 
 struct LoggingConnection {
     std::unique_ptr<std::list<std::function<void(const std::string&)>>::iterator> m_connection;
-    void* m_user_data;
+    void* m_user_data{nullptr};
     std::function<void(void* user_data)> m_deleter;
 
     LoggingConnection(btck_LogCallback callback, void* user_data, btck_DestroyCallback user_data_destroy_callback)
@@ -244,21 +244,22 @@ struct LoggingConnection {
 
         auto connection{LogInstance().PushBackCallback([callback, user_data](const std::string& str) { callback(user_data, str.c_str(), str.length()); })};
 
-        // Only start logging if we just added the connection.
-        if (LogInstance().NumConnections() == 1 && !LogInstance().StartLogging()) {
-            LogError("Logger start failed.");
-            LogInstance().DeleteCallback(connection);
-            if (user_data && user_data_destroy_callback) {
-                user_data_destroy_callback(user_data);
+        try {
+            // Only start logging if we just added the connection.
+            if (LogInstance().NumConnections() == 1 && !LogInstance().StartLogging()) {
+                LogError("Logger start failed.");
+                throw std::runtime_error("Failed to start logging");
             }
-            throw std::runtime_error("Failed to start logging");
+
+            m_connection = std::make_unique<std::list<std::function<void(const std::string&)>>::iterator>(connection);
+            m_user_data = user_data;
+            m_deleter = user_data_destroy_callback;
+
+            LogDebug(BCLog::KERNEL, "Logger connected.");
+        } catch (...) {
+            LogInstance().DeleteCallback(connection);
+            throw;
         }
-
-        m_connection = std::make_unique<std::list<std::function<void(const std::string&)>>::iterator>(connection);
-        m_user_data = user_data;
-        m_deleter = user_data_destroy_callback;
-
-        LogDebug(BCLog::KERNEL, "Logger connected.");
     }
 
     ~LoggingConnection()

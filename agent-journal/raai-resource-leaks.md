@@ -148,3 +148,61 @@ The source/test commit is `9105c2db16c102bf11245f4306e73203c600d78d` (`ipc: clos
 Remaining cells are file/mapping failure paths, further database iterator/transaction ownership, secure allocation cleanup, and the `echoipc`/spawn lifecycle paths that were inspected but not independently reproduced this cycle. In particular, `echoipc`'s `init.release()` callback registration and the post-fork parent-close failure path need a separate fault-injection harness before any change is justified. Re-check the finding index and prior journals before selecting one.
 
 Verdict: Cycle 246 confirmed and fixed four independent reachable resource-lifetime defects. This is a finite evidence-backed cycle, not a repository-completion claim. The next run must select a new unchecked hypothesis from the accumulated map.
+
+# RAII, Smart-Pointer, and Resource-Leak Audit Cycle 278
+
+## Identity and Gate
+
+- Cycle: `278`
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `54`
+- Goal: `RAII, smart-pointer, and resource-leak audit`
+- Slug: `raai-resource-leaks`
+- Branch: `uber-cycle-278-raii-resource-leaks-20260802`
+- Base: `origin/master` at `556988790a7f961693a8fd93f73725baea66476a`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- HEAD at cycle start: `8957ad563f60845eaff97b5a7e3a406e97d664e3`
+- `origin/master...HEAD` at the gate: `45 1345`
+- Uber-goal state SHA-256 at the gate: `1ff34f7ceee52a933c41361f136d8e2f67f9090f9f40e7e20f9af7beeee2dbae`
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`
+- Goal TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`
+- Uber protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc`
+- The tracked/index state and `git diff --check` were clean at entry. Existing untracked agent artifacts, crash files, package files, `node_modules/`, `test/cache/`, and prior probes were preserved and excluded.
+- Protected long-running tests with PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` were alive and were not touched. All new builds and test data used `/data/my_storage/tmp`.
+
+## Scope and Prior-Work Exclusions
+
+Cycle 73's LevelDB constructor cleanup and Cycle 246's IPC connection, proxy-callback, SQLite statement, and `SpawnProcess` descriptor fixes were searched first. The remaining map included file/mapping paths, database iterator/transaction ownership, secure allocation cleanup, and kernel C/C++ wrapper failure paths. The current cycle selected the unindexed logging callback and wrapper ownership boundary rather than reopening those findings.
+
+## Working Hypothesis
+
+`btck::Logger` in `src/kernel/bitcoinkernel_wrapper.h` released its `std::unique_ptr<T>` before `btck_logging_connection_create()` proved that a logging connection existed. The C API explicitly returns null on construction failure, so the wrapper could lose the callback object. The native `LoggingConnection` constructor also registered the callback before allocating its iterator and before completing logging setup; an exception in that interval could leave a callback pointing at a caller-owned object that the failed wrapper construction subsequently destroyed.
+
+## Independent Discovery and Verification
+
+The ownership path was traced from `Logger::Logger` through `btck_logging_connection_create()` to `Handle::create()` and `LoggingConnection`. The old wrapper passed `log.release()` into the C API. The old native constructor removed the callback and invoked the user-data deleter only for the `StartLogging()` false branch; allocation or later logging exceptions had no rollback. The public header promised ownership to the created connection but did not define failure ownership.
+
+A deterministic public C API failure was produced by setting the internal logger to file output with a path whose parent did not exist. A `CountingLog` object and destroy callback showed the pre-fix behavior invoked the destroy callback before `btck_logging_connection_create()` returned null (`destructions == 1`), while the corrected contract leaves the object with the caller (`destructions == 0` until the caller deletes it). The same test also verifies that no callback remains registered after failure.
+
+The fix passes `log.get()` to the C API and calls `release()` only after successful base construction. `LoggingConnection` now initializes its user-data pointer, wraps setup in a catch block, removes the registered callback on every exception, and leaves failed-call user data with the caller. The public header documents that `user_data_destroy_callback` runs only after successful connection creation and is not called when null is returned. The regression is `logging_connection_failure_retains_user_data` in `src/test/kernel/test_kernel.cpp`.
+
+For independent pre-fix evidence, the same test was built after temporarily restoring the original constructor. It failed at the ownership assertion with `[1 != 0]`; after restoring the fix it passed all four assertions. This establishes sensitivity to the old behavior rather than an execution-only coverage addition.
+
+## Validation
+
+- Clean Clang 19 Debug kernel-library build: `/data/my_storage/tmp/cycle278-kernel-build`, `cmake --build ... --target test_kernel -j2` passed.
+- Focused fixed test: `test_kernel --run_test=logging_connection_failure_retains_user_data --random=278005` passed 1 case and 4 assertions.
+- Existing logging regression: `test_kernel --run_test=logging_tests --random=278002` passed.
+- Full fixed kernel suite with `TMPDIR=/data/my_storage/tmp/cycle278-test-tmp`: `test_kernel --random=278006` passed 20 cases and 3723 assertions. The first run using the host `/tmp` was not used as evidence because the root filesystem was full and several tests could not create chainstate data.
+- Clang 19 ASan+UBSan build: `/data/my_storage/tmp/cycle278-kernel-asan`, `cmake --build ... --target test_kernel -j2` passed.
+- ASan+UBSan focused run with `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1` and `UBSAN_OPTIONS=halt_on_error=1` passed 1 case and 4 assertions with no sanitizer or leak diagnostic.
+- `git diff --check` passed after the final source/test edits. No protected process was stopped or rebuilt.
+
+## Commit and Residual Queue
+
+- Source/test commit: to be recorded when this entry is committed; it contains the wrapper, native constructor rollback, public contract, and focused regression.
+- The test exercises deterministic logging-start failure, not allocator failure at the iterator or `LoggingConnection` allocation sites. The exception rollback is established by code-path analysis and the public failure test; an allocation-failure interposer remains a useful future kernel-wrapper cell.
+- Remaining queue: file/mapping failure paths, database iterator/transaction ownership, secure allocation cleanup, IPC `ListenConnections` raw-fd transfer, and allocation-failure coverage for C API wrappers. Search this entry and the deduplication journal before selecting any of them.
+
+Verdict: confirmed one kernel C/C++ ownership and callback-cleanup defect and fixed it with the smallest compatible transfer/rollback change. This is a finite evidence-backed cycle, not a repository-completion claim. Continue with a fresh gate and exact random selection.

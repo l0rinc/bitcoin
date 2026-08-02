@@ -935,8 +935,11 @@ BITCOINKERNEL_API void btck_logging_disable_category(btck_LogCategory category);
  *                                       to the user through the callback. If the user_data_destroy_callback
  *                                       is also defined it is assumed that ownership of the user_data is passed
  *                                       to the created logging connection.
- * @param[in] user_data_destroy_callback Nullable, function for freeing the user data.
- * @return                               A new kernel logging connection, or null on error.
+ * @param[in] user_data_destroy_callback Nullable, function for freeing the user data after
+ *                                       successful connection creation.
+ * @return                               A new kernel logging connection, or null on error. If
+ *                                       null is returned, ownership of user_data is retained by
+ *                                       the caller and user_data_destroy_callback is not called.
  */
 BITCOINKERNEL_API btck_LoggingConnection* BITCOINKERNEL_WARN_UNUSED_RESULT btck_logging_connection_create(
     btck_LogCallback log_callback,

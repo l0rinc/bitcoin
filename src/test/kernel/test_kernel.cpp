@@ -4,6 +4,7 @@
 
 #include <kernel/bitcoinkernel.h>
 #include <kernel/bitcoinkernel_wrapper.h>
+#include <logging.h>
 #include <util/fs.h>
 
 #define BOOST_TEST_MODULE Bitcoin Kernel Test Suite
@@ -97,6 +98,19 @@ public:
         std::cout << "kernel: " << message;
     }
 };
+
+struct CountingLog {
+    int* destructions;
+
+    ~CountingLog() { ++*destructions; }
+};
+
+void NoopLogCallback(void*, const char*, size_t) {}
+
+void DestroyCountingLog(void* user_data)
+{
+    delete static_cast<CountingLog*>(user_data);
+}
 
 struct TestDirectory {
     fs::path m_directory;
@@ -656,19 +670,48 @@ BOOST_AUTO_TEST_CASE(logging_tests)
     };
 
     logging_set_options(logging_options);
-    logging_set_level_category(LogCategory::BENCH, LogLevel::TRACE_LEVEL);
-    logging_disable_category(LogCategory::BENCH);
-    logging_enable_category(LogCategory::VALIDATION);
-    logging_disable_category(LogCategory::VALIDATION);
+    logging_set_level_category(btck::LogCategory::BENCH, btck::LogLevel::TRACE_LEVEL);
+    logging_disable_category(btck::LogCategory::BENCH);
+    logging_enable_category(btck::LogCategory::VALIDATION);
+    logging_disable_category(btck::LogCategory::VALIDATION);
 
     // Check that connecting, connecting another, and then disconnecting and connecting a logger again works.
     {
-        logging_set_level_category(LogCategory::KERNEL, LogLevel::TRACE_LEVEL);
-        logging_enable_category(LogCategory::KERNEL);
+        logging_set_level_category(btck::LogCategory::KERNEL, btck::LogLevel::TRACE_LEVEL);
+        logging_enable_category(btck::LogCategory::KERNEL);
         Logger logger{std::make_unique<TestLog>()};
         Logger logger_2{std::make_unique<TestLog>()};
     }
     Logger logger{std::make_unique<TestLog>()};
+}
+
+BOOST_AUTO_TEST_CASE(logging_connection_failure_retains_user_data)
+{
+    const auto previous_log_path{LogInstance().m_file_path};
+    const bool previous_print_to_file{LogInstance().m_print_to_file};
+    const bool previous_print_to_console{LogInstance().m_print_to_console};
+    const TestDirectory log_directory{"kernel_logger_failure"};
+
+    LogInstance().DisconnectTestLogger();
+    LogInstance().m_print_to_file = true;
+    LogInstance().m_print_to_console = false;
+    LogInstance().m_file_path = log_directory.m_directory / "missing" / "debug.log";
+
+    int destructions{0};
+    auto* log{new CountingLog{&destructions}};
+    auto* connection{btck_logging_connection_create(&NoopLogCallback, log, &DestroyCountingLog)};
+
+    BOOST_CHECK(connection == nullptr);
+    if (connection) btck_logging_connection_destroy(connection);
+    BOOST_CHECK_EQUAL(LogInstance().NumConnections(), 0);
+    BOOST_CHECK_EQUAL(destructions, 0);
+    if (destructions == 0) delete log;
+    BOOST_CHECK_EQUAL(destructions, 1);
+
+    LogInstance().DisconnectTestLogger();
+    LogInstance().m_file_path = previous_log_path;
+    LogInstance().m_print_to_file = previous_print_to_file;
+    LogInstance().m_print_to_console = previous_print_to_console;
 }
 
 BOOST_AUTO_TEST_CASE(btck_chainparams_tests)

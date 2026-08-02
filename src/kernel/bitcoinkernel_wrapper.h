@@ -963,9 +963,10 @@ public:
     Logger(std::unique_ptr<T> log)
         : UniqueHandle{btck_logging_connection_create(
               +[](void* user_data, const char* message, size_t message_len) { static_cast<T*>(user_data)->LogMessage({message, message_len}); },
-              log.release(),
+              log.get(),
               +[](void* user_data) { delete static_cast<T*>(user_data); })}
     {
+        log.release();
     }
 };
 
