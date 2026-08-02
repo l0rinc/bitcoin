@@ -219,3 +219,53 @@ valgrind [--quiet] --error-exitcode=42 bin/ctime_tests.
 
 ## Rotation note
 Four cycles; declassification surface closed.
+
+## Cycle 5 (2026-08-02, draw 266, raw=13490391729748515582, suspicion-mined from the 26-PR sweep): PR 35688 empty-HMAC UB — CONFIRMED with first-invalid UBSan trace at HEAD + ADOPTED; UBSan probe silent post-fix; crypto_tests green with empty-key vectors
+
+### Defect (F3 empty-span family, crypto arm)
+CHMAC_SHA256/512 constructors memcpy key bytes unconditionally;
+an empty key vector hands memcpy(nullptr, 0) — UB by the C
+standard's nonnull contract, and UBSan flags it even though the
+copy length is zero. The in-tree fuzz target worked around it by
+force-resizing empty inputs (crypto.cpp guards) — the footprint
+was already visible.
+- FAILING-BEFORE (first-invalid trace): UBSan probe
+  (CHMAC_SHA256{nullptr, 0} + CHMAC_SHA512{nullptr, 0}):
+  hmac_sha256.cpp:16 + hmac_sha512.cpp:16 'runtime error: null
+  pointer passed as argument 2, which is declared to never be
+  null'.
+
+### Adoption (audit/adopt-empty-hmac)
+- Cherry-picked b80907909c (std::copy for empty ranges + empty-
+  key RFC-style vectors) with two conflict resolutions recorded:
+  (a) test comment union — kept BOTH the new empty-key vectors
+  AND our RFC-4231 case-5 documentation (#107 c1 lineage);
+  (b) fuzz-target union — dropped ONLY the empty-guards, kept
+  the fork's added split/chunking calls unconditionally.
+- Also picked the branch tip a6b1b82f0d (eval_script stale
+  empty-guard removal — same family).
+- PASSING-AFTER: crypto_tests green (empty-key vectors + case 5
+  cohabit); UBSan probe with the fixed sources is SILENT
+  (EMPTY-HMAC-OK, no runtime error).
+
+### Verdict
+CONFIRMED + ADOPTED: genuine null-at-size-0 UB at HEAD (the F3
+family's crypto arm), fixed with the author's minimal std::copy
+change; empty keys now exercised instead of avoided. Upstream
+vehicle: PR 35688.
+
+### Suspicion-mining
+- S7: std::copy's empty-range semantics make the guard-removal
+  safe everywhere the same shape appears; the eval_script arm
+  (a6b1b82f0d) is the same family's second instance — checked
+  ConsumeRemainingBytes already returns early.
+- S8: the fork's chunking differential calls now run on empty
+  inputs too (wider coverage, no new oracle needed).
+
+### Exact commands
+- UBSan probe (failing) above; cherry-picks + resolutions above;
+  crypto_tests + probe (passing) above; empty-seed fuzz run
+  pending below.
+
+### Limitations / queue
+- Empty-seed fuzz run pending the build_fuzz rebuild.

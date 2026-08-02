@@ -174,6 +174,23 @@ comment-drift family as F1 (LockPoints).
   already sanitized (rpc/request.cpp:245-249) — the rejection paths
   were the missed twins.
 
+## F21: empty-HMAC-key null memcpy (F3 empty-span family, crypto arm) — FIXED 2026-08-02
+- Mechanism: CHMAC_SHA256/512 constructors memcpy'd key bytes
+  unconditionally; empty key vector -> memcpy(nullptr, 0), UB by the
+  nonnull contract (UBSan reports even at length 0). The in-tree fuzz
+  target force-resized empty inputs to avoid it.
+- Evidence: FAILING-BEFORE — UBSan first-invalid trace:
+  hmac_sha256.cpp:16 + hmac_sha512.cpp:16 'null pointer passed as
+  argument 2, which is declared to never be null'; PASSING-AFTER —
+  std::copy version, probe silent, crypto_tests green (empty-key
+  vectors cohabiting with our RFC-4231 case-5 docs).
+- Fix: b80907909c adopted (std::copy for empty ranges + empty-key
+  vectors; fuzz guards dropped) + a6b1b82f0d (eval_script same-family
+  guard); conflicts union-resolved (case-5 comment kept, fork chunking
+  calls kept unconditionally).
+- Dedup note: same class as F3 (AutoFile empty-span fwrite UB) —
+  null-at-size-0 in a C API; this is the crypto arm.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
