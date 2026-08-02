@@ -17,6 +17,18 @@ independently verified.
 - Fix: reject rounds > INT_MAX + harden KDF guard !count -> count < 1.
 - Next: offer upstream (already covered by #35859 — track its merge).
 
+## ✅ RPC method-name log injection + wallet-name control chars (adopted 3 commits)
+- Mechanism: whitelist-rejection warnings logged method names UNSANITIZED
+  (httprpc.cpp:118/:147) — newline injection forges node-looking lines;
+  wallet names accepted control chars (paths/UIs/logs).
+- Evidence: FAILING-BEFORE — characterize test fails expecting the
+  injected forged-consensus-error payload ('getblock\nERROR: ConnectTip:
+  ConnectBlock 0000...deadbeef failed'); PASSING-AFTER — rpc_whitelist.py
+  green, createwallet bad\nname -> error -8, goodname created.
+- Branch/commits: audit/adopt-sanitize-logs (9d5fb22f1d + 6ed8e2af39 +
+  ed4eb51e9f); archive 0c7d19aec8; journal #30 c6; index F20.
+- Next: track PR 35833 upstream.
+
 ## 🟠➜✅ FlushStateToDisk writes after block-flush failure (adopted f90291ffb9)
 - Mechanism: a failed FlushChainstateBlockFile only logged (TODO at
   validation.cpp:2821-2822) — block-index + coins writes PROCEEDED and

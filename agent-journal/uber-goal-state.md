@@ -78,6 +78,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 61 | stateful-contract-fuzzing | CYCLE-4 | 2026-08-02 | undo-data cell absorbed by #35-c5 battery (green); DISMISSED |
 | 30 | security-logging | CYCLE-3 | 2026-07-28 | 2 injection fixes; amplification dismissed by design (0 bytes at default, 14.6KB/round at -debug) |
 | 30 | security-logging | CYCLE-5 | 2026-08-02 | URI-on-exception safe by design (no secret-bearing URIs, body/auth never logged); DISMISSED |
+| 30 | security-logging | CYCLE-6 | 2026-08-02 | PR 35833 both arms CONFIRMED+ADOPTED (forged-consensus-error failing-before); F20 |
 | 31 | cross-layer-contracts | CYCLE-3 | 2026-07-28 | +gettxoutsetinfo use_index restriction (9396f0b414); 3 doc/RPC layer fixes total |
 | 29 | dead-stale-code | CYCLE-2 | 2026-07-28 | util/common + node/wallet/script scans clean; SAFE_CHARS_FILENAME parked |
 | 29 | dead-stale-code | CYCLE-4 | 2026-08-02 | reverse-dead-code sample: 9/9 helpers live; DISMISSED |
@@ -1049,6 +1050,9 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 265 (suspicion-mined): PR 35833 log injection both
+   arms CONFIRMED+ADOPTED (forged consensus-error failing-before
+   proof); F20; archive 0c7d19aec8.
    Cycle 264 (suspicion-mined from 26-PR sweep): PR 35714
    flush-failure write-stop CONFIRMED at HEAD + ADOPTED with
    failing-before/passing-after pair; F19 added; URGENT entry.
