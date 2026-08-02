@@ -126,26 +126,18 @@ independently verified.
   condvar/shared_mutex in txdb, resize-cursor test green at HEAD
   per #42 c1). Nothing to do locally.
 
-## 🟡 txgraph GetMainMemoryUsage under-charges retained Entry capacity (author fix in flight)
-- Mechanism: TxGraphImpl::Compact removes entries via swap-to-end +
-  pop_back WITHOUT releasing m_entries vector capacity (the only
-  shrink_to_fit calls, txgraph.cpp:1458-1459, cover other members);
-  GetMainMemoryUsage charges sizeof(Entry) * LIVE txcount
-  (:3762-3775) — after fill-then-drain churn, allocated memory
-  (peak capacity) sits outside DynamicMemoryUsage and the
-  -maxmempool accounting.
-- Reachability/severity: mempool churn on any busy node; bounded by
-  the peak tx watermark since startup (retained-old memory, not
-  unbounded growth; no consensus/remote primitive).
-- Evidence: HEAD mechanism verified statically (pop_back path
-  :1875-1900, charge formula :3769); author WIP branch
-  l0rinc/l0rinc/txgraph-retained-entry-usage (2 commits,
-  2026-08-01) with churn characterization test + DynamicUsage(
-  m_entries) charge + zero-when-empty guard.
-- Branch/commit: fix on the author's branch (475ab49da6); radar
-  journal #65 c12; archive this cycle.
-- Next: adopt/review when the author lands it; re-verify
-  DynamicMemoryUsage vs RSS before/after churn on adoption.
+## ✅ txgraph retained-capacity accounting (adopted + verified locally 28ba79168b)
+- Mechanism: Compact() pops m_entries without releasing vector
+  capacity; GetMainMemoryUsage charged live count only -> retained
+  memory outside -maxmempool accounting.
+- Evidence: fix 475ab49da6 (DynamicUsage(m_entries) charge) adopted
+  onto the lineage; flipped characterization test GREEN (churned
+  usage now GT fresh); full txgraph_tests green; #22-c4 churn
+  profile rerun unchanged within noise (accounting truth at large
+  scales; RSS residual is allocator slack).
+- Branch/commit: audit/adopt-retained-capacity @ 28ba79168b;
+  author's upstream vehicle l0rinc/txgraph-retained-entry-usage.
+- Next: none local; watch the author's PR for upstream.
 
 ## ✅ dbwrapper failed-construction leak (fixed 73a6798206, #13 c2)
 - Mechanism: CDBWrapper ctor can throw (LevelDB open failure) after
