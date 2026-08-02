@@ -142,7 +142,7 @@ def check_manifests(ci_type):
 def prepare_tests(ci_type):
     workspace = Path.cwd()
     if ci_type == "standard":
-        run([sys.executable, "-m", "pip", "install", "pyzmq"])
+        run([sys.executable, "-m", "pip", "install", "pyzmq==27.1.0"])
         dest = workspace / "unit_test_data"
         download_script_assets(dest)
     elif ci_type == "fuzz":

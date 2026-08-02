@@ -1,3 +1,43 @@
+# C/C++ Supply-Chain Cycle 265
+
+## Cycle 265 Completion: pin CI pyzmq installations
+
+### Identity and Gate
+
+- The fresh gate fetched `origin/master` before branch creation. The exact selector `shuf -i 0-98 -n 1` drew `59`; no reroll was needed because the Goal 59 journal still had distinct open cells. Goal: `C/C++ supply-chain and security-gate audit`; slug: `cpp-supply-chain`.
+- Branch: `uber-cycle-265-cpp-supply-chain-pyzmq-20260802`.
+- Start HEAD: `546eb9d130600f8674434b6441711580e402261f`; `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1319 45` (`HEAD...origin/master`).
+- The tracked tree was clean at the gate. Existing untracked agent artifacts, goal files, probes, `node_modules/`, `test/cache/`, and crash/profiling artifacts were preserved. Protected long-running tests were observed and not touched.
+- Catalog, prompt, TSV, and protocol hashes were unchanged: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+### Closed Scope and Hypothesis
+
+The selected journal's open Goal 59 queue explicitly retained `pip install pyzmq`, vcpkg inputs/cache, container image provenance, generated inputs, and license gates. The previous qa-assets corpus cell was closed in Cycle 264. Four native CI environment files passed `pyzmq` without a version through `ci/test/01_base_install.sh`; `.github/ci-windows.py` and `.github/ci-windows-cross.py` also invoked `pip install pyzmq` without a version. The lint environment already used `pyzmq==27.1.0` in `ci/lint/requirements.txt`.
+
+The trust boundary is CI preparation: pyzmq is a native Python extension used by the functional ZMQ tests and Python lint dependency checks. An unpinned install lets a future PyPI release, wheel selection, or dependency change alter code executed by CI without a Bitcoin commit, causing non-reproducible results or introducing behavior at the test/tool boundary. This cycle targets pyzmq only; the separately queued unpinned `pycapnp` paths remain open.
+
+### Provenance and Compatibility Evidence
+
+- PyPI JSON for `pyzmq` reports current version `27.1.0`, 92 release artifacts, and only the conditional PyPy dependency `cffi`; the project already selected this version for linting. The exact-release file metadata was read from `https://pypi.org/pypi/pyzmq/27.1.0/json`.
+- A CPython 3.11 Linux wheel downloaded with `pip download --no-deps --only-binary=:all: pyzmq==27.1.0` had SHA-256 `5bbf8d3630bf96550b3be8e1fc0fea5cbdc8d5466c1192887bd94869da17a63e`, matching the PyPI digest. The relevant Windows, macOS, manylinux, and musllinux wheel hashes were also present in the same immutable release metadata.
+- Installing that downloaded wheel into a scratch target under `/data/my_storage/tmp` imported `zmq` at version `27.1.0`, created and closed a `zmq.PAIR` socket, and terminated its context successfully. The host interpreter's unrelated installed pyzmq was `24.0.1`; no global package was modified.
+
+### Independent Verification
+
+- Sourcing each changed native environment file and inspecting the resulting `PIP_PACKAGES` value showed `pyzmq==27.1.0`; a repository-wide check found no remaining unpinned pyzmq install in the CI or README paths. The lint requirements pin remained unchanged.
+- Python compilation of both Windows helpers and shell syntax checks for all four changed environment files passed. A source-level Windows command check found both `prepare_tests` paths use the exact `pyzmq==27.1.0` requirement.
+- The old and new command shapes were compared against a controlled package-resolution model: the old bare `pyzmq` requirement leaves the resolver free to select a later release, while the new requirement can resolve only the reviewed version. No full CI job was run because the required Windows, container, and sanitizer environments are unavailable and protected tests must remain untouched.
+
+### Fix and Verdict
+
+Pinned `pyzmq==27.1.0` in the four native CI `PIP_PACKAGES` bundles, both Windows helper installs, and the macOS test README. The existing lint requirement already had the same pin. This is a small reproducibility/provenance fix and does not change the functional test protocol or install `pycapnp` differently.
+
+**Confirmed and fixed.** Before the change, active CI preparation paths accepted an unbounded PyPI pyzmq release. After the change, all repository-maintained pyzmq install instructions and CI consumers name the same reviewed version. The pin does not provide `--require-hashes` for every platform-specific wheel; adding a complete hash lock is a separate scope decision, and the unpinned `pycapnp` dependency remains in the next queue.
+
+### Handoff
+
+Keep `pycapnp` installation, vcpkg manifest/cache inputs, container image provenance, generated-input checks, and license gates as distinct Goal 59 cells. Do not reopen the Cycle 264 qa-assets commit/cache finding or earlier action, lint-tool, script-vector, Guix-archive, release-signature, compiler-ref, or SDK-archive findings.
+
 # C/C++ Supply-Chain Cycle 264
 
 ## Cycle 264 Completion: pinned qa-assets fuzz corpus provenance

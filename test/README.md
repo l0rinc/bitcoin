@@ -32,7 +32,7 @@ See [/doc/fuzzing.md](/doc/fuzzing.md)
 The ZMQ functional test requires a python ZMQ library. To install it:
 
 - on Unix, run `sudo apt-get install python3-zmq`
-- on mac OS, run `pip3 install pyzmq`
+- on mac OS, run `pip3 install pyzmq==27.1.0`
 
 The IPC functional test requires a python IPC library. `pip3 install pycapnp` may work, but if not, install it from source:
 
