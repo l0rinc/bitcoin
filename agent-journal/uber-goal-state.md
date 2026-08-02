@@ -2,6 +2,60 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 263 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact
+  selector `shuf -i 0-98 -n 1` drew goal `74`
+  (`memory-pressure-allocator`). The dedicated branch is
+  `uber-cycle-263-memory-pressure-allocator-20260802`. Start HEAD was
+  `fa8f1f6f860076385e83e41d7ebb1665565f0eab`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1313 45`
+  (`HEAD...origin/master`).
+- Catalog, prompt, goals TSV, and protocol hashes were unchanged:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Tracked/index state was clean at the draw; existing untracked agent/user
+  artifacts were preserved and excluded.
+- The source audit found that `TxGraphImpl::GetMainMemoryUsage()` omitted
+  retained capacity in the main per-quality Cluster vectors, the cleared
+  `m_to_remove` vector, and the cleared `m_unlinked` index. The prior
+  `m_entries` capacity fix and live chunk-index accounting were retained;
+  staging and temporary group-operation state remain outside the documented
+  main-graph estimate.
+- Two controlled regressions equalized live Entry and Cluster state while
+  varying retained container capacity. Before the fix, both pairs reported
+  identical usage (`163992` and `442384` bytes). The fixed code reported
+  `172224` versus `200912` in the Cluster-container case and a larger value
+  after removal-buffer churn. Temporary removal of all new accounting terms
+  made both regressions fail, proving the tests are sensitive to the intended
+  allocation classes.
+- Source/test/journal commit
+  `48652bffd6eb9d21db69402449b42d8be4979a01` was authored as
+  `Lőrinc <pap.lorinc@gmail.com>` with subject
+  `mempool: account for retained txgraph containers`. The exact full hash is
+  included here for the next handoff.
+- The clean incremental build in `/data/my_storage/tmp/cycle243-build` passed
+  with ccache disabled. `txgraph_tests` passed 26 cases and 617 assertions;
+  `mempool_tests` passed 26 cases and 1013 assertions. `git diff --check`
+  passed. No full repository suite, sanitizer build, or production RSS
+  measurement was run; the change is an allocator-model accounting fix, not an
+  exact RSS claim.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` remained alive and untouched. All cycle-specific
+  failed test processes were terminated or exited; no cycle-263 process
+  remains. Scratch data stayed under `/data/my_storage/tmp/cycle263-*`.
+- Verdict: **confirmed and fixed**. Do not repeat the retained Entry,
+  unbroadcast-set, or TxGraph container-capacity omissions without new source,
+  backend, lifecycle, or recurrence evidence. The repository is not
+  considered exhausted.
+- The next cycle must perform a fresh gate, fetch `origin/master`, draw exactly
+  one selector from `0..98`, and create a new `uber-cycle-264-*` branch. Re-rank
+  the remaining risk-map cells rather than following the prior memory queue
+  blindly.
+
 ## Cycle 262 Completion
 
 - The fresh gate fetched `origin/master` before branch creation. The exact
