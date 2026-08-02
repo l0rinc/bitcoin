@@ -88,16 +88,6 @@ independently verified.
 - Next: none locally; optionally upstreamable (trivial, provably
   identical post-state, re-salt preserved).
 
-## ⚪ qrencode depends primary URL dead (404), fallback covers
-- Mechanism: https://fukuchi.org/works/qrencode/ is gone; depends
-  .mk pins its tarball sha256 (upstream-master-identical file).
-- Evidence: curl 404 on primary; bitcoincore.org/depends-sources
-  fallback serves byte-exact pinned tarball (da448ed4f5...71e8e).
-  expat 2.7.3 primary verified matching too (#76 c2).
-- Branch: journal-only, reproducible-builds.md c2.
-- Next: upstream-watch — if bitcoin/bitcoin updates qrencode.mk, take
-  theirs. No local divergence warranted (hash is the trust anchor).
-
 ## ✅ -limitclustercount=0 accepted at startup (fixed 5e0a80ade5, #52 c2)
 - Mechanism: only the upper bound of -limitclustercount was
   validated; 0 slipped to TxGraph's Assume(max_cluster_count >= 1)

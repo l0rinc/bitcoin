@@ -299,3 +299,35 @@ file.
 
 ## Rotation note
 Cycle 4 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 5 (2026-08-02, draw 210 chain: #101 EXHAUSTED (queue-empty), redraw #34 EXHAUSTED (35654 watch rides #42), redraw2 raw=1130504839277943065 (63-bit) idx 20/21): qrencode watch resolution — fallback byte-exact TODAY, upstream .mk identical; ⚪ item PRUNED from URGENT (verified-stale); DISMISSED
+
+### Re-verification (the standing ⚪'s scheduled re-check)
+- Primary https://fukuchi.org/works/qrencode/qrencode-4.1.1.
+  tar.gz: still 404 today (Apache/2.4.68 Debian).
+- Fallback https://bitcoincore.org/depends-sources/
+  qrencode-4.1.1.tar.gz: fetched LIVE; sha256 =
+  da448ed4f52aba6bcb0cd48cac0dd51b8692bccc4cd127431402fca6f8171e8e
+  — byte-exact match to the .mk pin (depends/packages/
+  qrencode.mk:5).
+- Upstream master qrencode.mk: IDENTICAL file (same version,
+  same dead primary, same hash) — upstream has not moved it;
+  the fork's posture is upstream-exact. The #42 watch covers
+  future .mk changes.
+
+### Verdict
+DISMISSED (fully bounded, twice-verified): the dead primary is
+covered by a byte-exact pinned fallback with the hash as trust
+anchor; no divergence warranted. URGENT item pruned
+(verified-stale); the class moves to routine #42 watch.
+
+### Exact commands
+- curl -sI primary (404); curl -sL fallback | sha256sum
+  (match); curl upstream raw qrencode.mk (identical).
+
+### Limitations / queue
+- Fallback availability is a bitcoincore.org operational
+  dependency (same as every other depends package; not
+  qrencode-specific).
+- qrencode patch (cmake_fixups.patch) re-applies cleanly by
+  construction (unchanged since c2).
