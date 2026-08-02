@@ -64,12 +64,18 @@ fi
 
 if [ "$RUN_FUZZ_TESTS" = "true" ]; then
   export DIR_FUZZ_IN=${DIR_QA_ASSETS}/fuzz_corpora/
+  QA_ASSETS_COMMIT="918cdd36fec3c78f8b8f6a1dc0ec6688e7559c9e"
   if [ ! -d "$DIR_FUZZ_IN" ]; then
     ${CI_RETRY_EXE} git clone --depth=1 https://github.com/bitcoin-core/qa-assets "${DIR_QA_ASSETS}"
   fi
+  actual_commit=$(git -C "${DIR_QA_ASSETS}" rev-parse HEAD 2>/dev/null || true)
+  if [[ "$actual_commit" != "$QA_ASSETS_COMMIT" ]]; then
+    echo "Unexpected qa-assets commit: ${actual_commit} (expected ${QA_ASSETS_COMMIT})" >&2
+    exit 1
+  fi
   (
     cd "${DIR_QA_ASSETS}"
-    echo "Using qa-assets repo from commit ..."
+    echo "Using qa-assets repo from pinned commit ${QA_ASSETS_COMMIT}"
     git log -1
   )
 elif [ "$RUN_UNIT_TESTS" = "true" ]; then

@@ -15,6 +15,9 @@ sys.path.append(str(Path(__file__).resolve().parent.parent / "test"))
 from download_utils import download_script_assets
 
 
+QA_ASSETS_COMMIT = "918cdd36fec3c78f8b8f6a1dc0ec6688e7559c9e"
+
+
 def run(cmd, **kwargs):
     print("+ " + shlex.join(cmd), flush=True)
     kwargs.setdefault("check", True)
@@ -152,7 +155,17 @@ def prepare_tests(ci_type):
             repo_dir,
         ]
         run(clone_cmd)
-        print("Using qa-assets repo from commit ...")
+        actual_commit = run(
+            ["git", "-C", repo_dir, "rev-parse", "HEAD"],
+            stdout=subprocess.PIPE,
+            text=True,
+        ).stdout.strip()
+        if actual_commit != QA_ASSETS_COMMIT:
+            sys.exit(
+                f"Unexpected qa-assets commit: {actual_commit} "
+                f"(expected {QA_ASSETS_COMMIT})"
+            )
+        print(f"Using qa-assets repo from pinned commit {QA_ASSETS_COMMIT}")
         run(["git", "-C", repo_dir, "log", "-1"])
 
 

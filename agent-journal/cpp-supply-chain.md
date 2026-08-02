@@ -1,3 +1,44 @@
+# C/C++ Supply-Chain Cycle 264
+
+## Cycle 264 Completion: pinned qa-assets fuzz corpus provenance
+
+### Identity and Gate
+
+- Selector history: the first exact draw was `61`, but the selected stateful-contract-fuzzer evidence cell had just been closed in Cycle 262, so the protocol rerolled exactly once; the reroll was `59`, selecting `C/C++ supply-chain and security-gate audit` (`cpp-supply-chain`).
+- Branch: `uber-cycle-264-cpp-supply-chain-security-gate-20260802`.
+- Gate HEAD: `419fed9c60c7372270d925a3ae850c27712475b4`; `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence: `1317 45`.
+- The tracked tree was clean at the gate. Existing untracked agent artifacts, goal files, probes, `node_modules/`, `test/cache/`, and crash/profiling artifacts were preserved. Protected long-running tests were observed and not touched.
+- Catalog, prompt, TSV, and protocol hashes were unchanged: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+### Closed Scope and Hypothesis
+
+Earlier Goal 59 cycles closed mutable GitHub Action refs, lint-tool assets, script test vectors, Guix cached archives, release-signature handling, compiler/toolchain Git refs, and cross-build SDK archives. The distinct open cell was the fuzz corpus. `ci/test/03_test_script.sh` cloned `https://github.com/bitcoin-core/qa-assets` from the moving default branch and skipped the clone whenever `${DIR_QA_ASSETS}/fuzz_corpora/` already existed. `.github/ci-windows.py` cloned the same moving branch and only printed its HEAD.
+
+The trust boundary is the CI test preparation step. `test/fuzz/test_runner.py` feeds every corpus file to production fuzz binaries; the corpus is not executable source, but its contents control test coverage, runtime, memory use, and whether existing fuzz-target defects are exercised. A moving external ref also makes CI results non-reproducible, while the Unix cache condition allowed an arbitrary or stale pre-existing corpus directory to bypass the repository's intended source.
+
+### Provenance Evidence
+
+- `git ls-remote https://github.com/bitcoin-core/qa-assets refs/heads/main` resolved `main` to `918cdd36fec3c78f8b8f6a1dc0ec6688e7559c9e` on 2026-08-02. The commit is recorded as the pinned corpus version; updates must change the two consumer constants together.
+- History shows the clone was introduced for fuzz seed corpora in `fa8a428c92d` and later moved to the current script path by CI refactors. The existing log line `Using qa-assets repo from commit ...` was observational only; it did not validate a commit or content identity.
+- The Unix guard checks only the corpus subdirectory, not the Git repository or commit. Therefore a populated stale cache never invokes `git clone` or any provenance check. The Windows path has no corresponding cache guard, but its shallow clone follows the mutable default branch on every run.
+
+### Independent Verification
+
+- A local bare Git remote with commit A followed by commit B reproduced the stale-cache case. The old `if [ ! -d cache/fuzz_corpora ]; then git clone ...; fi` path returned success while using cached commit A after the remote moved to B. The post-change HEAD comparison rejected the same cache (`old_stale_cache_status=0`, `new_stale_cache_rejected=1`).
+- The same remote reproduced the fresh-clone case: after `main` moved to B, a shallow clone resolved B. Comparing it with the expected A rejected the moving-ref result (`moving_head` was B and `new_moving_ref_rejected=1`).
+- A Python harness imported `.github/ci-windows.py` and exercised `prepare_tests("fuzz")` with a matching fake Git HEAD and a mismatching fake Git HEAD. The first was accepted; the second exited with the expected commit mismatch before the log/test step.
+- `bash -n ci/test/03_test_script.sh`, `python3 -m py_compile .github/ci-windows.py`, and `git diff --check` passed. The live `git ls-remote` check matched the pinned value. Full container, Windows, and fuzz runs were not executed because the required environments are unavailable and protected long-running tests must remain untouched.
+
+### Fix and Verdict
+
+Added the qa-assets commit `918cdd36fec3c78f8b8f6a1dc0ec6688e7559c9e` to the Unix and Windows fuzz-test preparation paths. The Unix path still reuses an existing corpus directory, but now resolves and compares its Git HEAD and fails closed for a missing repository, stale cache, or unexpected commit. A fresh clone is checked before the corpus is passed to `test_runner.py`. The Windows path resolves the shallow clone's HEAD and fails before the fuzz runner if it differs from the pinned commit.
+
+**Confirmed and fixed.** Before the change, CI could consume moving or locally seeded fuzz inputs without a repository change or identity check. The change binds both active fuzz-corpus consumers to a reviewed Git object ID and makes stale or moved input fail closed. This does not attest the contents of an already-extracted or copied corpus outside these preparation paths, and it does not prove fuzz-target behavior safe; those remain separate evidence cells.
+
+### Handoff
+
+Keep `pip install pyzmq`, vcpkg manifest/cache inputs, container image provenance, generated-input checks, and license gates as distinct Goal 59 cells. Do not reopen the closed action, lint-tool, script-vector, Guix-archive, release-signature, compiler-ref, or SDK-archive findings.
+
 # C/C++ Supply-Chain Cycle 239
 
 ## Cycle 239 Start: cross-build SDK archive integrity
