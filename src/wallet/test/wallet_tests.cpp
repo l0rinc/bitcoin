@@ -27,11 +27,13 @@
 #include <wallet/coincontrol.h>
 #include <wallet/context.h>
 #include <wallet/receive.h>
+#include <wallet/sqlite.h>
 #include <wallet/spend.h>
 #include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
 
 #include <boost/test/unit_test.hpp>
+#include <sqlite3.h>
 #include <univalue.h>
 
 using node::MAX_BLOCKFILE_SIZE;
@@ -44,6 +46,68 @@ static_assert(DEFAULT_TRANSACTION_MINFEE >= DEFAULT_MIN_RELAY_TX_FEE, "wallet mi
 static_assert(WALLET_INCREMENTAL_RELAY_FEE >= DEFAULT_INCREMENTAL_RELAY_FEE, "wallet incremental fee is smaller than default incremental relay fee");
 
 BOOST_FIXTURE_TEST_SUITE(wallet_tests, WalletTestingSetup)
+
+class FailCommitSQLiteBatch final : public SQLiteBatch
+{
+    bool& m_fail_commit;
+
+public:
+    FailCommitSQLiteBatch(SQLiteDatabase& database, bool& fail_commit)
+        : SQLiteBatch(database), m_fail_commit(fail_commit) {}
+
+    bool TxnCommit() override
+    {
+        if (m_fail_commit) return false;
+        return SQLiteBatch::TxnCommit();
+    }
+};
+
+class FailCommitSQLiteDatabase final : public SQLiteDatabase
+{
+    bool m_fail_commit{false};
+
+public:
+    FailCommitSQLiteDatabase()
+        : SQLiteDatabase(fs::PathFromString("goal57-del-mock/"), fs::PathFromString("wallet.dat"), DatabaseOptions(), SQLITE_OPEN_MEMORY) {}
+
+    void SetFailCommit(bool fail_commit) { m_fail_commit = fail_commit; }
+
+    std::unique_ptr<DatabaseBatch> MakeBatch() override
+    {
+        return std::make_unique<FailCommitSQLiteBatch>(*this, m_fail_commit);
+    }
+};
+
+BOOST_FIXTURE_TEST_CASE(del_address_book_commit_failure_preserves_state, TestingSetup)
+{
+    auto database = std::make_unique<FailCommitSQLiteDatabase>();
+    auto* database_ptr = database.get();
+    CWallet wallet(m_node.chain.get(), "", std::move(database));
+    const CTxDestination address{PKHash()};
+    int address_book_notifications{0};
+    auto notification_connection = wallet.NotifyAddressBookChanged.connect([&](const auto&, const auto&, auto, auto, auto) {
+        ++address_book_notifications;
+    });
+
+    {
+        LOCK(wallet.cs_wallet);
+        BOOST_CHECK(wallet.SetAddressBook(address, "label", AddressPurpose::SEND));
+        BOOST_CHECK(wallet.FindAddressBookEntry(address, /*allow_change=*/false) != nullptr);
+    }
+
+    database_ptr->SetFailCommit(true);
+    {
+        LOCK(wallet.cs_wallet);
+        BOOST_CHECK(!wallet.DelAddressBook(address));
+        BOOST_CHECK(wallet.FindAddressBookEntry(address, /*allow_change=*/false) != nullptr);
+    }
+    BOOST_CHECK_EQUAL(address_book_notifications, 1);
+
+    auto batch = wallet.GetDatabase().MakeBatch();
+    std::string stored_value;
+    BOOST_CHECK(batch->Read(std::make_pair(DBKeys::NAME, EncodeDestination(address)), stored_value));
+    BOOST_CHECK(batch->Read(std::make_pair(DBKeys::PURPOSE, EncodeDestination(address)), stored_value));
+}
 
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {

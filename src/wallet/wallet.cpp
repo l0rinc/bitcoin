@@ -2563,13 +2563,16 @@ bool CWallet::DelAddressBookWithDB(WalletBatch& batch, const CTxDestination& add
             WalletLogPrintf("Error: cannot erase address book entry name\n");
             return false;
         }
-
-        // finally, remove it from the map
-        m_address_book.erase(address);
     }
 
-    // All good, signal changes
-    NotifyAddressBookChanged(address, "", /*is_mine=*/false, AddressPurpose::SEND, CT_DELETED);
+    // Apply the in-memory change and notify upper layers only after the database transaction commits.
+    batch.RegisterTxnListener({.on_commit=[this, address] {
+        {
+            LOCK(cs_wallet);
+            m_address_book.erase(address);
+        }
+        NotifyAddressBookChanged(address, "", /*is_mine=*/false, AddressPurpose::SEND, CT_DELETED);
+    }, .on_abort={}});
     return true;
 }
 
@@ -4135,7 +4138,8 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
     // This wallet will be discarded at the end of the process. Only wallets that contain the
     // migrated records will be presented to the user.
     if (!has_spendable_material) {
-        if (!m_address_book.empty()) return util::Error{_("Error: Not all address book records were migrated")};
+        // Address book deletions are applied to memory by a transaction listener after commit.
+        if (dests_to_delete.size() != m_address_book.size()) return util::Error{_("Error: Not all address book records were migrated")};
         if (!mapWallet.empty()) return util::Error{_("Error: Not all transaction records were migrated")};
     }
 
