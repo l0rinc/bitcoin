@@ -17,6 +17,20 @@ independently verified.
 - Fix: reject rounds > INT_MAX + harden KDF guard !count -> count < 1.
 - Next: offer upstream (already covered by #35859 — track its merge).
 
+## 🟠➜✅ FlushStateToDisk writes after block-flush failure (adopted f90291ffb9)
+- Mechanism: a failed FlushChainstateBlockFile only logged (TODO at
+  validation.cpp:2821-2822) — block-index + coins writes PROCEEDED and
+  m_last_flushed_block advanced, recording a block as flushed while its
+  block/undo data may not be durable (restart/wallet then trust it).
+- Trigger: block-file IO failure during a flush (disk full/error/perms —
+  #93-c2 unwritable-blocksdir family).
+- Evidence: FAILING-BEFORE — PR's boundary test fails 2 assertions with
+  the pre-fix validation.cpp (marker advanced); PASSING-AFTER — test
+  green (exit EXIT_FAILURE, marker unchanged). Author PR 35714 (open).
+- Branch/commit: audit/adopt-flush-failure @ f90291ffb9; archive this cycle.
+- Next: track PR 35714 upstream; adopt 0f04fbee2f characterization test
+  if the author reworks it.
+
 ## ✅ btck_chainstate_manager_destroy null deref — lineage fix restored (#16 c4)
 - Mechanism: 22 btck_*_destroy functions, 21 are delete-only (null-safe
   free() convention); btck_chainstate_manager_destroy flushed chainstates
@@ -32,22 +46,6 @@ independently verified.
   audit/api-misuse-c4; archive commit this cycle; journal #16 c4.
 - Next: offer upstream (still vulnerable); sweep other pre-rotation
   journals/fixes missing from the lineage.
-
-## ✅ PSBT fuzz harness truncation gate (fixed d086164661, #101 c1)
-- Mechanism: psbt fuzz target fed ConsumeRandomLengthString() into
-  DecodeRawPSBT; the backslash-escape convention truncated any document
-  containing 0x5c+non-0x5c, so whole valid PSBTs never decoded and the
-  per-input/output half of the target was unreachable.
-- Evidence: hybrid consumption (ConsumeBool-selected
-  RandomLength/RemainingBytes) — 9 starved functions (483 edges)
-  covered AFTER, all 9 UNCOVERED again in the old-corpus CONTROL,
-  isolated RPC-verified 136-byte seed 528 -> 2857 edges. Inlining
-  artifacts separated per #9 c2 discipline.
-- Branch/commit: audit/public-characterization @ d086164661 (fix +
-  journal public-characterization-fix.md). Archived on
-  agent/all-findings @ 6890fc43f0 (+bookkeeping 199fc03af4).
-- Next: grep other fuzz targets for the same single-mode document
-  pattern; #50 c2 SigningProvider-bearing target for SignPSBTInput.
 
 ## ✅ psbt fuzz target missing ECC init — SEGV on first valid key (fixed, #50 c4)
 - Mechanism: the #50 c2 signing pass (08590b364d) made the psbt fuzz

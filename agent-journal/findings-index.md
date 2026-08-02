@@ -144,6 +144,19 @@ comment-drift family as F1 (LockPoints).
   pin) but a DIFFERENT input (qa-assets vs script_assets) — tracked
   separately so a future third pin gap stays visible.
 
+## F19: flush-failure write-through (durability marker advance) — FIXED 2026-08-02
+- Mechanism: FlushChainstateBlockFile failure only logged (TODO at
+  validation.cpp:2821-2822); block-index + coins writes proceeded and
+  m_last_flushed_block advanced — a block recorded flushed while its
+  block/undo data may not be durable; restart/wallet trust it.
+- Evidence: PR-35714 boundary test FAILS 2 assertions pre-fix (marker
+  advanced past injected file-open failure), green post-fix (exit
+  EXIT_FAILURE, marker unchanged). Author's PR 35714 (open upstream).
+- Fix: e1a337ee96 adopted as f90291ffb9 (return the flush error before
+  the writes/marker advance); union-resolved test conflict.
+- Dedup note: distinct from F14 (leak) and #93 c2 (loud-failure
+  behavior) — this one was a SILENT marker-advance, now loud.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
