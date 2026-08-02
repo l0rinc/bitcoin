@@ -152,6 +152,7 @@ CPartialMerkleTree::CPartialMerkleTree() : nTransactions(0), fBad(true) {}
 
 uint256 CPartialMerkleTree::ExtractMatches(std::vector<Txid> &vMatch, std::vector<unsigned int> &vnIndex) {
     vMatch.clear();
+    vnIndex.clear();
     // An empty set will not work
     if (nTransactions == 0)
         return uint256();

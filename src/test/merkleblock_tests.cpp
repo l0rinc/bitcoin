@@ -78,4 +78,26 @@ BOOST_AUTO_TEST_CASE(merkleblock_construct_from_txids_not_found)
     BOOST_CHECK_EQUAL(vIndex.size(), 0U);
 }
 
+BOOST_AUTO_TEST_CASE(merkleblock_extract_matches_reuse)
+{
+    CBlock block = getBlock13b8a();
+    std::set<Txid> txids{Txid{"74d681e0e03bafa802c8aa084379aa98d9fcd632ddc2ed9782b586ec87451f20"}};
+    CMerkleBlock merkleBlock(block, txids);
+
+    std::vector<Txid> vMatched;
+    std::vector<unsigned int> vIndex{1234};
+
+    const uint256 merkleRoot = merkleBlock.txn.ExtractMatches(vMatched, vIndex);
+    BOOST_CHECK_EQUAL(merkleRoot, block.hashMerkleRoot);
+    BOOST_CHECK_EQUAL(vMatched.size(), 1U);
+    BOOST_CHECK_EQUAL(vIndex.size(), vMatched.size());
+    BOOST_CHECK_EQUAL(vIndex[0], 8U);
+
+    const auto expectedMatched = vMatched;
+    const auto expectedIndex = vIndex;
+    BOOST_CHECK_EQUAL(merkleBlock.txn.ExtractMatches(vMatched, vIndex), merkleRoot);
+    BOOST_CHECK(vMatched == expectedMatched);
+    BOOST_CHECK(vIndex == expectedIndex);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
