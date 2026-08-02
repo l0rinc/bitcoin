@@ -1,4 +1,4 @@
-FROM debian:stable-slim
+FROM docker.io/library/debian:stable-slim@sha256:328d16499860ae6cb9b345e2e4cebca08c2a36e4f7278482c7bd1f39d71e5bfd
 
 SHELL ["/bin/bash", "-c"]
 

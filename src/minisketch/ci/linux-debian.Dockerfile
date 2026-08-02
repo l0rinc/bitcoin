@@ -1,4 +1,4 @@
-FROM debian:stable
+FROM docker.io/library/debian:stable@sha256:8e109a974a9659354791cab2c001e5c3e3153805c344ccec7c1ef98d814187e7
 
 RUN dpkg --add-architecture i386
 RUN dpkg --add-architecture s390x

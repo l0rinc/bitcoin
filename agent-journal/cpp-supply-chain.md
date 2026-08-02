@@ -1,3 +1,116 @@
+# C/C++ Supply-Chain Cycle 290
+
+## Cycle 290 Completion: pin CI container image manifests
+
+### Identity and Gate
+
+- The fresh gate fetched `origin/master` before branch creation. The exact
+  selector `shuf -i 0-98 -n 1` returned `59`; no reroll was needed because
+  Goal 59 retained distinct vcpkg, container, generated-input, and license
+  cells. Goal: `C/C++ supply-chain and security-gate audit`; slug:
+  `cpp-supply-chain`.
+- Branch: `uber-cycle-290-cpp-supply-chain-20260802`. Gate and cycle-start HEAD
+  were `150dbb5ae37a80035f321dd0536d355eda4f02ac`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `45 1370`
+  (`origin/master...HEAD`); and the entry state SHA-256 was
+  `6bf328a509a95aa68d4081ca35f7fe95f04eda90a0da9e21accba2a855aa50e7`.
+- Catalog, random prompt, goals TSV, and protocol hashes were unchanged:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`,
+  and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Tracked and index state were clean at the gate. Existing untracked agent
+  artifacts were preserved. Protected long-running PIDs
+  `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and
+  `1346200` were observed alive and left untouched.
+
+### Closed Scope and Hypothesis
+
+Cycles 119, 154, 207, 229, 239, 264, 265, and 279 already closed mutable
+GitHub Action refs, executable lint assets, script vectors, Guix archives,
+release signatures, compiler/toolchain refs, SDK archives, qa-assets,
+`pyzmq`, and `pycapnp`. This cycle selected the distinct container-image
+provenance cell. The active root CI environment files supplied 24 mutable
+`CI_IMAGE_NAME_TAG` values: Debian `trixie`, Ubuntu `22.04`/`24.04`/`26.04`,
+Alpine `3.24`, and the untagged Chimera image. `ci/lint_imagefile` had a
+mutable Ubuntu base plus mutable `uv:0.11` and `ruff:0.15` build stages.
+The vendored minisketch and libsecp256k1 CI Dockerfiles used mutable
+`debian:stable` and `debian:stable-slim` bases.
+
+These images select compilers, linkers, package managers, native libraries,
+and lint tooling before C/C++ code is built. A registry tag can move without a
+Bitcoin commit, so a successful CI run or release-adjacent build could execute
+different native code from the one reviewed by the project. The dynamic
+`FROM ${CI_IMAGE_NAME_TAG}` in `ci/test_imagefile` is intentional plumbing;
+the security boundary is the values assigned by every maintained environment
+file.
+
+### Registry and Architecture Evidence
+
+Manifest-list digests were resolved on 2026-08-02 with `skopeo inspect` and
+registry `Docker-Content-Digest` headers. The selected immutable values are:
+
+| Tag | Manifest-list digest |
+| --- | --- |
+| `mirror.gcr.io/debian:trixie` | `sha256:fac46bff2e02f51425b6e33b0e1169f55dfb053d83511ca28aa50c09fd5ed7a4` |
+| `mirror.gcr.io/alpine:3.24` | `sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b` |
+| `mirror.gcr.io/chimeralinux/chimera:latest` | `sha256:29102d7e12a1f464707d7aba19ce53e652d277861838ed4129178d0655444b1a` |
+| `mirror.gcr.io/ubuntu:22.04` | `sha256:0e0a0fc6d18feda9db1590da249ac93e8d5abfea8f4c3c0c849ce512b5ef8982` |
+| `mirror.gcr.io/ubuntu:24.04` | `sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90` |
+| `mirror.gcr.io/ubuntu:26.04` | `sha256:3131b4cc82a783df6c9df078f86e01819a13594b865c2cad47bd1bca2b7063bb` |
+| `ghcr.io/astral-sh/uv:0.11` | `sha256:77280f2f771df71f90786c314fe1bbc1e023feac652969bbf139c280babf2eb7` |
+| `ghcr.io/astral-sh/ruff:0.15` | `sha256:d9e5710276b88ae2c0a33bd394aeb2877f5f852e23235ebcaa1c5bda4998569a` |
+| `docker.io/library/debian:stable` | `sha256:8e109a974a9659354791cab2c001e5e3c3153805c344ccec7c1ef98d814187e7` |
+| `docker.io/library/debian:stable-slim` | `sha256:328d16499860ae6cb9b345e2e4cebca08c2a36e4f7278482c7bd1f39d71e5bfd` |
+
+The raw registry responses were OCI image indexes, not single-architecture
+child manifests. Debian, Ubuntu, and Alpine indexes include the existing
+amd64/arm64 and other CI architectures; Chimera includes amd64, arm64,
+ppc64le, and riscv64; the uv and ruff indexes include amd64 and arm64. The
+pins therefore preserve platform selection while fixing the selected bytes.
+
+### Independent Controls and Fix
+
+The old-tree inventory reported 24 CI assignments with 0 digest pins and five
+concrete Dockerfile base/stage references with 0 digest pins. After the
+change, the same scanners report 24/24 CI assignments and 5/5 concrete
+Dockerfile references digest-pinned. A repository search finds no remaining
+concrete unpinned `FROM`, `COPY --from`, or `CI_IMAGE_NAME_TAG` reference in
+the active root, lint, minisketch, or libsecp256k1 paths; only the intentional
+variable/argument plumbing remains.
+
+Replaced the mutable tags with `tag@sha256:<manifest-list-digest>` in all 24
+root CI environment assignments, the Ubuntu/uv/ruff lint image, and the two
+vendored project Dockerfiles. Each digest-only reference was resolved again
+through its registry after the edit and returned the exact requested digest.
+`bash -n ci/test/00_setup_env_*.sh`, Python compilation of
+`ci/test/02_run_container.py`, and `git diff --check` passed.
+
+### Verification and Verdict
+
+**Confirmed and fixed.** Before the change, CI and vendored Docker builds
+trusted mutable registry tags for C/C++ toolchain and native-dependency
+selection. The source now binds those image inputs to reviewed manifest-list
+digests while retaining the original release-family tags for update review.
+
+No Docker daemon/buildx, Windows runner, or full CI matrix was available in
+this environment, so no image build was executed locally. `skopeo` validated
+the digest-only image references and the registry headers bound each original
+tag to the recorded digest; its installed parser does not accept the standard
+combined `tag@digest` spelling, so combined-reference parsing was not claimed
+as a local `skopeo` test. The pins do not provide image signatures, SBOM
+verification, or automatic security updates; a future refresh must deliberately
+replace the recorded digest after reviewing the new image.
+
+### Handoff
+
+Keep vcpkg tool/manifest/cache provenance, hosted-runner labels, generated
+inputs, and license gates as separate Goal 59 cells. Do not reopen the closed
+action, lint-tool, script-vector, Guix-archive, release-signature,
+compiler-ref, SDK-archive, qa-assets, pyzmq, or pycapnp findings without new
+evidence.
+
 # C/C++ Supply-Chain Cycle 279
 
 ## Cycle 279 Completion: pin CI pycapnp installations
