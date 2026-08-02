@@ -374,3 +374,37 @@ misc-core corpora are green. Cumulative: 87,728 + 12,077 =
 - Remaining untested corpora are wallet/qt/descoped or small
   utility families (hex/base encodings, misc deserializers) —
   one more utility sweep closes the catalog.
+
+## Cycle 10 (2026-08-02, draw 246, raw=3671710469452730917, n=1): utility/encoding sweep — 25 targets, 12,577 seeds, ALL clean; every in-scope qa-assets family now covered; DISMISSED
+
+### Batch (utility layer, pinned 918cdd3)
+First pass: 23/25 clean — addition_overflow 161,
+addr_info_deserialize 176, address_deserialize 196, autofile
+339, base32 61, base58 151, base58check 196, base64 47,
+bech32_random 128, bech32_roundtrip 75, bitdeque 1,085,
+buffered_file 333, difference_formatter 67,
+flat_file_pos_deserialize 31, flatfile 43, float 36, hex 371,
+integer 401, inv_deserialize 9, key_io 327,
+key_origin_info_deserialize 56, locale 48,
+multiplication_overflow 167.
+Reruns (heavy descriptor targets, timeout kills not crashes):
+descriptor_parse 3,281/3,281 @1200s (ft 119,533);
+mocked_descriptor_parse 4,691/4,691 @3600s (ft 125,872 — the
+deepest coverage of the entire program).
+Total 12,577 seeds, zero crashes/artifacts.
+
+### Verdict
+DISMISSED: the utility/encoding layer is green. CORPUS
+PROGRAM FULLY COMPLETE: 99,805 + 12,577 = 112,382 upstream
+seeds validated through the fork's hardened build across 100+
+targets in 8 families + utility, zero crashes, zero Assume
+aborts, zero artifacts.
+
+### Exact commands
+- sparse-checkout add (25 dirs); per-target FUZZ runs;
+  1200s/3600s rerun lines above.
+
+### Limitations / queue
+- Single-pass validation only (throughout).
+- Remaining corpora are wallet/qt/coinselection-scoped
+  (descoped per uber-goal).

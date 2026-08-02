@@ -332,6 +332,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 79 | fuzz-corpus-stewardship | CYCLE-7 | 2026-08-02 | net/P2P batch: 15 targets 19,470 seeds clean; cumulative 80,323; DISMISSED |
 | 79 | fuzz-corpus-stewardship | CYCLE-8 | 2026-08-02 | block/merkle batch: 18 targets 7,405 seeds clean; IMPORT COMPLETE 87,728 seeds green; DISMISSED |
 | 79 | fuzz-corpus-stewardship | CYCLE-9 | 2026-08-02 | feefrac/miner batch: 15 targets 12,077 seeds clean; cumulative 99,805; DISMISSED |
+| 79 | fuzz-corpus-stewardship | CYCLE-10 | 2026-08-02 | utility sweep: 25 targets 12,577 seeds clean; PROGRAM COMPLETE 112,382 green; DISMISSED |
 | 35 | mutation-testing | CYCLE-7 (COMPLETE) | 2026-08-01 | NONNEGATIVE_SIGNED negative-write mangle pinned (-1->0x7f->127); unreachable from all call sites; upstream-identical |
 | 59 | supply-chain-security-gates | CYCLE-3 (COMPLETE) | 2026-08-01 | qa-assets corpus clone commit-pinned (weakening arm was silent; c1 reasoning covered injection only); live-verified |
 | 40 | multi-agent-adjudication | CYCLE-3 (COMPLETE) | 2026-08-01 | L4 executable confirmation: HEAD vs branch dup-check differential fuzz, 300k cases 0 divergences |
@@ -1019,6 +1020,9 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 246 (1-cell pool): raw=3671710469452730917 ->
+   #79 c10 (utility sweep: 12,577 seeds; PROGRAM COMPLETE
+   112,382 green; DISMISSED). Pool: watches/signals only.
    RE-RANK draw 245 (corpus-remainder pool): #79 c9 (feefrac/
    miner batch: 12,077 seeds clean; cumulative 99,805;
    DISMISSED). Pool: utility-encoding sweep (last corpus cell).
