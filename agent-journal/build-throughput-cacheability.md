@@ -255,3 +255,36 @@ GB).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 5 (2026-08-02, draw 196, raw=1891301078475215477 (63-bit), idx 33/37): post-session cache posture — uncacheable 58->85 still 96.5% own-failure residue; one NEW minor class (6x input-modified-during-compilation = own concurrent edits); hit rate steady ~58%; DISMISSED
+
+### Hypothesis
+The session's variant builds (clang -g0, kernel-shared, many
+probe compiles) could have introduced a new uncacheable class
+or cache pressure beyond c4's finding.
+
+### Evidence (ccache -s / -s -v)
+- Uncacheable 85/41907 (0.20%): 'Compilation failed' 82 (96.5%),
+  'Preprocessing failed' 3 — same own-probe-failure class as c4
+  (optdiff/instantiate/merkle-driver link attempts etc.); no
+  generated-code/IPC class appeared.
+- NEW minor category: Errors 6/41907 = 'Input file modified
+  during compilation' (100%) — traces to this session's
+  concurrent editing while background builds ran (stash/pop +
+  sed-on-live-tree); benign and self-inflicted, recorded so a
+  future reading doesn't misattribute it to the build system.
+- Hit rate 57.89% steady; cache 5.0/50 GB (10.08%) — no
+  pressure. Disk free 3.8 GB (build dirs are the pressure, not
+  ccache).
+
+### Verdict
+DISMISSED: cacheability posture unchanged in class; the only new
+entries are the rotation's own failure/edit residue. No action.
+
+### Exact commands
+- ccache -s; ccache -s -v; df -h.
+
+### Limitations
+- The 6 modified-during-compile instances are not individually
+  attributed (timestamps not kept); class-level attribution
+  suffices (no daemon/CI ran concurrently).
