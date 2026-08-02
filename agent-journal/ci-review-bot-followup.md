@@ -407,3 +407,53 @@ Quiet across all triggers; nothing actionable.
 
 ### Verdict
 Quiet; nothing actionable.
+
+## Cycle 12 (2026-08-02, draw 264, raw=15906117157415149653, suspicion-mined from the 26-PR sweep): PR 35714 (flush-failure write-stop) — defect CONFIRMED at our HEAD, fix ADOPTED with failing-before/passing-after proof; 🟠-class durability gap closed
+
+### Defect (confirmed at lineage HEAD, pre-fix)
+FlushStateToDisk: when m_blockman.FlushChainstateBlockFile
+failed, the old code only LogWarning'd (validation.cpp:2823-2825
+with an explicit 'TODO: Handle return error' admission) and then
+PROCEEDED to write block-index metadata (WriteBlockIndexDB
+:2832), flush coins (:2851), and advance m_last_flushed_block
+(:2852) — recording a block as flushed while its block/undo
+data may not be durable. Restart/recovery then trusts a
+non-durable block (wallet learns it via the update signal).
+Reachability: block-file IO failure during a flush (disk
+full/error/perms — the #93-c2 unwritable-blocksdir family).
+Severity: correctness/data-consistency 🟠, not remote.
+
+### Adoption (audit/adopt-flush-failure @ f90291ffb9)
+- Cherry-picked e1a337ee96 (PR head; union conflict in
+  chainstate_write_tests.cpp resolved keeping the lineage's
+  locator-front check + the new boundary test).
+- PASSING-AFTER: chainstate_write_tests green incl. the new
+  chainstate_flush_failure_boundary (injected file-open failure
+  -> exit EXIT_FAILURE + last_flushed unchanged).
+- FAILING-BEFORE: with the pre-fix validation.cpp swapped back,
+  the same test FAILS 2 assertions (writes proceeded, marker
+  advanced) — the defect is live at our HEAD pre-fix. Fixed
+  version restored and re-verified green.
+
+### Verdict
+CONFIRMED + ADOPTED: the defect was real in our lineage (the
+in-code TODO was the tell); the author's PR is the correct
+minimal fix and is now carried with the failing-before/
+passing-after pair. Upstream vehicle: PR 35714 (open).
+
+### Suspicion-mining (new protocol)
+- S3: the flush-error notification (exit_status=EXIT_FAILURE)
+  means a failed flush stops the node — correct loud-failure
+  per the #93 family contract; verified by the test's own
+  exit-status assertion.
+- S4: the union kept the lineage's locator-front invariant
+  check — no semantic clash with the PR (recorded).
+
+### Exact commands
+- curl PR head (l0rinc:l0rinc/flush-state-failure-boundary);
+  cherry-pick line above; failing-before swap proof above.
+
+### Limitations / queue
+- The 0f04fbee2f characterization-test commit was NOT adopted
+  (second conflict, skipped — the boundary test in the fix
+  commit is the regression oracle; noted).
