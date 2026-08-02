@@ -291,3 +291,42 @@ is now fully closed.
 Three cycles; loadblock import, empty-block P2P replay, and
 tx-heavy P2P replay all profiled; both perf fixes hold under tx
 traffic. Campaign quiet pending new anomalies.
+
+## Cycle 4 (2026-08-02, draw 221, raw=521034545174603853 (63-bit), idx 3/10): mempool churn memory profile — first EMPIRICAL data point for the #65-c12 retained-capacity gap: accounting returns exactly to ~0, RSS retains ~3.3MB with converging increments
+
+### Rig (/tmp/btc22c4/churn_profile.py, preserved)
+Single node (-maxmempool=100), MiniWallet: 5 rounds of fill
+(1,600 self-transfers each) + full drain (mine out), reading
+getmempoolinfo().usage and /proc/pid VmRSS at peak and drained
+points.
+
+### Results
+- usage_peak stable 1.71MB/round; usage_drained = 64 B (final)
+  — the charge-by-LIVE-count accounting returns exactly to zero
+  after every drain (the #65-c12 mechanism's premise).
+- RSS_drained climbs 61.8 -> 65.1 MB across rounds with
+  DECLINING increments (+1.9, +0.8, +0.3, +0.3, +0.3) —
+  converging toward a steady retained watermark, consistent
+  with retained vector capacity (peak ~1,600 entries) plus
+  allocator slack, NOT unbounded growth.
+
+### Verdict
+Finding of fact (supports, does not inflate, the 🟡): the
+retention is real, small at this scale (~3.3MB over 5 rounds,
+converging), and bounded as the mechanism predicts. The
+author's capacity-aware charge branch remains the right fix;
+this profile is the before-adoption baseline for the
+RSS-vs-accounting re-check.
+
+### Exact commands
+- python3 /tmp/btc22c4/churn_profile.py --configfile=build-
+  before/test/config.ini --tmpdir=/tmp/btc22c4/run (rounds
+  table + RESULT above).
+
+### Limitations / queue
+- 1,600-tx rounds are small (maxmempool=100 cap not hit);
+  allocator-retention confound not separated from vector
+  retention (the converging increment shape is the only
+  discriminator at this scale).
+- A maxmempool-scale churn would amplify both terms; disk/
+  time-bounded out.

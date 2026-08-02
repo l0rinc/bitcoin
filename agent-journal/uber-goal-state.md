@@ -104,6 +104,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 95 | database-semantics-differential | CYCLE-1 | 2026-07-28 | leveldb exact sync (c784869048, own branch) |
 | 75 | build-throughput-cacheability | CYCLE-1 | 2026-07-28 | no-op 0.19s stable; generator cascade restat-bounded; fan-out leaf-only; warm 2.85s / cold 30.78s incremental |
 | 22 | full-sync-ibd-profile | CYCLE-2 | 2026-07-28 | two-node P2P IBD: bloom reset-per-tip 40.6% CPU, clean-flag fix c8f53e58d9 (-58% user); checks-on 17.0s vs 2.96s re-confirmed |
+| 22 | full-sync-ibd-profile | CYCLE-4 | 2026-08-02 | churn profile: accounting returns to 0, RSS retains ~3.3MB converging; #65-🟡 baseline |
 | 1 | comment-code-contract | CYCLE-1 | 2026-07-28 | LockPoints bound comment wrong (b1c267c9f1); AddCoin/lock/nullptr-parent claims verified true |
 | 0 | continuous-bug-mining | CYCLE-2 | 2026-07-28 | TODO evidence sweep: 56 production items, 0 defects, 7 verified risk-map cells |
 | 0 | continuous-bug-mining | CYCLE-3 | 2026-08-02 | TODO re-sweep: 56/56 identical, zero session debt; DISMISSED |
@@ -997,6 +998,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 221 (10-campaign eligible set): raw=
+   521034545174603853 (63-bit) -> idx 3 -> #22 c4 (churn
+   memory profile: #65-🟡 empirical baseline).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58, #21, #28, #69, #61, #22}.
    RE-RANK draw 220 (11-campaign eligible set): raw=
    12572157352548436285, masked 3348785315693660477 -> idx 8 ->
    #61 c4 (undo-data absorbed; DISMISSED).
