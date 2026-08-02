@@ -93,6 +93,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 39 | generated-artifact-determinism | CYCLE-1 | 2026-07-28 | raw+json regen byte-identical (4bdf490240, own branch) |
 | 43 | option-api-lifecycle | CYCLE-1 | 2026-07-28 | -prevoutfetchthreads lifecycle clean (331048ba1e, own branch) |
 | 45 | constant-time-declassification | CYCLE-1 | 2026-07-28 | AES ctaes + CBC padding constant-time; declassifications intended-only |
+| 45 | constant-time-declassification | CYCLE-5 | 2026-08-02 | PR 35688 empty-HMAC UB CONFIRMED+ADOPTED (UBSan pair); F21 |
 | 47 | build-ci-parity | CYCLE-1 | 2026-07-28 | 4 registration/preset cells clean (f874c8a9c3, own branch) |
 | 51 | differential-metamorphic | CYCLE-1 | 2026-07-28 | full-UTXO undo oracle (47e5bf2f95, own branch) |
 | 59 | supply-chain-security-gates | CYCLE-1 | 2026-07-28 | script_assets sha256 pin (4124803dff, own branch) |
@@ -1050,6 +1051,9 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 266 (suspicion-mined): PR 35688 empty-HMAC UB
+   CONFIRMED (first-invalid UBSan trace) + ADOPTED (std::copy;
+   probe silent; F21); archive 27fda24406.
    Cycle 265 (suspicion-mined): PR 35833 log injection both
    arms CONFIRMED+ADOPTED (forged consensus-error failing-before
    proof); F20; archive 0c7d19aec8.
