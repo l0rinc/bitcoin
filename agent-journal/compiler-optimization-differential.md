@@ -71,3 +71,39 @@ this tree at gcc 13.3 -O2 -flto.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-08-02, draw 199, raw=13766814895528030814, masked 4543442858673255006, idx 30/34): clang thin-LTO cell — HOST-BLOCKED at link (LLVMgold.so absent, no lld); compile side proven; ⚪ with resume condition
+
+### Attempt
+cmake -B build-clang-lto (clang-18, Release -g0, IPO=ON,
+wallet/tests/IPC off): thin LTO CONFIRMED in the compile rules
+(-flto=thin in rules.ninja / -t commands); all objects compiled.
+Link: /usr/bin/ld cannot load /usr/lib/llvm-18/lib/LLVMgold.so
+(file simply absent — llvm-18 package ships no gold plugin);
+-fuse-ld=lld rejected ('invalid linker name' — no lld installed);
+only ld.bfd/ld.gold present. Same wall as #44 c2's no-link-LTO
+note — consistent host gap, now documented at both points.
+
+### Verdict
+⚪ BLOCKED (host toolchain, not a tree defect): clang-LTO linking
+is impossible on this host. c1's gcc -O2 -flto differential
+(green build, zero ODR warnings, suite green) remains the LTO
+cell of record. The compile side of the clang thin-LTO path is
+proven (bitcode objects built clean, zero warnings escalated).
+
+### Resume condition
+Install lld (or the LLVM gold plugin package) and rerun:
+ninja -C build-clang-lto bitcoind (config preserved on disk,
+~109 MB of thin-LTO objects staged; relink is the only missing
+step), then the #36-c6 6-test functional subset as the
+behavioral differential.
+
+### Exact commands
+- cmake line above; ninja -t commands grep -flto=thin; link
+  failure log (LLVMgold.so absent); -fuse-ld=lld rejection;
+  which ld.lld/ld.gold census above.
+
+### Limitations / queue
+- PGO/BOLT cells remain disk-blocked (3.8 GB free).
+- build-clang-lto kept for the resume (delete on disk squeeze;
+  recreate with the cmake line, ~15 min).
