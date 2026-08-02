@@ -191,3 +191,49 @@ yield for future comparisons.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-08-02, draw 181, raw=13891094590669444291, masked 4667722553814668483, idx 12/53): txindex lookup-path profile — positive AND negative lookups flat at ~0.42 ms p50, no collision-walk signal at 41k txs; baseline recorded; DISMISSED
+
+### Hypothesis
+The c3 queue's unmeasured lookup path (FindTx collision walk)
+could show a latency cliff on negative lookups (hash walk) or a
+positive/negative asymmetry. Falsifiable by a percentile profile
+of both classes on a live txindex chain.
+
+### Rig
+- Chain: /tmp/btc25_c4_build.py (preserved; c3's btc25_mw.py +
+  -txindex=1 inline, PortSeed/rpcport kept aligned — recorded
+  trap: extra_args rpcport must match TestNode's computed port
+  or ECONNREFUSED-forever; datadir /tmp/btc25_c4 kept for reruns).
+  410 blocks, ~41k txs, index synced (getindexinfo best 410).
+- Probe (/tmp/btc25_c4_bench.py, preserved): in-process
+  AuthServiceProxy, 3000 random present txids (from 200 random
+  blocks) + 3000 random 256-bit absent ids, perf_counter timing,
+  seeded 0x25C4.
+
+### Results (build-before bitcoind, release)
+- POSITIVE: 3000/3000 hits; p50 420.2us, p99 631.1us, max
+  3,387us, mean 436.7us.
+- NEGATIVE: 0/3000 false hits; p50 413.4us, p99 600.0us, max
+  8,438us, mean 433.4us.
+- Symmetry: negative lookups cost the same as positive (hash
+  probe terminates on absence; no walk). Max outliers are
+  singleton socket/scheduler noise, not a distribution tail.
+
+### Verdict
+DISMISSED: no lookup-path cliff; at 41k txs both classes are
+RPC-overhead-bound at ~0.42 ms median. The 35531 review's
+collision-walk concern has no measurable signal at this scale;
+the baseline table is the durable yield (same role as c3's).
+
+### Exact commands
+- python3 /tmp/btc25_c4_build.py; bitcoind -txindex=1 daemon
+  line; getindexinfo; python3 /tmp/btc25_c4_bench.py (tables
+  above); node stopped after.
+
+### Limitations / queue
+- 41k txs is regtest scale; mainnet-scale (10^9 keys) collision
+  behavior stays a branch-A/B question (35531 lineage decision,
+  not a defect cell).
+- Daemon stopped; datadir /tmp/btc25_c4 kept (~100 MB) for
+  reruns; delete on disk squeeze.
