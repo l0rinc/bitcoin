@@ -259,6 +259,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 76 | reproducible-builds | CYCLE-4 | 2026-08-01 | 45-uncacheable itemization: 0 uncacheable in all 6 live families (logfile-verified); lifetime 83 = deleted-config residue; DISMISSED |
 | 45 | constant-time-declassification | CYCLE-4 (COMPLETE) | 2026-08-01 | secp ctime_tests under valgrind memcheck: full suite, 0 errors (production backend params, aarch64) |
 | 79 | fuzz-corpus-stewardship | CYCLE-2 | 2026-08-01 | per-seed profile FLAT (max/median 1.05x); ~99.5% per-invocation cost = startup; oversized-seed hypothesis refuted |
+| 79 | fuzz-corpus-stewardship | CYCLE-3 | 2026-08-01 | qa-assets sparse import @918cdd3 (==CI pin): 7,846 seeds/3 corpora single-pass clean, zero artifacts; DISMISSED |
 | 35 | mutation-testing | CYCLE-7 (COMPLETE) | 2026-08-01 | NONNEGATIVE_SIGNED negative-write mangle pinned (-1->0x7f->127); unreachable from all call sites; upstream-identical |
 | 59 | supply-chain-security-gates | CYCLE-3 (COMPLETE) | 2026-08-01 | qa-assets corpus clone commit-pinned (weakening arm was silent; c1 reasoning covered injection only); live-verified |
 | 40 | multi-agent-adjudication | CYCLE-3 (COMPLETE) | 2026-08-01 | L4 executable confirmation: HEAD vs branch dup-check differential fuzz, 300k cases 0 divergences |
@@ -946,6 +947,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 172 (6-cell re-harvested pool): raw=
+   184429387142081413 (63-bit) -> idx 1 -> STALE (#108 complete;
+   pool repair). Redraw (5-cell): raw=14500292587252405485, masked
+   5276920550397629677 -> idx 2 -> #79 c3 (qa-assets selective
+   import @918cdd3: 7,846 seeds single-pass clean; DISMISSED).
+   Pool after draw 172 (4): alt-impl-diff btcd/rust-bitcoin
+   tx-ser, fuzz-engine-diff musig2 cross-field, database-semantics
+   large-UTXO, translation-validation single-TU.
    RE-RANK draw 171 (1-cell pool): raw=3220867768142961582
    (63-bit) -> idx 0 -> #105 c2 (dbwrapper failed-construction
    leak family: fixed in HEAD, sibling sweep 0, upstream master
