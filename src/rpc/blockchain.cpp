@@ -48,6 +48,7 @@
 #include <univalue.h>
 #include <util/check.h>
 #include <util/fs.h>
+#include <util/fs_helpers.h>
 #include <util/strencodings.h>
 #include <util/syserror.h>
 #include <util/translation.h>
@@ -3191,6 +3192,11 @@ static RPCMethod dumptxoutset()
 
     if (!fs::is_fifo(path_info)) {
         fs::rename(temppath, path);
+        if (!DirectoryCommit(path.parent_path())) {
+            throw JSONRPCError(
+                RPC_INTERNAL_ERROR,
+                "Unable to commit snapshot directory " + fs::PathToString(path.parent_path()));
+        }
     }
 
     return result;
@@ -3457,6 +3463,12 @@ UniValue WriteUTXOSnapshot(
 
     CHECK_NONFATAL(written_coins_count == maybe_stats->coins_count);
 
+    if (!afile.Commit()) {
+        const int errno_save{errno};
+        (void)afile.fclose();
+        throw std::ios_base::failure(
+            strprintf("Error committing %s: %s", fs::PathToString(temppath), SysErrorString(errno_save)));
+    }
     if (afile.fclose() != 0) {
         throw std::ios_base::failure(
             strprintf("Error closing %s: %s", fs::PathToString(temppath), SysErrorString(errno)));

@@ -1,5 +1,49 @@
 # Filesystem, power-loss, and crash-consistency injection
 
+## Cycle 269: UTXO snapshot durable publication
+
+### Selection and fresh gate
+
+- Selected by exact `shuf -i 0-98 -n 1` -> `72` (`filesystem-crash-consistency`). No reroll was needed.
+- Branch: `uber-cycle-269-filesystem-crash-consistency-20260802`.
+- Cycle-start HEAD: `92def17f486017c460b1f1c3b9b2263bb82b6221`; `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `1327 45`.
+- The fresh gate passed fetch, the tracked/index cleanliness check, `git diff --check`, all four catalog/protocol hashes, and the protected-process checks. Existing untracked probes and artifacts were preserved. The selected journal's cookie, banlist, settings, flat-file directory-commit, and chainstate metadata-publication cells were closed or explicitly excluded; this cycle selected a distinct RPC snapshot publication boundary.
+- Catalog hashes: reusable goals `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, random prompt `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, goals TSV `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and uber protocol `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+
+### Hypothesis and independent evidence
+
+`dumptxoutset` writes a snapshot to `<path>.incomplete`, closes that file, and then renames it to the requested path. Before this cycle it did not call `AutoFile::Commit()`/`FileCommit()` before publication and did not commit the parent directory after `fs::rename()`. The hypothesis was that a successful RPC could publish data that had not reached durable storage, or fail to report that the rename's directory entry could not be made durable after a filesystem error.
+
+The first candidate, an unchecked raw `fs::rename()` failure, was independently rejected as a false-success finding. A scratch `LD_PRELOAD` hook at `/data/my_storage/bitcoin/agent-journal/cycle269_rename_fail.c` made rename return `EIO` for the snapshot path. The pre-fix daemon `/data/my_storage/tmp/cycle267-pr35762-build-a/bin/bitcoind` returned RPC status `-1` with `filesystem error: cannot rename: Input/output error`, left `failed.dat.incomplete`, and did not create `failed.dat`. The exception path therefore already reports this error.
+
+The distinct missing-file-sync hypothesis reproduced on the same older binary. Hook `/data/my_storage/tmp/cycle269-rename/libfailsync.so` failed `fdatasync`/`fsync` only for snapshot `.incomplete` files when `FAIL_DUMP_SYNC=1`. `dumptxoutset syncfail.dat latest` nevertheless succeeded and created a 51-byte final `syncfail.dat`; the hook recorded no snapshot sync failure. Existing persistence code in `src/node/mempool_persist.cpp`, `src/addrdb.cpp`, and `FlatFileSeq::Flush()` uses `FileCommit()`/`DirectoryCommit()` for comparable durable publication, making this an applicable local contract rather than a generic preference for extra syncs.
+
+### Fix and verification
+
+`WriteUTXOSnapshot()` now calls `afile.Commit()` before `fclose()`, preserves `errno` for the diagnostic, closes the handle on the failure path, and throws before the incomplete file can be renamed. After a successful rename, `dumptxoutset` now calls `DirectoryCommit(path.parent_path())` for regular files and returns `RPC_INTERNAL_ERROR` if the directory sync fails. FIFO output retains its existing streaming behavior. The change is limited to the snapshot's file and directory durability boundaries; it does not alter snapshot contents or consensus behavior.
+
+The current source was rebuilt with Clang 19 in `/data/my_storage/tmp/cycle107-kernel-clang19`:
+
+    cmake --build /data/my_storage/tmp/cycle107-kernel-clang19 --target bitcoind -j2
+
+The file-sync fault was replayed against that current-tree binary in `/data/my_storage/tmp/cycle269-dump-sync`. With `FAIL_DUMP_SYNC=1`, the RPC returned status `-1` and:
+
+    Error committing /data/my_storage/tmp/cycle269-dump-sync/regtest/fixed-syncfail.dat.incomplete: Input/output error (5): iostream error
+
+Only `fixed-syncfail.dat.incomplete` remained, at 51 bytes; no final snapshot was published. An unhooked success control in `/data/my_storage/tmp/cycle269-dump-pre` produced a 51-byte final snapshot. The existing functional test also passed:
+
+    python3 test/functional/rpc_dumptxoutset.py --configfile=/data/my_storage/tmp/cycle107-kernel-clang19/test/config.ini --tmpdir=/data/my_storage/tmp/cycle269-functional --randomseed=269001
+
+It exited 0 with `Tests successful`.
+
+For directory durability, the hook was armed only after daemon startup through `/data/my_storage/tmp/cycle269-rename/fail-dir-sync` and restricted to `/data/my_storage/tmp/cycle269-dump-dir2/regtest`. In `/data/my_storage/tmp/cycle269-dump-dir2`, `dumptxoutset fixed-dirsync.dat latest` returned RPC status `-32603` with `Unable to commit snapshot directory /data/my_storage/tmp/cycle269-dump-dir2/regtest`; the daemon stayed alive, the final file was 51 bytes, and the log recorded `fsync failed for directory ...: Input/output error (5)`. The published file can remain visible after a directory-sync failure because the rename has already happened; the important contract is that the RPC does not claim durable publication and the failure is observable. The initial broad marker run was rejected because it also faulted unrelated block-directory flushes and shut down the daemon; the narrowed rerun is the accepted evidence.
+
+The full existing functional test is the behavioral regression oracle for normal snapshot output and hash/metadata correctness. The preload faults provide independent syscall-level evidence for the two newly checked durable boundaries. `git diff --check` and `git show --check` are required final checks. The limitation is that an actual power-loss or `dm-flakey` replay was not run; the fault harness exercises the exact Linux sync calls, while Windows intentionally treats directory commit as a no-op.
+
+### Verdict and handoff
+
+Confirmed local persistence-integrity finding. Before the fix, a successful snapshot RPC could return after close/rename without a file durability barrier, and a directory sync failure after publication was not reported. The raw rename-error candidate was dismissed. The remaining goal-72 queue is prune-file unlink/directory durability and other current atomic-rename/index publication boundaries; do not repeat the cookie, banlist, settings, flat-file, or chainstate cells. Status transitions: `scouted -> rename-negative-controlled -> file-sync-reproduced -> fixed -> file-sync-replayed -> directory-sync-replayed -> functional-tested -> reviewed`.
+
 ## Cycle 134: RPC cookie partial-write recovery
 
 ### Selection and fresh gate
