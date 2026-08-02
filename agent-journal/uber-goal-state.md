@@ -80,6 +80,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 17 | build-matrix-modules | CYCLE-4 | 2026-08-02 | DISABLE_OPTIMIZED_SHA256 end-to-end: 'standard' backend, 3 functional tests green; CONFIRMED |
 | 18 | exhaustive-algebraic | QUEUE-COMPLETE | 2026-07-28 | c1-c3 round-trips all mutation-verified (c382122eeb, own branch) |
 | 31 | cross-layer-contracts | CYCLE-4 | 2026-07-28 | testnet-key examples labeled (b2a0c38154, own branch) |
+| 31 | cross-layer-contracts | CYCLE-5 | 2026-08-02 | external-signer.md extraction: zero falsely-parseable examples; DISMISSED |
 | 36 | cross-tool-analysis-matrix | CYCLE-1 | 2026-07-28 | UBSan unit suite: 1 UB found+fixed (22aa75a2eb, own branch) |
 | 36 | cross-tool-analysis-matrix | COMPLETE | 2026-08-01 | c6: clang-18 functional subset 7/7 == gcc baseline; Werror CI gap dismissed (BITCOIN_CONFIG_ALL); campaign complete |
 | 37 | build-dead-zones | CYCLE-1 | 2026-07-28 | parity/empty-arm/#if 0/DEBUG_LOCK clean (442db1aa87, own branch) |
@@ -980,6 +981,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 206 (27-campaign eligible set): raw=
+   13014474695973678266, masked 3791102659118902458 -> idx 9 ->
+   #31 c5 (docs extraction: zero falsely-parseable; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31}.
    RE-RANK draw 205 (28-campaign eligible set): raw=
    3235443014574466965 (63-bit) -> idx 17 -> #53 c2 (secp
    ctime_tests valgrind green; CONFIRMED).
