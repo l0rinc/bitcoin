@@ -344,6 +344,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 79 | fuzz-corpus-stewardship | CYCLE-12 | 2026-08-02 | txgraph scratch campaign: 420,878 runs 0 crashes, corpus 0->4,586; DISMISSED |
 | 79 | fuzz-corpus-stewardship | CYCLE-13 | 2026-08-02 | txorphanage_sim campaign: 67,241 runs 0 crashes, corpus +205; DISMISSED |
 | 79 | fuzz-corpus-stewardship | CYCLE-14 | 2026-08-02 | txgraph corpus minimized 3,468 units cov 12,054/ft 73,114; qa-assets PR candidate |
+| 79 | fuzz-corpus-stewardship | CYCLE-15 | 2026-08-02 | coinscache_sim campaign: 2,380 runs 0 crashes, corpus +152; DISMISSED |
 | 35 | mutation-testing | CYCLE-7 (COMPLETE) | 2026-08-01 | NONNEGATIVE_SIGNED negative-write mangle pinned (-1->0x7f->127); unreachable from all call sites; upstream-identical |
 | 59 | supply-chain-security-gates | CYCLE-3 (COMPLETE) | 2026-08-01 | qa-assets corpus clone commit-pinned (weakening arm was silent; c1 reasoning covered injection only); live-verified |
 | 40 | multi-agent-adjudication | CYCLE-3 (COMPLETE) | 2026-08-01 | L4 executable confirmation: HEAD vs branch dup-check differential fuzz, 300k cases 0 divergences |
@@ -1043,6 +1044,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   RE-RANK draw 259: raw=12284359011998066296 -> #79 c15
+   (coinscache_sim campaign: zero crashes).
    RE-RANK draw 258: raw=12724671350429090044 -> event-trigger
    sweep (master/radar/qa-assets: all quiet).
    RE-RANK draw 257: raw=12184613341022450052 -> #79 c14

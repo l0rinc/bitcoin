@@ -523,3 +523,28 @@ upstream corpus; recorded as an offerable artifact).
 - Corpus is fuzzer-fresh (not aged by coverage-guided long
   runs); a qa-assets PR would want a maintainers' long-run
   pass first.
+
+## Cycle 15 (2026-08-02, draw 259, raw=12284359011998066296): coinscache_sim mutation campaign — 2,380 runs, corpus 373->525 (+152 retained units), zero crashes/artifacts; DISMISSED
+
+### Campaign
+FUZZ=coinscache_sim -max_total_time=640 -artifact_prefix=
+/tmp/ccs_artifacts/ <restored corpus>:
+- 2,380 runs in 657s (heavy target, ~3.6 runs/s); corpus grew
+  373 -> 525 (+152 new units retained on disk).
+- Zero crashes, zero artifacts: the fork's coins-cache sim
+  model (FRESH/DIRTY/dirty-count disciplines from #57's family)
+  held on every accepted case.
+
+### Verdict
+DISMISSED: the coins-cache target is robust under fresh
+mutation. Mutation cells now closed across 4 targets:
+ephemeral_package_eval (c11), txgraph (c12), txorphanage_sim
+(c13), coinscache_sim (c15) — all clean.
+
+### Exact commands
+- git checkout restore; campaign line above; census above.
+
+### Limitations / queue
+- mini_miner / txrequest mutation runs remain available (same
+  shape, diminishing returns; queued only if a new signal
+  appears).
