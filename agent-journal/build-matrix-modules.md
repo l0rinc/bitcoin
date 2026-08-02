@@ -167,3 +167,48 @@ automatically. The fork did not break the walletless matrix.
 
 ## Rotation note
 Three bounded cycles complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 4 (2026-08-02, draw 200, raw=15353805843689760592, masked 6130433806834984784, idx 5/33): DISABLE_OPTIMIZED_SHA256 build + SelfTest — scalar backend selected ('standard'), startup clean, 3 consensus functional tests green; CONFIRMED (forced-scalar path works end-to-end)
+
+### Cell
+The c3 queue's forced-scalar cell: prove the reference SHA256
+implementation carries the full node end-to-end (pairs with
+#69's backend inventory).
+
+### Wiring note (recorded)
+The DISABLE_OPTIMIZED_SHA256 cache option is NOT wired to a
+compile definition in this fork's CMake — and not in upstream's
+either (origin/master CMakeLists has zero references): both
+sides expect it via compiler flags (upstream CI does exactly
+that). Passed as -DDISABLE_OPTIMIZED_SHA256 in C/CXX flags;
+verified present on the sha256.cpp compile line (-t commands
+count 1). No fork build gap.
+
+### Evidence
+- Build: build-sha256scalar (Release -g0, gcc 13.3, wallet/
+  tests/IPC off; bitcoind+bitcoin-cli).
+- Startup: debug.log 'Using the 'standard' SHA256
+  implementation' (vs 'arm_shani(1way;2way)' on the normal
+  build — backend switch proven at the log contract); node
+  serves RPC (init selftest passed).
+- Behavioral: test_runner subset vs this build's config.ini:
+  feature_block, p2p_compactblocks, feature_reindex — ALL
+  Passed (100s accumulated, /tmp/btc17c4f). Full block
+  validation/merkle/compact-block hashing on the scalar path.
+
+### Verdict
+CONFIRMED (matrix cell works): the scalar reference path is a
+fully functional backend, selectable end-to-end; no defect.
+(Verdict shape: this is a capability confirmation, not a bug
+hunt — the cell's purpose is proving the escape hatch works.)
+
+### Exact commands
+- cmake/ninja lines above; bitcoind -datadir=/tmp/btc17c4
+  (log line above); cp build-sha256scalar/test/config.ini
+  test/config.ini; test_runner subset line above; config.ini
+  removed after; node stopped, no processes left.
+
+### Limitations / queue
+- build-sha256scalar kept (~110 MB) for #69 cross-refs; delete
+  on disk squeeze.
+- Cross/emulated armhf cell remains parked (c3 note).
