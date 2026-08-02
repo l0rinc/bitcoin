@@ -611,3 +611,18 @@ Next watch on a longer interval or on a merge event.
 
 ### Exact commands
 - git fetch origin master; closed-PR sample above.
+
+## Cycle 13 (2026-08-02, draw 254, raw=6000597539641640036 (63-bit), idx 2/3): watch — third consecutive zero-delta; moving to merge-event-triggered cadence
+
+### State
+- origin/master: 0 new commits; same newest closed pair as
+  c11/c12. No new review objects.
+- Decision (recorded): the watch moves from per-rotation
+  polling to merge-event-triggered — re-poll when (a)
+  origin/master advances past 556988790a, or (b) a tracked PR
+  changes state (open -> merged/closed). This avoids repeat
+  cycles with no evidence content (policy: no passing-campaign
+  repeats).
+
+### Verdict
+Quiet; cadence change recorded.
