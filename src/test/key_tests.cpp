@@ -252,6 +252,23 @@ BOOST_AUTO_TEST_CASE(pubkey_unserialize)
     }
 }
 
+BOOST_AUTO_TEST_CASE(pubkey_unserialize_truncated)
+{
+    const CPubKey valid_key = DecodeSecret(strSecret1C).GetPubKey();
+    BOOST_CHECK(valid_key.IsValid());
+
+    for (const auto& data : {
+             std::vector<uint8_t>{},
+             std::vector<uint8_t>{CPubKey::COMPRESSED_SIZE, 0x02},
+             std::vector<uint8_t>{CPubKey::SIZE + 1, 0x00},
+         }) {
+        CPubKey key = valid_key;
+        DataStream stream{std::span<const uint8_t>{data}};
+        BOOST_CHECK_THROW(stream >> key, std::ios_base::failure);
+        BOOST_CHECK(!key.IsValid());
+    }
+}
+
 BOOST_AUTO_TEST_CASE(bip340_test_vectors)
 {
     static const std::vector<std::pair<std::array<std::string, 3>, bool>> VECTORS = {

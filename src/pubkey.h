@@ -141,6 +141,7 @@ public:
     template <typename Stream>
     void Unserialize(Stream& s)
     {
+        Invalidate();
         const unsigned int len(::ReadCompactSize(s));
         if (len <= SIZE) {
             s >> std::span{vch, len};
