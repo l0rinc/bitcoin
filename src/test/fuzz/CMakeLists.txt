@@ -135,6 +135,7 @@ add_executable(fuzz
   txorphan.cpp
   txrequest.cpp
   utxo_snapshot.cpp
+  utxo_snapshot_base_blockhash.cpp
   utxo_total_supply.cpp
   validation_load_mempool.cpp
   vecdeque.cpp
