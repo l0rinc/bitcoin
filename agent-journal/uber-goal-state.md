@@ -147,6 +147,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 100 | sink-reverse-reachability | CYCLE-1 | 2026-07-28 | bloom ctor div-by-zero test-only latent; empty-filter guarded (CVE-2013-5700 present) |
 | 100 | sink-reverse-reachability | CYCLE-4 (COMPLETE) | 2026-08-01 | feefrac backends exact: Mul/Div vs fallback 0 diffs (3200 cases) + UBSan clean (shift corners C++20-defined) |
 | 7 | resource-exhaustion-variants | CYCLE-2 | 2026-07-29 | UTXO-scan/resize race: fixed in-tree (e049f064e1 unique-lock cursor); upstream master verified still racy |
+| 7 | resource-exhaustion-variants | EXHAUSTED | 2026-08-02 | bound census: 16/16 constants enforced+measured |
 | 94 | bindings-ffi-parity | CYCLE-2 | 2026-07-29 | enum mapping static_assert tables (073d543f26), reorder tripwire fires at :268 |
 | 94 | bindings-ffi-parity | CYCLE-3 | 2026-08-02 | wrapper ownership sound; copy family documented-nonnull (SIGSEGV=annotated misuse); DISMISSED |
 | 64 | finding-dedup-recurrence | CYCLE-1 | 2026-07-29 | findings-index.md built; 5 fixes confirmed NOT in lineage (F1,F2,F3,F7,F9) |
@@ -1002,6 +1003,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 226 (5-campaign eligible set): raw=
+   17325288802186375634, masked 8101916765331599826 -> idx 1 ->
+   #7 c5 (bound census: EXHAUSTED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58, #21, #28, #69, #61, #22, #23, #39, #64, #2, #7}.
    RE-RANK draw 225 (6-campaign eligible set): raw=
    16331761350244753227, masked 7108389313389977419 -> idx 1 ->
    #2 c4 (upstream assert sweep: tautologies; DISMISSED).
@@ -1467,7 +1476,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 ## Handoff
 Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 (mechanically rebuilt from table rows 2026-07-28): 3, 5, 6(EXHAUSTED), 8, 11, 12,
-13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 108(COMPLETE 2026-08-01), 73(COMPLETE 2026-08-01), 45(COMPLETE 2026-08-01), 81(EXHAUSTED 2026-08-01), 74(COMPLETE 2026-08-01), 50(COMPLETE 2026-08-01), 35(COMPLETE 2026-08-01), 59(COMPLETE 2026-08-01), 93(COMPLETE 2026-08-01), 100(COMPLETE 2026-08-01), 40(COMPLETE 2026-08-01), 109(COMPLETE 2026-08-01), 67(COMPLETE 2026-08-01), 36(COMPLETE 2026-08-01), 47(COMPLETE 2026-08-01), 78(COMPLETE 2026-08-02), 95(COMPLETE 2026-08-02), 80(COMPLETE 2026-08-02), 24(COMPLETE per its own journal: 6 cycles, 2026-07-30), 101(EXHAUSTED 2026-08-02), 34(EXHAUSTED 2026-08-02), 57(EXHAUSTED 2026-08-02), 69(EXHAUSTED 2026-08-02), 20, 26, 27, 33, 41(EXHAUSTED 2026-07-31), 52, 55(EXHAUSTED 2026-07-31), 71(EXHAUSTED 2026-07-31),
+13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 108(COMPLETE 2026-08-01), 73(COMPLETE 2026-08-01), 45(COMPLETE 2026-08-01), 81(EXHAUSTED 2026-08-01), 74(COMPLETE 2026-08-01), 50(COMPLETE 2026-08-01), 35(COMPLETE 2026-08-01), 59(COMPLETE 2026-08-01), 93(COMPLETE 2026-08-01), 100(COMPLETE 2026-08-01), 40(COMPLETE 2026-08-01), 109(COMPLETE 2026-08-01), 67(COMPLETE 2026-08-01), 36(COMPLETE 2026-08-01), 47(COMPLETE 2026-08-01), 78(COMPLETE 2026-08-02), 95(COMPLETE 2026-08-02), 80(COMPLETE 2026-08-02), 24(COMPLETE per its own journal: 6 cycles, 2026-07-30), 101(EXHAUSTED 2026-08-02), 34(EXHAUSTED 2026-08-02), 57(EXHAUSTED 2026-08-02), 69(EXHAUSTED 2026-08-02), 7(EXHAUSTED 2026-08-02), 20, 26, 27, 33, 41(EXHAUSTED 2026-07-31), 52, 55(EXHAUSTED 2026-07-31), 71(EXHAUSTED 2026-07-31),
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 41(c1,c2,c3,c4,c5,c6), 0(c1,c2), 1(c1,c2,c3,c4), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1,c2,c3), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2,c3,c4), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5,c6),
