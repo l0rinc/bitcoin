@@ -155,6 +155,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 71 | deterministic-simulation | CYCLE-4 | 2026-07-31 | extension-resume oracle (forced, fire-proofed) + ext-hash uniqueness fix + c1 oracle correction (flip can fire pre-scan); 3k clean |
 | 71 | deterministic-simulation | CYCLE-5 (EXHAUSTED) | 2026-07-31 | progress-value fuzzing: monotonic/flat/adversarial gVP schedules, [0,1] + divide-guard oracles; early-consumption trap fixed |
 | 32 | whole-history-leftovers | CYCLE-1 | 2026-07-29 | multiply-first percentage shape: no exploitable survivor (range/memory-bounded) |
+| 32 | whole-history-leftovers | CYCLE-2 (queue-empty) | 2026-08-02 | all 3 seed families absorbed (#105 c1, scope rule, #49 c10); queue EMPTY |
 | 69 | backend-differential | CYCLE-1 | 2026-07-29 | secp wide-multiply int128-vs-int64 differential: 4/4 suites pass, no divergence |
 | 103 | finding-composition | CYCLE-1 | 2026-07-29 | capability graph: no realizable chain; 3 edges tested broken (L2 fixed, F4+F5 fixed, F8 bounded) |
 | 103 | finding-composition | CYCLE-2 | 2026-08-02 | F10-F16 indexed, #95-c7 excluded (not in HEAD); all edges broken-by-repair; no realizable chain |
@@ -983,6 +984,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 209 (24-campaign eligible set): raw=
+   10310213087096134840, masked 1086841050241359032 -> idx 8 ->
+   #32 c2 (seed absorption audit: queue EMPTY).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32}.
    RE-RANK draw 208 (25-campaign eligible set): raw=
    15795260889241617676, masked 6571888852386841868 -> idx 18 ->
    #60 c9 (reviewer watch: template holds; quiet).
