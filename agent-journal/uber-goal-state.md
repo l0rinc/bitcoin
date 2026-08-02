@@ -1,3 +1,46 @@
+# Cycle 286 Completion
+
+- The fresh gate had selected goal `29` (`dead-stale-code`) with the exact
+  selector `shuf -i 0-98 -n 1`, without rerolling. The dedicated branch was
+  `uber-cycle-286-dead-stale-code-20260802`.
+- Gate HEAD was `38764035eb81e416fbf6591844e587ee8c9d6c39`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1362` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `7016d1f62c11a2edfa58bdd8fbc96d019553ed2b9f99359709c7261001420163`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Tracked/index cleanliness, `git diff --check`, and all seven protected
+  process checks passed; unrelated untracked artifacts were preserved.
+- The cycle inventoried current TODO/FIXME markers, conditional and disabled
+  paths, and deferred work. ArgsManager `ALLOW_*` comments remain tied to open
+  draft PR #16545; minisketch benchmark skips remain tied to open upstream PR
+  #96; compact-block reconstruction and orphan-resolution TODOs are on live,
+  intentionally incomplete paths. None was dead code or safe to remove.
+- The wallet change-detection comment in `src/wallet/receive.cpp` was confirmed
+  stale: current descriptor-wallet support already covers internal multisig
+  outputs, and `wallet_multisig_descriptor_psbt.py` checks their `ischange`
+  behavior. The underlying address-book heuristic remains a real limitation.
+- The comment-only correction and selected-goal journal were committed together
+  as `3f78435bbbbdcfdb2ac242ad4840d540435af1c7`,
+  `wallet: refresh stale change detection comment`, authored by
+  `Lőrinc <pap.lorinc@gmail.com>`. It replaces the future-multisig TODO with
+  the current behavior and remaining misclassification risk; no production
+  behavior or test file changed.
+- The first functional-test invocation failed before setup because the source
+  checkout lacks generated `test/config.ini`. The configured rerun was:
+
+      test/functional/wallet_multisig_descriptor_psbt.py --configfile=/data/my_storage/tmp/cycle214-build/test/config.ini --tmpdir=/data/my_storage/tmp/cycle286-wallet-multisig --randomseed=286 --portseed=86286 --loglevel=INFO
+
+  It exited 0 after successful multisig address, PSBT, signing, broadcast, and
+  balance checks. This setup-only failure is retained as a limitation, not a
+  product finding.
+- Post-source-close HEAD is `3f78435bbbbdcfdb2ac242ad4840d540435af1c7`; current
+  divergence is `45 1363` (`origin/master...HEAD`). The next action is this
+  separate state-close commit, then a fresh gate, exact selector draw, and a
+  new `uber-cycle-287-*` branch. Do not claim the repository is exhausted or
+  reopen the prior placeholder, CoinStats, TxReconciliation, macOS, or wallet
+  comment cells without changed evidence.
+
 # Cycle 285 Completion
 
 - The fresh gate fetched `origin/master` before the exact selector. The
