@@ -3,12 +3,14 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <index/txospenderindex.h>
+#include <dbwrapper.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
 
+#include <array>
 #include <atomic>
 #include <future>
 #include <thread>
@@ -187,6 +189,48 @@ BOOST_FIXTURE_TEST_CASE(txospenderindex_reinit_reader_race, TestChain100Setup)
     reader.join();
     txospenderindex.Stop();
     BOOST_REQUIRE(init_ok);
+}
+
+BOOST_FIXTURE_TEST_CASE(txospenderindex_rejects_corrupt_siphash_key, TestChain100Setup)
+{
+    const CScript& coinbase_script = m_coinbase_txns[0]->vout[0].scriptPubKey;
+    for (int i = 0; i < 10; ++i) CreateAndProcessBlock({}, coinbase_script);
+
+    CMutableTransaction spender;
+    spender.vin.resize(1);
+    spender.vin[0].prevout = COutPoint(m_coinbase_txns[0]->GetHash(), 0);
+    spender.vout.resize(1);
+    spender.vout[0].nValue = m_coinbase_txns[0]->GetValueOut();
+    spender.vout[0].scriptPubKey = coinbase_script;
+
+    std::vector<unsigned char> signature;
+    const uint256 signature_hash = SignatureHash(coinbase_script, spender, 0, SIGHASH_ALL, 0, SigVersion::BASE);
+    BOOST_REQUIRE(coinbaseKey.Sign(signature_hash, signature));
+    signature.push_back(static_cast<unsigned char>(SIGHASH_ALL));
+    spender.vin[0].scriptSig << signature;
+
+    const CBlock block = CreateAndProcessBlock({spender}, coinbase_script);
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    const COutPoint spent{spender.vin[0].prevout};
+    const fs::path db_path{m_args.GetDataDirNet() / "indexes" / "txospenderindex" / "db"};
+
+    {
+        TxoSpenderIndex index{interfaces::MakeChain(m_node), 1 << 20, false, true};
+        BOOST_REQUIRE(index.Init());
+        index.Sync();
+        BOOST_REQUIRE(index.FindSpender(spent).value().has_value());
+        BOOST_CHECK_EQUAL(index.GetSummary().best_block_hash, block.GetHash());
+        index.Stop();
+    }
+
+    {
+        CDBWrapper db({.path = db_path, .cache_bytes = 1 << 20, .obfuscate = false, .bloom_filter = false});
+        db.Write("siphash_key", std::array<uint8_t, 1>{0});
+    }
+
+    TxoSpenderIndex index{interfaces::MakeChain(m_node), 1 << 20, false, false};
+    BOOST_CHECK(!index.Init());
+    index.Stop();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

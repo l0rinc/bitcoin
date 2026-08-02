@@ -1,5 +1,116 @@
 # Local Reasoning Domain and Relationship Audit
 
+## Cycle 285 start/close: persisted SipHash key versus index readiness
+
+### Fresh selection and gate
+
+- The exact selector was `shuf -i 0-98 -n 1` -> `57`, selecting
+  `local-reasoning-domain`; no reroll was needed. This is a new persistence
+  relationship cell after Cycle 283's snapshot-flush failure cell.
+- Branch: `uber-cycle-285-local-reasoning-domain-20260802`.
+- Start HEAD: `8a5b80481e3c626118ef7d621b87b9d9d40beb99`; origin/master:
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence:
+  `origin/master...HEAD = 45 1360`.
+- The fresh gate passed `git fetch origin master`, tracked/index cleanliness,
+  `git diff --check`, all four catalog/protocol hashes, and the protected
+  process liveness check. The catalog hashes were
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc`.
+  The start uber-state hash was
+  `a33c106886e46bb664f06860e5fb34c2aa3e72fa6ae332564ec5be3e844e2832`.
+  Known untracked artifacts were preserved.
+
+### Scope and exclusions
+
+Do not reopen Cycle 65's AddrMan network classification, Cycle 77's BaseIndex
+callback/transaction-download ownership, Cycle 97's wallet replacement
+rollback, Cycle 135's index file-position/publication relationship, Cycle
+174's `Chain::hasBlocks` empty-range fix, Cycle 180's index reinitialization
+flag, Cycle 243's persisted block-filter readiness, or Cycle 269/283's
+snapshot publication and durable-flush cells. The new cell is the relationship
+between a persisted `TxoSpenderIndex` SipHash key, its existing keyed entries,
+and `BaseIndex` readiness during restart after database corruption.
+
+### Candidate and source trace
+
+`TxoSpenderIndex` stores spender entries under keys derived from
+`m_siphash_key`. Its constructor used `CDBWrapper::Read("siphash_key", ...)`
+and generated and synchronously persisted a random replacement whenever
+`Read` returned false. `CDBWrapper::Read` returns false both for a missing key
+and for `std::ios_base::failure` while decoding an existing value; it throws
+for other LevelDB errors. Therefore a malformed persisted key was
+indistinguishable from a new index at construction time.
+
+The old constructor then let the default `BaseIndex::CustomInit` succeed.
+`BaseIndex::Init()` could read the old best-block locator, mark the index
+ready, and expose a new random key to `FindSpender`. Every existing spender
+entry remained stored under the old key, so lookups silently returned no
+spender even though the index advertised the persisted tip. This is a local
+state relationship failure: key identity, keyed data, best-block metadata,
+and readiness were treated as independent when they must be initialized as
+one contract.
+
+### Independent before/after reproduction
+
+The regression first created ten blocks and a signed transaction spending a
+coinbase output. It initialized and synced an on-disk index, verified a real
+spender lookup and the best block, rewrote the serialized `siphash_key` with a
+malformed one-byte value through a separate `CDBWrapper`, then reopened the
+index.
+
+For the independent failing-before control, the new initializer was
+temporarily replaced with the old constructor behavior and a successful
+`CustomInit`. The exact command was:
+
+    TMPDIR=/data/my_storage/tmp/cycle285-pre-tmp /data/my_storage/tmp/cycle243-build/bin/test_bitcoin --run_test=txospenderindex_tests/txospenderindex_rejects_corrupt_siphash_key --catch_system_errors=no --color_output=false --log_level=test_suite --report_level=short
+
+It exited 201. The decisive output was:
+
+    test/txospenderindex_tests.cpp(232): error: in "txospenderindex_tests/txospenderindex_rejects_corrupt_siphash_key": check !index.Init() has failed
+
+The control passed 4 of 5 assertions, demonstrating that the old path
+silently accepted the corrupted key and reached the ready state. The
+temporary mutation was restored before final verification.
+
+The repair moves key loading into `TxoSpenderIndex::CustomInit`. A valid key
+loads normally. If decoding fails while a committed best block exists, or if
+the malformed key is still present in the database, initialization logs a
+corruption error and returns false. Only a genuinely new database with no
+best-block state and no existing key generates and synchronously stores a new
+random key. `BaseIndex` consequently cannot publish readiness after this
+failure.
+
+The repaired build command was:
+
+    CCACHE_DIR=/data/my_storage/tmp/cycle285-ccache TMPDIR=/data/my_storage/tmp/cycle285-build-tmp cmake --build /data/my_storage/tmp/cycle243-build --target test_bitcoin -j2
+
+It completed with `[100%] Built target test_bitcoin`. The focused repaired
+command was:
+
+    TMPDIR=/data/my_storage/tmp/cycle285-post-verify /data/my_storage/tmp/cycle243-build/bin/test_bitcoin --run_test=txospenderindex_tests/txospenderindex_rejects_corrupt_siphash_key --catch_system_errors=no --color_output=false --log_level=test_suite --report_level=short
+
+It passed 1 test case and all 5 assertions. The related command was:
+
+    TMPDIR=/data/my_storage/tmp/cycle285-index-suite-post /data/my_storage/tmp/cycle243-build/bin/test_bitcoin --run_test=txospenderindex_tests,txindex_tests,baseindex_tests,blockfilter_index_tests,coinstatsindex_tests --catch_system_errors=no --color_output=false --report_level=short --random=285
+
+It passed 18 test cases and all 3,108 assertions. `git diff --check` passed.
+
+### Verdict and limits
+
+Confirmed and fixed as a persistent index lifecycle/state-contract defect:
+malformed key material was converted into a new secret while old keyed entries
+and the old best-block locator remained, causing a ready index to return false
+absence for existing spenders. The regression proves both a valid pre-corruption
+lookup and the failing-before/passing-after initialization result. The defect
+requires local database corruption or an equivalent storage fault; no
+unauthenticated network, consensus, or wallet/key compromise was demonstrated.
+The repair intentionally treats a missing key with no committed best block as
+fresh-index initialization; partial uncommitted garbage without a locator is
+outside this cycle's demonstrated contract and remains a journal limitation.
+
 ## Cycle 283 start: snapshot completion and durable flush relationship
 
 ### Fresh selection and gate
