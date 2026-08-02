@@ -358,3 +358,40 @@ family (signing arms).
 
 ## Rotation note
 Six cycles; sibling imports closed. #9 quiet until new signals.
+
+## Cycle 7 (2026-08-02, draw 202, raw=4615193276133132286 (63-bit), idx 3/31): NEW SIGNAL — upstream clusterlin corpus family (12 targets) imported + validated clean through the fork's Assume-hardened build; 3,436 seeds, zero aborts; DISMISSED
+
+### New signal (the c6 quiet condition, met)
+Upstream qa-assets carries 12 clusterlin corpora; the fork's
+fuzz binary has all 12 targets (+txgraph, +fork-internal
+backend_equivalence which has NO upstream corpus — recorded).
+The fork's txgraph-era hardening (Assume arms, G_ABORT_ON_
+FAILED_ASSUME build) must hold across the entire upstream
+cluster-linearization corpus — falsifiable per-seed.
+
+### Import + validation
+- Sparse add: fuzz_corpora/clusterlin_* at the same pinned
+  918cdd3 (#59 c3 pin == upstream HEAD, #79 c3 recorded).
+- Per-target single pass (FUZZ=<t> build_fuzz/bin/fuzz -runs=0):
+  chunking 126, components 121, depgraph_serialization 236,
+  depgraph_sim 279, linearize 559, make_connected 214,
+  postlinearize 132, postlinearize_moved_leaf 143,
+  postlinearize_tree 327, sfl 787, simple_finder 196,
+  simple_linearize 307 — 3,436 seeds total, ALL DONE clean,
+  zero crashes, zero Assume aborts, zero artifacts (find -newer
+  check pattern of #79 c3).
+
+### Verdict
+DISMISSED: the fork's cluster-linearization invariants hold on
+every upstream seed; the coverage signal is green with no
+fork-specific arm uncovered. backend_equivalence remains
+fork-corpus-only (its corpus is the #60-c14 differential's).
+
+### Exact commands
+- git sparse-checkout add (12 dirs); per-target FUZZ runs
+  (counts above); PRINT_ALL_FUZZ_TARGETS_AND_ABORT census.
+
+### Limitations / queue
+- Single-pass validation, not a mutation campaign (qa-assets'
+  own CI runs those; the fork question was corpus-compat).
+- /tmp/qa-assets now 182M; delete on disk squeeze.
