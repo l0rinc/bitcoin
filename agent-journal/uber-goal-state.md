@@ -157,6 +157,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 103 | finding-composition | CYCLE-1 | 2026-07-29 | capability graph: no realizable chain; 3 edges tested broken (L2 fixed, F4+F5 fixed, F8 bounded) |
 | 103 | finding-composition | CYCLE-2 | 2026-08-02 | F10-F16 indexed, #95-c7 excluded (not in HEAD); all edges broken-by-repair; no realizable chain |
 | 53 | timing-side-channel | CYCLE-1 | 2026-07-29 | AES-CBC padding dudect: Welch t 1.53/1.69/-1.14 (no leak), confirms #45 code-read |
+| 53 | timing-side-channel | CYCLE-2 | 2026-08-02 | secp ctime_tests under valgrind: 0/0 errors; library constant-time CONFIRMED |
 | 74 | memory-pressure-allocator | CYCLE-1 (retro) | 2026-07-28 | mempool accounting honest (1.13x RSS/usage @8k); glibc drain retention not a leak (2ef390de05, row restored) |
 | 74 | memory-pressure-allocator | CYCLE-2 | 2026-07-29 | LockedPool oversize alloc -> graceful bad_alloc via RPC (fault-injected); no residue |
 | 74 | memory-pressure-allocator | CYCLE-5 | 2026-07-31 | mlock-failure path live: degraded arena works unlocked (locked=0/total=262144), log-silent (upstream-identical); DISMISSED |
@@ -979,6 +980,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 205 (28-campaign eligible set): raw=
+   3235443014574466965 (63-bit) -> idx 17 -> #53 c2 (secp
+   ctime_tests valgrind green; CONFIRMED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53}.
    RE-RANK draw 204 (29-campaign eligible set): raw=
    664956795418753102 (63-bit) -> idx 27 -> #79 c4 (coins/
    storage corpus batch: 20,760 seeds clean; DISMISSED).
