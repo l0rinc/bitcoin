@@ -12,6 +12,7 @@
 #include <boost/test/unit_test.hpp>
 #include <test/util/setup_common.h>
 
+#include <array>
 #include <limits>
 #include <map>
 #include <vector>
@@ -87,6 +88,56 @@ BOOST_AUTO_TEST_CASE(base64_decode_roundtrip)
     const util::Result<PartiallySignedTransaction> roundtrip{DecodeBase64PSBT(reencoded)};
     BOOST_REQUIRE(roundtrip);
     BOOST_CHECK(SerializePSBT(*roundtrip) == serialized);
+}
+
+BOOST_AUTO_TEST_CASE(global_xpub_versions_roundtrip)
+{
+    CMutableTransaction mtx;
+    mtx.vin.emplace_back(COutPoint{});
+    mtx.vout.emplace_back(1, CScript{});
+    const PartiallySignedTransaction base{mtx};
+
+    CExtPubKey xpub;
+    xpub.nDepth = 1;
+    xpub.fingerprint[0] = 0x12;
+    xpub.fingerprint[1] = 0x34;
+    xpub.fingerprint[2] = 0x56;
+    xpub.fingerprint[3] = 0x78;
+    xpub.nChild = 0x80000000U;
+    xpub.chaincode = ChainCode{uint256::ONE};
+    xpub.pubkey = CPubKey{ParseHex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")};
+    BOOST_REQUIRE(xpub.pubkey.IsFullyValid());
+
+    std::array<unsigned char, BIP32_EXTKEY_WITH_VERSION_SIZE> xpub_x{};
+    xpub_x[0] = 0x04;
+    xpub_x[1] = 0x88;
+    xpub_x[2] = 0xb2;
+    xpub_x[3] = 0x1e;
+    xpub.Encode(&xpub_x[4]);
+
+    std::array<unsigned char, BIP32_EXTKEY_WITH_VERSION_SIZE> xpub_y{};
+    xpub_y[0] = 0x04;
+    xpub_y[1] = 0x9d;
+    xpub_y[2] = 0x7c;
+    xpub_y[3] = 0xb2;
+    xpub.Encode(&xpub_y[4]);
+
+    const KeyOriginInfo origin{{0x12, 0x34, 0x56, 0x78}, {0, 1 | 0x80000000U}};
+    std::vector<unsigned char> xpub_entries;
+    VectorWriter xpub_writer{xpub_entries, 0};
+    SerializeToVector(xpub_writer, PSBT_GLOBAL_XPUB, xpub_x);
+    SerializeHDKeypath(xpub_writer, origin);
+    SerializeToVector(xpub_writer, PSBT_GLOBAL_XPUB, xpub_y);
+    SerializeHDKeypath(xpub_writer, origin);
+
+    std::vector<unsigned char> serialized{SerializePSBT(base)};
+    serialized.insert(serialized.begin() + sizeof(PSBT_MAGIC_BYTES), xpub_entries.begin(), xpub_entries.end());
+
+    const auto decoded{DecodeBase64PSBT(EncodeBase64(serialized))};
+    BOOST_REQUIRE(decoded);
+    BOOST_REQUIRE_EQUAL(decoded->m_xpubs.size(), 1);
+    BOOST_CHECK_EQUAL(decoded->m_xpubs.begin()->second.size(), 2);
+    BOOST_CHECK(SerializePSBT(*decoded) == serialized);
 }
 
 BOOST_AUTO_TEST_CASE(hd_keypaths_roundtrip)

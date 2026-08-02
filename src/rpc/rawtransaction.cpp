@@ -1118,7 +1118,7 @@ static RPCMethod decodepsbt()
 
     // Add the global xpubs
     UniValue global_xpubs(UniValue::VARR);
-    for (std::pair<KeyOriginInfo, std::set<CExtPubKey>> xpub_pair : psbtx.m_xpubs) {
+    for (const auto& xpub_pair : psbtx.m_xpubs) {
         for (auto& xpub : xpub_pair.second) {
             std::vector<unsigned char> ser_xpub;
             ser_xpub.assign(BIP32_EXTKEY_WITH_VERSION_SIZE, 0);

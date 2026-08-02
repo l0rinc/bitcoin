@@ -1,5 +1,41 @@
 # Public object parsing and validation variant analysis
 
+## Cycle 299: PSBT global xpub serialized-key identity
+
+### Selection and gate
+
+- Selector: `shuf -i 0-98 -n 1`
+- Draw: `15`
+- Slug: `public-object-validation`
+- Branch: `uber-cycle-299-public-object-validation-20260802`
+- Cycle-start HEAD: `f30c241b4348a5b72bd6401cab52b635f95d3ec6`; `origin/master` at `556988790a7f961693a8fd93f73725baea66476a`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `45 1388` (`origin/master...HEAD`).
+- The fixed catalog, random prompt, goals TSV, and uber protocol hashes at selection were `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`, `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`, `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Protected test processes `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` were preserved and not touched. Earlier Goal 15 cells for full-key descriptor inference, x-only leaf inference, Taproot lookup, compact recovery headers, and Taproot PSBT x-only metadata were searched and excluded.
+
+### Contract and independent applicability check
+
+The candidate is the global PSBT xpub map. BIP-174 defines `PSBT_GLOBAL_XPUB` key data as the complete 78-byte serialized BIP32 extended public key, and its duplicate-key rule applies to the complete key, not only the derived public point or chain code: https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki. Therefore two records that differ in version bytes, depth, fingerprint, child number, chain code, or public key are distinct wire keys when all other PSBT framing is valid.
+
+The implementation used `std::set<CExtPubKey>` for `PartiallySignedTransaction::m_xpubs`. `CExtPubKey::operator<` compared only `pubkey` and `chaincode`, while `EncodeWithVersion()` deliberately retained version bytes so a decoded xpub could be serialized with the same representation. The set therefore collapsed distinct PSBT keys before serialization. The global duplicate-key lookup correctly rejects an identical `<keytype,keydata>` vector, so this was not a duplicate-key acceptance issue; it was loss of a distinct key.
+
+### Reproducer and verdict
+
+The deterministic unit fixture created a valid PSBTv2 global map with two xpub records sharing depth, origin, child, chain code, and public key, but using `0488b21e` and `049d7cb2` version bytes. Both records have the same valid HD keypath value. The pre-fix command was:
+
+`TMPDIR=/data/my_storage/tmp/cycle299-xpub /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=psbt_tests/global_xpub_versions_roundtrip --log_level=all --random=29901`
+
+The pre-fix build succeeded after correcting the fixture's C-array size expression, and the test exited 201 with `check SerializePSBT(*decoded) == serialized has failed`. This is a self-contained proof that parsing accepted the wire data but reserialization lost or changed a record.
+
+### Fix and regression oracle
+
+`PSBTXPubKeyComparator` now orders xpubs by all fields represented by the serialized 78-byte key, including version bytes. The PSBT xpub map and its duplicate-tracking set use this comparator; descriptor and wallet sets retain their existing derivation-material comparator semantics. The RPC decoder loop was changed to hold the map entry by const reference and pass a const fingerprint span.
+
+The fixed build `ninja -C /data/my_storage/tmp/cycle246-wallet test_bitcoin bitcoin_node -j2` exited 0. The focused fixed test with seed `29902` exited 0, asserting one origin entry, two retained xpubs, and exact serialized round-trip equality. The complete `psbt_tests` suite with seed `29903` passed all 15 cases with no errors. `git diff --check` passed. The original six-parameter generalization remains queued for a subsequent independent test rather than being assumed from the version-only witness.
+
+### Verdict and handoff
+
+Confirmed local PSBT parser/serializer correctness defect with public, caller-supplied metadata as the trust boundary. The impact is loss of a valid distinct global xpub record during decode/merge/re-encode, not consensus acceptance or private-key exposure. Commit the source, regression, and this journal entry together. After that commit, extend the catalog with a learned serialized-key identity campaign, rebase the cycle branch onto the freshly fetched `origin/master`, close the uber state separately, and draw from the expanded catalog. Remaining Goal 15 queue: direct address/key decoding variants, public wrapper representation parity, release-version parser differences, and PSBT key identity fields beyond version bytes.
+
 ## Cycle 168: direct address/key decoding and wrapper validation follow-up
 
 ### Selection and gate

@@ -22,6 +22,8 @@
 
 #include <optional>
 #include <bitset>
+#include <cstring>
+#include <set>
 
 namespace node {
 enum class TransactionError;
@@ -42,6 +44,25 @@ static constexpr uint8_t PSBT_GLOBAL_OUTPUT_COUNT = 0x05;
 static constexpr uint8_t PSBT_GLOBAL_TX_MODIFIABLE = 0x06;
 static constexpr uint8_t PSBT_GLOBAL_VERSION = 0xFB;
 static constexpr uint8_t PSBT_GLOBAL_PROPRIETARY = 0xFC;
+
+// PSBT global xpub keys are unique by their complete serialized xpub, including version bytes.
+struct PSBTXPubKeyComparator
+{
+    bool operator()(const CExtPubKey& a, const CExtPubKey& b) const
+    {
+        int version_cmp = memcmp(a.version, b.version, sizeof(a.version));
+        if (version_cmp != 0) return version_cmp < 0;
+        if (a.nDepth != b.nDepth) return a.nDepth < b.nDepth;
+        int fingerprint_cmp = memcmp(a.fingerprint.data(), b.fingerprint.data(), sizeof(a.fingerprint));
+        if (fingerprint_cmp != 0) return fingerprint_cmp < 0;
+        if (a.nChild != b.nChild) return a.nChild < b.nChild;
+        if (a.chaincode < b.chaincode) return true;
+        if (b.chaincode < a.chaincode) return false;
+        return a.pubkey < b.pubkey;
+    }
+};
+
+using PSBTXPubKeySet = std::set<CExtPubKey, PSBTXPubKeyComparator>;
 
 // Input types
 static constexpr uint8_t PSBT_IN_NON_WITNESS_UTXO = 0x00;
@@ -1271,7 +1292,7 @@ private:
 public:
     // We use a vector of CExtPubKey in the event that there happens to be the same KeyOriginInfos for different CExtPubKeys
     // Note that this map swaps the key and values from the serialization
-    std::map<KeyOriginInfo, std::set<CExtPubKey>> m_xpubs;
+    std::map<KeyOriginInfo, PSBTXPubKeySet> m_xpubs;
     std::optional<std::bitset<8>> m_tx_modifiable;
     std::vector<PSBTInput> inputs;
     std::vector<PSBTOutput> outputs;
@@ -1385,7 +1406,7 @@ public:
         std::set<std::vector<unsigned char>> key_lookup;
 
         // Track the global xpubs we have already seen. Just for sanity checking
-        std::set<CExtPubKey> global_xpubs;
+        PSBTXPubKeySet global_xpubs;
 
         // Read global data
         bool found_sep = false;
