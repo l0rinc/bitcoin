@@ -339,3 +339,21 @@ accumulate note); nothing else moved.
 ### Limitations / queue
 - CI-failure content for 35859/35818 (c10 flags) not pulled
   (upstream-side; next watch if they advance).
+
+## Cycle 8 (2026-08-02, draw 243, raw=17911194993721673680, masked 8687822956866897872, idx 0/2): upstream watch — static (master 556988790a, 4 PRs open, F13/F14/F17 still absent); quiet
+
+### Watch
+- origin/master: 0 new commits since c7.
+- Tracked PRs 35744/35859/35818/35620: all open, unmerged.
+- F13/F14 offerability: upstream still lacks ~LevelDBContext
+  (0) and the limitclustercount bound (0). F17 unguarded
+  (c7 check, unchanged).
+
+### Verdict
+Quiet cycle; nothing moved.
+
+### Exact commands
+- git fetch/log; api.github.com PR states; git show greps.
+
+### Limitations / queue
+- Same as c7.
