@@ -64,3 +64,50 @@ assertions!")
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-08-02, draw 174, raw=3650315433786879391 (63-bit), idx 1/3): optimization-level output differential — g++ {-O0,-O2,-O3} x clang++-18 {-O0,-O2} byte-identical on the consensus arithmetic boundary corpus; DISMISSED; campaign COMPLETE
+
+### Hypothesis
+H (c1 queue): optimizer level changes the RESULT of consensus
+header-only arithmetic (UB exploitation, contract violation,
+__int128 lowering divergence) — falsifiable by running an
+identical boundary corpus through the same TU compiled at
+multiple opt levels and compilers, byte-diffing outputs.
+
+### Harness (/tmp/btc78c2/optdiff.cpp, preserved)
+Single-TU: util/feefrac.h (Mul/MulFallback __int128 vs pair,
+Div/DivFallback round_down, Add) + consensus/amount.h
+(MoneyRange, CAmount add) over the #100-c4 boundary corpus
+(23 a-values x 12 b-values incl. INT32_MIN/MAX, INT64_MAX/4,
+21e14, 1<<40 edges) = 742 output lines. No linker deps beyond
+the headers (arith_uint256 arm dropped: mul/GetHex are NOT
+header-only — recorded). g++ -O0 needs an assertion_fail stub
+because Assume is a REAL call without optimization — exactly
+c1's confirmed contract (erasure only under optimization); the
+stub aborts and never fires on these valid inputs.
+
+### Result
+g++ 13.3 {-O0,-O2,-O3} + clang++ 18.1 {-O0,-O2}: all five
+binaries' outputs md5-identical
+(382248379b24e73a5a37fd3878e873e4, 742 lines each). Zero
+opt-level or cross-compiler divergence.
+
+### Verdict
+DISMISSED: the fork's feefrac/Amount arithmetic is optimization-
+invariant and compiler-invariant at the boundary corpus,
+consistent with #100 c4's backend-exactness and UBSan-clean
+results. The c1 transformation contract is now backed at both
+ends: erased in optimized builds (c1 disassembly), real-but-
+correct at -O0 (this cycle).
+
+### Exact commands
+- g++/clang++-18 -O{0,2,3} -std=c++20 -I src optdiff.cpp; md5sum
+  of the five output files above.
+
+### Limitations / queue
+- Alive2/IR-level validation remains host-unavailable (c1 note).
+- No #78 cells remain queued.
+
+### Campaign #78: COMPLETE
+c1 Assume-erasure binary contract (CONFIRMED); c2 opt-level
+arithmetic differential (DISMISSED).
