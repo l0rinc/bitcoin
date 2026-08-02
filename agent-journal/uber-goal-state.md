@@ -337,6 +337,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 79 | fuzz-corpus-stewardship | CYCLE-9 | 2026-08-02 | feefrac/miner batch: 15 targets 12,077 seeds clean; cumulative 99,805; DISMISSED |
 | 79 | fuzz-corpus-stewardship | CYCLE-10 | 2026-08-02 | utility sweep: 25 targets 12,577 seeds clean; PROGRAM COMPLETE 112,382 green; DISMISSED |
 | 79 | fuzz-corpus-stewardship | CYCLE-11 | 2026-08-02 | 10-min mutation campaign on ephemeral_package_eval: fresh coverage, zero crashes; DISMISSED |
+| 79 | fuzz-corpus-stewardship | CYCLE-12 | 2026-08-02 | txgraph scratch campaign: 420,878 runs 0 crashes, corpus 0->4,586; DISMISSED |
 | 35 | mutation-testing | CYCLE-7 (COMPLETE) | 2026-08-01 | NONNEGATIVE_SIGNED negative-write mangle pinned (-1->0x7f->127); unreachable from all call sites; upstream-identical |
 | 59 | supply-chain-security-gates | CYCLE-3 (COMPLETE) | 2026-08-01 | qa-assets corpus clone commit-pinned (weakening arm was silent; c1 reasoning covered injection only); live-verified |
 | 40 | multi-agent-adjudication | CYCLE-3 (COMPLETE) | 2026-08-01 | L4 executable confirmation: HEAD vs branch dup-check differential fuzz, 300k cases 0 divergences |
@@ -1027,6 +1028,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    RE-RANK draw 250: raw=5687290599673046444 -> consolidated
    regression sweep (test_bitcoin + test_kernel + functional
    subset ALL GREEN on the integrated lineage).
+   RE-RANK draw 252 (2-target pool): raw=450380974070410478
+   (63-bit) -> idx 0 -> #79 c12 (txgraph scratch campaign:
+   420,878 runs, zero crashes).
+   Pool: txorphanage_sim mutation run, watches.
    RE-RANK draw 251 (3-target mutation pool): raw=
    5490570177768737669 (63-bit) -> idx 2 -> #79 c11 (10-min
    mutation campaign: fresh coverage, zero crashes).

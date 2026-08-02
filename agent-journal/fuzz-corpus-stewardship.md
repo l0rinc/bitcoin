@@ -439,3 +439,34 @@ its 4,691-seed replay result (c10).
 ### Limitations / queue
 - 10 minutes is a smoke-length campaign; the real long-run
   belongs to qa-assets' continuous infra (c6 note).
+
+## Cycle 12 (2026-08-02, draw 252, raw=450380974070410478 (63-bit), idx 0/2): txgraph scratch-corpus mutation campaign — 420,878 runs, corpus 0->4,586 units, zero crashes/Assume aborts; DISMISSED
+
+### Campaign
+FUZZ=txgraph build_fuzz/bin/fuzz -max_total_time=640 -timeout=25
+-artifact_prefix=/tmp/txgraph_artifacts/ /tmp/txgraph_corpus
+(scratch corpus — txgraph is fork-authored with NO upstream
+corpus; the first attempt's seed dir was the c7-pruned
+txorphanage_sim dir, recorded).
+- 420,878 runs in 641s; the fuzzer generated a 4,586-unit corpus
+  from scratch (/tmp/txgraph_corpus, preserved — a genuine new
+  txgraph corpus, the first for this target).
+- Zero crashes, zero Assume aborts, zero artifacts
+  (/tmp/txgraph_artifacts empty): the fork's sim-model
+  differential + invariant tripwires (#51 c3's hook) survived
+  420k fresh mutations with zero violations.
+
+### Verdict
+DISMISSED: the fork's txgraph target is robust under
+from-scratch adversarial mutation; its sim-vs-implementation
+oracle held on every accepted case. The generated corpus is
+preserved as campaign produce (would feed a future long-run).
+
+### Exact commands
+- campaign line above; corpus/artifact census above.
+
+### Limitations / queue
+- ~11 minutes smoke-length (as c11); the generated corpus is
+  NOT minimized (fuzzer's raw output; minimize before any
+  checkin per #79-c1's method).
+- txorphanage_sim mutation run remains in the pool.
