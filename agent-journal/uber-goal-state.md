@@ -158,6 +158,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 32 | whole-history-leftovers | CYCLE-1 | 2026-07-29 | multiply-first percentage shape: no exploitable survivor (range/memory-bounded) |
 | 32 | whole-history-leftovers | CYCLE-2 (queue-empty) | 2026-08-02 | all 3 seed families absorbed (#105 c1, scope rule, #49 c10); queue EMPTY |
 | 69 | backend-differential | CYCLE-1 | 2026-07-29 | secp wide-multiply int128-vs-int64 differential: 4/4 suites pass, no divergence |
+| 69 | backend-differential | EXHAUSTED | 2026-08-02 | census: all host-executable pairs green; x86/4way absent, SHA512/ctaes single |
 | 103 | finding-composition | CYCLE-1 | 2026-07-29 | capability graph: no realizable chain; 3 edges tested broken (L2 fixed, F4+F5 fixed, F8 bounded) |
 | 103 | finding-composition | CYCLE-2 | 2026-08-02 | F10-F16 indexed, #95-c7 excluded (not in HEAD); all edges broken-by-repair; no realizable chain |
 | 53 | timing-side-channel | CYCLE-1 | 2026-07-29 | AES-CBC padding dudect: Welch t 1.53/1.69/-1.14 (no leak), confirms #45 code-read |
@@ -995,6 +996,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 219 (12-campaign eligible set): raw=
+   16824079916139056791, masked 7600707879284280983 -> idx 11 ->
+   #69 c5 (backend census: EXHAUSTED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58, #21, #28, #69}.
    RE-RANK draw 218 (13-campaign eligible set): raw=
    8871967550067354166 (63-bit) -> idx 5 -> #28 c3 (sighash
    guard mutant killed 409x; DISMISSED). Side-repair noted:
@@ -1404,7 +1413,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 ## Handoff
 Updated after every rotation. Campaign-DONE/QC/EXHAUSTED/deferred
 (mechanically rebuilt from table rows 2026-07-28): 3, 5, 6(EXHAUSTED), 8, 11, 12,
-13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 108(COMPLETE 2026-08-01), 73(COMPLETE 2026-08-01), 45(COMPLETE 2026-08-01), 81(EXHAUSTED 2026-08-01), 74(COMPLETE 2026-08-01), 50(COMPLETE 2026-08-01), 35(COMPLETE 2026-08-01), 59(COMPLETE 2026-08-01), 93(COMPLETE 2026-08-01), 100(COMPLETE 2026-08-01), 40(COMPLETE 2026-08-01), 109(COMPLETE 2026-08-01), 67(COMPLETE 2026-08-01), 36(COMPLETE 2026-08-01), 47(COMPLETE 2026-08-01), 78(COMPLETE 2026-08-02), 95(COMPLETE 2026-08-02), 80(COMPLETE 2026-08-02), 24(COMPLETE per its own journal: 6 cycles, 2026-07-30), 101(EXHAUSTED 2026-08-02), 34(EXHAUSTED 2026-08-02), 57(EXHAUSTED 2026-08-02), 20, 26, 27, 33, 41(EXHAUSTED 2026-07-31), 52, 55(EXHAUSTED 2026-07-31), 71(EXHAUSTED 2026-07-31),
+13, 14, 15, 18(QUEUE-COMPLETE), 19(EXHAUSTED), 108(COMPLETE 2026-08-01), 73(COMPLETE 2026-08-01), 45(COMPLETE 2026-08-01), 81(EXHAUSTED 2026-08-01), 74(COMPLETE 2026-08-01), 50(COMPLETE 2026-08-01), 35(COMPLETE 2026-08-01), 59(COMPLETE 2026-08-01), 93(COMPLETE 2026-08-01), 100(COMPLETE 2026-08-01), 40(COMPLETE 2026-08-01), 109(COMPLETE 2026-08-01), 67(COMPLETE 2026-08-01), 36(COMPLETE 2026-08-01), 47(COMPLETE 2026-08-01), 78(COMPLETE 2026-08-02), 95(COMPLETE 2026-08-02), 80(COMPLETE 2026-08-02), 24(COMPLETE per its own journal: 6 cycles, 2026-07-30), 101(EXHAUSTED 2026-08-02), 34(EXHAUSTED 2026-08-02), 57(EXHAUSTED 2026-08-02), 69(EXHAUSTED 2026-08-02), 20, 26, 27, 33, 41(EXHAUSTED 2026-07-31), 52, 55(EXHAUSTED 2026-07-31), 71(EXHAUSTED 2026-07-31),
 56, 62, 72(deferred), 77(deferred), 82, 83, 84, 85, 86, 87, 88, 89,
 96, 97, 98.
 Cycles done (random-pool state): 41(c1,c2,c3,c4,c5,c6), 0(c1,c2), 1(c1,c2,c3,c4), 4(c1,c2), 6(c1,c2,c3),7(c1), 2(c1,c2,c3), 9(c1,c2,c3,c4,c5,c6), 10(c1,c2,c3,c4), 7(c1,c2,c3,c4), 13(c1,c2), 16(c1,c2), 17(c1,c2,c3), 21(c1,c2,c3,c4), 22(c1,c2), 89(c1,c2,c3,c4,c5), 108(c1,c2,c3,c4,c5,c6),
