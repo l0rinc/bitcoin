@@ -1,3 +1,98 @@
+# Cycle 276: concurrent ThreadPool shutdown ownership
+
+## Fresh gate and selection
+
+- `git fetch origin master` passed before branch creation. The exact selector
+  `shuf -i 0-98 -n 1` drew goal `8`, `locking-threading`; no reroll was used.
+- Branch: `uber-cycle-276-locking-threading-20260802`.
+- Gate HEAD: `ae3e461186f61b061d0edd4350793a273a32cc4c`; `origin/master`:
+  `556988790a7f961693a8fd93f73725baea66476a`; merge base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence:
+  `1341 45` (`HEAD...origin/master`).
+- The tracked/index state was clean, `git diff --check` passed, the state file
+  hash was `89d1b4626a852098a80dd70a9d9b2822d4074643436947d0812cab50fb973e0d`,
+  and the catalog, prompt, TSV, and protocol hashes matched the persistent
+  values. The protected long-running processes were alive and untouched.
+
+## Distinct scope and hypothesis
+
+The exact validation-callback re-registration cell from Cycle 210, the
+SignalInterrupt lost-wakeup cell from Cycle 189, the mapport `std::thread`
+lifecycle cell from Cycle 163, and the deferred scheduler callback lifetime
+cell from Cycle 235 remain excluded. The new cell was the fixed-size
+`ThreadPool` controller lifecycle in `src/util/threadpool.h`, focusing on two
+controller threads calling `Stop()` concurrently while a worker is still
+executing.
+
+The public lifecycle contract requires `Stop()` to be called from a controller
+(non-worker) thread and says it waits for all queued work to complete. The
+implementation swapped `m_workers` into a local vector before joining. A second
+controller therefore saw an empty worker vector, independently set
+`m_interrupt`, returned after an empty drain/join, and reset `m_interrupt` to
+false while the first stopper was still joining the original worker. The first
+worker could then finish its task and return to its wait predicate instead of
+exiting. The existing Start-vs-Stop test covered one stopper but did not cover
+Stop-vs-Stop ownership.
+
+## Independent pre-fix reproduction
+
+The new `threadpool_tests/concurrent_stop_waits_for_first_stop` test starts one
+worker, blocks it on a counting semaphore, starts a first stopper, waits until
+that stopper has swapped the worker list, and starts a second stopper. Before
+the fix, the second stopper returned during the first stopper's join phase, so
+the assertion
+
+`second_stop_finished.wait_for(500ms) == std::future_status::timeout`
+
+failed in the Clang 19 ASan+UBSan build at
+`/data/my_storage/tmp/cycle274-asan-wallet/bin/test_bitcoin` with:
+
+`ASAN_OPTIONS=detect_leaks=0 /data/my_storage/tmp/cycle274-asan-wallet/bin/test_bitcoin --run_test=threadpool_tests/concurrent_stop_waits_for_first_stop --report_level=short --catch_system_errors=no`
+
+The test then hung after releasing the worker because the early second Stop
+had cleared `m_interrupt`; the first stopper's worker went back to its
+condition-variable wait and could not be joined. That intentionally failing
+process was terminated with Ctrl-C after the first assertion failure. This is
+a direct lifecycle witness, not a timing-only inference.
+
+## Repair and verification
+
+The fix adds `m_stopping`, guarded by `m_mutex`, as shutdown ownership state.
+The first controller entering `Stop()` sets it before swapping workers and
+keeps it set through queue draining, worker joins, the empty-queue assertion,
+and the `m_interrupt` reset. A concurrent controller waits on the existing
+condition variable until that state clears and then returns. The final state
+transition notifies all waiters. `Start()` remains rejected because
+`m_interrupt` stays true for the entire first shutdown. The public comment now
+states the concurrent Stop contract explicitly.
+
+Verification results:
+
+- The repaired ASan+UBSan build passed the focused test: 1 case and 4
+  assertions. The complete `threadpool_tests` suite passed 18 cases and 461
+  assertions.
+- An independent Clang 19 UBSan build at
+  `/data/my_storage/tmp/cycle273-clang19-ubsan` passed the focused test (1/4)
+  and the complete suite (18/461). Its build emitted only the pre-existing
+  `-O0` object-size-sanitizer warning.
+- A separate Clang 19 ThreadSanitizer build at
+  `/data/my_storage/tmp/cycle163-tsan` was rebuilt after reconfiguration and
+  passed the focused test (1/4) with
+  `TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1`; the complete suite
+  passed 18 cases and 462 assertions with no TSan report.
+- `git diff --check` passed. No full repository suite was run; the evidence is
+  scoped to the changed lifecycle and its direct ThreadPool callers/tests.
+
+## Verdict and handoff
+
+**Confirmed and fixed**: concurrent controller-thread `Stop()` calls could
+return early and clear the shutdown predicate, leaving the first stopper
+deadlocked and permitting `Start()` during an unfinished shutdown. The source,
+regression test, and this journal section belong in one independent commit,
+authored as `Lőrinc <pap.lorinc@gmail.com>`. The next Goal 8 cycle should use a
+new callback, worker, socket, or scheduler lifecycle cell and must not reopen
+this Stop ownership race without a changed contract or recurrence evidence.
+
 # Cycle 210: validation callback re-registration boundary
 
 ## Fresh gate and selection

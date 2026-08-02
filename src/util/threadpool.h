@@ -55,6 +55,8 @@ private:
     // This ensures threads blocked on m_cv reliably observe the change and proceed correctly without missing signals.
     // Ref: https://en.cppreference.com/w/cpp/thread/condition_variable
     bool m_interrupt GUARDED_BY(m_mutex){false};
+    //! True while one controller thread owns the shutdown sequence.
+    bool m_stopping GUARDED_BY(m_mutex){false};
     std::vector<std::thread> m_workers GUARDED_BY(m_mutex);
 
     void WorkerThread() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
@@ -124,13 +126,19 @@ public:
      *
      * Must be called from a controller (non-worker) thread.
      * Concurrent calls to Start() will be rejected while Stop() is in progress.
+     * Concurrent calls to Stop() wait for the in-progress shutdown to finish.
      */
     void Stop() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
         // Notify workers and join them
         std::vector<std::thread> threads_to_join;
         {
-            LOCK(m_mutex);
+            WAIT_LOCK(m_mutex, lock);
+            if (m_stopping) {
+                m_cv.wait(lock, [&]() EXCLUSIVE_LOCKS_REQUIRED(m_mutex) { return !m_stopping; });
+                return;
+            }
+            m_stopping = true;
             // Ensure Stop() is not called from a worker thread while workers are still registered,
             // otherwise a self-join deadlock would occur.
             auto id = std::this_thread::get_id();
@@ -146,10 +154,14 @@ public:
         for (auto& worker : threads_to_join) worker.join();
 
         // Since we currently wait for tasks completion, sanity-check empty queue
-        LOCK(m_mutex);
-        Assume(m_work_queue.empty());
-        // Re-allow Start() now that all workers have exited
-        m_interrupt = false;
+        {
+            LOCK(m_mutex);
+            Assume(m_work_queue.empty());
+            // Re-allow Start() now that all workers have exited
+            m_interrupt = false;
+            m_stopping = false;
+        }
+        m_cv.notify_all();
     }
 
     enum class SubmitError {

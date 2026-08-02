@@ -435,6 +435,40 @@ BOOST_AUTO_TEST_CASE(start_mid_stop_does_not_deadlock)
     stopper_thread.join();
 }
 
+BOOST_AUTO_TEST_CASE(concurrent_stop_waits_for_first_stop)
+{
+    ThreadPool threadPool(POOL_NAME);
+    threadPool.Start(/*num_workers=*/1);
+
+    std::counting_semaphore<> workers_blocker(0);
+    const auto blocking_tasks = BlockWorkers(threadPool, workers_blocker, 1);
+
+    std::thread first_stopper([&threadPool] { threadPool.Stop(); });
+
+    // Stop() takes ownership of the workers before waiting for them to finish.
+    while (threadPool.WorkersCount() != 0) {
+        std::this_thread::yield();
+    }
+
+    std::promise<void> second_stop_done;
+    auto second_stop_finished{second_stop_done.get_future()};
+    std::thread second_stopper([&threadPool, &second_stop_done] {
+        threadPool.Stop();
+        second_stop_done.set_value();
+    });
+
+    // A concurrent Stop() must not return while the first Stop() is still
+    // waiting for the worker to finish.
+    BOOST_CHECK(second_stop_finished.wait_for(500ms) == std::future_status::timeout);
+
+    workers_blocker.release();
+    WAIT_FOR(blocking_tasks);
+    first_stopper.join();
+    BOOST_REQUIRE(second_stop_finished.wait_for(TEST_WAIT_TIMEOUT) == std::future_status::ready);
+    second_stopper.join();
+    BOOST_CHECK_EQUAL(threadPool.WorkersCount(), 0);
+}
+
 // Test 12, queued tasks complete after Interrupt()
 BOOST_AUTO_TEST_CASE(queued_tasks_complete_after_interrupt)
 {
