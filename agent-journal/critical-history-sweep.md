@@ -750,7 +750,7 @@ uniform model exactly.
 Nine cycles; the txindex v2 claim is now measured, closing c8's
 only open cell.
 
-## Cycle 3 (2026-08-02, draw 183, raw=2201154799395572746 (63-bit), idx 25/51): pre-2020 advisory batch — CVE-2018-17144 executable GUARDED at the public path; 8 further pre-2020 cells marker-verified; DISMISSED
+## Cycle 10 (2026-08-02, draw 183, raw=2201154799395572746 (63-bit), idx 25/51): pre-2020 advisory batch — CVE-2018-17144 executable GUARDED at the public path; 8 further pre-2020 cells marker-verified; DISMISSED
 
 ### Batch selection
 Official advisory list (bitcoincore.org security-advisories,
