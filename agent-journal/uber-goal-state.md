@@ -143,6 +143,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 104 | analogical-vulnerability-translation | CYCLE-3 (queue-empty) | 2026-07-31 | INTERPRETER-CONFUSION: descriptor/miniscript limits agree, all fail closed (valid nest cap 200 via ops 201; parse cap 3600; tr braces 128); DISMISSED |
 | 104 | analogical-vulnerability-translation | CYCLE-4 (queue-empty) | 2026-08-02 | Coldcard RNG-fallback/32-bit-reseed shape translated: abort-on-failure + 256-bit seeds throughout; NEGATIVE |
 | 90 | historical-knowledge-recipes | CYCLE-2 | 2026-07-29 | R15-R22 added (sancov inlining, reindex gating, MiniWallet API, io sampling, mutant-first, pool mechanics, dict fuzzing, flag persistence) |
+| 90 | historical-knowledge-recipes | CYCLE-3 | 2026-08-02 | R23 lineage sweep: 28 pre-rotation journals restored (2a147cfb08); REPAIR COMPLETE |
 | 71 | deterministic-simulation | CYCLE-2 | 2026-07-29 | crash-resume durability invariant delivered (6c6e7d9f87), 3k scans clean |
 | 71 | deterministic-simulation | CYCLE-3 | 2026-07-30 | reorged-record resume oracle + mock duplicate-hash fidelity fix (7e88645b92); 3k clean (row restored 2026-07-31) |
 | 71 | deterministic-simulation | CYCLE-4 | 2026-07-31 | extension-resume oracle (forced, fire-proofed) + ext-hash uniqueness fix + c1 oracle correction (flip can fire pre-scan); 3k clean |
@@ -968,6 +969,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 194 (39-campaign eligible set): raw=
+   16675846116259616253, masked 7452474079404840445 -> idx 37 ->
+   #90 c3 (R23 lineage sweep: 28 journals restored in 2a147cfb08;
+   REPAIR COMPLETE).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90}.
    RE-RANK draw 193 (40-campaign eligible set): raw=
    14784019335709398726, masked 5560647298854622918 -> idx 38 ->
    #94 c3 (wrapper/copy-null contract: documented nonnull;
