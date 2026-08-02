@@ -1051,7 +1051,7 @@ BOOST_AUTO_TEST_CASE(http_server_socket_tests)
     };
 
     HTTPServer server{StoreRequest};
-    server.InitHTTPAllowList();
+    BOOST_REQUIRE(server.InitHTTPAllowList());
 
     {
         // We can only bind to NET_IPV4 and NET_IPV6
@@ -1213,6 +1213,7 @@ BOOST_AUTO_TEST_CASE(http_server_pipelined_request_backpressure)
         }
         req->WriteReply(HTTP_OK);
     }};
+    BOOST_REQUIRE(server.InitHTTPAllowList());
 
     CService addr_bind{Lookup("0.0.0.0", /*portDefault=*/0, /*fAllowLookup=*/false).value()};
     BOOST_REQUIRE(server.BindAndStartListening(addr_bind));
@@ -1260,7 +1261,7 @@ BOOST_AUTO_TEST_CASE(http_socket_error_tests)
         // Can't call BOOST_REQUIRE from worker thread
         Assert(workers.Submit(std::move(item)));
     }};
-    server.InitHTTPAllowList();
+    BOOST_REQUIRE(server.InitHTTPAllowList());
 
     // All replies will be the same size
     static constexpr std::size_t reply_length = std::string_view{

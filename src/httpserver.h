@@ -220,7 +220,7 @@ public:
     }
 
     /**
-     * Parse the user's -rpcallowip settings and populate m_allow_subnets
+     * Parse the user's -rpcallowip settings and populate m_allow_subnets.
      */
     bool InitHTTPAllowList();
 
@@ -386,12 +386,12 @@ private:
     std::chrono::seconds m_rpcservertimeout{DEFAULT_HTTP_SERVER_TIMEOUT};
 
     /**
-     * List of subnets to allow HTTP connections from
+     * List of subnets to allow HTTP connections from.
      */
     std::vector<CSubNet> m_allow_subnets;
 
     /**
-     * Check an incoming connection's source IP against the allow list
+     * Check an incoming connection's source IP against the allow list.
      */
     bool ClientAllowed(const CNetAddr& netaddr) const;
 

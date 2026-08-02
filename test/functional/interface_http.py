@@ -18,15 +18,6 @@ RPCSERVERTIMEOUT = 2
 MAX_HEADERS_SIZE = 8192
 MAX_BODY_SIZE = 32 * 1024 * 1024
 
-# When a test expects a server disconnection, any of these errors are
-# acceptable. The specific event is determined by race condition and platform OS.
-NETWORK_ERRORS = (
-    BrokenPipeError,                 # write to a closed socket/pipe
-    ConnectionResetError,            # connection forcibly closed by peer
-    ConnectionAbortedError,          # connection aborted locally or by network stack
-    http.client.ResponseNotReady,    # server response not ready or connection out of sync
-)
-
 def get_header_values(header_lines, name):
     prefix = f"{name.lower()}:"
     return [line.split(":", 1)[1].strip() for line in header_lines if line.lower().startswith(prefix)]
