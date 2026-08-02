@@ -121,3 +121,43 @@ now has an early-warning tripwire; c1's enum name-map conclusion
 ## Rotation note
 Two cycles; enum maps pinned value-independent, struct layouts
 pinned by tripwire.
+
+## Cycle 3 (2026-08-02, draw 190, raw=16880636655586222475, masked 7657264618731446667, idx 39/43): user_data_destroy ordering/lifetime — executable contract proof, both arms; DISMISSED
+
+### Cell
+The c2 queue's "callback threading/lifetime contracts
+(user_data_destroy ordering) partially covered by #16 c2" —
+closed with an executable consumer against the SHARED kernel
+lib (build-kernel-shared, #47 c4's artifact reused).
+
+### Contract (bitcoinkernel.h:438-443, 455-460)
+user_data_destroy provided -> ownership passes to the options/
+context, kernel calls it when the object is destroyed; NULL ->
+user owns user_data and must outlive kernel objects.
+
+### Executable proof (/tmp/btc92c3/lifetime.c, preserved)
+- Arm 1 (destroy provided): destroy_calls=0 after
+  btck_context_options_destroy (ownership had moved to the
+  context — options destroy does NOT fire it), =1 after
+  btck_context_destroy — EXACTLY ONCE, at the documented point.
+- Arm 2 (destroy NULL): destroy_calls=0 after both destroys —
+  kernel does not free; user frees. No double-free, no leak-by-
+  contract.
+- LIFETIME-OK. Harness nits recorded: warning_set signature
+  mismatch (unused arm), dtor doesn't free the 8-byte probe
+  allocation (counter-only experiment).
+
+### Verdict
+DISMISSED: the lifetime/ordering contract is documented and
+behaves exactly as documented under the shared-lib ABI; no
+double-free/destroy-omission path. Combined with #46 c3's
+lock-state map, the callback contract surface is closed.
+
+### Exact commands
+- gcc line above (against build-kernel-shared/lib); LIFETIME-OK
+  output above.
+
+### Limitations / queue
+- Callback-threading (which THREAD fires block_tip) covered by
+  #46 c3's call-site trace, not re-run here.
+- No #92 cells remain queued (32-bit row conditional).

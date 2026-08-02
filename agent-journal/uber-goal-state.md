@@ -130,6 +130,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 63 | loupe-style-pipeline | CYCLE-1 | 2026-07-28 | fee-estimator zero-state waste confirmed+fixed (675011ba86): 20.4%->0 samples, -34% IBD user |
 | 35 | mutation-testing | CYCLE-1 | 2026-07-28 | ReadVarInt overflow guards test-blind (M2/M3 survived); oracle delivered+verified (083afedbf1) |
 | 92 | abi-alignment-aliasing | CYCLE-1 | 2026-07-28 | kernel enum name-maps value-independent; by-value structs static-linkage contract; aliasing sweep clean |
+| 92 | abi-alignment-aliasing | CYCLE-3 | 2026-08-02 | user_data_destroy lifetime proven executable vs shared .so (once-at-context-destroy / NULL-user-owned); DISMISSED |
 | 78 | translation-validation | CYCLE-1 | 2026-07-28 | Assume-erasure contract validated at binary: fork hardening zero-cost in release |
 | 78 | translation-validation | COMPLETE | 2026-08-02 | c2: g++{-O0,-O2,-O3}+clang{-O0,-O2} outputs md5-identical on 742-vector feefrac/Amount corpus; DISMISSED |
 | 100 | sink-reverse-reachability | CYCLE-1 | 2026-07-28 | bloom ctor div-by-zero test-only latent; empty-filter guarded (CVE-2013-5700 present) |
@@ -964,6 +965,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 190 (43-campaign eligible set): raw=
+   16880636655586222475, masked 7657264618731446667 -> idx 39 ->
+   #92 c3 (user_data_destroy lifetime executable proof;
+   DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92}.
    RE-RANK draw 189 (44-campaign eligible set): raw=
    16823264503710230643, masked 7599892466855454835 -> idx 3 ->
    #4 c3 (lineage repair + retraction re-verified; CONFIRMED).
