@@ -1,5 +1,101 @@
 # Whole-history incomplete-fix and migration mining
 
+## Cycle 261: GUI wallet-migration load-policy follow-up
+
+### Fresh selection and gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `32` (`history-incomplete-fixes`).
+- Branch: `uber-cycle-261-whole-history-migration-mining-20260802`.
+- Start HEAD: `8a826f6659d6c11657a70c6d65ec67d107bdb953`; `origin/master` after
+  the fresh fetch: `556988790a7f961693a8fd93f73725baea66476a`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence `1311 45`.
+- The tracked worktree/index was clean at the draw. `git diff --check`, the
+  catalog/prompt/goals TSV/protocol hash gate, and the protected-process check
+  passed. Existing untracked agent/user artifacts, package files,
+  `node_modules/`, and `test/cache/` were preserved.
+
+### Historical seed and distinct hypothesis
+
+Recent history contains two separate migration changes: `4acd063ba6`
+(`wallet: make loading the wallet after migrating optional`) added the core
+`MigrateLegacyToDescriptor(..., bool load_wallet)` path and the RPC's
+`load_wallet` option; `492a715d78` (`gui: Adds option to not load the wallet
+after migration`) then propagated that policy through the GUI interface. The
+second change is not an ancestor of this branch.
+
+Before this cycle, the current GUI contract still declared
+`WalletLoader::migrateWallet(name, passphrase)` without a load-policy
+parameter. `WalletLoaderImpl::migrateWallet` called the core function with its
+default `true`, and `MigrateWalletActivity::do_migrate` unconditionally passed
+`res->wallet` to `getOrCreateWallet`. Thus the GUI could not use the already
+supported no-load migration mode. This is a distinct interface/lifecycle
+omission from the earlier wallet migration write, cleanup, best-block, and
+HTTP queue cells.
+
+The existing `wallet_migration.py` contract supplies an independent failure
+case: `test_no_load_after_migration` verifies that a successful
+`migratewallet(load_wallet=False)` leaves a migrated SQLite wallet on disk but
+does not load it; `unsynced_wallet_on_pruned_node_fails` verifies that loading
+an unsynced migrated wallet can fail on a pruned node while migration with
+`load_wallet=False` still succeeds. The GUI had no way to select that behavior.
+
+### Fix
+
+- Add `bool load_wallet` to the public wallet-loader migration interface and
+  forward it to `MigrateLegacyToDescriptor`.
+- Add a checked-by-default GUI option for normal migration, pass its value
+  through the asynchronous activity, and avoid constructing a wallet model
+  when the user chooses not to load it. Report that the wallet can be opened
+  later from the File menu.
+- Keep restore-and-migrate explicitly `load_wallet=true`, preserving its
+  existing behavior and making the policy visible at the call site.
+
+### Validation
+
+The following clean configuration and builds passed:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle261-qt-config-tmp \
+cmake -S . -B /data/my_storage/tmp/cycle261-qt-build \
+  -DBUILD_GUI=ON -DENABLE_WALLET=ON -DBUILD_TESTS=OFF \
+  -DBUILD_BENCH=OFF -DWITH_ZMQ=OFF -DCMAKE_BUILD_TYPE=Debug
+
+TMPDIR=/data/my_storage/tmp/cycle261-qt-build-tmp \
+CCACHE_DIR=/data/my_storage/tmp/cycle261-qt-ccache \
+cmake --build /data/my_storage/tmp/cycle261-qt-build --target bitcoin-qt -j2
+
+TMPDIR=/data/my_storage/tmp/cycle261-daemon-build-tmp \
+CCACHE_DIR=/data/my_storage/tmp/cycle261-qt-ccache \
+cmake --build /data/my_storage/tmp/cycle261-qt-build \
+  --target bitcoind bitcoin-cli -j2
+```
+
+`bitcoin-qt`, `bitcoind`, and `bitcoin-cli` all built successfully. The full
+`wallet_migration.py` run was attempted with the v28.2 previous-release
+fixture, but the Debug daemon stopped before the target migration checks at
+the existing `txgraph.cpp:3781` assertion:
+
+```text
+./txgraph.cpp:3781 virtual size_t {anonymous}::TxGraphImpl::GetMainMemoryUsage():
+Assertion `(usage == 0) == (m_main_clusterset.m_txcount == 0)' failed.
+```
+
+The resulting `RemoteDisconnected` was a test-environment abort, not evidence
+against this GUI change. No Qt runtime test infrastructure was enabled in the
+clean build; the compile covered the changed interface implementation and
+both asynchronous GUI call paths. `git diff --check` passed.
+
+### Verdict and residual queue
+
+Verdict: confirmed and fixed. The old GUI path had a reachable feature and
+operability omission: it forced the core migration to load the result even
+when the user needs migration without a historical rescan/load. The fix is
+one self-contained interface/UI commit and preserves the default behavior.
+The failed Debug functional run must not be presented as a passing full-suite
+result. Continue mining different recent compatibility or migration cells;
+do not repeat the GUI load-policy, core no-load, HTTP parsed-request queue,
+or prior wallet migration cells without a new source, backend, or lifecycle.
+
 ## Cycle 259: HTTP pipelined-request retention follow-up
 
 ### Fresh selection and gate
