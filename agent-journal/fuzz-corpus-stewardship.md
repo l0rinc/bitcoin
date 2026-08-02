@@ -214,3 +214,30 @@ clusterlin x12) + 20,760 (this batch) = 32,042 seeds green.
   future budgeting).
 - /tmp/qa-assets now 538M; disk 3.2G free; delete corpora on
   squeeze (re-sparse per the recorded lines).
+
+## Cycle 5 (2026-08-02, draw 238, raw=17902753180228641946, masked 8679381143373866138, idx 2/4): crypto corpus family — 11 targets, 6,634 seeds, ALL clean; DISMISSED
+
+### Batch (crypto/BIP324 layer, pinned 918cdd3)
+AEAD 452, chacha20 644, diff_fuzz_chacha20 519, fschacha20
+353, fschacha20poly1305 610, hkdf_hmac_sha256_l32 193,
+poly1305 57, poly1305_split 108, bip324_cipher_roundtrip
+1,521, bip324_ecdh 1,540, muhash 745 = 6,634 seeds. All DONE
+clean, zero crashes/artifacts; coverage highlights:
+bip324_cipher_roundtrip ft 14,804, bip324_ecdh ft 14,295.
+
+### Verdict
+DISMISSED: the crypto-layer corpus (including the BIP324
+transport crypto and its ECDH handshake paths) is fully
+compatible with the fork's build; no skew. Cumulative green:
+32,042 (c4 note) + 3,436 + 6,634 = 42,112 seeds... correction:
+32,042 already included the clusterlin 3,436 — cumulative is
+32,042 + 6,634 = 38,676 seeds green.
+
+### Exact commands
+- git sparse-checkout add (11 dirs); per-target FUZZ runs
+  (counts above).
+
+### Limitations / queue
+- Single-pass validation only (as c3/c4).
+- /tmp/qa-assets now 1.1G; disk 2.5G free — prune older corpora
+  on the next squeeze (re-sparse per recorded lines).
