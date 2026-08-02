@@ -260,3 +260,43 @@ segwit-address (c5).
 ## Rotation note
 Five cycles; the clean-room campaign's cells are closed. Not
 exhausted (new reference-able surfaces only).
+
+## Cycle 6 (2026-08-02, draw 182, raw=4137810895725815666 (63-bit), idx 46/52): ComputeMerkleRoot clean-room differential — 400/400 root+mutation-flag exact incl. 60 planted mutation cases; CVE-2012-2459 anchor reproduced (same root, dup flagged); DISMISSED
+
+### Cell
+New reference-able surface: consensus merkle root + the
+CVE-2012-2459 mutation detector (merkle.cpp:41-56 pair-equality
+rule mirrored exactly: at each level BEFORE odd-padding, any
+hashes[2k]==hashes[2k+1] sets mutation).
+
+### Differential
+- Driver (/tmp/btc99c6/merkle_driver.cpp, preserved): C++
+  ComputeMerkleRoot over stdin hash lists -> root hex + flag.
+  Link recipe recorded: driver + consensus/merkle.cpp +
+  uint256.cpp against build-before libbitcoin_{common,util,
+  clientversion,crypto} (order matters; clientversion after
+  util).
+- Reference: independent Python sha256d implementation of the
+  same documented algorithm (pair-check then pad-then-halve).
+- Corpus (seed 0x99C6): 400 cases, sizes 1-9/15/16/17/31/33;
+  60 planted mutation cases (trailing-dup on odd levels,
+  even-boundary pair-dups).
+- TALLY: cases=400 mutation_cases=60 mismatches=0 (root bytes
+  AND flag).
+- Anchor: the file's own comment example [1..6] vs [1..6,5,6]
+  reproduces e997cf87... for BOTH, with B flagged mutated=1 and
+  A clean — the documented defense behaves exactly as written.
+
+### Verdict
+DISMISSED (differential clean): consensus merkle computation
+matches the clean-room reference at every cell, including the
+mutation classes that carry the CVE. No defect.
+
+### Exact commands
+- g++ line above; python3 differential (TALLY/anchor above).
+
+### Limitations / queue
+- Witness variant (BlockWitnessMerkleRoot) shares the same
+  ComputeMerkleRoot core — covered transitively.
+- Clean-room surfaces closed: CompactSize, bech32, VarInt
+  x2, segwit-address, merkle. New surfaces only on redraw.
