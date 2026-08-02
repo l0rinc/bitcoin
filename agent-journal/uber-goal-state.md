@@ -1,3 +1,51 @@
+# Cycle 288 Completion
+
+- The fresh gate selected goal `53` (`statistical-timing`) from the exact
+  selector `shuf -i 0-98 -n 1`, with no reroll. The dedicated branch is
+  `uber-cycle-288-statistical-timing-side-channel-20260802`.
+- Gate HEAD was `2d03b1a9415b2a9d776af600c1a2a7f2846de11f`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1366` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `b6736a853c8b7a63b90b651e37b79c859c74f26bc7c95f48deef86b32337ea00`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+- The distinct selected surface was `secp256k1_musig_partial_sign` timing,
+  with four valid secret classes and public parity/session-parity controls.
+  Clang 19 AUTO, Clang 19 assembly-off, and GCC 12 AUTO probes used 3,000
+  randomized samples per class for three repetitions, eight calls per sample,
+  CPU 2 affinity, return/signature verification, medians, p95 values, and
+  Welch statistics. The result did not establish a secret-only timing defect;
+  the small AUTO variation was not reproduced by the portable backend/GCC and
+  the classes also differed in public keys. Aggregate `perf stat` controls
+  completed with branch-miss rates below `1.1%`.
+- A fresh Clang 19 MSan ctime build exposed a separate current-source defect:
+  `secp256k1_memczero(pubnonce, sizeof(*pubnonce), !ret)` conditionally
+  invalidated a public MuSig nonce based on secret-tainted validity, but the
+  output was not declassified before later `pubnonce_load`/`nonce_agg` use.
+  The first clean run exited `86` at `ctime_tests.c:275`; removing only the
+  added boundary reproduced the identical trace, and restoring it returned
+  ctime to exit `0`.
+- Source/evidence commit `33741810b78e6aca4878ae16fda77fa817780092`,
+  `secp256k1: declassify MuSig public nonce after invalidation`, was authored
+  as `Lőrinc <pap.lorinc@gmail.com>`. It adds the smallest post-invalidation
+  `secp256k1_declassify(ctx, pubnonce, sizeof(*pubnonce))` repair and updates
+  `agent-journal/statistical-timing.md` with the exact probes, MSan mutation,
+  source/history rationale, validation, limitations, and next queue. No
+  additional permanent test code was needed because the existing ctime test is
+  a sensitive regression oracle.
+- Rebuilt current-source Clang AUTO, Clang assembly-off, and GCC AUTO library
+  targets and ran `tests` plus `noverify_tests` in each cell with seed
+  `0123456789abcdef`, `--iterations=1`, and `--jobs=2`; all six exited `0`.
+  `git diff --check` passed. The only logged skips were expected low-iteration
+  SHA-256 and ecmult constant tests. dudect and Valgrind remain unavailable;
+  no 32-bit, non-x86, LTO, or cross-architecture timing cell was available.
+- Post-source-close HEAD is `33741810b78e6aca4878ae16fda77fa817780092` and
+  divergence is `45 1367` (`origin/master...HEAD`). This state entry is to be
+  committed separately from the source finding. The next action is a fresh
+  post-close gate, one exact selector draw, a new `uber-cycle-289-*` branch,
+  and a distinct eligible goal/cell; do not repeat the MuSig partial-sign
+  timing screen without changed evidence.
+
 # Cycle 287 Completion
 
 - The fresh gate selected goal `90` (`historical-knowledge-recipes`) from the
