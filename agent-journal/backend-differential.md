@@ -206,3 +206,32 @@ green.
 ## Rotation note
 Four cycles; backend campaign cells all closed green. #69 quiets
 pending new backends.
+
+## Cycle 5 (2026-08-02, draw 219, raw=16824079916139056791, masked 7600707879284280983, idx 11/12): backend census — no further differential executable on this host; EXHAUSTED
+
+### Census (all selectable crypto backends in-tree)
+- SHA256: 5 optimized (arm_shani [c2 tested], avx2/sse4/sse41/
+  x86_shani [x86-only, untestable on aarch64]) + scalar
+  [#17 c4 tested end-to-end]. The arm 4way variant is runtime-
+  gated to CPUs this host lacks (Cortex-A76 gets 1way;2way).
+- SHA512: single scalar Transform (no SIMD variant in-tree,
+  sha512.cpp:47) — no differential exists.
+- ctaes (AES): single bitsliced constant-time backend by
+  design (ctaes.c, no variant selection in aes.cpp) — no
+  differential exists.
+- secp256k1 widemul: int128 vs int64 (c1/c3) + ctime valgrind
+  (c4, independently re-run by #53 c2 this session).
+
+### Verdict
+EXHAUSTED: every backend pair executable on this host is green;
+the rest are architecture-absent (x86 SIMD, arm 4way) or
+single-implementation by design (SHA512, ctaes). Reopen on new
+backend or second host.
+
+### Exact commands
+- ls src/crypto/sha256*; grep backend refs above (sha512.cpp,
+  aes.cpp, ctaes/).
+
+### Limitations
+- x86 backend correctness is upstream-CI territory (this host
+  is aarch64-only); recorded, not a gap.
