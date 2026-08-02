@@ -96,3 +96,58 @@ For every candidate, retain the smallest input and exact command. A confirmed fi
 - The old-code regression failure and the passing-after result are recorded above. `git diff --check` passed before the source commit.
 - No production behavior outside malformed Taproot BIP32 PSBT rejection changed. No relevant build, test, fuzz, sanitizer, daemon, or profiling process remains running.
 - Cycle status: complete. The next run must re-check branch/base/HEAD, dirty state, known artifacts, process state, catalog/protocol/TSV hashes, existing journals/history, and review precedent before selecting a distinct next cell.
+
+## Cycle 308 start
+
+- Selector: exact `shuf -i 0-107 -n 1` -> `6` (`serialization-untrusted-input`).
+- Branch: `uber-cycle-308-serialization-untrusted-input-20260802`.
+- Cycle-start HEAD: `49b264dd560a024702c81ca5c3493e180e5322d3` (`journal: record cycle 307 handoff state`).
+- Catalog SHA-256: `633bb1216c6ddf55f6e4bdeda2a99dfb3eb8bb1878b0e6370dd49521c05069c9`.
+- The fresh gate found all tracked files clean before the selector entry, `git diff --check` passed, and the seven protected long-running jobs remained alive. The filesystem was effectively full, so this cycle used existing build trees and small scratch fixtures rather than starting a broad build.
+
+### Scope and prior-finding exclusions
+
+The PSBT value-boundary fixes from Cycles 81 and 121, compact-filter vector/cardinality work, generic database output fix from Cycle 56, block-filter range-output fix, and earlier network/parser cells are closed. This cycle therefore selected a distinct persisted or wallet byte-to-object boundary. Candidates were required to have a concrete malformed value, a caller-visible contract, and either a failing-before regression or a source-level proof of the violated invariant.
+
+### Candidate ledger
+
+1. `BlockFilterIndex::ReadFilterFromDisk()` reads an encoded GCS filter, checks its stored hash, and constructs `BlockFilter` with `skip_decode_check=true`. A tiny filter declaring `N=UINT32_MAX` would make later `MatchInternal()` attempt an enormous decode, but the DB hash is an integrity check for ordinary flat-file corruption and the index is local persisted state. Creating a malformed payload with a matching DB hash would require corrupting both coupled records or an in-process writer defect; no local production path was found that creates such a record. This is retained as a separate persisted-filter recovery goal, not reported as a current finding.
+2. BIP155 address parsing bounds the declared address size to 512 bytes and checks known network identifiers against exact lengths. HEADERS and block-locator counts are checked before vector allocation. These paths were dismissed by source and existing boundary tests; reopening their earlier cells would duplicate prior evidence.
+3. `GCSFilter`'s checked constructor rejects truncated and excess Golomb-Rice data, while the unchecked constructor is used only by the local index and construction benchmarks. The optionality is historical and intentional; no external untrusted caller reaches the unchecked path.
+4. `wallet::DatabaseBatch::Read()` deserializes a stored value directly into its caller-owned output and returns `false` when a later field is truncated. This is a distinct wallet backend boundary from the already-fixed LevelDB wrapper: both SQLite and the in-memory SQLite test backend expose the same bool-plus-output API, and wallet loading treats failed reads as non-committing operations.
+
+## Cycle 308 result: wallet database reads published partial values on failure
+
+### Failing-before proof
+
+The focused regression stores the exact six-byte value `01 00 00 00 02 03` through the normal `DatabaseBatch::Write()` path. `PartiallyDecoded` reads two `uint32_t` fields. The first field is complete and the second is truncated, so the old implementation returned `false` after changing the caller's first field from `0xa1b2c3d4` to `1`.
+
+The pre-fix binary was built after adding only the regression test and ran:
+
+`TMPDIR=/data/my_storage/tmp/cycle308-wallet-before /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=db_tests/db_read_preserves_output_on_deserialize_failure --log_level=test_suite --report_level=short --color_output=false --random=308001`
+
+It exited `201`; both SQLite and in-memory SQLite cases failed the first-field preservation assertion, while the remaining 14 of 16 assertions passed. The valid-record control confirms that this is a late-deserialization failure rather than a backend read failure.
+
+### Fix and contract
+
+`DatabaseBatch::Read()` now decodes into a temporary and commits it only after the complete serialized value succeeds. Trivially default-constructible outputs are value-initialized so the helper does not copy uninitialized scalar locals such as `LoadWalletFlags()`'s `uint64_t flags`; nontrivial outputs preserve their existing construction/configuration. Move assignment, copy assignment, and same-address reconstruction cover the same categories as the established `CDBWrapper` output-atomicity fix.
+
+The post-fix focused command was:
+
+`TMPDIR=/data/my_storage/tmp/cycle308-wallet-after /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=db_tests/db_read_preserves_output_on_deserialize_failure --log_level=test_suite --report_level=short --color_output=false --random=308002`
+
+It exited `0` with all 16 assertions passing. The rebuilt normal unit binary also ran:
+
+`TMPDIR=/data/my_storage/tmp/cycle308-wallet-suite /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=db_tests,walletdb_tests,walletload_tests --log_level=test_suite --report_level=short --color_output=false --random=308003`
+
+The command passed 12 cases and 643 assertions. `walletdb_tests` covered the best-block read-result compatibility wrapper and scalar serialization; `walletload_tests` covered descriptor loading and malformed-purpose logging; `db_tests` covered both backends, transaction cleanup, cursor behavior, and repeated batch use.
+
+### Independent verification and limitations
+
+The before/after malformed-record oracle is independent of the implementation because it writes raw serialized bytes through the database API and checks complete caller state. The successful read control, both supported test backends, full wallet DB/load suites, compile-time instantiation of the wallet callers, and `git diff --check` provide additional verification. The same helper shape was cross-checked against `src/dbwrapper.h`'s already-reviewed decode-then-commit implementation without importing a LevelDB dependency into the wallet header.
+
+The full wallet suite and a sanitizer rebuild were not attempted because `/data` and `/` were at 100% capacity and several protected test processes must remain alive. No consensus, network, or wallet-on-disk format changes were made. The malformed-record fixture and raw logs remain under `/data/my_storage/tmp/cycle308-wallet-*`.
+
+### Verdict and next queue
+
+Confirmed local persistence/API defect; fixed in the source/test commit containing this cycle's production and regression changes. A malformed or incompatible wallet value could return failure while publishing a partially decoded caller output. The next distinct serialization cells are persisted block/index payload recovery, local GCS semantic validation under coupled DB/file corruption, and non-wallet database readers. Do not reopen this `DatabaseBatch::Read()` contract unless a different backend, serializer, or caller demonstrates a new failure mode.

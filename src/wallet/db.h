@@ -15,11 +15,41 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 class ArgsManager;
 struct bilingual_str;
 
 namespace wallet {
+namespace database_private {
+template <typename T>
+T MakeDeserializeTarget(const T& existing)
+{
+    // Do not read caller state for trivially default-constructible outputs,
+    // which may be uninitialized scalars.
+    if constexpr (std::is_trivially_default_constructible_v<T>) {
+        return T{};
+    } else {
+        return T{existing};
+    }
+}
+
+template <typename T>
+void CommitDeserializedValue(T& target, T&& decoded)
+{
+    if constexpr (std::is_move_assignable_v<T>) {
+        target = std::move(decoded);
+    } else if constexpr (std::is_copy_assignable_v<T>) {
+        target = decoded;
+    } else {
+        // Some decoded wallet types may intentionally delete assignment.
+        std::destroy_at(std::addressof(target));
+        std::construct_at(std::addressof(target), std::move(decoded));
+    }
+}
+} // namespace database_private
+
 // BytePrefix compares equality with other byte spans that begin with the same prefix.
 struct BytePrefix {
     std::span<const std::byte> prefix;
@@ -74,7 +104,9 @@ public:
         DataStream ssValue{};
         if (!ReadKey(std::move(ssKey), ssValue)) return false;
         try {
-            ssValue >> value;
+            T decoded_value{database_private::MakeDeserializeTarget(value)};
+            ssValue >> decoded_value;
+            database_private::CommitDeserializedValue(value, std::move(decoded_value));
             return true;
         } catch (const std::exception&) {
             return false;

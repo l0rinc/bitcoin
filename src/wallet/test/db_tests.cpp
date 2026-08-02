@@ -14,6 +14,7 @@
 #include <wallet/test/util.h>
 #include <wallet/walletutil.h>
 
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <span>
@@ -42,6 +43,26 @@ static SerializeData StringData(std::string_view str)
     auto bytes = StringBytes(str);
     return SerializeData{bytes.begin(), bytes.end()};
 }
+
+struct RawBytes {
+    std::array<uint8_t, 6> bytes;
+
+    template <typename Stream>
+    void Serialize(Stream& stream) const
+    {
+        stream.write(std::as_bytes(std::span{bytes}));
+    }
+};
+
+struct PartiallyDecoded {
+    uint32_t first{0};
+    uint32_t second{0};
+
+    SERIALIZE_METHODS(PartiallyDecoded, obj)
+    {
+        READWRITE(obj.first, obj.second);
+    }
+};
 
 static void CheckPrefix(DatabaseBatch& batch, std::span<const std::byte> prefix, MockableData expected)
 {
@@ -166,6 +187,32 @@ BOOST_AUTO_TEST_CASE(db_availability_after_write_error)
         std::string read_value;
         BOOST_CHECK(batch->Read(key, read_value));
         BOOST_CHECK_EQUAL(read_value, value2);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(db_read_preserves_output_on_deserialize_failure)
+{
+    constexpr uint32_t sentinel_first{0xa1b2c3d4};
+    constexpr uint32_t sentinel_second{0xe5f60718};
+    const RawBytes malformed{{1, 0, 0, 0, 2, 3}};
+
+    for (const auto& database : TestDatabases(m_path_root)) {
+        std::unique_ptr<DatabaseBatch> batch = database->MakeBatch();
+        BOOST_REQUIRE(batch->Write("malformed", malformed));
+
+        PartiallyDecoded parsed{sentinel_first, sentinel_second};
+        BOOST_CHECK(!batch->Read("malformed", parsed));
+        BOOST_CHECK_EQUAL(parsed.first, sentinel_first);
+        BOOST_CHECK_EQUAL(parsed.second, sentinel_second);
+
+        BOOST_REQUIRE(batch->Write("valid", PartiallyDecoded{1, 2}));
+        parsed = {};
+        BOOST_REQUIRE(batch->Read("valid", parsed));
+        BOOST_CHECK_EQUAL(parsed.first, 1U);
+        BOOST_CHECK_EQUAL(parsed.second, 2U);
+
+        batch.reset();
+        database->Close();
     }
 }
 
