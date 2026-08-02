@@ -316,6 +316,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 65 | contributor-branch-radar | CYCLE-13 | 2026-08-02 | package-weight-accumulator: narrowing real, wrap unreachable (25x4M WU cap); hygiene only |
 | 65 | contributor-branch-radar | CYCLE-14 | 2026-08-02 | rpc-deduplicate-scan-objects: perf nicety, semantics-preserving; no URGENT change |
 | 65 | contributor-branch-radar | CYCLE-15 | 2026-08-02 | radar: zero delta; quiet |
+| 65 | contributor-branch-radar | CYCLE-16 | 2026-08-02 | retained-capacity fix ADOPTED (28ba79168b), flipped test green; 🟡 -> ✅ verified |
 | 80 | fuzz-engine-differential | CYCLE-5 | 2026-07-29 | rich PSBTv2 differential: A=0/400, E=115, R=4 guard-contained; BIP371 value-layout lesson (6-seed iterations) |
 | 42 | ci-review-bot-followup | CYCLE-4 | 2026-07-29 | corecheck sweep: bench deltas noise-shaped (same +10-33% on unrelated bloom PR); regression reading corrected |
 | 42 | ci-review-bot-followup | CYCLE-6 | 2026-08-02 | watch @556988790a: 5 commits (2 out-of-scope merges), PRs static, F13/F14/F16 offerability re-confirmed |
@@ -1047,6 +1048,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 263 (goal resumed with suspicion-mining protocol;
+   adopt-the-🟡 preempt): 475ab49da6 adopted onto lineage
+   (28ba79168b), flipped test green, profile rerun unchanged
+   within noise; 🟡 L3 -> ✅ adopted+verified.
    RE-RANK draw 262: raw=4778902433768003794 -> trigger
    re-check (all quiet).
    RE-RANK draw 261: raw=3682198685844657455 -> #79 c17
