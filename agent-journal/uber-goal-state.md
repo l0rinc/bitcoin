@@ -77,6 +77,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 31 | cross-layer-contracts | CYCLE-3 | 2026-07-28 | +gettxoutsetinfo use_index restriction (9396f0b414); 3 doc/RPC layer fixes total |
 | 29 | dead-stale-code | CYCLE-2 | 2026-07-28 | util/common + node/wallet/script scans clean; SAFE_CHARS_FILENAME parked |
 | 17 | build-matrix-modules | CYCLE-3 | 2026-07-28 | c1-c3 all clean (fbe821c003, own branch) |
+| 17 | build-matrix-modules | CYCLE-4 | 2026-08-02 | DISABLE_OPTIMIZED_SHA256 end-to-end: 'standard' backend, 3 functional tests green; CONFIRMED |
 | 18 | exhaustive-algebraic | QUEUE-COMPLETE | 2026-07-28 | c1-c3 round-trips all mutation-verified (c382122eeb, own branch) |
 | 31 | cross-layer-contracts | CYCLE-4 | 2026-07-28 | testnet-key examples labeled (b2a0c38154, own branch) |
 | 36 | cross-tool-analysis-matrix | CYCLE-1 | 2026-07-28 | UBSan unit suite: 1 UB found+fixed (22aa75a2eb, own branch) |
@@ -974,6 +975,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 200 (33-campaign eligible set): raw=
+   15353805843689760592, masked 6130433806834984784 -> idx 5 ->
+   #17 c4 (scalar SHA256 end-to-end green; CONFIRMED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17}.
    RE-RANK draw 199 (34-campaign eligible set): raw=
    13766814895528030814, masked 4543442858673255006 -> idx 30 ->
    #70 c2 (clang thin-LTO: host-blocked at link, ⚪ resume
