@@ -265,3 +265,5 @@ close) — campaign COMPLETE on the current surface.
 
 ## Rotation note
 Five cycles; the disconnect/teardown family is closed.
+
+## Postscript (2026-08-02, draw 232, raw=15445030354089246842, masked 6221658317234471034, idx 4/5): tail-parse cell assessed — VACUOUS (the tail's own record classifies it as pre-close queued traffic, irrelevant to the teardown question; parsing answers nothing the campaign asks). Same null-experiment class as #40 c4. #73 remains COMPLETE.
