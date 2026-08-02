@@ -218,3 +218,40 @@ stable, CLI-overridable). No defect.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-08-02, draw 203, raw=5711495130052899885 (63-bit), idx 15/30): deprecated -limitancestorcount/-limitdescendantcount lifecycle — documentation ACCURATE (wallet-only reporting, cluster-based acceptance); DISMISSED
+
+### Hypothesis
+The deprecated options' help text ('replaced by cluster limits...
+and only used by wallet for coin selection', init.cpp:677/683)
+might contradict behavior if the values still constrained mempool
+acceptance.
+
+### Trace (full lifecycle)
+- Read: node/mempool_args.cpp:39/41 — still applied into
+  MemPoolLimits.ancestor_count/descendant_count.
+- Consumers (grep census): exactly ONE — node/interfaces.cpp:730
+  getPackageLimits, which reports the values to the WALLET
+  (coin selection's package-limit awareness).
+- Acceptance path: CheckPolicyLimits is cluster-based
+  (interfaces.cpp:736-741, error 'too many unconfirmed
+  transactions in cluster'); txmempool's CalculateAncestorData
+  (:1057-1068) computes stats for reporting, not gating.
+- So: deprecated-for-acceptance (replaced by -limitclustercount/
+  -limitclustersize), still honored for wallet coin selection —
+  exactly what the help text claims.
+
+### Verdict
+DISMISSED: the deprecation lifecycle is coherent and the
+documentation accurate at every stage. No defect.
+
+### Exact commands
+- sed mempool_args.cpp:25-45; grep ancestor_count census;
+  sed interfaces.cpp:720-741, txmempool.cpp:1057-1068.
+
+### Limitations / queue
+- Behavioral probe (setting =5 and watching coin selection) not
+  run — wallet-side effect, and the plumbing is single-consumer
+  (census is the evidence).
+- Campaign cells: -prevoutfetchthreads c1, -capturemessages c2,
+  -v2transport c3, deprecated ancestors c4 — surface covered.
