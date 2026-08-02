@@ -958,6 +958,9 @@ enum class SnapshotCompletionResult {
     // base block.
     MISSING_CHAINPARAMS,
 
+    // The validated chainstate could not be flushed before hashing its UTXO set.
+    FLUSH_FAILED,
+
     // Failed to generate UTXO statistics (to check UTXO set hash) for the
     // validated chainstate.
     STATS_FAILED,

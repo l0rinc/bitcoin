@@ -1,5 +1,111 @@
 # Local Reasoning Domain and Relationship Audit
 
+## Cycle 283 start: snapshot completion and durable flush relationship
+
+### Fresh selection and gate
+
+- The exact selector was `shuf -i 0-98 -n 1` -> `57`, selecting
+  `local-reasoning-domain`; no reroll was needed.
+- Branch: `uber-cycle-283-local-reasoning-domain-20260802`.
+- Start HEAD: `4f43868807a11144ba4cf5598892a528ec3ea481`; origin/master:
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence:
+  `origin/master...HEAD = 45 1356`.
+- The fresh gate passed `git fetch origin master`, tracked/index cleanliness,
+  `git diff --check`, all four catalog/protocol hash checks, and the protected
+  process liveness check. The start uber-state hash was
+  `a86c972cf9c128872dfcbbf0a44a036abf45fef40b48223fe3894f637cf6f631`.
+  Known untracked artifacts were preserved.
+
+### Scope and exclusions
+
+Do not reopen Cycle 65's AddrMan network classification, Cycle 77's BaseIndex
+callback/transaction-download ownership, Cycle 97's wallet replacement
+rollback, Cycle 135's index file-position/publication relationship, Cycle 174's
+`Chain::hasBlocks` empty-range fix, Cycle 180's index reinitialization flag,
+Cycle 243's persisted block-filter readiness, or Cycle 269's snapshot
+publication durability. A new candidate must use a different object pair,
+backend, failure point, or lifecycle transition with independent evidence.
+
+The selected cell is the relationship between the validated chainstate's
+durable flush result, its UTXO-statistics hash, and the snapshot chainstate's
+promotion markers. The invariant is: UTXO hashing and snapshot promotion must
+not proceed after the validated chainstate's required `FORCE_FLUSH` fails.
+
+### Candidate and source trace
+
+`ChainstateManager::MaybeValidateSnapshot()` obtains the validated
+`CCoinsViewDB`, calls `validated_cs.ForceFlushStateToDisk()`, computes the
+serialized UTXO hash, then assigns `unvalidated_cs.m_assumeutxo = VALIDATED`,
+sets `validated_cs.m_target_utxohash`, and rebalances caches. The wrapper is
+`void`; it only logs when its underlying `FlushStateToDisk()` returns false.
+The underlying flush can report an I/O failure after `FlushBlockFile` or
+`FlushUndoFile` sends the application a flush error, and the recent
+`d6e42bca9c` fix explicitly returns before metadata publication on a block-file
+flush failure. The snapshot path bypassed that return value and had no result
+code for a failed prerequisite, so it could continue into expensive statistics
+work and report the failure as `STATS_FAILED`.
+
+`LoadChainstate()` treats every non-`SUCCESS` completion result as fatal, so
+the repair preserves the startup failure behavior while making the local
+completion contract precise. It also leaves both chainstates and both promotion
+markers untouched. This is a different failure boundary from Cycle 269's
+snapshot publication test and from Cycle 243's persisted filter validation.
+
+### Independent before/after reproduction
+
+`SnapshotTestSetup` writes post-snapshot blocks and undo data to the assumed
+blockfile namespace. A temporary pre-fix run restored the old
+`ForceFlushStateToDisk()` call and faulted `rev00001.dat` by replacing it with
+the Linux `/sys/kernel/uevent_seqnum` symlink. The run emitted:
+
+    Error: A fatal internal error occurred, see debug.log for details: Flushing undo file to disk failed. This is likely the result of an I/O error.
+
+It then continued to the generic stats result: the test expecting a distinct
+flush outcome failed with `result == 4` (`STATS_FAILED` in that temporary enum
+layout), and the run recorded 414/417 assertions passed. The stats failure is
+consistent with the old path trying to read a chainstate whose required flush
+did not complete; it is not a precise indication of the first invalid
+operation.
+
+The exact pre-fix command was:
+
+    TMPDIR=/data/my_storage/tmp/cycle283-prev-undo-run /data/my_storage/tmp/cycle243-build/bin/test_bitcoin --run_test=validation_chainstatemanager_tests/chainstatemanager_snapshot_completion_flush_failure --catch_system_errors=no --color_output=false --report_level=short
+
+It exited 201 with the three expected oracle failures and the 414/417
+assertion summary.
+
+The repair replaces the wrapper call with a checked
+`FlushStateToDisk(flush_state, FlushStateMode::FORCE_FLUSH)` call and adds
+`SnapshotCompletionResult::FLUSH_FAILED`. The regression test asserts the
+undo-sync diagnostic, `FLUSH_FAILED`, two chainstates, `UNVALIDATED` snapshot
+state, and an unset target UTXO hash. The post-fix command was:
+
+    TMPDIR=/data/my_storage/tmp/cycle283-post-run4 /data/my_storage/tmp/cycle243-build/bin/test_bitcoin --run_test=validation_chainstatemanager_tests/chainstatemanager_snapshot_completion_flush_failure --catch_system_errors=no --color_output=false --report_level=short
+
+It passed 1 test case and all 417 assertions. The related command was:
+
+    TMPDIR=/data/my_storage/tmp/cycle283-related-run /data/my_storage/tmp/cycle243-build/bin/test_bitcoin --run_test=validation_chainstatemanager_tests,chainstate_write_tests --catch_system_errors=no --color_output=false --report_level=short
+
+It passed 27 test cases and 2,581 assertions. The build command was:
+
+    CCACHE_DIR=/data/my_storage/tmp/cycle283-ccache TMPDIR=/data/my_storage/tmp/cycle283-build-tmp cmake --build /data/my_storage/tmp/cycle243-build --target test_bitcoin -j2
+
+`git diff --check` passed for the source, header, and regression test.
+
+### Verdict and limits
+
+Confirmed and fixed as a local lifecycle/error-contract defect: a required
+validated-chainstate flush failure was allowed to fall through to UTXO hashing
+and was reported as a generic statistics failure. The test demonstrates a
+real Linux undo-file I/O boundary and verifies no snapshot promotion. The
+repair does not attempt to classify the snapshot as invalid, because the
+fault is in the validated chainstate rather than in the snapshot contents.
+No consensus, wallet/key, or unauthenticated network impact was demonstrated.
+The test uses a Linux virtual-filesystem fault and is skipped on other hosts;
+normal production shutdown remains delegated to the existing notification
+contract. The source/test diff is ready for one self-contained commit.
+
 ## Cycle 180 start: cross-index persistence and restart relationships
 
 ### Fresh selection and gate

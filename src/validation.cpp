@@ -6265,7 +6265,11 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     };
 
     CCoinsViewDB& validated_coins_db = validated_cs.CoinsDB();
-    validated_cs.ForceFlushStateToDisk();
+    BlockValidationState flush_state;
+    if (!validated_cs.FlushStateToDisk(flush_state, FlushStateMode::FORCE_FLUSH)) {
+        LogWarning("[snapshot] failed to flush validated chainstate before hashing (%s)", flush_state.ToString());
+        return SnapshotCompletionResult::FLUSH_FAILED;
+    }
 
     const auto& maybe_au_data = m_options.chainparams.AssumeutxoForHeight(validated_cs.m_chain.Height());
     if (!maybe_au_data) {

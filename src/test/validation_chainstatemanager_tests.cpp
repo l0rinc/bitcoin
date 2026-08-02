@@ -1586,6 +1586,51 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion_hash_mismatch, Sna
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion_flush_failure, SnapshotTestSetup)
+{
+#if defined(__linux__)
+    auto chainstates{this->SetupSnapshot()};
+    Chainstate& validated_cs{*std::get<0>(chainstates)};
+    Chainstate& unvalidated_cs{*std::get<1>(chainstates)};
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+    m_node.notifications->m_shutdown_on_fatal_error = false;
+
+    const fs::path fault_file{m_args.GetBlocksDirPath() / "rev00001.dat"};
+    fs::path backup_file{fault_file};
+    backup_file += ".snapshot-flush-failure-backup";
+    BOOST_REQUIRE(fs::exists(fault_file));
+    BOOST_REQUIRE(!fs::exists(backup_file));
+    fs::rename(fault_file, backup_file);
+    struct RestoreBlockFile {
+        const fs::path& path;
+        const fs::path& backup;
+        ~RestoreBlockFile()
+        {
+            std::error_code ec;
+            fs::remove(path, ec);
+            fs::rename(backup, path, ec);
+        }
+    } restore{fault_file, backup_file};
+    std::error_code ec;
+    fs::create_symlink(fs::path{"/sys/kernel/uevent_seqnum"}, fault_file, ec);
+    BOOST_REQUIRE(!ec);
+
+    SnapshotCompletionResult result;
+    {
+        ASSERT_DEBUG_LOG("Flushing undo file to disk failed");
+        result = WITH_LOCK(::cs_main, return chainman.MaybeValidateSnapshot(validated_cs, unvalidated_cs));
+    }
+
+    BOOST_CHECK_EQUAL(result, SnapshotCompletionResult::FLUSH_FAILED);
+    LOCK(::cs_main);
+    BOOST_CHECK_EQUAL(chainman.m_chainstates.size(), 2U);
+    BOOST_CHECK_EQUAL(unvalidated_cs.m_assumeutxo, Assumeutxo::UNVALIDATED);
+    BOOST_CHECK(!validated_cs.m_target_utxohash.has_value());
+#else
+    BOOST_TEST_MESSAGE("Skipped: this test requires a Linux virtual filesystem.");
+#endif
+}
+
 /** Helper function to parse args into args_man and return the result of applying them to opts */
 template <typename Options>
 util::Result<Options> SetOptsFromArgs(ArgsManager& args_man, Options opts,
