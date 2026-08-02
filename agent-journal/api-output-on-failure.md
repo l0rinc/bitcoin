@@ -124,3 +124,54 @@ stabilizes).
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-08-02, draw 180, raw=676234014466335055 (63-bit), idx 25/54): per-callback lock-state map — block_tip fires with cs_main HELD (reentrancy constraint real, undocumented); header_tip asserted lock-free; progress init-thread; DISMISSED (same upstream-identical doc gap as c2)
+
+### Hypothesis
+The c2 queue's untraced callbacks (NotifyBlockTip/NotifyProgress)
+might fire in DIFFERENT lock states than the validation-interface
+callbacks — changing the reentrancy constraint per callback.
+Falsifiable by tracing each call site.
+
+### Trace (call site -> notifications -> C-API wrapper)
+- block_tip: validation.cpp:3498-3503 (ConnectTip, cs_main HELD;
+  the :3493 'Enqueue while holding cs_main' comment covers the
+  adjacent signals path, and the blockTip call is in the same
+  held scope) -> node/kernel_notifications.cpp:50-60 (leaf
+  m_tip_block_mutex for the waiters, then uiInterface) ->
+  kernel/bitcoinkernel.cpp:341-345: consumer's btck block_tip
+  invoked INLINE -> consumer callback runs with cs_main held.
+  Reentrancy constraint REAL: calling process_block/import_blocks
+  from a block_tip handler deadlocks (non-recursive cs_main).
+- header_tip: validation.cpp:3378-3380 — explicit comment 'Send
+  block tip changed notifications without the lock held'
+  (fNotify deferral); and :4456 ReportHeadersPresync has
+  AssertLockNotHeld(GetMutex()) — asserted lock-free at both
+  sites -> kernel wrapper bitcoinkernel.cpp:347-349 inline, but
+  lock-free by construction.
+- progress: validation.cpp:4805/4850/4926/4992 (VerifyDB,
+  ReplayBlocks — init-time, no P2P) -> bitcoinkernel.cpp:353
+  inline; no cs_main interaction (init thread).
+- warning_set/unset, flush_error, fatal_error: same inline
+  wrapper (:357-367), driven from notification contexts.
+
+### Verdict
+DISMISSED (local): the per-callback map shows the cs_main-held
+constraint is UNIQUE to block_tip; header_tip is asserted lock-
+free, progress is init-thread. The kernel header documents NONE
+of this (c2 byte-compare with upstream master stands) — same
+upstream-identical documentation gap class, WIP API; not a local
+defect. The map is recorded for the upstream-watch note: when
+the C API stabilizes, bitcoinkernel.h should state per-callback
+lock states (block_tip: cs_main held, no reentry; header_tip/
+progress: lock-free).
+
+### Exact commands
+- grep/sed line refs above (validation.cpp:3378-3380, 3493-3503,
+  4456-4472, 4805-4992; kernel_notifications.cpp:50-78;
+  bitcoinkernel.cpp:330-367).
+
+### Limitations / queue
+- fatal_error/flush_error call-site lock states not individually
+  traced (error paths, no consumer reentry value).
+- The 5 output-on-failure surfaces from c1 unchanged.
