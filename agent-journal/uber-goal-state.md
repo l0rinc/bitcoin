@@ -291,6 +291,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 45 | constant-time-declassification | CYCLE-4 (COMPLETE) | 2026-08-01 | secp ctime_tests under valgrind memcheck: full suite, 0 errors (production backend params, aarch64) |
 | 79 | fuzz-corpus-stewardship | CYCLE-2 | 2026-08-01 | per-seed profile FLAT (max/median 1.05x); ~99.5% per-invocation cost = startup; oversized-seed hypothesis refuted |
 | 79 | fuzz-corpus-stewardship | CYCLE-3 | 2026-08-01 | qa-assets sparse import @918cdd3 (==CI pin): 7,846 seeds/3 corpora single-pass clean, zero artifacts; DISMISSED |
+| 79 | fuzz-corpus-stewardship | CYCLE-4 | 2026-08-02 | coins/UTXO/storage batch: 15 targets 20,760 seeds all clean; cumulative 32,042 green; DISMISSED |
 | 35 | mutation-testing | CYCLE-7 (COMPLETE) | 2026-08-01 | NONNEGATIVE_SIGNED negative-write mangle pinned (-1->0x7f->127); unreachable from all call sites; upstream-identical |
 | 59 | supply-chain-security-gates | CYCLE-3 (COMPLETE) | 2026-08-01 | qa-assets corpus clone commit-pinned (weakening arm was silent; c1 reasoning covered injection only); live-verified |
 | 40 | multi-agent-adjudication | CYCLE-3 (COMPLETE) | 2026-08-01 | L4 executable confirmation: HEAD vs branch dup-check differential fuzz, 300k cases 0 divergences |
@@ -978,6 +979,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 204 (29-campaign eligible set): raw=
+   664956795418753102 (63-bit) -> idx 27 -> #79 c4 (coins/
+   storage corpus batch: 20,760 seeds clean; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79}.
    RE-RANK draw 203 (30-campaign eligible set): raw=
    5711495130052899885 (63-bit) -> idx 15 -> #43 c4 (deprecated
    ancestor opts lifecycle: docs accurate; DISMISSED).

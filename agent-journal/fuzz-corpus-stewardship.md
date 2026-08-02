@@ -170,3 +170,47 @@ GB-scale full clone) to repeat per-target on demand.
 - /tmp/qa-assets kept (218M); delete on disk squeeze, re-sparse
   per the lines above.
 - crash-artifact policy cell remains standing (already policy).
+
+## Cycle 4 (2026-08-02, draw 204, raw=664956795418753102 (63-bit), idx 27/29): coins/UTXO/storage corpus batch — 15 targets, 20,760 seeds, ALL clean through the fork's hardened build; DISMISSED
+
+### Batch (campaign-focus core: coins/UTXO/storage/orphanage)
+Sparse add at the same pinned 918cdd3: coins_view (3,547),
+coins_view_db (4,551), coins_view_overlay (3,017),
+coins_view_stacked (2,719), coinscache_sim (373), dbwrapper
+(539), dbwrapper_concurrent_reads (357), dbwrapper_threaded
+(619), txundo_deserialize (271), utxo_snapshot (683),
+utxo_snapshot_invalid (805), utxo_total_supply (1,370),
+blockundo_deserialize (321), txorphan (684), txorphanage_sim
+(1,123) = 20,760 seeds.
+
+### Results
+- 13/15 DONE clean in the first pass (300s/target bound);
+  coverage highlights: coins_view_stacked ft 80,383,
+  coins_view_db ft 52,260, dbwrapper_threaded ft 31,506,
+  txorphanage_sim ft 32,711.
+- utxo_total_supply and txorphan hit MY 300s bound (heavy
+  targets, 1-2 exec/s — NOT crashes; 'run interrupted' timeout
+  kills); rerun at 1200s: utxo_total_supply 1,370/1,370 DONE
+  (ft 92,617), txorphan 684/684 DONE (ft 26,860).
+- Zero crashes, zero Assume aborts, zero artifacts across all
+  15 — the fork's coins/dbwrapper/orphanage hardening (F14 area,
+  #57 flags, txorphanage Assume invariants) holds on every
+  upstream seed.
+
+### Verdict
+DISMISSED: the storage-family corpus is fully compatible with
+the fork's hardened build; no corpus-vs-build skew anywhere in
+the campaign-focus core. Cumulative import coverage: 7,846
+(c3: process_messages/transaction/script) + 3,436 (#9 c7:
+clusterlin x12) + 20,760 (this batch) = 32,042 seeds green.
+
+### Exact commands
+- git sparse-checkout add (15 dirs, 538M total with prior);
+  per-target FUZZ runs (counts above); 1200s rerun lines above.
+
+### Limitations / queue
+- Single-pass validation only; utxo_total_supply is the slowest
+  target seen (1 exec/s, ~20 min for 1,370 seeds — recorded for
+  future budgeting).
+- /tmp/qa-assets now 538M; disk 3.2G free; delete corpora on
+  squeeze (re-sparse per the recorded lines).
