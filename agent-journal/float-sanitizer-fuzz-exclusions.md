@@ -1,5 +1,119 @@
 # Floating-Point, Sanitizer, and Fuzzer-Exclusion Audit
 
+## Cycle 295: preserve floating-point RPC fuzzer arguments
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `98`
+- Selected goal: `float-sanitizer-fuzz-exclusions`
+- Branch: `uber-cycle-295-float-sanitizer-fuzz-exclusions-20260802`
+- Start HEAD: `e8cd67286f2f8373d0e1a60ed5931e7a243ad45e`
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Entry divergence (`origin/master...HEAD`): `45 1380`
+- Catalog, prompt, TSV, and protocol hashes matched the fixed gate values.
+- The tree had no tracked changes at entry. Existing untracked agent artifacts
+  were preserved. The seven protected long-running test processes remained
+  alive and untouched.
+
+### Scope and prior-finding exclusions
+
+The previous Goal 98 cycles closed raw IEEE exceptional-value coverage, the
+locale-unavailable precondition, policy-estimator non-finite input handling,
+the necessary SHA256 SSE4 sanitizer attribute, the overly broad strprintf
+fuzzer guards, and bloom integer-overflow suppressions. The current scan
+therefore concentrated on remaining sanitizer exclusions, float conversions,
+and fuzzer paths that transform numeric values before they reach a production
+parser. No consensus or libsecp256k1 production path in the current float
+inventory used floating point.
+
+### Confirmed finding: RPC fuzzer rounded generated doubles before JSON parsing
+
+`src/test/fuzz/rpc.cpp` generated scalar RPC floating-point arguments with
+`strprintf("%f", value)`. This fixed the representation at six digits after
+the decimal point before passing the string to `RPCConvertValues`. The
+converter treats the `estimaterawfee` threshold parameter as JSON, and the
+RPC implementation rejects thresholds only after parsing when the value is
+outside `[0, 1]` (`src/rpc/client.cpp` parameter mapping and `ParseParam`,
+`src/rpc/fees.cpp:168`). Thus the fuzzer did not preserve the value it claimed
+to generate at a boundary-sensitive RPC interface.
+
+The before-fix converter probe used the same `strprintf` and
+`RPCConvertValues` path. Its relevant output was:
+
+```text
+0.99999939999999998 -> 0.999999 -> 0.99999899999999997
+0.99999950000000004 -> 1.000000 -> 1
+1.0000004 -> 1.000000 -> 1
+1.2345678899999999 -> 1.234568 -> 1.2345680000000001
+4.9406564584124654e-324 -> 0.000000 -> 0
+```
+
+The `1.0000004` case is a direct oracle failure: the generated value is
+outside the RPC threshold domain, but the fuzzer submitted the rounded value
+`1`, which passes the production check. The subnormal case also demonstrates
+that `%f` erased a distinct valid numeric input by converting it to zero.
+
+The smallest harness-only fix uses `%g` with
+`std::numeric_limits<double>::max_digits10`, which is sufficient to round-trip
+every finite `double` through a decimal JSON number. A post-fix scratch probe
+using the same converter produced:
+
+```text
+0.999999 -> 0.99999939999999998 -> 0.99999939999999998 rejected=0
+1 -> 0.99999950000000004 -> 0.99999950000000004 rejected=0
+1 -> 1.0000004 -> 1.0000004 rejected=1
+1.23457 -> 1.2345678899999999 -> 1.2345678899999999 rejected=1
+4.94066e-324 -> 4.9406564584124654e-324 -> 4.9406564584124654e-324 rejected=0
+```
+
+This is a fuzz-oracle defect, not a production RPC defect. The standard
+`ConsumeFloatingPoint<double>()` helper samples the full finite double range;
+an independent million-sample probe found no values in `(-2, 2)`, so the
+usual generated distribution rarely reaches the threshold boundary. That
+limitation is recorded rather than hidden: the formatting fix preserves
+boundary behavior whenever such a value is generated, but this cycle does not
+claim that the existing generator efficiently explores that domain. The later
+unmerged RPC-target redesign was treated as review precedent only and was not
+used as an oracle.
+
+### Verification
+
+- The source change added `<limits>` and replaced the `%f` conversion with
+  `strprintf("%.*g", std::numeric_limits<double>::max_digits10, ...)`.
+- `git diff --check` passed.
+- Rebuild from the current tree:
+  `env TMPDIR=/data/my_storage/tmp/cycle295-rpc-build-tmp CCACHE_DIR=/data/my_storage/tmp/cycle295-rpc-ccache ninja -C /data/my_storage/tmp/cycle188-coverage-build fuzz -j2`
+  passed all three final steps, including recompilation of `rpc.cpp` and
+  relinking `bin/fuzz`.
+- Final fixed-run RPC fuzz command:
+  `env FUZZ=rpc TMPDIR=/data/my_storage/tmp/cycle295-rpc/runtime-final /data/my_storage/tmp/cycle188-coverage-build/bin/fuzz -runs=10000 -seed=29502 -max_len=4096 -rss_limit_mb=4096 -timeout=5 -artifact_prefix=/data/my_storage/tmp/cycle295-rpc/artifacts-final/ -print_final_stats=1 -verbosity=0 --testdatadir=/data/my_storage/tmp/cycle295-rpc/testdata-final`
+  completed 10,000 executions, added 164 units, and reached 1,297 MiB peak
+  RSS with no crash, timeout, sanitizer diagnostic, or artifact. It exercised
+  the RPC setup, conversion, and multiple scalar-argument paths; the direct
+  converter probe supplies the targeted formatting oracle because the random
+  run did not reliably select the rare small-double boundary.
+- A preceding eight-second seeded run completed 28,509 executions with 352
+  new units and no failure. Its initial retry failed only because a typo made
+  `TMPDIR` nonexistent; the corrected run used a dedicated `/data` temporary
+  directory and completed normally.
+- The source was rebuilt after the formatting-only adjustment; no production
+  unit-test behavior was changed.
+
+### Verdict and handoff
+
+**Confirmed and fixed:** the RPC fuzz harness rounded generated floating-point
+arguments to six fractional digits, allowing invalid boundary values to reach
+JSON-RPC code as different valid values and collapsing small values to zero.
+The source/evidence commit must include only `src/test/fuzz/rpc.cpp` and this
+journal update, authored as `Lőrinc <pap.lorinc@gmail.com>`. The separate uber
+state-close commit records the exact source commit and the next Goal 98 queue.
+
+Next Goal 98 cells: construct a deterministic input that selects the float
+argument lambda and reaches a boundary-sensitive JSON parameter; then inspect
+the remaining production `TrafficGraphWidget` zero-interval path and current
+sanitizer/fuzzer exclusions. Revisit the persisted `AddrInfo::nAttempts`
+candidate only after these higher-evidence cells.
+
 ## Cycle 282: resurrect bloom integer diagnostics
 
 - Draw command: `shuf -i 0-98 -n 1`

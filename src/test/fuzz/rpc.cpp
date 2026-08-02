@@ -31,6 +31,7 @@
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -284,7 +285,11 @@ std::string ConsumeScalarRPCArgument(FuzzedDataProvider& fuzzed_data_provider, b
         },
         [&] {
             // floating point argument
-            r = strprintf("%f", fuzzed_data_provider.ConsumeFloatingPoint<double>());
+            // Preserve enough significant digits for the JSON conversion to retain the
+            // generated double's boundary behavior.
+            r = strprintf(
+                "%.*g", std::numeric_limits<double>::max_digits10,
+                fuzzed_data_provider.ConsumeFloatingPoint<double>());
         },
         [&] {
             // tx destination argument
