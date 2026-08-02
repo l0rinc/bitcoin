@@ -11,6 +11,7 @@
 #include <primitives/block.h>
 #include <protocol.h>
 #include <sync.h>
+#include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <util/check.h>
@@ -86,6 +87,46 @@ BOOST_AUTO_TEST_CASE(connections_desirable_service_flags)
     // Lastly, verify the stale tip checks can disallow limited peers connections after not receiving blocks for a prolonged period.
     clock += std::chrono::seconds{consensus.nPowTargetSpacing * NODE_NETWORK_LIMITED_ALLOW_CONN_BLOCKS + 1};
     BOOST_CHECK(peerman->GetDesirableServiceFlags(peer_flags) == ServiceFlags(NODE_NETWORK | NODE_WITNESS));
+}
+
+BOOST_AUTO_TEST_CASE(fetch_block_clears_failed_request)
+{
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    CNode* const node{new CNode{/*id=*/0,
+                                /*sock=*/nullptr,
+                                /*addrIn=*/CAddress{},
+                                /*nKeyedNetGroupIn=*/0,
+                                /*nLocalHostNonceIn=*/0,
+                                /*addrBindIn=*/CService{},
+                                /*addrNameIn=*/"",
+                                /*conn_type_in=*/ConnectionType::OUTBOUND_FULL_RELAY,
+                                /*inbound_onion=*/false,
+                                /*network_key=*/0}};
+
+    connman.Handshake(*node,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                      /*local_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                      /*version=*/PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+    connman.AddTestNode(*node);
+
+    const CBlockIndex* const block_index{WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip())};
+    BOOST_REQUIRE(block_index != nullptr);
+
+    // Simulate the peer losing its fully-connected status between the peer lookup
+    // and the send attempt.
+    node->fSuccessfullyConnected = false;
+    const auto result{m_node.peerman->FetchBlock(node->GetId(), *block_index)};
+    BOOST_REQUIRE(!result);
+    BOOST_CHECK_EQUAL(result.error(), "Peer not fully connected");
+
+    CNodeStateStats stats;
+    BOOST_REQUIRE(m_node.peerman->GetNodeStateStats(node->GetId(), stats));
+    BOOST_CHECK(stats.vHeightInFlight.empty());
+
+    m_node.peerman->FinalizeNode(*node);
+    connman.ClearTestNodes();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

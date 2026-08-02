@@ -2117,7 +2117,10 @@ util::Expected<void, std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, co
         return true;
     });
 
-    if (!success) return util::Unexpected{"Peer not fully connected"};
+    if (!success) {
+        RemoveBlockRequest(hash, peer_id);
+        return util::Unexpected{"Peer not fully connected"};
+    }
 
     LogDebug(BCLog::NET, "Requesting block %s from peer=%d\n",
                  hash.ToString(), peer_id);
