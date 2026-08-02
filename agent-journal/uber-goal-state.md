@@ -182,6 +182,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 39 | generated-artifact-determinism | CYCLE-2 | 2026-07-29 | full JSON sweep 60/60 byte-identical (9 tree + 51 univalue) |
 | 39 | generated-artifact-determinism | CYCLE-3 | 2026-08-02 | blocked cells re-checked: manpages are intentional placeholders, sage absent; DISMISSED |
 | 37 | build-dead-zones | CYCLE-2 | 2026-07-29 | config-dead zones clean: ZMQ/USDT/chainstate-util all properly gated |
+| 37 | build-dead-zones | CYCLE-3 | 2026-08-02 | runtime-dead feature opts: accepted-but-inert by design (hidden reg + value validation); DISMISSED |
 | 95 | database-semantics-differential | CYCLE-2 | 2026-07-29 | dbwrapper contracts hold: WriteBatch atomicity + HEAD_BLOCKS crash protocol, scan-only iterators |
 | 108 | adversarial-artifact-generation | CYCLE-1 | 2026-07-29 | hostile V1 peer artifact: 4/4 classes classified correctly (magic/checksum/oversize/valid) |
 | 108 | adversarial-artifact-generation | CYCLE-6 (COMPLETE) | 2026-08-01 | post-handshake v2 slowloris reaped at +20.0min (ping+send timeout dual lines); mocktime + framework peertimeout masks recorded |
@@ -1003,6 +1004,15 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 227 (4-campaign eligible set): raw=
+   12394660665079399478, masked 3171288628224623670 -> idx 2 ->
+   #37 c3 (runtime-dead opts: by design; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58, #21, #28, #69, #61, #22, #23, #39, #64, #2, #7,
+   #37}.
    RE-RANK draw 226 (5-campaign eligible set): raw=
    17325288802186375634, masked 8101916765331599826 -> idx 1 ->
    #7 c5 (bound census: EXHAUSTED).
