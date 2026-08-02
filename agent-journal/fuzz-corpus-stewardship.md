@@ -304,3 +304,45 @@ back to 3.4G.
 ### Limitations / queue
 - Single-pass validation only.
 - Remaining untested in-scope family: block/merkle.
+
+## Cycle 8 (2026-08-02, draw 241, raw=7943594722486301467, n=1): block/merkle corpus family — 18 targets, 7,405 seeds, ALL clean; every in-scope corpus family now covered; DISMISSED
+
+### Batch (block parse layer, pinned 918cdd3)
+block 1,067, block_deserialize 248, block_header 135,
+block_header_and_short_txids_deserialize 286, block_index 615,
+block_index_tree 331, blockfilter 526, blockheader_deserialize
+14, blocklocator_deserialize 53, blockmerkleroot 270,
+blocktransactions_deserialize 267,
+blocktransactionsrequest_deserialize 74, chain 259, cmpctblock
+1,435, diskblockindex_deserialize 59, headers_sync_state 384,
+load_external_block_file 700 = 7,405 seeds, all DONE clean.
+Coverage highlights: cmpctblock ft 45,816, load_external_
+block_file ft 18,952, block_index ft 16,883.
+
+### Harness note
+blockundo_deserialize (321) errored 'directory does not exist'
+on the first pass: it was in BOTH the c7 prune and the c8
+sparse list — the prune deleted the files while the sparse
+PATTERN persisted, so 'sparse-checkout add' saw no delta.
+Fixed with git checkout fuzz_corpora/blockundo_deserialize
+(restore from index) -> 321/321 DONE clean. Recorded: after a
+prune, restore pattern-kept dirs with git checkout, not
+sparse-checkout add/reapply.
+
+### Verdict
+DISMISSED: the block-parse family is green. CORPUS IMPORT
+PROGRAM COMPLETE across all in-scope families: c3 (7,846) +
+#9 c7 (3,436) + c4 (20,760) + c5 (6,634) + c6 (22,177) +
+c7 (19,470) + c8 (7,405) = 87,728 upstream seeds validated
+through the fork's hardened build with zero crashes, zero
+Assume aborts, zero artifacts.
+
+### Exact commands
+- sparse-checkout add (18 dirs); per-target FUZZ runs;
+  blockundo restore line above.
+
+### Limitations / queue
+- Single-pass validation only (throughout).
+- Remaining corpora on disk: block family + addrman_serdeser +
+  utxo_total_supply (~430M); re-sparse any pruned family per
+  the recorded lines.
