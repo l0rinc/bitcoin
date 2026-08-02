@@ -51,13 +51,11 @@ CAmount TxGetCredit(const CWallet& wallet, const CTransaction& tx)
 
 bool ScriptIsChange(const CWallet& wallet, const CScript& script)
 {
-    // TODO: fix handling of 'change' outputs. The assumption is that any
-    // payment to a script that is ours, but is not in the address book
-    // is change. That assumption is likely to break when we implement multisignature
-    // wallets that return change back into a multi-signature-protected address;
-    // a better way of identifying which outputs are 'the send' and which are
-    // 'the change' will need to be implemented (maybe extend CWalletTx to remember
-    // which output, if any, was change).
+    // Change detection uses the heuristic that any payment to a script that is
+    // ours, but is not in the address book, is change. This also covers internal
+    // descriptor outputs, including multisig, but can misclassify other
+    // wallet-owned outputs that are not represented in the address book. A more
+    // precise implementation would remember which output, if any, was change.
     AssertLockHeld(wallet.cs_wallet);
     if (wallet.IsMine(script))
     {

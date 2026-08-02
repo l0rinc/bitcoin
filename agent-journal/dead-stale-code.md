@@ -1,5 +1,89 @@
 # Goal 29: dead code, stale feature, and TODO archaeology
 
+## Cycle 286 close: stale multisig change-detection premise
+
+- Selected by the exact selector `shuf -i 0-98 -n 1`: goal 29, `dead-stale-code`.
+- Branch: `uber-cycle-286-dead-stale-code-20260802`.
+- Start HEAD: `38764035eb81e416fbf6591844e587ee8c9d6c39`.
+- Origin/master: `556988790a7f961693a8fd93f73725baea66476a`.
+- Merge base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Start divergence convention: `45` local commits, `1362` remote-only commits.
+- Catalog SHA: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- TSV SHA: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc`.
+- Start state SHA: `7016d1f62c11a2edfa58bdd8fbc96d019553ed2b9f99359709c7261001420163`.
+- Tracked/index state was clean at the gate. Known unrelated untracked files were preserved.
+- All protected long-running processes were checked alive before work and were not touched.
+
+### Scope and candidate triage
+
+The prior Goal 29 cycle closed the obvious placeholder-test, CoinStats compatibility,
+TxReconciliation scaffolding, and macOS wording cells. This cycle inventoried current
+TODO/FIXME markers, conditional paths, disabled jobs, and deferred work, then excluded
+those cells unless current callers, build configuration, and history falsified their
+purpose.
+
+- The commented `ALLOW_BOOL`, `ALLOW_INT`, `ALLOW_STRING`, and `ALLOW_LIST` flags in
+  `src/common/args.h` have no active use, but commit `be55f545d53` introduced them as
+  part of an unfinished refactor and GitHub issue/PR #16545 remains open and draft.
+  Its body explicitly describes the flags as test-oriented follow-up work, so the
+  comments are not stale enough to remove.
+- The MSVC Debug and ClangCL benchmark skips in
+  `src/minisketch/.github/workflows/ci.yml` were imported with the current upstream
+  subtree in `c235aa468b0`. Upstream minisketch PR #96 remains open and addresses the
+  benchmark undefined behavior that motivated the skips. The vendored workflow is
+  therefore supported deferred work, not dead CI.
+- The compact-block reconstruction TODO in `src/net_processing.cpp` is on an active
+  temporary reconstruction path. Its `InitData` failure return does not own the
+  in-flight request created by another peer, unlike the normal requested path, so
+  ignoring that result is intentional in the current state machine. No change is
+  justified without a new failure/retry invariant.
+- The orphan-resolution TODO in `src/node/txdownloadman_impl.cpp` is on live code
+  with existing announcement, in-flight, permission, and delay limits. It is an
+  active policy item, not dead code.
+
+### Confirmed stale marker and evidence
+
+`src/wallet/receive.cpp:ScriptIsChange` still described multisignature wallets as a
+future feature that would likely break the change heuristic. Current descriptor wallet
+support already includes multisig internal outputs. In particular,
+`test/functional/wallet_multisig_descriptor_psbt.py` checks `getaddressinfo(...)["ischange"]`
+for multisig outputs and exercises two complete PSBT signing/broadcast flows. Recent
+history includes activated multisig descriptor checks and multipath descriptor support;
+`git blame` shows the stale comment itself dates from `c7bd5842e46` in 2021.
+
+The deterministic functional command was:
+
+    test/functional/wallet_multisig_descriptor_psbt.py --configfile=/data/my_storage/tmp/cycle214-build/test/config.ini --tmpdir=/data/my_storage/tmp/cycle286-wallet-multisig --randomseed=286 --portseed=86286 --loglevel=INFO
+
+It exited 0 and logged successful multisig address agreement, funding, PSBT creation,
+partial signing, combination, broadcast, and balance checks. The first invocation
+without `--configfile` failed before setup because this checkout has no generated
+`test/config.ini`; that setup-only failure was discarded and the configured rerun
+passed. The build used for this behavioral check points at the current source tree
+and has wallet, CLI, and bitcoind enabled.
+
+The heuristic itself remains: a wallet-owned output not represented in the address
+book is classified as change. That limitation is still real, so this cycle changes no
+behavior. It only replaces the obsolete future-multisig TODO with a current statement:
+internal descriptor outputs, including multisig, are covered, while other wallet-owned
+outputs may still be misclassified and a precise implementation would remember the
+actual change output.
+
+### Verdict and change
+
+Verdict: confirmed stale documentation marker; no dead production code found in the
+reviewed cells. `src/wallet/receive.cpp` now documents the live heuristic and its
+remaining limitation without changing `ScriptIsChange`. The existing functional test
+is the regression oracle for the multisig behavior. This is intentionally a comment-
+only source change; no test file was altered.
+
+The source and this journal are committed together as one independently buildable
+change. The next state-close commit must record that source commit, recheck the
+catalog/protocol hashes, and select a distinct goal. Do not reopen the prior-cycle
+placeholder, CoinStats, TxReconciliation, or macOS cells without new evidence.
+
 ## Cycle 212 start
 
 - Selected by the exact selector `shuf -i 0-98 -n 1`: goal 29, `dead-stale-code`.
