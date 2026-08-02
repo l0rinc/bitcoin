@@ -248,6 +248,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 21 | rebuild-recovery-profile | CYCLE-3 | 2026-07-29 | Taproot-OP_TRUE mix profiled: tweak math = validation floor (~86% EC), 11.2k vs 9.0k tx/s vs P2PK; no defect |
 | 65 | contributor-branch-radar | CYCLE-3 | 2026-07-29 | leveldb knob batch assessed: block-cache-bypass premise VERIFIED (format.cc:106 + table.cc:182); others = bench ladders/diagnostic/vendored bump |
 | 1 | comment-code-contract | CYCLE-3 | 2026-07-29 | txmempool+txgraph strong claims 8/8 TRUE; chunk-connectedness assert matches IsAcceptable guard exactly; core claim surface covered |
+| 1 | comment-code-contract | CYCLE-5 | 2026-08-02 | validation.cpp leftovers: 60 claims/8 families, deepest 4 TRUE; DISMISSED |
 | 45 | constant-time-declassification | CYCLE-3 | 2026-07-29 | RPC auth sweep: comparisons constant-time, single-401; HMAC-on-match username oracle = de minimis at local RPC boundary |
 | 75 | build-throughput-cacheability | CYCLE-3 | 2026-07-29 | clean-build wall: cold 1418.2s vs warm 59.6s (23.8x ccache lever); CI cache keys sound (content-key is the anchor) |
 | 50 | fuzz-introspector-blockers | CYCLE-2 | 2026-07-29 | signing section covers SignPSBTInput/UpdatePSBTOutput/PSBTInputSignedAndVerified; iso seed 528->2857->3048 edges |
@@ -1006,6 +1007,9 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 230 (1-campaign pool): raw=418748291906749644
+   (63-bit) -> #1 c5 (validation leftovers: deepest TRUE;
+   DISMISSED). Pool EMPTY — re-harvest before draw 231.
    RE-RANK draw 229 (2-campaign eligible set): raw=
    8430095800060831913 (63-bit) -> idx 1 -> #68 c4 (unaligned
    sweep: clean; DISMISSED).
