@@ -286,6 +286,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 46 | api-output-on-failure | CYCLE-2 | 2026-07-29 | import_blocks clean; callback reentrancy constraint real (cs_main held, deadlock on reentry) but undocumented (upstream-identical) |
 | 46 | api-output-on-failure | CYCLE-3 | 2026-08-02 | per-callback lock map: block_tip cs_main-held (unique), header_tip asserted lock-free, progress init-thread; same upstream doc gap |
 | 21 | rebuild-recovery-profile | CYCLE-4 | 2026-07-29 | dbcache sensitivity: wall +60% at dbcache=4, user-CPU neutral (validation-bound); fork default sane |
+| 21 | rebuild-recovery-profile | CYCLE-5 | 2026-08-02 | forcecompactdb: sub-second, chainstate 2MB->1MB, scope=2 validation DBs; fact |
 | 60 | reviewer-preference-skill | CYCLE-5 | 2026-07-29 | maintainer merge-rationale mined: M1-M4 (terse depth-honest ACKs, self-contained descriptions, lifecycle, no info-hiding) |
 | 60 | reviewer-preference-skill | CYCLE-9 | 2026-08-02 | watch: 35592/35838 template-conformant; ordering caveat recorded; quiet |
 | 58 | helper-reuse | CYCLE-3 | 2026-07-29 | 7th PSBT copy deduplicated: helper moved to rpc/rawtransaction_util (existing shared header); rpc_psbt green |
@@ -993,6 +994,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 217 (14-campaign eligible set): raw=
+   7034722257148739485 (63-bit) -> idx 3 -> #21 c5
+   (forcecompactdb profile; fact).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58, #21}.
    RE-RANK draw 216 (15-campaign eligible set): raw=
    6114129767934136255 (63-bit) -> idx 10 -> #58 c4 (duplicate
    census: queue EMPTY).
