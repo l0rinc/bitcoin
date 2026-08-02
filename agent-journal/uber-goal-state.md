@@ -312,6 +312,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 80 | fuzz-engine-differential | CYCLE-5 | 2026-07-29 | rich PSBTv2 differential: A=0/400, E=115, R=4 guard-contained; BIP371 value-layout lesson (6-seed iterations) |
 | 42 | ci-review-bot-followup | CYCLE-4 | 2026-07-29 | corecheck sweep: bench deltas noise-shaped (same +10-33% on unrelated bloom PR); regression reading corrected |
 | 42 | ci-review-bot-followup | CYCLE-6 | 2026-08-02 | watch @556988790a: 5 commits (2 out-of-scope merges), PRs static, F13/F14/F16 offerability re-confirmed |
+| 42 | ci-review-bot-followup | CYCLE-7 | 2026-08-02 | watch: static; F13/F14/F17 offerable, accumulate hygiene offer noted; PRs open |
 | 10 | fuzz-target-gaps | CYCLE-3 | 2026-07-29 | load_wallet widened (crypted/ACTIVE*SPK/BESTBLOCK); LoadActiveScriptPubKeyMan assert on corrupt DB documented (upstream-matching) |
 | 80 | fuzz-engine-differential | CYCLE-6 | 2026-07-29 | MuSig2 PSBT seeding: differential clean (A=0, E=100); format-from-source worked first try |
 | 95 | database-semantics-differential | CYCLE-5 | 2026-07-31 | write-flush-windowed kill: _Exit inside all 4 batch commits (idx/coins/shutdown); identical tip recovery, 0 corruption; DISMISSED |
@@ -1010,6 +1011,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 237 (1-watch pool): raw=4535641261288490616
+   -> #42 c7 (watch: static; F17 newly offerable).
+   Pool: all watches cycled; next deeper harvest or new
+   signals.
    RE-RANK draw 236 (2-watch pool): raw=17935444686604899945,
    masked 8712072649750124137 -> idx 1 -> #65 c13 (radar:
    package-weight wrap unreachable; hygiene note).
