@@ -252,6 +252,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 95 | database-semantics-differential | COMPLETE | 2026-08-02 | c7: rocksdb-brute MultiRead autopsy — ASan UAF + 2N/4N misalignment CONFIRMED branch-local; HEAD clean; campaign complete |
 | 42 | ci-review-bot-followup | CYCLE-2 | 2026-07-29 | wider DrahtBot sweep (15 PRs, 7 flagged): all failures PR-owned; 35793 shows in-tree assert working as designed |
 | 44 | secret-copy-optimization | CYCLE-2 | 2026-07-29 | clang cross-check: barrier un-elidable in IR (calloc+barrier+free); cleanse idiom confirmed both compilers |
+| 44 | secret-copy-optimization | CYCLE-3 | 2026-08-02 | crossing map: all crossings secure/cleansed/deliberate-export; DISMISSED |
 | 80 | fuzz-engine-differential | CYCLE-3 | 2026-07-29 | consensus acceptance differential: A=0/300 (no structural over-acceptance); E=53/D=99 agreement, C=148 parse/policy |
 | 80 | fuzz-engine-differential | COMPLETE | 2026-08-02 | c12: musig2 nonce/sig vs participant membership unchecked (parser maps, decodepsbt-only consumer); foreign-K3 doc accepted live; DISMISSED |
 | 75 | build-throughput-cacheability | CYCLE-4 | 2026-07-29 | 45-uncacheable itemized: 57/58 = failed compilations (rotation's own mutants); IPC/capnp hypothesis refuted |
@@ -971,6 +972,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 197 (36-campaign eligible set): raw=
+   13023617683058369127, masked 3800245646203593319 -> idx 19 ->
+   #44 c3 (secret crossing map: clean; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44}.
    RE-RANK draw 196 (37-campaign eligible set): raw=
    1891301078475215477 (63-bit) -> idx 33 -> #75 c5 (cache
    posture re-check: own-residue only; DISMISSED).

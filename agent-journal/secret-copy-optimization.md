@@ -123,3 +123,42 @@ cross-compiler confirmation.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-08-02, draw 197, raw=13023617683058369127, masked 3800245646203593319, idx 19/36): wallet-side secret crossing map (c1 queue) — every production crossing of private-key material is secure-store / immediately-cleansed / deliberate-export; DISMISSED
+
+### Map (private key material, all crossings)
+1. STORAGE: CKey holds its 32 bytes in secure_unique_ptr
+   (key.h:56-67) — locked pages, memory_cleanse on dealloc.
+2. WIF DECODE (key_io.cpp:223-239): base58 decode buffer is a
+   plain vector BUT memory_cleansed before return (:235-237);
+   key.Set writes directly into secure storage.
+3. WIF ENCODE (:241-252): prefix+key vector cleansed (:250)
+   after EncodeBase58Check; the base58 string itself is the
+   deliberate user-facing export boundary (non-secure by design
+   and purpose).
+4. SIGNING (key.cpp:233-238): the raw secure-store pointer goes
+   DIRECTLY into secp256k1_ecdsa_sign — zero non-secure copies in
+   Core; secp256k1 cleanses its own internal key buffers
+   (subtree hygiene). Schnorr same shape. extra_entropy is a
+   stack counter, not secret.
+5. Copies: secure_unique_ptr copies stay in the secure allocator
+   family (no silent downgrade found; KeyType is std::array
+   inside make_secure_unique).
+
+### Verdict
+DISMISSED: no secret crosses into persistent non-secure memory
+on the audited paths; every temporary crossing is cleansed at
+the exact exit points, and the only non-secure artifact is the
+intended export string. Wallet-side crossing map closed.
+
+### Exact commands
+- sed/grep: key.h:25-67, key_io.cpp:223-252, key.cpp:225-246,
+  support/allocators/secure.h:20-74.
+
+### Limitations / queue
+- Descriptor-extkey decode (DecodeExtKey) uses the same CKey::Set
+  secure landing (same family, not separately traced).
+- secp256k1-internal cleansing is subtree-verified by its own
+  tests (not re-run here).
+- #44 cells closed: gcc idiom (c1), clang idiom (c2), crossing
+  map (c3).
