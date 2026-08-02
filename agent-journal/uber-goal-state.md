@@ -2,6 +2,58 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 258 Completion
+
+- The fresh gate fetched `origin/master` successfully before branch creation. The
+  exact selector `shuf -i 0-98 -n 1` drew goal `21`
+  (`rebuild-recovery-profile`). The dedicated branch is
+  `uber-cycle-258-rebuild-recovery-profile-20260801`. Start HEAD was
+  `34847fe1393830f640e4ebc1b0947d1448bcb4ea`, `origin/master` was
+  `67efced1fc83a0b7215cc1513e7c4754fee0f12f`, merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was
+  `1305 42` (`HEAD...origin/master`).
+- Catalog, prompt, goals TSV, and protocol hashes remained unchanged:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Existing untracked artifacts were preserved and excluded from commits.
+- The selected Goal 21 cell used a transaction-heavy 303-block fixture with
+  4,021 non-coinbase transactions and 12,402 outputs, unlike the prior large
+  coinbase-only cells. Four independent 16 MiB chainstate reindexes had
+  task-clock 485.20-499.17 ms; the 256 MiB control was 488.72 ms, inside that
+  spread. Full reindex reached the same tip at 525.72 ms, and the txindex plus
+  coinstatsindex run reached height 303 with both indexes enabled and synced.
+  No correctness failure, cache-size win, or actionable regression was shown.
+- Ordinary post-reindex runs of 1,000 blocks and 5,000 blocks at 1 MiB cache
+  reached heights 1,303 and 5,303 respectively but triggered no periodic
+  compaction; logs showed only final shutdown flushes. The hidden
+  `-forcecompactdb=1` control then recorded start/finish pairs for both
+  `blocks/index` and `chainstate`. Reopening that compacted datadir without the
+  force flag returned the exact original tip, so compaction persistence held.
+- The maintained `test/functional/feature_dbcrash.py` campaign ran with fixed
+  seed `258002`, prepared 5,000 UTXOs, completed all 40 transaction/reorg
+  iterations, and reported `Restarted nodes: [10, 6, 4]; crashes on restart:
+  12`, followed by `Tests successful`. Final serialized UTXO hashes matched
+  the reference node. This is positive evidence for the tested partial-batch
+  recovery schedule, not a proof of arbitrary filesystem or power-loss faults.
+- The selected-goal journal close is commit `8c3edd6e99` (`journal: close
+  cycle 258 rebuild recovery profile`), authored as `Lőrinc
+  <pap.lorinc@gmail.com>`. Verdict: **dismissed for a confirmed product
+  defect**. No production or permanent test change is warranted. Raw profile
+  JSON/perf/logs, fixture generator, runner, and retained crash test data are
+  under `/data/my_storage/tmp/cycle258/`.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were left untouched. No cycle-258 daemon, profile,
+  or functional-test process remains running. `/` remains full; scratch data
+  is under `/data`.
+- The next cycle must perform a fresh gate, fetch `origin/master`, draw exactly
+  one selector, and create a new `uber-cycle-259-*` branch. Do not reopen this
+  Goal 21 fixture or the same crash seed without new source, filesystem,
+  toolchain, or input-shape evidence. A future Goal 21 cell should use longer
+  chained outputs with disk-versus-memory separation or controlled
+  ENOSPC/short-write injection.
+
 ## Cycle 257 Completion
 
 - The fresh gate fetched `origin/master` successfully before branch creation. The
