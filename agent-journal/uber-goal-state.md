@@ -238,6 +238,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 49 | critical-history-sweep | CYCLE-10 | 2026-08-02 | pre-2020 advisory batch: CVE-2018-17144 executable guarded (bad-txns-inputs-duplicate at testmempoolaccept) + 8 marker cells; DISMISSED |
 | 91 | compiler-binary-hardening | CYCLE-3 | 2026-07-29 | shared kernel lib measured: 134 btck_ + std weak only, zero internal/secp exports; full RELRO+NX; no BTI note (c1's toolchain finding) |
 | 106 | semantic-twin-inconsistency | CYCLE-3 | 2026-07-29 | vsize twins agree (formula + 6/6 functional); sighash numerics agree; PSBT DEFAULT\|ALL restriction = intentional policy |
+| 106 | semantic-twin-inconsistency | CYCLE-4 | 2026-08-02 | amount-parse twin 26/26: exponent accepted, tzero compression, 21M exact; DISMISSED |
 | 43 | option-api-lifecycle | CYCLE-3 | 2026-07-29 | -v2transport settings.json lifecycle proven: honored, persisted (write-back intact), CLI-overridable |
 | 34 | uncovered-code-classification | CYCLE-4 | 2026-07-29 | dbwrapper boundary layers safe; Cursor warmup asymmetry = author's PR 35654 pending (corrupt-only, parked) |
 | 34 | uncovered-code-classification | CYCLE-5 | 2026-07-31 | BitsToBytes padding arms: dedicated test, 0xff-mutant killed (was sancov-granularity, not behavioral gap); in-tree queue CLOSED |
@@ -965,6 +966,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 191 (42-campaign eligible set): raw=
+   6989687031219001031 (63-bit) -> idx 41 -> #106 c4 (amount-
+   parse twin 26/26; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106}.
    RE-RANK draw 190 (43-campaign eligible set): raw=
    16880636655586222475, masked 7657264618731446667 -> idx 39 ->
    #92 c3 (user_data_destroy lifetime executable proof;
