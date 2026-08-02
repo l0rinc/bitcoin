@@ -571,3 +571,29 @@ recorded as PR-state facts, not objection classes.
 - CI-failure CONTENT (which test failed) not fetched this cycle
   (upstream-side; next watch can pull the check runs if either
   PR advances).
+
+## Cycle 11 (2026-08-02, draw 242, raw=13148362549488644065, masked 3924990512633868257, idx 2/3): watch — master static; #35865 (undersized-dbcache warning) closed on a premise-refutation; template holds
+
+### Sample
+- origin/master: 0 new commits (still 556988790a).
+- Newest closed item: #35865 'validation: warn on undersized
+  -dbcache' (closed 2026-08-02, not merged): andrewtoth's
+  objection — the pathological small-dbcache write pattern was
+  fixed in bitcoin-core/leveldb-subtree#61, so the warning's
+  premise is largely stale. A premise-refutation close, the
+  standard 'rejected approaches: premise fixed elsewhere'
+  shape; content aligns with our #21 c4 finding (dbcache=4
+  costs wall-time, not correctness) and the #95 engine family.
+- No template-failing objection shape observed.
+
+### Verdict
+Watch quiet; the template predicts the close reason class.
+
+### Exact commands
+- git fetch origin master (0 new); api.github.com closed-PR
+  sample + 35865 comments above.
+
+### Limitations / queue
+- The 35865 comment API returned sparse content (2 of N
+  comments visible); the premise summary is from the visible
+  objection only.
