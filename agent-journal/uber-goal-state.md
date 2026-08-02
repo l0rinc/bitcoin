@@ -1023,6 +1023,9 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 250: raw=5687290599673046444 -> consolidated
+   regression sweep (test_bitcoin + test_kernel + functional
+   subset ALL GREEN on the integrated lineage).
    RE-RANK draw 249 (1-watch pool): raw=173496863651005843 ->
    #65 c15 (radar: zero delta; quiet). Pool: watches on
    interval / new signals only.
