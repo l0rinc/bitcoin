@@ -1,5 +1,177 @@
 # Fuzz-engine and property-framework differential
 
+## Cycle 294 start: package evaluation engine comparison
+
+### Selection and fresh gate
+
+- The exact post-Cycle-293 selector was `shuf -i 0-98 -n 1` -> `80`
+  (`fuzz-engine-differential`). The draw was retained because the selected
+  package-evaluation cell was not among the previously closed Goal-80 target
+  cells. The dedicated branch is
+  `uber-cycle-294-fuzz-engine-differential-20260802`.
+- Gate and cycle-start HEAD were `f3d7996c299faf88bb88f02757376640def7126e`;
+  fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `45 1378`.
+  The tracked and index state was clean. Existing unrelated untracked files
+  were preserved. The catalog, random prompt, goals TSV, and uber-protocol
+  hashes matched their recorded values. Protected PIDs
+  `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and
+  `1346200` remained alive and untouched.
+- Prior Goal-80 cells for `bech32_roundtrip`, `parse_numbers`,
+  `descriptor_parse`, `process_messages`/`process_message`, transport
+  serialization, `minisketch`, and `p2p_headers_presync` were excluded by
+  target-specific cell identity. Fuzz Introspector's earlier package target
+  reachability screen was seed evidence, not an engine differential. The
+  target history search was `git log --oneline --all -S'FUZZ_TARGET(ephemeral_package_eval' -- src/test/fuzz/package_eval.cpp`
+  and returned the harness introduction commit `21d28b2f36`; the existing
+  Goal-80 journal, source history, and package test names were searched before
+  choosing this cell. No online PR was used as an oracle for this target.
+
+### Hypothesis and protocol
+
+The falsifiable hypothesis was that libFuzzer, AFL++, and Honggfuzz could
+exercise different package-graph states or persistent-loop behavior in
+`src/test/fuzz/package_eval.cpp`, exposing a crash, assertion, sanitizer
+diagnostic, hang, timeout, corpus-transfer defect, or package semantic
+mismatch that a single sanitizer fuzzer would miss. The selected targets were
+`tx_package_eval` and `ephemeral_package_eval`; the package dispatcher uses
+the production package/mempool evaluation code. Native counters, guard counts,
+bitmap percentages, and corpus sizes are engine-specific and were not treated
+as equivalent coverage units.
+
+The protocol was: rebuild all available engines from the current source;
+create one deterministic corpus and independent copies; use one worker,
+4,096-byte maximum inputs, a 12-second feedback budget where supported, and
+scratch data under `/data/my_storage/tmp`; run both targets under each engine;
+replay every AFL++ queue file and Honggfuzz `.honggfuzz.cov` file through the
+current Clang 19 ASan/UBSan libFuzzer binary; then run current production
+package and mempool tests. FuzzTest was checked for executables, installed
+libraries, and repository integration and was unavailable locally.
+
+### Build and corpus evidence
+
+All three fuzz binaries were rebuilt from this checkout after the cycle gate.
+The libFuzzer tree was `/data/my_storage/tmp/cycle188-coverage-build` with
+Clang 19, `BUILD_FOR_FUZZING=ON`, and the existing ASan+UBSan+libFuzzer
+configuration. AFL++ used the current PCGUARD build at
+`/data/my_storage/tmp/cycle131-build-afl19d` and its
+`afl-clang-fast++-no-cf` wrapper. Honggfuzz used
+`/data/my_storage/tmp/cycle131-build-honggfuzz19` after explicitly selecting
+`HFUZZ_CC_PATH=/usr/bin/clang-19 HFUZZ_CXX_PATH=/usr/bin/clang++-19`; the
+initial local Clang 14 wrapper failure was quarantined as a toolchain issue.
+The successful binary SHA-256 values were:
+
+- libFuzzer ASan/UBSan:
+  `9e95cfc2944f652a292a3b01539f66619ebd9036c794a6eb14324a062d913db5`
+- AFL++:
+  `bf161ee45c3358f921f96fddb5a0b16cbcec7d812c8fd74d5332cfe1ce1bab3a`
+- Honggfuzz:
+  `2eee0e0e601710e7f7d6ed8ffcd3cf523dfcfda358709479f03e19d19cf858e9`
+
+The shared source corpus was copied from the prior package seed and valid
+package-loop scratch inputs into
+`/data/my_storage/tmp/cycle294-package/corpus-source`: 20 files, 11,879
+bytes, manifest SHA-256
+`07d04a21a35a57b9b562221e2274abedd47ef9394f3999880364978afb8a6b30`.
+The manifest included `valid-empty-tx`, `valid-plus-64-true`,
+`valid-escape-256-true`, `zero-4096`, `ff-4096`, and 15 deterministic
+valid-package-loop inputs. Each engine received an independent copy.
+
+### Engine results
+
+The exact libFuzzer controls were:
+
+    env FUZZ=tx_package_eval TMPDIR=/data/my_storage/tmp/cycle294-package/runtime-lib /data/my_storage/tmp/cycle188-coverage-build/bin/fuzz /data/my_storage/tmp/cycle294-package/corpus-lib -max_total_time=12 -seed=29401 -max_len=4096 -rss_limit_mb=4096 -timeout=5 -artifact_prefix=/data/my_storage/tmp/cycle294-package/artifacts/lib-tx- -print_final_stats=1 --testdatadir=/data/my_storage/tmp/cycle294-package/testdata-lib
+    env FUZZ=ephemeral_package_eval TMPDIR=/data/my_storage/tmp/cycle294-package/runtime-lib-ephemeral /data/my_storage/tmp/cycle188-coverage-build/bin/fuzz /data/my_storage/tmp/cycle294-package/corpus-lib-ephemeral -max_total_time=12 -seed=29402 -max_len=4096 -rss_limit_mb=4096 -timeout=5 -artifact_prefix=/data/my_storage/tmp/cycle294-package/artifacts/lib-ephemeral- -print_final_stats=1 --testdatadir=/data/my_storage/tmp/cycle294-package/testdata-lib-ephemeral
+
+`tx_package_eval` completed 531 executions, reached `cov 15402` and
+`ft 67830`, added 306 units, retained 323 in-memory corpus entries, and used
+1,397 MiB peak RSS. `ephemeral_package_eval` completed 362 executions,
+reached `cov 17634` and `ft 75568`, added 252 units, retained 271 in-memory
+corpus entries, and used 1,390 MiB peak RSS. Neither run produced a
+sanitizer diagnostic, assertion, timeout, crash, or artifact.
+
+The corrected AFL++ controls were `AFL_NO_FORKSRV=1 AFL_SKIP_CPUFREQ=1
+TMPDIR=<dedicated /data path> FUZZ=<target> afl-fuzz -m none -i
+<corpus-afl> -o <target output> -V 12 -- <afl binary>
+--testdatadir=<dedicated path>`. `tx_package_eval` completed 207 executions
+at 16.29 executions/sec, with 13,690 edges, 99.78% stability, 0.16% bitmap
+coverage, 0 saved crashes, and 0 saved hangs. `ephemeral_package_eval`
+completed 213 executions at 16.75 executions/sec, with 16,964 edges, 99.74%
+stability, 0.20% bitmap coverage, 0 saved crashes, and 0 saved hangs. The
+target's persistent state made AFL++ report calibration instability; its
+12-second run nevertheless completed normally. The initial AFL++ launch
+omitted `TMPDIR`, placed temporary chainstate data on the full root
+filesystem, and aborted every dry-run input with `Disk space is too low!`.
+A direct replay with `/data` `TMPDIR` exited zero, so this launch is
+quarantined as environment evidence rather than a target crash.
+
+The exact Honggfuzz controls used one persistent worker, `-t 5`,
+`--run_time 12`, and the `___FILE___` input placeholder with a dedicated
+`TMPDIR` and testdata directory. `tx_package_eval` completed 180 iterations
+in 13 seconds, added 24 units, reported 301,510 guards and 2% branch metric,
+used 92 MiB peak RSS, and saved 0 crashes and 0 timeouts.
+`ephemeral_package_eval` completed 141 iterations in 13 seconds, added 0
+units, reported 301,510 guards and 3% branch metric, used 94 MiB peak RSS,
+and saved 0 crashes and 0 timeouts. Honggfuzz has no fixed mutation-seed
+option in this local build, so these are fixed-corpus feedback results, not
+byte-for-byte deterministic engine repetitions.
+
+### Independent replay and production controls
+
+The current Clang 19 ASan/UBSan oracle was
+`/data/my_storage/tmp/cycle188-coverage-build/bin/fuzz`. It replayed the 20
+non-hidden AFL++ `tx_package_eval` queue files in 21 executions, the 22
+non-hidden AFL++ `ephemeral_package_eval` queue files in 23 executions, 79
+Honggfuzz `tx_package_eval` `.honggfuzz.cov` files in 80 executions, and 53
+Honggfuzz `ephemeral_package_eval` `.honggfuzz.cov` files in 54 executions.
+The four replay logs are under
+`/data/my_storage/tmp/cycle294-package/logs/replay-*.log`; all exited zero,
+used 111--113 MiB peak RSS, and reported no assertion, sanitizer diagnostic,
+timeout, crash, or artifact. The libFuzzer artifact directory was empty.
+
+The current-head test binary was rebuilt at
+`/data/my_storage/tmp/cycle170-mempool-build/bin/test_bitcoin` with the
+command `env TMPDIR=/data/my_storage/tmp/cycle294-package/build-tmp ninja -C
+/data/my_storage/tmp/cycle170-mempool-build test_bitcoin -j2`. The corrected
+focused controls were:
+
+    env TMPDIR=/data/my_storage/tmp/cycle294-package/test-runtime /data/my_storage/tmp/cycle170-mempool-build/bin/test_bitcoin --run_test=txpackage_tests --log_level=test_suite --report_level=short
+    env TMPDIR=/data/my_storage/tmp/cycle294-package/test-runtime /data/my_storage/tmp/cycle170-mempool-build/bin/test_bitcoin --run_test=mempool_tests --report_level=short
+
+`txpackage_tests` passed 15 cases and 306 assertions. `mempool_tests` passed
+26 cases and 1,013 assertions. The first package-test invocation used a
+nonexistent `TMPDIR`, failed to create its temporary directory, and was
+stopped after the resulting in-process setup contamination; it is recorded in
+`logs/txpackage-tests.log` only as a setup limitation. The corrected fresh
+invocation passed. No source or permanent test file changed.
+
+### Verdict, limitations, and handoff
+
+The hypothesis is **dismissed for a new repository defect**. Both production
+package-evaluation targets ran under current-head Clang 19 ASan/UBSan
+libFuzzer, AFL++, and Honggfuzz. All retained cross-engine inputs survived
+the independent sanitizer oracle, and the focused package/mempool suites
+passed. Engine-specific throughput, counters, persistent-loop instability,
+and corpus growth are expected differences and are not defect evidence. No
+production or permanent test change is justified.
+
+FuzzTest was unavailable: no `fuzztest` executable, runner, installed local
+library, or repository integration was found. The root filesystem remained
+full, so all valid runs used `/data/my_storage/tmp`; the omitted-`TMPDIR`
+AFL launch and nonexistent-`TMPDIR` package-test launch remain explicitly
+quarantined. Honggfuzz's no-fixed-seed limitation and the AFL++ persistent
+calibration-instability warnings remain tool/harness limitations. This cell
+must not be rerun without a changed target, corpus, engine/toolchain, or new
+reachability evidence.
+
+The next untouched Goal-80 queue is `p2p_private_broadcast`, then
+`txdownloadman`, followed by a new property/engine adapter or compiler
+matrix. Preserve the corpus manifest, binary hashes, raw engine output trees,
+replay logs, and the FuzzTest availability result under
+`/data/my_storage/tmp/cycle294-package` for future deduplication.
+
 ## Cycle 175 start: transport serialization engine comparison
 
 ### Selection and fresh gate
