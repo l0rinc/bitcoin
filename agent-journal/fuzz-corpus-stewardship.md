@@ -470,3 +470,30 @@ preserved as campaign produce (would feed a future long-run).
   NOT minimized (fuzzer's raw output; minimize before any
   checkin per #79-c1's method).
 - txorphanage_sim mutation run remains in the pool.
+
+## Cycle 13 (2026-08-02, draw 253, raw=16849002992585107402, n=1): txorphanage_sim mutation campaign — 67,241 runs, corpus 1,123->1,328 units, zero crashes/Assume aborts; DISMISSED
+
+### Campaign
+Seed dir restored after the c7 prune via git checkout (the c8
+rule), then FUZZ=txorphanage_sim -max_total_time=640 -timeout=25
+-artifact_prefix=/tmp/txo_artifacts/ <corpus>:
+- 67,241 runs in 641s; corpus grew 1,123 -> 1,328 units (205
+  new coverage-carrying units retained on disk this time —
+  the artifact_prefix + writable-dir shape from c11's lesson).
+- Zero crashes, zero Assume aborts, zero artifacts: the fork's
+  Assume-instrumented orphanage invariants (txdownloadman_impl
+  :100-111 family) held on every accepted case.
+
+### Verdict
+DISMISSED: the orphanage target is robust under fresh
+mutation; its Assume invariants held throughout. Mutation-
+campaign cells closed: ephemeral_package_eval (c11), txgraph
+(c12), txorphanage_sim (c13) — all clean.
+
+### Exact commands
+- git checkout restore; campaign line above; census above.
+
+### Limitations / queue
+- Smoke-length runs throughout; continuous long-run is
+  qa-assets' infra.
+- The 205 new units are unminimized fuzzer output (c12 note).
