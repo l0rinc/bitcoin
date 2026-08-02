@@ -284,3 +284,32 @@ work triggered. F13/F14 offerability re-confirmed against
 
 ## Rotation note
 Five cycles; watches quiet, duplicate searches negative.
+
+## Cycle 6 (2026-08-02, draw 184, raw=6415546748680638711 (63-bit), idx 11/50 -> #24 STALE (journal COMPLETE 2026-07-30, handoff entry added); redraw raw=3428502195126078629 (63-bit) idx 20/49): upstream watch — 5 commits since 9611a35603, nothing in-scope; tracked PRs static; F13/F14/F16 offerability re-confirmed at 556988790a
+
+### Watch (anchors from c5)
+- git fetch origin master: 9611a35603..556988790a = 5 commits,
+  2 merges: #35592 (http rpcallowip check at accept — RPC layer,
+  out of scope, noted), #35838 (qa gui macOS — out of scope).
+- In-scope paths (validation, txdb, dbwrapper, txmempool,
+  net_processing, consensus, coins, mempool_args): ZERO merges.
+- Tracked PRs (api.github.com): 35744 (coins resize/cursor),
+  35859 (KDF rounds), 35818 (bloom sizing), 35620 (leveldb cache
+  budget) — ALL open, unmerged, unchanged.
+- F13/F14 offerability at 556988790a: origin/master dbwrapper.cpp
+  still has NO ~LevelDBContext (count 0); mempool_args.cpp still
+  has no 'at least 1' bound (count 0). F16 is covered by open
+  #35859 (fork fix mirrors it).
+
+### Verdict
+Watch cycle complete; every cell quiet with evidence. No new
+work triggered, no URGENT severity changes.
+
+### Exact commands
+- git fetch origin master; git log [--merges] range queries;
+  curl api.github.com/repos/bitcoin/bitcoin/pulls/{...};
+  git show origin/master:<path> | grep -c counts above.
+
+### Limitations / queue
+- Point-in-time sweep; 556988790a is the new resume anchor.
+- corecheck noise-floor caveat (c4) still applies to bench reads.
