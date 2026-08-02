@@ -497,3 +497,29 @@ campaign cells closed: ephemeral_package_eval (c11), txgraph
 - Smoke-length runs throughout; continuous long-run is
   qa-assets' infra.
 - The 205 new units are unminimized fuzzer output (c12 note).
+
+## Cycle 14 (2026-08-02, draw 257, raw=12184613341022450052): txgraph generated-corpus stewardship — merge/minimize 4,586->3,468 units, independent coverage cov 12,054 / ft 73,114, zero crashes; corpus candidate for qa-assets upstream
+
+### Follow-through (c12's produce)
+- Merge: -merge=1 kept 3,468 coverage-adding units (11,874
+  coverage edges, 72,561 features attributed).
+- Replay of the merged corpus: cov 12,054 ft 73,114, DONE clean
+  in 48s — the generated corpus independently drives 12k edges /
+  73k features of the fork's txgraph target.
+- /tmp/txgraph_min (14M, 3,468 units) preserved; raw
+  /tmp/txgraph_corpus (19M, 4,586) kept as provenance.
+
+### Verdict
+Finding of fact: the 11-minute scratch campaign produced a
+real 3,468-unit txgraph corpus with measurable independent
+coverage — a candidate for a qa-assets PR (the target has NO
+upstream corpus; recorded as an offerable artifact).
+
+### Exact commands
+- -merge=1 line above (MERGE-OUTER stats above); -runs=0 replay
+  above.
+
+### Limitations / queue
+- Corpus is fuzzer-fresh (not aged by coverage-guided long
+  runs); a qa-assets PR would want a maintainers' long-run
+  pass first.
