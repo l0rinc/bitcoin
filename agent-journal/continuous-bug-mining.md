@@ -1,5 +1,58 @@
 # Continuous Evidence-First Bug Mining
 
+## Cycle 260: reject disallowed RPC clients before HTTP request parsing
+
+- Selected index: `0`
+- Selected slug: `continuous-bug-mining`
+- Selector: `shuf -i 0-98 -n 1`
+- Branch: `uber-cycle-260-continuous-bug-mining-20260802`
+- Start HEAD: `b46b53bb73c49ce71cda1c86e5853ce734c1ebd9`
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Start divergence: `1309 45` (`HEAD...origin/master`)
+- Catalog, goal TSV, prompt, and uber-protocol hashes matched the authoritative values in `uber-goal-state.md`.
+- Gate: tracked worktree and index were clean; `git diff --check` passed; existing untracked artifacts were preserved. The protected long-running test processes were left untouched. Scratch builds, datadirs, and temp directories were under `/data/my_storage/tmp` because the root filesystem is full.
+
+### Scope and prior evidence
+
+The only prior entry in this journal was Cycle 142, whose directory-commit queue is already closed by `50c503d0dcb7086d940fb2638ea19251c561adfc`. A fresh history scan found no current journal entry closing the early RPC allowlist cell. The prior stale-PR ledger explicitly dismissed #35772 as a partial/duplicate direction but retained #35592, and the new `origin/master` history contains its follow-up commit `d1ed2a6e25d7e64943fbff5e3a7053c55c0617e4`, `http: check rpcallowip immediately after accepting connection`. That commit is not an ancestor of the current branch.
+
+The current tree still had a file-scope `rpc_allow_subnets` and a `ClientAllowed()` check only in `MaybeDispatchRequestToWorker()`. `SocketHandlerConnected()` reads network bytes into the client receive buffer, `ReadRequest()` parses control data and headers and calls `LoadBody()`, and only after a complete request is available does the worker path issue `403 Forbidden`. Therefore a client outside `-rpcallowip` can be connected, send a slow or large body, and consume parsing, buffering, and request-body allocation work before authorization rejects it. The allowlist also could not be tested at accept time because it was not owned by `HTTPServer`.
+
+### Hypothesis and trust boundary
+
+An unauthorised network peer should be rejected immediately after the operating system supplies its source address. Deferring the address check until after HTTP parsing violates the RPC exposure/resource boundary: the peer is not allowed to consume HTTP request parsing and body resources, and it should not receive a protocol-level `403` response that proves the server accepted the connection. The trust boundary is the remote socket address and the HTTP request bytes; this is a remotely reachable resource-exhaustion and exposure-hardening issue, not a consensus change.
+
+### Independent reproduction
+
+The pre-fix functional baseline used the current old binary `/data/my_storage/tmp/cycle243-build/bin/bitcoind` and the original `rpc_bind.py`. The non-loopback test completed successfully, including the disallowed case, because the old server returned `403 Forbidden` after parsing the request.
+
+The stronger pre-fix oracle was run against a disposable binary built from the exact start commit `b46b53bb73` in `/data/my_storage/tmp/cycle260-pre-fix-build`. The current test script was changed to accept connection-level network errors for the disallowed case. Command:
+
+`python3 test/functional/rpc_bind.py --configfile=/data/my_storage/tmp/cycle260-pre-fix-build/test/config.ini --tmpdir=/data/my_storage/tmp/cycle260-rpc-bind-prefix --cachedir=/data/my_storage/tmp/cycle260-cache-prefix --nonloopback --loglevel=INFO`
+
+It failed at the negative assertion with `test_framework.util.JSONRPCException: non-JSON HTTP response with '403 Forbidden'` and left the old behavior observable. The pre-fix binary was built in a separate worktree from the start HEAD; no current source or test changes were used to build it.
+
+### Fix and verification
+
+The minimal fix moves the allowlist and its parsing into `HTTPServer`, initializes it before socket threads, checks `ClientAllowed(addr)` in `AcceptConnection()`, destroys and returns the accepted socket for a forbidden address, and removes the later worker-level `403` check. Direct socket fixtures initialize the list and force the mocked peer address `5.5.5.5` into `-rpcallowip`. The cycle-259 pipelined fixture is also a direct `HTTPServer` user, so it receives the same explicit initialization. The functional test centralizes acceptable connection-error exceptions and asserts that allowed clients succeed while a disallowed client does not complete an RPC exchange.
+
+- Post-fix build: `TMPDIR=/data/my_storage/tmp/cycle260-http-build-tmp CCACHE_DIR=/data/my_storage/tmp/cycle260-http-ccache cmake --build /data/my_storage/tmp/cycle243-build --target test_bitcoin bitcoind -j2`; passed.
+- Python validation: `python3 -m py_compile test/functional/rpc_bind.py test/functional/interface_http.py test/functional/test_framework/netutil.py`; passed.
+- Focused socket tests, each in an independent scratch temp directory: `http_server_socket_tests` passed 20 assertions; `http_server_pipelined_request_backpressure` passed 6 assertions; `http_socket_error_tests` passed 5 assertions.
+- Full HTTP unit suite: `TMPDIR=/data/my_storage/tmp/cycle260-http-suite-tmp /data/my_storage/tmp/cycle243-build/bin/test_bitcoin --run_test=httpserver_tests --log_level=message --report_level=short --color_output=false`; passed all 9 cases and 355 assertions.
+- Post-fix functional command: `python3 test/functional/rpc_bind.py --configfile=/data/my_storage/tmp/cycle243-build/test/config.ini --tmpdir=/data/my_storage/tmp/cycle260-rpc-bind-post2 --cachedir=/data/my_storage/tmp/cycle260-cache-post2 --nonloopback --loglevel=INFO`; passed. The allowed request succeeded and the disallowed request raised an accepted network error, so the new negative oracle returned false as intended.
+- Adjacent functional command: `python3 test/functional/interface_http.py --configfile=/data/my_storage/tmp/cycle243-build/test/config.ini --tmpdir=/data/my_storage/tmp/cycle260-interface-http-post --cachedir=/data/my_storage/tmp/cycle260-cache-interface --loglevel=INFO`; passed all HTTP persistence, malformed-input, authentication, size-limit, and timeout checks.
+- Review evidence: upstream `d1ed2a6e25` independently records the same accept-time contract and changes the expected `rpc_bind.py` behavior from `403` to a network error. The current implementation was compared against that patch and against the direct mock-socket tests. `git diff --check` passed.
+
+The first post-fix full HTTP run exposed a missing allowlist initialization in the newer cycle-259 pipelined test and aborted before cleanup; that test setup was corrected, and the focused and full HTTP suites were rerun successfully. It was a test-harness omission, not a product failure. No timeout, input narrowing, catch that hides a product failure, or broader suppression was used.
+
+### Change and verdict
+
+The source/test change spans `src/httpserver.cpp`, `src/httpserver.h`, `src/test/httpserver_tests.cpp`, `src/test/util/setup_common.cpp`, and the three functional-test Python modules. It does not alter allowed-client behavior, RPC authentication, protocol parsing, consensus, or wallet state. It closes the pre-parse authorization/resource boundary and makes the server's allowlist state explicit per `HTTPServer` instance.
+
+**Confirmed and fixed.** The source/test/journal commit is recorded after this journal update as `http: reject disallowed RPC clients before parsing`, authored as `Lőrinc <pap.lorinc@gmail.com>`. Next cycles must perform a fresh gate and exact random draw, exclude this accept-time allowlist cell and the old #35772 duplicate, and select a new current evidence cell from recent history, coverage, tooling, or an unclosed risk-map boundary. The repository is not considered exhausted.
+
 ## Cycle 142: chainstate metadata after block-file flush failure
 
 - Selected index: `0`
