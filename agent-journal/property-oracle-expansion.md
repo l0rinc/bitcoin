@@ -312,3 +312,41 @@ compression family is fully analyzed.
 
 ## Rotation note
 Four cycles; the family is closed with the corner proven vacuous.
+
+## Cycle 5 (2026-08-02, draw 211, raw=15898866038248710399, masked 6675494001393934591, idx 11/20): FeeFrac ByRatio ordering-laws oracle — 55,201 checks (trichotomy, antisymmetry, operator-agreement, reference match, transitivity), ZERO mismatches; DISMISSED
+
+### Cell
+The amount/VarInt family is closed (c1-c4); fresh algebraic
+surface: the ByRatio<FeeFrac> ordering (feefrac.h:242-289) —
+cross-product comparison via T::Mul (__int128/fallback), never
+law-verified.
+
+### Oracle (/tmp/btc48c5/order_oracle.cpp, preserved)
+- Corpus: 149 fractions (18 fee edges x 8 sizes incl.
+  INT32_MIN/MAX, INT64_MAX/4, 21e14, 1<<40, sign edges) +
+  equal-ratio pairs (1/2,2/4,3/6,-1/2,-2/4).
+- Laws checked:
+  1. trichotomy + antisymmetry on all 149² pairs (a<=>b ==
+     -(b<=>a));
+  2. agreement with an INDEPENDENT exact reference
+     (boost::multiprecision::cpp_int cross products) on all pairs;
+  3. specialized operators <,>,<=,>= all agree with <=> on all
+     pairs (the documented-efficiency set at :269-289);
+  4. transitivity on sampled triples (stride 7/5/3).
+- TALLY pairs+triples=55,201 mismatches=0.
+
+### Verdict
+DISMISSED (laws hold): the ordering is a proper total preorder
+with exact cross-product semantics at every adversarial edge,
+on both the int128 path and (by the #100-c4 backend-equality
+result) the fallback. No defect.
+
+### Exact commands
+- g++ -O2 line above; ./order_oracle (TALLY above).
+
+### Limitations / queue
+- ByRatioNegSize (:314-326) same shape, not separately swept
+  (same Mul core; noted).
+- Corpus is edge-dense, not exhaustive over the 64-bit fee
+  domain (infeasible; the reference agreement at edges is the
+  evidence form).
