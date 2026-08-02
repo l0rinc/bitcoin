@@ -647,3 +647,49 @@ adoption). Pruned the archived load_wallet ✅ to keep cap 10.
 - The churn test on the branch was read, not executed (author's
   CI is the natural runner; adoption cycle can re-run it).
 - knots v29.4 rc1 not diffed (release process, separate watch).
+
+## Cycle 13 (2026-08-02, draw 236, raw=17935444686604899945, masked 8712072649750124137, idx 1/2): radar — NEW author branch package-weight-accumulator assessed: narrowing real, wrap UNREACHABLE under the count cap; hygiene/diagnosis-ordering fix, no acceptance path; no URGENT change
+
+### Fetch
+- git fetch l0rinc --prune: ONE new branch (863 total):
+  l0rinc/l0rinc/package-weight-accumulator (2 commits,
+  2026-08-01). knots: unchanged (v29.4.knots20260508rc1).
+
+### Assessment
+Claim: std::accumulate(..., 0, ...) narrows the accumulator to
+int; a wrapping package skips 'package-too-large' and reaches
+later checks.
+- HEAD verification: the literal-0 accumulate is present at
+  policy/packages.cpp:87 (total_weight int64_t, init int).
+- REACHABILITY bound: count is capped FIRST
+  (MAX_PACKAGE_COUNT=25, packages.h:19) before the accumulate,
+  and consensus weight per tx caps at 4M WU
+  (MAX_STANDARD_TX_WEIGHT; packages.h:25 static_assert chains
+  MAX_PACKAGE_WEIGHT=404,000 to it). Max possible sum =
+  25 x 4M WU = 100M WU — 21x SHORT of the 2.147G WU needed to
+  wrap int32. The wrap is UNREACHABLE under policy bounds.
+- Even at the unreachable extreme: skipping the too-large
+  rejection only reorders diagnosis — per-tx PreChecks weight
+  checks still reject oversized members downstream. No invalid
+  acceptance path exists (the branch's own test delta is the
+  reject REASON: 'package-contains-duplicates' ->
+  'package-too-large').
+- Upstream context: #35473 proposed the same fix, closed over
+  its regression test; the author pairs the one-liner with a
+  focused sanitization case (de08e28551) — correct hygiene.
+
+### Verdict
+RADAR NOTE: mechanism technically real (accumulator narrowing),
+impact unreachable (count-capped sum can't wrap) and
+diagnosis-ordering at worst. Branch is sound hygiene; NOT a
+security cell — no URGENT entry, no adoption urgency. Watch
+continues.
+
+### Exact commands
+- git fetch l0rinc --prune (863); git show 2481dc2aec;
+  sed packages.cpp:80-92, packages.h:19-29.
+
+### Limitations / queue
+- The arithmetic bound assumes the count check precedes the
+  accumulate (verified in the same function, :84-87).
+- knots v29.4 rc1 still not diffed (release-process watch).
