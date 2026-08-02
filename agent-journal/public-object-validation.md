@@ -405,3 +405,70 @@ No additional wrapper or FFI defect was found in the reviewed public-key paths. 
 ### Handoff
 
 Commit the source/test and journal update as one independent finding. Keep this exact parity case closed unless a new caller, serializer, wrapper, backend, or recurrence appears. The broader goal remains eligible for distinct malformed-input, API-wrapper, or release-version cells; the next uber cycle must re-check the gate and draw from the full catalog.
+
+## Cycle 303: direct xpub rejection and intentional P2PK representation
+
+### Selection and scope
+
+The exact post-Cycle-302 draw was `shuf -i 0-102 -n 1` -> goal `15`,
+`public-object-validation`, on branch
+`uber-cycle-303-public-object-validation-20260802`. The cycle-start HEAD was
+`9f9184f137b66e20962b4b6042dc548bdd47c597`, with `origin/master` at
+`556988790a7f961693a8fd93f73725baea66476a`. The previous PSBT serialized-key
+identity finding, Taproot x-only metadata validation, compact-header, and
+descriptor-inference cells were excluded from this cycle.
+
+The first hypothesis was that direct BIP32 extended-public-key decoding might
+accept a structurally valid Base58Check xpub whose compressed public key is
+off-curve. The second was that syntactic P2PK extraction might normalize or
+lose such a public key when converting between script and destination objects.
+
+### Evidence and verdicts
+
+`CExtPubKey::Decode()` stores the serialized fields, then clears the public key
+unless `pubkey.IsFullyValid()` succeeds. `DecodeExtPubKey()` and the PSBT global
+xpub path both use this decoder and independently require full validity. A
+temporary `bip32_tests` probe changed the compressed-key prefix and zeroed its
+coordinate in a valid test vector; the rebuilt focused test passed, proving the
+malformed xpub is rejected. The probe was removed before cycle close.
+
+`Solver` and `ExtractDestination()` intentionally use syntactic `CPubKey`
+validity for a P2PK script. A temporary `script_standard_tests` probe built a
+33-byte compressed off-curve key followed by `OP_CHECKSIG`. It passed all five
+checks: P2PK classification succeeds, `IsValid()` is true, `IsFullyValid()` is
+false, `GetScriptForDestination()` reproduces the original script, and
+`EncodeDestination()` is empty because P2PK destinations are not addresses.
+The probe was removed before cycle close. This is consensus-preserving raw
+script representation, not a parser/serializer mismatch; no source fix is
+warranted.
+
+The xpub probe initially failed only because its scratch `TMPDIR` did not
+exist. After creating `/data/my_storage/tmp/cycle303-p2pk-probe`, the focused
+test passed with no errors. The P2PK probe used the same isolated directory and
+also passed with no errors. The modified `test_bitcoin` target rebuilt cleanly
+in `/data/my_storage/tmp/cycle246-wallet`; `git diff --check` passed after both
+temporary probes were removed. Evidence is limited to the Linux RelWithDebInfo
+build and source/history inspection; Windows, other architectures, and a
+sanitized run were not needed for this dismissed representation hypothesis.
+
+### Learned adjacent risk
+
+The constructor `XOnlyPubKey(const CPubKey&)` in `src/pubkey.h` takes
+`std::span{pubkey}.subspan(1, 32)` without an error channel. A default or
+short `CPubKey` therefore violates the span precondition, while a syntactically
+valid off-curve key can produce an x-only object that is not fully valid. Most
+production callers are preceded by full key validation, but descriptor,
+signing, provider, benchmark, test, and fuzz call sites need an explicit map.
+The adjacent wallet path also deserves separate review: `LoadKey()` can use
+`fSkipCheck=true` after validating a stored `Hash(pubkey, privkey)`, then
+`FillableSigningProvider::AddKeyPubKey()` stores the supplied identity without
+re-deriving it. Existing history makes this optimization intentional, so this
+cycle does not claim a wallet defect.
+
+### Handoff
+
+Add Goal 103, `xonly-cpubkey-preconditions`, to audit every
+`XOnlyPubKey(CPubKey)` caller for empty, short, syntactically valid, and
+off-curve inputs. Preserve raw script consensus semantics; change code only for
+a proven unsafe caller or add a precise contract test. Keep the wallet
+keypair-association observation as a lower-priority adjacent queue item.
