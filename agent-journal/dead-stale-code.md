@@ -163,3 +163,33 @@ No test exercises removed behavior against the CURRENT binary. DISMISSED.
 
 ## Rotation note
 Three bounded cycles complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 4 (2026-08-02, draw 228, raw=4931726890564104754 (63-bit), idx 1/3): reverse-dead-code sample — 9 helper candidates all have production callers; no coverage tool needed for the sample verdict; DISMISSED
+
+### Sample (reverse-reachability, c3's parked direction)
+9 header-declared helpers probed for production-only vs
+test/bench/fuzz-only caller sets (grep -rl, split by path class):
+- TrimString (prod 10), RemoveSuffixView (3, incl. dbwrapper
+  Logv), ReplaceAll (6), ToLower (9), SplitString (9), HexStr
+  (31), HexDigit (3, hex_base per c3), RenameOver (5): ALL have
+  production callers.
+- ToUpper (prod 2): production-reachable via
+  common/messages.cpp:94 (mode_string normalization) — the
+  thinnest sample, still live.
+- FormatParagraphs: my bad candidate name — zero hits anywhere
+  (does not exist in this tree; recorded as a candidate-name
+  error, not a finding).
+
+### Verdict
+DISMISSED: no test-only production helper in the sample; the
+reverse-dead-code direction shows no dead weight at the utility
+layer. The full census still wants a coverage build (c3 note);
+the sample method is recorded as the cheap first pass.
+
+### Exact commands
+- per-symbol grep -rl loop above; sed strencodings.cpp:391-402,
+  common/messages.cpp:94.
+
+### Limitations / queue
+- 9-symbol sample, not exhaustive; the coverage-build census
+  remains the definitive cell (parked on tooling).
