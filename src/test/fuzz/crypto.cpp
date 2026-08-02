@@ -113,11 +113,6 @@ FUZZ_TARGET(crypto)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     std::vector<uint8_t> data = ConsumeRandomLengthByteVector(fuzzed_data_provider);
-    if (data.empty()) {
-        auto new_size = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 4096);
-        auto x = fuzzed_data_provider.ConsumeIntegral<uint8_t>();
-        data.resize(new_size, x);
-    }
     size_t split_pos{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, data.size())};
     CheckHashWrapperChunking(data, split_pos);
     CheckCryptoHasherChunking(data, split_pos);
@@ -139,11 +134,6 @@ FUZZ_TARGET(crypto)
             [&] {
                 if (fuzzed_data_provider.ConsumeBool()) {
                     data = ConsumeRandomLengthByteVector(fuzzed_data_provider);
-                    if (data.empty()) {
-                        auto new_size = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 4096);
-                        auto x = fuzzed_data_provider.ConsumeIntegral<uint8_t>();
-                        data.resize(new_size, x);
-                    }
                     split_pos = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, data.size());
                     CheckHashWrapperChunking(data, split_pos);
                     CheckCryptoHasherChunking(data, split_pos);
