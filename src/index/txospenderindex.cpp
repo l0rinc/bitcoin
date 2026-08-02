@@ -74,7 +74,7 @@ bool TxoSpenderIndex::CustomInit(const std::optional<interfaces::BlockRef>& bloc
     // A missing key is valid only for a new index. A failed decode must not be
     // mistaken for a missing key, because replacing it would orphan all
     // existing entries that were keyed with the original secret.
-    if (block || m_db->Exists("siphash_key")) {
+    if (block || !m_db->IsEmpty()) {
         LogError("Cannot read current %s state; index may be corrupted", GetName());
         return false;
     }

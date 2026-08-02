@@ -4,6 +4,7 @@
 
 #include <index/txospenderindex.h>
 #include <dbwrapper.h>
+#include <index/disktxpos.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
@@ -14,6 +15,21 @@
 #include <atomic>
 #include <future>
 #include <thread>
+
+namespace {
+struct PersistedSpenderKey {
+    uint64_t hash{0};
+    CDiskTxPos pos{};
+
+    SERIALIZE_METHODS(PersistedSpenderKey, obj)
+    {
+        uint8_t prefix{'s'};
+        READWRITE(prefix);
+        READWRITE(obj.hash);
+        READWRITE(obj.pos);
+    }
+};
+} // namespace
 
 BOOST_AUTO_TEST_SUITE(txospenderindex_tests)
 
@@ -226,6 +242,24 @@ BOOST_FIXTURE_TEST_CASE(txospenderindex_rejects_corrupt_siphash_key, TestChain10
     {
         CDBWrapper db({.path = db_path, .cache_bytes = 1 << 20, .obfuscate = false, .bloom_filter = false});
         db.Write("siphash_key", std::array<uint8_t, 1>{0});
+    }
+
+    TxoSpenderIndex index{interfaces::MakeChain(m_node), 1 << 20, false, false};
+    BOOST_CHECK(!index.Init());
+    index.Stop();
+}
+
+BOOST_FIXTURE_TEST_CASE(txospenderindex_rejects_missing_siphash_key_with_persisted_entries, TestChain100Setup)
+{
+    const fs::path db_path{m_args.GetDataDirNet() / "indexes" / "txospenderindex" / "db"};
+
+    {
+        TxoSpenderIndex index{interfaces::MakeChain(m_node), 1 << 20, false, true};
+    }
+
+    {
+        CDBWrapper db({.path = db_path, .cache_bytes = 1 << 20, .obfuscate = false, .bloom_filter = false});
+        db.Write(PersistedSpenderKey{}, std::array<uint8_t, 1>{0});
     }
 
     TxoSpenderIndex index{interfaces::MakeChain(m_node), 1 << 20, false, false};
