@@ -265,6 +265,30 @@ void TestComputeFunctions() {
     }
 }
 
+void TestDecodeLargeMaxElements() {
+    constexpr uint32_t bits{8};
+    constexpr size_t capacity{1};
+    const size_t max_elements[] = {
+        static_cast<size_t>(std::numeric_limits<int>::max()),
+        static_cast<size_t>(std::numeric_limits<int>::max()) + 1,
+        std::numeric_limits<size_t>::max(),
+    };
+
+    for (uint32_t implementation = 0; implementation <= Minisketch::MaxImplementation(); ++implementation) {
+        if (!Minisketch::ImplementationSupported(bits, implementation)) continue;
+        minisketch* sketch{minisketch_create(bits, implementation, capacity)};
+        CHECK(sketch);
+        minisketch_set_seed(sketch, UINT64_MAX);
+        minisketch_add_uint64(sketch, 7);
+        for (size_t max_element : max_elements) {
+            uint64_t output{0};
+            CHECK(minisketch_decode(sketch, max_element, &output) == 1);
+            CHECK(output == 7);
+        }
+        minisketch_destroy(sketch);
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -293,6 +317,7 @@ int main(int argc, char** argv) {
     printf("Running libminisketch tests%s with complexity=%llu\n", mode, (unsigned long long)test_complexity);
 
     TestComputeFunctions();
+    TestDecodeLargeMaxElements();
 
     for (unsigned j = 2; j <= 64; ++j) {
         TestRandomized(j, 8, (test_complexity << 10) / j);

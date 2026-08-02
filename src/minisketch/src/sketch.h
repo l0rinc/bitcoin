@@ -36,7 +36,7 @@ public:
     virtual size_t Merge(const Sketch* other_sketch) = 0;
     virtual void SetSeed(uint64_t seed) = 0;
 
-    virtual int Decode(int max_count, uint64_t* roots) const = 0;
+    virtual int Decode(size_t max_count, uint64_t* roots) const = 0;
 };
 
 #endif

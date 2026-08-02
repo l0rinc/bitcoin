@@ -481,3 +481,118 @@ All 30 optimized AFL bitset queue files and all 20 optimized AFL cluster queue f
 **Verdict:** dismissed as a current bitset/backend-equivalence defect. The independent `std::bitset` model, production cluster-linearization comparison, current unit control, optimized AFL++ exploration, and sanitizer oracle replay produced no output, status, accounting, ordering, chunking, crash, hang, or sanitizer divergence. No production repair or permanent test change is justified.
 
 The evidence is x86_64-only and does not establish ARM, 32-bit, big-endian, LTO/PGO, or timing equivalence. The unit control used a pre-existing equivalent build, while the fuzz targets exercised current source with only journal/state commits since compilation. The AFL forkserver failure was not hidden and was independently reproduced as a mode-specific resource/toolchain issue. The libFuzzer corpus directory growth was accounted for rather than misreported as a fresh corpus result. Next action is to close the cycle and draw a fresh catalog goal; reopen this backend cell only for a source change or new architecture, compiler, sanitizer, or optimization evidence.
+
+## Cycle 305: Minisketch decode output-bound differential
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-104 -n 1` -> `69` (`backend-differential`).
+- Branch: `uber-cycle-305-backend-differential-20260802`.
+- Cycle-start HEAD: `54afa66613a649a55974ec83c67efd12cb02052`.
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base equals
+  `origin/master`; start divergence was `0 1407`.
+- Entry state-file SHA-256:
+  `117054ed9a8028c76040e401605ddbd1fe7f774e80e2d2a4ab91d506ce5dc4ec`.
+- The tracked gate was clean and `git diff --check` passed. Existing untracked
+  probes and artifacts were preserved. All seven protected test processes
+  remained alive.
+
+The earlier backend cells were excluded: CRC32C SSE4.2, Core SHA256 dispatch,
+libsecp256k1 portable/assembly under Release, sanitizer, ThinLTO, and full
+module matrices, Minisketch field implementations, and bitset/cluster
+representation comparisons. The current source inspection instead followed a
+new public API boundary shared by all field backends.
+
+### Scope and hypothesis
+
+`minisketch_decode()` accepts `size_t max_elements`, but the common `Sketch`
+interface previously declared `Decode(int max_count, ...)` and narrowed the
+public argument with `static_cast<int>`. `SketchImpl::Decode()` then tested
+`(int)poly.size() > 1 + max_count`. The falsifiable hypothesis was that a
+caller-provided output capacity above `INT_MAX` would either produce a wrong
+decode result or trigger signed arithmetic undefined behavior, despite the
+sketch containing only a small number of elements. The trust boundary is the
+public C API and C++ wrapper: a sufficiently large caller-owned output array
+must not make a valid small sketch fail merely because the bound is large.
+
+The independent probe was preserved at
+`agent-journal/cycle305_minisketch_api_probe.cpp`. It creates an 8-bit,
+capacity-one sketch, fixes the basis, adds element 7, and calls the C API with
+max-elements values 0, 1, `INT_MAX`, `INT_MAX + 1`, and `SIZE_MAX`. It also
+checks implementation support/create consistency for implementation IDs 0,
+1, 2, 3, and `UINT32_MAX`.
+
+### Before-fix differential evidence
+
+The probe was compiled with Clang 19 against the existing Cycle 301 generic and
+CLMUL-enabled libraries. Both backends agreed on the invalid large-bound
+behavior, which was itself wrong:
+
+```text
+max=0
+decode=0:-1:0
+decode=1:1:7
+decode=2147483647:-1:0
+decode=2147483648:-1:0
+decode=18446744073709551615:-1:0
+impl=0:1:1
+impl=1:0:0
+impl=2:0:0
+impl=3:0:0
+impl=4294967295:0:0
+```
+
+The optimized library reported `max=2`, implementation 1 supported, and the
+same decode failures. Recompiling the probe against the existing ASan+UBSan
+generic and CLMUL libraries produced the first independent diagnostic in both
+trees:
+
+```text
+src/minisketch/src/fields/../sketch_impl.h:401:34: runtime error: signed integer overflow: 1 + 2147483647 cannot be represented in type 'int'
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior .../sketch_impl.h:401:34
+```
+
+The stack reached `SketchImpl::Decode`, `minisketch_decode`, and the external
+probe. The invalid implementation IDs correctly returned null and were not
+the finding.
+
+### Fix and verification
+
+The internal decode bound now remains `size_t` through `Sketch` and
+`SketchImpl`, and `minisketch_decode()` passes it without narrowing. The
+polynomial degree check uses `poly.size() - 1 > max_count`, avoiding both the
+signed addition overflow and a `size_t` max-value addition overflow. A
+permanent Minisketch test exercises the C API for `INT_MAX`, `INT_MAX + 1`, and
+`SIZE_MAX` across every compiled implementation.
+
+Normal Clang 19 generic and CLMUL-enabled CMake trees rebuilt their no-VERIFY
+and VERIFY binaries. The external probe then returned, in both trees:
+
+```text
+decode=0:-1:0
+decode=1:1:7
+decode=2147483647:1:7
+decode=2147483648:1:7
+decode=18446744073709551615:1:7
+```
+
+Implementation support/create results remained consistent. The normal
+complexity-2 and sanitized complexity-2 no-VERIFY/VERIFY suites passed in both
+backend trees. The broader sanitized complexity-4 no-VERIFY/VERIFY suites also
+passed in both trees with `All tests successful.`; the repaired external probes
+exited 0 with no ASan, UBSan, runtime-error, or sanitizer-summary output.
+
+`git diff --check` passed. The hypothesis is **confirmed and fixed**. The
+finding changes only the shared decode-bound type, its overflow-safe degree
+comparison, and the focused library test. Execution was x86_64 little-endian
+with Clang 19; the generic and CLMUL matrices do not establish ARM, 32-bit,
+big-endian, or alternate compiler behavior.
+
+### Learned queue
+
+The next Minisketch boundary should inspect other public `size_t` count and
+byte-size paths before another field implementation matrix: serialized-size
+multiplication, capacity/max-elements arithmetic, and the `int` return count
+from decode under very large but allocation-feasible capacities. Keep the
+repaired decode-bound cell out of future scans unless a new architecture or
+API evidence appears.

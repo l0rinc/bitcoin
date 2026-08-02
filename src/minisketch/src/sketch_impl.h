@@ -392,13 +392,13 @@ public:
         }
     }
 
-    int Decode(int max_count, uint64_t* out) const override
+    int Decode(size_t max_count, uint64_t* out) const override
     {
         auto all_syndromes = ReconstructAllSyndromes(m_syndromes, m_field);
         auto poly = BerlekampMassey(all_syndromes, max_count, m_field);
         if (poly.size() == 0) return -1;
         if (poly.size() == 1) return 0;
-        if ((int)poly.size() > 1 + max_count) return -1;
+        if (poly.size() - 1 > max_count) return -1;
         std::reverse(poly.begin(), poly.end());
         auto roots = FindRoots(poly, m_basis, m_field);
         if (roots.size() == 0) return -1;
