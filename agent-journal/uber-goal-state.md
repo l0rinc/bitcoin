@@ -317,6 +317,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 42 | ci-review-bot-followup | CYCLE-6 | 2026-08-02 | watch @556988790a: 5 commits (2 out-of-scope merges), PRs static, F13/F14/F16 offerability re-confirmed |
 | 42 | ci-review-bot-followup | CYCLE-7 | 2026-08-02 | watch: static; F13/F14/F17 offerable, accumulate hygiene offer noted; PRs open |
 | 42 | ci-review-bot-followup | CYCLE-8 | 2026-08-02 | watch: static; quiet |
+| 42 | ci-review-bot-followup | CYCLE-9 | 2026-08-02 | variant: 26 author PRs open; radar branches pre-PR; static |
 | 10 | fuzz-target-gaps | CYCLE-3 | 2026-07-29 | load_wallet widened (crypted/ACTIVE*SPK/BESTBLOCK); LoadActiveScriptPubKeyMan assert on corrupt DB documented (upstream-matching) |
 | 80 | fuzz-engine-differential | CYCLE-6 | 2026-07-29 | MuSig2 PSBT seeding: differential clean (A=0, E=100); format-from-source worked first try |
 | 95 | database-semantics-differential | CYCLE-5 | 2026-07-31 | write-flush-windowed kill: _Exit inside all 4 batch commits (idx/coins/shutdown); identical tip recovery, 0 corruption; DISMISSED |
@@ -1021,6 +1022,10 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 248 (2-watch pool): raw=13484172206762621838,
+   masked 4260800169907846030 -> idx 0 -> #42 c9 (variant
+   watch: 26 author PRs; radar branches pre-PR).
+   Pool: #65 radar (next).
    RE-RANK draw 247 (3-watch pool): raw=3324739333356707657
    (63-bit) -> idx 2 -> #60 c12 (watch: zero delta; quiet).
    Pool: #42, #65 (next).

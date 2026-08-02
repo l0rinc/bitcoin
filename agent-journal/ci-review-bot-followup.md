@@ -357,3 +357,30 @@ Quiet cycle; nothing moved.
 
 ### Limitations / queue
 - Same as c7.
+
+## Cycle 9 (2026-08-02, draw 248, raw=13484172206762621838, masked 4260800169907846030, idx 0/2): variant watch — author has 26 open upstream PRs; the radar branches (retained-capacity, package-weight, rpc-dedup) have NO PRs yet; tracked set static
+
+### Variant sweep (beyond the static master check)
+- origin/master: still 556988790a (0 new).
+- Author's open upstream PRs: 26 (search author:l0rinc
+  is:open). The tracked set (35744, 35818, 35620, 35654, 35859)
+  is present and open.
+- The three radar-assessed branches (txgraph-retained-entry-
+  usage, package-weight-accumulator, rpc-deduplicate-scan-
+  objects) have NO upstream PRs yet — the 🟡 (L3) rides the
+  author's branch until PRed; the adoption watch stays on the
+  branch, not the PR queue.
+- Oldest open: 31868 (IBD block-serialization, 2025-02);
+  newest: 35839 (p2p empty-headers reselection, 2026-07-29).
+
+### Verdict
+Watch complete: the upstream queue is large but static on our
+tracked cells; the radar branches remain pre-PR.
+
+### Exact commands
+- git fetch/log; api.github.com search author:l0rinc (26
+  listed above).
+
+### Limitations / queue
+- PR-body alignment of the 26 against our journals not swept
+  (only the tracked 5 + radar branches checked).
