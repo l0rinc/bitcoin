@@ -160,6 +160,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 64 | finding-dedup-recurrence | CYCLE-4 | 2026-08-02 | index updated: F17 null-destroy, F18 qa-assets pin (F9-sibling), L3 txgraph retention open item |
 | 104 | analogical-vulnerability-translation | CYCLE-3 (queue-empty) | 2026-07-31 | INTERPRETER-CONFUSION: descriptor/miniscript limits agree, all fail closed (valid nest cap 200 via ops 201; parse cap 3600; tr braces 128); DISMISSED |
 | 104 | analogical-vulnerability-translation | CYCLE-4 (queue-empty) | 2026-08-02 | Coldcard RNG-fallback/32-bit-reseed shape translated: abort-on-failure + 256-bit seeds throughout; NEGATIVE |
+| 104 | analogical-vulnerability-translation | CYCLE-5 | 2026-08-03 | strong-random-contracts adopted: #104 contracts pinned behaviorally+statically |
 | 90 | historical-knowledge-recipes | CYCLE-2 | 2026-07-29 | R15-R22 added (sancov inlining, reindex gating, MiniWallet API, io sampling, mutant-first, pool mechanics, dict fuzzing, flag persistence) |
 | 90 | historical-knowledge-recipes | CYCLE-3 | 2026-08-02 | R23 lineage sweep: 28 pre-rotation journals restored (2a147cfb08); REPAIR COMPLETE |
 | 71 | deterministic-simulation | CYCLE-2 | 2026-07-29 | crash-resume durability invariant delivered (6c6e7d9f87), 3k scans clean |
@@ -1067,6 +1068,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 284 (radar hit): strong-random-contracts ADOPTED
+   (#104 RNG contracts pinned; tidy check CI-side).
    Cycle 283 (suspicion-mined): PR 35260 + 32189 closure;
    26-PR sweep COMPLETE (6 adopted, 2 covered-ahead, 17
    assess-only, 5 standing-watch).
