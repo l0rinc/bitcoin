@@ -313,3 +313,29 @@ work triggered, no URGENT severity changes.
 ### Limitations / queue
 - Point-in-time sweep; 556988790a is the new resume anchor.
 - corecheck noise-floor caveat (c4) still applies to bench reads.
+
+## Cycle 7 (2026-08-02, draw 237, raw=4535641261288490616, n=1): upstream watch — master static at 556988790a; F13/F14/F17 offerability re-confirmed; accumulate-narrowing also present upstream (author's hygiene branch would be an offer); PRs static
+
+### Watch (anchors c6)
+- origin/master: 556988790a, 0 new commits since c6.
+- Offerability at the current head:
+  F14 dbwrapper dtor: still absent (count 0).
+  F13 limitclustercount bound: still absent (count 0).
+  F17 null-destroy: still unguarded (:1126-1129) — newly
+  offerable this cycle (#16 c4 fix in-lineage).
+- c13's accumulate narrowing: upstream packages.cpp:87 has the
+  same literal-0 accumulate — the author's package-weight-
+  accumulator branch is a valid upstream offer (hygiene class).
+- Tracked PRs 35744/35859/35818/35620: all open, unmerged.
+
+### Verdict
+Watch complete; the offerable set grew by F17 (and the hygiene
+accumulate note); nothing else moved.
+
+### Exact commands
+- git fetch/log above; git show origin/master greps above;
+  api.github.com PR states above.
+
+### Limitations / queue
+- CI-failure content for 35859/35818 (c10 flags) not pulled
+  (upstream-side; next watch if they advance).
