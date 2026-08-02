@@ -254,3 +254,24 @@ No local Bitcoin Core source or permanent test change is justified. The independ
 The scratch regtest node at `/data/my_storage/tmp/cycle155-rpc.pTS5Dd` was stopped after the probes. The exact scratch source snapshots remain outside the workspace for recurrence checks. Future revisits should require a new boundary, a newly observed alternative implementation, or executable Rust/Go differential tooling; they should not repeat the canonical CompactSize, supported descriptor, or current ADDRv2 cells.
 
 Next queue: fresh selector gate, then the highest-risk unchecked protocol/crypto/database/wrapper cell from the selected goal's accumulated risk map. Keep this journal-only cycle separate from the next cycle's branch and commits.
+
+## Cycle 307: BIP324 short/long message compatibility
+
+- Exact selector: `shuf -i 0-106 -n 1` -> `55` (`alternative-implementation`), with no reroll. Branch: `uber-cycle-307-alternative-implementation-20260802`. The selection entry was recorded before investigation at base `bf8b74bacfde5bb19be05bb960acbedf68b54afa`.
+- The prior-goal ledger excluded the already closed Core V2 DEL boundary, V1 transport roundtrip, BIP324 XDH vector refresh, raw transaction, PSBT, descriptor, ADDRv2, and complex Miniscript cells. This cycle therefore targeted BIP324 application-layer encoding parity.
+- The authoritative BIP324 v1.0.2 application-layer text at `https://bips.dev/324/` defines IDs 1 through 28 and states that when a message has both encodings, a peer supporting it should accept both the one-byte ID and the `0x00` plus 12-byte command form. The relevant example includes `getblocktxn` short ID `0x0a`.
+- Core's `src/net.cpp:935-969` contains the BIP324 table, including all compact-block IDs and the BIP434 `FEATURE` extension at ID 37. Commit `6a129983c9b` intentionally added empty slots 29-36 as unimplemented extension IDs and changed the test boundary to `BIP324_SHORTIDS_IMPLEMENTED == 38`; `src/net.cpp:5475` ignores unknown message types for extensibility. This explains why Core returns an empty type for reserved slots rather than treating them as a malformed short ID. No Core defect was established.
+- The pinned btcd snapshot `/data/my_storage/tmp/cycle155-btcd` at root `05585e037ba0690572208dbc46d121a49cc0c4c9` has no compact-block message types in `wire/makeEmptyMessage`; its BIP324 maps only messages it implements. Its omission of compact-block short IDs is therefore an intentional unsupported-feature boundary, not evidence that Core's IDs 3, 4, 10, and 20 are wrong.
+- The pinned rust-bitcoin snapshot `/data/my_storage/tmp/cycle155-rust-bitcoin` at `607e8b2fe0d8f1ebe06923dbbc0ca6afdf00d1d1` has all four compact-block variants and maps short IDs 1-28 in `p2p/src/message.rs:1476-1515` and `1655-1696`. However, its separate V2 long-command dispatcher at `p2p/src/message.rs:1698-1712` recognizes only `version`, a small set of zero-payload handshake commands, `alert`, `reject`, and `sendtxrcncl`; all optimized command strings such as `mempool`, `tx`, `cmpctblock`, and `blocktxn` fall into `Unknown`.
+- Deterministic source-level reproducer: the valid zero-payload long form `00 6d 65 6d 70 6f 6f 6c 00 00 00 00 00` (`0x00` plus `mempool` padded to 12 bytes) reaches rust-bitcoin's `_ => E::Unknown` branch and ends as `NetworkMessage::Unknown { command: "mempool", payload: [] }`, while the equivalent short form `0x0f` reaches `E::Empty("mempool")` and ends as `NetworkMessage::MemPool`. Core's `V2Transport::GetMessageType` recognizes both forms as `mempool`. The same source asymmetry applies to non-empty optimized commands, subject to the decoder's payload-length behavior.
+- Independent verification forms were the BIP324 specification, Core's table/history and transport parser, rust-bitcoin's encoder/short-ID decoder/long-command decoder, and btcd's supported-message inventory. The rust and btcd sources were not executable on this host because `rustc`, `cargo`, and `go` are unavailable. A current Core `net_tests` invocation could not initialize its chain fixture because both `/` and `/data` were full; this is recorded as an environment limitation, not a passing test.
+
+### Verdict and learned queue
+
+This is a report-ready external rust-bitcoin compatibility finding, not a
+Bitcoin Core or libsecp256k1 source finding. The short-form paths and Core's
+reserved extension behavior were dismissed for this cell. Add Goal 107,
+`bip324-short-id-parity`, to re-run the matrix with executable alternate
+implementations and new BIP extension tables. Preserve the exact mempool
+fixture and require future work to test every supported message in both
+directions, including payload parsing and version-gated IDs.

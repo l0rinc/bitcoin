@@ -36,6 +36,26 @@
 - Generator SHA-256: `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`
 - Random-run prompt SHA-256: `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`
 
+## Cycle 307
+
+- Selected index: `55`
+- Goal slug: `alternative-implementation`
+- Goal title: Alternative-implementation compatibility-difference audit
+- Selection command: `shuf -i 0-106 -n 1`
+- Catalog SHA-256: `fb4f3f314db4d15105120db4109ddb2bcfda208e26290a400ddb9028644d7a62`
+- Base commit: `bf8b74bacfde5bb19be05bb960acbedf68b54afa`
+- Branch: `uber-cycle-307-alternative-implementation-20260802`
+- Timestamp: `2026-08-02T23:19:53Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-55`
+
+## Cycle 307 Result
+
+- Finding: the pinned rust-bitcoin V2 message decoder recognizes BIP324 short IDs 1-28, but its long-command dispatcher routes optimized messages such as `mempool`, `tx`, `cmpctblock`, and `blocktxn` to `NetworkMessage::Unknown`. The valid long-form `mempool` fixture is `00 6d 65 6d 70 6f 6f 6c 00 00 00 00 00`; short form `0f` decodes as `MemPool`.
+- Core verdict: dismissed. Core's reserved short IDs 29-36 were intentionally added as ignored extension slots by `6a129983c9b`; ID 37 is BIP434 FEATURE and is version-gated. btcd's missing compact-block IDs are an unsupported-message boundary because the pinned wire package has no compact-block message types.
+- External verdict: report-ready rust-bitcoin long-form interoperability gap at pinned commit `607e8b2fe0d8f1ebe06923dbbc0ca6afdf00d1d1`; no local source/test change justified.
+- Learned suspicious surface: BIP324 short/long message-type parity, extension-ID freshness, bidirectional wire fixtures, and version-gated message registries. Added Goal 107, `bip324-short-id-parity`, with seed journal `agent-journal/bip324-short-id-parity.md`.
+- Verification: BIP324 v1.0.2 specification, Core source/history, rust-bitcoin source, and btcd source inventory. Rust/Go execution was unavailable. Core `net_tests` execution was blocked by full `/` and `/data` filesystems during chain fixture setup.
+
 ## Cycle 306 Result
 
 - Finding: all three libsecp256k1 vector generators copied external JSON
