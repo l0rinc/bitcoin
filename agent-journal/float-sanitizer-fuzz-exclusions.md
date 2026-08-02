@@ -1,5 +1,88 @@
 # Floating-Point, Sanitizer, and Fuzzer-Exclusion Audit
 
+## Cycle 282: resurrect bloom integer diagnostics
+
+- Draw command: `shuf -i 0-98 -n 1`
+- Draw: `98`
+- Selected goal: `float-sanitizer-fuzz-exclusions`
+- Branch: `uber-cycle-282-float-sanitizer-fuzz-exclusions-20260802`
+- Start HEAD: `13000d172edb256d511836811a246632bad0473b`
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`
+- Entry divergence (`origin/master...HEAD`): `45 1354`
+- Uber-state SHA-256 at gate: `d0d00df03c527185ac2950da398fc202b84b17ba7123ecee97b9ec8a308fd0e5`
+- Catalog, prompt, TSV, and protocol hashes matched the fixed gate values.
+- `git fetch origin master`, tracked/index cleanliness, and `git diff --check` passed at entry. Persistent untracked agent artifacts were preserved. The seven protected long-running test processes remained alive and untouched.
+
+### Scope and prior-finding exclusions
+
+The earlier Goal 98 cycles closed raw IEEE exceptional-value coverage, the
+locale-unavailable precondition, policy-estimator non-finite input handling,
+the necessary SHA256 SSE4 sanitizer attribute, and the overly broad strprintf
+fuzzer guards. This cycle therefore concentrated on current sanitizer
+suppression scope and production float-adjacent arithmetic that had not yet
+been independently checked. The current tree still had three bloom-specific
+`unsigned-integer-overflow` suppressions in
+`test/sanitizer_suppressions/ubsan`.
+
+### Confirmed finding: bloom wraparound was hidden by per-symbol suppressions
+
+The current `src/common/bloom.cpp` computed the MurmurHash seed as
+`nHashNum * 0xFBA4C795 + nTweak` in `unsigned int`, and formed rolling filter
+generation masks as `0 - uint64_t(...)`. These operations intentionally wrap,
+but they caused integer sanitizer diagnostics to be suppressed for
+`CBloomFilter::Hash`, `CRollingBloomFilter::insert`, and `RollingBloomHash`.
+The historical fix `6ea393cd6f5a28d16f86e9c7cddb0912d6124cff` was present in a
+separate local history line but was not an ancestor of this cycle branch; the
+current source still contained the pre-fix expressions.
+
+The independent reproduction used a fresh Clang 19 build configured with
+`-DSANITIZERS=integer`, `-DENABLE_IPC=OFF`, and wallet/GUI/bench disabled. The
+baseline `bloom_tests` suite passed in the existing UBSan build. After copying
+the repository suppression file to scratch and removing only the three bloom
+entries, the focused command
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle282-bloom-int-run UBSAN_OPTIONS="suppressions=/data/my_storage/tmp/cycle282-bloom-int-run/ubsan-no-bloom:halt_on_error=1:print_stacktrace=1:report_error_type=1" /data/my_storage/tmp/cycle282-bloom-int/bin/test_bitcoin --run_test=bloom_tests/bloom_create_insert_serialize --log_level=test_suite --report_level=short --color_output=false
+```
+
+stopped at `src/common/bloom.cpp:50` with
+`unsigned integer overflow: 2 * 4221880213`, reached from the existing
+`CBloomFilter::insert` test. This is a deterministic first-invalid-operation
+trace, not a theoretical warning. The same test also verifies the exact
+serialized filter bytes, so its oracle is sensitive to seed changes.
+
+The fix computes each hash seed in `uint64_t` and explicitly truncates to the
+protocol's 32-bit seed, preserving modulo-2^32 behavior. It replaces the
+mask subtraction with conditional all-zero/all-one masks. The three bloom
+symbol suppressions were removed. No floating-point contract or fuzzer gate
+was changed.
+
+### Verification
+
+- Incremental rebuild after the patch:
+  `CCACHE_DIR=/data/my_storage/tmp/cycle282-bloom-ccache TMPDIR=/data/my_storage/tmp/cycle282-bloom-tmp ninja -C /data/my_storage/tmp/cycle282-bloom-int test_bitcoin -j2`: passed, 6/6 steps.
+- The same suppression file with only the bloom entries removed was used after
+  the patch. The full `bloom_tests` suite passed all 14 cases and 37,687
+  assertions under `-fsanitize=integer`, with no bloom diagnostic.
+- Existing exact serialization vectors passed, including the two hash-seed
+  cases; rolling-filter retention, reset, and false-positive checks also
+  passed. This independently checks behavior rather than merely removing a
+  warning.
+- `git diff --check` passed after the source/suppression edit. No unrelated
+  tracked files were changed.
+
+### Verdict and handoff
+
+**Confirmed and fixed:** integer sanitizer coverage for bloom hashing and
+rolling generation was hidden by suppressions even though the wraparound was
+intentional and could be made explicit without changing behavior. The cycle
+source commit must include `src/common/bloom.cpp`, the suppression removal,
+and this journal. The next cycle must close the uber state, draw a distinct
+goal with the exact selector, and repeat the fresh gate; do not reopen the
+already closed float, SHA256, locale, policy-estimator, or strprintf cells
+without new evidence.
+
 ## Cycle 178 Identity and Fresh Gate
 
 - Draw command: shuf -i 0-98 -n 1
