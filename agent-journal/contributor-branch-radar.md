@@ -742,3 +742,46 @@ Quiet cycle; radar interval produced nothing.
 
 ### Exact commands
 - git fetch l0rinc --prune; branch count above.
+
+## Cycle 16 (2026-08-02, goal-resumed cycle 263): ADOPT the retained-capacity fix — 475ab49da6 cherry-picked onto the lineage (clean; churn test already present from #23 c5); flipped test GREEN; mempool-scale profile unchanged within noise (retained capacity at 1,600-tx peaks is ~100KB, under RSS noise); 🟡 -> ✅ locally verified
+
+### Adoption (audit/adopt-retained-capacity @ 28ba79168b)
+- Cherry-pick 475ab49da6 onto agent/all-findings tip: clean
+  (the characterization test was already in-lineage from #23
+  c5's fc48fd6345; the fix's 2-line test edit applied).
+- Verification: test_bitcoin txgraph_tests FULL suite green
+  including the FLIPPED expectation (churned usage now GT fresh
+  — capacity-aware charging active: DynamicUsage(m_entries)
+  counts retained vector capacity).
+- Mempool-scale before/after (#22 c4 profile rerun, /tmp/btc263):
+  usage_drained returns to ~0 both ways (as designed — the
+  charge now includes retained capacity, which at 1,600-tx
+  peaks is ~100KB); RSS delta 3.1MB vs 3.3MB pre-fix — the
+  residual RSS retention is allocator slack, not the vector
+  (expected: the fix charges accounting, it cannot shrink RSS
+  at this scale; its value is accounting truth at LARGE churn
+  scales).
+
+### Verdict
+✅ ADOPTED + VERIFIED locally: the author's fix works as
+designed (unit-level flipped test green; accounting now
+includes retained capacity; no regression in the full suite or
+the churn profile). The author's branch remains the upstream
+vehicle; our lineage carries it for the next profiles.
+
+### Suspicion-mining (new protocol)
+- S1 (recorded): DynamicUsage(m_entries) charges retained
+  capacity until graph teardown — by design (charge the
+  allocation, not the count); overcount direction is the SAFE
+  one (conservative accounting).
+- S2 (recorded): RSS-vs-accounting gap at small scale is
+  allocator slack — a massif run would attribute it, but the
+  unit test already pins the vector term; not queued.
+
+### Exact commands
+- cherry-pick line above; test run above; profile rerun above.
+
+### Limitations / queue
+- 1,600-tx scale hides the vector term in RSS; a maxmempool-
+  scale churn would show the accounting delta directly (disk/
+  time-bounded out).
