@@ -1,5 +1,102 @@
 # SIMD, Assembly, and Portable-Reference Backend Differential
 
+## Cycle 301: libminisketch generic and CLMUL implementation differential
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-100 -n 1` -> `69` (`backend-differential`). The
+  previous backend cells covered CRC32C, Bitcoin Core SHA256 dispatch, and
+  libsecp256k1 x86_64 portable/assembly under Release, sanitizer, and ThinLTO;
+  this cycle therefore selected the remaining vendored Minisketch backend
+  matrix rather than repeating those passing cells.
+- Branch: `uber-cycle-301-backend-differential-20260802`.
+- Cycle-start HEAD: `6078e6c8c33514435957cc5a186be5049d9ad1ac`.
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`.
+- Merge-base equals `origin/master`; start divergence was `0 1395`.
+- The tracked worktree was clean at selection. Existing untracked probes and
+  scratch artifacts were preserved and excluded from cycle commits. The seven
+  protected test processes were checked and left running.
+
+### Scope and hypothesis
+
+`src/minisketch/src/minisketch.cpp` exposes implementation 0 (generic), and,
+when `HAVE_CLMUL` is compiled in and CPUID reports PCLMULQDQ, implementations 1
+(CLMUL) and 2 (trinomial CLMUL). The falsifiable hypothesis was that an
+optimized field backend diverges from generic behavior for a supported field
+size, especially at non-byte-aligned sizes, zero/full capacity, high-bit
+truncation, clone/deserialize, decode bounds, or a failed merge. The trust
+boundary is the public C/C++ Minisketch API: equal serialized bytes and decoded
+set-XOR results are required for equivalent operations; a merge rejected for a
+different implementation or field size must leave the destination unchanged.
+
+The existing `src/minisketch/src/test.cpp` already compares implementations
+inside its own test oracle. A separate probe was used here so that the new
+evidence also exercised the public merge failure contract and an independent
+`std::set` model across every field size 2 through 64.
+
+### Build matrix and independent evidence
+
+Two fresh standalone CMake builds used Clang 19.1.7, Release mode, all field
+sizes, and tests enabled:
+
+```text
+cmake -S src/minisketch -B /data/my_storage/tmp/cycle301-minisketch/generic -G Ninja -DCMAKE_CXX_COMPILER=clang++-19 -DCMAKE_BUILD_TYPE=Release -DMINISKETCH_INSTALL=OFF -DMINISKETCH_BUILD_TESTS=ON -DMINISKETCH_BUILD_BENCHMARK=OFF -DHAVE_CLMUL=OFF -DCMAKE_CXX_FLAGS=-mno-pclmul
+cmake -S src/minisketch -B /data/my_storage/tmp/cycle301-minisketch/optimized -G Ninja -DCMAKE_CXX_COMPILER=clang++-19 -DCMAKE_BUILD_TYPE=Release -DMINISKETCH_INSTALL=OFF -DMINISKETCH_BUILD_TESTS=ON -DMINISKETCH_BUILD_BENCHMARK=OFF
+cmake --build /data/my_storage/tmp/cycle301-minisketch/generic --target test-noverify test-verify --parallel 4
+cmake --build /data/my_storage/tmp/cycle301-minisketch/optimized --target test-noverify test-verify --parallel 4
+```
+
+The generic configuration reported CLMUL disabled. The optimized configuration
+reported CLMUL enabled and built both CLMUL source families. The preserved
+probe `agent-journal/minisketch_backend_cycle301_probe.cpp` constructed every
+available implementation for bits 2..64, applied deterministic toggle/add
+sequences including truncation and `UINT64_MAX`, compared serialization across
+implementations, checked bounded decode against a set-XOR model, cloned every
+state, tested capacity-reducing same-implementation merges, and used the C API
+to verify rejected cross-implementation and cross-field merges preserve the
+destination and source.
+
+Both probes returned status 0 and exactly:
+
+```text
+bits=2..64 failures=0 digest=727afd9cb1c74f12
+```
+
+The independent probe was compiled against each static library. The optimized
+run additionally exercised implementations 1 and 2; its implementation-0
+behavior produced the same digest as the generic-only build. The Release
+`test-noverify 2` and `test-verify 2` commands passed in both trees with
+`All tests successful.`
+
+### Sanitized replay
+
+The same all-field matrix was rebuilt with Clang 19, `-O1 -g
+-fsanitize=address,undefined -fno-omit-frame-pointer`, once with CLMUL disabled
+and once with it enabled. With
+`ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:abort_on_error=1` and
+`UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`, both sanitized probes
+returned the same digest above. The four sanitized VERIFY/non-VERIFY test
+commands returned status 0 and `All tests successful.`; no ASan, UBSan,
+runtime-error, or sanitizer-summary output was present.
+
+### Verdict and handoff
+
+**Dismissed as a current Minisketch backend correctness defect; no source or
+permanent test change is justified.** Generic, CLMUL, and trinomial-CLMUL
+implementations agreed on the independent public API/model matrix, including
+the failure-state contract, and passed the implementation-local suites under
+Release and ASan+UBSan.
+
+Limitations are material: execution was x86_64 little-endian with Clang 19;
+there was no ARM/32-bit/big-endian runtime, alternate compiler, timing or
+constant-time measurement, and no host execution of a CLMUL-compiled binary on
+a CPU without PCLMULQDQ. The last item is now the next queue because
+`EnableClmul()` uses a raw CPUID gate and the host advertises the feature.
+Scratch builds, logs, and binaries remain under
+`/data/my_storage/tmp/cycle301-minisketch/`. Do not repeat this exact
+all-field x86_64 matrix without a changed runtime, compiler, architecture, or
+fault-injection boundary.
+
 ## Cycle 158: ThinLTO portable and x86_64 assembly differential
 
 ### Selection and fresh gate
