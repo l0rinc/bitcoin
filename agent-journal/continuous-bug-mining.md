@@ -127,3 +127,38 @@ manufactured; journal-only snapshot per policy.
 - PR 35740 (http linger-close) and 88-W5 (interrupted-migration
   load-time detection) stay parked — improvement candidates, not
   falsifiable defects.
+
+## Cycle 3 (2026-08-02, draw 201, raw=7541771897718507552 (63-bit), idx 0/32): TODO/FIXME re-sweep at today's HEAD — count-identical 56/56, ZERO new debt from the session's 37 changed src files; DISMISSED
+
+### Hypothesis
+The session's own lineage changes (KDF fix, null-destroy fix,
+campaign test batteries, backports — 37 src files touched since
+c2's 2026-07-28 sweep) could have introduced new TODO/FIXME
+debt or left markers behind.
+
+### Evidence
+- Same grep as c2 (production paths, same exclusions): 56 items
+  — count-identical to the c2 baseline.
+- Thematic grep of the list against the session's change areas
+  (rocksdb|multiread|kdf|null|destroy): 0 hits — no new items
+  from this session's work.
+- Distribution unchanged in shape: validation.cpp 11, wallet 6,
+  net_processing 4, subprocess.h 3 — the c2-audited items, all
+  previously dispositioned (0 defects).
+- Advisory-vs-tree axis: covered by #49 c10 (pre-2020 batch,
+  executable dup-input guard + 8 markers) and #42 c6 (upstream
+  watch @556988790a) — no unassessed external item.
+
+### Verdict
+DISMISSED: the risk-map baseline holds item-for-item at the
+current HEAD; the session added zero marker debt. Journal-only.
+
+### Exact commands
+- c2-identical grep (count 56); thematic grep (0); uniq -c
+  distribution above; git log --since file census (37).
+
+### Limitations / next leads
+- Item-identity (not just count) vs c2 assumed from count +
+  distribution; a full line-diff needs the c2 list (not recorded
+  inline — recorded here as a c4 improvement).
+- Coverage-gap lead remains the deepest unused charter source.
