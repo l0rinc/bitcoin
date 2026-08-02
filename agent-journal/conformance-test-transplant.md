@@ -119,3 +119,42 @@ independent implementation.
 
 ## Rotation note
 Two cycles; HMAC and AES-CBC transplants both clean.
+
+## Cycle 3 (2026-08-02, draw 178, raw=11916844877793972431, masked 2693472840939196623, idx 55/56): Wycheproof chacha20_poly1305 transplant — 316/316 (256 valid byte-exact + round-trip, 60 invalid tags rejected), second verifier (python cryptography/OpenSSL) 0 mismatches; CONFORMANCE CONFIRMED, differential DISMISSED
+
+### Cell selection
+In-tree crypto_tests has only ~4 RFC 8439 ChaCha20Poly1305
+cases (crypto_tests.cpp:1220-1264); the Wycheproof suite (edge
+AAD/msg sizes, invalid tags, boundary lengths) is the coverage
+gap. Primitive is BIP324 transport crypto — in scope.
+
+### Transplant
+- Vectors: wycheproof main testvectors_v1/
+  chacha20_poly1305_test.json, filtered to 32-byte key + 96-bit
+  nonce (the in-tree AEAD's contract) -> 316 cases.
+- Driver (/tmp/btc107c3/wp_chacha_driver.cpp, preserved):
+  AEADChaCha20Poly1305 Encrypt byte-exactness vs ct||tag AND
+  Decrypt round-trip; invalid-tag cases must fail Decrypt.
+  Nonce96 is pair<uint32_t,uint64_t> LE (chacha20.h:47-55) —
+  recorded; linked against build-before libbitcoin_crypto.
+- Result: n=316 valid_ok=256 invalid_rejected=60 fail=0.
+- Second verifier (independent implementation): python
+  cryptography ChaCha20Poly1305 (OpenSSL) re-encrypts all 316:
+  valid-mismatch=0. Chain Wycheproof == in-tree == OpenSSL.
+
+### Verdict
+CONFORMANCE CONFIRMED / defect hypothesis DISMISSED: the in-tree
+AEAD matches the external suite on every applicable vector,
+invalid tags are always rejected (no tag-truncation or
+comparison-lax case accepted).
+
+### Exact commands
+- curl wp.json; python filter (316); g++ -O2 line above;
+  ./wp_driver < wp_input.txt (RESULT above); python crosscheck
+  (0 mismatches).
+
+### Limitations / queue
+- XChaCha20-Poly1305 not applicable (in-tree AEAD is 96-bit only,
+  matching BIP324).
+- FSChaCha20Poly1305 (the rekeying wrapper) covered by its own
+  in-tree tests; not part of this external suite.
