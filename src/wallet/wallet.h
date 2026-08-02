@@ -611,10 +611,10 @@ public:
     unsigned int ComputeTimeSmart(const CWalletTx& wtx, bool rescanning_old_block) const;
 
     /**
-     * Increment the next transaction order id
-     * @return next transaction order id
+     * Increment and persist the next transaction order id.
+     * @return the allocated transaction order id, or std::nullopt if it cannot be persisted
      */
-    int64_t IncOrderPosNext(WalletBatch *batch = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    std::optional<int64_t> IncOrderPosNext(WalletBatch *batch = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     DBErrors ReorderTransactions();
 
     void MarkDirty();

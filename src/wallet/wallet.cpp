@@ -972,20 +972,25 @@ DBErrors CWallet::ReorderTransactions()
                 return DBErrors::LOAD_FAIL;
         }
     }
-    batch.WriteOrderPosNext(nOrderPosNext);
+    if (!batch.WriteOrderPosNext(nOrderPosNext))
+        return DBErrors::LOAD_FAIL;
 
     return DBErrors::LOAD_OK;
 }
 
-int64_t CWallet::IncOrderPosNext(WalletBatch* batch)
+std::optional<int64_t> CWallet::IncOrderPosNext(WalletBatch* batch)
 {
     AssertLockHeld(cs_wallet);
-    int64_t nRet = nOrderPosNext++;
+    const int64_t nRet = nOrderPosNext;
+    if (nRet == std::numeric_limits<int64_t>::max()) return std::nullopt;
+
+    const int64_t next = nRet + 1;
     if (batch) {
-        batch->WriteOrderPosNext(nOrderPosNext);
+        if (!batch->WriteOrderPosNext(next)) return std::nullopt;
     } else {
-        WalletBatch(GetDatabase()).WriteOrderPosNext(nOrderPosNext);
+        if (!WalletBatch(GetDatabase()).WriteOrderPosNext(next)) return std::nullopt;
     }
+    nOrderPosNext = next;
     return nRet;
 }
 
@@ -1092,7 +1097,12 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
     bool fUpdated = update_wtx && update_wtx(wtx, fInsertedNew);
     if (fInsertedNew) {
         wtx.nTimeReceived = GetTime();
-        wtx.nOrderPos = IncOrderPosNext(&batch);
+        const auto order_pos = IncOrderPosNext(&batch);
+        if (!order_pos) {
+            mapWallet.erase(ret.first);
+            return nullptr;
+        }
+        wtx.nOrderPos = *order_pos;
         wtx.m_it_wtxOrdered = wtxOrdered.insert(std::make_pair(wtx.nOrderPos, &wtx));
         wtx.nTimeSmart = ComputeTimeSmart(wtx, rescanning_old_block);
         AddToSpends(wtx);

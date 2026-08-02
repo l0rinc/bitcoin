@@ -759,3 +759,104 @@ production-state or fault-injection test for generated descriptor setup.
 - Next run must close this branch with a source commit, create the separate
   state-close commit, fetch `origin/master`, perform a fresh exact selector
   draw, and reject only an exact already-closed evidence cell.
+
+## Cycle 298: wallet order-position persistence failure published as success
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `27` (`error-path-state`); no reroll.
+- Branch: `uber-cycle-298-error-path-state-20260802`.
+- Cycle start HEAD: `49c0df1ce42251c561df89fa7ebc110aa65b43a5`; `origin/master`:
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `45 1386`
+  (`origin/master...HEAD`). The fresh gate was clean for tracked/index state,
+  catalog/prompt/TSV/protocol hashes, and protected processes; existing
+  untracked probes and artifacts were preserved.
+
+### Distinct scope and contract
+
+The prior Goal 27 cycle closed the descriptor top-up callers. The next queue
+was to inspect another caller-owned wallet write path. `CWallet::IncOrderPosNext`
+was incrementing `nOrderPosNext` before calling `WriteOrderPosNext` and ignored
+the boolean result. `CWallet::AddToWallet` then assigned the returned position
+and continued with the new `mapWallet`, ordered-index, spend-index, and
+transaction write. `CWallet::ReorderTransactions` likewise ignored the final
+order-counter write after updating and persisting reordered transactions.
+
+This makes a failed order-counter write look successful: a new transaction can
+remain in memory and on disk with an order position that is not represented by
+the durable counter, while a reorder can return `LOAD_OK` after its final
+durability step failed. The valid contract is to publish the in-memory counter
+only after its database write succeeds and to propagate a failed final write.
+
+### Confirmed finding
+
+The order-position write result was discarded in both paths. The old allocator
+also advanced the in-memory counter before persistence, so a database failure
+left `nOrderPosNext` advanced even though the transaction-counter row was not
+updated. This is reachable with a valid wallet transaction and a storage
+failure; it does not depend on malformed input or an invalid transaction.
+
+### Independent pre-fix reproduction
+
+The new test inserts one transaction, installs a `MockableSQLiteDatabase`
+trigger that aborts the exact serialized `DBKeys::ORDERPOSNEXT` row, then adds
+a distinct second transaction. With the production change temporarily
+restored to the old unchecked implementation, the focused run exited `201`:
+
+```text
+TMPDIR=/data/my_storage/tmp/cycle298-before \
+/data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin \
+  --run_test=wallet_tests/order_position_write_failure_is_reported \
+  --log_level=all --random=29804
+
+check !wallet.AddToWallet(second_ref, TxStateInactive{}) has failed
+check !wallet.mapWallet.contains(second_hash) has failed
+check wallet.nOrderPosNext == 1 has failed [2 != 1]
+check !WalletDatabaseHasKey(database, second_tx_key) has failed
+check WalletDatabaseHasKey(database, order_pos_key) has passed
+*** 4 failures are detected
+```
+
+The two transactions differ in output amount, so this is not a duplicate-
+transaction early return. The trigger is scoped to the scratch wallet database;
+no default datadir, wallet, key, or production database was used.
+
+### Fix
+
+`IncOrderPosNext` now returns `std::optional<int64_t>`, rejects counter
+exhaustion, writes the next value first, and updates `nOrderPosNext` only after
+the write succeeds. `AddToWallet` erases the newly inserted map entry and
+returns failure when the allocation cannot be persisted, before adding ordered
+or spend indexes. `ReorderTransactions` returns `DBErrors::LOAD_FAIL` when its
+final `WriteOrderPosNext` fails. The header comment now states the failure
+contract.
+
+### Verification
+
+- `ninja -C /data/my_storage/tmp/cycle246-wallet test_bitcoin -j2` passed after
+  restoring the production change.
+- The fixed focused regression with seed `29806` passed with no errors.
+- The combined `wallet_tests,walletdb_tests,scriptpubkeyman_tests` run with
+  seed `29807` passed all 52 selected cases, including the new regression and
+  the prior descriptor-top-up failure tests.
+- `git diff --check` passed.
+
+### Limitations and next queue
+
+The regression covers the batched `AddToWallet` path and the reorder failure
+return in one deterministic wallet fixture. It does not separately inject
+failure through the `IncOrderPosNext(nullptr)` path, force `INT64_MAX` in a
+persisted wallet, or exercise a crash between an order-counter write and a
+later transaction write. Future Goal 27 work should inspect another distinct
+wallet state publication or direct caller, not repeat this order-position cell
+without new backend, restart, or caller evidence.
+
+### Verdict and handoff
+
+- **Confirmed and fixed:** ignored order-counter persistence failures could
+  publish a transaction or reorder result despite inconsistent durable state.
+- Source/test/journal commit will be authored as `Lőrinc <pap.lorinc@gmail.com>`
+  and must include this journal update.
+- Next run must close this branch with a source commit, create the separate
+  state-close commit, pass the fresh post-close gate, and draw another goal.

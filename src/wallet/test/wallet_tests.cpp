@@ -171,6 +171,46 @@ BOOST_FIXTURE_TEST_CASE(migration_transaction_write_failure_is_reported, WalletT
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(order_position_write_failure_is_reported, WalletTestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    CMutableTransaction first_tx;
+    first_tx.vout.emplace_back(1 * COIN, CScript{});
+    const CTransactionRef first_ref{MakeTransactionRef(first_tx)};
+    BOOST_REQUIRE(wallet.AddToWallet(first_ref, TxStateInactive{}));
+
+    DataStream order_pos_key;
+    order_pos_key << DBKeys::ORDERPOSNEXT;
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+    const std::string trigger{
+        "CREATE TRIGGER fail_order_position_write BEFORE INSERT ON main WHEN lower(hex(NEW.key)) = '" +
+        HexStr(std::span<const std::byte>{order_pos_key}) + "' BEGIN SELECT RAISE(ABORT, 'injected'); END;"};
+    BOOST_REQUIRE_EQUAL(sqlite3_exec(database.m_db, trigger.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+
+    CMutableTransaction second_tx;
+    second_tx.vout.emplace_back(2 * COIN, CScript{});
+    const CTransactionRef second_ref{MakeTransactionRef(second_tx)};
+    const Txid second_hash{second_ref->GetHash()};
+
+    BOOST_CHECK(!wallet.AddToWallet(second_ref, TxStateInactive{}));
+    {
+        LOCK(wallet.cs_wallet);
+        BOOST_CHECK(!wallet.mapWallet.contains(second_hash));
+        BOOST_CHECK_EQUAL(wallet.nOrderPosNext, 1);
+    }
+
+    DataStream second_tx_key;
+    second_tx_key << std::make_pair(DBKeys::TX, second_hash);
+    BOOST_CHECK(!WalletDatabaseHasKey(database, second_tx_key));
+    BOOST_CHECK(WalletDatabaseHasKey(database, order_pos_key));
+
+    {
+        LOCK(wallet.cs_wallet);
+        wallet.mapWallet.at(first_ref->GetHash()).nOrderPos = -1;
+    }
+    BOOST_CHECK_EQUAL(wallet.ReorderTransactions(), DBErrors::LOAD_FAIL);
+}
+
 BOOST_FIXTURE_TEST_CASE(migration_corrupt_best_block_is_reported, WalletTestingSetup)
 {
     CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
