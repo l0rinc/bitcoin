@@ -1,5 +1,144 @@
 # Independent Multi-Agent Disagreement and Adjudication
 
+## Cycle 296: TrafficGraphWidget zero-interval lifecycle
+
+### Gate and scope
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `40`.
+- Selected goal: `multi-agent-adjudication` (goal 40).
+- Worktree branch: `uber-cycle-296-multi-agent-adjudication-20260802`.
+- HEAD at cycle start: `bcba7ed832576ede2696a10bf186454a94104462`;
+  `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence:
+  `origin/master...HEAD = 45 1382`.
+- The post-Cycle-295 fetch and gate passed. Catalog, random prompt, goals
+  TSV, and uber-protocol hashes matched the fixed values. Tracked/index state
+  was clean, existing untracked artifacts were preserved, and protected PIDs
+  `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and
+  `1346200` remained alive and untouched.
+- The previous Goal 40 cells for ForceRelay relay-queue state,
+  block-relay-only transaction `GETDATA`, and null-mempool chainstate deletion
+  are closed. This cycle selected the distinct Qt traffic-graph timer and
+  rate-calculation contract, seeded by the adjacent Goal 98 scan and by the
+  historical Qt traffic-graph branches.
+
+### Shared candidate
+
+`TrafficGraphWidget::updateRates()` divides the byte delta by
+`timer->interval()` at `src/qt/trafficgraphwidget.cpp:123-124`. The widget's
+member `m_range` defaults to zero. `setGraphRange()` converts that range to
+milliseconds, divides by `DESIRED_SAMPLES`, sets the timer interval, and calls
+`clear()`, which starts the timer. A zero range therefore produces an active
+zero-interval timer and a floating-point division by zero on the next update.
+
+The candidate was intentionally given to both investigators before either
+report saw the other's conclusion. Investigator A was asked to test the
+arithmetic and public-slot contract. Investigator B was asked to audit only
+the shipped call graph, UI constraints, initialization order, and history.
+
+### Investigator A: contract and reachability concern
+
+A's hypothesis was confirmed at the component-contract level. The public
+`setGraphRange(std::chrono::minutes)` slot accepts zero and has no documented
+positive precondition. The exact zero-range arithmetic was reproduced in a
+Qt 6.4.2 `QCoreApplication` scratch probe:
+
+```text
+agent-journal/cycle296_trafficgraph_interval_probe.cpp:14:44: runtime error: division by zero
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior agent-journal/cycle296_trafficgraph_interval_probe.cpp:14:44
+interval_ms=0 active=1 rate=inf
+```
+
+The probe uses the same `duration_cast<milliseconds>(minutes{0}) / 800`,
+`QTimer::setInterval`, `QTimer::start`, and float division sequence as the
+widget. A therefore argues that the slot is not misuse-resistant: a future Qt
+caller, a test, or a programmatic signal that supplies zero can create a busy
+timer and undefined floating-point behavior. A's proposed repair was either
+to reject nonpositive ranges or to clamp the denominator to a positive value.
+
+A also found a separate contributor history line in which the traffic graph
+used elapsed wall-clock time rather than the configured timer interval. That
+line is on `remotes/l0rinc/detached484`, not an ancestor of this branch, so A
+treated it as design precedent only and did not use it as proof.
+
+### Investigator B: shipped lifecycle and history audit
+
+B independently searched all current source and UI references. The only
+production widget instance is `ui->trafficGraph` in `debugwindow.ui`; the only
+production rate callback connection is the widget's own `QTimer::timeout`, and
+the only production range callers are `RPCConsole::setTrafficGraphRange()`
+from its constructor and the graph-range slider.
+
+The constructor order is decisive:
+
+1. `ui->setupUi(this)` creates the widget with an inactive timer.
+2. `setTrafficGraphRange(INITIAL_TRAFFIC_GRAPH_MINS)` supplies 30 minutes,
+   which produces a 2,250 ms interval, then `clear()` starts the timer.
+3. The later `RPCConsole::setClientModel()` call only supplies the model and
+   snapshots the byte counters; it does not start the timer.
+
+The UI slider has minimum `1`, maximum `288`, and its value is multiplied by
+`5` minutes before calling `setGraphRange`, so all shipped UI values are in
+`[5, 1440]` minutes. The Reset button is connected after the positive initial
+range is installed. There are no other current callers of `setGraphRange`,
+`clear`, or `updateRates` outside this widget/RPC-console lifecycle. The
+constructor's timer cannot invoke `updateRates()` before a range is installed
+because it is not started, and `setClientModel()` cannot make the timer start.
+
+B's history audit found that the old unit/divisor correction `d09ebc4723`
+retained the timer-interval denominator while changing the byte-rate units.
+The later remote commit
+`34696676ee` fixes the no-traffic `fMax` divide-by-zero on a separate traffic
+graph implementation line, not this timer interval, and neither it nor
+`56bf8312e7` is an ancestor of the current branch. The current source has no
+unresolved production caller that passes zero. B therefore rejects a source
+guard as an unsupported-misuse change that could hide a future lifecycle
+error; if a public reusable-widget contract is desired, it needs an explicit
+API precondition and test policy first.
+
+### Adjudication and independent verification
+
+The two reports agree on the arithmetic mechanism and disagree only on
+current reachability. The final verifier repeated B's call-site search,
+checked `RPCConsole` construction and `setClientModel` ordering, and inspected
+the slider's generated UI bounds. The existing current-source Qt target was
+then rebuilt with a cycle-local ccache and temp directory:
+
+```text
+env TMPDIR=/data/my_storage/tmp/cycle296-qt-build-tmp \
+    CCACHE_DIR=/data/my_storage/tmp/cycle296-qt-ccache \
+    make -C /data/my_storage/tmp/cycle261-qt-build bitcoin-qt -j2
+```
+
+The corrected run built `bitcoin-qt`, including `libbitcoinqt` and
+`trafficgraphwidget.cpp`, through `[100%] Built target bitcoin-qt`. An earlier
+run failed before compilation because reused ccache pointed at the full root
+filesystem; it was quarantined as environment setup noise and not used as a
+source verdict. `git diff --check` remained clean and no production source
+was changed.
+
+Final verifier verdict: **dismissed for a current repository defect, with A's
+component-level dissent retained**. The zero-range sequence is a valid
+unsupported-call counterexample, but no current shipped call graph reaches it.
+Adding a clamp or changing the elapsed-time model would be speculative and
+would alter a GUI-only lifecycle without a demonstrated current failure. The
+scratch probe remains useful regression evidence if a future caller or public
+widget contract makes nonpositive ranges reachable.
+
+### Cycle handoff
+
+- No source or permanent test commit is justified.
+- Evidence is the two independent reports, the Qt 6.4.2 UBSan probe, current
+  call-site/history audit, and successful current-source `bitcoin-qt` build.
+- Limitations: the runtime probe exercises the exact timer/rate arithmetic,
+  not a full `ClientModel` instance; the full GUI was compile-verified but not
+  launched in an offscreen desktop session. This is sufficient for the
+  reachability adjudication because the production call graph and timer start
+  order are statically explicit.
+- After the separate close snapshot, perform a fresh gate and exact selector
+  draw. Do not reopen this zero-interval cell unless a new caller, UI path, or
+  public API contract makes a nonpositive range reachable.
+
 ## Cycle 156: null-mempool chainstate deletion and kernel wipe lifecycle
 
 ### Gate and scope
