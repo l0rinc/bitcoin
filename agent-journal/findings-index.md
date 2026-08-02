@@ -157,6 +157,23 @@ comment-drift family as F1 (LockPoints).
 - Dedup note: distinct from F14 (leak) and #93 c2 (loud-failure
   behavior) — this one was a SILENT marker-advance, now loud.
 
+## F20: RPC method-name log injection + wallet-name control chars — FIXED 2026-08-02
+- Mechanism: whitelist-rejection warnings logged the method name
+  UNSANITIZED (httprpc.cpp:118/:147) — newline injection forges
+  node-looking log lines; wallet names accepted control chars
+  (paths/UIs/logs).
+- Evidence: FAILING-BEFORE — characterize test fails expecting the
+  injected payload 'getblock\nERROR: ConnectTip: ConnectBlock
+  0000...deadbeef failed' (a forged consensus-error line);
+  PASSING-AFTER — rpc_whitelist.py green, createwallet bad\nname
+  rejected (-8), goodname created. Author PR 35833 (open).
+- Fix: 9d5fb22f1d + 6ed8e2af39 + ed4eb51e9f adopted (sanitize method
+  names in both rejection paths; reject control chars in new wallet
+  names).
+- Dedup note: extends the #30 family; the debug method= log was
+  already sanitized (rpc/request.cpp:245-249) — the rejection paths
+  were the missed twins.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
