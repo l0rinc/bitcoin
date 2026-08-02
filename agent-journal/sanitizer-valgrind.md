@@ -1,5 +1,28 @@
 # Sanitizer and Valgrind True-Positive Sweep
 
+## Cycle 274 start
+
+- Selected by the uber loop: exact `shuf -i 0-98 -n 1` -> `11` (`sanitizer-valgrind`).
+- Branch: `uber-cycle-274-sanitizer-valgrind-20260802`.
+- Cycle-start HEAD: `13938c14c47ca7ab00a3f552e5dcf8a2d7b179c6` (`uber-goal: record cycle 273 close`).
+- Base: `origin/master` at `556988790a7f961693a8fd93f73725baea66476a`; merge-base `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`.
+- Scope: run a fresh Clang 19 ASan+UBSan cell against current source and target the six recent persistence, wrapper, txgraph, wallet-database, and KDF changes; classify sanitizer reports, harness failures, dependency issues, and clean negative evidence separately.
+- Exclusions: do not touch the protected `cycle217-sanitizer-wallet` binary or the other protected test processes; do not repeat Cycle 83's exact fuzz targets/seeds, standalone TSan corpus, bounded secp MSan smoke, or default-limit OOM probes. Valgrind remains a tool-availability check, not a source pass.
+- Scratch root: `/data/my_storage/tmp`; all new build, cache, logs, and datadirs stay there.
+
+### Cycle 274 hypotheses
+
+1. ASan or UBSan finds a current lifetime, bounds, alignment, or invalid-state defect in one of the six recent changes that the prior UBSan-only wallet run did not cover.
+2. A targeted sanitizer run exposes an error-path or recovery defect in the new durable UTXO snapshot publication or SQLite wallet transaction-abort path.
+3. A sanitizer report is caused by the harness, dependency, build configuration, or protected environment rather than project code and can be independently classified.
+
+### Cycle 274 planned evidence
+
+- Pin `/usr/bin/clang-19`, CMake/Ninja configuration, compiler flags, source HEAD, and isolated `ASAN_OPTIONS`/`UBSAN_OPTIONS`.
+- Run focused current-source tests for `minisketch_tests`, `txgraph_tests`, wallet scriptpubkeyman/database/crypto tests, and RPC snapshot coverage where the target is available; use scratch datadirs and deterministic seeds.
+- For every diagnostic, retain the first invalid operation and raw output, then reproduce with a second independent sanitizer or minimized test. A clean run is evidence only for the exercised cell.
+- Check `valgrind` availability exactly and record the blocker if absent.
+
 ## Cycle 83 start
 
 - Selected by the uber loop: exact `shuf -i 0-98 -n 1` -> `11` (`sanitizer-valgrind`).
@@ -75,3 +98,32 @@ The first default-limit probes used the current `build_fuzz_asan_clang19/bin/fuz
 - No current Bitcoin Core or libsecp256k1 source defect was confirmed. ASan/UBSan/LSan, standalone TSan, TSan+libFuzzer, suppression-free TSan, and bounded libsecp256k1 MSan evidence produced no source report. The only negative default-limit results were fixture RSS-limit failures, and the full libsecp MSan run was explicitly inconclusive because it was interrupted.
 - No source patch or regression test is warranted from this cycle. The next run should revisit the unchecked sanitizer cells with a complete MSan-capable Core dependency environment, installed Valgrind, qa-assets corpora, or a distinct recovery/functional workload; do not repeat these exact seeds and target/build combinations without a new trust boundary or first-invalid-operation hypothesis.
 - Relevant command/log artifacts: `/data/my_storage/tmp/sanitizer-cycle83/logs/`; build trees: `build_fuzz_asan_clang19`, `build_fuzz_tsan_clang19`, `build_fuzz_tsan_libfuzzer_clang19`, and `/data/my_storage/tmp/sanitizer-cycle83/msan-secp`.
+
+## Cycle 274 evidence
+
+### Build and tool gate
+
+- The exact source under test was HEAD `13938c14c47ca7ab00a3f552e5dcf8a2d7b179c6` (`uber-goal: record cycle 273 close`) on branch `uber-cycle-274-sanitizer-valgrind-20260802`. The tracked tree had only this journal edit; all pre-existing untracked agent artifacts were preserved.
+- A new isolated build at `/data/my_storage/tmp/cycle274-asan-wallet` used `/usr/bin/clang-19` 19.1.7, CMake 3.25.1, Ninja 1.11.1, `RelWithDebInfo`, `-DSANITIZERS=address,undefined`, `-DENABLE_WALLET=ON`, `-DENABLE_IPC=OFF`, `-DBUILD_TESTS=ON`, and ccache under `/data/my_storage/tmp/cycle274-asan-ccache`. The build completed all `502/502` actions for `test_bitcoin`; `bitcoind` then linked in `4/4` actions.
+- CMake's generated command inventory contains `-fsanitize=address,undefined`. Runs used strict unsuppressed `ASAN_OPTIONS='abort_on_error=1:halt_on_error=1:detect_leaks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1:strict_string_checks=1:detect_odr_violation=2:print_scariness=1'`, `UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1:report_error_type=1'`, and `LSAN_OPTIONS='report_objects=1:print_suppressions=1'`, with each log path isolated under `/data/my_storage/tmp`.
+- Valgrind is unavailable: CMake reported `Could NOT find Valgrind`, and `command -v valgrind` returned no executable. No Memcheck claim is made. Existing suppression files remain unchanged: `test/sanitizer_suppressions/valgrind.supp` (54 lines), `ubsan` (71), `lsan` (4), and `tsan` (34). Current production `no_sanitize` sites remain the documented SHA256 assembly address-sanitizer workaround, nanobench measurement arithmetic, and the minisketch CLMUL memory-sanitizer workaround; no recent target was broadly excluded.
+
+### Focused ASan, UBSan, and LSan evidence
+
+- `test_bitcoin --run_test=minisketch_tests/minisketch_invalid_copy_assignment --random=274001` exited 0: 1 case, 3 assertions. This exercised the invalid-source assignment and destination clearing added by `301207370c`.
+- `test_bitcoin --run_test=txgraph_tests/txgraph_memory_usage_allows_retained_empty_graph --random=274002` exited 0: 1 case, 2 assertions. This exercised retained allocation accounting after the last transaction removal from `3474cbeaf5`.
+- `test_bitcoin --run_test=wallet_crypto_tests/passphrase_rounds_limit --random=274003` exited 0: 1 case, 3 assertions. This exercised zero, oversized, and sane KDF iteration counts from `879b3b7b17`.
+- `test_bitcoin --run_test=scriptpubkeyman_tests/encrypt_descriptor_abort_preserves_state --random=274004` exited 0: 1 case, 7 assertions. This exercised the normal SQLite transaction-abort callback path from `9f15a43bd1`.
+- The affected suite set `minisketch_tests,txgraph_tests,scriptpubkeyman_tests,wallet_crypto_tests,walletdb_tests` with seed `274005` exited 0: 58 cases, 11,519 assertions. The lifecycle/RPC unit set `wallet_tests,wallet_transaction_tests,walletdb_tests,rpc_tests` with seed `274007` exited 0: 52 cases, 591 assertions. These runs covered nearby error, cleanup, persistence, and restart-supporting branches rather than only the four new tests.
+- None of the focused or broad logs contained `AddressSanitizer`, `UndefinedBehaviorSanitizer`, `runtime error:`, `LeakSanitizer`, `ERROR:`, or `SUMMARY:`. No ASan, UBSan, or LSan report files were created by the configured `log_path` values. All unit commands used scratch `TMPDIR` and separate `HOME` directories; no default wallet or datadir was used.
+
+### RPC and persistence functional evidence
+
+- `bitcoind` from the same sanitized build ran `test/functional/rpc_dumptxoutset.py` with Python random seed `274006`, `--tmpdir=/data/my_storage/tmp/cycle274-dumptxoutset-tmp`, and the scratch config `/data/my_storage/tmp/cycle274-functional-config.ini`. The test exited 0 and covered the latest snapshot, rollback snapshot, in-memory rollback, fork handling, existing/invalid paths, and unknown snapshot type. The retained datadir contains `txoutset.dat`, `txoutset_fork.dat`, and `txoutset_fork_mem.dat`; the node stopped cleanly.
+- The functional log and retained node stdout/stderr contained no ASan, UBSan, LSan, or runtime diagnostic. The raw artifacts are `/data/my_storage/tmp/cycle274-dumptxoutset-asan.log`, `/data/my_storage/tmp/cycle274-dumptxoutset-tmp`, and `/data/my_storage/tmp/cycle274-asan-build.log`. Artifact hashes at capture were: `test_bitcoin` `fade5a4273d6812b67be8e03d4f81c82947bc097779de0a449e3a112fdad29a6`, `bitcoind` `18a675fef253f402147ef8886e706d649d3804f692477bd3af94eab50e868fe8`, and the functional log `6290d6bd2c215a04c5b9df14070aa7e5650e99f606446d3fa7d822db09761986`.
+
+### Cycle 274 verdict and handoff
+
+- No current Bitcoin Core or libsecp256k1 source defect was confirmed. The fresh ASan+UBSan+LSan unit cell and the ASan-instrumented `dumptxoutset` process path completed without a source diagnostic. The clean result is limited to the exercised current-source paths; it does not replace the missing Valgrind run or a Core-wide MSan run.
+- No source patch or regression test is warranted from this cycle. The only journal change is this evidence and handoff snapshot. Do not repeat Cycle 83's exact fuzz targets/seeds, standalone TSan corpora, bounded secp MSan smoke, or default-limit OOM probes without a new trust boundary or first-invalid-operation hypothesis.
+- Next queue, ranked: obtain an installed Valgrind/Memcheck environment and run a small current wallet/persistence path; construct a complete MSan-capable Core dependency build; then exercise a current-source TSan or sanitizer fuzz target using new wallet/database or crash-recovery schedules. Preserve the exact build and functional artifacts above for independent review.
