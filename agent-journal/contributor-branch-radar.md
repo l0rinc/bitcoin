@@ -603,3 +603,47 @@ Nothing new to assess. Radar cell closed.
 
 ## Rotation note
 Eleven cycles; radar quiet.
+
+## Cycle 12 (2026-08-02, draw 198, raw=3654393603145900293 (63-bit), idx 28/35): radar — NEW author branch txgraph-retained-entry-usage assessed: memory-accounting gap REAL at HEAD (mechanism verified), bounded by peak watermark; author's fix in flight; 🟡 URGENT entry
+
+### Fetch results
+- git fetch l0rinc --prune: ONE new branch (862 total):
+  l0rinc/l0rinc/txgraph-retained-entry-usage (2 commits,
+  2026-08-01 18:25 -0700 — fresh).
+- knots: new tag v29.4.knots20260508rc1 (rc of the next knots
+  release; release-pipeline event, not a code-assessment cell).
+- l0rinc/master tracks origin/master (556988790a).
+
+### Assessment (the author's new WIP)
+Claim: GetMainMemoryUsage charges Entry storage by LIVE txcount
+while Compact retains m_entries capacity — churn leaves allocated
+memory outside DynamicMemoryUsage and -maxmempool accounting.
+- HEAD verification: TxGraphImpl::Compact's removal path
+  (txgraph.cpp:1875-1900) swaps to end + pop_back — capacity
+  RETAINED (no shrink on m_entries; :1458-1459 shrink_to_fit
+  covers m_linearization/m_mapping only). Charge formula at
+  :3762-3775 is sizeof(Entry)*txcount. GAP CONFIRMED REAL.
+- Bound: retained capacity <= peak tx watermark since startup —
+  retained-old memory, not unbounded growth; RSS can exceed the
+  -maxmempool-derived expectation persistently after churn.
+  No consensus/remote primitive; accounting accuracy class.
+- Branch quality (static): 475ab49da6 charges
+  memusage::DynamicUsage(m_entries) (capacity-aware) + early
+  zero-when-empty guard preserving the empty-graph contract;
+  b793679ed5 adds the churn characterization test. Sound shape.
+
+### Verdict
+RADAR FINDING: real, bounded, author-fix-in-flight. No local
+action (author's WIP; radar does not duplicate). 🟡 URGENT entry
+added (adopt/review when landed; RSS-vs-accounting re-check on
+adoption). Pruned the archived load_wallet ✅ to keep cap 10.
+
+### Exact commands
+- git fetch l0rinc --prune; git ls-remote --heads l0rinc (862);
+  git show 475ab49da6; sed txgraph.cpp:1456-1460, 1859-1900,
+  3762-3775.
+
+### Limitations / queue
+- The churn test on the branch was read, not executed (author's
+  CI is the natural runner; adoption cycle can re-run it).
+- knots v29.4 rc1 not diffed (release process, separate watch).

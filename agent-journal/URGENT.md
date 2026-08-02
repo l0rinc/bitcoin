@@ -116,20 +116,6 @@ independently verified.
   upper-bound error); re-verified NOT duplicated upstream @
   9611a35603 (#42 c5 — file is src/node/mempool_args.cpp there).
 
-## ✅ load_wallet fuzz harness delivered; bring-up crash = harness bug (fd74c4a7c2)
-- Mechanism: WalletBatch::LoadWallet (wallet-db record application)
-  had zero fuzz coverage; new harness pre-seeds in-memory SQLite with
-  fuzzed FLAGS/VERSION/NAME/descriptor/TX/unknown records and asserts
-  DBErrors classification + FLAGS/NAME round-trips.
-- Evidence: bring-up crash traced (seed /tmp/lw_crash_flags_seed) to
-  the harness's own SetWalletFlag persisting over the seeded FLAGS
-  record — production correct at every step; 5000 runs clean (~51/s).
-- Branch/commits: audit/fuzz-gaps-c2 @ fd74c4a7c2 (+ rescan harness
-  537e819eb0, 04254c1da7); archive agent/all-findings @ a8f5e2b503,
-  journal 90416bd242.
-- Next: widen record classes (crypted keys, ACTIVE*SPK, BESTBLOCK);
-  descriptor/TX semantic apply-vs-reject oracle.
-
 ## 🔴 UTXO-scan/resize race — upstream master (fixed in-tree e049f064e1)
 - Mechanism: gettxoutsetinfo/scantxoutset create a LevelDB cursor
   under cs_main then scan unlocked; assumeutxo ResizeCache resets
@@ -149,6 +135,27 @@ independently verified.
   rework 2026-07-28 — that shape cannot exist in-tree: zero
   condvar/shared_mutex in txdb, resize-cursor test green at HEAD
   per #42 c1). Nothing to do locally.
+
+## 🟡 txgraph GetMainMemoryUsage under-charges retained Entry capacity (author fix in flight)
+- Mechanism: TxGraphImpl::Compact removes entries via swap-to-end +
+  pop_back WITHOUT releasing m_entries vector capacity (the only
+  shrink_to_fit calls, txgraph.cpp:1458-1459, cover other members);
+  GetMainMemoryUsage charges sizeof(Entry) * LIVE txcount
+  (:3762-3775) — after fill-then-drain churn, allocated memory
+  (peak capacity) sits outside DynamicMemoryUsage and the
+  -maxmempool accounting.
+- Reachability/severity: mempool churn on any busy node; bounded by
+  the peak tx watermark since startup (retained-old memory, not
+  unbounded growth; no consensus/remote primitive).
+- Evidence: HEAD mechanism verified statically (pop_back path
+  :1875-1900, charge formula :3769); author WIP branch
+  l0rinc/l0rinc/txgraph-retained-entry-usage (2 commits,
+  2026-08-01) with churn characterization test + DynamicUsage(
+  m_entries) charge + zero-when-empty guard.
+- Branch/commit: fix on the author's branch (475ab49da6); radar
+  journal #65 c12; archive this cycle.
+- Next: adopt/review when the author lands it; re-verify
+  DynamicMemoryUsage vs RSS before/after churn on adoption.
 
 ## ✅ dbwrapper failed-construction leak (fixed 73a6798206, #13 c2)
 - Mechanism: CDBWrapper ctor can throw (LevelDB open failure) after
