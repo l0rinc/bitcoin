@@ -312,6 +312,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 65 | contributor-branch-radar | CYCLE-12 | 2026-08-02 | new author branch txgraph-retained-entry-usage: memory-accounting gap REAL+bounded at HEAD, fix in flight; URGENT 🟡 |
 | 65 | contributor-branch-radar | CYCLE-13 | 2026-08-02 | package-weight-accumulator: narrowing real, wrap unreachable (25x4M WU cap); hygiene only |
 | 65 | contributor-branch-radar | CYCLE-14 | 2026-08-02 | rpc-deduplicate-scan-objects: perf nicety, semantics-preserving; no URGENT change |
+| 65 | contributor-branch-radar | CYCLE-15 | 2026-08-02 | radar: zero delta; quiet |
 | 80 | fuzz-engine-differential | CYCLE-5 | 2026-07-29 | rich PSBTv2 differential: A=0/400, E=115, R=4 guard-contained; BIP371 value-layout lesson (6-seed iterations) |
 | 42 | ci-review-bot-followup | CYCLE-4 | 2026-07-29 | corecheck sweep: bench deltas noise-shaped (same +10-33% on unrelated bloom PR); regression reading corrected |
 | 42 | ci-review-bot-followup | CYCLE-6 | 2026-08-02 | watch @556988790a: 5 commits (2 out-of-scope merges), PRs static, F13/F14/F16 offerability re-confirmed |
@@ -1022,6 +1023,9 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 249 (1-watch pool): raw=173496863651005843 ->
+   #65 c15 (radar: zero delta; quiet). Pool: watches on
+   interval / new signals only.
    RE-RANK draw 248 (2-watch pool): raw=13484172206762621838,
    masked 4260800169907846030 -> idx 0 -> #42 c9 (variant
    watch: 26 author PRs; radar branches pre-PR).
