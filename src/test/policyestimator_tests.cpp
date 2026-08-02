@@ -2,12 +2,14 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <crypto/common.h>
 #include <policy/fees/block_policy_estimator.h>
 #include <policy/fees/block_policy_estimator_args.h>
 #include <policy/policy.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
 #include <uint256.h>
+#include <util/serfloat.h>
 #include <util/time.h>
 #include <validationinterface.h>
 
@@ -15,7 +17,123 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <array>
+#include <algorithm>
+#include <fstream>
+#include <iterator>
+#include <limits>
+#include <stdexcept>
+#include <utility>
+#include <vector>
+
+namespace {
+
+uint16_t ReadLE16(const std::vector<unsigned char>& data, size_t& position)
+{
+    const uint16_t value{static_cast<uint16_t>(static_cast<uint16_t>(data[position]) |
+                                              static_cast<uint16_t>(data[position + 1]) << 8)};
+    position += 2;
+    return value;
+}
+
+uint32_t ReadLE32(const std::vector<unsigned char>& data, size_t& position)
+{
+    uint32_t value{0};
+    for (unsigned int i = 0; i < 4; ++i) value |= uint32_t{data[position++]} << (8 * i);
+    return value;
+}
+
+uint64_t ReadLE64(const std::vector<unsigned char>& data, size_t& position)
+{
+    uint64_t value{0};
+    for (unsigned int i = 0; i < 8; ++i) value |= uint64_t{data[position++]} << (8 * i);
+    return value;
+}
+
+uint64_t ReadCompactSize(const std::vector<unsigned char>& data, size_t& position)
+{
+    const unsigned char marker{data[position++]};
+    if (marker < 253) return marker;
+    if (marker == 253) return ReadLE16(data, position);
+    if (marker == 254) return ReadLE32(data, position);
+    return ReadLE64(data, position);
+}
+
+size_t FindBucketPosition(const std::vector<unsigned char>& data, size_t& bucket_count)
+{
+    size_t position{16}; // version, best height, and historical range
+    bucket_count = ReadCompactSize(data, position);
+    if (bucket_count <= 1 || position + 8 * bucket_count > data.size()) {
+        throw std::runtime_error{"unexpected fee-estimator bucket vector"};
+    }
+    return position;
+}
+
+void WriteBucket(std::vector<unsigned char>& data, size_t position, double value)
+{
+    std::array<unsigned char, sizeof(uint64_t)> encoded{};
+    WriteLE64(encoded.data(), EncodeDouble(value));
+    std::copy(encoded.begin(), encoded.end(), data.begin() + position);
+}
+
+enum class BucketMutation {
+    NONFINITE,
+    NONINCREASING,
+    MISSING_SENTINEL,
+};
+
+} // namespace
+
 BOOST_FIXTURE_TEST_SUITE(policyestimator_tests, ChainTestingSetup)
+
+BOOST_AUTO_TEST_CASE(RejectInvalidPersistedBuckets)
+{
+    const fs::path path{m_node.args->GetDataDirNet() / "goal98-fee-buckets.dat"};
+    CBlockPolicyEstimator writer{path, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+    const std::array<std::pair<const char*, BucketMutation>, 3> mutations{{
+        {"non-finite", BucketMutation::NONFINITE},
+        {"non-increasing", BucketMutation::NONINCREASING},
+        {"missing high sentinel", BucketMutation::MISSING_SENTINEL},
+    }};
+
+    for (const auto& [name, mutation] : mutations) {
+        {
+            AutoFile output{fsbridge::fopen(path, "wb")};
+            BOOST_REQUIRE(!output.IsNull());
+            BOOST_REQUIRE(writer.Write(output));
+            BOOST_REQUIRE_EQUAL(output.fclose(), 0);
+        }
+
+        std::ifstream input{path.utf8string(), std::ios::binary};
+        std::vector<unsigned char> data{std::istreambuf_iterator<char>{input}, {}};
+        BOOST_REQUIRE(input.good() || input.eof());
+        size_t bucket_count{0};
+        const size_t buckets{FindBucketPosition(data, bucket_count)};
+
+        switch (mutation) {
+        case BucketMutation::NONFINITE:
+            WriteBucket(data, buckets, std::numeric_limits<double>::quiet_NaN());
+            break;
+        case BucketMutation::NONINCREASING:
+            std::copy_n(data.begin() + buckets, 8, data.begin() + buckets + 8);
+            break;
+        case BucketMutation::MISSING_SENTINEL:
+            WriteBucket(data, buckets + 8 * (bucket_count - 1), 0.0);
+            break;
+        }
+
+        std::ofstream output{path.utf8string(), std::ios::binary | std::ios::trunc};
+        output.write(reinterpret_cast<const char*>(data.data()), data.size());
+        output.close();
+        BOOST_REQUIRE(output.good());
+
+        CBlockPolicyEstimator reader{fs::path{}, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+        AutoFile mutated{fsbridge::fopen(path, "rb")};
+        BOOST_REQUIRE(!mutated.IsNull());
+        BOOST_CHECK_MESSAGE(!reader.Read(mutated), "accepted " << name << " persisted bucket vector");
+        BOOST_REQUIRE_EQUAL(mutated.fclose(), 0);
+    }
+}
 
 BOOST_AUTO_TEST_CASE(BlockPolicyEstimates)
 {

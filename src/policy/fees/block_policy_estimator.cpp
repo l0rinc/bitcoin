@@ -1028,6 +1028,13 @@ bool CBlockPolicyEstimator::Read(AutoFile& filein)
             if (numBuckets <= 1 || numBuckets > 1000) {
                 throw std::runtime_error("Corrupt estimates file. Must have between 2 and 1000 feerate buckets");
             }
+            if (!std::all_of(fileBuckets.begin(), fileBuckets.end(), [](const double bucket) { return std::isfinite(bucket); }) ||
+                fileBuckets.front() < MIN_BUCKET_FEERATE || fileBuckets.back() < INF_FEERATE ||
+                std::adjacent_find(fileBuckets.begin(), fileBuckets.end(), [](const double left, const double right) {
+                    return left >= right;
+                }) != fileBuckets.end()) {
+                throw std::runtime_error("Corrupt estimates file. Feerate buckets must be finite, strictly increasing, and cover the supported range");
+            }
 
             std::unique_ptr<TxConfirmStats> fileFeeStats(new TxConfirmStats(buckets, bucketMap, MED_BLOCK_PERIODS, MED_DECAY, MED_SCALE));
             std::unique_ptr<TxConfirmStats> fileShortStats(new TxConfirmStats(buckets, bucketMap, SHORT_BLOCK_PERIODS, SHORT_DECAY, SHORT_SCALE));
