@@ -1,3 +1,50 @@
+# Cycle 283 Completion
+
+- The fresh gate fetched `origin/master` before the exact selector. The
+  selector `shuf -i 0-98 -n 1` returned goal `57`
+  (`local-reasoning-domain`), with no reroll. The dedicated branch is
+  `uber-cycle-283-local-reasoning-domain-20260802`.
+- Gate HEAD was `4f43868807a11144ba4cf5598892a528ec3ea481`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1356` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `a86c972cf9c128872dfcbbf0a44a036abf45fef40b48223fe3894f637cf6f631`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Tracked/index cleanliness, `git diff --check`, and all seven protected
+  process checks passed; unrelated untracked artifacts were preserved.
+- Goal 57's prior cells excluded AddrMan classification, BaseIndex callback
+  ownership, wallet replacement rollback, index publication, `Chain::hasBlocks`,
+  index reinitialization, persisted filter readiness, and snapshot publication.
+  This cycle selected the distinct relationship between the validated
+  chainstate's durable flush result, UTXO hashing, and snapshot promotion.
+- `MaybeValidateSnapshot()` called the void `ForceFlushStateToDisk()` wrapper
+  and continued into UTXO hashing when `FlushStateToDisk()` reported an I/O
+  failure. A Linux scratch regression faulted the assumed undo file
+  `rev00001.dat` by replacing it with `/sys/kernel/uevent_seqnum`. Under the
+  temporary pre-fix source, the exact test command exited 201 after reaching
+  the generic `STATS_FAILED` result (414/417 assertions passed), rather than
+  identifying the first failed prerequisite. The run emitted the exact
+  `Flushing undo file to disk failed` notification.
+- Source/test/journal commit `cbd001bbe0`
+  (`validation: stop snapshot completion after flush failure`) was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It checks
+  `FlushStateToDisk(..., FORCE_FLUSH)` directly, adds
+  `SnapshotCompletionResult::FLUSH_FAILED`, returns before UTXO hashing, and
+  verifies two chainstates, `UNVALIDATED` snapshot state, and an unset target
+  UTXO hash. The selected-goal journal is included in the commit.
+- The focused Linux regression passed 1 case and 417 assertions. The related
+  `validation_chainstatemanager_tests,chainstate_write_tests` run passed 27
+  cases and 2,581 assertions. The build was
+  `CCACHE_DIR=/data/my_storage/tmp/cycle283-ccache TMPDIR=/data/my_storage/tmp/cycle283-build-tmp cmake --build /data/my_storage/tmp/cycle243-build --target test_bitcoin -j2`,
+  and `git diff --check` passed. No consensus, wallet/key, or unauthenticated
+  network impact was demonstrated; the fault test is Linux-only.
+- Verdict: **confirmed and fixed**. Post-source-close HEAD is
+  `cbd001bbe0`; divergence is `45 1357` (`origin/master...HEAD`). The next
+  action is a separate state close commit, then a fresh gate, exact selector
+  draw, and new `uber-cycle-284-*` branch. Do not claim the repository is
+  exhausted or reopen this cell without a changed failure backend or distinct
+  snapshot lifecycle.
+
 # Cycle 282 Completion
 
 - The fresh gate fetched `origin/master` before the exact selector. The
