@@ -2,6 +2,73 @@
 
 This ledger is the authoritative handoff state for the continuing 99-goal investigation.
 
+## Cycle 260 Completion
+
+- The fresh gate fetched `origin/master` before branch creation. The exact
+  selector `shuf -i 0-98 -n 1` drew goal `0`
+  (`continuous-bug-mining`). The dedicated branch is
+  `uber-cycle-260-continuous-bug-mining-20260802`. Start HEAD was
+  `b46b53bb73c49ce71cda1c86e5853ce734c1ebd9`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `1309 45`
+  (`HEAD...origin/master`).
+- Catalog, prompt, goals TSV, and protocol hashes were unchanged:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`, and
+  `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+  Tracked/index state was clean at the gate and `git diff --check` passed.
+  Existing untracked agent/user artifacts were preserved and excluded.
+- The old Goal 0 handoff queue was checked against current history and
+  journals. Its DirectoryCommit item is already closed by
+  `50c503d0dcb7086d940fb2638ea19251c561adfc`. The retained stale-PR seed was
+  #35592 and upstream commit `d1ed2a6e25d7e64943fbff5e3a7053c55c0617e4`,
+  `http: check rpcallowip immediately after accepting connection`; that
+  commit was not an ancestor of the selected branch.
+- Before the fix, `src/httpserver.cpp` checked `-rpcallowip` only in the
+  worker path after `ReadRequest()` had parsed headers and the body. A
+  forbidden peer could therefore consume HTTP parsing and request-body
+  resources and receive `403 Forbidden`. The fix stores the allowlist on
+  `HTTPServer`, initializes it before socket threads, rejects the peer in
+  `AcceptConnection()`, and removes the post-parse worker check. Direct mock
+  socket fixtures initialize the list for their `5.5.5.5` peer; the newer
+  pipelined fixture receives the same initialization.
+- A disposable pre-fix build from the exact start commit was created in
+  `/data/my_storage/tmp/cycle260-pre-fix-build`. Running the updated
+  non-loopback `rpc_bind.py` oracle against it failed at the disallowed case
+  with `JSONRPCException: non-JSON HTTP response with '403 Forbidden'`.
+  The post-fix binary passed the same test with a connection-level network
+  error for the forbidden peer. The original pre-fix test also passed only
+  because it expected that 403 response.
+- Post-fix validation passed: the `test_bitcoin` and `bitcoind` targets built
+  in `/data/my_storage/tmp/cycle243-build`; Python bytecode compilation passed;
+  `http_server_socket_tests` passed 20 assertions,
+  `http_server_pipelined_request_backpressure` passed 6, and
+  `http_socket_error_tests` passed 5. The full `httpserver_tests` suite passed
+  all 9 cases and 355 assertions. `rpc_bind.py --nonloopback` and adjacent
+  `interface_http.py` both reported `Tests successful`.
+- The first post-fix full HTTP attempt found a missing allowlist initialization
+  in the cycle-259 direct-server test and aborted before cleanup. That harness
+  correction was included before the successful focused and full reruns; no
+  product failure was hidden.
+- Finding commit `69cc7a3c35` (`http: reject disallowed RPC clients before
+  parsing`) was authored as `Lőrinc <pap.lorinc@gmail.com>` and includes the
+  source, unit/functional tests, shared test helper move, and
+  `agent-journal/continuous-bug-mining.md` update. Verdict: **confirmed and
+  fixed**. This is a remotely reachable RPC resource/exposure boundary and
+  does not alter allowed-client behavior, authentication, consensus, or wallet
+  state.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` remained alive and untouched. No cycle-260 daemon
+  or test process remains; disposable pre-fix worktree/build and test data are
+  under `/data/my_storage/tmp/cycle260-*`. `/` remains full, so scratch data
+  stayed under `/data`.
+- The next cycle must perform a fresh gate, fetch `origin/master`, draw exactly
+  one selector from `0..98`, and create a new `uber-cycle-261-*` branch. Do not
+  repeat the accept-time RPC allowlist cell or the dismissed #35772 duplicate;
+  re-rank the remaining current-history, coverage, tooling, and risk-map cells.
+  The repository is not considered exhausted.
+
 ## Cycle 259 Completion
 
 - The fresh gate fetched `origin/master` before branch creation. The exact
