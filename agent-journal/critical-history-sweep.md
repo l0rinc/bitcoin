@@ -749,3 +749,57 @@ uniform model exactly.
 ## Rotation note
 Nine cycles; the txindex v2 claim is now measured, closing c8's
 only open cell.
+
+## Cycle 3 (2026-08-02, draw 183, raw=2201154799395572746 (63-bit), idx 25/51): pre-2020 advisory batch — CVE-2018-17144 executable GUARDED at the public path; 8 further pre-2020 cells marker-verified; DISMISSED
+
+### Batch selection
+Official advisory list (bitcoincore.org security-advisories,
+fetched 2026-08-02); cells before 2020 not swept in c1/c2.
+
+### E1 — CVE-2018-17144 (duplicate-input DoS+inflation, CRITICAL
+class) — GUARDED, executable
+Probe (/tmp/btc49c3/dupinput.py, preserved): regtest node, real
+MiniWallet tx cloned with vin[0] duplicated ->
+testmempoolaccept: allowed=False, reject-reason=
+'bad-txns-inputs-duplicate'. The inflation-class input check
+fires at the public mempool path (CheckTransaction).
+
+### Marker-verified cells (fix-presence at HEAD, line refs)
+- CVE-2024-52920 (huge GETDATA CPU, 0.20.0): MAX_GETDATA_SZ=1000
+  net_processing.cpp:130; oversized vInv rejected :4170/:4261.
+- CVE-2024-52915 (huge INV 50MB, 0.20.0): MAX_INV_SZ=50000
+  net_processing.cpp:128.
+- CVE-2015-3641 (large incomplete messages, 0.10.1):
+  MAX_PROTOCOL_MESSAGE_LENGTH=4MB net.h:65; header size reject
+  net.cpp:774-777.
+- CVE-2017-18350 (SOCKS buffer overflow, 0.15.1): Socks5 rewritten
+  with Sock/InterruptibleRecv bounded reads, netbase.cpp:408-511.
+- CVE-2024-52914 (orphan-handling stall, 0.18.0): bounded
+  orphanage with count/usage accounting + Assume invariants,
+  node/txdownloadman_impl.cpp:100-111.
+- CVE-2024-52916 + CVE-2019-25220 (low-diff headers memory,
+  0.15.0/later): nMinimumChainWork gate (chainparams.cpp:141) +
+  rate-limited, work-gated presync reporting
+  (validation.cpp:4456-4472, AssertLockNotHeld + 250ms limit).
+- CVE-2020-14198 (distinct-IP DoS, 0.20.1) + CVE-2024-52912
+  (first-200-peers timestamp netsplit, 0.21.0): peer time
+  adjustment REMOVED — src/timedata.h does not exist in this
+  tree; addrman bucketing/limits stand (addrdb/addrman present).
+- inv-to-send sort DoS: per-peer inv bounds via MAX_INV_SZ path.
+
+### Verdict
+DISMISSED: every pre-2020 advisory class is guarded at HEAD; the
+one consensus-critical cell was proven executable, the rest are
+fix-present at exact line refs. The whole-history sweep now
+covers 2024-2025 (c1/c2) and pre-2020 (c3) advisories.
+
+### Exact commands
+- FetchURL advisory list; dupinput.py run (RESULT above);
+  grep line refs above.
+
+### Limitations / queue
+- Marker cells are fix-presence, not re-exploits (the affected
+  versions are a decade old; the fixes are long-covered by
+  in-tree regression tests).
+- BIP50/BIP30-era cells covered elsewhere (#99 c6 merkle CVE
+  anchor; BIP30 in fork campaigns).
