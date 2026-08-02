@@ -103,6 +103,12 @@ class GetBlocksActivityTest(BitcoinTestFramework):
             node.getdescriptoractivity([blockhash], [
                 f"addr({addr_1})", f"addr({addr_1})", f"addr({addr_2})"], True))
 
+        scan_object = {"desc": f"addr({addr_1})"}
+        assert_equal(
+            result,
+            node.getdescriptoractivity(
+                [blockhash], [scan_object, scan_object, f"addr({addr_2})"], True))
+
         # Flipping descriptor order doesn't affect results.
         result_flipped = node.getdescriptoractivity(
             [blockhash], [f"addr({addr_2})", f"addr({addr_1})"], True)

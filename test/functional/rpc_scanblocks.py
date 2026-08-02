@@ -79,8 +79,11 @@ class ScanblocksTest(BitcoinTestFramework):
             "start", [f"addr({addr_1})"], 0, height - 1)['relevant_blocks']
 
         # make sure the blockhash is present when using the first mined block as start_height
-        assert blockhash in node.scanblocks(
-            "start", [{"desc": f"pkh({parent_key}/*)", "range": [0, 100]}], height)['relevant_blocks']
+        scan_object = {"desc": f"pkh({parent_key}/*)", "range": [0, 100]}
+        assert blockhash in node.scanblocks("start", [scan_object], height)['relevant_blocks']
+        assert_equal(
+            node.scanblocks("start", [scan_object, scan_object], height),
+            node.scanblocks("start", [scan_object], height))
 
         # check that false-positives are included in the result now; note that
         # finding a false-positive at runtime would take too long, hence we simply

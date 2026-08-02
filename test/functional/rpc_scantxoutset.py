@@ -81,6 +81,14 @@ class ScantxoutsetTest(BitcoinTestFramework):
         assert_raises_rpc_error(-8, "Range specified as [begin,end] must not have begin after end", self.nodes[0].scantxoutset, "start", [{"desc": "desc", "range": [2, 1]}])
         assert_raises_rpc_error(-8, "Range is too large", self.nodes[0].scantxoutset, "start", [{"desc": "desc", "range": [0, 1000001]}])
 
+        scan_object = {
+            "desc": "combo(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/1/1/*)",
+            "range": 1500,
+        }
+        assert_equal(
+            self.nodes[0].scantxoutset("start", [scan_object, scan_object]),
+            self.nodes[0].scantxoutset("start", [scan_object]))
+
         self.log.info("Test extended key derivation.")
         # Run various scans, and verify that the sum of the amounts of the matches corresponds to the expected subset.
         # Note that all amounts in the UTXO set are powers of 2 multiplied by 0.001 BTC, so each amounts uniquely identifies a subset.
