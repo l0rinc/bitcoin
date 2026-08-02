@@ -1,3 +1,56 @@
+# Cycle 282 Completion
+
+- The fresh gate fetched `origin/master` before the exact selector. The
+  selector `shuf -i 0-98 -n 1` returned goal `98`
+  (`float-sanitizer-fuzz-exclusions`), with no reroll. The dedicated branch
+  is `uber-cycle-282-float-sanitizer-fuzz-exclusions-20260802`.
+- Gate HEAD was `13000d172edb256d511836811a246632bad0473b`; fetched
+  `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`; merge base
+  was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was
+  `45 1354` (`origin/master...HEAD`); and the entry state SHA-256 was
+  `d0d00df03c527185ac2950da398fc202b84b17ba7123ecee97b9ec8a308fd0e5`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged.
+  Tracked/index cleanliness, `git diff --check`, and all seven protected
+  process checks passed; unrelated untracked artifacts were preserved and
+  untouched.
+- Earlier Goal 98 cells had already closed raw IEEE exceptional values,
+  locale and policy-estimator preconditions, the necessary SHA256 SSE4
+  sanitizer attribute, and broad strprintf fuzzer guards. This cycle found a
+  distinct current-tree sanitizer gap in bloom arithmetic. The source still
+  computed MurmurHash seeds in 32-bit unsigned arithmetic and formed rolling
+  generation masks with `0 - uint64_t(...)`, while three per-symbol integer
+  sanitizer suppressions hid those operations.
+- A fresh Clang 19 build at
+  `/data/my_storage/tmp/cycle282-bloom-int` was configured with
+  `-DSANITIZERS=integer`, `-DENABLE_IPC=OFF`, wallet/GUI/bench disabled, and
+  built with `ninja -C ... test_bitcoin -j2`. With only the three bloom
+  suppressions removed from a scratch copy of the suppression file, the
+  focused pre-fix command stopped at
+  `src/common/bloom.cpp:50` with
+  `unsigned integer overflow: 2 * 4221880213`, reached from the existing
+  `bloom_create_insert_serialize` test. The deterministic test also checks
+  exact serialized filter bytes, so it is a behavior-sensitive oracle.
+- Source commit `38a74d7b36`
+  (`bloom: make sanitizer-clean wraparound explicit`) was authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. It computes hash seeds in `uint64_t` before
+  explicit 32-bit truncation, forms all-zero/all-one generation masks without
+  sanitizer-visible subtraction, removes the three bloom suppressions, and
+  records the selected-goal journal update. Existing behavior is preserved by
+  the protocol serialization vectors and rolling-filter assertions.
+- After the source commit, the incremental rebuild completed 6/6 steps. The
+  full `bloom_tests` suite ran with the bloom-free scratch suppression file
+  under `-fsanitize=integer` and passed all 14 cases and 37,687 assertions,
+  including exact serialization, insert/contains, reset, retention, and
+  false-positive checks. The baseline bloom suite also passed before the edit.
+  `git diff --check` passed after the edit. No floating-point contract,
+  production fuzzer gate, or unrelated tracked file changed.
+- Verdict: **confirmed and fixed**. Post-source-close HEAD is
+  `38a74d7b36`; divergence is `45 1355` (`origin/master...HEAD`). The next
+  action is a separate state close commit, then a fresh gate, exact selector
+  draw, and new `uber-cycle-283-*` branch. Do not reopen the prior Goal 98
+  cells without changed source, compiler, or independent evidence. The
+  repository is not considered exhausted.
+
 # Cycle 281 Completion
 
 - The fresh gate fetched `origin/master` before the exact selector. The
