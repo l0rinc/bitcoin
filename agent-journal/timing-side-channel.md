@@ -62,3 +62,38 @@ faster.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 2 (2026-08-02, draw 205, raw=3235443014574466965 (63-bit), idx 17/28): secp256k1 ctime_tests under valgrind — 0 errors from 0 contexts; constant-time property CONFIRMED at the library level
+
+### Cell
+The c1 queue's secp ctime cell: SECP256K1_BUILD_CTIME_TESTS is a
+valgrind-backed suite that poisons secrets and fails on any
+secret-dependent branch/address — the library-level constant-
+time check.
+
+### Evidence
+- Host check: valgrind present (/usr/bin/valgrind) — c1's
+  'availability unverified' resolved.
+- Subtree build: cmake -B /tmp/secp-ctime (Release,
+  CTIME_TESTS=ON, others OFF; Valgrind_WORKS success) — 7-edge
+  build, seconds (the session's subtree technique).
+- Run: valgrind --error-exitcode=42 ./bin/ctime_tests ->
+  'ERROR SUMMARY: 0 errors from 0 contexts' + clean heap
+  (1 alloc/1 free). The suite's secret-dependence checks all
+  pass on this host/toolchain (gcc 13.3, Cortex-A76).
+
+### Verdict
+CONFIRMED (negative, second form): the constant-time property
+holds at library level under valgrind's dynamic taint analysis,
+complementing c1's statistical dudect negative on AES-CBC and
+the #45 code-read. No timing-leak signal on any axis tested.
+
+### Exact commands
+- cmake/ninja lines above; valgrind run above.
+
+### Limitations / queue
+- Single microarchitecture (c1 note stands: a second host would
+  strengthen both negatives).
+- ctime_tests covers the library's own suites; Core-side usage
+  patterns (nonce function choice etc.) are covered by the #45
+  family code-reads, not valgrind.
