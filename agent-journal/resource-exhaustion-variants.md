@@ -241,3 +241,42 @@ or failure-contract issue.
 ## Rotation note
 Four cycles; HTTP accounting, scan/resize race, scan queueing,
 and getblockstats-pruning all closed with measurements.
+
+## Cycle 5 (2026-08-02, draw 226, raw=17325288802186375634, masked 8101916765331599826, idx 1/5): untrusted-interface bound census — all 16 bound constants have enforcement points AND measured journal cells; campaign EXHAUSTED
+
+### Census (net_processing.cpp bound constants -> enforcement ->
+measured cell)
+- MAX_INV_SZ 50000 / MAX_GETDATA_SZ 1000: reject arms
+  (:4170/:4261) — #49 c10 markers.
+- MAX_CMPCTBLOCK_DEPTH 5 / MAX_BLOCKTXN_DEPTH 10: static_assert
+  + height gates (:2528/:4406-4414) — #109 c1-c3 compact-block
+  family.
+- MAX_GETCFILTERS_SIZE 1000 / MAX_GETCFHEADERS_SIZE 2000:
+  response caps (:3394/:3423) — blockfilter family (#49-era
+  review).
+- MAX_ADDR_RATE_PER_SECOND 0.1 + token bucket (:195-402):
+  addr-spam protection (CVE-2024-52919's fix shape) — advisory
+  family #49.
+- MAX_BLOCKS_IN_TRANSIT_PER_PEER 16: in-flight cap — stalling
+  family (#49 52922 markers).
+- MAX_LOCATOR_SZ 101: getheaders bound — headers family (#46 c3
+  presync map).
+- PRIVATE_BROADCAST_MAX_CONNECTION_LIFETIME 3min: #49 c2
+  fork-interaction cell (54604).
+- MAX_OUTBOUND_PEERS_TO_PROTECT 4 / MAX_BLOCKS_TO_ANNOUNCE 8 /
+  MAX_PCT_ADDR_TO_SEND 23 / MAX_ADDR_TO_SEND 1000 /
+  MAX_FEEFILTER_CHANGE_DELAY: outbound-shaping constants
+  (self-resource, not attacker-consumed).
+
+### Verdict
+EXHAUSTED: every attacker-reachable resource consumer on the
+P2P interface has a bound, an enforcement point, and a measured
+cell in the journals. Reopen on new message types or new
+unbounded consumers.
+
+### Exact commands
+- grep constant census + enforcement line refs above.
+
+### Limitations
+- Census is net_processing-scoped (the untrusted interface);
+  RPC/RPC-server bounds are separate campaigns' cells (#4, #30).
