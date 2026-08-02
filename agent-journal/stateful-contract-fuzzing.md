@@ -159,3 +159,29 @@ counting; remaining genuinely-weak spots are more likely in NEW targets
 
 ## Rotation note
 Three bounded cycles complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 4 (2026-08-02, draw 220, raw=12572157352548436285, masked 3348785315693660477, idx 8/11): undo-data shapes (shared #61/#28 queue item) — ALREADY COVERED by the #35-c5 lineage battery; absorption verified green; DISMISSED
+
+### Absorption evidence
+The queued 'CTxOutUndo/undo-data round-trip shapes' cell is
+delivered as ctxundo_hostile_field_semantics (coins_tests.cpp:344,
+commit f11c3ec1a2, #35 cycle 5): four-layer classification of
+hostile undo fields (decode-reject out-of-range amount /
+apply-reject height-0 / documented-accept huge height / trust-
+boundary self-written data) + range-check mutation KILLED.
+Run today: --run_test=coins_tests 'No errors detected'
+(build-before, current HEAD).
+
+### Verdict
+DISMISSED (absorbed): the undo-data cell is covered with a
+mutation-verified battery; nothing to add without duplicating
+the #35 lineage. The shared queue note in #28 c3's journal is
+resolved by the same pointer.
+
+### Exact commands
+- git show f11c3ec1a2; test run above.
+
+### Limitations / queue
+- fuzz/undo_data target (fuzz-level) is qa-assets' domain
+  (#79's family).
+- Campaign queue: fuzz-target PR watch (standing).
