@@ -1,5 +1,51 @@
 # CI, Coverage-Bot, and Review-Bot Follow-up Audit
 
+## Cycle 292: failed Windows PR follow-up
+
+### Cycle identity and gate
+
+- The exact selector shuf -i 0-98 -n 1 returned 42, selecting ci-bot-followup. No reroll was made. The dedicated branch is uber-cycle-292-ci-bot-followup-20260802.
+- Cycle-start HEAD was 6b574d31651b5563839e061f0f01355713ef943a; origin/master was 556988790a7f961693a8fd93f73725baea66476a; merge-base was a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b; start divergence origin/master...HEAD was 45 1374; and the entry uber-state SHA-256 was e0f1cabf9f08f3c5b19659508eada7e3fce8a4e8535b523e0e595779f88ba4c0.
+- The tracked and index tree was clean apart from the pre-existing untracked agent artifacts. Catalog, random prompt, goals TSV, and uber-protocol hashes matched 5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8, 10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec, babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb, and 954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0. All seven protected long-running processes were alive and untouched. New raw API responses and probes were stored only under /data/my_storage/tmp/cycle292-ci-bot.
+- Prior Goal 42 cells excluded: static workflow/matrix reference checking, macOS GUI coverage follow-up, and vendored action SHA pinning. The new queue cell was a live failed check on an open PR, independently compared with current-master checks and the PR's review/bot evidence.
+
+### Hypotheses and scope
+
+1. A current open PR has a failed or unresolved CI check whose failure is caused by a source or build-contract regression rather than an opaque transient.
+2. A review-bot or coverage-bot follow-up is present but not reflected in the changed source or test contract.
+3. A Windows-specific change can compile under the repository's MSVC Unicode configuration and preserve the intended UTF-8 process boundary.
+
+The trust boundary is the upstream pull request, GitHub check-run conclusions, review discussion, CoreCheck report, and the local CMake/source contract. External status is a seed; a source classification requires an independent local reproduction or a direct source/configuration proof. No current-branch production change is justified for an unmerged remote PR without an analogous defect in origin/master.
+
+### Current check-run and review evidence
+
+- The current origin/master commit 556988790a7f961693a8fd93f73725baea66476a returned 29 check runs: 28 success and the expected test ancestor commits skip. The Windows native, VS job 91386601965 and Windows native, fuzz, VS job 91386601949 were both successful.
+- Open PR 35704, windows: remove deprecated codecvt via UTF-8 narrow APIs, had head 217926dfdf06dc0f0cf3f76ded7d9f4b73af9da2 and base 556988790a7f961693a8fd93f73725baea66476a. Its check-run endpoint returned 29 checks: 26 success, one skipped, and two failures. The failed jobs were Windows native, VS, job 91515361967, and Windows native, fuzz, VS, job 91515362008. Both stopped in the Build step; executable-manifest checks and tests were skipped.
+- The failed check-run annotations contained only Process completed with exit code 1 and a pull-request-number notice. The unauthenticated GitHub job-log endpoint returned HTTP 403 with Must have admin rights to Repository, so the hosted compiler diagnostic was not treated as directly observed evidence.
+- The PR review trail is consistent with the changed boundary. Review comment https://github.com/bitcoin/bitcoin/pull/35704#discussion_r3580156813 says the earlier Windows wide conversion should be reverted after the UTF-8 active-code-page change. Review comment https://github.com/bitcoin/bitcoin/pull/35704#discussion_r3580628463 asks whether a narrow execvp path can be used. A later review asks about CreateProcess and the PR head updates to the generic API in commit 217926d. The latest issue comment records that update, while the two Windows builds then fail.
+- The CoreCheck report linked by DrahtBot is https://corecheck.dev/bitcoin/bitcoin/pulls/35704. Its latest report 3447 is status success with benchmark_status pending and no coverage data for the current head. It is not a failing coverage or benchmark gate and does not explain the Windows build failure.
+
+### Independent source and compiler-contract reproduction
+
+- The PR diff from origin/master FETCH_HEAD changes src/util/subprocess.h from CreateProcessW with a wchar_t command line and STARTUPINFOW semantics to generic CreateProcess with a char command line and generic STARTUPINFO. It also changes the Windows quote helper and ExecVp path to narrow strings, removes the codecvt deprecation suppression, and removes the HAVE__WSYSTEM probe. The current origin/master source still uses CreateProcessW.
+- The repository's CMakeLists.txt explicitly adds _UNICODE and UNICODE to core_interface for MSVC at lines 325-326. Under the Windows SDK macros, generic CreateProcess therefore resolves to CreateProcessW and generic STARTUPINFO resolves to STARTUPINFOW.
+- A minimal clang-cl-19 type reproduction was run with target x86_64-pc-windows-msvc, a synthetic Windows declaration, and UNICODE defined. The call used char command_line[2], generic STARTUPINFO, and generic CreateProcess. It failed with: no matching function for call to CreateProcessW; candidate not viable because char[2] cannot convert to wchar_t*. This reproduces the exact narrow/wide type incompatibility independently of the unavailable hosted log.
+- A control with the same UNICODE condition but explicit CreateProcessA, STARTUPINFOA, and char command_line passed clang-cl-19 -fsyntax-only with exit 0. This is a minimal repair-direction proof, not a proposed local commit. Retaining the existing W implementation would also preserve the current wide contract; whether A or W is appropriate for the PR must be resolved by its author and Windows UTF-8 policy.
+- The source/configuration check is reproducible from the checkout without a Windows SDK: git grep on origin/master finds only CreateProcessW in src/util/subprocess.h and the MSVC _UNICODE;UNICODE definition; git grep on FETCH_HEAD finds generic CreateProcess with the same definition. git diff --check origin/master FETCH_HEAD passed.
+
+### Verdict
+
+**Confirmed remote-only PR build defect; no current-tree finding.** The two Windows CI failures are source-correlated: the PR changes a wide Windows API call to a generic macro while the same build explicitly defines UNICODE, and the independent clang-cl type probe fails on the resulting W signature. Current master uses the explicit wide API and its corresponding Windows jobs pass. The hosted log remains inaccessible, so the exact CI compiler line is an inference from the source contract and the failed Build-step location, not a quoted remote diagnostic.
+
+No source or permanent test change is justified on this branch because the defect exists only in unmerged PR 35704, not in origin/master or the local current source. The review/bot evidence did not reveal a separate current coverage or analyzer omission. The report-ready remote follow-up is the PR URL, both failed job URLs, the exact source diff, the UNICODE CMake line, and the minimal clang-cl reproduction above.
+
+### Limitations and next queue
+
+- No MSVC or Windows SDK is installed locally, so the full PR cannot be built here. The type-level clang-cl reproduction is narrower than a hosted Windows build.
+- GitHub job logs require repository-admin access and returned HTTP 403. Check-run metadata, annotations, job-step boundaries, review comments, PR history, CoreCheck HTML, and local source contracts were available.
+- CoreCheck's latest report has no coverage data and a pending benchmark status; it is not evidence that the changed process paths are covered.
+- Do not patch the current tree for the unmerged PR. Reopen this CI cell only with a new head, a post-fix failed check, a current-master analogue, or accessible logs showing a different mechanism. The next cycle should draw a fresh goal and avoid repeating this PR's stale Windows source cell.
+
 ## Cycle 267: PR check failure and vendored workflow follow-up
 
 ### Cycle identity and gate
