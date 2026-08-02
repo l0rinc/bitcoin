@@ -119,3 +119,35 @@ journal's evidence tier rises.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 3 (2026-08-02, draw 186, raw=8926299595551660088 (63-bit), idx 44/47): A11 replay — kernel input_index asserts confirmed at TODAY's upstream head; sharpened: ZERO in-tree callers (not even tests); replay queue now empty
+
+### Replay (fresh context, claims from #46 c1 re-derived)
+A11: plain asserts on public C API parameters —
+btck_transaction_get_input_at (bitcoinkernel.cpp:578) and
+btck_script_pubkey_verify (:717): assert(input_index <
+vin.size()); asserts-on -> abort; NDEBUG downstream -> UB; no
+status path, no documented precondition.
+1. Upstream identity at 556988790a (fetched this cycle): the same
+   two asserts, upstream lines 540/676. WIP-API status unchanged.
+2. Caller census: grep across src/ finds NO caller outside
+   bitcoinkernel.{h,cpp}/wrapper — not even test_kernel. The
+   functions are exercised only by EXTERNAL kernel consumers, so
+   the OOB path is unreachable from anything this tree ships.
+3. Behavioral tier: asserts present in this tree's builds (c1
+   verified the abort class); the NDEBUG-UB arm is a downstream-
+   build property, unchanged.
+
+### Verdict
+A11 CONFIRMED-LATENT, replay-verified with one sharpening (zero
+in-tree callers incl. tests). No local change (minimal-diff rule;
+upstream WIP; watch via #42 stands). Replay queue: EMPTY
+(A-items green, A5 behavior-verified, A8 superseded, A11 done).
+
+### Exact commands
+- git show origin/master:src/kernel/bitcoinkernel.cpp | grep
+  assert(input_index (540/676); grep caller census above.
+
+### Limitations / queue
+- The replay queue is empty; new suspicions arrive via other
+  campaigns' Limitations tails (standing rule).

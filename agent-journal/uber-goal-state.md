@@ -249,6 +249,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 75 | build-throughput-cacheability | CYCLE-4 | 2026-07-29 | 45-uncacheable itemized: 57/58 = failed compilations (rotation's own mutants); IPC/capnp hypothesis refuted |
 | 95 | database-semantics-differential | CYCLE-4 | 2026-07-29 | durability differential: kill -9 mid-reindex, both engines recover identical tip, zero corruption |
 | 102 | durable-suspicion-replay | CYCLE-2 | 2026-07-29 | A5 capturemessages abort replayed on v28.2 binary: same msghand exception abort (behavior-verified, second verifier form) |
+| 102 | durable-suspicion-replay | CYCLE-3 | 2026-08-02 | A11 replay: upstream-identical @556988790a, zero in-tree callers; CONFIRMED-LATENT; replay queue empty |
 | 91 | compiler-binary-hardening | CYCLE-4 | 2026-07-29 | ELF census 7/7 binaries: PIE+NX+full RELRO+canary uniform, zero divergence; BTI note absent (c1 toolchain finding) |
 | 80 | fuzz-engine-differential | CYCLE-4 | 2026-07-29 | PSBTv2 differential: v2 paths clean (A=0/400 mixed); E=107 round-trip-exact, C=124 Python-lax |
 | 50 | fuzz-introspector-blockers | CYCLE-3 | 2026-07-29 | correlated PSBT signing seed: layout replay byte-exact + walletprocesspsbt complete=True; complete-arm driver |
@@ -960,6 +961,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 186 (47-campaign eligible set): raw=
+   8926299595551660088 (63-bit) -> idx 44 -> #102 c3 (A11
+   replay: CONFIRMED-LATENT, upstream-identical, zero callers;
+   replay queue empty).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102}.
    RE-RANK draw 185 (48-campaign eligible set): raw=
    5590414441187505117 (63-bit) -> idx 45 -> #104 c4 (Coldcard
    RNG shape translation: NEGATIVE; abort-on-failure design).
