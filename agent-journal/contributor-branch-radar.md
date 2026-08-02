@@ -693,3 +693,39 @@ continues.
 - The arithmetic bound assumes the count check precedes the
   accumulate (verified in the same function, :84-87).
 - knots v29.4 rc1 still not diffed (release-process watch).
+
+## Cycle 14 (2026-08-02, draw 244, raw=8935267519944944495, n=1): radar — NEW branch rpc-deduplicate-scan-objects assessed: perf nicety (skip exact-repeat scan-object expansion), semantics-preserving by set-dedup design; package-weight-accumulator force-updated (author rebase); no URGENT change
+
+### Fetch
+- git fetch l0rinc --prune: ONE new branch (864 total):
+  l0rinc/l0rinc/rpc-deduplicate-scan-objects (2 commits,
+  2026-08-01). package-weight-accumulator force-updated to
+  4eaf3c6595 (author's own rebase, expected WIP flow).
+
+### Assessment
+- Mechanism: descriptor scan RPCs (scantxoutset :2421,
+  scanblocks :2656, getdescriptoractivity :2815) expand every
+  request object independently; exact repeats re-parse/re-derive
+  with no result change (derived scripts land in SETS).
+- Fix shape: track serialized scanobject.write() in an
+  unordered_set, skip exact repeats pre-expansion; different
+  spellings deriving the same scripts keep the existing path
+  (commit's own scoping note).
+- Correctness: semantics-preserving by construction (set-based
+  script collection; response shapes unchanged). Scope:
+  authenticated local RPC, self-inflicted CPU only — no
+  security/consensus angle, no acceptance-path impact.
+- Branch quality: minimal diff (3 call sites + helper + test
+  9567eb8c99 covering duplicate scans). Sound.
+
+### Verdict
+RADAR NOTE: perf nicety, no defect class. No URGENT entry; no
+local action.
+
+### Exact commands
+- git fetch l0rinc --prune (864); git show 14ac2d4f18 (diff
+  refs above); git log package-weight-accumulator (4eaf3c6595).
+
+### Limitations / queue
+- Dedup-by-serialized-form misses semantically-equal-different-
+  spelling objects (the commit's documented scoping; fine).
