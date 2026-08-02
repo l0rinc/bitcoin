@@ -1,3 +1,62 @@
+# Cycle 305 Completion
+
+- The exact post-Cycle-304 selector was `shuf -i 0-104 -n 1` -> goal `69`
+  (`backend-differential`). The dedicated branch is
+  `uber-cycle-305-backend-differential-20260802`. Cycle-start HEAD was
+  `54afa66613a649a55974ec83c67efd12cb02052`; `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base equaled
+  `origin/master`; start divergence was `0 1407`; and the entry state-file
+  SHA-256 was
+  `117054ed9a8028c76040e401605ddbd1fe7f774e80e2d2a4ab91d506ce5dc4ec`.
+- The prior CRC32C, Core SHA256, libsecp256k1 portable/assembly, Minisketch
+  field, and bitset/cluster representation matrices were excluded. A new
+  public API boundary was found in `minisketch_decode`: `size_t
+  max_elements` narrowed to `int`, and the common decoder evaluated signed
+  `1 + max_count`. A one-element sketch returned `-1` for `INT_MAX`,
+  `INT_MAX + 1`, and `SIZE_MAX` in both generic and CLMUL libraries.
+- The independent Clang 19 ASan/UBSan generic and CLMUL probes reported
+  signed overflow at `src/minisketch/src/sketch_impl.h:401`, with a stack
+  through `SketchImpl::Decode` and `minisketch_decode`. Invalid implementation
+  IDs 3 and `UINT32_MAX` correctly returned null and were dismissed as an
+  unrelated candidate.
+- The fix keeps the decode bound as `size_t` through the abstract and concrete
+  decoders, passes it without narrowing, and compares `poly.size() - 1` to
+  the bound. A permanent C API test covers `INT_MAX`, `INT_MAX + 1`, and
+  `SIZE_MAX` for every compiled implementation. Finding commit `9a8cf446ba`
+  (`minisketch: preserve large decode bounds`) is authored by
+  `Lőrinc <pap.lorinc@gmail.com>`.
+- Normal and sanitized generic/CLMUL CMake trees rebuilt their no-VERIFY and
+  VERIFY binaries. Focused probes returned element 7 for all large bounds;
+  complexity-2 and complexity-4 suites passed with `All tests successful.`
+  The repaired sanitized probes exited without ASan, UBSan, runtime-error, or
+  sanitizer-summary output. `git diff --check` passed.
+- The learned suspicious surface is Minisketch serialized-size multiplication,
+  capacity/max-elements arithmetic, and decode return counts. Goal `105`,
+  `minisketch-api-size-arithmetic`, was added with seed
+  `agent-journal/minisketch-api-size-arithmetic.md`; its catalog commit is
+  `14d0a8782f` (`goal: add minisketch size arithmetic campaign`). The catalog
+  now contains 106 contiguous goals `0..105`. Catalog SHA-256 is
+  `ae927e6bca7b2406e318ac893962e481862f22ff46443228e6908131ff7dca13`,
+  manifest SHA-256 is
+  `233d8f1d52e98a4a3d8d134df4e7bd35792af2ea6814d5af02185cf8fdc20510`, the
+  random selector prompt SHA-256 is
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`, and
+  the generator SHA-256 is
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`.
+- The requested selection ledger is recorded in
+  `agent-journal/random-goal-run.md`. Existing untracked probes and generated
+  artifacts remain preserved. Protected PIDs `777094`, `956381`, `1138182`,
+  `1157959`, `1312049`, `1312050`, and `1346200` were alive and untouched.
+- The rebase after source changes was attempted before the final ledger edit
+  and was blocked only by that unstaged ledger update; commit the state and
+  ledger, then run `git fetch origin master` and `git rebase origin/master`
+  again. No source conflict is expected. At this close, the completed finding
+  and goal stack is `0 1410` ahead/behind before the state-close commit.
+- Verdict: **confirmed and fixed**. No repository-completion claim is made.
+  After the state-close rebase and fresh gate, draw exactly one selector with
+  `shuf -i 0-105 -n 1`, create a new `uber-cycle-306-*` branch, and continue
+  with the selected goal.
+
 # Cycle 304 Completion
 
 - The exact post-Cycle-303 selector was `shuf -i 0-103 -n 1` -> goal `52`

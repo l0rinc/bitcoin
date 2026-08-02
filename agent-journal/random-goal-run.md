@@ -47,3 +47,26 @@
 - Branch: `uber-cycle-305-backend-differential-20260802`
 - Timestamp: `2026-08-02T22:50:50Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-69`
+
+## Cycle 305 Result
+
+- Finding: `minisketch_decode()` narrowed its public `size_t max_elements`
+  through `int`, and the decoder then evaluated signed `1 + max_count`.
+  Generic and CLMUL builds returned `-1` for a valid one-element sketch when
+  the caller supplied `INT_MAX`, `INT_MAX + 1`, or `SIZE_MAX`.
+- Verdict: confirmed and fixed.
+- Finding commit: `9a8cf446ba` (`minisketch: preserve large decode bounds`)
+- Focused verification: generic and CLMUL external probes returned element 7
+  for all three large bounds; pre-fix ASan/UBSan replay independently reported
+  signed overflow at `src/minisketch/src/sketch_impl.h:401` in both backends.
+- Broad validation: normal and sanitized no-VERIFY/VERIFY Minisketch suites
+  passed at complexities 2 and 4 in generic and CLMUL trees.
+- Learned suspicious surface: Minisketch serialized-size multiplication,
+  capacity/max-elements arithmetic, and decode return counts.
+- Added contiguous goal: `105` (`minisketch-api-size-arithmetic`)
+- Goal/seed/catalog commit: `14d0a8782f`
+- Catalog count after extension: 106 goals, IDs `0..105`
+- Catalog SHA-256: `ae927e6bca7b2406e318ac893962e481862f22ff46443228e6908131ff7dca13`
+- Manifest SHA-256: `233d8f1d52e98a4a3d8d134df4e7bd35792af2ea6814d5af02185cf8fdc20510`
+- Generator SHA-256: `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`
+- Random-run prompt SHA-256: `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`
