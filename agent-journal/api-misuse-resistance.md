@@ -256,3 +256,21 @@ verified; upstream offerable). The c1/c2-era fixes (b6b48987a5,
 ### Limitations / queue
 - Sweep for OTHER pre-rotation journals missing from the archive
   (the #4/#16 class) is the natural follow-up cell.
+
+## Postscript (2026-08-02, draw 233-redraw, raw=3871160351176686871 (63-bit), idx 1/2): lineage re-sweep (the c4 queue item) — 112/112 journals present in agent/all-findings, ZERO missing; the R23 repair holds
+
+### Re-sweep (R23 method, #90 c3)
+- Branch set: all audit/* agent-journal/*.md, sorted-unique =
+  112.
+- Archive set: agent/all-findings agent-journal/ = 112.
+- comm -23: EMPTY. Every journal across every feature branch is
+  in the archive — the c194 bulk repair plus the identity-ride
+  pattern (journal commits riding both refs) has kept them
+  exactly equal since.
+
+### Verdict
+CONFIRMED (lineage complete): no further pre-rotation gaps; the
+c4 sweep queue item is closed with a clean re-measurement.
+
+### Exact commands
+- ls-tree loop + comm above (counts above).
