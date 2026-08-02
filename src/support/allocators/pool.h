@@ -187,10 +187,15 @@ class PoolResource final
         }
 
         void* storage = ::operator new (m_chunk_size_bytes, std::align_val_t{ELEM_ALIGN_BYTES});
+        try {
+            m_allocated_chunks.emplace_back(static_cast<std::byte*>(storage));
+        } catch (...) {
+            ::operator delete(storage, std::align_val_t{ELEM_ALIGN_BYTES});
+            throw;
+        }
         m_available_memory_it = new (storage) std::byte[m_chunk_size_bytes];
         m_available_memory_end = m_available_memory_it + m_chunk_size_bytes;
         ASAN_POISON_MEMORY_REGION(m_available_memory_it, m_chunk_size_bytes);
-        m_allocated_chunks.emplace_back(m_available_memory_it);
         SanityCheck();
     }
 

@@ -1,5 +1,96 @@
 # Memory Pressure, OOM, Allocator, and Fragmentation Audit
 
+## Cycle 266: PoolResource chunk allocation failure cleanup
+
+- Goal: `74`, `memory-pressure-allocator`; exact selector `shuf -i 0-98 -n 1` -> `74`.
+- Branch: `uber-cycle-266-memory-pressure-allocator-20260802`.
+- Start HEAD/state close: `46781c48c19553b349ff7f0767d29e2bab5ff478`; `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start `git rev-list --left-right --count HEAD...origin/master`: `1321 45`.
+- The tracked/index gate was clean at cycle start. Existing untracked goal, journal, probe, package, crash, and test-cache artifacts were preserved. Protected long-running tests were left running. Scratch state used `/data/my_storage/tmp/cycle266-*`; no default datadir, wallet, key, or production database was used.
+
+### Scope and caller audit
+
+The previous memory handoff left three distinct cells: a fresh chainstate/cache
+resize workload, allocation failure outside the closed prevector policy cell,
+and a post-commit `DynamicMemoryUsage()` owner review. The fresh cache review
+ran first. `Chainstate::ResizeCoinsCaches()` compares only the coin-tip cache
+size when deciding whether to call `FlushStateToDisk(IF_NEEDED)` or
+`FORCE_FLUSH`; a direct database-only resize would therefore discard cached
+coin entries even though the coin-tip budget did not shrink. History from
+`f36aaa6392` through `7099e93d0a8` describes reallocation as necessary for a
+shrinking in-memory coin map. All current production callers found in
+`ActivateSnapshot()` and `MaybeRebalanceCaches()` change both dimensions
+together. The existing direct resize and cache-rebalance tests passed, so the
+database-only edge remains an uncovered API case rather than a reachable
+runtime defect in this cycle.
+
+The allocation-failure review then traced `PoolResource::AllocateChunk()`.
+`PoolAllocator` backs `CCoinsMap` and other unordered-map accounting paths, so
+chunk rollover is reachable during ordinary cache/graph growth. The old code
+allocated an aligned chunk, published its cursor members, and only then called
+`m_allocated_chunks.emplace_back()`. If the list-node allocation threw
+`std::bad_alloc`, the aligned chunk was neither tracked nor reclaimable by the
+resource destructor. The partially published cursor also described memory
+outside the tracked chunk list. This is an allocator cleanup defect, distinct
+from the repository-wide deliberate fatal `new_handler` policy: the failure
+can occur in a component that still exposes and propagates `std::bad_alloc`.
+
+### Deterministic failure proof
+
+`/data/my_storage/tmp/cycle266_pool_allocate_failure_probe.cpp` overrides the
+global allocation functions only in the scratch executable. It constructs a
+`PoolResource<16, 8>` with a 16-byte first chunk, consumes that chunk, then
+fails the next ordinary allocation while allowing the aligned chunk allocation
+to succeed. The test catches `std::bad_alloc` from the list-node construction
+and counts aligned chunk allocations versus aligned deallocations at resource
+destruction.
+
+The pre-fix probe was compiled with:
+
+`c++ -std=c++20 -O0 -g -I src -I /data/my_storage/tmp/cycle243-build/src /data/my_storage/tmp/cycle266_pool_allocate_failure_probe.cpp src/util/check.cpp src/clientversion.cpp -o /data/my_storage/tmp/cycle266_pool_allocate_failure_probe && /data/my_storage/tmp/cycle266_pool_allocate_failure_probe`
+
+It exited `134` at the final allocation/deallocation equality assertion. The
+patched source exits `0` with the same deterministic fault schedule. This is
+an independent ownership oracle: it does not depend on allocator RSS, pool
+statistics, or a test-only production hook.
+
+### Fix and validation
+
+`AllocateChunk()` now inserts the aligned storage pointer into the owned list
+before publishing the available-memory cursor. If the list node cannot be
+allocated, a catch block calls the matching aligned `operator delete` and
+rethrows. Once list insertion succeeds, the remaining initialization is
+nothrow and the existing sanity checks remain unchanged.
+
+Validation completed:
+
+- `git diff --check` passed.
+- `CCACHE_DISABLE=1 TMPDIR=/data/my_storage/tmp/cycle266-build-tmp cmake --build /data/my_storage/tmp/cycle243-build --target test_bitcoin -j2` passed. The existing two unrelated Clang `txgraph.cpp` unused-member warnings remained.
+- `test_bitcoin --run_test=pool_tests,allocator_tests` passed 11 cases and 21,747 assertions.
+- `test_bitcoin --run_test=coins_tests,mempool_tests` passed 63 cases and 1,219,050 assertions.
+- `test_bitcoin --run_test=validation_chainstate_tests,validation_chainstatemanager_tests,validation_flush_tests` passed 29 cases and 60,104 assertions, including `/data`-backed scratch temp directories and cache rebalancing/restart paths.
+- The deterministic pre-fix/fixed scratch probe described above failed before the change and passed after it.
+
+No sanitizer rebuild or full repository test suite was run in this cycle. The
+probe validates cleanup of the aligned chunk allocation; it does not attempt to
+make every possible `std::list` or aligned allocation failure site observable.
+The fix is limited to the chunk ownership transition and does not alter pool
+capacity, freelist rounding, or the fatal process-wide OOM policy.
+
+### Verdict and next queue
+
+Confirmed: a `std::bad_alloc` from `m_allocated_chunks.emplace_back()` leaked
+the just-allocated aligned pool chunk and left the resource's cursor state
+untracked. The ownership-order fix is ready for one self-contained commit with
+this journal update.
+
+Next distinct memory cells are (1) a post-fix persistent `/data` chainstate
+resize/flush profile that measures allocator retention separately from database
+cache ownership, (2) direct `PoolAllocator::allocate()` size multiplication and
+constructor-overflow contracts if a reachable standard-container path is
+found, and (3) a source/history review of any remaining `DynamicMemoryUsage()`
+owner added after Cycle 263. Do not reopen the closed prevector OOM policy,
+unbroadcast-set, or TxGraph container-capacity findings without new evidence.
+
 ## Cycle 263: retained TxGraph container accounting
 
 - Goal: `74`, `memory-pressure-allocator`; exact selector `shuf -i 0-98 -n 1` -> `74`.
