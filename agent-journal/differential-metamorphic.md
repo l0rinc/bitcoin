@@ -180,3 +180,37 @@ green. No code change.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-08-02, draw 213, raw=10746796534152436801, masked 1523424497297660993, idx 11/18): BIP30 fee-domain unconstructability PROVEN LIVE — both consensus doors reject the duplicate (bad-cb-height / bad-version); c2 note upgraded to executable proof
+
+### Construction attempt (/tmp/btc51c4/bip30_proof.py, preserved)
+Regtest node, crafted identical coinbase tx C:
+- Door 1 (BIP34-active v4 blocks): C accepted at height h, the
+  SAME C at h+1 rejected 'bad-cb-height' — the height baked into
+  the scriptSig makes every height's coinbase a distinct txid;
+  exact duplicates are impossible at v2+.
+- Door 2 (pre-BIP34 v1 blocks, where the height rule would not
+  bite): rejected 'bad-version(0x00000001)' — versionbits
+  consensus demands v4+ at current heights.
+- RESULT line: no block-version path admits a duplicate coinbase
+  txid at current heights (regtest or mainnet post-activation).
+
+### Verdict
+DISMISSED (unconstructable, now proven live): the BIP30
+fee-domain metamorphic cell has no constructor — the historical
+duplicates are unreachable artifacts of the pre-BIP34 era, and
+the fee-domain has no second instance to be confused with.
+The c2 note is upgraded from reasoning to executable evidence.
+
+### Exact commands
+- python3 /tmp/btc51c4/bip30_proof.py --configfile=build-before/
+  test/config.ini (RESULT above); failed-path iterations
+  preserved in /tmp/btc51c4/bip30_fee.py (get_scriptPubKey
+  attribute, premined-height, bad-cb-height, bad-version
+  sequence — the exploration record).
+
+### Limitations / queue
+- The overwrite path itself (AddCoins check_for_overwrite BIP30
+  arm) remains exercised only by the historical mainnet blocks
+  (#57/#40 families covered its review).
+- #51 cells: sim-hook (c3), BIP30 domain (c4) — queue empty.
