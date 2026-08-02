@@ -47,6 +47,105 @@ Focused unit controls passed independently: current `test_bitcoin --run_test=pow
 
 Verdict: dismissed for this cycle. The mainnet-parameter fixture is a useful additional release cell, but it contains only coinbase-only synthetic blocks. It does not cover live historical mainnet transactions, wallet/database migration, P2P transcripts, external indexes, or release-branch backports. No production or permanent test change is justified. The next distinct queue remains wallet/database migration, P2P transcripts, release-branch backports, and a real historical transaction/block corpus if bounded provenance-preserving inputs become available.
 
+## Cycle 280: compact-block short-ID collision release differential
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `67` (`release-version-differential`); no reroll.
+- Branch: `uber-cycle-280-release-version-differential-20260802`.
+- Gate HEAD: `54cc096d716613fc31f5ebfa527adc482eb29fc5`; fetched
+  `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`; merge base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `45 1350`
+  (`origin/master...HEAD`).
+- The gate fetched `origin/master`, passed tracked/index cleanliness and
+  `git diff --check`, verified unchanged catalog/prompt/TSV/protocol hashes,
+  and confirmed all seven protected processes were alive and untouched.
+  Gate state SHA-256 was `07c3e84aa97fe7cadac2d5439269b4ccdcaec92e5f53b9f7fa73438a5097e3af`.
+
+### Distinct hypothesis and source evidence
+
+The prior Goal 67 cells covered RPC/genesis, fixed script and transaction
+vectors, coinbase-only reorg/restart, prune/persistence, synthetic
+mainnet-style blocks, empty and funded/encrypted wallet migration, and P2P
+transcripts. The open queue next named release-branch cherry-pick/backport
+equivalence. The release sweep found a directly testable current-versus-v31.1
+behavioral difference in compact-block reconstruction before performing a
+broader backport inventory.
+
+Current commit `6aa5d8d9481f5e06b10095df7f46f0532f7ecdb7` (`blockencodings: fix
+extra transaction count`) is an ancestor of `origin/master` but not of
+`origin/31.x` (`9be056a8a72b624dae9623b2f7bded92c2a21c91`, v31.1). Its source
+diff changes `PartiallyDownloadedBlock::InitData` to track each slot as
+`NONE`, `MEMPOOL`, `EXTRA`, or `COLLIDED`. A collision after an unrelated extra
+transaction decrements only the mempool count; a collision of an extra-sourced
+slot decrements both counters exactly once; and a collided slot is terminal
+so later genuine transactions cannot refill it. The associated test extends
+the block to leave one slot missing and checks both counter values and the
+non-refill invariant.
+
+The trust boundary is compact-block short IDs, mempool transactions, the
+extra-transaction vector supplied by the peer path, reconstruction counters,
+and the resulting request/reconstruction state. An accidental release
+backport omission or conflict was the hypothesis; expected source/test-count
+growth and known release differences were not treated as findings.
+
+### Independent reproduction
+
+The existing v31.1 Clang 19 release test build is
+`/data/my_storage/tmp/cycle125-v311-test`, sourced from the v31.1 tree at
+`/data/my_storage/tmp/cycle109-release-differential/v31.1-src`. Its original
+`ReceiveWithExtraTransactions` control passed 1 case and 13 assertions before
+the differential harness was added. In the scratch source only, the
+regression setup was adapted with `apply_patch`: it added protected-counter
+accessors, appended the fourth block transaction required to keep scanning
+past the collision, and added the three collision scenarios. The production
+v31.1 `src/blockencodings.cpp` was left unchanged.
+
+After rebuilding only `test_bitcoin` with
+`CCACHE_DIR=/data/my_storage/tmp/cycle280-v311-ccache`, the v31.1 production
+implementation failed the adapted regression with exit code 201: 26 of 29
+assertions passed and these three checks failed:
+
+- after a mempool collision following an unrelated extra transaction,
+  `GetExtraCount()` was `0` instead of `1`;
+- after an extra-sourced collision, `GetExtraCount()` was
+  `18446744073709551615` instead of `0`;
+- after the same collision followed by genuine extra transactions,
+  `GetExtraCount()` remained `18446744073709551615` instead of `0`.
+
+The exact command was:
+
+`TMPDIR=/data/my_storage/tmp/cycle280-v311-test-tmp /data/my_storage/tmp/cycle125-v311-test/bin/test_bitcoin --run_test=blockencodings_tests/ReceiveWithExtraTransactions --log_level=test_suite --report_level=short --color_output=false`
+
+The current fixed binary
+`/data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin` passed the
+same behavior in 1 case and all 29 assertions with exit code 0 under an
+independent scratch `TMPDIR`. The exact current command was:
+
+`TMPDIR=/data/my_storage/tmp/cycle280-current-test-tmp /data/my_storage/tmp/cycle105-clang19-release/bin/test_bitcoin --run_test=blockencodings_tests/ReceiveWithExtraTransactions --log_level=test_suite --report_level=short --color_output=false`
+
+This is an independent old-production/new-regression versus
+current-production/current-regression comparison. The failure is not a
+compiler or harness-only result: it is the old implementation's explicit
+unconditional `extra_count--` after a mempool-sourced collision, followed by
+continued processing of a slot that should be terminal.
+
+### Verdict and close
+
+Verdict: **confirmed, already fixed upstream**. The v31.1 release branch is
+missing the current fix, and the regression demonstrates the behavioral
+difference. The current repository already contains commit `6aa5d8d948`; no
+new source or permanent test change is justified, and no redundant backport
+commit is being manufactured on this investigation branch. This cell is
+closed with the source/history evidence and reproducible old/new results.
+
+Limitations: this cycle did not yet audit every release-branch cherry-pick or
+backport prerequisite. It covered one high-risk compact-block fix selected
+from the release-branch queue. The next distinct queue remains other
+release-branch backport equivalence cells, followed by bounded historical
+transaction/block evidence. Scratch source/build/test data remains under
+`/data/my_storage/tmp/cycle280-*` and was not used by any protected process.
+
 # Release-to-release behavioral and consensus differential
 
 ## Cycle 275: funded and encrypted wallet migration
