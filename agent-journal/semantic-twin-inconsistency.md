@@ -178,3 +178,48 @@ intentional policy. No defect.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 4 (2026-08-02, draw 191, raw=6989687031219001031 (63-bit), idx 41/42): amount-parse twin — RPC AmountFromValue/ParseFixedPoint vs faithful python mirror over 26 boundary cases: 0 mismatches after mirror correction; DISMISSED
+
+### Hypothesis
+The RPC monetary parser (ParseFixedPoint, decimals=8, MoneyRange)
+and a naive reader's model of it could diverge on boundary
+syntax — exponent notation, trailing sub-sat zeros, overflow
+edges.
+
+### Method note (twin-fidelity incident, recorded)
+First pass produced 2 mismatches ('21000000', '0.000000010') —
+BOTH were mirror bugs, not RPC divergences: ProcessMantissaDigit
+(strencodings.cpp:275-289) DEFERS trailing zeros (tzeros) and
+folds them into the exponent at finalize instead of multiplying
+them into the mantissa. Corrected mirror -> 26/26 agreement.
+Lesson recorded: twins must mirror the tzero-deferral, not a
+naive digit loop.
+
+### Matrix results (probe /tmp/btc106c4/amt_twin.py, preserved;
+live createrawtransaction+decoderawtransaction per case)
+- '1e-8' -> 1 sat (exponent notation ACCEPTED by the RPC parser);
+  '1E-7' -> 10; '1e+2' -> 1e10 sats.
+- '0.000000010' -> 1 sat (trailing sub-sat zero compressed, not
+  rejected); '0.000000014' REJECTED (sub-sat nonzero).
+- 21000000 ACCEPTED exactly; 21000000.00000001 REJECTED
+  (MoneyRange boundary exact).
+- ' 1', '1.', '.1', '00.1', '-1', '1e-9', '5e-324', '1e9',
+  '9999999999.99999999' all REJECTED identically.
+- TALLY cases=26 mismatches=0.
+
+### Verdict
+DISMISSED: the amount-parse twin agrees at every boundary; the
+parser's documented quirks (exponent accepted, tzero
+compression) are uniform between code paths. No defect.
+
+### Exact commands
+- python3 /tmp/btc106c4/amt_twin.py --configfile=build-before/
+  test/config.ini (TALLY above); reads strencodings.cpp:272-370,
+  rpc/util.cpp:98-108.
+
+### Limitations / queue
+- ParseFeeRate's >=1BTC/kvB cap (rpc/util.cpp:113) not separately
+  swept (same AmountFromValue core + one comparison).
+- Twin families closed: hex-decode, merkle, vsize/sighash,
+  amount-parse.
