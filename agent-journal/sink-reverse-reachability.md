@@ -272,3 +272,5 @@ feefrac backends) — campaign COMPLETE.
 
 ## Rotation note
 Four cycles; the sink family is closed.
+
+## Postscript (2026-08-02, draw 233, raw=17388002019312348372, masked 8164629982457572564, idx 1/3): >int64-products tail — ABSORBED by #48 c5: the ByRatio ordering oracle checked products up to ~2^91-2^126 (INT64_MAX/4 fees x INT32_MAX/2 sizes, 21e14 x 1e8) against an exact cpp_int reference with 0/55,201 mismatches — FeeFrac::Mul returns __int128, so >int64 products are represented and compared exactly; the tail is examined, not just contract-bounded. #100 remains COMPLETE.
