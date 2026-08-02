@@ -116,6 +116,34 @@ prose-verified, T-block resolved by Trim caller audit
 audit/comment-code-contract-c4 (this cycle) | done; same
 comment-drift family as F1 (LockPoints).
 
+## F17: btck_chainstate_manager_destroy null deref (FFI misuse) — FIXED 2026-08-02
+- Mechanism: 22 btck_*_destroy functions, 21 delete-only (null-safe
+  free() convention); btck_chainstate_manager_destroy flushed
+  chainstates through btck_ChainstateManager::get(chainman) BEFORE the
+  delete — destroy(nullptr) = null dereference. FFI error-path cleanup
+  after a failed create hits it directly.
+- Evidence: #16 c4 — HEAD had the unguarded deref (bitcoinkernel.cpp:
+  1192-1202); cherry-picked fix (union conflict + 2 labeled repairs);
+  test_kernel btck_destroy_null_tests green (crashes pre-fix), full
+  suite green. Upstream master @556988790a still unguarded (:1126-1130).
+- Fix: 55f1fa334f -> in-lineage as 81b13d9e9f (+ repairs d004ac04d2,
+  6e9753d608); journal #16 c4. Offerable upstream.
+- Dedup note: distinct from F14 (dbwrapper ctor leak) — same null/RAII
+  family, different layer (FFI destroy vs DB construction).
+
+## F18: qa-assets fuzz-corpus clone unpinned (supply chain, F9 sibling) — FIXED 2026-08-01
+- Mechanism: ci/test/03_test_script.sh cloned bitcoin-core/qa-assets
+  with --depth=1 at floating HEAD — a compromised/weakened upstream
+  corpus would silently reduce fuzz coverage (c1's 'fails loudly'
+  covered only corruption injection, not weakening).
+- Evidence: #59 c3 — fixed by fetching+detaching a reviewed commit
+  (QA_ASSETS_COMMIT=918cdd36fec3...); a coverage-weakening change now
+  requires a second reviewed commit touching the pin. Live-verified
+  this session: the pin == upstream HEAD at import time (#79 c3).
+- Fix: 3afdc24bc7 (in lineage). Dedup note: F9 family (supply-chain
+  pin) but a DIFFERENT input (qa-assets vs script_assets) — tracked
+  separately so a future third pin gap stays visible.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
@@ -193,6 +221,14 @@ c3 v0 seed layout corrected (single-terminator whole-mode merge ate
 the keys) | multi-input multi-key docs; taproot/witness variants.
 
 ## Latent / upstream-context items (not local defects)
+- L3 (2026-08-02): txgraph GetMainMemoryUsage under-charges retained
+  Entry vector capacity after churn (Compact pop_back, no shrink):
+  allocated memory sits outside DynamicMemoryUsage/-maxmempool after
+  fill-then-drain. Mechanism verified (#65 c12), empirical ~3.3MB
+  converging over 5x1600-tx rounds (#22 c4), pre-fix semantics run at
+  HEAD (#23 c5). Author fix in flight (l0rinc/txgraph-retained-
+  entry-usage, 475ab49da6); adopt-then-reprofile is the close-out.
+
 
 L1 | CBloomFilter ctor div-by-zero/log(0) | bloom | math UB at
 nElements=0/nFPRate=0 | test-only reachability | LATENT |
