@@ -289,6 +289,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 60 | reviewer-preference-skill | CYCLE-5 | 2026-07-29 | maintainer merge-rationale mined: M1-M4 (terse depth-honest ACKs, self-contained descriptions, lifecycle, no info-hiding) |
 | 60 | reviewer-preference-skill | CYCLE-9 | 2026-08-02 | watch: 35592/35838 template-conformant; ordering caveat recorded; quiet |
 | 58 | helper-reuse | CYCLE-3 | 2026-07-29 | 7th PSBT copy deduplicated: helper moved to rpc/rawtransaction_util (existing shared header); rpc_psbt green |
+| 58 | helper-reuse | CYCLE-4 (queue-empty) | 2026-08-02 | census: DecodeHexTx shared; near-twins binary-separated by design; queue EMPTY |
 | 65 | contributor-branch-radar | CYCLE-4 | 2026-07-29 | rocksdb-brute assessed: bulk-fetch class subsumed by shipped -prevoutfetchthreads; stale WIP, nothing actionable |
 | 65 | contributor-branch-radar | CYCLE-12 | 2026-08-02 | new author branch txgraph-retained-entry-usage: memory-accounting gap REAL+bounded at HEAD, fix in flight; URGENT 🟡 |
 | 80 | fuzz-engine-differential | CYCLE-5 | 2026-07-29 | rich PSBTv2 differential: A=0/400, E=115, R=4 guard-contained; BIP371 value-layout lesson (6-seed iterations) |
@@ -992,6 +993,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 216 (15-campaign eligible set): raw=
+   6114129767934136255 (63-bit) -> idx 10 -> #58 c4 (duplicate
+   census: queue EMPTY).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58}.
    RE-RANK draw 215 (16-campaign eligible set): raw=
    18054278019244708601, masked 8830905982389932793 -> idx 9 ->
    #38 c3 (mid-build kill: sub-second rebuild, premise
