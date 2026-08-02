@@ -110,3 +110,32 @@ to a fresh path, cmp against the checked-in generated header:
 
 ## Rotation note
 Cycle 2 complete; rotating per uber-goal policy. Not exhausted.
+
+## Cycle 3 (2026-08-02, draw 223, raw=8820920191778943197 (63-bit), idx 5/8): toolchain-blocked cells re-checked — sage/help2man still absent; committed manpages are intentional PLACEHOLDERS (not stale artifacts); DISMISSED
+
+### Re-check
+- sage: no binary, no python module (ModuleNotFoundError) —
+  secp sage tables remain regeneration-blocked here (they are
+  subtree-committed, upstream-controlled; out of fork scope).
+- help2man: absent. The committed doc/man/*.1 files were then
+  freshness-audited WITHOUT the tool — and found to be
+  intentional placeholders: every file carries 'This is a
+  placeholder file. Please follow the instructions in
+  contrib/devtools/README.md to generate the manual pages after
+  a release.' — there is no committed stale content to drift;
+  generation is a release-time step by design.
+
+### Verdict
+DISMISSED: no generated-artifact determinism gap beyond the two
+external-tool gates (sage tables, manpage generation), both now
+characterized precisely (absent tools + intentional placeholder
+policy). The JSON family (c2, 60/60 byte-identical) remains the
+covered surface.
+
+### Exact commands
+- which sage help2man; python3 -c 'import sage';
+  head doc/man/bitcoin-cli.1 (placeholder text above).
+
+### Limitations / queue
+- Placeholder-versus-generated drift at release time is a
+  release-process cell (out of rotation scope on this host).

@@ -177,6 +177,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 66 | backport-correctness | CYCLE-2 | 2026-07-29 | 5 out-of-lineage fixes backported+verified (e15c4025e5, 84a3913096, 508d9edfca, 75c0616c24, b73b7c5d39) |
 | 66 | backport-correctness | CYCLE-3 | 2026-08-02 | post-c2 fix reachability: all present (3 as cherry-picked copies); content-level check proceduralized; CONFIRMED+RESOLVED |
 | 39 | generated-artifact-determinism | CYCLE-2 | 2026-07-29 | full JSON sweep 60/60 byte-identical (9 tree + 51 univalue) |
+| 39 | generated-artifact-determinism | CYCLE-3 | 2026-08-02 | blocked cells re-checked: manpages are intentional placeholders, sage absent; DISMISSED |
 | 37 | build-dead-zones | CYCLE-2 | 2026-07-29 | config-dead zones clean: ZMQ/USDT/chainstate-util all properly gated |
 | 95 | database-semantics-differential | CYCLE-2 | 2026-07-29 | dbwrapper contracts hold: WriteBatch atomicity + HEAD_BLOCKS crash protocol, scan-only iterators |
 | 108 | adversarial-artifact-generation | CYCLE-1 | 2026-07-29 | hostile V1 peer artifact: 4/4 classes classified correctly (magic/checksum/oversize/valid) |
@@ -999,6 +1000,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    Campaign #36 COMPLETE.
    Pool after draw 169 (3): #47 shared-lib consumer, #10
    VerifyCryptedKeys, #105 capability autopsy.
+   RE-RANK draw 223 (8-campaign eligible set): raw=
+   8820920191778943197 (63-bit) -> idx 5 -> #39 c3 (blocked
+   cells re-checked: placeholders; DISMISSED).
+   Pool: eligible minus {#103, #107, #66, #46, #25, #99, #49,
+   #24, #42, #104, #102, #91, #105, #4, #92, #106, #16, #94,
+   #90, #63, #75, #44, #65, #70, #17, #0, #9, #43, #79, #53,
+   #31, #30, #60, #32, #101, #34, #76, #48, #54, #51, #57,
+   #38, #58, #21, #28, #69, #61, #22, #23, #39}.
    RE-RANK draw 222 (9-campaign eligible set): raw=
    6987695114313435315 (63-bit) -> idx 3 -> #23 c5 (retention
    attribution via author test at HEAD; chain closed).
