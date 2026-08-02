@@ -1,3 +1,49 @@
+# Cycle 289 Completion
+
+- The fresh gate selected goal `43` (`option-api-lifecycle`) from the exact
+  selector `shuf -i 0-98 -n 1`, with no reroll. The dedicated branch is
+  `uber-cycle-289-option-api-lifecycle-20260802`. Gate and cycle-start HEAD
+  were `fefcef2b8eefaae923407ba32daca32e93d49bc6`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base was
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence was `45 1368`;
+  and the entry state SHA-256 was
+  `b12d4c1c9748803f12b9a2bada66029276cfacd1a339af210a837caea3401807`.
+  Catalog, random prompt, goals TSV, and protocol hashes were unchanged:
+  `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`,
+  `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`,
+  `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`,
+  and `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- The selected distinct cell was cross-section precedence for
+  `includeconf`/`noincludeconf`: a final network-specific
+  `noincludeconf=1` must suppress lower-precedence default-section includes.
+  The old daemon loaded `common.conf` and exposed
+  `/Satoshi:31.99.0(base; common)/` despite `[regtest] noincludeconf=1`.
+  The new regression failed on the old binary with exit `201` and the
+  `uacomment` assertion, then passed after the fix with 1 case and 4
+  assertions.
+- Source/evidence commit `87ed43b7d8` (`args: honor network noincludeconf
+  precedence`) was authored as `Lőrinc <pap.lorinc@gmail.com>`. It records the
+  final network negation, suppresses default include loading, and applies the
+  same decision during recursive-include warning collection. The selected-goal
+  journal is included in that commit. The complete `argsman_tests` suite passed
+  18 cases and 220569 assertions; `git diff --check` and the source commit
+  check passed.
+- Final-source daemon controls preserved the ordinary default include result
+  `/Satoshi:31.99.0(base; common)/` and the network-specific positive include
+  result `/Satoshi:31.99.0(base; network)/`. Both scratch daemons shut down
+  cleanly through RPC. The existing `feature_includeconf.py` functional test
+  remained setup-blocked by the absent shared 199-block cache, so no full
+  functional-test claim is made. No full `test_bitcoin` run or Windows/macOS
+  build was available; all scratch datadirs and credentials were isolated
+  under `/data/my_storage/tmp`.
+- Unrelated untracked artifacts were preserved. Protected PIDs
+  `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and
+  `1346200` remained alive and untouched. At this pre-state-close point HEAD
+  is `87ed43b7d8`; this state entry is to be committed separately from the
+  source finding. The next action is a fresh post-close gate, one exact
+  selector draw, a new `uber-cycle-290-*` branch, and a distinct unchecked
+  cell; do not reopen this includeconf precedence path without new evidence.
+
 # Cycle 288 Completion
 
 - The fresh gate selected goal `53` (`statistical-timing`) from the exact
