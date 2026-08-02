@@ -647,3 +647,115 @@ The regression uses `MockableSQLiteDatabase`, an exact serialized `DBKeys::DESTD
 - The caller still ignores the boolean because this marker is secondary wallet metadata; a future cycle may separately assess whether multi-input marker updates need an explicit transaction or fail-closed policy. That is outside this focused state-publication fix.
 - Source/test/journal commit: `600afa95995f5aaa50c23b6b6c2f940dc61674bb` (`wallet: publish spent state after successful write`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
 - Next queue: close this cycle, run a fresh gate, and draw another distinct catalog goal. Do not reopen the earlier goal-27 wallet passphrase, transaction/index, address-book publication, or `setlabel` cells without new backend, restart, commit-failure, or caller evidence.
+## Cycle 297: batch-owned descriptor setup ignored failed top-up
+
+### Selection and fresh gate
+
+- Exact selector: `shuf -i 0-98 -n 1` -> `27` (`error-path-state`); no reroll.
+- Branch: `uber-cycle-297-error-path-state-20260802`.
+- Cycle start HEAD: `f2e7aaab012a5fe55f7339b3317b390309bd3e1b`; `origin/master`:
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base:
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; start divergence: `45 1384`
+  (`HEAD...origin/master`). The fresh gate passed after fetching `origin/master`:
+  tracked/index state was clean, catalog/prompt/TSV/protocol hashes matched, and
+  all protected processes remained alive. Existing untracked probes and
+  artifacts were preserved.
+
+### Distinct scope and contract
+
+The prior Goal 27 cell fixed the owned `TopUpInternal` transaction, but its
+queue explicitly retained the two direct callers that pass an externally owned
+`WalletBatch`: `SetupDescriptorGeneration` and
+`ExternalSignerScriptPubKeyMan::CreateNew`. Both wrote descriptor state, called
+`TopUpWithDB(batch)`, ignored its boolean result, and continued to clear the
+blank-wallet flag or return a new manager. `TopUpWithDB` can write cache records
+before a later descriptor expansion returns `false`; it publishes no staged
+memory state on that return. The caller contract is therefore to signal failure
+so the transaction owner can abort rather than commit a partial batch.
+
+`RunWithinTxn` aborts when its callback returns `false`, and `WalletBatch`/the
+underlying SQLite batch aborts an active transaction during exception cleanup.
+The external-signer setup owns the active batch in
+`CWallet::SetupDescriptorScriptPubKeyMans`; an exception from `CreateNew` consequently prevents the
+outer commit. The historical batching commits `075aa44ceb` and `f053024273`
+introduced these unchecked call sites while moving top-up work into shared
+transactions.
+
+### Confirmed finding
+
+Both direct callers discarded a `false` from `TopUpWithDB`. A partial
+expansion could therefore leave descriptor/cache writes staged while the
+caller proceeded as if setup succeeded. In the external-signer path this
+returned a manager after the failed top-up; the enclosing wallet setup could
+then commit the descriptor and cache records. The normal parser-generated
+descriptors are expected to expand successfully, but the failure is an
+explicit API result and is reachable through a valid descriptor implementation
+and corrupted/unsupported expansion state. Ignoring it violates the error-path
+transaction contract independently of whether ordinary descriptors reach it.
+
+### Independent pre-fix reproduction
+
+The existing partial-expansion fixture was parameterized so the external-signer
+constructor expands index 0, writes its parent-xpub cache item, and returns
+`false` at index 1. The test starts the same caller-owned transaction used by
+wallet setup and expects the constructor to throw while the descriptor/cache
+rows are still visible only inside the active transaction. With the external
+caller temporarily restored to `spkm->TopUpWithDB(batch);`, the rebuilt test
+exited `201`:
+
+```text
+env TMPDIR=/data/my_storage/tmp/cycle297-script-test \
+  /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin \
+  --run_test=scriptpubkeyman_tests/external_signer_topup_failure_aborts_caller_transaction \
+  --log_level=test_suite --random=29702
+
+error: in "scriptpubkeyman_tests/external_signer_topup_failure_aborts_caller_transaction":
+check threw has failed
+*** 1 failure is detected
+```
+
+This negative control proves the regression is sensitive to the ignored
+return value rather than merely observing a preexisting failure. No default
+datadir, wallet, key, or production database was used.
+
+### Fix
+
+The source change checks `TopUpWithDB(batch)` in both callers and throws
+`"Could not top up scriptPubKeys"` on `false`. This lets the transaction owner
+abort through its existing exception path and prevents the setup code from
+clearing the blank-wallet flag or returning a partially initialized manager.
+The deterministic external-signer regression also checks the staged
+descriptor/cache rows, aborts the caller transaction, and verifies both rows
+are absent afterward.
+
+### Verification
+
+- `ninja -C /data/my_storage/tmp/cycle246-wallet test_bitcoin -j2` passed after
+  the production checks were restored; the first build caught and was corrected
+  for the test's explicit `external_signer.h` include dependency.
+- The focused `scriptpubkeyman_tests` run with seed `29701` passed all 23 cases.
+- The isolated new regression with the restored fix and seed `29703` passed.
+- The adjacent `scriptpubkeyman_tests,wallet_tests,walletdb_tests` run with seed
+  `29704` passed all 51 cases.
+- `git diff --check` passed after the source/test edits.
+
+### Limitations and next queue
+
+The regression directly exercises `ExternalSignerScriptPubKeyMan::CreateNew`;
+the generated-descriptor setup caller is covered by the same checked return
+contract and the `RunWithinTxn` exception/abort path, but no separate test
+fixture injects a failed expansion into `SetupDescriptorGeneration` without
+changing production descriptor construction. Future cycles should examine
+other externally owned wallet batches for ignored status results and seek a
+production-state or fault-injection test for generated descriptor setup.
+
+### Verdict and handoff
+
+- **Confirmed and fixed:** two descriptor setup callers ignored failed
+  `TopUpWithDB` results in shared transactions, allowing partial setup state to
+  proceed toward commit.
+- Source/test commit will be authored as `Lőrinc <pap.lorinc@gmail.com>` and
+  must include this journal update.
+- Next run must close this branch with a source commit, create the separate
+  state-close commit, fetch `origin/master`, perform a fresh exact selector
+  draw, and reject only an exact already-closed evidence cell.

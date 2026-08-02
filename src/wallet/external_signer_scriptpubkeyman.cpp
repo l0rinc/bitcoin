@@ -47,7 +47,9 @@ std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::Cr
     }
 
     // TopUp
-    spkm->TopUpWithDB(batch);
+    if (!spkm->TopUpWithDB(batch)) {
+        throw std::runtime_error("Could not top up scriptPubKeys");
+    }
 
     storage.UnsetBlankWalletFlag(batch);
     return spkm;

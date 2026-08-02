@@ -4,9 +4,11 @@
 
 #include <key.h>
 #include <key_io.h>
+#include <external_signer.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <script/solver.h>
+#include <wallet/external_signer_scriptpubkeyman.h>
 #include <wallet/export.h>
 #include <wallet/scriptpubkeyman.h>
 #include <wallet/wallet.h>
@@ -59,6 +61,8 @@ class PartialTopUpDescriptor final : public Descriptor
 {
 private:
     const CExtPubKey m_xpub;
+    const int m_successful_expand_pos;
+    const bool m_expand_from_cache;
 
     static CScript Script(int pos)
     {
@@ -66,7 +70,8 @@ private:
     }
 
 public:
-    explicit PartialTopUpDescriptor(const CExtPubKey& xpub) : m_xpub(xpub) {}
+    explicit PartialTopUpDescriptor(const CExtPubKey& xpub, int successful_expand_pos = 1, bool expand_from_cache = true)
+        : m_xpub(xpub), m_successful_expand_pos(successful_expand_pos), m_expand_from_cache(expand_from_cache) {}
 
     bool IsRange() const override { return true; }
     bool IsSolvable() const override { return true; }
@@ -87,7 +92,7 @@ public:
 
     bool Expand(int pos, const SigningProvider&, std::vector<CScript>& output_scripts, FlatSigningProvider&, DescriptorCache* write_cache) const override
     {
-        if (pos != 1) return false;
+        if (pos != m_successful_expand_pos) return false;
         if (write_cache) write_cache->CacheParentExtPubKey(0, m_xpub);
         output_scripts = {Script(pos)};
         return true;
@@ -95,7 +100,7 @@ public:
 
     bool ExpandFromCache(int pos, const DescriptorCache&, std::vector<CScript>& output_scripts, FlatSigningProvider&) const override
     {
-        if (pos != 0) return false;
+        if (!m_expand_from_cache || pos != 0) return false;
         output_scripts = {Script(pos)};
         return true;
     }
@@ -178,6 +183,41 @@ BOOST_AUTO_TEST_CASE(topup_return_failure_aborts_prior_cache_writes)
     }
     BOOST_CHECK_EQUAL(spkm->GetEndRange(), 1);
     BOOST_CHECK_EQUAL(spkm->GetScriptPubKeys().size(), 1);
+    BOOST_CHECK(!DatabaseHasKey(database, cache_key));
+}
+
+BOOST_AUTO_TEST_CASE(external_signer_topup_failure_aborts_caller_transaction)
+{
+    CExtKey extkey;
+    extkey.SetSeed(std::array<std::byte, 32>{});
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS | WALLET_FLAG_EXTERNAL_SIGNER);
+
+    auto descriptor{std::make_unique<PartialTopUpDescriptor>(extkey.Neuter(), /*successful_expand_pos=*/0, /*expand_from_cache=*/false)};
+    const uint256 descriptor_id{DescriptorID(*descriptor)};
+    const std::string descriptor_cache_type{"walletdescriptorcache"};
+    DataStream cache_key;
+    cache_key << std::make_pair(std::make_pair(descriptor_cache_type, descriptor_id), uint32_t{0});
+    DataStream descriptor_key;
+    descriptor_key << std::make_pair(DBKeys::WALLETDESCRIPTOR, descriptor_id);
+
+    auto& database = dynamic_cast<MockableSQLiteDatabase&>(wallet.GetDatabase());
+    WalletBatch batch(wallet.GetDatabase());
+    BOOST_REQUIRE(batch.TxnBegin());
+
+    bool threw{false};
+    try {
+        ExternalSignerScriptPubKeyMan::CreateNew(wallet, batch, /*keypool_size=*/2, std::move(descriptor));
+    } catch (const std::runtime_error& e) {
+        threw = true;
+        BOOST_CHECK_EQUAL(e.what(), "Could not top up scriptPubKeys");
+    }
+    BOOST_CHECK(threw);
+    BOOST_CHECK(batch.HasActiveTxn());
+    BOOST_CHECK(DatabaseHasKey(database, descriptor_key));
+    BOOST_CHECK(DatabaseHasKey(database, cache_key));
+    BOOST_REQUIRE(batch.TxnAbort());
+    BOOST_CHECK(!DatabaseHasKey(database, descriptor_key));
     BOOST_CHECK(!DatabaseHasKey(database, cache_key));
 }
 

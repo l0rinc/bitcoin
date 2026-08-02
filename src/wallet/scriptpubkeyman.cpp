@@ -1274,7 +1274,9 @@ void DescriptorScriptPubKeyMan::SetupDescriptorGeneration(WalletBatch& batch, co
     }
 
     // TopUp
-    TopUpWithDB(batch);
+    if (!TopUpWithDB(batch)) {
+        throw std::runtime_error("Could not top up scriptPubKeys");
+    }
 
     m_storage.UnsetBlankWalletFlag(batch);
 }
