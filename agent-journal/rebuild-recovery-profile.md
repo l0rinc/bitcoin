@@ -282,3 +282,34 @@ and #95 c3's engine-CPU-parity.
 ## Rotation note
 One bounded cycle complete; rotating per uber-goal policy. Not
 exhausted.
+
+## Cycle 5 (2026-08-02, draw 217, raw=7034722257148739485 (63-bit), idx 3/14): -forcecompactdb profile — chainstate 2MB->1MB at small scale, sub-second per DB; finding of fact
+
+### Cell
+Compaction profile of the force_compact path (dbwrapper.cpp:270
+via node/database_args.cpp:16 -forcecompactdb).
+
+### Measurement (copy of the 410-block chain, /tmp/btc21c5)
+- blocks/index: compacted same-second (Starting/Finished log
+  pair, 03:50:29).
+- chainstate: compacted same-second; size 2MB -> 1MB (the
+  small-scale reclaim is level-metadata overhead; the 41k-UTXO
+  content itself is already dense).
+- txindex untouched by the flag (blocks/index + chainstate only
+  — recorded: -forcecompactdb scopes to the two validation DBs).
+- Node restarted clean after (no compaction-induced issue).
+
+### Verdict
+Finding of fact: compaction is IO-cheap at regtest scale and
+reclaims ~50% of a small chainstate (overhead-dominated); the
+flag's scope is exactly the two validation databases. No
+pathology (consistent with the engine cells in #95).
+
+### Exact commands
+- cp -a fixture; du before/after; -forcecompactdb run (log
+  pairs above); stop; no processes left.
+
+### Limitations / queue
+- Large-UTXO compaction profile remains disk-blocked (c4 note).
+- Compaction-under-write-load (concurrent validation) untested
+  (needs the same large fixture).
