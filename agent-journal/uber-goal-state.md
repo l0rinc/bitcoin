@@ -5824,3 +5824,10 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - The next action is a separate state-close commit, a fresh post-close gate,
   one exact selector draw, and a new `uber-cycle-299-*` branch. Do not reopen
   this order-position cell without new backend, restart, or caller evidence.
+
+## Cycle 307 Completion
+
+- Goal 55 (`alternative-implementation`) selected by `shuf -i 0-106 -n 1` as `uber-cycle-307-alternative-implementation-20260802`.
+- No Core/libsecp source finding survived. Core's reserved BIP324 IDs 29-36 are intentional ignored extension slots, and btcd's compact-block omission is an unsupported-message boundary.
+- Pinned rust-bitcoin `607e8b2fe0d8f1ebe06923dbbc0ca6afdf00d1d1` has a report-ready BIP324 gap: valid long forms for optimized commands such as `mempool` reach `NetworkMessage::Unknown`, while short forms decode to typed messages. The exact zero-payload fixture is `00 6d 65 6d 70 6f 6f 6c 00 00 00 00 00` versus `0f`.
+- Added Goal 107 `bip324-short-id-parity` and seed journal `agent-journal/bip324-short-id-parity.md` to re-run this matrix with executable alternate implementations and extension tables. Storage exhaustion blocked Core net fixture execution; rustc/cargo/go are unavailable.
