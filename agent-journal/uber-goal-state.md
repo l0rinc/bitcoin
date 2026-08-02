@@ -1,3 +1,72 @@
+# Cycle 300 Completion
+
+- The exact selector from the expanded catalog was `shuf -i 0-99 -n 1` ->
+  goal `65` (`contributor-branch-radar`), on a distinct public-WIP evidence
+  cell because the previous Goal 65 wallet-KDF cell was already closed. The
+  dedicated branch is `uber-cycle-300-contributor-branch-radar-20260802`.
+  Cycle-start HEAD was `b88a9682cb`; `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base equaled
+  `origin/master`; start divergence was `0 1392`; and the tracked worktree was
+  clean. The entry state SHA-256 was
+  `f564000253c45622915ed06cebadb0008e6584031d6290d9901f8c327f3612bc`.
+- The public PR radar refreshed current heads, ancestry, and review comments
+  for wallet BIP39 import (#35857), generic index tests (#35847), config getter
+  tests (#35846), fee-estimator fuzz I/O (#35830), scanblocks filter ranges
+  (#35837), PSBT coverage (#35848), early RPC rejection (#35866), private
+  broadcast classification (#35867), PSBT output-before-input (#35797),
+  multipath descriptor duplicates (#35742), fallback file allocation (#35524),
+  HTTP connection limits (#35730), and privacy documentation (#35858). Public
+  branches were fetched only as `origin/pr-*` references. Branch-only leads
+  were kept as deferred evidence unless the current tree had an applicable
+  defect.
+- Goal 65 independently confirmed a current-tree data-corruption bug in the
+  non-`posix_fallocate()` `AllocateFileRange()` fallback. It sought to the
+  logical offset and wrote the whole requested range, so a physical flat file
+  larger than that logical position could have existing bytes overwritten by
+  zeroes during allocation. A new `flatfile_tests/flatfile_allocate_preserves_existing_data`
+  regression created a 128-byte sentinel, forced `posix_fallocate()` to return
+  `EOPNOTSUPP` with `/data/my_storage/tmp/cycle300-fallocate-fail.so`, and
+  exercised the production `FlatFileSeq::Allocate()` path. Before the fix,
+  seed `300002` failed with the first 100 bytes zeroed; after the fix, seed
+  `300003` passed with all 9 assertions. The exact pre-fix command and output
+  are in `agent-journal/contributor-branch-radar.md`.
+- The fix seeks to the physical end with `fseeko()`/`ftello()` and appends only
+  a missing suffix through the fallback. The normal five-case `flatfile_tests`
+  run with seed `300004` passed with 38 assertions. Rebuilding
+  `/data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin` passed, and
+  `git diff --check` passed. Finding commit `a8647ca006` contains the source,
+  regression, and selected-goal journal, authored by `Lőrinc
+  <pap.lorinc@gmail.com>`.
+- The cycle's learned risk shape is **physical state versus logical position**:
+  preallocation, truncation, flush, rebuild, and recovery helpers must not
+  assume that a logical append point equals the physical file end. Unsupported
+  platform fallbacks and existing bytes beyond the logical position need
+  explicit fault-injected tests. Goal 100, `append-only-file-allocation`, was
+  added with this evidence lineage and a seeded journal for Windows, macOS,
+  narrower `off_t`, short-write, crash, and reindex cells. Catalog extension
+  commit: `a4cab95184`.
+- The requested end-of-cycle rebase was performed after the evidence and goal
+  commits: `git fetch origin master` followed by `git rebase origin/master`.
+  It was a no-op from `a4cab9518495ed72e7aac2d10f0253095999493c` to the same
+  HEAD, with no conflicts; `origin/master` remained
+  `556988790a7f961693a8fd93f73725baea66476a`, and divergence became `0 1394`.
+  The catalog now has 101 contiguous goals `0..100`; the generated catalog
+  hash is `b9cccaeb182efeeccf19c5d180985e1e1b7d23faee9eaa8c72b3f5b18c2d2333`
+  and the manifest hash is
+  `1cf584ccc1d92d0b7718791701139892ff9be4ccb46e0a81c2799cb2a3a85b04`.
+  The selector and protocol remain dynamic; their hashes are
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2` and
+  `78ca57acf308180c8e195e1f9c669724688b03baca4c423638549b8969f08bf1`.
+- All seven protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were alive at close and untouched. Existing
+  untracked agent artifacts and scratch files were preserved. No full suite
+  was run because the protected long-running jobs remain in service and the
+  root filesystem constraints make broad parallel runs unsafe.
+- Verdict: **confirmed and fixed**. No repository-completion claim is made.
+  After this state-close commit, perform a fresh gate, fetch/rebase if needed,
+  draw exactly one selector with `shuf -i 0-100 -n 1`, create a new
+  `uber-cycle-301-*` branch, and select a distinct eligible evidence cell.
+
 # Cycle 299 Completion
 
 - The exact selector `shuf -i 0-98 -n 1` drew goal `15`
