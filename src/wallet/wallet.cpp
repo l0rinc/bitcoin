@@ -2873,13 +2873,13 @@ bool CWallet::SetAddressPreviouslySpent(WalletBatch& batch, const CTxDestination
     if (std::get_if<CNoDestination>(&dest))
         return false;
 
-    if (!used) {
-        if (auto* data{common::FindKey(m_address_book, dest)}) data->previously_spent = false;
-        return batch.WriteAddressPreviouslySpent(dest, false);
+    if (!batch.WriteAddressPreviouslySpent(dest, used)) return false;
+    if (used) {
+        LoadAddressPreviouslySpent(dest);
+    } else if (auto* data{common::FindKey(m_address_book, dest)}) {
+        data->previously_spent = false;
     }
-
-    LoadAddressPreviouslySpent(dest);
-    return batch.WriteAddressPreviouslySpent(dest, true);
+    return true;
 }
 
 void CWallet::LoadAddressPreviouslySpent(const CTxDestination& dest)
