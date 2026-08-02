@@ -1,5 +1,112 @@
 # Contributor branch and work-in-progress radar
 
+## Cycle 300 selection and gate
+
+- Selected goal: `65`, `contributor-branch-radar`, on a new evidence cell. The
+  exact expanded-catalog draw was `shuf -i 0-99 -n 1` -> `65`; the prior Goal
+  65 wallet-KDF cell remains closed and was not reopened. The dedicated branch
+  is `uber-cycle-300-contributor-branch-radar-20260802`.
+- Cycle-start HEAD was `b88a9682cb`; freshly fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; the merge base was
+  `556988790a7f961693a8fd93f73725baea66476a`; and start divergence was `0`
+  behind and `1392` ahead. The tracked worktree was clean. Existing untracked
+  agent artifacts, crash files, package files, and protected processes were
+  preserved; no protected process was stopped.
+- Public open-PR evidence was refreshed through the GitHub API on 2026-08-02.
+  Heads were fetched only into `refs/remotes/origin/pr-*`, never copied into
+  the working tree or treated as an oracle. The selected inventory included:
+  `35857` wallet BIP39 `addhdkey` (5 commits, 11 files, 2832 additions),
+  `35847` generic BaseIndex tests (6 commits), `35846` throwing config getter
+  tests (2 commits), `35830` fee-estimator fuzz I/O handling, `35837`
+  `scanblocks` block-filter-range errors, `35848` PSBT `IsNull` coverage,
+  `35866` early RPC-client rejection coverage, `35867` private-broadcast log
+  classification, `35797` PSBT output-before-input handling, `35742`
+  multipath Miniscript duplicate-key checking, `35524` fallback file
+  allocation, `35730` HTTP connection limits, and `35858` privacy docs.
+  Ancestry and divergence were recorded with `git rev-list --left-right
+  --count origin/master...origin/pr-N`; the current-base one-commit test PRs
+  were `0 1393`, while older-base branches ranged from `0 1393` to `0 1417`.
+- Review evidence was used to rank hypotheses. PR #35524's public discussion
+  explicitly questioned whether `AllocateFileRange()` is append-only and
+  whether an existing file may be larger than the logical offset. PR #35837's
+  review distinguishes an unavailable requested filter range from an index
+  merely behind the tip. PR #35730's review covers queued connections,
+  descriptor limits, simultaneous clients, and the follow-up early rejection
+  behavior. PR #35857 has official BIP39 vectors and wallet functional tests,
+  but its new implementation is not in current `HEAD`. The test-only PRs
+  #35866 and #35867 each supplied useful before/after test evidence without a
+  current production change. No public patch was copied as proof.
+
+## Confirmed finding: fallback preallocation overwrote existing flat-file data
+
+- The current `AllocateFileRange()` fallback in `src/util/fs_helpers.cpp`
+  sought to `offset` and wrote the complete allocation length. On a system
+  without working `posix_fallocate()`, reopening a pre-existing flat file at a
+  logical position could therefore overwrite stored bytes with zeroes. The
+  trust boundary is local filesystem state during block-file allocation,
+  especially reindex/recovery or any state where physical file size exceeds
+  logical write position. This is data corruption, not merely a benchmark or
+  style issue.
+- The independent regression was added to
+  `flatfile_tests/flatfile_allocate_preserves_existing_data`. It created a
+  128-byte sentinel file, forced `posix_fallocate()` to return `EOPNOTSUPP`
+  with `/data/my_storage/tmp/cycle300-fallocate-fail.so`, then called the
+  real `FlatFileSeq::Allocate()` path. Before the source fix, seed `300002`
+  failed at the exact sentinel comparison: the first 100 bytes were zeroes.
+  The force-fallback command was:
+
+  ```text
+  TMPDIR=/data/my_storage/tmp/cycle300-flatfile-fail LD_PRELOAD=/data/my_storage/tmp/cycle300-fallocate-fail.so /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=flatfile_tests/flatfile_allocate_preserves_existing_data --log_level=all --report_level=short --color_output=false --random=300002
+  ```
+
+- The repair seeks to the physical end, obtains `ftello()`, and writes only
+  the missing suffix up to `offset + length`. It preserves the existing
+  `posix_fallocate()` behavior and keeps the allocation advisory. The same
+  forced-fallback test passed with seed `300003`; all five `flatfile_tests`
+  cases passed on the normal path with seed `300004`; and rebuilding
+  `test_bitcoin` after the change passed. `git diff --check` passed before
+  commit. The self-contained finding commit is `272de16fea`, authored as
+  `Lőrinc <pap.lorinc@gmail.com>`.
+- The test intentionally models a physical/logical-size mismatch rather than
+  only an empty file. The public issue history for #33128 supplies a realistic
+  reindex/recovery context on systems lacking `posix_fallocate()`. The
+  remaining cross-platform question is queued: the Windows and macOS branches
+  also need explicit preservation tests for existing files, and the API's
+  offset/length overflow contract should be checked on narrower `off_t` and
+  unusual filesystem implementations.
+
+## Dismissed, deferred, and learned radar cells
+
+- #35857's BIP39 implementation was checked for word-count/checksum handling,
+  PBKDF2 vectors, ASCII passphrase policy, cleansing buffers, RPC exclusivity,
+  and functional recovery coverage. Its current branch is not part of
+  `HEAD`, official vectors cover the derivation, and no current-tree defect was
+  independently established. Keep it as a Goal 13/44/84 secret-lifetime and
+  wallet-recovery seed rather than copying the branch.
+- #35837's proposed `scanblocks` error classification, #35730's HTTP cap,
+  #35742's multipath duplicate-key check, and #35797's PSBT output-before-input
+  fix are valuable public hypotheses, but this cycle did not establish a
+  separate current-tree finding after caller and review inspection. Keep them
+  in the Goal 4/6/51/73/87 queues with their PR provenance. #35847, #35846,
+  #35848, #35866, and #35867 are test or coverage changes; their review and
+  before/after evidence did not reveal an additional production omission.
+- The strongest new reusable pattern is **physical state versus logical
+  position**: helpers that allocate, truncate, flush, rebuild, or recover must
+  not infer that a logical append point equals the physical file end. Fault
+  injection must force unsupported-platform fallbacks, and tests must seed
+  existing bytes beyond the requested logical position. This lineage adds
+  Goal 100, `append-only-file-allocation`, to the catalog before the next
+  random draw.
+
+## Handoff
+
+- Verdict: **confirmed and fixed**. No repository-completion claim is made.
+  Before the next draw, fetch and rebase this branch onto current
+  `origin/master`, record any conflicts and the post-rebase validation, add
+  Goal 100 and regenerate the catalog, close `uber-goal-state.md` separately,
+  run the protected-process gate, and draw exactly one index from the new
+  contiguous catalog.
+
 ## Cycle 273 selection and gate
 
 - Selected goal: `65`, `contributor-branch-radar`.

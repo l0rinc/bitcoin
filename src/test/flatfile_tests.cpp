@@ -136,6 +136,34 @@ BOOST_AUTO_TEST_CASE(flatfile_allocate)
     BOOST_CHECK(!out_of_space);
 }
 
+BOOST_AUTO_TEST_CASE(flatfile_allocate_preserves_existing_data)
+{
+    const auto data_dir = m_args.GetDataDirBase();
+    FlatFileSeq seq(data_dir, "preserve", 100);
+    const auto path = seq.FileName(FlatFilePos(0, 0));
+    const std::string data(128, 'D');
+
+    {
+        FILE* file = fsbridge::fopen(path, "wb");
+        BOOST_REQUIRE(file);
+        BOOST_REQUIRE_EQUAL(fwrite(data.data(), 1, data.size(), file), data.size());
+        BOOST_REQUIRE_EQUAL(fclose(file), 0);
+    }
+
+    bool out_of_space;
+    BOOST_CHECK_EQUAL(seq.Allocate(FlatFilePos(0, 0), 1, out_of_space), 100U);
+    BOOST_CHECK(!out_of_space);
+
+    {
+        FILE* file = fsbridge::fopen(path, "rb");
+        BOOST_REQUIRE(file);
+        std::string actual(data.size(), '\0');
+        BOOST_REQUIRE_EQUAL(fread(actual.data(), 1, actual.size(), file), actual.size());
+        BOOST_CHECK_EQUAL(actual, data);
+        BOOST_REQUIRE_EQUAL(fclose(file), 0);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(flatfile_flush)
 {
     const auto data_dir = m_args.GetDataDirBase();
