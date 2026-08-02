@@ -5295,3 +5295,41 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   exact selector draw, a new `uber-cycle-298-*` branch, and a distinct eligible
   cell; do not reopen this descriptor top-up family without changed transaction
   semantics or new evidence.
+
+## Cycle 298 Completion
+
+- The exact selector `shuf -i 0-98 -n 1` drew goal `27` (`error-path-state`)
+  with no reroll. The dedicated branch is
+  `uber-cycle-298-error-path-state-20260802`. Cycle start HEAD was
+  `49c0df1ce42251c561df89fa7ebc110aa65b43a5`; source/evidence commit is
+  `f57c1ba3515ce2f1976ca466d58c40eb70fcf235`; fetched `origin/master` is
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base is
+  `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; and the post-source gate
+  divergence is `45 1387` (`origin/master...HEAD`). The pre-entry state-file
+  SHA-256 was `e92043774e0fed8b1fabc69e1cb9ee3d85e3773b43c7a19c9c2ba835eb1cd062`.
+- Catalog, random prompt, goals TSV, and uber-protocol hashes matched their
+  fixed values. Protected PIDs `777094`, `956381`, `1138182`, `1157959`,
+  `1312049`, `1312050`, and `1346200` remained alive and untouched. Existing
+  untracked probes and artifacts were preserved and excluded from both commits.
+- The distinct Goal 27 cell was wallet order-position durability. The old
+  `IncOrderPosNext` advanced `nOrderPosNext` and discarded a failed
+  `WriteOrderPosNext`; `AddToWallet` then retained/persisted a transaction, and
+  `ReorderTransactions` discarded its final order-counter write result. The
+  source commit changes the allocator to return `std::optional<int64_t>`,
+  publish the counter only after persistence, reject counter exhaustion, make
+  `AddToWallet` roll back its new map entry on failure, and return
+  `DBErrors::LOAD_FAIL` from the reorder path.
+- The independent pre-fix trigger replay failed four contract checks: the
+  second transaction was accepted and stored, `nOrderPosNext` changed from 1
+  to 2 despite the forced write failure, and the counter row remained present.
+  The fixed focused test passed. The combined
+  `wallet_tests,walletdb_tests,scriptpubkeyman_tests` run passed all 52 selected
+  cases with seed `29807`; the target rebuild and `git diff --check` also passed.
+- Source/test/journal commit `f57c1ba351` (`wallet: report order position write
+  failures`) was authored as `Lőrinc <pap.lorinc@gmail.com>`. It includes the
+  regression and the selected-goal journal entry. No repository-completion
+  claim is made; the journal records the untested nullptr allocator,
+  `INT64_MAX`, and crash-window limitations.
+- The next action is a separate state-close commit, a fresh post-close gate,
+  one exact selector draw, and a new `uber-cycle-299-*` branch. Do not reopen
+  this order-position cell without new backend, restart, or caller evidence.
