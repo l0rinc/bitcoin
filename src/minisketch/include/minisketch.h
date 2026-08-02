@@ -239,8 +239,10 @@ public:
     /** Make this Minisketch a clone of the specified one. */
     Minisketch& operator=(const Minisketch& sketch) noexcept
     {
-        if (this != &sketch && sketch.m_minisketch) {
-            m_minisketch = std::unique_ptr<minisketch, Deleter>(minisketch_clone(sketch.m_minisketch.get()));
+        if (this != &sketch) {
+            m_minisketch = sketch.m_minisketch
+                ? std::unique_ptr<minisketch, Deleter>(minisketch_clone(sketch.m_minisketch.get()))
+                : nullptr;
         }
         return *this;
     }

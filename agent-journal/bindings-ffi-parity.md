@@ -1,5 +1,65 @@
 # Bindings, FFI, and language-wrapper parity
 
+## Cycle 270: invalid Minisketch copy assignment leaves stale native state
+
+### Selection and gate
+
+- Exact selector after the Cycle 269 state close: `shuf -i 0-98 -n 1` -> `94` (`bindings-ffi-parity`); no reroll was needed.
+- Branch: `uber-cycle-270-bindings-ffi-parity-20260802`.
+- Cycle start and branch-gate HEAD: `ad31a18954843f110225714f46c2a97fb76ab901`.
+- `origin/master`: `556988790a7f961693a8fd93f73725baea66476a`.
+- Merge-base: `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`; divergence (`HEAD...origin/master`): `1329 45`.
+- The tracked/index state was clean and `git diff --check` passed at entry. Existing untracked agent artifacts, package files, `node_modules/`, `test/cache/`, crash files, and profiling output were preserved and excluded from staging.
+- Catalog SHA-256: `5c847ef77405df14b7e7e8fa50430d11a71dcbac3d84df66d25a168d1e955ea8`.
+- Prompt SHA-256: `10408ad01c000bba65c1fff135cf2d7d92508bf8a8549141e3d6880f7fe0d4ec`.
+- Corrected TSV SHA-256: `babfb36e1a64d8b4ad310459306fa2dfdb240d644d731e2b795177f93a68f1cb`.
+- Protocol SHA-256: `954a67b016918eb2d71c17ae78a12b38f014bb47ed32fe45a0b6f307e5002fc0`.
+- Protected long-running tests `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` were alive and were not touched. Disposable builds, probes, and test temporary data used `/data/my_storage/tmp`.
+
+### Scope and exclusions
+
+The tree does not ship maintained Rust, Python, Java, Go, or C# bindings. Prior Goal 94 cells for the libbitcoinkernel pointer-array conversion, tracing-demo field omission, callback ownership and serialization-failure behavior, nullable ancestor boundary, and the external Rust MuSig secret-nonce wrapper were searched and excluded.
+
+The current IPC/Cap'n Proto boundary was also checked as a separate schema-parity cell. The external Rust consumer `2140-dev/bitcoin-capnp-types` was cloned at `/data/my_storage/tmp/cycle270-bitcoin-capnp-types`, HEAD `b1a9876f6563dbb802e66c20bae27dc42fca7917` (2026-07-24); its `mining.capnp` body matches the Core schema. Apparent `BlockCreateOptions` omissions were checked against history: `block_max_weight` was explicitly not exposed to IPC by commit `128da7c3ff`, and `test_block_validity` was explicitly not exposed by `020166080c`. The remaining `block_min_fee_rate`/`print_modified_fee` and 32-bit `size_t` width questions remain separate queue cells, not findings here. Rust tooling is unavailable, so the external consumer was used for static comparison only.
+
+### Working hypothesis
+
+`src/minisketch/include/minisketch.h` represents construction failures, unsupported field/implementation combinations, and internal OOM as an invalid object (`m_minisketch == nullptr`), and explicitly requires callers to check `operator bool()` before using it. The copy constructor preserves that invalid state by leaving its destination invalid. The copy-assignment operator instead guarded the entire assignment with `sketch.m_minisketch`, so assigning an invalid source to a valid destination silently retained the destination's old native sketch. This violates the wrapper's value semantics and can make a caller continue using stale state after an operation that intentionally propagates an invalid result.
+
+### Independent discovery and verification
+
+The old operator at lines 239-246 was:
+
+```cpp
+if (this != &sketch && sketch.m_minisketch) {
+    m_minisketch = std::unique_ptr<minisketch, Deleter>(minisketch_clone(sketch.m_minisketch.get()));
+}
+```
+
+The constructor documentation at lines 262-267 identifies invalid objects as a supported state, not an impossible input. Existing `minisketch_tests` covered valid copy construction/assignment indirectly through wrapper operations but had no invalid-source copy-assignment case.
+
+A standalone public-wrapper probe in `agent-journal/minisketch_cycle270_probe.cpp` was compiled with `g++ -std=c++17 -O2 -Wall -Wextra -Werror` against the pre-fix library `/data/my_storage/tmp/cycle214-build/src/libminisketch.a`. It produced:
+
+```text
+source_valid=0 destination_valid=1 destination_bytes_unchanged=1
+```
+
+and returned failure because the destination stayed valid and serialized exactly as before. This is a direct pre-fix reproduction independent of the project test harness.
+
+### Fix and verification
+
+The operator now assigns either a cloned native handle or `nullptr` for every non-self assignment. The regression test constructs a valid sketch and a documented invalid sketch, assigns the latter, and asserts that the destination is invalid.
+
+- Isolated build: CMake Debug, Clang 19, `BUILD_TESTS=ON`, wallet/IPC/GUI/bench/BDB/ZMQ disabled, `/data/my_storage/tmp/cycle270-minisketch-build`; `cmake --build ... --target test_bitcoin -j2` passed.
+- Focused test: `/data/my_storage/tmp/cycle270-minisketch-build/bin/test_bitcoin --run_test=minisketch_tests --random=270001 --log_level=test_suite --report_level=short --color_output=false` passed 3 cases and 705/705 assertions.
+- Rebuilt public-wrapper probe with the current library under Clang 19: `source_valid=0 destination_valid=0 destination_bytes_unchanged=0`, exit 0.
+- Rebuilt the same probe under GCC 12 against the same current library: `source_valid=0 destination_valid=0 destination_bytes_unchanged=0`, exit 0.
+- The source/test diff passed `git diff --check`; no protected process or default datadir was used.
+
+Verdict: confirmed local C++ wrapper contract defect. The minimal fix is to clear the destination native handle when the source is invalid, and the regression is self-contained in `minisketch_tests`. This is not a consensus or cryptographic algorithm change; it prevents stale wrapper state from surviving a documented invalid value. The remaining limitation is that the test does not inject clone-time OOM or exercise 32-bit ABI widths; the invalid-source path itself is a normal documented state and is directly reproduced.
+
+Next queue: continue with the remaining IPC schema-width/output-on-failure and wrapper lifetime cells, searching this entry and the prior Goal 94 cells before selecting a new hypothesis. Do not reopen invalid copy assignment unless a distinct recurrence appears in another maintained boundary.
+
 ## Cycle 208: external Rust MuSig secret-nonce exposure
 
 ### Selection and gate

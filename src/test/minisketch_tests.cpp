@@ -107,4 +107,15 @@ BOOST_AUTO_TEST_CASE(minisketch_wrapper_contracts)
     BOOST_CHECK(*decoded == std::vector<uint64_t>({1, 2, 4}));
 }
 
+BOOST_AUTO_TEST_CASE(minisketch_invalid_copy_assignment)
+{
+    Minisketch valid{MakeMinisketch32(4)};
+    Minisketch invalid{0, 0, 4};
+    BOOST_REQUIRE(valid);
+    BOOST_CHECK(!invalid);
+
+    valid = invalid;
+    BOOST_CHECK(!valid);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
