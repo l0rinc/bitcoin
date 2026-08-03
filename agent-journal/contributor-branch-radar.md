@@ -1279,3 +1279,47 @@ remains vulnerable; lineage covered-ahead.
 Write-side sibling goal38 (1fe00d5a05, WriteSnapshotBaseBlockhash
 unguarded at utxo_snapshot.cpp:39) is STILL LIVE in-tree — queued
 for fault-injection verification.
+
+### goal38-snapshot-cleanup-fix (1fe00d5a05): CONFIRMED + ADOPTED
+Mechanism: WriteSnapshotBaseBlockhash (src/node/utxo_snapshot.cpp:39)
+left `afile << blockhash` unguarded; a short write of the 32-byte
+marker throws ios_base::failure which escapes ActivateSnapshot past
+cleanup_bad_snapshot: RPC surfaces raw generic -1, and the fully
+validated-but-unactivated chainstate_snapshot dir is orphaned WITH a
+truncated base_blockhash file.
+Trust boundary: local IO fault during loadtxoutset activation
+(disk full/quota/transient); loud failure; no consensus/network
+impact. F19/xor-key write-failure family (third arm).
+Evidence (build-after ASan Debug bitcoind, deterministic injection):
+- Fixture: canonical height-299 regtest snapshot reproduced
+  bit-exact (base_hash 0c552ced... == committed chainparams hash)
+  via the framework cache + feature_assumeutxo recipe (mocktime
+  pinned, MiniWallet self-transfers i%3==0, stale-block diversion);
+  setup_network override needed (default setup_nodes mines +1 block).
+  Node B: 199-cache datadir + submitheader 200..299 (blocks=199,
+  headers=299).
+- Injection: /tmp/snap_interpose.so — fopen* tracker matching
+  ".../base_blockhash", one-shot fwrite short-write (1 byte lands).
+- FAILING-BEFORE: RPC 'error code: -1 AutoFile::write: write
+  failed: iostream error'; chainstate_snapshot orphaned with 1-byte
+  base_blockhash; activation aborted.
+- PASSING-AFTER: RPC '-32603 Unable to load UTXO snapshot: could
+  not write base blockhash' (designed contract); orphan removed;
+  immediate retry without injection activates cleanly (tip == base).
+- Retry-note: even pre-fix, retry recovered in OUR lineage because
+  a146380c8e (goal10 read-side) tolerates the truncated marker;
+  upstream lacks both guards.
+Adoption: audit/adopt-snapshot-write-cleanup 3c9090b644 (fix only;
+regression evidence = the injection pair; harness preserved below).
+Severity: Medium-low local availability; upstream 556988790a
+vulnerable on both arms (write + read).
+
+### Preserved harness (this cycle)
+/tmp/snap_interpose.c (path-targeted one-shot short-write): interpose
+fopen/fopen64 to record the stream whose basename == "base_blockhash";
+first fwrite on it writes 1 byte, returns short. Build: gcc -shared
+-fPIC -o /tmp/snap_interpose.so /tmp/snap_interpose.c -ldl.
+Fixture builder: /tmp/snap_builder2.py (framework cache +
+feature_assumeutxo recipe; asserts base_hash == committed regtest
+height-299 hash). Node prep: copy /tmp/snapcache/node0 datadir
+(199-chain), submitheader 200..299 from a 299-tip donor node.

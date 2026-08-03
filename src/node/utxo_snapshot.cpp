@@ -36,7 +36,13 @@ bool WriteSnapshotBaseBlockhash(Chainstate& snapshot_chainstate)
                   fs::PathToString(write_to));
         return false;
     }
-    afile << *snapshot_chainstate.m_from_snapshot_blockhash;
+    try {
+        afile << *snapshot_chainstate.m_from_snapshot_blockhash;
+    } catch (const std::ios_base::failure& e) {
+        LogError("[snapshot] failed to write base blockhash file %s: %s",
+                 fs::PathToString(write_to), e.what());
+        return false;
+    }
 
     if (afile.fclose() != 0) {
         LogError("[snapshot] failed to close base blockhash file %s after writing",
