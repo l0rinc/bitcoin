@@ -286,6 +286,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 44 | secret-copy-optimization | CYCLE-3 | 2026-08-02 | crossing map: all crossings secure/cleansed/deliberate-export; DISMISSED |
 | 80 | fuzz-engine-differential | CYCLE-3 | 2026-07-29 | consensus acceptance differential: A=0/300 (no structural over-acceptance); E=53/D=99 agreement, C=148 parse/policy |
 | 80 | fuzz-engine-differential | COMPLETE | 2026-08-02 | c12: musig2 nonce/sig vs participant membership unchecked (parser maps, decodepsbt-only consumer); foreign-K3 doc accepted live; DISMISSED |
+| 80 | fuzz-engine-differential | CYCLE-13 | 2026-08-03 | PR 35797: lineage already protected (53506a51e9); upstream still vulnerable |
 | 75 | build-throughput-cacheability | CYCLE-4 | 2026-07-29 | 45-uncacheable itemized: 57/58 = failed compilations (rotation's own mutants); IPC/capnp hypothesis refuted |
 | 75 | build-throughput-cacheability | CYCLE-5 | 2026-08-02 | posture re-check: 85 uncacheable=own residue, 6 modified-during-compile=own edits; hit 58% steady; DISMISSED |
 | 95 | database-semantics-differential | CYCLE-4 | 2026-07-29 | durability differential: kill -9 mid-reindex, both engines recover identical tip, zero corruption |
@@ -1056,6 +1057,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 272 (suspicion-mined): PR 35797 PSBT abort: lineage
+   already protected (53506a51e9); upstream still vulnerable.
    Cycle 271 (suspicion-mined): PR 31868 author-draft; no
    adoption; watch 32043.
    Cycle 270 (suspicion-mined): PR 33637 comparator perf
