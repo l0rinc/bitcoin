@@ -67,18 +67,6 @@ independently verified.
 - Next: track PR 35714 upstream; adopt 0f04fbee2f characterization test
   if the author reworks it.
 
-## ✅ txdb cursor valid over malformed first key (F25, adopted 8481b1f27f)
-- Mechanism: CCoinsViewDB::Cursor() cached the default DB_COIN tag
-  when first-key decode failed -> Valid()/GetKey() reported a usable
-  cursor over an undecodable key; Next() already invalidated it.
-- Trigger: corrupt or foreign-written chainstate keyspace (readable
-  value under a malformed coin key); not network reachable.
-- Evidence: failing-before (Valid/GetKey true over one-byte 'C'
-  key) / passing-after (focused + coins_tests green).
-- Branch/commit: audit/adopt-txdb-cursor-firstkey 8481b1f27f;
-  archive 35548eb2ba; upstream PR 35654 open (covered-ahead).
-- Next: track 35654 merge.
-
 ## ✅ xor.dat short-write leaves unbootable datadir (F26, adopted 2110abf119)
 - Mechanism: InitBlocksdirXorKey left a truncated xor.dat when the
   key write/close failed; next startup read it as authoritative ->
@@ -91,6 +79,21 @@ independently verified.
 - Branch/commit: audit/adopt-xor-key-shortwrite 2110abf119;
   archive ebd42ea45e; upstream master vulnerable.
 - Next: none locally; offerable upstream with the injection harness.
+
+## ✅ headers commitment cap wraps under lagging clock (F30, adopted 35473f91b4)
+- Mechanism: HeadersSyncState assigned signed (possibly negative)
+  elapsed seconds into uint64_t m_max_commitments; clock skew >2h
+  backward wraps the presync memory cap to ~2^64, letting a peer
+  stream header commitments past the intended bound.
+- Trigger: remote syncing peer + local clock skew (NTP correction,
+  VM resume, wrong TZ); memory DoS only, no consensus impact.
+- Evidence: failing-before — FakeNodeClock lagging genesis-MTP,
+  sync stays PRESYNC (state 0, expected FINAL=2); passing-after —
+  clamp to 0, fast-fail, full headers suite green.
+- Branch/commit: audit/adopt-headers-clock-lag 35473f91b4;
+  archive a5a73c53f2; upstream 556988790a vulnerable. Same
+  surface as F22 (empty-headers).
+- Next: none locally; offerable upstream with the boundary test.
 
 ## ✅ snapshot blockhash write escapes as raw exception (F27, adopted 3c9090b644)
 - Mechanism: WriteSnapshotBaseBlockhash left the 32-byte marker

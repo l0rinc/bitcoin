@@ -308,6 +308,19 @@ comment-drift family as F1 (LockPoints).
 - Reachability: local config error only; no consensus impact.
   Count arm covered in-tree already (mempool_args.cpp:115-120).
 
+## F30: headers commitment cap wraps under lagging clock (goal56-future-mtp) — FIXED 2026-08-03
+- Mechanism: HeadersSyncState assigned signed (possibly negative)
+  elapsed seconds into uint64_t m_max_commitments; clock skew >2h
+  backward (NTP correction, VM resume) wraps the presync memory
+  cap to ~2^64; a syncing peer can stream header commitments past
+  the intended per-peer bound (memory DoS, no consensus impact).
+- Evidence: failing-before future_chain_start_mtp_bounds_commitments
+  (FakeNodeClock lagging genesis-MTP: PRESYNC, expected FINAL);
+  passing-after clamp-to-0 fast-fail, full headers suite green.
+  audit/adopt-headers-clock-lag 35473f91b4; archive a5a73c53f2.
+- Reachability: remote peer + local clock skew >2h; upstream
+  556988790a vulnerable. Same surface as F22.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
