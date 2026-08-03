@@ -1072,6 +1072,17 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 316 (verification + goal48 closure): REGRESSION #8 GREEN
+   (full test_bitcoin on the cycle-312 lineage with F34/F35 +
+   blockfilter). goal48 oracle series all 4 VERIFIED GREEN +
+   adopted as coverage: mtp boundary property (30bb38cdc7),
+   AccessByTxid sparse-output, variable-tip proof relation,
+   BitSet Fill boundary (310051e236); archive b2573677da.
+   Tooling note: fuzz runs need build_fuzz + FUZZ=<target> env
+   (build-after has BUILD_FOR_FUZZING=OFF). Flood queue fully
+   closed: every one of the 52 src-touching branches has a
+   recorded verdict; remaining flood branches are wallet-scoped
+   or journal/meta per the goal-111 manifest.
    Cycle 315 (watch): upstream master advanced again dcc2ed52b8
    -> 30f6b05857 (merge #35860 rpc fuzz rework, fuzz-only 112
    lines; second fuzz advance). Both advances merge-tree CLEAN
