@@ -6355,6 +6355,30 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   No repository-completion claim is made. After this state-only commit, run a
   fresh gate, draw exactly one selector with `shuf -i 0-113 -n 1`, create a
   dedicated Cycle 314 branch, and continue.
+# Cycle 321 Completion
+
+- Goal 43 (`option-api-lifecycle`) was selected by `shuf -i 0-120 -n 1` ->
+  `43` on branch `uber-cycle-321-option-api-lifecycle-20260802`. Cycle-start
+  HEAD was `286f85f5f229b0ce6fbac1f50ff0d5647f418d70`; selection commit was
+  `41614c589e`; and the pre-cycle catalog SHA-256 was
+  `12a885d6e83e495aca1030563565e88251a74ac08a08cdefe6c2fd189aa048d8`.
+- Source and history review established that repeated `-loadblock` values are
+  processed sequentially and that unknown-parent tracking is intentionally
+  omitted for the user-file call form. A release process reproduction showed
+  child-first two-file import silently stopped at height 1, while
+  parent-first reached height 2. A clean single-file child-parent run also
+  stopped at height 1; explicit retry on restart after the parent was persisted
+  reached height 2 with the expected child hash. The current help and
+  functional test do not define multi-file ordering. No production source
+  change was justified: verdict is inconclusive as a bug, confirmed as a
+  contract/test gap.
+- Cycle journal: `agent-journal/option-api-lifecycle.md`. Learning journal:
+  `agent-journal/loadblock-order-recovery.md`. Goal 121,
+  `loadblock-order-recovery`, was added to attack deferred replay, restart,
+  config ordering, and contract evidence in a distinct future campaign.
+- Catalog regeneration, rebase, final gate, and the next selector remain
+  pending. Preserve all unrelated untracked probes and protected processes.
+
 # Cycle 320 Completion
 
 - Goal 14 (`secret-control-flow`) was selected by the exact command

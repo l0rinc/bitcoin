@@ -12,6 +12,29 @@
 - Timestamp: `2026-08-03T03:38:45Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-43`
 
+## Cycle 321 Result
+
+- Goal 43 (`option-api-lifecycle`) completed on branch
+  `uber-cycle-321-option-api-lifecycle-20260802`. The selected cell was
+  repeated `-loadblock` ordering and deferred-parent recovery; prior closed
+  option lifecycle cells were excluded.
+- Source and history review confirmed that repeated `-loadblock` values have
+  been processed sequentially since 2012, while unknown-parent tracking is
+  explicitly reserved for reindex. The public help does not state whether
+  multiple files are order-independent.
+- Independent process reproduction in
+  `/data/my_storage/tmp/cycle321-loadblock-order-a` showed child-first
+  `-loadblock=child.dat -loadblock=parent.dat` silently ended at height 1,
+  while parent-first ended at height 2. A clean single-file child-parent
+  fixture also ended at height 1; retrying the child on a later restart after
+  the parent was persisted reached height 2 with the expected child hash. A
+  debug assertion without `-checkblockindex=0` was classified as a setup
+  artifact. No production fix was justified: verdict is inconclusive as a bug
+  and confirmed as a contract/test gap.
+- Learning added Goal 121, `loadblock-order-recovery`, with seed journal
+  `agent-journal/loadblock-order-recovery.md`. Catalog regeneration and final
+  gate remain pending.
+
 ## Cycle 320 Selection
 
 - Selected index: `14`

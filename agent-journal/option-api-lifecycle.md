@@ -1,5 +1,96 @@
 # Option and API Lifecycle Audit
 
+## Cycle 321 - repeated loadblock ordering and deferred-parent contract
+
+### Identity and scope
+
+- Goal 43 (`option-api-lifecycle`) was selected by `shuf -i 0-120 -n 1` -> `43`.
+  Branch: `uber-cycle-321-option-api-lifecycle-20260802`. Cycle-start HEAD was
+  `286f85f5f229b0ce6fbac1f50ff0d5647f418d70`; selection commit was
+  `41614c589e`; the pre-cycle catalog SHA-256 was
+  `12a885d6e83e495aca1030563565e88251a74ac08a08cdefe6c2fd189aa048d8`.
+- The previously repaired `-txsendrate`, settings-path, failed-write,
+  `noincludeconf`, and other closed cells were excluded. The remaining queue
+  explicitly named multi-file `loadblock` ordering/restart behavior.
+
+### Contract and historical evidence
+
+`src/init.cpp` collects every repeated `-loadblock` value with
+`args.GetArgs("-loadblock")`, preserving argument/config order, and
+`node::ImportBlocks()` invokes `LoadExternalBlockFile(file)` once per path.
+The no-map call form intentionally omits unknown-parent tracking. The source
+comment in `src/validation.h` promises cross-file out-of-order recovery for
+reindex only, then explicitly says the `-loadblock` form has no unknown-parent
+tracking. The help text says only that blocks are imported from an external
+file and does not state a multi-file or ordering guarantee.
+
+The original 2012 `-loadblock` implementation already iterated
+`mapMultiArgs["-loadblock"]` sequentially. Later refactors retained this
+behavior while introducing the persistent unknown-parent map only for
+reindex. The current functional test uses one linearized bootstrap file, so it
+does not define or exercise repeated-file ordering. This is strong evidence of
+an inherited sharp edge, but not by itself authority for changing behavior.
+
+### Process-boundary reproduction
+
+Scratch data and block files are under
+`/data/my_storage/tmp/cycle321-loadblock-order-a`; no default datadir, wallet,
+or production state was used. A regtest daemon generated blocks at heights 1
+and 2. The serialized block records were split into `parent.dat` and
+`child.dat`; the hashes were:
+
+```text
+height 1: 20ae78d5e4666f6901d0c86a2974d7da07051893eb735fc6c577071d965a84be
+height 2: 6ec25883a09e8c56d3db5df77a3e30671b74c5e2f2f85a49e32adb1c53ad68ba
+```
+
+Using the release binary with `-dbcache=16 -checkblockindex=0` (the latter
+avoids a debug consistency assertion before activation), child-first startup
+with `-loadblock=child.dat -loadblock=parent.dat` completed normally but
+reported `getblockcount=1`; `getblockhash 2` returned error `-8 Block height
+out of range`. Parent-first startup with the same files returned
+`getblockcount=2` and the expected child hash. The daemons stopped cleanly via
+RPC. A debug-build abort without `-checkblockindex=0` was classified as a
+test-configuration artifact, not product evidence.
+
+The result demonstrates silent loss of a valid child when the caller supplies
+an order that the implementation does not defer. It does not demonstrate a
+documented contract violation: `-loadblock` may intentionally require a
+linearized file, and the existing header comment distinguishes it from
+reindex. The clean one-file control confirmed the same behavior: a file
+containing child then parent ended at height 1. A restart control then loaded
+the child again after the parent had been persisted and reached height 2 with
+hash `6ec25883a09e8c56d3db5df77a3e30671b74c5e2f2f85a49e32adb1c53ad68ba`.
+Thus the skipped child is recoverable only when the caller explicitly retries
+it; the initial import does not retain a deferred request.
+
+### Verdict and learning
+
+Verdict: **inconclusive as a production bug; confirmed as a contract/test gap**.
+No source change is justified until help, release history, callers, or
+maintainer precedent establishes whether repeated `-loadblock` inputs must be
+order-independent. The exact behavior, controls, and limitations are retained
+here so future cycles do not rediscover it as a generic parser bug.
+
+Learning added Goal 121, `loadblock-order-recovery`, with seed journal
+`agent-journal/loadblock-order-recovery.md`. That campaign will compare
+within-file and cross-file ordering, restart recovery, CLI/config ordering,
+observability, and the minimum viable deferred-replay design. It must either
+find authoritative contract evidence for a focused fix or produce a precise
+documentation/test recommendation without manufacturing a behavior change.
+
+### Next queue
+
+1. Run the one-file child-first and restart-after-parent controls, then inspect
+   whether a later `-loadblock` retry recovers the skipped child. **Done:** the
+   clean one-file run ended at height 1; the explicit retry restart reached
+   height 2 with the expected child hash.
+2. Check config-file versus command-line ordering and duplicate path behavior.
+3. Search release notes, issues, PR history, and bootstrap/linearization
+   tooling for an ordering promise before proposing code or help changes.
+4. Exclude this exact child-first two-file reproduction unless new contract or
+   lifecycle evidence changes the verdict.
+
 ## Cycle 38 selection and gate
 
 - Selector command: `shuf -i 0-98 -n 1`
