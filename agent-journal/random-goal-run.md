@@ -20,7 +20,7 @@
 - The final rebuild briefly hit the 445MB archive versus low-disk limit, then succeeded after removing only cycle-owned disposable test datadirs. `/data` remained critically constrained and `/` full; all protected processes remained alive.
 - Learning added Goal 125, `persisted-index-key-oracles`, with seed journal `agent-journal/persisted-index-key-oracles.md`. Goal/catalog commit `4904de45c7` generated 126 contiguous goals `0..125`.
 - Post-learning hashes: catalog `eec305dfa0d12fc3619f7a793b137aab8d9bc652b83d5c24cda5582f6d60b8ce`, manifest `6e7997619ff37d5d2ab7a9cbeb8efce7ced19964d325620157560c798f63bfe9`, generator `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, random prompt `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
-- Rebase and final gate remain pending; the next selector must wait for the fresh gate and draw from `0..125`.
+- `git fetch origin master` and `git rebase origin/master` were no-ops. Final gate HEAD `d24d461d40` has `0/1496` divergence, tracked cleanliness, clean `git diff --check`, 126 contiguous catalog rows, maximum prompt 3990 bytes, and all seven protected processes alive. `/data` has approximately 374M free and `/` is full. The next selector must draw from `0..125`.
 
 ## Cycle 324 Selection
 
