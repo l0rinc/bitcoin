@@ -12,6 +12,15 @@
 - Timestamp: `2026-08-03T01:11:54Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-7`
 
+## Cycle 312 Result
+
+- The selected resource-exhaustion campaign excluded all previously closed generic vector, locator, cfilter, BIP35, relay, receive-buffer, REST `getutxos`, duplicate-descriptor, and address/inventory cells. The distinct hypothesis was `GETBLOCKTXN`: `BlockTransactionsRequest` used generic vector allocation before `DifferenceFormatter` could enforce its strictly increasing `uint16_t` index domain.
+- Independent pre-fix probe evidence used only a 32-byte block hash and a five-byte CompactSize count declaring 2,500,000 indexes. The old parser produced `capacity=2500000 size=1` and then failed at EOF, reserving 5,000,000 bytes from a 37-byte message. The fixed probe rejected the count with `Vector length limit exceeded`, leaving `capacity=0 size=0`.
+- Confirmed and fixed in `b8ae707f47399124c65b42e56423f124cfb9a706` (`p2p: bound block transaction request indexes`), authored as `Lőrinc <pap.lorinc@gmail.com>`. `BlockTransactionsRequest` now uses `LimitedVectorFormatter<65536, DifferenceFormatter>`; the regression verifies oversized-count rejection, empty output, and zero capacity.
+- Validation: the existing scratch build `/data/my_storage/tmp/cycle246-wallet` rebuilt `test_bitcoin`; the focused regression passed 1 case and 3 assertions; the full `blockencodings_tests` suite passed 31 cases and 372 assertions; and `git diff --check` passed. No fresh daemon socket test was run because the host filesystems are full and protected workloads were preserved.
+- Learned suspicious surface: custom difference, varint, CompactSize, and related vector formatters may expose the same mismatch between declared count, representable element domain, allocation timing, output-on-failure, and malformed-input accounting. Added Goal 112, `difference-formatter-input-bounds`, with seed journal `agent-journal/difference-formatter-input-bounds.md`.
+- Goal/catalog/seed commit: `d90c20520861a1ea728e28e2611b910a93371403` (`agent: add formatter boundary audit goal`). The catalog now contains 113 contiguous goals (`0..112`); catalog SHA-256 is `9704269e8b150f9f1c2d9acaa83b49dd40b862cbd15defb0e948d41099f9175d`, manifest SHA-256 is `4507b42251321675eca0bde823d8b9256afa0345c5fbcbb5adf7d3e0df727767`, generator SHA-256 is `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and random prompt SHA-256 is `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`.
+
 ## Cycle 311
 
 - Selected index: `17`
