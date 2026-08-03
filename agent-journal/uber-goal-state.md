@@ -1068,6 +1068,9 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 285 (verification): consolidated regression #2 — full
+   suite + kernel + 7 functional tests ALL GREEN on the final
+   integrated lineage.
    Cycle 284 (radar hit): strong-random-contracts ADOPTED
    (#104 RNG contracts pinned; tidy check CI-side).
    Cycle 283 (suspicion-mined): PR 35260 + 32189 closure;
