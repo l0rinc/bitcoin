@@ -19,6 +19,32 @@ static PSBTProprietary MakeProprietary(uint64_t subtype, uint8_t key_data, uint8
     };
 }
 
+static std::vector<unsigned char> MakeKey(uint64_t type, uint8_t key_data)
+{
+    std::vector<unsigned char> key;
+    VectorWriter writer{key, 0};
+    WriteCompactSize(writer, type);
+    writer << key_data;
+    return key;
+}
+
+static PSBTProprietary MakeSerializedProprietary(uint64_t type, uint64_t subtype, uint8_t key_data, uint8_t value)
+{
+    const std::vector<unsigned char> identifier{'p', 's', 'b', 't'};
+    std::vector<unsigned char> key;
+    VectorWriter writer{key, 0};
+    WriteCompactSize(writer, type);
+    writer << identifier;
+    WriteCompactSize(writer, subtype);
+    writer << key_data;
+    return PSBTProprietary{
+        .subtype = subtype,
+        .identifier = identifier,
+        .key = key,
+        .value = {value},
+    };
+}
+
 void CheckTimeLock(const std::string& base64_psbt, std::optional<uint32_t> timelock)
 {
     util::Result<PartiallySignedTransaction> psbt = DecodeBase64PSBT(base64_psbt);
@@ -214,6 +240,48 @@ BOOST_AUTO_TEST_CASE(merge_proprietary_fields)
     const auto output_it = left.outputs[0].m_proprietary.find(right_prop);
     BOOST_REQUIRE(output_it != left.outputs[0].m_proprietary.end());
     BOOST_CHECK(output_it->value == right_prop.value);
+}
+
+BOOST_AUTO_TEST_CASE(preserves_full_compact_size_numeric_fields)
+{
+    CMutableTransaction tx;
+    tx.vin.emplace_back(COutPoint{});
+    tx.vout.emplace_back(0, CScript{});
+
+    constexpr uint64_t large_number = MAX_SIZE + 1;
+    PartiallySignedTransaction psbt(tx);
+
+    const auto global_prop = MakeSerializedProprietary(PSBT_GLOBAL_PROPRIETARY, large_number, 0x01, 0xaa);
+    const auto input_prop = MakeSerializedProprietary(PSBT_IN_PROPRIETARY, large_number, 0x02, 0xbb);
+    const auto output_prop = MakeSerializedProprietary(PSBT_OUT_PROPRIETARY, large_number, 0x03, 0xcc);
+    const auto global_unknown_key = MakeKey(large_number, 0x04);
+    const auto input_unknown_key = MakeKey(large_number, 0x05);
+    const auto output_unknown_key = MakeKey(large_number, 0x06);
+
+    psbt.m_proprietary.insert(global_prop);
+    psbt.inputs[0].m_proprietary.insert(input_prop);
+    psbt.outputs[0].m_proprietary.insert(output_prop);
+    psbt.unknown.emplace(global_unknown_key, std::vector<unsigned char>{0x42});
+    psbt.inputs[0].unknown.emplace(input_unknown_key, std::vector<unsigned char>{0x43});
+    psbt.outputs[0].unknown.emplace(output_unknown_key, std::vector<unsigned char>{0x44});
+
+    DataStream stream;
+    stream << psbt;
+    PartiallySignedTransaction decoded{deserialize, stream};
+
+    const auto global_prop_it = decoded.m_proprietary.find(global_prop);
+    BOOST_REQUIRE(global_prop_it != decoded.m_proprietary.end());
+    BOOST_CHECK_EQUAL(global_prop_it->subtype, large_number);
+    const auto input_prop_it = decoded.inputs[0].m_proprietary.find(input_prop);
+    BOOST_REQUIRE(input_prop_it != decoded.inputs[0].m_proprietary.end());
+    BOOST_CHECK_EQUAL(input_prop_it->subtype, large_number);
+    const auto output_prop_it = decoded.outputs[0].m_proprietary.find(output_prop);
+    BOOST_REQUIRE(output_prop_it != decoded.outputs[0].m_proprietary.end());
+    BOOST_CHECK_EQUAL(output_prop_it->subtype, large_number);
+
+    BOOST_CHECK(decoded.unknown.at(global_unknown_key) == std::vector<unsigned char>{0x42});
+    BOOST_CHECK(decoded.inputs[0].unknown.at(input_unknown_key) == std::vector<unsigned char>{0x43});
+    BOOST_CHECK(decoded.outputs[0].unknown.at(output_unknown_key) == std::vector<unsigned char>{0x44});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

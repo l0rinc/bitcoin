@@ -586,7 +586,7 @@ public:
             // "skey" is used so that "key" is unchanged after reading keytype below
             SpanReader skey{key};
             // keytype is of the format compact size uint at the beginning of "key"
-            uint64_t type = ReadCompactSize(skey);
+            uint64_t type = ReadCompactSize(skey, /*range_check=*/false);
 
             // Do stuff based on keytype "type", i.e., key checks, reading values of the
             // format "<valuelen><valuedata>" from the stream "s", and value checks
@@ -901,7 +901,7 @@ public:
                 {
                     PSBTProprietary this_prop;
                     skey >> this_prop.identifier;
-                    this_prop.subtype = ReadCompactSize(skey);
+                    this_prop.subtype = ReadCompactSize(skey, /*range_check=*/false);
                     this_prop.key = key;
 
                     s >> this_prop.value;
@@ -1095,7 +1095,7 @@ public:
             // "skey" is used so that "key" is unchanged after reading keytype below
             SpanReader skey{key};
             // keytype is of the format compact size uint at the beginning of "key"
-            uint64_t type = ReadCompactSize(skey);
+            uint64_t type = ReadCompactSize(skey, /*range_check=*/false);
 
             // Do stuff based on keytype "type", i.e., key checks, reading values of the
             // format "<valuelen><valuedata>" from the stream "s", and value checks
@@ -1201,7 +1201,7 @@ public:
                 {
                     PSBTProprietary this_prop;
                     skey >> this_prop.identifier;
-                    this_prop.subtype = ReadCompactSize(skey);
+                    this_prop.subtype = ReadCompactSize(skey, /*range_check=*/false);
                     this_prop.key = key;
 
                     s >> this_prop.value;
@@ -1390,7 +1390,7 @@ public:
             // "skey" is used so that "key" is unchanged after reading keytype below
             SpanReader skey{key};
             // keytype is of the format compact size uint at the beginning of "key"
-            uint64_t type = ReadCompactSize(skey);
+            uint64_t type = ReadCompactSize(skey, /*range_check=*/false);
 
             // Do stuff based on keytype "type", i.e., key checks, reading values of the
             // format "<valuelen><valuedata>" from the stream "s", and value checks
@@ -1493,7 +1493,7 @@ public:
                 {
                     PSBTProprietary this_prop;
                     skey >> this_prop.identifier;
-                    this_prop.subtype = ReadCompactSize(skey);
+                    this_prop.subtype = ReadCompactSize(skey, /*range_check=*/false);
                     this_prop.key = key;
 
                     s >> this_prop.value;
