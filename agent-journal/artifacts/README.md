@@ -54,3 +54,12 @@ recipe-exact chains must override `setup_network` with
   LESSON: chmod-based fault injection is invalid when running as
   root (CAP_DAC_OVERRIDE bypasses permission checks) — first
   attempt false-negatived 2,400 writes; use dir-rename instead.
+
+## Goal 125 LevelDB crash-recovery harnesses (cycle 308)
+- `ldb_manifest_conf.cpp` — MANIFEST byte corruption ->
+  DB::Open fails Corruption even with create_if_missing (CONFORM).
+- `ldb_wal_conf.cpp` — mid-WAL corruption -> paranoid=true fails
+  loud; default keeps intact prefix (kept=1755, torn=0) (CONFORM).
+- `ldb_current_conf.cpp` — CURRENT deleted + create_if_missing ->
+  opens EMPTY, live tables silently orphaned (VERIFIED HAZARD,
+  client-choice contract — not a LevelDB defect).

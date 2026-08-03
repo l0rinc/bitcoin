@@ -213,3 +213,24 @@ half-done — the correct marginal call).
 Decision for next cycle: if the random draw does not land 125,
 take 125 anyway as the marginal-yield winner (recorded deviation
 from the draw, per urgent-preempt rule).
+
+## Cycle 308 (goal 125 WAL/MANIFEST/VersionSet crash-recovery; draw raw=139903139087397213 idx=1 -> 116 tool-blocked, recorded 125-preempt taken)
+- Iter 1 MANIFEST corruption: DB::Open(create_if_missing=true)
+  fails 'Corruption: checksum mismatch' — no silent empty-recreate
+  over live tables. CONFORM (fail-loud).
+- Iter 2 WAL mid-record corruption: dbwrapper's paranoid_checks=true
+  -> open fails loud; default mode recovers the intact prefix
+  (1,755/2,000 keys kept, 0 torn values). CONFORM.
+- Iter 3 CURRENT loss (VersionSet arm): with create_if_missing=true
+  LevelDB opens EMPTY — live tables silently orphaned. VERIFIED
+  HAZARD NOTE (not a defect): the create_if_missing contract treats
+  missing-CURRENT as no-DB; Bitcoin inherits it — outcome is a
+  fresh empty chainstate + full re-validation (loud in effect,
+  recoverable, no consensus impact, data orphaned not deleted).
+  LevelDB's own CURRENT writes are temp+rename atomic, so the
+  window needs external action or fs-level corruption.
+  Client-mitigation candidates (recorded for future goals):
+  detect orphaned *.ldb at LoadChainstate and refuse/regenerate.
+Harnesses preserved in artifacts/. Campaign #125: crash-recovery
+arms verified; the single hazard is a documented client-choice.
+Regression #7 GREEN (full test_bitcoin, final tip).
