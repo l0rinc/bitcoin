@@ -6454,3 +6454,39 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   byte metadata, seven protected processes alive, and `0/1481` divergence
   from `origin/master`. No repository-completion claim is made; the next
   exact selector from `0..122` remains pending.
+
+# Cycle 323 Completion
+
+- Goal 3 (`current-pr-leftovers`) was selected by the exact command
+  `shuf -i 0-122 -n 1` -> `3` on branch
+  `uber-cycle-323-current-pr-leftovers-20260802`. Cycle-start HEAD was
+  `3a96d968e0`; selection commit was `3a96d968e0`; and the pre-cycle catalog
+  SHA-256 was
+  `da5a2650e39932fe39d952c139a8f547fe319819c4f663d71a055f4f6298a153`.
+- The post-Cycle-293 source stack was checked for stale names, partial
+  migrations, omitted tests, generated/build omissions, and unresolved local
+  review objections. The confirmed leftover was in
+  `test/functional/wallet_taproot.py`: `2ac99aac74` removed the old
+  script-path fee-estimation workaround comments but left both explicit
+  `fee_rate=200` overrides. Commit `65bf8fe790` removes them so current
+  `sendtoaddress` and PSBT flows exercise automatic estimation.
+- The rebuilt wallet-enabled functional run covered all Taproot address,
+  send, and PSBT cases with port seed `323` and random seed `32301`, and
+  exited 0 with `Tests successful`. The descriptor unit oracle independently
+  distinguishes the old 66-byte/one-element bound from the fixed
+  135-byte/three-element bound. Other reviewed current-stack candidates were
+  dismissed with their contract or test evidence; no production defect was
+  found in this cycle.
+- Learning added Goal 123, `taproot-fee-test-oracle`, and
+  `agent-journal/taproot-fee-test-oracle.md`. Goal/catalog commit `e3232f45af`
+  generated 124 contiguous goals `0..123`. Goals TSV SHA-256 is
+  `62be855d897552e1d06bb199458fa069a90478788bf3388efd4f4a9ddb843826`,
+  catalog SHA-256 is
+  `f2b3a468817fb1d169021ecf567a42bf6c843b693aa9384842341a56fcbf074d`,
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- State-close, fresh fetch/rebase, final gate, and the next exact selector
+  from `0..123` remain pending. No repository-completion claim is made;
+  continue with the learned oracle campaign when selected.

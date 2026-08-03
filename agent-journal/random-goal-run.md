@@ -12,6 +12,42 @@
 - Timestamp: `2026-08-03T04:40:12Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-3`
 
+## Cycle 323 Result
+
+- Goal 3 (`current-pr-leftovers`) completed on branch
+  `uber-cycle-323-current-pr-leftovers-20260802`. Cycle-start HEAD was
+  `3a96d968e0`; the selected catalog SHA-256 was
+  `da5a2650e39932fe39d952c139a8f547fe319819c4f663d71a055f4f6298a153`.
+- The post-Cycle-293 stack was inventoried for partial migrations, stale
+  comments and overrides, test omissions, generated/build lists, and review
+  leftovers. The secp256k1 comment sanitizer, cross-platform file allocation,
+  kernel C ABI array validation, and other recent changes had matching tests
+  or intentional configuration-only contracts. No online-PR merge metadata
+  occurs in this local range.
+- A confirmed test leftover followed `2ac99aac74`: the Taproot fee-bound fix
+  removed the historical workaround comments but left `fee_rate=200` in both
+  wallet Taproot send and PSBT paths. Blame tied both overrides to the old
+  script-path underestimation. `65bf8fe790` (`test: exercise automatic Taproot
+  fee estimation`) removed both overrides and included the selected journal.
+- The rebuilt wallet-enabled `bitcoind` passed the full isolated
+  `wallet_taproot.py` run with automatic estimation: all address,
+  `sendtoaddress`, and PSBT cases completed with `Tests successful` (port seed
+  `323`, random seed `32301`). Python compilation and `git diff --check`
+  passed. The independent descriptor oracle remains the 66-byte/one-element
+  old bound versus the 135-byte/three-element corrected bound.
+- Learning added Goal 123, `taproot-fee-test-oracle`, with seed journal
+  `agent-journal/taproot-fee-test-oracle.md`. Goal/catalog commit `e3232f45af`
+  generated 124 contiguous goals `0..123`. Goals TSV SHA-256 is
+  `62be855d897552e1d06bb199458fa069a90478788bf3388efd4f4a9ddb843826`,
+  catalog SHA-256 is
+  `f2b3a468817fb1d169021ecf567a42bf6c843b693aa9384842341a56fcbf074d`,
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- State-close, rebase, final gate, and the next exact selector remain
+  pending. Preserve unrelated files and protected processes.
+
 ## Cycle 322 Selection
 
 - Selected index: `12`
