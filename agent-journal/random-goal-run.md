@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 320 Selection
+
+- Selected index: `14`
+- Goal slug: `secret-control-flow`
+- Goal title: Secret-dependent control-flow and memory-access audit
+- Selection command: `shuf -i 0-119 -n 1`
+- Catalog SHA-256: `028ce2f22b37f6b2a61fb2345915f18062fdd66143c2336c4a3a66178b363d40`
+- Base commit: `6631878f49453c8857104accc914fc3661392ff8`
+- Branch: `uber-cycle-320-secret-control-flow-20260802`
+- Timestamp: `2026-08-03T03:23:36Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-14`
+
 ## Cycle 319 Result
 
 - Goal 70 (`compiler-optimization-differential`) completed on branch
