@@ -503,6 +503,7 @@ bool ArgsManager::WriteSettingsFile(std::vector<std::string>* errors, bool backu
         SaveErrors({strprintf("Failed renaming settings file %s to %s\n", fs::PathToString(path_tmp), fs::PathToString(path))}, errors);
         return false;
     }
+    DirectoryCommit(path.parent_path());
     return true;
 }
 

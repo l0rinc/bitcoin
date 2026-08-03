@@ -9,6 +9,7 @@
 #include <tinyformat.h>
 #include <univalue.h>
 #include <util/fs.h>
+#include <util/fs_helpers.h>
 
 #include <fstream>
 #include <iterator>
@@ -131,19 +132,26 @@ bool WriteSettings(const fs::path& path,
     for (const auto& value : values) {
         out.pushKVEnd(value.first, value.second);
     }
-    std::ofstream file;
-    file.open(path.std_path());
-    if (file.fail()) {
+    const std::string output = out.write(/* prettyIndent= */ 4, /* indentLevel= */ 1) + '\n';
+    FILE* file = fsbridge::fopen(path, "w");
+    if (!file) {
         errors.emplace_back(strprintf("Error: Unable to open settings file %s for writing", fs::PathToString(path)));
         return false;
     }
-    file << out.write(/* prettyIndent= */ 4, /* indentLevel= */ 1) << std::endl;
-    if (file.fail()) {
+
+    if (std::fwrite(output.data(), 1, output.size(), file) != output.size()) {
         errors.emplace_back(strprintf("Error: Unable to write settings file %s", fs::PathToString(path)));
+        std::fclose(file);
         return false;
     }
-    file.close();
-    if (file.fail()) {
+
+    if (!FileCommit(file)) {
+        errors.emplace_back(strprintf("Error: Unable to commit settings file %s", fs::PathToString(path)));
+        std::fclose(file);
+        return false;
+    }
+
+    if (std::fclose(file) != 0) {
         errors.emplace_back(strprintf("Error: Unable to close settings file %s", fs::PathToString(path)));
         return false;
     }

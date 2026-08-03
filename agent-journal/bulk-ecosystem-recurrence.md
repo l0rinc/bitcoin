@@ -304,3 +304,18 @@ still clears only vMatch; lineage covered-ahead.
 Remaining unreviewed core queue: goal72 settings durability x2
 (write-family siblings), goal86 index-reorg x2, goal43-reindex-
 interrupt, goal7-descriptor-range.
+
+### goal72 pair (d4c38ef9f5 settings FileCommit, 2f72b5c693 DirectoryCommit): CONFIRMED + ADOPTED
+Mechanism: WriteSettings (ofstream, no fsync) + rename into
+settings.json without directory sync -> crash/power loss in the
+window loses/corrupts the new settings despite success returns.
+Evidence: strace -f -e trace=fsync,fdatasync on
+argsman_tests/util_ReadWriteSettings (drives WriteSettingsFile):
+PRE-FIX zero durability syscalls on the whole path; POST-FIX
+fdatasync+fsync on temp file + parent dir present; full
+argsman_tests green. Second verifiers: their EIO-interposer oracle
+and dm-flakey drop-writes recovery run (commit messages).
+Reachability: crash window only; settings loss, parse-tolerant
+read side (119-sweep verified); durability arm of the write-
+failure family. Adoption: audit/adopt-settings-durability
+f194e4482e (both commits, one stack). Upstream vulnerable.
