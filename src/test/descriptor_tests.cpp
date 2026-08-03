@@ -1628,6 +1628,32 @@ BOOST_AUTO_TEST_CASE(infer_descriptor_taproot_off_curve_leaf_roundtrips)
     BOOST_CHECK_EQUAL(parsed[0]->ToString(), descriptor);
 }
 
+BOOST_AUTO_TEST_CASE(taproot_script_path_satisfaction_size)
+{
+    const std::string descriptor{"tr(" + HexStr(XOnlyPubKey::NUMS_H) + ",pk(" + HexStr(XOnlyPubKey::NUMS_H) + "))"};
+    FlatSigningProvider provider;
+    std::string error;
+    const auto parsed{Parse(descriptor, provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_MESSAGE(parsed.size() == 1, error);
+
+    std::vector<CScript> scripts;
+    FlatSigningProvider expanded;
+    BOOST_REQUIRE(parsed[0]->Expand(0, provider, scripts, expanded));
+    BOOST_REQUIRE_EQUAL(scripts.size(), 1U);
+    BOOST_REQUIRE_EQUAL(expanded.tr_trees.size(), 1U);
+    const auto spend_data{expanded.tr_trees.begin()->second.GetSpendData()};
+    BOOST_REQUIRE_EQUAL(spend_data.scripts.size(), 1U);
+    BOOST_CHECK_EQUAL(spend_data.scripts.begin()->first.first.size(), 34U);
+    BOOST_REQUIRE(!spend_data.scripts.begin()->second.empty());
+    BOOST_CHECK_EQUAL(spend_data.scripts.begin()->second.begin()->size(), 33U);
+
+    // A pk() leaf has a 65-byte Schnorr signature, a 34-byte script, and a 33-byte
+    // depth-zero control block. The witness stack has three elements.
+    BOOST_CHECK_EQUAL(parsed[0]->MaxSatisfactionWeight(/*use_max_sig=*/true), 135);
+    BOOST_CHECK_EQUAL(parsed[0]->MaxSatisfactionWeight(/*use_max_sig=*/false), 135);
+    BOOST_CHECK_EQUAL(parsed[0]->MaxSatisfactionElems(), 3);
+}
+
 BOOST_AUTO_TEST_CASE(taproot_compressed_key_uses_xonly_private_key_lookup)
 {
     const auto secret{ParseHex("0000000000000000000000000000000000000000000000000000000000000002")};

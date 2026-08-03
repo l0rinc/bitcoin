@@ -1566,14 +1566,34 @@ public:
 
     std::optional<int64_t> ScriptSize() const override { return 1 + 1 + 32; }
 
-    std::optional<int64_t> MaxSatisfactionWeight(bool) const override {
-        // FIXME: We assume keypath spend, which can lead to very large underestimations.
-        return 1 + 65;
+    std::optional<int64_t> MaxSatisfactionWeight(bool use_max_sig) const override {
+        // A key path satisfaction consists of a single Schnorr signature. For a script path,
+        // the satisfaction also contains the leaf script and its control block. The child
+        // descriptor reports its satisfaction in serialized bytes, excluding the witness stack
+        // element count, which is accounted for by MaxInputWeight().
+        int64_t max_satisfaction{1 + 65};
+        for (size_t pos = 0; pos < m_subdescriptor_args.size(); ++pos) {
+            const auto sat_size{m_subdescriptor_args[pos]->MaxSatSize(use_max_sig)};
+            const auto script_size{m_subdescriptor_args[pos]->ScriptSize()};
+            if (!sat_size || !script_size) return {};
+            const int64_t control_size{static_cast<int64_t>(TAPROOT_CONTROL_BASE_SIZE) +
+                                       static_cast<int64_t>(TAPROOT_CONTROL_NODE_SIZE) * m_depths[pos]};
+            const int64_t script_path_size{
+                *sat_size + static_cast<int64_t>(GetSizeOfCompactSize(*script_size)) + *script_size +
+                static_cast<int64_t>(GetSizeOfCompactSize(control_size)) + control_size};
+            max_satisfaction = std::max(max_satisfaction, script_path_size);
+        }
+        return max_satisfaction;
     }
 
     std::optional<int64_t> MaxSatisfactionElems() const override {
-        // FIXME: See above, we assume keypath spend.
-        return 1;
+        int64_t max_elems{1};
+        for (const auto& subdescriptor : m_subdescriptor_args) {
+            const auto sat_elems{subdescriptor->MaxSatisfactionElems()};
+            if (!sat_elems) return {};
+            max_elems = std::max(max_elems, *sat_elems + 2);
+        }
+        return max_elems;
     }
 
     std::unique_ptr<DescriptorImpl> Clone() const override
