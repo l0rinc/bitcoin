@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 316
+
+- Selected index: `106`
+- Goal slug: `generated-source-boundaries`
+- Goal title: Generated-source escaping and provenance boundary audit
+- Selection command: `shuf -i 0-115 -n 1`
+- Catalog SHA-256: `33b236d32ac47a56bd35bf3c9fff0121988df90c1c1e72dac1ee0ed12577e773`
+- Base commit: `0374c23bb1989f87332ed9d9d2e90c417de86f95`
+- Branch: `uber-cycle-316-generated-source-boundaries-20260802`
+- Timestamp: `2026-08-03T02:27:31Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-106`
+
 ## Cycle 315
 
 - Selected index: `51`
