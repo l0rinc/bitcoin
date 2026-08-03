@@ -366,6 +366,20 @@ comment-drift family as F1 (LockPoints).
 - Reachability: authenticated RPC scan-object caller; worker
   availability. Boundary-overflow family (F28/F29 siblings).
 
+## F35: blockfilter index rejects itself after unclean reorg (goal86-prune) — FIXED 2026-08-03
+- Mechanism: BlockFilterIndex::ReadFilterHeader restored the last
+  header by height key only; post-reorg the height entry points at
+  the new branch while durable chainstate ends at the old branch
+  -> startup 'unexpected block' rejection -> init exit 1.
+- Evidence: failing-before — restarted node exits status 1 with
+  'previous block header belongs to unexpected block ... Cannot
+  read last block filter header'; passing-after — both indexed
+  nodes restart cleanly, sync to durable tip, full
+  feature_index_prune.py green. audit/adopt-blockfilter-reorg-
+  recovery 8b9a20b114; archive fe8d015755.
+- Reachability: unclean shutdown after reorg on -blockfilterindex
+  nodes; startup availability + BIP157/158 serving. Sibling of F33.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |

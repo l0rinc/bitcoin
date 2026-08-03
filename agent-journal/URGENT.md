@@ -135,18 +135,22 @@ independently verified.
   condvar/shared_mutex in txdb, resize-cursor test green at HEAD
   per #42 c1). Nothing to do locally.
 
-## ✅ txgraph retained-capacity accounting (adopted + verified locally 28ba79168b)
-- Mechanism: Compact() pops m_entries without releasing vector
-  capacity; GetMainMemoryUsage charged live count only -> retained
-  memory outside -maxmempool accounting.
-- Evidence: fix 475ab49da6 (DynamicUsage(m_entries) charge) adopted
-  onto the lineage; flipped characterization test GREEN (churned
-  usage now GT fresh); full txgraph_tests green; #22-c4 churn
-  profile rerun unchanged within noise (accounting truth at large
-  scales; RSS residual is allocator slack).
-- Branch/commit: audit/adopt-retained-capacity @ 28ba79168b;
-  author's upstream vehicle l0rinc/txgraph-retained-entry-usage.
-- Next: none local; watch the author's PR for upstream.
+## 🟠 blockfilter index rejects itself after unclean reorg (F35, adopted 8b9a20b114)
+- Mechanism: BlockFilterIndex::ReadFilterHeader restored the last
+  header by height key only; post-reorg the height entry points at
+  the new branch while durable chainstate ends at the old branch
+  -> startup 'unexpected block' rejection -> init exit 1 (node
+  won't start until manual index removal).
+- Trigger: unclean shutdown after a reorg on -blockfilterindex
+  nodes; startup availability + BIP157/158 filter serving.
+- Evidence: failing-before — restart exits status 1 with
+  'unexpected block ... Cannot read last block filter header';
+  passing-after — clean restart, sync to durable tip, full
+  feature_index_prune.py green.
+- Branch/commit: audit/adopt-blockfilter-reorg-recovery 8b9a20b114;
+  archive fe8d015755; upstream vulnerable. Sibling of F33 (same
+  BaseIndex crash-recovery family).
+- Next: none locally; offerable upstream paired with F33.
 
 ---
 Recently removed from this list (dismissed/closed): Fee-estimator
