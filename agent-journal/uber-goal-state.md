@@ -1072,6 +1072,18 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 298 (radar-flood tail): P3 kernel ownership trio
+   (9b5bdd99fc/8c5db6e36e/309226ff53) DISMISSED — every trigger is
+   a bad_alloc on the OOM path (leak-under-OOM, no non-allocation
+   throw reachable); goal56-future-mtp CONFIRMED + ADOPTED —
+   signed elapsed -> uint64 m_max_commitments wrap kills the
+   presync memory cap under >2h backward clock skew
+   (failing-before PRESYNC vs FINAL; passing-after full headers
+   suite green); audit/adopt-headers-clock-lag 35473f91b4,
+   archive a5a73c53f2, F30. URGENT swap: F30 in (remote-gated),
+   F25 out to index. Radar-flood adoption tally now F25-F30
+   (6 adopted) + goal10 test; covered-ahead: goal26/goal98/goal33;
+   dismissed: goal92-abi, P3 trio; cross-confirmed: dup-txid.
    Cycle 297b (same cycle): goal43-cluster-size — count arm
    COVERED-AHEAD (in-tree both-bounds :115-120), size arm
    CONFIRMED + ADOPTED (failing-before 2 arms accepted; passing-
