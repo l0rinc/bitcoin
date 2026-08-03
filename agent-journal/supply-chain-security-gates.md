@@ -174,3 +174,47 @@ mode).
 
 ## Rotation note
 Three cycles; supply-chain download surface closed.
+
+## Cycle 3 (2026-08-03, draw 274, raw=11964944838196273461, suspicion-mined from the 26-PR sweep): PR 35754 CI input pinning — gap CONFIRMED at HEAD (unpinned pip, floating actions, tag images) + ADOPTED; all four arms verified in-tree; the F9/F18 family completes
+
+### Gap (confirmed at HEAD, pre-fix)
+- pip test deps: pip3 install --user $PIP_PACKAGES with UNPINNED
+  names (pycapnp/pyzmq, no version, no hash) at
+  ci/test/01_base_install.sh:61.
+- Lint python deps: requirements.txt with == but NO hashes.
+- GitHub Actions: floating tags (@v6, @v5).
+- OCI images: FROM mirror.gcr.io/ubuntu:26.04 (tag, not digest).
+- Lint tool binaries (shellcheck/mlc): downloaded unverified.
+
+### Adoption (audit/adopt-ci-pinning, 4 commits, all verified)
+- 5671b32614 lint tool binaries: sha256sum checks for
+  shellcheck/mlc (per-arch, union conflict resolved in
+  01_install.sh keeping both the pip line and the hash block).
+- 9bf68d70bc test python deps: --require-hashes +
+  ci/test/requirements/{pycapnp,pyzmq}.txt (190 artifact
+  hashes) wired into 15 env files.
+- 0f0eb35c8b container images: digest-pinned
+  (CI_IMAGE_NAME_TAG with @sha256 per env file; lint_imagefile
+  @sha256:3131b4cc).
+- 49cc4e8cab GitHub Actions: full commit pins
+  (actions/checkout@d23441a48... # v6).
+- bash -n on changed scripts: SYNTAX-OK.
+
+### Verdict
+CONFIRMED + ADOPTED: the CI supply-chain surface that F9
+(script_assets) and F18 (qa-assets) started is now closed for
+all four external-input classes. No code touched (CI files
+only). Upstream vehicle: PR 35754.
+
+### Suspicion-mining
+- S14: --require-hashes makes any hash-less transitive dep a
+  HARD failure at install time — the failing-loud contract we
+  want (verified by the lockfile being complete today).
+
+### Exact commands
+- curl PR head; cherry-picks + union above; in-tree verifications
+  above.
+
+### Limitations / queue
+- The lockfiles age (pip releases new versions) — a periodic
+  lockfile-refresh note rides the #42 watch.
