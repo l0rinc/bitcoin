@@ -1391,3 +1391,30 @@ leak-under-OOM. Per the no-inflation rule (and our F17 contrast —
 F17 was a null deref on a REAL error path, not bad_alloc), these
 are hygiene hardening, not defects. NO adoption. Resume if a
 non-allocation throw path into these setters is identified.
+
+### goal56-future-mtp (7d669fbd94): CONFIRMED + ADOPTED
+Mechanism: HeadersSyncState ctor computed
+max_seconds_since_start = (now - chain_start_MTP) + 2h as signed
+int64, then m_max_commitments (uint64_t) = 6*elapsed/period. Clock
+skew >2h backward makes elapsed negative -> assignment wraps to
+~2^64 -> the presync memory cap (the resource bound that lets us
+give up on impossibly-long chains) silently disappears; a syncing
+peer can stream commitments unbounded (per-peer memory DoS).
+Trust boundary: REMOTE peer input (header commitments) + local
+clock skew (NTP correction, VM resume, wrong TZ); memory growth
+only, no consensus impact.
+Type chain verified in-tree: Ticks<std::chrono::seconds> ->
+int64_t (util/time.h:82-85), MAX_FUTURE_BLOCK_TIME int64_t
+(chain.h:29), m_max_commitments uint64_t (headerssync.h:242).
+Evidence (build-after ASan Debug):
+- FAILING-BEFORE: future_chain_start_mtp_bounds_commitments
+  (FakeNodeClock at genesis_time - 2h - 1s): state PRESYNC (0),
+  expected FINAL (2) — peer stays alive past the cap.
+- PASSING-AFTER: clamp to 0 -> FINAL/unsuccessful; full
+  headers_sync_chainwork_tests suite green.
+Why existing tests missed it: all headers-sync fixtures run with
+NodeClock ~ real time and chain_start MTP in the past; the
+negative-elapsed branch needs an explicit FakeNodeClock skew.
+Adoption: audit/adopt-headers-clock-lag 35473f91b4 (fix + their
+boundary test). Severity: Medium-low P2P memory DoS gated on
+clock skew; upstream 556988790a vulnerable. Same surface as F22.
