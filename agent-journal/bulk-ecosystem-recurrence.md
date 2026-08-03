@@ -400,3 +400,21 @@ full mempool_tests suite GREEN after. audit/transplant-goal87-
 tests 8146b1fd8a. Their v1/v2 dependency-order and eviction/
 unbroadcast accounting assertions map to behavior our roundtrip
 family (576-781) partially covers; totals were the uncovered arm.
+
+### goal48 oracle series (0b4b0a22dd mtp, 7c5cbef2f2 bitset, 7db12877dd coins, f2310c1928 pow): all four VERIFIED GREEN in-tree
+- goal48-mtp: median_time_past_property — out-of-order 12th
+  predecessor + 0xffffffff; GetMedianTimePast == sorted-window
+  median at every position; applied clean, skiplist_tests green.
+- goal48-bitset-fill: check_fill(0/Size-1/Size) vs simulated set;
+  manual apply (identical types); 20,000-run clean on build_fuzz
+  (clang fuzz binary rebuilt; build-after has BUILD_FOR_FUZZING=OFF
+  — recorded: fuzz runs need build_fuzz, FUZZ=<target> env).
+- goal48-access-by-txid: spent vout0 + unspent vout1 case;
+  manual insert into coins_tests; focused green.
+- goal48-equivalent-time: variable tip proof antisymmetry +
+  magnitude; manual insert into pow_tests; full pow_tests green.
+Verdict: all four are test-only oracles of existing behavior —
+adopted as coverage (no defect found, none claimed). Commits:
+30bb38cdc7 (mtp), 310051e236 (coins+pow+bitset).
+REGRESSION #8: full test_bitcoin GREEN on the cycle-312 lineage
+(includes F34/F35/blockfilter fixes + all test adoptions).

@@ -240,6 +240,35 @@ BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_test)
     }
 }
 
+BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_variable_tip_proof)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
+    const auto& consensus = chainParams->GetConsensus();
+
+    CBlockIndex to;
+    CBlockIndex from;
+    CBlockIndex tip;
+    from.nBits = 0x207fffff;
+    to.nBits = 0x207fffff;
+    tip.nBits = 0x1d00ffff;
+
+    const arith_uint256 tip_proof{GetBlockProof(tip)};
+    const arith_uint256 work_delta{tip_proof * 7 + 1};
+    to.nChainWork = work_delta;
+    from.nChainWork = 0;
+
+    const arith_uint256 expected_magnitude{
+        work_delta * consensus.nPowTargetSpacing / tip_proof};
+    const int64_t expected{static_cast<int64_t>(expected_magnitude.GetLow64())};
+
+    BOOST_CHECK_EQUAL(GetBlockProofEquivalentTime(to, from, tip, consensus), expected);
+    BOOST_CHECK_EQUAL(GetBlockProofEquivalentTime(from, to, tip, consensus), -expected);
+
+    from.nChainWork = tip_proof * 3;
+    to.nChainWork = tip_proof * 10 + 1;
+    BOOST_CHECK_EQUAL(GetBlockProofEquivalentTime(to, from, tip, consensus), expected);
+}
+
 BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_contracts)
 {
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
