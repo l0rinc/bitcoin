@@ -20,6 +20,7 @@
 #include <util/translation.h>
 
 #include <chrono>
+#include <limits>
 #include <memory>
 
 using common::AmountErrMsg;
@@ -109,6 +110,16 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& argsman, const CChainP
     }
 
     mempool_opts.persist_v1_dat = argsman.GetBoolArg("-persistmempoolv1", mempool_opts.persist_v1_dat);
+
+    // -limitclustersize is multiplied by 1'000 (KiB->vbytes) at option
+    // ingestion and by 40 for the graph limit; reject values whose
+    // products would overflow or go negative, before they are ingested.
+    static constexpr int64_t MAX_CLUSTER_SIZE_KVB{std::numeric_limits<int64_t>::max() / 40'000};
+    if (auto vkb = argsman.GetIntArg("-limitclustersize")) {
+        if (*vkb < 0 || *vkb > MAX_CLUSTER_SIZE_KVB) {
+            return util::Error{Untranslated(strprintf("limitclustersize must be between 0 and %d", MAX_CLUSTER_SIZE_KVB))};
+        }
+    }
 
     ApplyArgsManOptions(argsman, mempool_opts.limits);
 
