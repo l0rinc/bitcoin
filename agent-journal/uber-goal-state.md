@@ -6003,3 +6003,47 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   `0 1435`. No repository-completion claim is made. After this state-only
   commit, run a fresh gate, draw exactly one selector with
   `shuf -i 0-111 -n 1`, create a dedicated Cycle 312 branch, and continue.
+
+## Cycle 312 Completion
+
+- Goal 7 (`resource-exhaustion-variants`) was selected by exact
+  `shuf -i 0-111 -n 1` -> `7` on branch
+  `uber-cycle-312-resource-exhaustion-variants-20260802`. Cycle-start/base
+  HEAD was `260f3a2081b3893120c09eb8d8fe11da7802a755`; selection commit was
+  `b57a9f0abe`; selected catalog SHA-256 was
+  `ffadac8632c7f62b066b42bcf04b77ce2bb75dca3d8f7917546f141ad289c2dc`; and
+  the pre-entry state-file SHA-256 was
+  `2a8cee51d6e381efe1f4e60347479421d8f840ef79aa34ba6f79f4cc1edcbca6`.
+- The distinct finding was a GETBLOCKTXN count-before-allocation defect:
+  a 37-byte block-hash-plus-count payload declaring 2,500,000 uint16 indexes
+  made the generic vector formatter reserve 5,000,000 bytes and construct one
+  element before EOF. The repaired `BlockTransactionsRequest` uses
+  `LimitedVectorFormatter<65536, DifferenceFormatter>`, rejecting the
+  impossible count before allocation. The old/new standalone probes and the
+  focused regression independently verified capacity 2,500,000 versus zero.
+- Confirmed and fixed in `b8ae707f47399124c65b42e56423f124cfb9a706`
+  (`p2p: bound block transaction request indexes`), authored as
+  `Lőrinc <pap.lorinc@gmail.com>`. The existing scratch build rebuilt
+  `test_bitcoin`; the focused test passed 1 case and 3 assertions; the full
+  `blockencodings_tests` suite passed 31 cases and 372 assertions; and
+  `git diff --check` passed. A daemon socket test was omitted because
+  `/data` and `/` are full and protected workloads were preserved.
+- Learned Goal 112 (`difference-formatter-input-bounds`) and seed journal
+  `agent-journal/difference-formatter-input-bounds.md` were added.
+  Goal/catalog/seed commit is `d90c20520861a1ea728e28e2611b910a93371403`;
+  the result ledger commit is `5237ed3f87`; the catalog now contains 113
+  contiguous goals (`0..112`) with catalog SHA-256
+  `9704269e8b150f9f1c2d9acaa83b49dd40b862cbd15defb0e948d41099f9175d` and
+  manifest SHA-256
+  `4507b42251321675eca0bde823d8b9256afa0345c5fbcbb5adf7d3e0df727767`.
+  Generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`;
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`.
+- `git fetch origin master` and `git rebase origin/master` completed with
+  no conflicts. Before this state close, HEAD was
+  `5237ed3f87f49fa717fe6510b99e5297070a37fc`, origin was
+  `556988790a7f961693a8fd93f73725baea66476a`, and divergence was `0 1440`.
+  No repository-completion claim is made. After this state-only commit, run a
+  fresh gate, draw exactly one selector with `shuf -i 0-112 -n 1`, create a
+  dedicated Cycle 313 branch, and continue.
