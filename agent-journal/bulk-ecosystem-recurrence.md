@@ -418,3 +418,27 @@ adopted as coverage (no defect found, none claimed). Commits:
 30bb38cdc7 (mtp), 310051e236 (coins+pow+bitset).
 REGRESSION #8: full test_bitcoin GREEN on the cycle-312 lineage
 (includes F34/F35/blockfilter fixes + all test adoptions).
+
+## Cycle 316 tail (fuzz transplants from flood index branches)
+- txospenderindex target (8bdb064dbc): TRANSPLANTED + REPAIRED.
+  First 20k campaign CRASHED on a 4-byte seed (76 00 43 00):
+  CheckGlobalsImpl teardown abort (g_used_system_time,
+  check_globals.cpp:54) — the parallel target seeds RNG but never
+  SetMockTime, while BaseIndex::Sync reads NodeClock for log
+  pacing. Root cause = harness-contract violation, NOT index
+  logic (F33/F35 fixes not implicated; abort is post-target).
+  Repair: SetMockTime(1231006505) — crash seed executes clean
+  (13ms), 20k campaign clean (161s). Seed + root-cause preserved
+  in agent-journal/artifacts/. Commit 70f5b19656 (target+repair).
+- blockfilter_index target (8c057d0b2a): new-file transplant
+  (CMake conflict resolved manually); 20k campaign running.
+- goal9-real-disk (3247190ea5): their blockmanager test extends
+  diverged context; native version inserted
+  (blockmanager_loadblockindex_malformed_disk_value — malformed
+  DB value rejected without inserter); full suite green;
+  commit cf33694d3c.
+- Harness lessons: (1) fuzz builds need build_fuzz + FUZZ=<target>
+  (build-after has BUILD_FOR_FUZZING=OFF); (2) a check_globals
+  teardown abort on a fresh transplant is most often the target's
+  OWN contract gap (SetMockTime), not the code under test —
+  reproduce on a minimal seed FIRST before touching production code.
