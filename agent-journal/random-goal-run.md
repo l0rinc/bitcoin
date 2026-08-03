@@ -12,6 +12,48 @@
 - Timestamp: `2026-08-03T03:57:03Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-12`
 
+## Cycle 322 Result
+
+- Goal 12 (`static-analysis-true-positives`) completed on branch
+  `uber-cycle-322-static-analysis-true-positives-20260802`. Cycle-start HEAD
+  was `3d9f1a12d786f18e7ed18b1b5ea7ed6a1d3a8507`; the selection commit was
+  `44846eef9c`; and the pre-cycle catalog SHA-256 was
+  `6ce33c08973b96f7f1c25f755a774ef4303f8e23920358594feb120565979cab`.
+- Corrected Clang 19 analyzer scans of core node/RPC/persistence files and
+  wallet files, plus a focused GCC 12 `-fanalyzer` batch, produced no new
+  standalone warning. The repeated `Assert(m_context)` warning in
+  `src/node/interfaces.cpp` was excluded as the exact Cycle 172 finding. The
+  two new wallet reports were independently triaged: `FeeFrac` division by
+  zero was an analyzer model artifact for an invalid state rejected by the
+  deserializer, while the null `GetWalletTx` report exposed a real stale
+  `WalletTXO` reference after a same-txid stripped-to-witness replacement.
+- Finding commit `12e386db50` (`wallet: refresh TXO references after witness
+  upgrade`), authored by `Lőrinc <pap.lorinc@gmail.com>`, erases and rebuilds
+  an existing cache entry when its referenced transaction/output changes and
+  adds `wallet_txos_follow_witness_upgrade`. The old implementation was
+  restored as a mutation control: the focused test failed with a distinct
+  output pointer (`6 assertions out of 7 passed`). Restoring the fix made the
+  test pass with 7/7 assertions; `wallet_tests,spend_tests` passed 34 cases
+  and 277 assertions.
+- The focused and broader runs used the rebuilt GCC RelWithDebInfo wallet
+  binary in `/data/my_storage/tmp/cycle246-wallet`; no active test processes
+  were stopped. An ASan rebuild was attempted but blocked by the stale
+  unavailable `/root/.cache/ccache/tmp` path, so no ASan result is claimed.
+- Learning added Goal 122, `wallet-txo-cache-lifetime`, with seed journal
+  `agent-journal/wallet-txo-cache-lifetime.md`. Goal/catalog commit
+  `d1453b55d7` (`goals: add wallet TXO cache lifetime campaign`) generated
+  123 contiguous goals `0..122`. Post-cycle catalog SHA-256 is
+  `da5a2650e39932fe39d952c139a8f547fe319819c4f663d71a055f4f6298a153`,
+  manifest SHA-256 is
+  `18deec289d7307115e9e1534e8be8d8994cc3a2c4c1af6d542f53e2823aeeefc`,
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- The confirmed production fix and the catalog extension are complete. The
+  state-close commit, fresh fetch/rebase, final gate, and next selector remain
+  pending; preserve unrelated files and protected processes.
+
 ## Cycle 321 Selection
 
 - Selected index: `43`

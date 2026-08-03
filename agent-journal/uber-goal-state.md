@@ -6417,3 +6417,37 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - Final gate remains: verify tracked cleanliness, catalog hashes/metadata,
   `git diff --check`, storage constraints, and all protected PIDs before
   drawing Cycle 321 from `0..120`.
+
+# Cycle 322 Completion
+
+- Goal 12 (`static-analysis-true-positives`) was selected by the exact
+  command `shuf -i 0-121 -n 1` -> `12` on branch
+  `uber-cycle-322-static-analysis-true-positives-20260802`. Cycle-start HEAD
+  was `3d9f1a12d786f18e7ed18b1b5ea7ed6a1d3a8507`; selection commit was
+  `44846eef9c`; and pre-cycle catalog SHA-256 was
+  `6ce33c08973b96f7f1c25f755a774ef4303f8e23920358594feb120565979cab`.
+- Clang 19 and GCC 12 analyzer passes found no new standalone warning after
+  excluding the exact previously recorded `Assert(m_context)` report. The
+  wallet null-dereference report led to a confirmed lifetime defect:
+  `WalletTXO` held references into a stripped `CWalletTx` after
+  `CWallet::AddToWallet()` replaced its transaction with a witness-bearing
+  version. `12e386db50` fixes `RefreshTXOsFromTx()` and adds the focused
+  regression test, authored by `Lőrinc <pap.lorinc@gmail.com>`.
+- Independent negative-control evidence restored the old implementation and
+  made the new test fail on output pointer identity (`6/7` assertions); the
+  restored fix passed 7/7. The broader `wallet_tests,spend_tests` run passed
+  34 cases and 277 assertions. The ASan attempt was blocked by an unavailable
+  stale ccache path, so ASan evidence is explicitly outstanding.
+- Learning added Goal 122, `wallet-txo-cache-lifetime`, and
+  `agent-journal/wallet-txo-cache-lifetime.md`. Goal/catalog commit
+  `d1453b55d7` generated 123 contiguous goals `0..122`. Catalog SHA-256 is
+  `da5a2650e39932fe39d952c139a8f547fe319819c4f663d71a055f4f6298a153`,
+  manifest SHA-256 is
+  `18deec289d7307115e9e1534e8be8d8994cc3a2c4c1af6d542f53e2823aeeefc`,
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- State-close commit, fresh fetch/rebase, final integrity gate, and the next
+  exact selector from `0..122` remain pending. No repository-completion claim
+  is made; retain the handoff and continue learning from the next cycle.
