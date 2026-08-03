@@ -319,6 +319,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 65 | contributor-branch-radar | CYCLE-14 | 2026-08-02 | rpc-deduplicate-scan-objects: perf nicety, semantics-preserving; no URGENT change |
 | 65 | contributor-branch-radar | CYCLE-15 | 2026-08-02 | radar: zero delta; quiet |
 | 65 | contributor-branch-radar | CYCLE-16 | 2026-08-02 | retained-capacity fix ADOPTED (28ba79168b), flipped test green; 🟡 -> ✅ verified |
+| 65 | contributor-branch-radar | CYCLE-17 | 2026-08-03 | PR 35839 empty-headers stall CONFIRMED+ADOPTED (5-commit stack); F22 |
 | 80 | fuzz-engine-differential | CYCLE-5 | 2026-07-29 | rich PSBTv2 differential: A=0/400, E=115, R=4 guard-contained; BIP371 value-layout lesson (6-seed iterations) |
 | 42 | ci-review-bot-followup | CYCLE-4 | 2026-07-29 | corecheck sweep: bench deltas noise-shaped (same +10-33% on unrelated bloom PR); regression reading corrected |
 | 42 | ci-review-bot-followup | CYCLE-6 | 2026-08-02 | watch @556988790a: 5 commits (2 out-of-scope merges), PRs static, F13/F14/F16 offerability re-confirmed |
@@ -1051,6 +1052,9 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 267 (suspicion-mined): PR 35839 empty-headers stall
+   CONFIRMED (PR's own test fails at HEAD) + ADOPTED (5-commit
+   stack; F22).
    Cycle 266 (suspicion-mined): PR 35688 empty-HMAC UB
    CONFIRMED (first-invalid UBSan trace) + ADOPTED (std::copy;
    probe silent; F21); archive 27fda24406.
