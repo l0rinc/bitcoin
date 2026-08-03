@@ -307,6 +307,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 51 | differential-metamorphic | CYCLE-3 | 2026-07-29 | fee-diagram incremental-vs-recompute: hook exists (txgraph fuzz sim+CompareChunks), 1000 runs green |
 | 51 | differential-metamorphic | CYCLE-4 | 2026-08-02 | BIP30 dup unconstructable PROVEN LIVE (bad-cb-height + bad-version); queue empty |
 | 51 | differential-metamorphic | CYCLE-5 | 2026-08-03 | dup disconnect-pool txids: Assert-fires confirmed, skip-fix adopted (unit green); feature_block.py reverted in archive (BIP30 divergence) |
+| 51 | differential-metamorphic | CYCLE-6 | 2026-08-03 | divergence settled: BIP30 identical to upstream; PR test is author's open iteration; not a fork issue |
 | 42 | ci-review-bot-followup | CYCLE-3 | 2026-07-29 | corecheck endpoint = real oracle; flags 35744 bench regressions (ComplexMemPool +15.6%, OrphanageEraseForPeer +33%) upstream-side |
 | 46 | api-output-on-failure | CYCLE-2 | 2026-07-29 | import_blocks clean; callback reentrancy constraint real (cs_main held, deadlock on reentry) but undocumented (upstream-identical) |
 | 46 | api-output-on-failure | CYCLE-3 | 2026-08-02 | per-callback lock map: block_tip cs_main-held (unique), header_tip asserted lock-free, progress init-thread; same upstream doc gap |
@@ -1069,6 +1070,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 288: divergence settled — BIP30 identical to
+   upstream; PR's test flow is the author's open iteration.
    Cycle 287 (radar hit): disconnect-pool dup txids: skip-fix
    ADOPTED (unit green; functional fork-scenario BIP30
    divergence recorded, upstream-CI oracle).
