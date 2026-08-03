@@ -342,3 +342,18 @@ null-next path assumed successorless == active tip.
 Adoption: audit/adopt-txospender-stale-rewind 6cd9d75a67 (fix +
 their functional test). Severity: 🟠 Medium (public-RPC wrong
 data, persistent, narrow gate). URGENT candidate.
+
+### goal7-descriptor-range (827acab9dd): CONFIRMED + ADOPTED
+Mechanism: EvalDescriptorStringOrObject loop `for (int i =
+range.first; i <= range.second; ++i)` — with range.second ==
+INT32_MAX (a valid endpoint), ++i after the last iteration is
+signed overflow: -ftrapv builds trap (RPC thread dies), -fwrapv
+builds wrap negative -> invalid derive positions / hardened-child
+abort. Reachability: authenticated RPC caller (scan objects);
+availability of the RPC worker. Evidence: FAILING-BEFORE
+rpc_descriptor_range_max_int32 — test process killed by signal
+(exit 133) in our -ftrapv Debug+ASan build; PASSING-AFTER full
+rpc_tests green (exit 0). Second verifier: their -fwrapv
+CPubKey::Derive pos=-2147483648 abort (commit message).
+Adoption: audit/adopt-descriptor-range-overflow 62e05ae526 (fix +
+their boundary test). Upstream 556988790a vulnerable.
