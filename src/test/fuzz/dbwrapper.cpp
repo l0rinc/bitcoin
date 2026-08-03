@@ -81,17 +81,25 @@ public:
 
     /** Execute one pending background task. The task may schedule a
      *  successor which is left pending for a later call. */
-    bool RunOne() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+    bool RunOne(std::optional<size_t> index = std::nullopt) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
         Work work;
         {
             LOCK(m_mutex);
             if (m_queue.empty()) return false;
-            work = m_queue.front();
-            m_queue.pop_front();
+            const auto work_it{index ? m_queue.begin() + *index : m_queue.begin()};
+            Assert(work_it < m_queue.end());
+            work = *work_it;
+            m_queue.erase(work_it);
         }
         work.function(work.arg);
         return true;
+    }
+
+    size_t PendingWork() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+    {
+        LOCK(m_mutex);
+        return m_queue.size();
     }
 
     /** Execute pending background tasks until none remain. */
@@ -237,10 +245,10 @@ void StartReadPoolIfNeeded()
 
 /** Build randomized DBParams from the fuzz input, shared by all targets. */
 DBParams ConsumeDBParams(FuzzedDataProvider& provider, leveldb::Env* testing_env,
-                         bool obfuscate, DBOptions options = {})
+                         bool obfuscate, DBOptions options = {}, const fs::path& path = "dbwrapper_fuzz")
 {
     return DBParams{
-        .path = "dbwrapper_fuzz",
+        .path = path,
         .cache_bytes = provider.ConsumeIntegralInRange<size_t>(64 << 10, 1_MiB),
         .obfuscate = obfuscate,
         .bloom_filter = provider.ConsumeBool(),
@@ -427,8 +435,114 @@ FUZZ_TARGET(dbwrapper, .init = [] { static auto setup{MakeNoLogFileContext<>()};
     TestDbWrapper(
         provider, &det_env,
         [&] { det_env.DrainWork(); },
-        [&] { return det_env.RunOne(); },
+        [&] {
+            const auto pending{det_env.PendingWork()};
+            if (pending == 0) return false;
+            return det_env.RunOne(provider.ConsumeIntegralInRange<size_t>(0, pending - 1));
+        },
         /*allow_force_compact=*/false);
+}
+
+FUZZ_TARGET(dbwrapper_scheduled_pair, .init = [] { static auto setup{MakeNoLogFileContext<>()}; })
+{
+    SeedRandomStateForTest(SeedRand::ZEROS);
+    FuzzedDataProvider provider{buffer.data(), buffer.size()};
+
+    const auto memenv{std::unique_ptr<leveldb::Env>{leveldb::NewMemEnv(leveldb::Env::Default())}};
+    DeterministicEnv det_env{memenv.get()};
+    const bool obfuscate{provider.ConsumeBool()};
+
+    constexpr size_t NUM_DATABASES{2};
+    constexpr size_t NUM_SEED_ENTRIES{1'000};
+    constexpr size_t SEED_BATCH_ENTRIES{500};
+    constexpr uint32_t MIN_SEED_VALUE_SIZE{4 * 1024};
+    std::vector<std::unique_ptr<CDBWrapper>> dbs;
+    dbs.reserve(NUM_DATABASES);
+    const auto make_db{[&](size_t index) {
+        return std::make_unique<CDBWrapper>(ConsumeDBParams(
+            provider, &det_env, obfuscate, {}, fs::PathFromString("dbwrapper_scheduled_" + std::to_string(index))));
+    }};
+    for (size_t index{0}; index < NUM_DATABASES; ++index) {
+        dbs.emplace_back(make_db(index));
+    }
+
+    std::vector<Oracle> oracles(NUM_DATABASES);
+    // Seed both databases before running deferred work. The second batch crosses the
+    // memtable boundary, leaving one deferred compaction task per database to order.
+    for (size_t index{0}; index < NUM_DATABASES; ++index) {
+        for (size_t batch_start{0}; batch_start < NUM_SEED_ENTRIES; batch_start += SEED_BATCH_ENTRIES) {
+            CDBBatch batch{*dbs[index]};
+            for (size_t offset{0}; offset < SEED_BATCH_ENTRIES; ++offset) {
+                const auto key{static_cast<uint16_t>(batch_start + offset)};
+                const auto size{MIN_SEED_VALUE_SIZE + provider.ConsumeIntegralInRange<uint16_t>(0, MIN_SEED_VALUE_SIZE)};
+                batch.Write(key, MakeValue(key, size));
+                oracles[index][key] = MakeValue(key, size);
+            }
+            dbs[index]->WriteBatch(batch, /*fSync=*/true);
+        }
+    }
+    Assert(det_env.PendingWork() >= NUM_DATABASES);
+
+    const auto drain_before_mutation{[&] {
+        det_env.DrainWork();
+    }};
+    const auto choose_db{[&] { return provider.ConsumeIntegralInRange<size_t>(0, NUM_DATABASES - 1); }};
+
+    LIMITED_WHILE(provider.ConsumeBool(), 256)
+    {
+        const size_t index{choose_db()};
+        CallOneOf(
+            provider,
+            [&] { // Run one scheduled task chosen by the deterministic schedule.
+                const auto pending{det_env.PendingWork()};
+                if (pending != 0) {
+                    det_env.RunOne(provider.ConsumeIntegralInRange<size_t>(0, pending - 1));
+                }
+            },
+            [&] { // Read.
+                const auto key{ConsumeKey(provider)};
+                std::vector<uint8_t> value;
+                const bool found{dbs[index]->Read(key, value)};
+                if (const auto it{oracles[index].find(key)}; it != oracles[index].end()) {
+                    Assert(found && value == it->second);
+                } else {
+                    Assert(!found);
+                }
+            },
+            [&] { // Erase.
+                drain_before_mutation();
+                const auto key{ConsumeKey(provider)};
+                dbs[index]->Erase(key, /*fSync=*/provider.ConsumeBool());
+                oracles[index].erase(key);
+            },
+            [&] { // Write.
+                drain_before_mutation();
+                const auto key{ConsumeKey(provider)};
+                const auto size{ConsumeValueSize(provider)};
+                dbs[index]->Write(key, MakeValue(key, size), /*fSync=*/provider.ConsumeBool());
+                oracles[index][key] = MakeValue(key, size);
+            },
+            [&] { // Reopen one database while the other remains live.
+                drain_before_mutation();
+                dbs[index].reset();
+                dbs[index] = make_db(index);
+                VerifyIterator(*dbs[index], oracles[index], obfuscate);
+            },
+            [&] { // Verify an arbitrary seek point.
+                VerifyIterator(*dbs[index], oracles[index], obfuscate, ConsumeKey(provider));
+            },
+            [&] { // Drain all scheduled work, exercising the shutdown boundary early.
+                drain_before_mutation();
+                for (size_t db_index{0}; db_index < NUM_DATABASES; ++db_index) {
+                    VerifyIterator(*dbs[db_index], oracles[db_index], obfuscate);
+                }
+            });
+    }
+
+    det_env.DrainWork();
+    for (size_t index{0}; index < NUM_DATABASES; ++index) {
+        VerifyIterator(*dbs[index], oracles[index], obfuscate);
+    }
 }
 
 FUZZ_TARGET(dbwrapper_threaded, .init = [] { static auto setup{MakeNoLogFileContext<>()}; })
