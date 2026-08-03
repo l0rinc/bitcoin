@@ -189,3 +189,33 @@ unannotated asymmetry was the genuine gap, already fixed).
   would throw only if CopyFunc returned null gracefully — noted
   as wrapper-internal, unreachable from conforming C++.
 - Enum/struct parity cells closed in c2; no #94 cells queued.
+
+## Cycle 4 (2026-08-03, draw 275, raw=11901789004298460673, suspicion-mined): PR 35662 txdata reuse hardening — lineage ALREADY PROTECTED (67239a4a19 flag-reset + fuzz arm); upstream only asserts on reuse; covered-ahead
+
+### Assessment
+- The PR's concern: PrecomputedTransactionData default-construct
+  + Init() reuse leaves stale precompute state.
+- OUR STATE: interpreter.cpp:1417-1423 already resets
+  m_spent_outputs + all three readiness flags on EVERY Init()
+  (fork commit 67239a4a19, 2026-07-05, whose own analysis named
+  the exact stale-BIP143-readiness -> wrong WITNESS_V0
+  SignatureHash mechanism, with a fuzz-target arm; suite green).
+  Post-init Assume invariants pin the state (:1424-1426 area).
+- UPSTREAM STATE: origin/master's Init() only has
+  `assert(!m_spent_outputs_ready)` — it ABORTS on the reuse the
+  PR worries about instead of resetting; no flag clearing.
+- The PR's non-default-constructible redesign is broader API
+  surgery; our leak vector is already closed.
+
+### Verdict
+COVERED AHEAD (second instance after 35797): the reuse-leak
+class is fixed in-lineage with the fork's own analysis + fuzz
+arm; upstream's redesign PR is its vehicle. No adoption.
+
+### Exact commands
+- sed interpreter.cpp:1414-1430 both trees; git show 67239a4a19;
+  transaction_tests green.
+
+### Limitations / queue
+- If upstream lands the non-default-constructible shape, our
+  Init-reset stays compatible (reset is a superset behavior).
