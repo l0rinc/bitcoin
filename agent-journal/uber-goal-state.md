@@ -1066,6 +1066,9 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 282 (suspicion-mined): PR 32554 bench block gen:
+   bench modernization; A/B methodology unaffected; no
+   adoption.
    Cycle 281 (suspicion-mined): PR 32729 sigop coverage: test
    refactor, no defect; no adoption.
    Cycle 280 (suspicion-mined): PR 35161 merkle doc+test
