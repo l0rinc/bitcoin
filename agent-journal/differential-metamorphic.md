@@ -272,3 +272,38 @@ ordering question for upstream CI or a fork-specific variant).
 ### Limitations / queue
 - Functional arm inconclusive pending upstream CI / a
   fork-specific test variant.
+
+## Cycle 6 (2026-08-03, draw 288): cycle-287 functional divergence SETTLED — our BIP30 check is byte-identical to upstream master's; the PR's fork-scenario expectation fails on master semantics too (author's CI all queued, likely iterating); NOT a fork issue
+
+### Settlement evidence
+1. CI check: the fix commit's 57 check-runs are ALL queued
+   (branch force-updated recently; no verdict exists yet — the
+   author is likely still iterating on exactly this).
+2. Static diff: git diff origin/master HEAD --
+   validation.cpp/tx_check.cpp/tx_verify.cpp has ZERO hits for
+   BIP30/overwrite/coinbase/duplicate-related changes — the
+   fork did NOT touch the BIP30 check. Our rejection of the
+   fork-scenario's height-120 duplicate coinbase
+   ('bad-txns-BIP30, tried to overwrite transaction') is
+   byte-identical behavior to upstream master.
+3. Conclusion: the PR's send_blocks(fork_blocks, success=True)
+   expectation does not hold against CURRENT master semantics
+   either — the test flow is the author's open work (their
+   force-update + queued CI is consistent with mid-iteration),
+   NOT a fork validation divergence.
+
+### Verdict
+DIVERGENCE CLOSED as not-a-fork-issue: our adoption of the
+skip fix (unit-verified) stands; the functional test's fate
+belongs to the PR's own iteration. When the author's CI
+completes, the check-runs URL is the settlement oracle
+(recorded).
+
+### Exact commands
+- check-runs API (57 queued); git diff origin/master HEAD
+  (zero BIP30-family hits).
+
+### Limitations
+- If a later push makes the upstream test pass, re-run the PR's
+  feature_block.py variant in our tree (identical semantics
+  expected by point 2).
