@@ -1418,3 +1418,17 @@ negative-elapsed branch needs an explicit FakeNodeClock skew.
 Adoption: audit/adopt-headers-clock-lag 35473f91b4 (fix + their
 boundary test). Severity: Medium-low P2P memory DoS gated on
 clock skew; upstream 556988790a vulnerable. Same surface as F22.
+
+### dup-txid branch CI verdict (2026-08-03): settlement HOLDS, externally corroborated
+l0rinc/l0rinc/disconnect-pool-duplicate-txids tip 8dfa501356 —
+CI now shows 2 completed-failure "NetBSD Cross" jobs (logs
+auth-walled; annotations only). Local repro of the author's exact
+feature_block.py (from 8dfa501356) against our binary: FAILS at
+"Submit a genesis fork" — peer disconnect in send_blocks
+(timeout=2440), identical to cycle-287's in-tree divergence. The
+fix diff-of-diffs (theirs 8dfa501356 vs ours a9a78f2907): only
+comment/Assert-line placement differs; functional change
+identical. Conclusion: the author's own branch is red on their
+own test flow (their open iteration), independent of tree; our
+archive carries the identical fix + HEAD's green feature_block.py
++ the unit coverage. No action; watch for the author's test fix.
