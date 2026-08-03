@@ -1072,6 +1072,23 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 295 (RESUME TRIGGER FIRED — radar flood): 498 new l0rinc
+   branches (865->1363), a parallel audit campaign's working set.
+   Triage + verdicts: goal56-disconnect-duplicate (4061d3763d)
+   CROSS-CONFIRMED == adopted a9a78f2907 semantics (independent
+   second verifier for F24); goal56-txdb-cursor (062a1a02ad = open
+   PR 35654) CONFIRMED + ADOPTED — failing-before (cursor Valid()
+   true over one-byte 'C' malformed key) / passing-after (focused +
+   coins_tests green) on audit/adopt-txdb-cursor-firstkey
+   8481b1f27f; goal92-abi enum aliasing DISMISSED (uint8_t ==
+   unsigned char byte-alias permitted by [basic.lval]; gcc
+   -Wstrict-aliasing=2 + clang UBSan clean; zero behavior delta);
+   goal98 fee-estimator pair COVERED-AHEAD (fork 62f15c4ab9 +
+   0cf655f1d6 already reject non-finite/negative vectors + bad
+   bucket boundaries, stricter than parallel isfinite-only).
+   Queued: goal93-xor-key (HEAD vulnerable; LD_PRELOAD interposer
+   staged at /tmp/xor_interpose.so). Full test_bitcoin verify in
+   flight at cycle close.
    Cycle 294 (watch, zero-delta x3 after resume — BLOCKED audit
    threshold met): origin/master static 556988790a; l0rinc fetch
    zero ref updates (865 heads); qa-assets HEAD 918cdd3 == CI pin;

@@ -1120,3 +1120,78 @@ recorded disposition with evidence.
 ### Limitations / queue
 - Successor series of 32189 (#32238+) becomes a new radar cell
   when it settles.
+
+## Cycle 295 addendum (2026-08-03): parallel-campaign branch flood (865 -> 1363 heads)
+
+### Triage
+498 new l0rinc branches = a parallel audit campaign's working
+branches (i9/codex/goal*, umbrel/uber-cycle-*, umbrel/fuzz-contract-
+oracles-*). External material = seeds, not proof; each overlap
+candidate cross-checked against our lineage.
+
+### goal56-disconnect-duplicate (4061d3763d): CROSS-CONFIRMED
+Parallel "reorg: keep duplicate txids out of disconnect pool" is
+semantically IDENTICAL to our adopted a9a78f2907 (F24): both
+try_emplace-skip duplicates (no queue append, no cachedInnerUsage
+charge, first reverse-iteration occurrence wins). Style differs
+(ranges vs placeholder-iterator); semantics equal. Independent
+implementation arriving at the same invariant = second verifier
+form for the adopted fix. No action.
+
+### goal56-txdb-cursor (062a1a02ad) = open PR 35654: IN VERIFICATION
+See adoption branch audit/adopt-txdb-cursor-firstkey.
+
+### goal92-abi (85635a410a, kernel enum aliasing): DISMISSED as defect
+Claim: reinterpret_cast<btck_ScriptVerifyStatus*>(&status) aliases a
+C++ enum object through its underlying integer type (UB).
+Reality: btck_ScriptVerifyStatus is `typedef uint8_t`
+(bitcoinkernel.h:518), NOT an enum; enum class ScriptVerifyStatus :
+btck_ScriptVerifyStatus has fixed underlying type uint8_t (1 byte,
+same size). uint8_t == unsigned char on every Core target
+(static_assert verified x86_64), so the write is byte-access through
+unsigned char* — EXPLICITLY permitted by [basic.lval] byte rule.
+Experiment (/tmp/enum-alias/t2.cpp, exact wrapper shape):
+gcc -O2 -fstrict-aliasing -Wstrict-aliasing=2 silent + correct;
+clang++-18 -O2 -fsanitize=undefined -fno-sanitize-recover clean.
+Any-byte-valid for fixed-underlying-type scoped enums; their own
+commit states "public behavior and status values are unchanged".
+Verdict: portability-hygiene refactor (exotic-platform uint8_t
+distinct-type letter-of-the-law exposure only), zero behavioral
+delta, no observable defect possible on Core targets. NO adoption.
+
+### goal98 pair (1921dae3ac persisted-averages, ae0f11f35d bucket-boundaries): COVERED-AHEAD
+Parallel fee-estimator hardening duplicates protection our lineage
+already carries from fork-only 62f15c4ab9 + 0cf655f1d6 (2026-07-07):
+- non-finite persisted averages: our IsSaneEstimatorVector rejects
+  non-finite AND negative on all four vectors (m_feerate_avg,
+  txCtAvg, confAvg[i], failAvg[i]) — strictly stronger than the
+  parallel isfinite-only checks.
+- invalid bucket boundaries: our IsSaneBucketsVector (isfinite,
+  strictly increasing, back() >= INF_FEERATE sentinel) rejects at
+  the fileBuckets read path (block_policy_estimator.cpp:1149) with
+  Assume() invariants at 635/1082/1168.
+Upstream master still accepts all of these (no checks at HEAD).
+Verdict: lineage already protected; NO adoption.
+
+### goal56-txdb-cursor (062a1a02ad = open PR 35654): CONFIRMED + ADOPTED
+Mechanism: CCoinsViewDB::Cursor() (src/txdb.cpp) cached the default
+DB_COIN tag when first-key decode failed — Valid()/GetKey() reported
+a usable cursor over an undecodable key; Next() already invalidated
+the same failure. Trust boundary: chainstate keyspace readable but
+malformed (corruption or foreign writer); NOT network/consensus
+reachable — callers scanning the cursor would process a bogus first
+entry (outpoint default) instead of rejecting the position.
+Evidence (build-after, ASan Debug):
+- FAILING-BEFORE: test-only tree at 2f14ea03ac — writes a readable
+  Coin under one-byte 'C' key; cursor->Valid()==true and
+  GetKey()==true (2 BOOST failures).
+- PASSING-AFTER: + 9-line txdb.cpp fix (reject on !Valid() ||
+  !GetKey(entry)) — focused test + full 14-case coins_tests green.
+- Dup search: no existing coverage (coins_db_leveldb_layout covers
+  well-formed keys only); upstream PR 35654 still open; parallel
+  commit's stated Valgrind-clean run consistent.
+Why existing tests missed it: cursor tests only exercise well-formed
+DBs; malformed-keyspace fixtures never reach Cursor().
+Adoption: audit/adopt-txdb-cursor-firstkey 8481b1f27f (smallest
+buildable commit: fix + regression test). Severity: corrupt-only
+robustness (Medium-low); covered-ahead while upstream 35654 is open.
