@@ -1072,6 +1072,15 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 313 (watch + verification): upstream master ADVANCED
+   556988790a -> dcc2ed52b8 (single merge #35856, fuzz-only 48
+   lines in tx_pool.cpp; no src changes, no adopted-area overlap;
+   merge-tree clean vs our modified tx_pool.cpp — no rebase
+   conflict). dup-txid CI: 34 success/2 NetBSD failures (author's
+   own test flow — settlement holds). Watch PRs 35744/35859/
+   35818/35620/35654 all open, unmerged. qa-assets == pin.
+   Regression #8b test_kernel GREEN on final lineage. Regression
+   #8 full suite in flight.
    Cycle 312 (goal 111 cell closures, end): goal86-prune-restart
    (blockfilter) CONFIRMED + ADOPTED — height-only ReadFilterHeader
    rejects own index after reorg + unclean kill; failing-before
