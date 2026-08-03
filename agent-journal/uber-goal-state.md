@@ -2470,3 +2470,50 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
    CLEAN (worktree=ledger-only, tmp worktrees removed, stash
    empty); caught the r40-r63 logging gap (closed here). VERDICT
    PASS — logging hygiene restored.
+ r65 raw=6141341774054688911 -> #15: reopen FAIL (repeat). NP 1/20.
+ r66 raw=4959960851153761031 -> #7: reopen FAIL (repeat). NP 2/20.
+ r67 raw=1367167898054442412 -> #44 secret-copy: reopen FAIL
+   (crossing map clean). NP 3/20.
+ r68 raw=7911005381960570435 -> #67 release differential: reopen
+   FAIL (COMPLETE; no new releases). NP 4/20.
+ r69 raw=7583377033628740363 -> #11 sanitizer: reopen FAIL (zero
+   true positives; session crashes were harness asserts). NP 5/20.
+ r70 raw=2526189774095845513 -> #9: reopen FAIL (repeat). NP 6/20.
+ r71 raw=2330547285007289236 -> #20: reopen FAIL (repeat). NP 7/20.
+ r72 raw=4585023098692496028 -> #28 mutation-survival: reopen
+   FAIL (guard arms mutation-proven). NP 8/20.
+ r73 raw=6794620905583372968 -> #40: reopen FAIL (repeat). NP 9/20.
+ r74 raw=7022713462283039251 -> #19: reopen FAIL (32554 still
+   open). NP 10/20.
+ r75 raw=1269052630831254779 -> #123 Sparrow: reopen FAIL
+   (repo-blocked). NP 11/20.
+ r76 raw=8005728185119929451 -> #107: reopen FAIL (repeat). NP 12/20.
+ r77 raw=7574435814202051208 -> #8 locking: reopen FAIL (T1
+   dismissed; DONE). NP 13/20.
+ r78 raw=8917635868790062157 -> #77: reopen FAIL (repeat). NP 14/20.
+ r79 raw=462740528385217945 -> #25 perf bisect: reopen FAIL (no
+   anomalies). NP 15/20.
+ r80 raw=1064144530723103329 -> #97: reopen FAIL (repeat). NP 16/20.
+ r81 raw=5449249411804058698 -> #74 memory: reopen FAIL (c6
+   pruning IO dismissed; COMPLETE). NP 17/20.
+ r82 raw=2579150022665358302 -> #94 FFI parity: reopen FAIL (no
+   new wrappers). NP 18/20.
+ r83 raw=6498382602877518808 -> #88 wallet recovery: reopen FAIL
+   (DONE; W4 fixed 0e7a8fabb5). NP 19/20.
+ r84 raw=6042916750713161832 -> #104 analogical: reopen FAIL
+   (RNG contracts pinned at c4; no new external events). NP 20/20.
+
+ HALT (user's 20-round rule, cycle 326): 20 consecutive
+ reopen-fails, every one with a recorded reason; no
+ progress-bearing work in flight (all fuzz campaigns done and
+ committed, archive tip e6dbedd2dc). Goal -> blocked.
+ RESUME CONDITIONS (unchanged): (1) upstream master advance past
+ 1ed14c6122; (2) new/force-updated l0rinc branch (now 1364);
+ (3) qa-assets past pin 918cdd3; (4) watch-PR merge/state change
+ (35744/35859/35818/35620/35654 + 32554 for #19);
+ (5) host tooling appearing (lld, clang-tidy, cbmc/klee,
+ cppcheck, sage/help2man, Sparrow repo); (6) catalog mutation
+ (campaign-goals.md sha256 ba7b1dd0 changes); (7) user
+ instruction. On resume: same assess-and-adopt protocol;
+ verify queue cells against campaign-journal tails first
+ (stale-cell hygiene, cycle-324 note).
