@@ -1,3 +1,52 @@
+# Cycle 316 Completion
+
+- The exact selector from the 116-goal catalog was `shuf -i 0-115 -n 1` ->
+  goal `106` (`generated-source-boundaries`). The dedicated branch is
+  `uber-cycle-316-generated-source-boundaries-20260802`. Cycle-start HEAD was
+  `0374c23bb1989f87332ed9d9d2e90c417de86f95`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; start divergence was `0 1455`;
+  and the selection entry was committed as `372e888b8b`.
+- The selected campaign excluded the repaired Cycle 306 generator comment
+  boundary. A distinct fixture proved that `mpgen` emitted raw
+  `$Proxy.include()` text into a generated C++ `#include` line. The old
+  generator returned 0 and its generated header compiled while declaring
+  `int generated_marker = 1;` outside the intended include. A separate
+  `includeTypes` fixture reproduced the same sink; a clean schema compiled
+  successfully.
+- Finding commit `f8973a2540` (`mpgen: reject unsafe include annotations`) is
+  authored by `Lőrinc <pap.lorinc@gmail.com>`. It validates both header-path
+  annotation IDs after schema parsing and before opening proxy outputs,
+  rejecting empty paths, quotes, backslashes, and ASCII control bytes. The
+  commit includes two CMake regression fixtures and the selected journal.
+- Validation passed: the focused existing standalone build rebuilt `mpgen` and
+  `mptest`; both new `mpgen_rejects_*` CTest cases passed; the existing
+  `mptest` CTest passed; a clean generated proxy passed
+  `g++ -std=c++20 -fsyntax-only`; and `git diff --check` passed.
+- The strongest new suspicious surface is the remaining raw C++ annotation
+  boundary for namespace, wrap, exception, name, and related Text values.
+  Goal 116, `mpgen-cpp-annotation-contract`, was added with seed journal
+  `agent-journal/mpgen-cpp-annotation-contract.md`. Goal/catalog commit is
+  `8fb04c6192` (`goals: add mpgen annotation contract audit`).
+- The catalog now contains 117 contiguous goals `0..116`; catalog SHA-256 is
+  `960a42b979b9e4c5ed2cd86f78b8f2fdb3a83fb06b97d30f67eaff07a352e7f2`,
+  manifest SHA-256 is
+  `cb1fc63e2029ce37fea901c82bbd855d382f2f3eb48ccbea8ff243fc8e2b5766`, the
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`.
+- `git fetch origin master` followed by `git rebase origin/master` was a
+  no-op after the finding and goal commits. Before this state-close commit,
+  HEAD was `8fb04c6192bc751942c79ff9e0846d8073d67690`, origin/master was
+  `556988790a7f961693a8fd93f73725baea66476a`, and divergence was `0 1458`.
+  `/data` remains full with approximately 1.3G available. Protected PIDs
+  `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and
+  `1346200` remain alive and untouched; prior untracked probes and user files
+  remain preserved.
+- Verdict: **confirmed and fixed**. After this state-close commit, perform a
+  fresh gate, fetch and rebase `origin/master`, draw exactly one selector with
+  `shuf -i 0-116 -n 1`, create a new `uber-cycle-317-*` branch, and continue.
+
 # Cycle 315 Completion
 
 - The exact selector from the 115-goal catalog was `shuf -i 0-114 -n 1` ->
