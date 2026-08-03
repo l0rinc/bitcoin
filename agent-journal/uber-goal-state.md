@@ -1072,6 +1072,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 303 (goal 114 threat-model->oracle, draw
+   raw=17746324290832141658 masked=8522952253977365850 n=9 idx=3):
+   clock-skew security-gate sweep (35 NodeClock/GetTime sites)
+   — every remaining gate has a design margin exceeding the
+   +/-70min adjusted-time attacker bound (24h staleness on system
+   clock, 3.3h tip recency, 2h block-future on adjusted time,
+   hours-level bans/file ages); the only failable class is
+   sub-minute-margin + remote-input gates = the two proven
+   instances F22/F30. NEGATIVE RESULT narrowing the threat model;
+   validity condition for future findings recorded.
    Cycle 302 (goal 126 LevelDB semantics, draw
    raw=7175895203802760358 n=10 idx=8): comparator N/A (default
    Bytewise everywhere, no custom in-tree); bloom standard
