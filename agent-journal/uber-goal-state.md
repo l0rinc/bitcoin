@@ -6494,3 +6494,12 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   alive, and `0/1486` divergence from `origin/master`. No repository-
   completion claim is made; the next exact selector from `0..123` remains
   pending.
+
+## Cycle 324 Completion
+
+- Goal 32 (`history-incomplete-fixes`) was selected by `shuf -i 0-123 -n 1` -> `32` on branch `uber-cycle-324-history-incomplete-fixes-20260802`; cycle base was `aa99407416`, selection commit `fd66e34f5b`, and pre-cycle catalog SHA-256 was `f2b3a468817fb1d169021ecf567a42bf6c843b693aa9384842341a56fcbf074d`.
+- A real v28.4 BDB watch-only wallet and daemon-only SQLite commit fault injection reproduced a cleanup omission: the third commit failure during auxiliary descriptor import threw out of `DoMigration()`, leaving a converted SQLite main wallet, a legacy backup, and `legacy_watchonly/wallet.dat`.
+- Commit `6ef48bbfa0` (`wallet: restore migration after descriptor failure`) translates false results and storage exceptions in both descriptor-import loops into the existing rollback path. On a fresh fixed replay, the original Berkeley DB wallet and backup matched byte-for-byte, the auxiliary wallet was removed, and RPC returned the storage error. A no-fault control still created and loaded both SQLite wallets.
+- The focused `wallet_tests,scriptpubkeyman_tests` attempt was blocked by the host low-disk guard: `/data` had 499M free and `/` had 0 bytes. The run was stopped after unrelated fixture assertions; no protected process was stopped. Product-path before/after and no-fault control evidence are the primary verification.
+- Learning commit `0c4a936864` adds Goal 124 (`migration-exception-rollback`) and seed journal `agent-journal/migration-exception-rollback.md`. The regenerated catalog has 125 contiguous goals `0..124`; catalog SHA-256 is `0cdd366b6eca70f027e1da2fd4a14385a930b3d29740bc3e87817b7989bbcc73`, manifest SHA-256 is `837de4b19fa63346327a1493be96f70acdac9df04db58041ab54b577f25debc6`, generator SHA-256 remains `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and random prompt SHA-256 remains `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- Rebase and final gate remain pending. The next selector must draw exactly one goal from `0..124` after the gate; do not reopen the fixed descriptor loops or intentional SQLite assertion without new evidence.

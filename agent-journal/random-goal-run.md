@@ -12,6 +12,16 @@
 - Timestamp: `2026-08-03T04:50:35Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-32`
 
+## Cycle 324 Result
+
+- Goal 32 completed on branch `uber-cycle-324-history-incomplete-fixes-20260802`. The historical migration sweep found that auxiliary watch-only descriptor storage exceptions escaped the caller's rollback path.
+- Pre-fix daemon reproduction: a real v28.4 BDB watch-only wallet plus daemon-only SQLite fault injection at commit 3 returned `Unable to write descriptor cache` while leaving a converted SQLite main wallet, its legacy backup, and `legacy_watchonly/wallet.dat`.
+- Finding commit: `6ef48bbfa0` (`wallet: restore migration after descriptor failure`). It factors the two descriptor-import loops through a helper that converts false results and storage exceptions into `DoMigration()` failure, allowing backup restoration and auxiliary-wallet cleanup.
+- Fixed replay on fresh datadir returned RPC error `-4`; the main wallet and backup were both Berkeley DB with identical SHA-256 `fb589cdbdb8d25d7aca016b4c692640cada2c7dc7e123ea48090d9f7884ca9df`, and `legacy_watchonly` was removed. A no-fault control created and loaded both SQLite wallets successfully.
+- The focused unit test attempt was blocked by the host low-disk guard (`/data` had 499M free and `/` had 0 bytes); all protected processes remained alive.
+- Learning added Goal 124, `migration-exception-rollback`, with seed journal `agent-journal/migration-exception-rollback.md`. Goal/catalog commit `0c4a936864` generated 125 contiguous goals `0..124`.
+- Post-cycle hashes: catalog `0cdd366b6eca70f027e1da2fd4a14385a930b3d29740bc3e87817b7989bbcc73`, manifest `837de4b19fa63346327a1493be96f70acdac9df04db58041ab54b577f25debc6`, generator `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, random prompt `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+
 ## Cycle 323 Selection
 
 - Selected index: `3`
