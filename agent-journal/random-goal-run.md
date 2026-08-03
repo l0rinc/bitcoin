@@ -12,6 +12,15 @@
 - Timestamp: `2026-08-03T01:02:47Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-17`
 
+## Cycle 311 Result
+
+- The selected build-matrix-modules campaign excluded prior wallet/IPC/GUI-off and reduced-export cells and focused on the independently configurable kernel-library and chainstate options. The concrete hypothesis was that `BUILD_UTIL_CHAINSTATE=ON` with `BUILD_KERNEL_LIB=OFF` could advertise and test a target that CMake did not generate.
+- Pre-fix configure in `/data/my_storage/tmp/cycle311-chainstate-without-kernel-1` exited 0 and printed `bitcoin-chainstate ... ON` with `libbitcoinkernel ... OFF`. It generated `ENABLE_BITCOIN_CHAINSTATE=true`, but target help contained no chainstate or kernel target; requesting `bitcoin-chainstate` exited 1 with `ninja: error: unknown target 'bitcoin-chainstate'`. History traced the mismatch to `7990463b105`, which nested the pure chainstate executable under the kernel-library guard while retaining independent options.
+- Confirmed and fixed in `657e4c64eb` (`cmake: reject chainstate without kernel library`), authored by `Lőrinc <pap.lorinc@gmail.com>`. `CMakeLists.txt` now rejects the impossible combination during option interaction with `BUILD_UTIL_CHAINSTATE requires BUILD_KERNEL_LIB=ON.` The repaired invalid cell in `/data/my_storage/tmp/cycle311-chainstate-without-kernel-2` exits 1 before producing a misleading summary or capability file.
+- Independent valid-cell verification in `/data/my_storage/tmp/cycle311-chainstate-valid-1` with both options ON exits 0, prints both capabilities ON, writes `ENABLE_BITCOIN_CHAINSTATE=true`, and exposes `bitcoin-chainstate`, `bitcoinkernel`, `libbitcoinkernel`, and `libbitcoinkernel.a` in target help. `git diff --check` passed. A full compile was not attempted because `/data` and `/` are full; the configuration graph is sufficient for this guard defect and protected workloads were preserved.
+- Learned suspicious surface: the kernel library, chainstate utility, kernel tests, install components, pkg-config/header exports, functional capability flags, Windows/cross recipes, and fuzz/reduced-export overrides may still diverge. Added Goal 111, `kernel-chainstate-config-parity`, with seed journal `agent-journal/kernel-chainstate-config-parity.md`.
+- Goal/catalog/seed commit: `eefdbe5211` (`goals: add kernel chainstate configuration parity audit`). The catalog now contains 112 goals with IDs `0..111`; catalog SHA-256 is `ffadac8632c7f62b066b42bcf04b77ce2bb75dca3d8f7917546f141ad289c2dc`, manifest SHA-256 and the next exact selector will be recorded at cycle close. No sanitizer, cross-compiler, or full kernel build was run because of storage limits.
+
 ## Cycle 310
 
 - Selected index: `15`
