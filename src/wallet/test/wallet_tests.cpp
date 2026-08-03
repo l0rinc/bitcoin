@@ -122,6 +122,31 @@ BOOST_FIXTURE_TEST_CASE(wallet_encryption_ignores_deterministic_rng, TestingSetu
     BOOST_CHECK(first.salt != second.salt);
 }
 
+BOOST_FIXTURE_TEST_CASE(addhdkey_ignores_deterministic_rng, WalletTestingSetup)
+{
+    const auto generate_xpub{[&](const std::string& name) {
+        std::vector<bilingual_str> warnings;
+        auto wallet_result{m_wallet_loader->createWallet(name, "", WALLET_FLAG_DESCRIPTORS | WALLET_FLAG_BLANK_WALLET, warnings)};
+        BOOST_REQUIRE(wallet_result);
+        std::unique_ptr<interfaces::Wallet> wallet{std::move(*wallet_result)};
+
+        JSONRPCRequest request;
+        request.context = &m_node;
+        request.URI = "/wallet/" + name;
+        request.strMethod = "addhdkey";
+        request.params = UniValue{UniValue::VARR};
+        request.params.push_back(UniValue{});
+        if (RPCIsInWarmup(nullptr)) SetRPCWarmupFinished();
+
+        SeedRandomForTest(SeedRand::ZEROS);
+        const std::string xpub{tableRPC.execute(request)["xpub"].get_str()};
+        wallet->remove();
+        return xpub;
+    }};
+
+    BOOST_CHECK(generate_xpub("first") != generate_xpub("second"));
+}
+
 BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
 {
     CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
