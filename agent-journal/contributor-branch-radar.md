@@ -981,3 +981,30 @@ Assess-only, NO adoption: feature PR, no defect at HEAD.
 ### Limitations
 - If the setter lands upstream, the #92 ABI layout battery
   needs a new row for the options struct (recorded gate).
+
+## Cycle 23 (2026-08-03, draw 276, raw=16076528475606086983, suspicion-mined): PR 34320 HaveCoin/Exists semantic split — presence==unspent by write discipline at HEAD (no reachable divergence); alignment refactor, NO adoption
+
+### Assessment
+- CCoinsViewDB::HaveCoin calls CDBWrapper::Exists (key-present),
+  while GetCoin reads-as-unspent. The PR aligns them.
+- Invariant at HEAD: the coins DB stores ONLY unspent coins
+  (spent are erased at flush — the #95 durability family
+  verified the write/flush discipline end-to-end incl. crash
+  windows). So Exists()==unspent for every value the DB can
+  hold; the divergence is only reachable via out-of-band
+  corruption, which is the 35654 cursor-key family's territory
+  (separate open PR, tracked).
+- Our lineage additionally has the PeekCoin non-caching lookup
+  (coins.h:370) and the HaveCoin 'is unspent' contract
+  (:372-374) already explicit.
+
+### Verdict
+Assess-only, NO adoption: alignment refactor with no reachable
+divergence at HEAD; the corruption arm belongs to 35654's watch.
+
+### Exact commands
+- txdb.cpp:103-106; coins.h:369-374; caller census above.
+
+### Limitations
+- If 35654 lands (undecodable-key rejection), the Exists()
+  fast path remains correct (rejection happens at read).
