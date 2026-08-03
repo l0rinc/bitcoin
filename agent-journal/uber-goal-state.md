@@ -1072,6 +1072,19 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 297 (radar-flood continuation): goal26-null-mempool
+   COVERED-AHEAD (fork 0a2deeea1d 2026-07-19 with kernel-API
+   reproducer + test; parallel 1d05b4ac4f semantic-duplicate);
+   goal43-mempoolexpiry CONFIRMED + ADOPTED — failing-before
+   (ApplyArgsManOptions(-1) accepted) / passing-after (mempool_tests
+   green) + parallel daemon-eviction second verifier;
+   audit/adopt-mempoolexpiry-negative 0e0b3d6576, archive
+   b095724b20, F28. goal43-cluster-size count arm COVERED-AHEAD
+   (both-bounds in-tree :110-115); clustersize negative/overflow
+   arm still live (queued). NOTE: clearing a bad cherry-pick with
+   reset --hard restored the user's unstaged deletion of
+   agent-journal/campaign-goals-99.md (content == HEAD, no loss;
+   their catalog-migration deletion may be re-applied by them).
    Cycle 296 (radar-flood continuation + catalog migration to
    128-goal mutable, hash ba7b1dd0a2ab7203): goal10-snapshot-
    basehash COVERED-AHEAD (fork a146380c8e 2026-07-02 guards the
