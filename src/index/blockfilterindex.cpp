@@ -250,18 +250,10 @@ size_t BlockFilterIndex::WriteFilterToDisk(FlatFilePos& pos, const BlockFilter& 
 
 std::optional<uint256> BlockFilterIndex::ReadFilterHeader(int height, const uint256& expected_block_hash)
 {
-    std::pair<uint256, DBVal> read_out;
-    if (!m_db->Read(index_util::DBHeightKey(height), read_out)) {
-        return std::nullopt;
-    }
+    DBVal read_out;
+    if (!index_util::LookUpOne(*m_db, {expected_block_hash, height}, read_out)) return std::nullopt;
 
-    if (read_out.first != expected_block_hash) {
-        LogError("previous block header belongs to unexpected block %s; expected %s",
-                 read_out.first.ToString(), expected_block_hash.ToString());
-        return std::nullopt;
-    }
-
-    return read_out.second.header;
+    return read_out.header;
 }
 
 bool BlockFilterIndex::CustomAppend(const interfaces::BlockInfo& block)

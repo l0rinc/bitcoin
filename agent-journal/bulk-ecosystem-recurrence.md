@@ -357,3 +357,28 @@ rpc_tests green (exit 0). Second verifier: their -fwrapv
 CPubKey::Derive pos=-2147483648 abort (commit message).
 Adoption: audit/adopt-descriptor-range-overflow 62e05ae526 (fix +
 their boundary test). Upstream 556988790a vulnerable.
+
+### goal86-prune-restart (6ce88f28f7, blockfilter index): CONFIRMED + ADOPTED
+Mechanism: BlockFilterIndex::ReadFilterHeader restored the last
+header by height key only; post-reorg the height entry points at
+the new branch while durable chainstate ends at the old branch ->
+startup rejects its own index ('previous block header belongs to
+unexpected block ... Cannot read last block filter header') ->
+init exit 1 (node won't start until manual index removal).
+Reachability: unclean shutdown after reorg on -blockfilterindex
+nodes; startup availability + BIP157/158 filter serving.
+Evidence (functional, ASan debug, --timeout-factor=8 after a
+default-factor generatetoaddress RPC timeout false-start):
+- FAILING-BEFORE: restarted node 'bitcoind exited with status 1
+  during initialization', debug.log shows the exact unexpected-
+  block rejection + 'Cannot read last block filter header'.
+- PASSING-AFTER: both independently indexed nodes restart cleanly,
+  sync to durable tip, getblockfilter/gettxoutsetinfo answer;
+  full feature_index_prune.py green.
+- Second verifier: their repaired-test pass (commit message).
+Why existing tests missed it: index-prune tests never combined
+reorg + unclean kill + restart; the height-only read assumed
+height == expected durable block.
+Adoption: audit/adopt-blockfilter-reorg-recovery 8b9a20b114 (fix +
+their extended regression). Severity: 🟠 Medium (startup kill,
+optional index, crash-gated). Sibling of F33 (same family).
