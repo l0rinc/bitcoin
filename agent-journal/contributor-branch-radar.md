@@ -939,3 +939,23 @@ is the right vehicle.
 ### Limitations
 - If upstream lands it with bench-attached semantic-identity
   evidence, adoption becomes cheap (recorded gate).
+
+## Cycle 21 (2026-08-03, draw 271, raw=8103122317847213642, suspicion-mined): PR 31868 IBD serialization — author's own DRAFT ('remeasure everything... I don't like all the specializations'); not an adoption candidate; watch the 32043 umbrella
+
+### Assessment
+- The PR is self-declared unfinished (author's note in the
+  body: drafted until remeasurement, unhappy with the
+  specialization shape). ~1.5 years old (2025-02-14).
+- Adopting a self-declared unfinished optimization series would
+  violate evidence-first discipline (the author themselves
+  hasn't validated the current shape); the IBD-tracking
+  umbrella PR 32043 is the real vehicle.
+
+### Verdict
+Assess-only, NO adoption; watch 32043 for the finished shape.
+
+### Exact commands
+- curl PR body (draft note quoted).
+
+### Limitations
+- The IBD perf family (#22) may revisit when 32043 settles.
