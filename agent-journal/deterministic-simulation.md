@@ -339,3 +339,58 @@ c4 extension-resume + 2 harness fixes, c5 progress fuzzing).
 
 ## Rotation note
 Five cycles; campaign exhausted.
+
+## Cycle 6 (2026-08-03, REOPENED by flood evidence): dbwrapper_scheduled_pair transplant — deterministic ordering of deferred LevelDB compaction work across two live databases; 20k campaign IN FLIGHT
+
+### Reopen trigger (not a draw)
+Campaign #71 was EXHAUSTED at c5 (queue EMPTY). The 2026-08-03
+author-branch flood delivered a goal71-shaped target the exhaustion
+verdict could not have seen: l0rinc's dbwrapper_scheduled_pair
+(transplant source branch i9/codex/goal10-fuzz-gap-20260801
+lineage). Per the reopen rule (new code/tools change assumptions),
+#71 reopens for exactly this cell.
+
+### Cell and mechanism
+CDBWrapper defers compaction/background work through the fuzz
+DeterministicEnv queue; production drains FIFO. The target explores
+NON-FIFO schedules: the fuzzer picks WHICH pending task runs next
+(RunOne(index)), so two databases each carrying a deferred
+compaction can interleave in adversarial orders — a schedule space
+the FIFO dbwrapper target never reaches. Pair dimension: one DB is
+reopened while the other stays live, with full iterator
+verification against per-DB oracles after every arm.
+
+### Delivered (src/test/fuzz/dbwrapper.cpp, uncommitted pending verdict)
+- DeterministicEnv::RunOne(optional<size_t> index) — default
+  nullopt preserves FIFO for existing callers; indexed form
+  Assert-bounds-checks and erases the chosen element.
+- DeterministicEnv::PendingWork() accessor (locked).
+- Existing dbwrapper target upgraded to scheduled-index selection
+  (was strict FIFO RunOne()).
+- New FUZZ_TARGET(dbwrapper_scheduled_pair): 2 DBs x 1000 seeded
+  entries (2x500 batches, fSync, second batch crosses the memtable
+  boundary so each DB has >=1 deferred task; Assert(PendingWork()
+  >= NUM_DATABASES)); LIMITED_WHILE 256 arms: scheduled-task-step,
+  read, erase, write, reopen-one-while-other-live, arbitrary-seek
+  verify, drain-all+both-verify; final DrainWork + full
+  VerifyIterator on both DBs at shutdown.
+- Adaptation from the author's version: their Oracle maps
+  key->value-SIZE; ours maps key->full-VALUE (MakeValue(key,size))
+  and asserts value equality on reads — strictly stronger oracle,
+  same schedule coverage.
+
+### Campaign (in flight)
+FUZZ=dbwrapper_scheduled_pair ./build_fuzz/bin/fuzz -runs=20000,
+started 12:34 (task bash-mrh5b21j). Cost driver: ~2000 seeded
+entries + up to 256 ops per input; blockfilter_index comparison
+took 46 min. Snapshot at +1h39m: 98% CPU, RSS ~511 MB stable, zero
+new crash-*/slow-unit-* artifacts since start. Resume: on
+completion verify 'Done 20000 runs' clean, then commit dbwrapper.cpp
+as 'fuzz: add dbwrapper_scheduled_pair target (goal71, 20k clean)'
+on audit/transplant-index-fuzz and copy to agent/all-findings;
+if it crashes, reproduce with the emitted seed and check for a
+harness-contract gap (txospenderindex mock-time class) BEFORE
+touching production code.
+
+### Verdict
+PENDING (campaign in flight).
