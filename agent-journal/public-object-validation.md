@@ -1,5 +1,44 @@
 # Public object parsing and validation variant analysis
 
+## Cycle 310: extended public-key metadata identity across ordered containers
+
+### Selection, gate, and excluded cells
+
+- Selector: `shuf -i 0-109 -n 1` -> `15` (`public-object-validation`)
+- Branch: `uber-cycle-310-public-object-validation-20260802`
+- Cycle-start/base HEAD: `199365c2793ca9ece8692dc65946864a5fe1d1d8`; selection commit `601460a135cebd0236bb2a4b99033fa61d2df2d8`; `origin/master` at `556988790a7f961693a8fd93f73725baea66476a`.
+- Catalog SHA-256 at selection: `0f3f6c11ee008c76cb88250fdbc6f6abd713e72206f1c3b94daeb8e9983ed172`.
+- Prior Goal 15 cells for compact recovery headers, Taproot x-only metadata, descriptor inference, PSBT global xpub wire identity, direct xpub rejection, and raw P2PK representation were searched and excluded. Direct Bech32/Base58 canonicalization and hybrid-key acceptance were also classified as intentional compatibility boundaries in this cycle.
+
+### Hypothesis and contract
+
+`CExtPubKey::operator==` compares depth, parent fingerprint, child number, chain code, and public key, while the ordered comparator in `src/pubkey.h` compared only public key and chain code. Consequently, two unequal public objects could become equivalent keys in every default `std::set` or `std::map`. The trust boundary is a descriptor or wallet caller supplying valid BIP32 public objects with distinct provenance metadata. The expected contract is that an API enumerating or pairing extended keys must not silently select one metadata-bearing xpub, and an xprv returned for an xpub must neuter back to that same object.
+
+This reaches production aggregation directly. `Descriptor::GetPubKeys()` inserts root xpubs into `std::set<CExtPubKey>`. `wallet/rpc/wallet.cpp:gethdkeys` uses the resulting keys for `wallet_xpubs` and `wallet_xprvs`. If equivalent comparator keys occur in separate descriptors, the xpub map retains one representative while the xprv assignment can overwrite its value with the later key's depth/fingerprint/child metadata. The RPC can then emit an xpub and an xprv whose metadata do not match, and it can omit a distinct descriptor root. `PSBTXPubKeyComparator` is intentionally separate: PSBT global keys are unique by complete serialized xpub including version bytes; the generic `CExtPubKey::operator==` deliberately excludes version bytes.
+
+### Independent applicability and before evidence
+
+The temporary BIP32 test decoded the first BIP32 vector xpub, cloned it, and changed the clone to depth `1`, fingerprint `11 22 33 44`, and child `1`, leaving the valid public key and chain code unchanged. `operator==` correctly reported the objects unequal. The old comparator nevertheless made `std::set<CExtPubKey>` contain one object. The exact old focused command was:
+
+`TMPDIR=/data/my_storage/tmp/cycle310-public-object /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=bip32_tests/extpubkey_metadata_set_identity_probe --log_level=all`
+
+The initial old-behavior probe passed with `keys.size() == 1`, `private_keys.size() == 1`, the stored private metadata equal to the second object, and descriptor extraction returning one xpub. After changing the regression expectations to the contract, the same old source exited with `keys.size() [1 != 2]` and a fatal `private_keys.size() [1 != 2]`. The old map behavior is the exact `wallet_xprvs[xpub] = CExtKey(xpub, key)` update pattern, not a synthetic comparator-only example.
+
+The fixture also built `wsh(multi(2,xpub1,xpub2))` through the production descriptor parser, so distinct metadata is accepted at the public descriptor boundary. This is not invalid curve data, malformed BIP32 framing, or a consensus case; it is a valid public-object identity collision in API aggregation.
+
+### Fix and verification
+
+The comparator now orders public key, chain code, depth, fingerprint, and child number, making ordered-container equivalence consistent with `operator==`. Version bytes remain outside this comparator because they remain outside `operator==`; PSBT keeps its complete serialized-key comparator. The permanent `bip32_tests/extpubkey_metadata_identity` regression checks two set entries, two map entries, preservation of each map value's metadata, `CExtKey::Neuter()` matching the corresponding xpub, and two xpubs returned by `Descriptor::GetPubKeys()`.
+
+- Repaired build: `TMPDIR=/data/my_storage/tmp/cycle310-public-object ninja -C /data/my_storage/tmp/cycle246-wallet test_bitcoin -j4`, exit `0`.
+- Focused repaired test: `bip32_tests/extpubkey_metadata_identity`, all checks passed, `*** No errors detected`.
+- Relevant repaired suites: `bip32_tests,descriptor_tests,psbt_tests,wallet_rpc_tests`, seed `31003`, 38 test cases selected, exit `0`, and `*** No errors detected`. Log: `/data/my_storage/tmp/cycle310-public-object/relevant-suites-final.log`.
+- `git diff --check` passed. The first slower `-j1` build was stopped after it was clear that four-job compilation could use the dedicated scratch `TMPDIR`; no protected process was stopped.
+
+### Verdict and handoff
+
+Confirmed local public-object aggregation defect and fixed in the shared comparator contract. The impact is loss or mismatch of BIP32 provenance metadata in descriptor/wallet enumeration and xpub/xprv output; no consensus acceptance, private-key disclosure, or funds-loss primitive was established. The selected journal, source, and regression belong in one self-contained finding commit. Add a follow-up catalog goal for explicit extended-key identity matrices across descriptors, wallet RPC, migration, backup, and PSBT, then rebase and close the cycle state separately.
+
 ## Cycle 299: PSBT global xpub serialized-key identity
 
 ### Selection and gate

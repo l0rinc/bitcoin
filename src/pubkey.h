@@ -363,7 +363,19 @@ struct CExtPubKey {
         } else if (a.pubkey > b.pubkey) {
             return false;
         }
-        return a.chaincode < b.chaincode;
+        if (a.chaincode < b.chaincode) {
+            return true;
+        } else if (b.chaincode < a.chaincode) {
+            return false;
+        }
+        // Keep ordered-container equivalence consistent with operator==.
+        if (a.nDepth != b.nDepth) {
+            return a.nDepth < b.nDepth;
+        }
+        if (a.fingerprint != b.fingerprint) {
+            return a.fingerprint < b.fingerprint;
+        }
+        return a.nChild < b.nChild;
     }
 
     KeyFingerprint id_key_fingerprint() const

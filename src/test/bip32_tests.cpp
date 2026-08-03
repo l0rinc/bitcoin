@@ -7,11 +7,14 @@
 #include <clientversion.h>
 #include <key.h>
 #include <key_io.h>
+#include <script/descriptor.h>
 #include <streams.h>
 #include <test/util/setup_common.h>
 #include <util/bip32.h>
 #include <util/strencodings.h>
 
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -303,6 +306,41 @@ BOOST_AUTO_TEST_CASE(bip32_invalid_derivation_inputs)
     BOOST_CHECK(!valid_pubkey.Derive(child_pubkey, 0x80000000U, &bip32_tweak));
     BOOST_CHECK(child_pubkey == child_pubkey_before);
     BOOST_CHECK(bip32_tweak == bip32_tweak_before);
+}
+
+BOOST_AUTO_TEST_CASE(extpubkey_metadata_identity)
+{
+    const CExtPubKey first{DecodeExtPubKey(test1.vDerive[0].pub)};
+    CExtPubKey second{first};
+    second.nDepth = 1;
+    second.fingerprint = {0x11, 0x22, 0x33, 0x44};
+    second.nChild = 1;
+
+    BOOST_REQUIRE(!(first == second));
+    std::set<CExtPubKey> keys{first, second};
+    BOOST_CHECK_EQUAL(keys.size(), 2);
+
+    const CExtKey source_private{DecodeExtKey(test1.vDerive[0].prv)};
+    std::map<CExtPubKey, CExtKey> private_keys;
+    private_keys[first] = CExtKey(first, source_private.key);
+    private_keys[second] = CExtKey(second, source_private.key);
+    BOOST_REQUIRE_EQUAL(private_keys.size(), 2);
+    BOOST_CHECK_EQUAL(private_keys.at(first).nDepth, first.nDepth);
+    BOOST_CHECK_EQUAL(private_keys.at(second).nDepth, second.nDepth);
+    BOOST_CHECK(private_keys.at(first).fingerprint == first.fingerprint);
+    BOOST_CHECK(private_keys.at(second).fingerprint == second.fingerprint);
+    BOOST_CHECK(private_keys.at(first).Neuter() == first);
+    BOOST_CHECK(private_keys.at(second).Neuter() == second);
+
+    FlatSigningProvider provider;
+    std::string error;
+    const std::string descriptor = "wsh(multi(2," + EncodeExtPubKey(first) + "," + EncodeExtPubKey(second) + "))";
+    const auto descriptors = Parse(descriptor, provider, error);
+    BOOST_REQUIRE_MESSAGE(descriptors.size() == 1, error);
+    std::set<CPubKey> pubkeys;
+    std::set<CExtPubKey> extpubkeys;
+    descriptors[0]->GetPubKeys(pubkeys, extpubkeys);
+    BOOST_CHECK_EQUAL(extpubkeys.size(), 2);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
