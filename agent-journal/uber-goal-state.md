@@ -1072,6 +1072,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 302 (goal 126 LevelDB semantics, draw
+   raw=7175895203802760358 n=10 idx=8): comparator N/A (default
+   Bytewise everywhere, no custom in-tree); bloom standard
+   10 bits/key; iterator-vs-concurrent-writes conformance
+   harness 20 rounds 0 violations (torn/post-snapshot/status,
+   ASan+UBSan silent); pinned-iterator + overwrite + delete +
+   full CompactRange keeps complete original snapshot (20,000
+   keys) — both arms DISMISSED as defects; real iterator hazard
+   (DB reset mid-scan) already covered-ahead (35744 family).
+   Harnesses in agent-journal/artifacts/. Regression #7 running.
    Cycle 301 (goal 112 replay/continuity/FP-revalidation, draw
    raw=8554301223849903997 n=11 idx=2): CONTINUITY GAP FIXED —
    fault-injection harnesses lived only in /tmp (ephemeral);
