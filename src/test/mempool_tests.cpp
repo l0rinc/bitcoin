@@ -1438,6 +1438,28 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
     BOOST_CHECK(pool.GetCluster(Txid::FromUint256(uint256::ZERO)).empty());
 }
 
+BOOST_AUTO_TEST_CASE(MempoolUnbroadcastMemoryUsage)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    LOCK2(cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    CMutableTransaction tx;
+    tx.vin.resize(1);
+    tx.vout.resize(1);
+    tx.vout[0].nValue = 10 * COIN;
+    tx.vout[0].scriptPubKey = CScript() << OP_1;
+    const Txid txid{tx.GetHash()};
+    TryAddToMempool(pool, entry.Fee(1000LL).FromTx(tx));
+
+    const size_t before{pool.DynamicMemoryUsage()};
+    pool.AddUnbroadcastTx(txid);
+    BOOST_CHECK_EQUAL(pool.DynamicMemoryUsage() - before, 0); // TODO: Include the retained set node in reported usage
+
+    pool.RemoveUnbroadcastTx(txid);
+    BOOST_CHECK_EQUAL(pool.DynamicMemoryUsage(), before);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_CASE(MempoolCheckSaturatingFeeDiagram, TestChain100Setup)
