@@ -252,3 +252,24 @@ Own operational hygiene verified + repaired:
 - Dirty state: tracked tree clean; user untracked files intact.
 Verdict: isolation COMPLIANT after the /tmp sweep; the artifacts/
 dir is now the single harness home (replay README maintained).
+
+## Cycle 310 (goal 111 coverage manifest — flood-triage closure audit)
+Manifest: 106 i9/codex branches -> 52 carry unique src/ commits
+(54 are journal/meta-only). Dispositions:
+- ASSESSED (17): goal10-snapshot, goal26, goal38, goal43 x2,
+  goal54 x2, goal56 x3, goal92, goal93 x3, goal98 x2, goal104.
+- WALLET-SCOPE deferred (9): goal27, goal56-wallet, goal57 x3,
+  goal6-external-signer x2, goal88, goal67-v29.3.
+- RELEASE-BRANCH (2): goal67-v30.0/v31.0 (upstream backport mgmt).
+- TEST/FUZZ-ONLY oracles (12): goal48 x4, goal87 x4, goal9-real-disk,
+  goal10-blockfilter, goal10-fuzz-gap, goal61, goal71.
+- MINOR (2): goal31 help text, goal41 ISO8601 range.
+- UNREVIEWED CORE (ranked): goal7-getblocktxn (compact-blocks
+  index bounds, REMOTE) > goal6-merkle-recurrence (merkle state
+  reset, consensus-adjacent) > goal72 x2 (settings durability,
+  write-family sibling) > goal86 x2 (index reorg recovery) >
+  goal43-reindex-interrupt (init liveness) > goal7-descriptor-range
+  (RPC-gated wraparound).
+Incomplete coverage admitted: the 12 test/fuzz-only oracles were
+classified by commit message + scope, not individually verified.
+Cell to close next: goal7-getblocktxn (highest reachability).
