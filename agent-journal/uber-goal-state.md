@@ -1072,6 +1072,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 297b (same cycle): goal43-cluster-size — count arm
+   COVERED-AHEAD (in-tree both-bounds :115-120), size arm
+   CONFIRMED + ADOPTED (failing-before 2 arms accepted; passing-
+   after mempool_tests green; minimal pre-ingestion guard variant
+   vs their helper refactor — avoids the post-multiply overflow
+   window; audit/adopt-clustersize-validation a3253e6396, archive
+   e9cb3e3f02, F29).
    Cycle 297 (radar-flood continuation): goal26-null-mempool
    COVERED-AHEAD (fork 0a2deeea1d 2026-07-19 with kernel-API
    reproducer + test; parallel 1d05b4ac4f semantic-duplicate);
