@@ -1195,3 +1195,62 @@ DBs; malformed-keyspace fixtures never reach Cursor().
 Adoption: audit/adopt-txdb-cursor-firstkey 8481b1f27f (smallest
 buildable commit: fix + regression test). Severity: corrupt-only
 robustness (Medium-low); covered-ahead while upstream 35654 is open.
+
+### goal93-xor-key (d7d3559a30): CONFIRMED + ADOPTED
+Mechanism: InitBlocksdirXorKey (src/node/blockstorage.cpp) creates
+blocksdir/xor.dat via fopen("wbx") + AutoFile write + checked
+fclose. A short write (disk full/quota/transient IO fault) throws
+from operator<< BEFORE the fclose check; the FILE* closes on stack
+unwind but the TRUNCATED FILE REMAINS. Next startup: the file exists
+so the read path treats it as authoritative; reading the fixed-size
+8-byte key from 1 byte fails (AutoFile::read: end of file) — init
+aborts on every subsequent start until manual deletion. Loud, not
+silent; no wrong-key reads possible (our earlier symmetry-journal
+verdict covers torn-content reads: they throw).
+Trust boundary: local storage fault during first-ever key creation;
+NOT network/consensus reachable; no data corruption — availability
+only (self-inflicted unbootable datadir). Same write-failure family
+as F19 flush-failure (f90291ffb9).
+Evidence (build-after ASan Debug bitcoind, deterministic injection):
+- FAILING-BEFORE: LD_PRELOAD=/tmp/xor_interpose.so (one-shot fwrite
+  interposer accepting 1 of 8 key bytes) + fresh regtest datadir:
+  boot1 exit=1 'Failed to initialize ChainstateManager:
+  AutoFile::write: write failed'; xor.dat LEFT BEHIND = 1 byte;
+  restart WITHOUT interposer: 'AutoFile::read: end of file' — FAIL.
+- PASSING-AFTER (fix applied): identical injection: boot1 exit=1
+  same write error, xor.dat ABSENT (removed on failure); restart:
+  boots, getblockcount=0, xor.dat=8 bytes, bitcoin-cli stop clean.
+- Second verifier form: parallel campaign's independent RelWithDebInfo
+  reproducer (their commit message), same mechanism and outcome.
+Why existing tests missed it: no fault injection on the xor-key
+creation path; the write-error branch of InitBlocksdirXorKey is
+unreachable without an injected IO fault.
+Adoption: audit/adopt-xor-key-shortwrite 2110abf119 (fix only;
+regression evidence = the injection pair below; no unit-test hook
+exists for this init path — the harness is the regression).
+Severity: Medium-low local availability (requires prior IO fault);
+covered-ahead; upstream master vulnerable at 556988790a.
+Limitations: Linux x86_64 LD_PRELOAD only; power-loss mid-write
+(torn fs state) not exercised — but torn content already throws on
+read by design (symmetry journal), only the remove-on-failure
+cleanup is new.
+
+### Preserved harness (provenance: this cycle, host gcc 13/clang-18)
+/tmp/xor_interpose.c (one-shot short-write interposer):
+    #define _GNU_SOURCE
+    #include <dlfcn.h>
+    #include <stdio.h>
+    static size_t (*real_fwrite)(const void*, size_t, size_t, FILE*) = NULL;
+    static int armed = 1;
+    size_t fwrite(const void* ptr, size_t size, size_t nmemb, FILE* stream) {
+        if (!real_fwrite) real_fwrite = dlsym(RTLD_NEXT, "fwrite");
+        if (armed && size * nmemb == 8) {
+            armed = 0;
+            real_fwrite(ptr, 1, 1, stream);
+            return size == 1 ? 1 : 0;
+        }
+        return real_fwrite(ptr, size, nmemb, stream);
+    }
+Build: gcc -shared -fPIC -o /tmp/xor_interpose.so /tmp/xor_interpose.c -ldl
+Driver: /tmp/xor_experiment.sh <prefix|postfix> — fresh /tmp/xor-test-*
+datadir, injected boot, xor.dat size check, clean restart check.
