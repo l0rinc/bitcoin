@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 318 Selection
+
+- Selected index: `47`
+- Goal slug: `build-ci-parity`
+- Goal title: Build-system and CI parity audit
+- Selection command: `shuf -i 0-117 -n 1`
+- Catalog SHA-256: `82fe4d3eefbf266fa38a76d9949344be6e8c454a881c0411fa567fa010c34019`
+- Base commit: `39eebea9546c197d2795d1b39139e23d0000a51d`
+- Branch: `uber-cycle-318-build-ci-parity-20260802`
+- Timestamp: `2026-08-03T02:58:43Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-47`
+
 ## Cycle 317 Selection
 
 - Selected index: `107`
