@@ -6,6 +6,7 @@ target_sources(fuzz
   PRIVATE
     coincontrol.cpp
     coinselection.cpp
+    feebumper.cpp
     crypter.cpp
     fees.cpp
     load_wallet.cpp
