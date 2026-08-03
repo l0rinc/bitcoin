@@ -1254,3 +1254,13 @@ cleanup is new.
 Build: gcc -shared -fPIC -o /tmp/xor_interpose.so /tmp/xor_interpose.c -ldl
 Driver: /tmp/xor_experiment.sh <prefix|postfix> — fresh /tmp/xor-test-*
 datadir, injected boot, xor.dat size check, clean restart check.
+
+### goal33 parse-oracle family (iso8601/integer/bech32/hex/base58/base32): COVERED, no adoption
+Parallel branch tips carry test-only "fuzz: check ..." contract
+oracles over string parsers. Every parser they pin already has an
+in-tree fuzz target (parse_iso8601.cpp, integer.cpp, bech32.cpp,
+hex.cpp, parse_numbers.cpp, string.cpp, base_encode_decode.cpp for
+base58/base32) and all passed through our 112,382-seed corpus
+program with zero crashes. Their oracles encode current behavior
+(contract pins), not defect fixes — no src/ changes in the series.
+Verdict: assess-only; coverage already in lineage.
