@@ -17,6 +17,19 @@ independently verified.
 - Fix: reject rounds > INT_MAX + harden KDF guard !count -> count < 1.
 - Next: offer upstream (already covered by #35859 — track its merge).
 
+## ✅ Empty-headers sync-slot stall — IBD liveness (adopted 5-commit stack)
+- Mechanism: a sync peer answering valid empty headers keeps its
+  initial-sync slot (empty input fails the sync-continuation check,
+  timestamp not cleared, slot release fires only when a replacement
+  exists) — IBD stalls on a slot the peer never fills.
+- Evidence: FAILING-BEFORE — the PR's own test fails at unfixed HEAD
+  ('Test empty headers response during initial sync'); PASSING-AFTER —
+  full p2p_initial_headers_sync.py green on the archive tip.
+- Branch/commits: audit/adopt-empty-headers (297c0f7ca7, 7de4fba5b8,
+  79aca0b97f, 92a98ffb30, 6d10e8e193); archive 93d076cd38 + stack-
+  completion repair 212672d6c9; journal #65 c17; index F22.
+- Next: track PR 35839 upstream (open 2026-07-29).
+
 ## ✅ RPC method-name log injection + wallet-name control chars (adopted 3 commits)
 - Mechanism: whitelist-rejection warnings logged method names UNSANITIZED
   (httprpc.cpp:118/:147) — newline injection forges node-looking lines;
