@@ -1060,7 +1060,9 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
    Cycle 274 (suspicion-mined): PR 35754 CI pinning CONFIRMED
-   gap + ADOPTED (4 arms verified); F23.
+   gap + ADOPTED (full 7-commit stack: lint binaries, uv.lock,
+   test pip hashes, Git-source pins, image digests, SDK digests,
+   action commits; F23).
    Cycle 273 (suspicion-mined): PR 35205 kernel dbcache
    setter: API extension, no defect; no adoption.
    Cycle 272 (suspicion-mined): PR 35797 PSBT abort: lineage
