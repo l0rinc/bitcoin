@@ -189,3 +189,27 @@ calibration CONFIRMS the adoption evidence chain end-to-end
 (failing-before shapes bit-identical to adoption-day runs).
 Negative-control note: each mutant's failure was verified to come
 from the mutation itself (restore + prior green runs), not drift.
+
+## Cycle 307 (goal 113 risk ranking + marginal yield, draw raw=12828903349424140929 masked=3605531312569365121 n=5 idx=1)
+Risk table for the live queue (severity x reachability x confidence
+x next-proof-value, 1-5 each; yield = next-proof / cost):
+| item | sev | reach | conf | proof-val | cost | note |
+| 125 WAL/MANIFEST recovery | 3 | 2 | 4 | 4 | low | reopen-time blast radius, queued cell, harness pattern proven |
+| 116 cross-scanner differential | 2 | 2 | 3 | 3 | med | clang-tidy MISSING on host (tool blocker) |
+| 111 coverage-manifest closure | 1 | 1 | 4 | 2 | low | bookkeeping, low defect yield |
+| 118 agent sandbox isolation | 1 | 1 | 2 | 2 | med | process, not code |
+| standing watches (35744 etc) | 4 | 3 | 5 | 1 | n/a | upstream-side, no local marginal work |
+| fuzz corpus re-runs | 1 | 1 | 5 | 1 | high | repeat of passing campaign (barred) |
+Ranking verdict: 125 has the only non-trivial marginal yield in
+the pool (4 proof-value at low cost, unexercised arm with
+reopen-time blast radius) — it SHOULD preempt the random pool on
+the next draw if not drawn naturally; 116 is tool-blocked
+(clang-tidy absent), 111/118 are bookkeeping with low defect
+yield; the standing watches have zero local marginal yield
+(upstream-side). Stop-depth audit: 126/127 dismissals stopped at
+the right depth (each arm conform + code-verified + harness
+preserved; the WAL/MANIFEST arm was explicitly queued rather than
+half-done — the correct marginal call).
+Decision for next cycle: if the random draw does not land 125,
+take 125 anyway as the marginal-yield winner (recorded deviation
+from the draw, per urgent-preempt rule).
