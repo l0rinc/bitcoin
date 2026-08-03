@@ -182,7 +182,13 @@ util::Expected<std::optional<TxoSpender>, std::string> TxoSpenderIndex::FindSpen
 
     // find all keys that start with the outpoint hash, load the transaction at the location specified in the key
     // and return it if it does spend the provided outpoint
-    for (it->Seek(std::pair{DB_TXOSPENDERINDEX, prefix}); it->Valid() && it->GetKey(key) && key.hash == prefix; it->Next()) {
+    for (it->Seek(std::pair{DB_TXOSPENDERINDEX, prefix}); it->Valid(); it->Next()) {
+        if (!it->GetKey(key)) {
+            LogError("Deserialize error reading txospender index key");
+            return util::Unexpected{strprintf("IO error finding spending tx for outpoint %s:%d.", txo.hash.GetHex(), txo.n)};
+        }
+        if (key.hash != prefix) break;
+
         if (const auto spender{ReadTransaction(key.pos)}) {
             for (const auto& input : spender->tx->vin) {
                 if (input.prevout == txo) {

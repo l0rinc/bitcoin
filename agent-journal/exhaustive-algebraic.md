@@ -262,3 +262,33 @@ No source defect or missing durable test oracle was confirmed. The iterator impl
 The evidence does not prove behavior for undefined caller sequences such as `Next()` after `Valid()==false`, does not add `Prev()`/`SeekToLast()` because those methods are not exposed by `CDBIterator`, and does not exhaust all LevelDB storage-engine corruption schedules or all serialized key types. The concurrent fuzz run is a smoke campaign, not a proof of race freedom. No source/test commit is justified; this journal-only handoff records the closed cell and exact remaining limits.
 
 Next queue: select a fresh goal after the separate cycle-state close. For Goal 18, prioritize a new persistence identity such as recovery/index-key reconstruction or a new failure schedule; do not reopen iterator, GCS, compact-target, or batch-parent cells without new evidence.
+
+## Cycle 325: txospender index key decode must not become a false negative
+
+### Selection and scope
+
+- Goal 18 (`exhaustive-algebraic`) was selected by `shuf -i 0-124 -n 1` -> `18` on branch `uber-cycle-325-exhaustive-algebraic-20260802`. Base commit was `e5d68894b7`; the catalog SHA-256 was `0cdd366b6eca70f027e1da2fd4a14385a930b3d29740bc3e87817b7989bbcc73`.
+- Prior Goal 18 cells for GCS `MatchAny`, compact-target canonicalization, cross-wrapper batches, and iterator status/exhaustion are closed. This cycle selected the queued persistence identity: reconstructing an index key must distinguish clean prefix exhaustion from a malformed persisted key.
+
+### Contract and pre-fix proof
+
+`TxoSpenderIndex::FindSpender()` documents `util::Unexpected` for I/O or deserialization errors and returns an engaged `Expected` containing `std::nullopt` only when the outpoint has not been spent. The old loop put `it->GetKey(key)` in its condition. A malformed key with the requested SipHash prefix therefore terminated the loop and returned a successful “not found” result, hiding local index corruption and making RPC callers treat the entry as absent.
+
+The regression creates a real spend in `TestChain100Setup`, lets a disk-backed index write its valid key, reads the persisted SipHash key, and writes a second raw key containing the correct `s` prefix and SipHash value but a truncated `CDiskTxPos`. The malformed key sorts before the valid key for the same prefix. On the unmodified source, the exact command
+
+    TMPDIR=/data/my_storage/tmp/cycle325-txospender-tmp /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=txospenderindex_tests/txospenderindex_reports_corrupt_entry_key --log_level=test_suite --report_level=short --color_output=false -- -testdatadir=/data/my_storage/tmp/cycle325-txospender-datadir
+
+exited 201: the new `!result.has_value()` check failed, with 5 of 6 assertions passing. The result was value-bearing but contained no spender, independently confirming the false-negative mechanism rather than a missing fixture.
+
+### Fix, mutation, and validation
+
+- Replace the condition-only decode with an explicit loop. A failed `GetKey()` now logs a deserialization error and returns the documented `Unexpected` result; a successfully decoded key with a different prefix still ends the range normally.
+- Rebuilt the wallet-enabled test binary with `cmake --build /data/my_storage/tmp/cycle246-wallet --target test_bitcoin -j2`. The first restoration rebuild briefly failed while recreating the 445MB node archive because `/data` had 449MB free. After removing only the three cycle-owned disposable test datadirs, the final `-j1` build linked successfully. No unrelated repository artifacts or protected processes were touched.
+- The fixed replay on fresh `.../cycle325-txospender-datadir-fixed` passed 1 case and 6 assertions. A temporary source mutation restoring the old loop, rebuilt and run with `.../cycle325-txospender-datadir-mutation`, failed status 201 at the same `!result.has_value()` assertion. The source was restored and rebuilt before the broad run.
+- The complete `txospenderindex_tests` suite passed 6 cases and 1,098 assertions with the fixed binary. `git diff --check` passed. Seven protected processes remained alive; storage remained critically constrained at approximately 374M free on `/data` and 0 bytes on `/` after validation.
+
+### Verdict and handoff
+
+Verdict: confirmed and fixed. This is a local persisted-index integrity/error-reporting defect. The fix does not change valid key ordering, valid spender lookup, or clean end-of-range behavior; it only prevents malformed entry keys from being reported as an ordinary absent spend. No consensus or remote trigger was demonstrated.
+
+The remaining Goal 18 queue is to audit analogous persisted-key reconstruction and range loops in block-filter, coin-statistics, transaction, and RPC index readers, especially `GetKey()`/`GetValue()` calls embedded in conditions. Do not reopen the txospender key or already closed GCS/compact/iterator cells without a new key type, recovery mode, or recurrence.

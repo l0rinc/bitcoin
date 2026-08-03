@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <index/txospenderindex.h>
+#include <crypto/siphash.h>
 #include <dbwrapper.h>
 #include <index/disktxpos.h>
 #include <test/util/common.h>
@@ -27,6 +28,19 @@ struct PersistedSpenderKey {
         READWRITE(prefix);
         READWRITE(obj.hash);
         READWRITE(obj.pos);
+    }
+};
+
+struct TruncatedSpenderKey {
+    uint64_t hash{0};
+
+    explicit TruncatedSpenderKey(uint64_t hash_in) : hash{hash_in} {}
+
+    SERIALIZE_METHODS(TruncatedSpenderKey, obj)
+    {
+        uint8_t prefix{'s'};
+        READWRITE(prefix);
+        READWRITE(obj.hash);
     }
 };
 } // namespace
@@ -246,6 +260,52 @@ BOOST_FIXTURE_TEST_CASE(txospenderindex_rejects_corrupt_siphash_key, TestChain10
 
     TxoSpenderIndex index{interfaces::MakeChain(m_node), 1 << 20, false, false};
     BOOST_CHECK(!index.Init());
+    index.Stop();
+}
+
+BOOST_FIXTURE_TEST_CASE(txospenderindex_reports_corrupt_entry_key, TestChain100Setup)
+{
+    const CScript& coinbase_script = m_coinbase_txns[0]->vout[0].scriptPubKey;
+    for (int i = 0; i < 10; ++i) CreateAndProcessBlock({}, coinbase_script);
+
+    CMutableTransaction spender;
+    spender.vin.resize(1);
+    spender.vin[0].prevout = COutPoint(m_coinbase_txns[0]->GetHash(), 0);
+    spender.vout.resize(1);
+    spender.vout[0].nValue = m_coinbase_txns[0]->GetValueOut();
+    spender.vout[0].scriptPubKey = coinbase_script;
+
+    std::vector<unsigned char> signature;
+    const uint256 signature_hash = SignatureHash(coinbase_script, spender, 0, SIGHASH_ALL, 0, SigVersion::BASE);
+    BOOST_REQUIRE(coinbaseKey.Sign(signature_hash, signature));
+    signature.push_back(static_cast<unsigned char>(SIGHASH_ALL));
+    spender.vin[0].scriptSig << signature;
+
+    CreateAndProcessBlock({spender}, coinbase_script);
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    const COutPoint spent{spender.vin[0].prevout};
+    const fs::path db_path{m_args.GetDataDirNet() / "indexes" / "txospenderindex" / "db"};
+
+    {
+        TxoSpenderIndex index{interfaces::MakeChain(m_node), 1 << 20, false, true};
+        BOOST_REQUIRE(index.Init());
+        index.Sync();
+        BOOST_REQUIRE(index.FindSpender(spent).value().has_value());
+        index.Stop();
+    }
+
+    {
+        CDBWrapper db({.path = db_path, .cache_bytes = 1 << 20, .obfuscate = false, .bloom_filter = false});
+        std::pair<uint64_t, uint64_t> siphash_key;
+        BOOST_REQUIRE(db.Read("siphash_key", siphash_key));
+        const uint64_t prefix = PresaltedSipHasher(siphash_key.first, siphash_key.second)(spent.hash.ToUint256(), spent.n);
+        db.Write(TruncatedSpenderKey{prefix}, std::array<uint8_t, 1>{0}, /*fSync=*/true);
+    }
+
+    TxoSpenderIndex index{interfaces::MakeChain(m_node), 1 << 20, false, false};
+    BOOST_REQUIRE(index.Init());
+    const auto result = index.FindSpender(spent);
+    BOOST_CHECK(!result.has_value());
     index.Stop();
 }
 
