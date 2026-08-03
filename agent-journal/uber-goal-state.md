@@ -154,6 +154,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 7 | resource-exhaustion-variants | EXHAUSTED | 2026-08-02 | bound census: 16/16 constants enforced+measured |
 | 94 | bindings-ffi-parity | CYCLE-2 | 2026-07-29 | enum mapping static_assert tables (073d543f26), reorder tripwire fires at :268 |
 | 94 | bindings-ffi-parity | CYCLE-3 | 2026-08-02 | wrapper ownership sound; copy family documented-nonnull (SIGSEGV=annotated misuse); DISMISSED |
+| 94 | bindings-ffi-parity | CYCLE-4 | 2026-08-03 | PR 35662: lineage already protected (67239a4a19 flag-reset); upstream asserts |
 | 64 | finding-dedup-recurrence | CYCLE-1 | 2026-07-29 | findings-index.md built; 5 fixes confirmed NOT in lineage (F1,F2,F3,F7,F9) |
 | 64 | finding-dedup-recurrence | CYCLE-4 | 2026-08-02 | index updated: F17 null-destroy, F18 qa-assets pin (F9-sibling), L3 txgraph retention open item |
 | 104 | analogical-vulnerability-translation | CYCLE-3 (queue-empty) | 2026-07-31 | INTERPRETER-CONFUSION: descriptor/miniscript limits agree, all fail closed (valid nest cap 200 via ops 201; parse cap 3600; tr braces 128); DISMISSED |
@@ -1059,6 +1060,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 275 (suspicion-mined): PR 35662 txdata reuse: lineage
+   already protected (67239a4a19); upstream asserts-on-reuse.
    Cycle 274 (suspicion-mined): PR 35754 CI pinning CONFIRMED
    gap + ADOPTED (full 7-commit stack: lint binaries, uv.lock,
    test pip hashes, Git-source pins, image digests, SDK digests,
