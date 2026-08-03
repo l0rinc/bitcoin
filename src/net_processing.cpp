@@ -421,6 +421,8 @@ struct Peer {
 
     /** Time of the last getheaders message to this peer */
     NodeClock::time_point m_last_getheaders_timestamp GUARDED_BY(NetEventsInterface::g_msgproc_mutex){};
+    /** Whether empty headers released this peer's initial sync slot. */
+    bool m_initial_headers_sync_released GUARDED_BY(NetEventsInterface::g_msgproc_mutex){false};
 
     /** Protects m_headers_sync **/
     Mutex m_headers_sync_mutex;
@@ -1022,6 +1024,10 @@ private:
 
     bool TipMayBeStale() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+    bool IsBestHeaderStale() const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+    void ReleaseHeadersSyncSlot(CNodeState& state, Peer& peer) EXCLUSIVE_LOCKS_REQUIRED(cs_main, g_msgproc_mutex);
+
     /** Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks, until it has
      *  at most count entries.
      */
@@ -1460,6 +1466,21 @@ bool PeerManagerImpl::TipMayBeStale()
         m_last_tip_update = GetTime<std::chrono::seconds>();
     }
     return m_last_tip_update.load() < GetTime<std::chrono::seconds>() - std::chrono::seconds{consensusParams.nPowTargetSpacing * 3} && mapBlocksInFlight.empty();
+}
+
+bool PeerManagerImpl::IsBestHeaderStale() const
+{
+    AssertLockHeld(cs_main);
+    return m_chainman.m_best_header->Time() <= NodeClock::now() - BEST_HEADER_STALE_AGE;
+}
+
+void PeerManagerImpl::ReleaseHeadersSyncSlot(CNodeState& state, Peer& peer)
+{
+    AssertLockHeld(cs_main);
+    Assume(state.fSyncStarted);
+    state.fSyncStarted = false;
+    nSyncStarted--;
+    peer.m_headers_sync_timeout = 0us;
 }
 
 int64_t PeerManagerImpl::ApproximateBestBlockDepth() const
@@ -3233,15 +3254,27 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, Peer& peer,
         // If we were in the middle of headers sync, receiving an empty headers
         // message suggests that the peer suddenly has nothing to give us
         // (perhaps it reorged to our chain). Clear download state for this peer.
-        LOCK(peer.m_headers_sync_mutex);
-        if (peer.m_headers_sync) {
-            peer.m_headers_sync.reset(nullptr);
-            LOCK(m_headers_presync_mutex);
-            m_headers_presync_stats.erase(pfrom.GetId());
+        {
+            LOCK(peer.m_headers_sync_mutex);
+            if (peer.m_headers_sync) {
+                peer.m_headers_sync.reset(nullptr);
+                LOCK(m_headers_presync_mutex);
+                m_headers_presync_stats.erase(pfrom.GetId());
+            }
         }
-        // A headers message with no headers cannot be an announcement, so assume
-        // it is a response to our last getheaders request, if there is one.
-        peer.m_last_getheaders_timestamp = {};
+
+        LOCK(cs_main);
+        CNodeState& state{*Assert(State(pfrom.GetId()))};
+        if (state.fSyncStarted && IsBestHeaderStale()) {
+            ReleaseHeadersSyncSlot(state, peer);
+            peer.m_initial_headers_sync_released = true;
+        } else if (!peer.m_initial_headers_sync_released) {
+            // A headers message with no headers cannot be an announcement, so assume
+            // it is a response to our last getheaders request, if there is one.
+            // A peer that released its slot keeps its request timestamp as a backoff
+            // instead, so the scheduler does not hand the slot straight back to it.
+            peer.m_last_getheaders_timestamp = {};
+        }
         return;
     }
 
@@ -3304,8 +3337,10 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, Peer& peer,
 
     // If headers connect, assume that this is in response to any outstanding getheaders
     // request we may have sent, and clear out the time of our last request. Non-connecting
-    // headers cannot be a response to a getheaders request.
+    // headers cannot be a response to a getheaders request. A connecting response also
+    // ends any released-slot backoff.
     peer.m_last_getheaders_timestamp = {};
+    peer.m_initial_headers_sync_released = false;
 
     // If the headers we received are already in memory and an ancestor of
     // m_best_header or our tip, skip anti-DoS checks. These headers will not
@@ -4441,6 +4476,10 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             // use if we turned on sync with all peers).
             CNodeState& state{*Assert(State(pfrom.GetId()))};
             if (state.fSyncStarted || (!peer.m_inv_triggered_getheaders_before_sync && *best_block != m_last_block_inv_triggering_headers_sync)) {
+                // This peer's backoff was deliberately left armed when it released its
+                // slot; a new block announcement is fresh evidence, so let one request
+                // through rather than waiting for the backoff to expire.
+                if (peer.m_initial_headers_sync_released) peer.m_last_getheaders_timestamp = {};
                 if (MaybeSendGetHeaders(pfrom, GetLocator(m_chainman.m_best_header), peer)) {
                     LogDebug(BCLog::NET, "getheaders (%d) %s to peer=%d\n",
                             m_chainman.m_best_header->nHeight, best_block->ToString(),
@@ -6194,6 +6233,7 @@ bool PeerManagerImpl::SendMessages(CNode& node)
                 if (MaybeSendGetHeaders(node, GetLocator(pindexStart), peer)) {
                     LogDebug(BCLog::NET, "initial getheaders (%d) to peer=%d", pindexStart->nHeight, node.GetId());
 
+                    peer.m_initial_headers_sync_released = false;
                     state.fSyncStarted = true;
                     peer.m_headers_sync_timeout = current_time + HEADERS_DOWNLOAD_TIMEOUT_BASE +
                         (
@@ -6523,9 +6563,7 @@ bool PeerManagerImpl::SendMessages(CNode& node)
                         // Note: this will also result in at least one more
                         // getheaders message to be sent to
                         // this peer (eventually).
-                        state.fSyncStarted = false;
-                        nSyncStarted--;
-                        peer.m_headers_sync_timeout = 0us;
+                        ReleaseHeadersSyncSlot(state, peer);
                     }
                 }
             } else {

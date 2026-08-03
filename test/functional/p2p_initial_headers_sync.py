@@ -67,12 +67,46 @@ class HeadersSyncTest(BitcoinTestFramework):
     def wait_for_single_getheaders(self, peers, block_hash):
         self.wait_until(lambda: self.getheaders_recipients(peers))
         for p in peers:
-            with p2p_lock:
-                if "getheaders" in p.last_message:
-                    count += 1
-                    receiving_peer = p
-        assert_equal(count, 1)
-        return receiving_peer
+            p.sync_with_ping()
+        recipients = self.getheaders_recipients(peers)
+        assert_equal(len(recipients), 1)
+        recipients[0].wait_for_getheaders(block_hash=block_hash)
+        return recipients[0]
+
+    def test_empty_headers_sync_slot(self):
+        self.log.info("Test empty headers response during initial sync")
+        peer1 = self.nodes[0].add_p2p_connection(P2PInterface())
+        best_block_hash = int(self.nodes[0].getbestblockhash(), 16)
+        peer1.wait_for_getheaders(block_hash=best_block_hash)
+        peer1.send_and_ping(msg_headers())
+
+        # An unconnecting header is not a getheaders response, so it only draws a new
+        # request if the backoff has been cleared.
+        unconnecting_header = CBlock()
+        unconnecting_header.hashPrevBlock = 1
+        unconnecting_header.nBits = REGTEST_N_BITS
+        unconnecting_header.solve()
+        peer1.send_and_ping(msg_headers([unconnecting_header]))
+        with p2p_lock:
+            assert_equal("getheaders" in peer1.last_message, False)
+
+        peer2 = self.nodes[0].add_p2p_connection(P2PInterface())
+        peer3 = self.nodes[0].add_p2p_connection(P2PInterface())
+        for peer in [peer1, peer2, peer3]:
+            peer.sync_with_ping()
+
+        assert_equal(len(self.getheaders_recipients([peer2, peer3])), 1)
+
+        peer1.send_and_ping(msg_headers())
+        unconnecting_header.hashPrevBlock = 2
+        unconnecting_header.solve()
+        peer1.send_and_ping(msg_headers([unconnecting_header]))
+        with p2p_lock:
+            assert_equal("getheaders" in peer1.last_message, False)
+
+        self.announce_random_block([peer1])
+        with p2p_lock:
+            assert_equal("getheaders" in peer1.last_message, True)
 
     def test_released_slot_outbound_eviction(self):
         self.log.info("Test outbound eviction after releasing a headers sync slot")
