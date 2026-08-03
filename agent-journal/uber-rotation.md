@@ -207,3 +207,19 @@ self-consistent at the current archive tip (3501032880).
 ### Exact commands
 - cmake --build build-before test_bitcoin test_kernel; both
   suites; test_runner subset above; no processes left.
+
+## Consolidated regression sweep #2 (cycle 285, draw raw=13867619090362187920, 2026-08-03): final integrated lineage all-green
+
+### Scope (all 7 adopted fixes integrated)
+- test_bitcoin (full suite incl. merkle CVE anchor, empty-HMAC
+  vectors, flush-failure boundary, txgraph batteries): green.
+- test_kernel (destroy-null + abi layout): green.
+- Functional: feature_block, p2p_compactblocks, rpc_blockchain
+  (v1+v2), p2p_initial_headers_sync (F22's own test), rpc_whitelist
+  (F20's own test), rpc_psbt — ALL 7 Passed, 151s accumulated,
+  /tmp/btc285. No processes left.
+
+### Verdict
+FINAL INTEGRATED GREEN: the resumed protocol's adopted fix set
+(F19-F23 + merkle doc + strong-random guards) is self-consistent
+with the earlier lineage.
