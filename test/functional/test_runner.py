@@ -370,6 +370,7 @@ BASE_SCRIPTS = [
     'mempool_datacarrier.py',
     'feature_coinstatsindex.py',
     'feature_coinstatsindex_compatibility.py',
+    'feature_txospenderindex.py',
     'wallet_orphanedreward.py',
     'wallet_musig.py',
     'wallet_timelock.py',
