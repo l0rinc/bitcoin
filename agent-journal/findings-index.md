@@ -340,6 +340,20 @@ comment-drift family as F1 (LockPoints).
   full torcontrol_tests green. audit/adopt-tor-key-removal
   5cf00e1380; archive 3e5c7b1368. Write-failure family instance #6.
 
+## F33: txospenderindex stale tip reported as synced (goal86) — FIXED 2026-08-03
+- Mechanism: BaseIndex::Sync null-next path treats a stale side-
+  chain tip as synchronized when its fork is the active tip; after
+  invalidateblock + durable flush + unclean restart the index
+  retains a disconnected block's spender and gettxspendingprevout
+  reports it (public-RPC wrong spend status, persistent).
+- Evidence: failing-before feature_txospenderindex.py — prevout
+  returned WITH spendingtxid/spendingtx/blockhash of the
+  invalidated block (chain 200, index 201); passing-after unspent,
+  Tests successful. audit/adopt-txospender-stale-rewind 6cd9d75a67;
+  archive 902d84a97f.
+- Reachability: crash+invalidation gate, optional index;
+  correctness/integrity, not consensus. Upstream vulnerable.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |

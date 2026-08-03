@@ -67,18 +67,22 @@ independently verified.
 - Next: track PR 35714 upstream; adopt 0f04fbee2f characterization test
   if the author reworks it.
 
-## ✅ xor.dat short-write leaves unbootable datadir (F26, adopted 2110abf119)
-- Mechanism: InitBlocksdirXorKey left a truncated xor.dat when the
-  key write/close failed; next startup read it as authoritative ->
-  AutoFile::read: end of file -> unbootable until manual deletion.
-- Trigger: local IO fault (disk full/quota/transient) on first key
-  creation; loud failure, availability only. F19 write-failure family.
-- Evidence: deterministic one-shot LD_PRELOAD fwrite interposer —
-  pre-fix 1-byte xor.dat + restart EOF; post-fix file removed,
-  restart regenerates key, getblockcount=0, clean stop.
-- Branch/commit: audit/adopt-xor-key-shortwrite 2110abf119;
-  archive ebd42ea45e; upstream master vulnerable.
-- Next: none locally; offerable upstream with the injection harness.
+## 🟠 txospenderindex stale tip reported as synced (F33, adopted 6cd9d75a67)
+- Mechanism: BaseIndex::Sync null-next path treats a stale side-
+  chain tip as synchronized when its fork is the active tip; after
+  invalidateblock + durable flush + unclean restart the index
+  retains a disconnected block's spender and gettxspendingprevout
+  reports it — public-RPC wrong spend status, persistent.
+- Trigger: crash/kill after invalidation; optional index;
+  correctness/integrity, not consensus.
+- Evidence: failing-before — prevout returned WITH spendingtxid +
+  spendingtx + blockhash of the invalidated block (chain 200,
+  index 201); passing-after — unspent, feature_txospenderindex.py
+  green.
+- Branch/commit: audit/adopt-txospender-stale-rewind 6cd9d75a67;
+  archive 902d84a97f; upstream vulnerable. Same blockfilter-index
+  sibling (6ce88f28f7) queued.
+- Next: assess goal86-prune-restart sibling; offerable upstream.
 
 ## ✅ headers commitment cap wraps under lagging clock (F30, adopted 35473f91b4)
 - Mechanism: HeadersSyncState assigned signed (possibly negative)
