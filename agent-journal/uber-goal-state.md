@@ -1072,6 +1072,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 293 (watch, zero-delta x2 after resume): origin/master
+   static 556988790a; l0rinc fetch zero ref updates (865 heads);
+   qa-assets HEAD 918cdd3 == CI pin; dup-txid CI 44 queued/9
+   in_progress/3 success/1 skipped/0 failures — still no verdict;
+   watch PRs 35744/35859/35818/35620/35654 all open, unmerged.
+   No resume trigger fired.
    Cycle 292 (watch, zero-delta x1 after resume): origin/master
    static 556988790a; l0rinc fetch zero ref updates (865 heads);
    qa-assets HEAD 918cdd3 == CI pin; dup-txid CI (l0rinc 8dfa501356)
