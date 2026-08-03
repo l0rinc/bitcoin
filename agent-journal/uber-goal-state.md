@@ -1,3 +1,50 @@
+# Cycle 315 Completion
+
+- The exact selector from the 115-goal catalog was `shuf -i 0-114 -n 1` ->
+  goal `51` (`invariant-differential`). The dedicated branch is
+  `uber-cycle-315-invariant-differential-20260802`. Cycle-start HEAD was
+  `fdd1720c84961aaf40eb16f3bf460856b0f84f22`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; start divergence was `0 1451`;
+  and the selection entry was `a1f0b42535`.
+- The distinct metamorphic candidate was `ScriptCompression::Unser`'s
+  oversized-script branch. Historical commit `5d0434d13d` introduced the
+  bounded `s.ignore(nSize)` OOM guard and said the script should be replaced,
+  but the implementation appended `OP_RETURN` to a reused destination. A
+  deterministic encoded size of 10007 with 10001 payload bytes made the old
+  binary decode identical bytes differently into fresh versus pre-populated
+  `CTxOut` objects. The pre-fix targeted test failed with status 201.
+- Caller tracing proved production relevance through `Coin::Unserialize`,
+  undo records, `CDBIterator::GetValue`'s copy/commit behavior,
+  `CCoinsViewDBCursor::GetValue`, and the reused `Coin` in UTXO snapshot
+  export. The defect concerns malformed persisted or direct serialized input;
+  it does not change valid script serialization or consensus validation.
+- Finding commit `8d3a058c57` (`compressor: replace oversized scripts during
+  decode`) is authored by `Lőrinc <pap.lorinc@gmail.com>`. It clears the
+  destination before the replacement opcode. The regression compares both
+  destination states from the same stream. The fixed focused case and all 8
+  `compress_tests` cases passed with `*** No errors detected`.
+- Goal 115, `compressed-script-replacement-invariant`, was added with seed
+  journal `agent-journal/compressed-script-replacement-invariant.md`; it
+  expands the audit to malformed/truncated/noncanonical compressed scripts,
+  cursor reuse, undo/recovery, snapshot export, bounded consumption, and
+  output-on-failure contracts. Goal/catalog commit is `4b56ca47b4` (`goals:
+  add malformed UTXO decode campaign`). The catalog now contains 116
+  contiguous goals `0..115`; catalog SHA-256 is
+  `33b236d32ac47a56bd35bf3c9fff0121988df90c1c1e72dac1ee0ed12577e773`,
+  manifest SHA-256 is
+  `cd14bbd499291ae3bfa358ae830f1dc28e812acaea1f0997ba601298d2e22179`, the
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  the random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`.
+- `git diff --check` passed. No full rebuild or sanitizer run was attempted
+  because `/data` remains full with approximately 1.3G available; protected
+  workloads were kept alive and untouched. Existing untracked probes and user
+  files remain preserved.
+- Verdict: **confirmed and fixed**. After this state-close commit, perform a
+  fresh gate, fetch and rebase `origin/master`, draw exactly one selector with
+  `shuf -i 0-115 -n 1`, create a new `uber-cycle-316-*` branch, and continue.
+
 # Cycle 314 Completion
 
 - The exact selector from the 114-goal catalog was `shuf -i 0-113 -n 1` ->

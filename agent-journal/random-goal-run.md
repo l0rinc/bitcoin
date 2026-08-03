@@ -12,6 +12,16 @@
 - Timestamp: `2026-08-03T02:04:31Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-51`
 
+## Cycle 315 Result
+
+- The invariant-differential queue excluded prior chain-parameter, transaction-request, layered UTXO-cache, formatter, BIP32, and Taproot cells. The distinct metamorphic hypothesis was that oversized compressed-script decoding could depend on the destination object's prior script.
+- The historical OOM guard in `5d0434d13d` says an oversized script is replaced with a short invalid script, but `ScriptCompression::Unser` appended `OP_RETURN`. A deterministic 10007 encoded script-size value with exactly 10001 payload bytes made decoding into `CTxOut{1, OP_TRUE}` produce `OP_TRUE OP_RETURN`, while a fresh destination produced `OP_RETURN`. The unchanged targeted binary failed with status 201; the log is `/data/my_storage/tmp/cycle315-compress-before.log`.
+- The production reachability trace covers `Coin::Unserialize`, undo records, `CDBIterator::GetValue`'s copy/commit path, `CCoinsViewDBCursor::GetValue`, and the reused `Coin` in UTXO snapshot export. The issue is bounded to malformed persisted or direct serialized input; common fresh point lookups limit normal exposure but do not justify state-dependent formatter output.
+- Confirmed and fixed in `8d3a058c57` (`compressor: replace oversized scripts during decode`), authored by `Lőrinc <pap.lorinc@gmail.com>`. `ScriptCompression::Unser` now clears the destination before appending the documented replacement. The regression decodes identical bytes into fresh and pre-populated outputs. The fixed targeted case and all 8 `compress_tests` cases passed with `*** No errors detected`; after log: `/data/my_storage/tmp/cycle315-compress-after.log`.
+- Learned Goal 115, `compressed-script-replacement-invariant`, with seed journal `agent-journal/compressed-script-replacement-invariant.md`. It expands the suspicious surface to malformed/truncated/noncanonical compressed-script encodings, cursor reuse, undo recovery, snapshot export, bounded consumption, and output-on-failure contracts. Goal/catalog commit is `4b56ca47b` (`goals: add malformed UTXO decode campaign`).
+- The catalog now contains 116 contiguous goals (`0..115`); catalog SHA-256 is `33b236d32ac47a56bd35bf3c9fff0121988df90c1c1e72dac1ee0ed12577e773`, manifest SHA-256 is `cd14bbd499291ae3bfa358ae830f1dc28e812acaea1f0997ba601298d2e22179`, generator SHA-256 remains `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and random prompt SHA-256 remains `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`.
+- No full rebuild or sanitizer run was attempted because `/data` remains full with approximately 1.3G available; the existing protected workloads remain alive and untouched. After the state-close commit, fetch and rebase `origin/master`, run a fresh gate, draw exactly one selector with `shuf -i 0-115 -n 1`, create the next dedicated branch, and continue.
+
 ## Cycle 314
 
 - Selected index: `96`
