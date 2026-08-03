@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 324 Selection
+
+- Selected index: `32`
+- Goal slug: `history-incomplete-fixes`
+- Goal title: Whole-history incomplete-fix and migration mining
+- Selection command: `shuf -i 0-123 -n 1`
+- Catalog SHA-256: `f2b3a468817fb1d169021ecf567a42bf6c843b693aa9384842341a56fcbf074d`
+- Base commit: `aa99407416`
+- Branch: `uber-cycle-324-history-incomplete-fixes-20260802`
+- Timestamp: `2026-08-03T04:50:35Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-32`
+
 ## Cycle 323 Selection
 
 - Selected index: `3`
