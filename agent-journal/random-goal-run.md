@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 322 Selection
+
+- Selected index: `12`
+- Goal slug: `static-analysis-true-positives`
+- Goal title: Static-analysis true-positive campaign
+- Selection command: `shuf -i 0-121 -n 1`
+- Catalog SHA-256: `6ce33c08973b96f7f1c25f755a774ef4303f8e23920358594feb120565979cab`
+- Base commit: `3d9f1a12d786f18e7ed18b1b5ea7ed6a1d3a8507`
+- Branch: `uber-cycle-322-static-analysis-true-positives-20260802`
+- Timestamp: `2026-08-03T03:57:03Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-12`
+
 ## Cycle 321 Selection
 
 - Selected index: `43`
