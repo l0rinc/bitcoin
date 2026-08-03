@@ -670,3 +670,35 @@ root, c12 musig2) all closed; quiets pending new PSBT fields.
 ### Limitations
 - External signers (hardware wallets) may enforce membership;
   only Core's path was tested (c11 same caveat).
+
+## Cycle 13 (2026-08-03, draw 272, raw=16112864624053960703, suspicion-mined): PR 35797 PSBT output-before-input abort — our lineage ALREADY PROTECTED (53506a51e9, July 20); upstream master still vulnerable; coverage verified
+
+### Assessment
+- The PR's defect: UpdatePSBTOutput builds a signature creator
+  for input 0 unconditionally; PSBTv2 docs with outputs-before-
+  inputs abort the node (ECDSA/timelock access of a missing
+  input).
+- OUR STATE: psbt.cpp:610-614 already carries the vin.empty()
+  skip guard (fork commit 53506a51e9, 2026-07-20, WITH its own
+  27-line psbt_tests regression — suite green today).
+- UPSTREAM STATE: origin/master psbt.cpp:603-615 has NO guard —
+  still vulnerable; PR 35797 is its vehicle (hardens
+  MutableTransactionSignatureCreator for index-not-exist +
+  MuSig2/Schnorr).
+- Delta: the PR's approach is broader (all index-out-of-range);
+  ours covers the reachable producer (input-0-empty), with the
+  fork's own note that sign.cpp:623 has no other reachable
+  producer today.
+
+### Verdict
+COVERED AHEAD OF UPSTREAM: the defect class is closed in our
+lineage with regression evidence; upstream remains open via its
+own PR. No adoption needed; the #42 watch tracks 35797.
+
+### Exact commands
+- git log/show 53506a51e9; sed psbt.cpp:603-623 both trees;
+  psbt_tests green.
+
+### Limitations / queue
+- If upstream lands the broader signature-creator hardening,
+  evaluate replacing our skip with their shape (recorded gate).
