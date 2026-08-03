@@ -1072,6 +1072,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 318 (watch): upstream master advanced 30f6b05857 ->
+   e27c179db2 (merge #35869 lint: re-add guix Python linting;
+   ci/lint/requirements.txt +1 dep, guix security/symbol-check,
+   lint-python.py). F23 note: the ci/lint pin lockfiles will need
+   regeneration on next rebase (new requirement). No adoption
+   target (lint tooling). Author remote static (1363, 0 new).
    Cycle 317 (fuzz transplants + flood close-out): txospenderindex
    crash ROOT-CAUSED — harness-contract violation (parallel target
    seeds RNG, never SetMockTime; BaseIndex::Sync reads NodeClock;
