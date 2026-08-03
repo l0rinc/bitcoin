@@ -239,9 +239,13 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
         const secp256k1_pubkey *pk_ptr[1];
         secp256k1_xonly_pubkey agg_pk;
         unsigned char session_secrand[32];
+        unsigned char invalid_session_secrand[32];
+        unsigned char invalid_seckey[32] = { 0 };
         uint64_t nonrepeating_cnt = 0;
         secp256k1_musig_secnonce secnonce;
         secp256k1_musig_pubnonce pubnonce;
+        secp256k1_musig_secnonce invalid_secnonce;
+        secp256k1_musig_pubnonce invalid_pubnonce;
         const secp256k1_musig_pubnonce *pubnonce_ptr[1];
         secp256k1_musig_aggnonce aggnonce;
         secp256k1_musig_keyagg_cache cache;
@@ -275,6 +279,17 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
         CHECK(secp256k1_musig_nonce_agg(ctx, &aggnonce, pubnonce_ptr, 1));
         /* Make sure that previous tests don't undefine msg. It's not used as a secret here. */
         SECP256K1_CHECKMEM_DEFINE(msg, sizeof(msg));
+
+        /* The invalid secret-key path must not add a secret-dependent branch. */
+        memcpy(invalid_session_secrand, key, sizeof(invalid_session_secrand));
+        invalid_session_secrand[0] ^= 1;
+        SECP256K1_CHECKMEM_UNDEFINE(invalid_session_secrand, sizeof(invalid_session_secrand));
+        SECP256K1_CHECKMEM_UNDEFINE(invalid_seckey, sizeof(invalid_seckey));
+        ret = secp256k1_musig_nonce_gen(ctx, &invalid_secnonce, &invalid_pubnonce, invalid_session_secrand, invalid_seckey, &pk, msg, &cache, NULL);
+        SECP256K1_CHECKMEM_DEFINE(&invalid_pubnonce, sizeof(invalid_pubnonce));
+        SECP256K1_CHECKMEM_DEFINE(&ret, sizeof(ret));
+        CHECK(ret == 0);
+
         CHECK(secp256k1_musig_nonce_process(ctx, &session, &aggnonce, msg, &cache) == 1);
 
         ret = secp256k1_keypair_create(ctx, &keypair, key);
