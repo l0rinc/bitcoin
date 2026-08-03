@@ -554,6 +554,10 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
             LogDebug(BCLog::TOR, "Cached service private key to %s", fs::PathToString(GetPrivateKeyFile()));
         } else {
             LogWarning("tor: Error writing service private key to %s", fs::PathToString(GetPrivateKeyFile()));
+            std::error_code error;
+            if (!fs::remove(GetPrivateKeyFile(), error) && error) {
+                LogWarning("tor: Error removing failed service private key from %s: %s", fs::PathToString(GetPrivateKeyFile()), error.message());
+            }
         }
         AddLocal(m_service, LOCAL_MANUAL);
         // ... onion requested - keep connection open

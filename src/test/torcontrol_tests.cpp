@@ -5,6 +5,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <test/util/setup_common.h>
 #include <test/util/torcontrol.h>
 #include <torcontrol.h>
 
@@ -282,6 +283,28 @@ BOOST_AUTO_TEST_CASE(torcontrol_process_buffer_rejects_overlong_line)
             return std::string_view{e.what()} == "max_line_length exceeded by LineReader";
         });
     BOOST_CHECK(TorControlConnectionTest::ReceiveBuffer(conn) == original_buffer);
+}
+
+BOOST_FIXTURE_TEST_CASE(tor_private_key_write_failure_removes_path, BasicTestingSetup)
+{
+    TorController tor_controller;
+    CThreadInterrupt interrupt;
+    TorControlConnection conn{interrupt};
+
+    const fs::path private_key_file{tor_controller.GetPrivateKeyFile()};
+    BOOST_REQUIRE(fs::create_directory(private_key_file));
+
+    const std::string service_id(56, 'a');
+    TorControlReply reply;
+    reply.code = TOR_REPLY_OK;
+    reply.lines = {
+        "ServiceID=" + service_id,
+        "PrivateKey=ED25519-V3:" + std::string(64, 'A'),
+    };
+
+    tor_controller.add_onion_cb(conn, reply, /*pow_was_enabled=*/false);
+
+    BOOST_CHECK(!fs::exists(private_key_file));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
