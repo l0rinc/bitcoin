@@ -36,10 +36,14 @@ def check_ELF_RELRO(binary) -> bool:
     have_bindnow = False
     try:
         flags = binary.get(lief.ELF.DynamicEntry.TAG.FLAGS)
-        if flags.has(lief.ELF.DynamicEntryFlags.FLAG.BIND_NOW):
-            have_bindnow = True
+        have_bindnow = flags is not None and flags.has(lief.ELF.DynamicEntryFlags.FLAG.BIND_NOW)
     except Exception:
-        have_bindnow = False
+        pass
+    try:
+        flags1 = binary.get(lief.ELF.DynamicEntry.TAG.FLAGS_1)
+        have_bindnow |= flags1 is not None and flags1.has(lief.ELF.DynamicEntryFlags.FLAG.NOW)
+    except Exception:
+        pass
 
     return have_gnu_relro and have_bindnow
 
