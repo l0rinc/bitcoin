@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 326 Selection
+
+- Selected index: `124`
+- Goal slug: `migration-exception-rollback`
+- Goal title: Migration exception and rollback-boundary audit
+- Selection command: `shuf -i 0-125 -n 1`
+- Catalog SHA-256: `eec305dfa0d12fc3619f7a793b137aab8d9bc652b83d5c24cda5582f6d60b8ce`
+- Base commit: `d0bc9fd696`
+- Branch: `uber-cycle-326-migration-exception-rollback-20260802`
+- Timestamp: `2026-08-03T05:28:39Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-124`
+
 ## Cycle 325 Selection
 
 - Selected index: `18`
