@@ -82,3 +82,26 @@ overlap without deleting history.
 - First runnable experiment: read the diff, identify the cap
   condition; drive a regtest peer announcing far-future headers
   (mocktime skew) and measure request/commitment behavior pre/post.
+
+## Resolution log (cycle 306, goal 110 entropy-quality audit)
+- P1 persistence-write-failure sweep: EXECUTED as goal 119 cycle 1
+  (draw 299). Result: 6-instance family normalized, sweep exhausted
+  for src/ producers, i2p+tor adopted (F31/F32, archive 3e5c7b1368).
+  RESOLVED — superseded by campaign-119 journal cycle 1.
+- P2 deterministic-chain recipe oracle: DELIVERED as standing
+  harness agent-journal/artifacts/snap_builder2.py (+ framework
+  setup_nodes +1-block trap documented in artifacts/README.md).
+  RESOLVED as oracle, not a campaign goal.
+- P3 kernel setter-exception ownership: DISMISSED cycle 298 —
+  every trigger is bad_alloc-only (leak-under-OOM, no non-
+  allocation throw path identified). Resolved as negative
+  knowledge; resume only if a non-allocation throw is found.
+- P4 future-mtp headers commitment: CONFIRMED + ADOPTED cycle 298
+  (F30, 35473f91b4, archive a5a73c53f2). RESOLVED.
+Queue state: EMPTY. Session entropy flowed through campaign
+cycles directly (write-failure family normalization, clock-margin
+boundary table, LevelDB conformance harness shapes, chmod-as-root
+injection blind spot). No promotion-ready new proposals — the
+promotion bar (evidence-backed, nonduplicate) is not met by the
+remaining seeds (bad_alloc sweep = dismissed; methodology oracles
+= technique notes, not campaigns).
