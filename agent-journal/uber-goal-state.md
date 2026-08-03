@@ -1072,6 +1072,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 291 (verification): consolidated regression #3 — full
+   suite + kernel + 8 functional instances ALL GREEN.
    Cycle 290: flush-failure characterize adoption REDIRECTED
    (pre-fix anti-test dropped; fix oracle kept; S18).
    Cycle 289 (watch): master static; dup-txid CI progressing,
