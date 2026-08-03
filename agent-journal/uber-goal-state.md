@@ -1072,6 +1072,13 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 305 (goal 117 calibration, draw
+   raw=17929826660396438331 masked=8706454623541662523 n=7 idx=4):
+   mutation-catch battery on the final lineage — 3/3 adopted
+   oracles kill re-injected original defects (F25 txdb cursor,
+   F28 mempoolexpiry, F30 headers clamp; failure shapes bit-
+   identical to adoption-day failing-befores; all mutants
+   restored). Oracles live, evidence chain end-to-end.
    Cycle 304 (goal 127 LevelDB corruption/checksums/bg-errors,
    draw raw=11133441295003937015 masked=1910069258149161207 n=8
    idx=7): client assumptions code-verified (paranoid_checks +
