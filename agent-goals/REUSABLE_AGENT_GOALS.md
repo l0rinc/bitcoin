@@ -1,6 +1,6 @@
 # Reusable Continuous Agent Goals for Bitcoin Core and libsecp256k1
 
-This local catalog contains 112 standalone `/goal` prompts. Each fenced block is self-contained and can be selected independently. The catalog is generated from `goals.tsv`; keep the manifest and this file together when moving it.
+This local catalog contains 113 standalone `/goal` prompts. Each fenced block is self-contained and can be selected independently. The catalog is generated from `goals.tsv`; keep the manifest and this file together when moving it.
 
 ## Goals
 
@@ -2690,4 +2690,28 @@ Campaign execution rules: inventory the relevant surface, state the expected con
 
 Campaign focus:
 Audit the CMake relationship among BUILD_KERNEL_LIB, BUILD_UTIL_CHAINSTATE, BUILD_KERNEL_TEST, functional-test capability flags, install components, pkg-config/header exports, Windows presets, cross builds, reduced exports, and fuzz overrides. For every supported cell prove target membership, generated metadata, dependency closure, and truthful enablement; use configure-only matrices when compilation is too expensive, and fix only mismatches that can be reproduced with exact cache values and target or install evidence.
+```
+
+<a id="goal-112"></a>
+
+### 112. Differential and varint formatter input-boundary audit
+
+<!-- slug: difference-formatter-input-bounds; prompt-bytes: 3819 -->
+
+```text
+/goal
+Create or check out a dedicated branch before changing code. Treat this as a continuing, evidence-first investigation: after every cycle update `agent-journal/difference-formatter-input-bounds.md`, re-rank unchecked surfaces from accumulated evidence, choose the next distinct hypothesis, and continue. Never claim the repository is exhausted or follow a stale queue blindly. Stop only at a real session/tool limit or external blocker and leave an exact handoff.
+
+Journal the base and HEAD, dirty state, scope ledger, hypotheses, exact commands and key output, confirmed/dismissed/inconclusive candidates, unrelated leads, source links and versions, review precedent, limitations, and next queue. Search the journal, issues, pull requests, and history before reporting to avoid repeats. For every online pull request, record stated priorities, accepted and rejected approaches, whether preferences are general or contextual, and likely review objections.
+
+Prefer few definitive findings. Use one independent, self-sufficient commit per finding, authored as `Lőrinc <pap.lorinc@gmail.com>`, including its journal update. Every commit must build and test alone and be correct without later commits. Keep the smallest correct diff: no whitespace churn, broad refactors, speculative cleanup, or needless helpers. Use scratch state, fixed seeds and temporary directories; never use default datadirs, wallets, keys, or production databases. Do not hide failures with timeouts, narrower inputs, catches, assumptions, or broad suppressions.
+
+For each candidate, state the hypothesis and trust boundary; trace callers, history, tests, docs, and invariants; reproduce on clean HEAD; classify local code, test, documentation, tool, dependency, or other-project behavior; and lock a verdict of confirmed, dismissed, or inconclusive before drafting a fix. Keep discovery and verification independent when practical. External reports and implementations are seeds, not oracles; document remote-only bugs with a report-ready reproducer.
+
+Require hard proof: a failing-before/passing-after test, minimized fuzz seed or fixture, first-invalid-operation sanitizer/static trace, mutation or coverage delta, benchmark/profile table, build-matrix log, or rigorous proof when execution is impossible. For consensus, wallet/key, crypto, persistence, or remotely reachable findings, use two independent verifier forms when practical. Check patches apply; run narrow then broad validation and a per-commit stack loop. Commit messages must cover mechanism, reachability, impact, seed/source, exact commands and key output, correctness, limitations, and handoff. If the session ends without a fix, commit at most one clearly labeled journal-only handoff snapshot.
+
+Campaign execution rules: inventory the relevant surface, state the expected contract or invariant before testing, and choose the smallest deterministic experiment that can falsify it. Preserve minimized inputs, raw traces, profiles, coverage, and rejected hypotheses. Re-evaluate priorities after every cycle and immediately continue with a distinct high-value hypothesis. Do not manufacture commits to show activity.
+
+Campaign focus:
+Audit custom DifferenceFormatter, CompactSize, varint, and related vector formatters at public P2P, RPC, file, and persisted-state boundaries. Compare declared counts with representable element domains, allocation timing, arithmetic overflow, partial output, retry or penalty behavior, valid maximum cardinality, and malformed-input accounting across every caller. Use count-only malformed fixtures, independent old/new probes, boundary round trips, sanitizer or allocation evidence, history and recurrence searches, and exact caller contracts; avoid repeating repaired GETBLOCKTXN unless a different formatter or failure mode is proven.
 ```
