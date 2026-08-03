@@ -17,6 +17,17 @@ independently verified.
 - Fix: reject rounds > INT_MAX + harden KDF guard !count -> count < 1.
 - Next: offer upstream (already covered by #35859 — track its merge).
 
+## ✅ CI external-input pinning completed (PR 35754, 4 arms)
+- Mechanism: test pip deps unpinned, actions by floating tags, OCI
+  images by tag, lint tool binaries unverified — all mutable between
+  runs without a repository change (the F9/F18 family's open surface).
+- Evidence: gap greps at HEAD; adoption verified in-tree:
+  --require-hashes + 190-hash lockfiles (pycapnp/pyzmq), actions@
+  full commits, images @sha256 digests, shellcheck/mlc sha256sum.
+- Branch/commits: audit/adopt-ci-pinning (5671b32614, 9bf68d70bc,
+  0f0eb35c8b, 49cc4e8cab); archive ed457edca9; index F23.
+- Next: lockfile-refresh cadence rides the #42 watch.
+
 ## ✅ Empty-headers sync-slot stall — IBD liveness (adopted 5-commit stack)
 - Mechanism: a sync peer answering valid empty headers keeps its
   initial-sync slot (empty input fails the sync-continuation check,
