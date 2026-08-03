@@ -1072,6 +1072,17 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 321 (verification close): dbwrapper_scheduled_pair
+   20k CLEAN ('Done 20000 runs in 10436 second(s)', ~0.52
+   s/input; zero crashes/asserts/artifacts; process reaped, no
+   jobs left running). Target committed af32701739 on
+   audit/transplant-index-fuzz; goal71 c6 verdict
+   DISMISSED-coverage (non-FIFO deferred-compaction schedule
+   space reaches no divergence; target retained as permanent
+   coverage), campaign #71 back to EXHAUSTED. This was the
+   LAST open pipeline item: catalog is watches-only, archive
+   copies da1346479f (target) + 8d24d455f0 (journal),
+   Source-mapped.
    Cycle 320 (watch): ALL STATIC except one evaporation.
    upstream master e27c179db2 unchanged; author remote 1363
    heads, 0 new; qa-assets == pin 918cdd3; watch PRs
@@ -2240,3 +2251,18 @@ gate-independent metric. MiniWallet (~80 tx/s, no wallet DB) beats
 wallet-RPC (~0.1-26 tx/s with silent failure modes; fresh regtest
 needs -fallbackfee) for tx-heavy chain construction; the fork's
 framework needs called_by_framework=True on generate().
+Host-disk note (2026-08-03, cycle 320): / (also /tmp and
+/mnt/my_storage — single nvme0n1p2) at 100% use, 1.8 GiB free.
+Consequences for future cycles: NO new build trees, NO qa-assets
+corpus pulls, NO IBD/chainstate-copy experiments until space is
+reclaimed; journal/commit traffic (KB-scale) remains safe, as do
+memenv-only fuzz campaigns (scheduled_pair writes nothing unless
+it crashes). If a crash artifact cannot be written, libFuzzer
+still prints the base64 seed to stderr — capture from the task
+log. Reclaim candidates if needed: build-before/, build-after/,
+build_fuzz/ CMake object dirs are regenerable.
+Upstream-advance note (2026-08-03, cycle 320 watch): origin/master
+e27c179db2 -> 1ed14c6122 (merge bitcoin-core/gui#872, watchonly-
+wallet export menu; qt/* + interfaces/wallet.h + wallet/interfaces.cpp
+only). Out of scope (GUI/wallet); zero overlap with our modified
+files; no adoption target. qa-assets still pinned 918cdd3.
