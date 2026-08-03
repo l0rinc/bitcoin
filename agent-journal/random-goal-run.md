@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 325 Selection
+
+- Selected index: `18`
+- Goal slug: `exhaustive-algebraic`
+- Goal title: Exhaustive and algebraic-invariant audit
+- Selection command: `shuf -i 0-124 -n 1`
+- Catalog SHA-256: `0cdd366b6eca70f027e1da2fd4a14385a930b3d29740bc3e87817b7989bbcc73`
+- Base commit: `e5d68894b7`
+- Branch: `uber-cycle-325-exhaustive-algebraic-20260802`
+- Timestamp: `2026-08-03T05:15:56Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-18`
+
 ## Cycle 324 Selection
 
 - Selected index: `32`
