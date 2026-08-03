@@ -26,6 +26,8 @@
 #include <test/util/validation.h>
 #include <uint256.h>
 #include <util/byte_units.h>
+#include <util/fs.h>
+#include <util/readwritefile.h>
 #include <util/result.h>
 #include <util/vector.h>
 #include <validation.h>
@@ -116,6 +118,22 @@ void CheckSnapshotActivationFailurePreserved(ChainstateManager& chainman, const 
 } // namespace
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, TestingSetup)
+
+BOOST_FIXTURE_TEST_CASE(snapshot_base_blockhash_rejects_truncated, TestingSetup)
+{
+    const fs::path dir = gArgs.GetDataDirNet() / "snapshot_base_blockhash_test";
+    const fs::path file = dir / node::SNAPSHOT_BLOCKHASH_FILENAME;
+    fs::create_directories(dir);
+
+    for (const size_t size : {0, 1, 31}) {
+        BOOST_REQUIRE(WriteBinaryFile(file, std::string(size, '\0')));
+        BOOST_CHECK(!node::ReadSnapshotBaseBlockhash(dir));
+    }
+
+    BOOST_REQUIRE(WriteBinaryFile(file, std::string(32, '\x42')));
+    BOOST_CHECK(node::ReadSnapshotBaseBlockhash(dir));
+    fs::remove_all(dir);
+}
 
 BOOST_AUTO_TEST_CASE(load_external_block_file_unknown_parent_position)
 {
