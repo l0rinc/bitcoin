@@ -91,6 +91,37 @@ BOOST_FIXTURE_TEST_CASE(wallet_seed_ignores_deterministic_rng, TestingSetup)
     BOOST_CHECK(first_destination != second_destination);
 }
 
+BOOST_FIXTURE_TEST_CASE(wallet_encryption_ignores_deterministic_rng, TestingSetup)
+{
+    struct EncryptionMaterial {
+        CKeyingMaterial master_key;
+        std::vector<unsigned char> salt;
+    };
+    const SecureString passphrase{"passphrase"};
+    const auto encrypt_wallet{[&] {
+        CWallet wallet{m_node.chain.get(), "", CreateMockableWalletDatabase()};
+        {
+            LOCK(wallet.cs_wallet);
+            wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+            wallet.SetupDescriptorScriptPubKeyMans();
+        }
+
+        SeedRandomForTest(SeedRand::ZEROS);
+        BOOST_REQUIRE(wallet.EncryptWallet(passphrase));
+        const CMasterKey& master_key{wallet.mapMasterKeys.at(1)};
+        CCrypter crypter;
+        BOOST_REQUIRE(crypter.SetKeyFromPassphrase(passphrase, master_key.vchSalt, master_key.nDeriveIterations, master_key.nDerivationMethod));
+        CKeyingMaterial plain_master_key;
+        BOOST_REQUIRE(crypter.Decrypt(master_key.vchCryptedKey, plain_master_key));
+        return EncryptionMaterial{plain_master_key, master_key.vchSalt};
+    }};
+
+    const EncryptionMaterial first{encrypt_wallet()};
+    const EncryptionMaterial second{encrypt_wallet()};
+    BOOST_CHECK(first.master_key != second.master_key);
+    BOOST_CHECK(first.salt != second.salt);
+}
+
 BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
 {
     CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
