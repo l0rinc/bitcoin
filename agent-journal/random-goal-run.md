@@ -12,6 +12,43 @@
 - Timestamp: `2026-08-03T02:58:43Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-47`
 
+## Cycle 318 Result
+
+- The selected build/CI parity campaign compared the CMake Windows target
+  graph, native MSVC helper, MinGW cross helper, workflow matrices, presets,
+  and historical checker changes. The native standard job enables
+  `BUILD_KERNEL_LIB=ON` and `BUILD_UTIL_CHAINSTATE=ON`; CMake has attached an
+  application manifest to `bitcoin-chainstate` since its 2024 introduction.
+- `.github/ci-windows.py` nevertheless skipped `bitcoin-chainstate.exe` with
+  a stale `no manifest present` exception. The cross-build checker already
+  validated the same executable, and the analogous `test_kernel.exe` skip was
+  removed in a later kernel-test change. This was a confirmed native-only CI
+  coverage defect, not a production binary defect.
+- Fixed in `10aaa92d97` (`ci: validate native Windows chainstate manifest`),
+  authored by `Lőrinc <pap.lorinc@gmail.com>`. The fix removes only the stale
+  chainstate exclusion. `python3 -m py_compile .github/ci-windows.py
+  .github/ci-windows-cross.py`, the AST/source contract harness, and
+  `git diff --check` passed. A Windows `mt.exe` run is unavailable on this
+  Linux host; cross-checker parity and CMake/history evidence are retained.
+- Learned rule: generated or embedded artifacts need a three-way check between
+  source target attachments, native/cross verifier exception lists, and
+  historical target additions. Added Goal 118,
+  `windows-artifact-check-parity`, with seed journal
+  `agent-journal/windows-artifact-check-parity.md`.
+- Goal/catalog commit: `4c35fa1f32` (`goals: add Windows artifact parity
+  audit`). The catalog has 119 contiguous goals `0..118`; catalog SHA-256 is
+  `163eef986907fafe04cc3e27c87a892ed785fcc754f706cd4f318a521516deb4`,
+  manifest SHA-256 is
+  `f18edecea1171bbf1c108c38ab601c533e36540b751459a7bf97ed64577625f5`,
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- Rebase and final gate remain pending for this cycle. `/data` has about 1.2G
+  free and `/` has no free space. Protected PIDs `777094`, `956381`,
+  `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` remain alive and
+  untouched; unrelated untracked files remain preserved.
+
 ## Cycle 317 Selection
 
 - Selected index: `107`

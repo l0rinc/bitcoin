@@ -1,3 +1,39 @@
+# Cycle 318 Completion
+
+- Goal 47 (`build-ci-parity`) was selected by the exact command
+  `shuf -i 0-117 -n 1` -> `47` on branch
+  `uber-cycle-318-build-ci-parity-20260802`. Cycle-start HEAD was
+  `39eebea9546c197d2795d1b39139e23d0000a51d`; selection commit was
+  `f494232c98`; and pre-cycle catalog SHA was
+  `82fe4d3eefbf266fa38a76d9949344be6e8c454a881c0411fa567fa010c34019`.
+- The native Windows manifest checker skipped `bitcoin-chainstate.exe` even
+  though `src/CMakeLists.txt` attaches `add_windows_application_manifest` to
+  the target and the Windows cross checker validates it. History showed the
+  target resource was present since 2024 and the stale skip was introduced by
+  the checker in 2026; no local production defect was implied.
+- Finding commit `10aaa92d97` (`ci: validate native Windows chainstate
+  manifest`) removes the single stale exclusion and includes
+  `agent-journal/build-ci-parity.md`. Python compilation, AST/source contract
+  checks, and `git diff --check` passed. Native Windows `mt.exe` execution is
+  an external platform limitation; no protected process was stopped.
+- Learning from the asymmetry added Goal 118,
+  `windows-artifact-check-parity`, with seed journal
+  `agent-journal/windows-artifact-check-parity.md`. Goal/catalog commit
+  `4c35fa1f32` generated 119 contiguous goals `0..118`; catalog SHA-256 is
+  `163eef986907fafe04cc3e27c87a892ed785fcc754f706cd4f318a521516deb4`,
+  manifest SHA-256 is
+  `f18edecea1171bbf1c108c38ab601c533e36540b751459a7bf97ed64577625f5`,
+  generator SHA-256 is
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 is
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- Next queue: select from the 119-goal catalog after a fresh fetch/rebase and
+  gate. Goal 118 must not reopen the repaired chainstate skip unless a target,
+  generator, checker, or artifact contract changes. `/data` remains full with
+  about 1.2G available, `/` remains full, and protected PIDs `777094`,
+  `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and `1346200` remain
+  alive and untouched. Preserve unrelated untracked probes and user files.
+
 # Cycle 317 Completion
 
 - Goal 107 (`bip324-short-id-parity`) was selected by the exact command

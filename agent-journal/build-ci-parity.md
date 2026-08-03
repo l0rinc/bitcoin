@@ -60,7 +60,7 @@ The smallest repair removes only `bitcoin-chainstate.exe` from the native
 checker skip set. Fuzz, benchmark, and Qt unit-test exclusions remain because
 their current CMake target definitions do not attach application manifests.
 The native and cross checkers now cover the same manifest-bearing chainstate
-target.
+target. This repair is committed as `10aaa92d97`.
 
 Static contract verification:
 
