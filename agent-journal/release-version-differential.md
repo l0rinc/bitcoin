@@ -222,3 +222,30 @@ cross-version suites with exact binaries.
   covered by c2's reasoning, not re-run live.
 - Network-transcript differential (goal text) not exercised; no
   harness exists in-tree and building one was out of cycle scope.
+
+## Cycle 5 (2026-08-03, draw 278, raw=6618567780035071923, suspicion-mined): PR 33324 reobfuscation — feature addition (key rotation for pre-v28 zero-key files); our downgrade boundary verified independent (#67 c3); NO adoption
+
+### Assessment
+- The PR adds -reobfuscate-blocks to rewrite existing blk/rev
+  files under a new XOR key (pre-v28 nodes synced with zero-key
+  files). Feature, not defect: nodes with zero-key files work
+  fine (the key is an anti-forensic, not integrity).
+- Our #67 c3 verified the downgrade side (old binary aborts
+  LOUD on obfuscated files with correct reindex advice; forward
+  mutations benign). The PR's inverse path (old->new key) is
+  new surface with crash-safety requirements (resumable
+  rewrite) — upstream's design space.
+- Not a defect at HEAD; adoption would import a file-rewrite
+  feature against working data semantics with no local driver.
+
+### Verdict
+Assess-only, NO adoption: feature PR; the boundary contract
+(#67 c3, #63 c6) already covers the read-side semantics it
+interacts with.
+
+### Exact commands
+- curl PR body; #67 c3 / #63 c6 refs above.
+
+### Limitations
+- If it lands upstream, the #67 c3 matrix gains a reobfuscation
+  arm (recorded gate).
