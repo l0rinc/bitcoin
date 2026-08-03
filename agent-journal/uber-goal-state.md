@@ -5831,3 +5831,46 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
 - No Core/libsecp source finding survived. Core's reserved BIP324 IDs 29-36 are intentional ignored extension slots, and btcd's compact-block omission is an unsupported-message boundary.
 - Pinned rust-bitcoin `607e8b2fe0d8f1ebe06923dbbc0ca6afdf00d1d1` has a report-ready BIP324 gap: valid long forms for optimized commands such as `mempool` reach `NetworkMessage::Unknown`, while short forms decode to typed messages. The exact zero-payload fixture is `00 6d 65 6d 70 6f 6f 6c 00 00 00 00 00` versus `0f`.
 - Added Goal 107 `bip324-short-id-parity` and seed journal `agent-journal/bip324-short-id-parity.md` to re-run this matrix with executable alternate implementations and extension tables. Storage exhaustion blocked Core net fixture execution; rustc/cargo/go are unavailable.
+
+## Cycle 308 Completion
+
+- Goal 6 (`serialization-untrusted-input`) was selected by exact
+  `shuf -i 0-107 -n 1` -> `6` on branch
+  `uber-cycle-308-serialization-untrusted-input-20260802`. The cycle-start
+  HEAD/base was `49b264dd560a024702c81ca5c3493e180e5322d3`, and the selected
+  prompt catalog SHA-256 was
+  `633bb1216c6ddf55f6e4bdeda2a99dfb3eb8bb1878b0e6370dd49521c05069c9`.
+- The fresh serialization sweep excluded the already-fixed PSBT and generic
+  database output cells. It separately assessed block-filter index semantic
+  validation, BIP155/HEADERS/locator bounds, checked versus unchecked GCS
+  constructors, and wallet database reads. The GCS index path's
+  `skip_decode_check=true` remains an intentionally cheap local-corruption
+  check backed by a coupled LevelDB hash; a malformed hash-consistent record
+  is a distinct follow-up hypothesis, not a current finding.
+- Confirmed finding: `wallet::DatabaseBatch::Read()` published the fields
+  decoded before a malformed persisted value failed. The six-byte fixture
+  `01 00 00 00 02 03` changed a caller sentinel in both SQLite and in-memory
+  SQLite backends on the old binary. The source/test commit
+  `72c003fef9` (`walletdb: preserve outputs on decode failure`) decodes into a
+  temporary, handles uninitialized scalar outputs safely, and commits only on
+  complete success. The focused regression passed 16/16 after the fix; the
+  combined `db_tests,walletdb_tests,walletload_tests` run passed 12 cases and
+  643 assertions. `/data` and `/` were full, so sanitizer and broad wallet
+  runs remain an explicit limitation.
+- Added learned Goal 108 `persisted-gcs-filter-validation` and seed journal
+  `agent-journal/persisted-gcs-filter-validation.md`. Goal/catalog/seed commit
+  `7edd1f9112` extends the catalog to 109 contiguous goals (`0..108`), with
+  catalog SHA-256
+  `6284d0369462c9c426d557943b9c4b71fd20e06658f7993aba04f1811ecb686a` and
+  manifest SHA-256
+  `280600d2c11b4437ff7d0bccee1211231aaa7c3620075cf03c0ecb08b7562c68`.
+- The cycle ledger/result commit is `36932e6fed` (`journal: record cycle 308
+  result`). It records the exact commands, before/after evidence, learned
+  queue, catalog hashes, and limitations. `git fetch origin master` completed;
+  `git rebase origin/master` reported the branch already up to date. The
+  post-rebase HEAD is `36932e6fed568552b27e8a374de23eb6546c5c07`, origin is
+  `556988790a7f961693a8fd93f73725baea66476a`, and divergence is `0 1421`.
+- No repository-completion claim is made. The next action is a fresh gate,
+  exact selector `shuf -i 0-108 -n 1`, a dedicated Cycle 309 branch, and the
+  new persisted-GCS recovery cell when selected. Preserve all unrelated
+  untracked artifacts and protected processes.
