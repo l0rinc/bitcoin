@@ -264,6 +264,23 @@ comment-drift family as F1 (LockPoints).
   full/quota/transient); loud failure, availability only. Same
   write-failure family as F19. Upstream master vulnerable.
 
+## F27: snapshot base-blockhash write escapes as raw exception (goal38) — FIXED 2026-08-03
+- Mechanism: WriteSnapshotBaseBlockhash left the 32-byte marker
+  write unguarded; a short write threw ios_base::failure out of
+  ActivateSnapshot past cleanup_bad_snapshot -> RPC generic -1 +
+  orphaned chainstate_snapshot dir with a truncated marker.
+- Evidence: LD_PRELOAD path-targeted one-shot short-write on the
+  base_blockhash stream; canonical height-299 regtest snapshot
+  (base 0c552ced == committed hash); failing-before RPC -1 +
+  orphan; passing-after designed -32603 'could not write base
+  blockhash' + orphan removed + clean retry. Harness + fixture
+  recipe preserved in contributor-branch-radar journal.
+  audit/adopt-snapshot-write-cleanup 3c9090b644; archive 86533108ab.
+- Reachability: local IO fault during loadtxoutset; loud,
+  availability only. Third arm of the F19/F26 write-failure family.
+  Upstream vulnerable on write AND read arms (read arm covered
+  in-tree by a146380c8e + goal10 test 07c8ce5392).
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
