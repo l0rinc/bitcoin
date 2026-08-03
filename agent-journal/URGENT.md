@@ -92,6 +92,22 @@ independently verified.
   archive ebd42ea45e; upstream master vulnerable.
 - Next: none locally; offerable upstream with the injection harness.
 
+## ✅ snapshot blockhash write escapes as raw exception (F27, adopted 3c9090b644)
+- Mechanism: WriteSnapshotBaseBlockhash left the 32-byte marker
+  write unguarded; a short write threw ios_base::failure out of
+  ActivateSnapshot past cleanup_bad_snapshot -> RPC generic -1 +
+  orphaned chainstate_snapshot dir with a truncated base_blockhash.
+- Trigger: local IO fault during loadtxoutset activation; loud,
+  availability only. Third arm of the F19/F26 write-failure family.
+- Evidence: LD_PRELOAD path-targeted short-write; canonical
+  height-299 snapshot (base 0c552ced == committed hash); pre-fix
+  RPC -1 + orphan; post-fix designed -32603 + orphan removed +
+  clean retry.
+- Branch/commit: audit/adopt-snapshot-write-cleanup 3c9090b644;
+  archive 86533108ab; upstream vulnerable on write AND read arms
+  (read arm covered in-tree: a146380c8e + goal10 test 07c8ce5392).
+- Next: none locally; offerable upstream paired with the read arm.
+
 ## 🔴 UTXO-scan/resize race — upstream master (fixed in-tree e049f064e1)
 - Mechanism: gettxoutsetinfo/scantxoutset create a LevelDB cursor
   under cs_main then scan unlocked; assumeutxo ResizeCache resets
@@ -124,23 +140,6 @@ independently verified.
 - Branch/commit: audit/adopt-retained-capacity @ 28ba79168b;
   author's upstream vehicle l0rinc/txgraph-retained-entry-usage.
 - Next: none local; watch the author's PR for upstream.
-
-## ✅ dbwrapper failed-construction leak (fixed 73a6798206, #13 c2)
-- Mechanism: CDBWrapper ctor can throw (LevelDB open failure) after
-  options members block_cache/filter_policy/info_log were allocated;
-  LevelDBContext had no destructor, leaking them per failed open.
-- Evidence: failing-before LSan probe — 79,800 B / 361 allocs over
-  19 failed opens (stacks NewLRUCache dbwrapper.cpp:142, filter_policy
-  :144, info_log :146); passing-after 20 failed opens LSan-silent;
-  dbwrapper_tests green. Upstream master has the same missing
-  destructor (offerable).
-- Branch/commit: audit/raii-resource-leaks-c2 @ 4d8ae03172 (fix
-  73a6798206); journal raii-resource-leaks.md c2. Archived on
-  agent/all-findings @ d87da3929e (fix 461c21cbfa).
-- Next: offer upstream (small RAII fix, mirrors existing option
-  ownership comments); re-verified NOT duplicated upstream @
-  9611a35603 (#42 c5). Audit other throwing ctors holding raw
-  members.
 
 ---
 Recently removed from this list (dismissed/closed): Fee-estimator
