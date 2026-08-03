@@ -382,3 +382,21 @@ height == expected durable block.
 Adoption: audit/adopt-blockfilter-reorg-recovery 8b9a20b114 (fix +
 their extended regression). Severity: 🟠 Medium (startup kill,
 optional index, crash-gated). Sibling of F33 (same family).
+
+### goal87 series (824f041922/62971a4efb/de3c0086b0/e8c2ef2064): STRUCTURAL MISMATCH + intent adopted natively
+Their four test-only branches extend their fork's divergent
+mempool-persistence cases (MempoolV1DependencyOrdering family)
+with GetTotalFee/GetTotalTxSize preservation assertions — those
+test cases do not exist in this tree (0 matches), so direct
+extension is impossible and a transplant would be a rewrite.
+Gap analysis: OUR tree had no totals roundtrip coverage either.
+Resolution: wrote MempoolTotalsPreservedAcrossDumpLoad natively
+(submit 3 matured-coinbase spends via ProcessTransaction, record
+totals, dump, wipe, reload, require identical GetTotalFee/
+GetTotalTxSize). Initial run failed on
+bad-txns-premature-spend-of-coinbase (fixture coinbases need
+mineBlocks(3) for maturity — same pattern as the diagram tests);
+full mempool_tests suite GREEN after. audit/transplant-goal87-
+tests 8146b1fd8a. Their v1/v2 dependency-order and eviction/
+unbroadcast accounting assertions map to behavior our roundtrip
+family (576-781) partially covers; totals were the uncovered arm.
