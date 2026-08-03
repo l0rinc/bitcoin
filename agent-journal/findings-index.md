@@ -281,6 +281,20 @@ comment-drift family as F1 (LockPoints).
   Upstream vulnerable on write AND read arms (read arm covered
   in-tree by a146380c8e + goal10 test 07c8ce5392).
 
+## F28: negative -mempoolexpiry empties mempool (goal43) — FIXED 2026-08-03
+- Mechanism: -mempoolexpiry=-1 accepted at startup; negative
+  std::chrono::hours makes LimitMempoolSize compare entry_times
+  against now minus a negative duration -> every entry instantly
+  expired on any trim.
+- Evidence: failing-before MempoolExpiryOptionTest negative arm
+  (ApplyArgsManOptions(-1) accepted); passing-after full
+  mempool_tests green; second verifier = parallel daemon reproducer
+  (tx evicted under -1, retained under 336h).
+  audit/adopt-mempoolexpiry-negative 0e0b3d6576; archive b095724b20.
+- Reachability: local config error only; policy/availability, no
+  consensus impact. Same family as -limitclustercount=0 (5e0a80ade5).
+  Upstream master vulnerable.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
