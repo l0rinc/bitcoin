@@ -93,3 +93,31 @@
 ## Cycle 291 handoff
 
 - Close with a journal-only handoff commit authored as Lőrinc <pap.lorinc@gmail.com>. Preserve the Cycle 291 profile/build artifacts without staging them. The next distinct compiler campaign should use a larger deterministic production or functional workload, held-out replay vectors, interleaved repeated measurements with perf counters where useful, and BOLT only if an executable or supported integration becomes available. Keep the current profile-use result as evidence, not as a recommended build configuration.
+
+## Cycle 319 start
+
+- Selected by the uber loop: exact `shuf -i 0-118 -n 1` -> `70` (`compiler-optimization-differential`) after Cycle 318 closed Goal 47.
+- Branch: `uber-cycle-319-compiler-optimization-differential-20260802`.
+- Cycle-start HEAD: `9297c44a83d4e684ab584a30c44e7b96eebb3da2`; origin/master: `556988790a7f961693a8fd93f73725baea66476a`; selection commit: `9f8d780825`; catalog SHA-256: `163eef986907fafe04cc3e27c87a892ed785fcc754f706cd4f318a521516deb4`.
+- Prior cells excluded: Cycle 105's broad GCC/Clang Release-versus-IPO and utility PGO, Cycle 247's current libsecp GCC/Clang O2/O3/LTO/PGO matrix, and Cycle 291's current production bitcoind Release-versus-PGO-use replay. This cycle targets the newer libsecp source changes and verifies the build-mode contract rather than repeating those matrices.
+- Current-source hypotheses: (1) recent ECDH, EllSwift, and MuSig failure-path changes behave differently under optimization or LTO; (2) compiler-specific UB or aliasing appears only in the current optimized paths; (3) recent hardening/declassification changes lose their intended generated-code behavior; (4) CMake's Release normalization and explicit optimization append flags select different code than their summaries imply.
+
+## Cycle 319 evidence
+
+- Tool inventory: GCC 12.2.0, Clang 14.0.6, Clang 19.1.7, and `perf` were available. No `llvm-bolt`, `llvm-bolt-19`, or Valgrind executable was available. Existing standalone trees `/data/my_storage/tmp/cycle247-secp-gcc-o2`, `cycle247-secp-gcc-lto`, and `cycle247-secp-clang19-o3` were reused to avoid a new full build while the filesystems remained full.
+- Current-source GCC RelWithDebInfo `-O2` was reconfigured and rebuilt for `tests` and `noverify_tests`. GCC LTO was reconfigured with `-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON`, `gcc-ar`, and `gcc-ranlib`; generated commands contained `-O2 -g -flto -flto=auto -fno-fat-lto-objects`. Clang 19 Release was rebuilt with `SECP256K1_APPEND_CFLAGS=-O3`; generated commands contained the project base `-O2` followed by the actual appended `-O3`.
+- The focused current modules `ecdh`, `musig`, and `ellswift` passed under GCC O2, GCC LTO, and Clang 19 actual O3 with `tests` seed `319001` and `noverify_tests` seed `319002`, each at 32 iterations. The same tests had already been rebuilt from current source in each tree before execution.
+- The full current-source `tests` suite passed under GCC O2 with seed `319010` and under Clang 19 actual O3 with seed `319010`. The full current-source `noverify_tests` suite passed under GCC O2 with seed `319011` and under Clang 19 actual O3 with seed `319011`. The four runs exited 0; execution times were 124.336 seconds, 116.709 seconds, 55.300 seconds, and 50.338 seconds respectively. The times are not a benchmark because the runs were not interleaved and compiler/build differences dominate.
+- The generated-rule check was necessary: passing `-DCMAKE_C_FLAGS_RELEASE=-O3` alone left the nested libsecp compile commands at `-O2`, because `src/secp256k1/CMakeLists.txt` intentionally rewrites Release `-O3` to `-O2`. Passing `-DSECP256K1_APPEND_CFLAGS=-O3` produced compile commands ending in `-O3`. This is consistent with the documented project policy, but the configuration summary and generated behavior are easy to confuse.
+- The current source delta included `1ec5c95460` generated-vector comment sanitization, MuSig public-nonce invalidation/declassification changes, invalid ECDH-public-key propagation and ctime coverage, the EllSwift auxiliary-input boundary fix, and recent hardening/toolchain commits. No test failure, output/status differential, optimizer warning, or generated-source mismatch appeared in the current matrix.
+
+## Cycle 319 verdict
+
+- No current source, CMake, compiler, optimization, LTO, hardening, constant-time, or invalid-input defect was independently confirmed. The available current libsecp paths preserved full test status under GCC O2, GCC LTO, and Clang 19 actual O3. No source or permanent test change is justified.
+- Rejected candidates: recent ECDH/MuSig/EllSwift optimizer drift, GCC LTO-only behavior, Clang O3-only behavior, and a Release-summary-versus-generated-command mismatch. The last item is an important configuration lesson, not a defect: the nested project deliberately normalizes base Release O3 to O2, and the supported append variable is the explicit way to request an additional O3 flag.
+- Limitations: no current full top-level Bitcoin build was created because storage is critically constrained; Clang 14 and current PGO were not rerun because their relevant source/matrix cells are already covered by Cycles 247 and 291; BOLT, Valgrind, and Alive2 were unavailable. Passing tests provide evidence, not a proof of constant-time behavior.
+
+## Cycle 319 handoff
+
+- Close with a journal-only handoff commit authored as `Lőrinc <pap.lorinc@gmail.com>`. Preserve the existing Cycle 247/291 build and profile artifacts without staging them. The next distinct compiler campaign should use a current top-level held-out workload or a newly changed transformation; do not repeat the focused ECDH/MuSig/EllSwift cells without a source or toolchain change.
+- Learning seed for the next goal: compiler-mode audits must inspect generated compile/link commands and cache values, not only CMake summaries. A reusable build directory can retain stale append flags, and nested CMake projects can intentionally rewrite optimization levels.
