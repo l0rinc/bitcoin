@@ -12,6 +12,47 @@
 - Timestamp: `2026-08-03T03:23:36Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-14`
 
+## Cycle 320 Result
+
+- Goal 14 (`secret-control-flow`) completed on branch
+  `uber-cycle-320-secret-control-flow-20260802`. The selection commit was
+  `e59a47659d`; the cycle-start HEAD was
+  `6631878f49453c8857104accc914fc3661392ff8`; and the pre-cycle catalog SHA
+  was `028ce2f22b37f6b2a61fb2345915f18062fdd66143c2336c4a3a66178b363d40`.
+- Current libsecp256k1 source review found no new secret-dependent branch or
+  secret-indexed access in ECDH, ElligatorSwift, Schnorr, MuSig, Silent
+  Payments, scalar multiplication, or the reviewed variable-time public
+  paths. The distinct gap was ctime coverage: `ctime_tests.c` covered valid
+  MuSig nonce generation but did not mark an invalid MuSig secret key
+  undefined and exercise the documented failure path.
+- Added the focused invalid-secret MuSig ctime case in
+  `83014b6d02` (`secp256k1: cover invalid MuSig secret ctime path`), authored
+  by `Lőrinc <pap.lorinc@gmail.com>`, with the cycle journal. The current
+  Clang 19 MSan build (`SECP256K1_ASM=OFF`, Debug/O1) built `ctime_tests` and
+  passed before and after the commit with status 0 and an empty log.
+- Independent oracle check: changing only the production invalidation call
+  to an ordinary `if (!ret)` branch made the same ctime run exit 86. The first
+  MSan diagnostic was an uninitialized-value use at
+  `session_impl.h:422:9`; restoring the call returned status 0. The mutant
+  and all temporary production edits were removed.
+- Learning added Goal 120, `secret-failure-ctime-coverage`, with seed journal
+  `agent-journal/secret-failure-ctime-coverage.md` to extend this evidence
+  across secret-input failure paths. Goal/catalog commit is `a5a1851055`
+  (`goals: add secret failure ctime coverage campaign`). The catalog now has
+  121 contiguous goals `0..120`; post-cycle catalog SHA-256 is
+  `12a885d6e83e495aca1030563565e88251a74ac08a08cdefe6c2fd189aa048d8`,
+  manifest SHA-256 is
+  `ae5d66487dd09549f5cce4c33359eb2977d95f610854f633f574164f47b7ffcf`,
+  generator SHA-256 is
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 is
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- No production constant-time defect was confirmed. Limitations are x86_64
+  Linux/Clang 19 MSan for the new case; Valgrind, dudect, ARM, 32-bit,
+  big-endian, and broader optimization cells remain separate evidence.
+- Rebase onto freshly fetched `origin/master` completed with no conflicts and
+  no commits needed. Final gate and the next exact selector draw remain.
+
 ## Cycle 319 Result
 
 - Goal 70 (`compiler-optimization-differential`) completed on branch

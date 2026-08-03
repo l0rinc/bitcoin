@@ -6355,3 +6355,41 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   No repository-completion claim is made. After this state-only commit, run a
   fresh gate, draw exactly one selector with `shuf -i 0-113 -n 1`, create a
   dedicated Cycle 314 branch, and continue.
+# Cycle 320 Completion
+
+- Goal 14 (`secret-control-flow`) was selected by the exact command
+  `shuf -i 0-119 -n 1` -> `14` on branch
+  `uber-cycle-320-secret-control-flow-20260802`. Cycle-start HEAD was
+  `6631878f49453c8857104accc914fc3661392ff8`; selection commit was
+  `e59a47659d`; and pre-cycle catalog SHA-256 was
+  `028ce2f22b37f6b2a61fb2345915f18062fdd66143c2336c4a3a66178b363d40`.
+- Source review of current libsecp256k1 secret paths found no new production
+  constant-time control-flow or secret-memory-index defect. A focused gap in
+  `src/secp256k1/src/ctime_tests.c` was confirmed: valid MuSig nonce paths
+  were covered, but an invalid secret-key failure path was not exercised with
+  secret bytes marked undefined.
+- Commit `83014b6d02` (`secp256k1: cover invalid MuSig secret ctime path`),
+  authored by `Lőrinc <pap.lorinc@gmail.com>`, adds the smallest test-only
+  coverage case and its journal. The Clang 19 MSan ctime build with
+  `SECP256K1_ASM=OFF`, Debug/O1, rebuilt and passed with status 0 and an empty
+  log. A temporary ordinary branch replacing the production constant-time
+  invalidation call exited 86 with the first MSan report at
+  `session_impl.h:422:9`; restoring the source passed again.
+- Learning from this gap added Goal 120, `secret-failure-ctime-coverage`,
+  seeded by `agent-journal/secret-failure-ctime-coverage.md`. Goal/catalog
+  commit `a5a1851055` (`goals: add secret failure ctime coverage campaign`)
+  generated 121 contiguous goals `0..120`. Post-cycle catalog SHA-256 is
+  `12a885d6e83e495aca1030563565e88251a74ac08a08cdefe6c2fd189aa048d8`,
+  manifest SHA-256 is
+  `ae5d66487dd09549f5cce4c33359eb2977d95f610854f633f574164f47b7ffcf`,
+  generator SHA-256 is
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 is
+  `56f2d4093caa99fcc54c8709bd18b55482208bde3a1cd55c2`.
+- No production fix was justified. Limitations are x86_64 Linux/Clang 19
+  MSan for the new case; Valgrind, dudect, ARM, 32-bit, big-endian, and
+  broader optimization cells remain separate. The rebase onto freshly
+  fetched `origin/master` was a no-op with no conflicts.
+- Final gate remains: verify tracked cleanliness, catalog hashes/metadata,
+  `git diff --check`, storage constraints, and all protected PIDs before
+  drawing Cycle 321 from `0..120`.
