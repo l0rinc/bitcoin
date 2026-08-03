@@ -21,6 +21,7 @@ add_executable(fuzz
   block_index.cpp
   block_index_tree.cpp
   blockfilter.cpp
+  blockfilter_index.cpp
   bloom_filter.cpp
   buffered_file.cpp
   cache_sizes.cpp
@@ -134,6 +135,7 @@ add_executable(fuzz
   tx_in.cpp
   tx_out.cpp
   tx_pool.cpp
+  txospenderindex.cpp
   txgraph.cpp
   txorphan.cpp
   txrequest.cpp
