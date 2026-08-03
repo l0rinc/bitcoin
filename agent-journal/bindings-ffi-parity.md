@@ -469,3 +469,38 @@ ID or package hash. The narrow fix preserves the existing event layout and
 adds the missing semantic label. Remaining queue: inspect the other shipped
 USDT/BCC consumers for the same class of dropped or stale fields, then close
 the cycle only after the patched file is committed with this journal.
+
+## Cycle 309: C import-path array and width parity
+
+### Selection and scope
+
+- Exact selector: `shuf -i 0-108 -n 1` -> `94` (`bindings-ffi-parity`); no reroll was needed.
+- Branch: `uber-cycle-309-bindings-ffi-parity-20260802`.
+- Cycle start HEAD: `d8bb0bf76632b6436aaea56b54e526db9d5b3363`.
+- Catalog SHA-256: `6284d0369462c9c426d557943b9c4b71fd20e06658f7993aba04f1811ecb686a`.
+- The repository has no maintained foreign-language binding directories. The active in-tree boundary is the `libbitcoinkernel` C API and its C++ `btck` wrapper; the C++ `ChainMan::ImportBlocks` caller already constructs parallel path and length arrays.
+
+The prior Goal 94 cells for opaque pointer arrays, tracing fields, callback ownership, nullable ancestors, Minisketch invalid assignment, and the external Rust MuSig secret nonce were searched and excluded. Detached history contains related import-array fixes (`d3a8a0b851` and `ae8f9e9900`), but neither is an ancestor of this cycle's base. They were used as learned search evidence and the current base was independently reproduced before applying the contract repair.
+
+### Contract and reproduction
+
+`src/kernel/bitcoinkernel.h` documents both `block_file_paths_data` and `block_file_paths_lens` as nullable arrays, with `block_file_paths_data_len` describing their shared length. The implementation at `src/kernel/bitcoinkernel.cpp` previously skipped null path entries, dereferenced `block_file_paths_lens` whenever a path was non-null, and iterated a public `size_t` count with a `uint32_t` index. Thus a caller using count `1` with a null path entry returned success and a caller using a null lengths array could dereference absent storage; a count above `UINT32_MAX` would not be traversed according to the public width.
+
+The regression was added before the production change to `btck_chainman_tests`. It creates a real scratch chainstate manager, then calls the raw C entry point with one null path and with one null path plus a null lengths array. The pre-fix command:
+
+`TMPDIR=/data/my_storage/tmp/cycle309-kernel-before /data/my_storage/tmp/cycle278-kernel-build/bin/test_kernel --run_test=btck_chainman_tests --log_level=test_suite --report_level=short --color_output=false --random=309001`
+
+exited `201`; both new checks observed `0` instead of `-1` (`9/11` assertions passed). This demonstrates that malformed path arrays were silently treated as an empty import rather than rejected.
+
+### Fix and verification
+
+The C entry point now rejects nonzero counts with either array null, rejects every null path element, and uses `size_t` for the loop. It converts the supplied pointer/length pair with `fs::PathFromString`, preserving the length-delimited C contract instead of routing through a temporary NUL-terminated string. Empty imports with count zero remain unchanged; the C++ wrapper's normal vector conversion remains valid.
+
+- `CCACHE_DISABLE=1 cmake --build /data/my_storage/tmp/cycle278-kernel-build --target test_kernel -j1` passed after the source change.
+- Focused post-fix command with seed `309002` passed 1 case and `11/11` assertions.
+- Full `/data/my_storage/tmp/cycle278-kernel-build/bin/test_kernel` with seed `309003` passed all 20 cases and `3726/3726` assertions.
+- `git diff --check` passed; only scratch data under `/data/my_storage/tmp/cycle309-kernel-*` was used.
+
+### Verdict and learned queue
+
+Confirmed local C ABI contract defect, fixed in the source/test commit for this cycle. A foreign-language consumer can reach the raw C entry point without the C++ wrapper's array construction and previously received either silent acceptance or unsafe pointer-array behavior. The next learned queue is a distinct C boundary matrix for callback lifetime/reentrancy, status/exception translation, nullable output handles, and `size_t`/fixed-width conversions; prioritize cases where the header permits a nullable result or callback and the C++ wrapper turns it into a stronger assumption. Do not reopen this import-array finding unless another maintained boundary exhibits an independent recurrence.
