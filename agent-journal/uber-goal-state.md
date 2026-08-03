@@ -1072,6 +1072,30 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 325 (cycle-324 close): 39 draws, 5 reopened cells, all
+   delivered. goal56 revival COMMITTED (994d841b48:
+   wallet_transaction_can_be_bumped, 20k clean in 782 s; 4
+   harness-contract repairs, production never implicated; the
+   PR's HasDescendants-virtual NOT taken — zero production diff).
+   goal1 c6 (4/4 fork claims TRUE), goal62 R4 (no raw CFeeRate
+   serialization survives), goal75 cache arm (key scheme sound),
+   goal103 c3 (F25-F35 edges all broken). #21 c2 tx-heavy
+   reindex profile DEFERRED (CPU contention rule) — next clean
+   slot. NP counter at 4/20 (r57-r60 streak: #82, #21-deferred,
+   #6, #126). Archive copies follow this close.
+   USER OVERRIDE (2026-08-03, post-cycle-323): stop only after
+   20 no-progress rounds (replaces the 3-quiet-turn impasse
+   threshold). Draws must include newly added goals as well —
+   the full 0-127 catalog plus any future additions/promotions.
+   Operative protocol per round: recorded random draw over the
+   full catalog; for the drawn goal apply the reopen test (new
+   code/callers/tools/findings since its verdict?). If it
+   passes, run a falsifiable iteration (confirmed/dismissed/
+   inconclusive); if it fails, that round counts as
+   no-progress. Halt (blocked) only at 20 consecutive
+   no-progress rounds. Catalog state check at override:
+   0-127 (128 goals, sha256 ba7b1dd0), proposed-goals queue
+   EMPTY (P1-P4 all resolved), nothing promotable.
    Cycle 323 (RESUMED; resume condition FIRED, then assessed):
    author remote 1363 -> 1364: new branch
    l0rinc/descriptor-range-counter-overflow 264555af3c
@@ -2307,3 +2331,85 @@ e27c179db2 -> 1ed14c6122 (merge bitcoin-core/gui#872, watchonly-
 wallet export menu; qt/* + interfaces/wallet.h + wallet/interfaces.cpp
 only). Out of scope (GUI/wallet); zero overlap with our modified
 files; no adoption target. qa-assets still pinned 918cdd3.
+Cycle 324 draw log (user override: 20-round no-progress halt,
+full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
+ r1 raw=8165376623755832787 -> #83 secp group/ecmult: reopen FAIL
+   (subtree static since 9caae50682 2026-06-18, campaign done
+   after; no new callers/tools). NP.
+ r2 raw=2241473468838302655 -> #63 pipeline: reopen FAIL (no new
+   trigger since c6 banlist.dat). NP.
+ r3 raw=2565745173334991693 -> #77 symbolic/CBMC: reopen FAIL
+   (tooling-deferred stands; cbmc/klee still absent; ledger
+   'don't grind' honored). NP.
+ r4 raw=2937364628209396608 -> #0 meta-goal: covered by the
+   process itself. NP.
+ r5 raw=9136888865343352248 -> #56 stale-PR: REOPEN PASSED
+   (9-day new window). Scan EMPTY (0 closed-unmerged since
+   2026-07-26; 4 borderline = refactor/doc). PR 33916 revival
+   DELIVERED: wallet_transaction_can_be_bumped target driving
+   all 6 precondition arms through REAL mempool (no production
+   virtual). First-verify crash on EMPTY input (clock-class,
+   repair in flight). PROGRESS.
+ r6 raw=8142385977759109223 -> #103 composition: REOPEN PASSED
+   (F25-F35 hygiene rule). c3: all 6 edge classes BROKEN, no
+   realizable chain, DISMISSED. PROGRESS.
+ r7 raw=2077773021233991871 -> #63: reopen FAIL (repeat of r2).
+   NP 1/20.
+ r8 raw=4966080821746051881 -> #41 history archaeology: reopen
+   FAIL (EXHAUSTED; no new archaeological material). NP 2/20.
+ r9 raw=8921658222225892323 -> #99 clean-room: reopen FAIL
+   (c6 merkle done; no new differential targets). NP 3/20.
+ r10 raw=2922101250486260756 -> #20 micro-opt: reopen FAIL
+   (campaign complete; no new perf-relevant code). NP 4/20.
+ r21 raw=7452980860940327360 -> #64 dedup/fingerprint: reopen
+   FAIL (F25-F35 fingerprints recorded inline at adoption;
+   formalizing adds no oracle). NP 15/20.
+ r22 raw=9041082197701362591 -> #31 docs cross-layer: reopen
+   FAIL (no new docs/examples since c5). NP 16/20.
+ r23 raw=2650982761097055699 -> #83: reopen FAIL (repeat r1).
+   NP 17/20.
+ r24 raw=492485102296999540 -> #116: reopen FAIL (repeat r13).
+   NP 18/20.
+ r25 raw=9129565506789252582 -> #102 suspicion artifacts: reopen
+   FAIL (no unresolved suspicion artifacts; new seeds all
+   root-caused + replayed). NP 19/20.
+ r26 raw=9003341934708362150 -> #38 crash-safety: reopen FAIL
+   (flood's goal38-* all triaged; F27 adopted). NP 20/20 —
+   mechanical threshold reached BUT progress in flight
+   (canbebumped reverify), halt deferred to its resolution.
+ r27 raw=2523959946529228493 -> #77: reopen FAIL (repeat r3).
+   NP 21/20; draws paused pending the 2k verdict.
+ VERDICT (r5 cell): wallet_transaction_can_be_bumped 2k CLEAN
+ (158 s) after 3 harness repairs; 20k campaign queued
+ (bash-y9jb9gf9). NP counter RESETS on the 20k commit.
+ r28 raw=5545350288958490429 -> #61 private broadcast: reopen
+   FAIL (our dbef68896c state model still superset of upstream
+   35856 announcement fuzz). NP 1/20.
+ r29 raw=6755495390983413808 -> #48 oracle expansion: reopen FAIL
+   (exhausted c5; series adopted; no new oracle candidates). NP 2/20.
+ r30 raw=2631407392235416164 -> #100 sink reachability: reopen
+   FAIL (COMPLETE; no new sinks). NP 3/20.
+ r31 raw=7881098489247563944 -> #40 adjudication: reopen FAIL
+   (c4 tail VACUOUS by construction; no new CheckTransaction
+   code). NP 4/20.
+ r32 raw=5084189153564112933 -> #37 build dead-zone: reopen FAIL
+   (c3 done; lint-tooling delta not src conditional-compilation).
+   NP 5/20.
+ r33 raw=3141409297107318314 -> #42 CI follow-up: reopen FAIL
+   (35869 lint re-add carries no finding; F23 note covers it).
+   NP 6/20.
+ r34 raw=6237435702266693007 -> #15 validation variants: reopen
+   FAIL (DONE; rpc-fuzz rework touches target not validation). NP 7/20.
+ r35 raw=881770143947014817 -> #33 advisory variants: reopen FAIL
+   (no new Core advisories). NP 8/20.
+ r36 raw=6027971086052008625 -> #49: reopen FAIL (repeat r19).
+   NP 9/20.
+ r37 raw=2006177250128658707 -> #19 bench integrity: reopen FAIL
+   (PR 32554 still open; watch not fired). NP 10/20.
+ r38 raw=4802063129635219181 -> #109 whole-feature: reopen FAIL
+   (COMPLETE incl. c3 short-id cell). NP 11/20.
+ r39 raw=4578459854551380609 -> #1 comment-contract: REOPEN
+   PASSED (queue cell). c6: 4/4 fork claims in net_processing/
+   txmempool mechanically TRUE (fee-diagram gating, cumulative
+   prioritise delta, slot backoff, chain-sync timeout arm).
+   DISMISSED. PROGRESS — counter reset.
