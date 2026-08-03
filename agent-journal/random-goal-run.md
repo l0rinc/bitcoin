@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 317 Selection
+
+- Selected index: `107`
+- Goal slug: `bip324-short-id-parity`
+- Goal title: BIP324 short-message ID and long-form interoperability audit
+- Selection command: `shuf -i 0-116 -n 1`
+- Catalog SHA-256: `960a42b979b9e4c5ed2cd86f78b8f2fdb3a83fb06b97d30f67eaff07a352e7f2`
+- Base commit: `23be1ca3a470a0b511a4c87e8e3ff43bfa043239`
+- Branch: `uber-cycle-317-bip324-short-id-parity-20260802`
+- Timestamp: `2026-08-03T02:44:33Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-107`
+
 ## Cycle 316
 
 - Selected index: `106`
