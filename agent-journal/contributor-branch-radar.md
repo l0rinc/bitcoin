@@ -839,3 +839,39 @@ PR 35839 (open, 2026-07-29).
 ### Limitations / queue
 - The noban-peer eviction arm relies on the PR's test (not
   separately driven).
+
+## Cycle 18 (2026-08-03, draw 268, raw=1992446166920522805, suspicion-mined): PR 35195 hash-code cache tradeoff — premise MEASURED on this host (~1% runtime cost of noexcept recalc); deliberate documented tradeoff, NOT a defect; no adoption
+
+### Assessment
+- Mechanism (#16957, hasher.h:63-68): noexcept hasher ->
+  libstdc++ recomputes instead of caching hash codes in nodes
+  (documented: ~1.6% slower vs ~9.4% RSS saved).
+- Host A/B (ComplexMemPool, --min-time=1500, gcc 13.3 aarch64):
+  noexcept (HEAD): 183.88 ms/op (5.44 op/s, err 0.8%);
+  throwing (hash-cached nodes): 182.12 ms/op (5.49 op/s, err
+  0.2%). Delta -1.0% time — direction matches the documented
+  penalty, smaller on this bench (within ~2x err bars).
+- RSS arm NOT measured here (bench harness reports no RSS;
+  #16957's 9.4% was on the original machine class).
+
+### Verdict
+Premise CONFIRMED-directional; NOT a defect — a documented
+memory-vs-speed tradeoff whose reversal is an upstream design
+call. NO adoption (flipping it locally would contradict
+#16957's measured memory win with no correctness stake).
+
+### Suspicion-mining
+- S11: the A/B was nearly ruined by a restore-during-build race
+  (the #75-c5 modified-during-compile trap, hit and redone
+  deterministically — recorded).
+- S12: hash-cached nodes cost sizeof(size_t) per cache entry —
+  at ~500k UTXO-cache entries that's ~4MB, the real #16957
+  number to beat with the 1% runtime gain.
+
+### Exact commands
+- sed toggle + rebuild x3 (noexcept/throwing/restore);
+  bench lines above.
+
+### Limitations / queue
+- RSS arm unmeasured (needs /usr/bin/time long-run, out of
+  cycle); the tradeoff's RSS side stays #16957's number.
