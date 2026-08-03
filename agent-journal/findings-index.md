@@ -354,6 +354,18 @@ comment-drift family as F1 (LockPoints).
 - Reachability: crash+invalidation gate, optional index;
   correctness/integrity, not consensus. Upstream vulnerable.
 
+## F34: descriptor range counter overflow at INT32_MAX (goal7) — FIXED 2026-08-03
+- Mechanism: EvalDescriptorStringOrObject int loop counter
+  overflows after the valid INT32_MAX endpoint (++i signed
+  overflow): -ftrapv builds trap (RPC thread dies), -fwrapv
+  builds wrap negative into invalid derive positions.
+- Evidence: failing-before — test process killed by signal (exit
+  133) in the -ftrapv build; passing-after — full rpc_tests
+  green. audit/adopt-descriptor-range-overflow 62e05ae526;
+  archive 759755b6c5.
+- Reachability: authenticated RPC scan-object caller; worker
+  availability. Boundary-overflow family (F28/F29 siblings).
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
