@@ -191,6 +191,22 @@ comment-drift family as F1 (LockPoints).
 - Dedup note: same class as F3 (AutoFile empty-span fwrite UB) —
   null-at-size-0 in a C API; this is the crypto arm.
 
+## F22: empty-headers sync-slot stall (IBD liveness) — FIXED 2026-08-03
+- Mechanism: a sync peer answering valid empty headers keeps its
+  initial-sync slot: empty input fails IsContinuationOfLowWorkHeadersSync
+  (headersync.cpp:76-77), the timestamp is not cleared, and the slot
+  release at net_processing.cpp:6300 fires only when a replacement
+  exists — IBD stalls on a slot the peer never fills.
+- Evidence: FAILING-BEFORE — the PR's new test fails at unfixed HEAD
+  ('Test empty headers response during initial sync', AssertionError);
+  PASSING-AFTER — full p2p_initial_headers_sync.py green (timeout +
+  empty-slot + eviction cases). Author PR 35839 (open).
+- Fix: 5-commit stack adopted (297c0f7ca7, 7de4fba5b8, 79aca0b97f,
+  92a98ffb30, 6d10e8e193); ReleaseHeadersSyncSlot kept after stack-order
+  analysis (S9 rule: verify helper survival to branch tip).
+- Dedup note: liveness sibling of the CVE-2024-52922 stalling family
+  (#49 c10 markers) — that was withholding; this is truthful-empty.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
