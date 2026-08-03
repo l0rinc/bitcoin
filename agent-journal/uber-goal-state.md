@@ -1072,6 +1072,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 304 (goal 127 LevelDB corruption/checksums/bg-errors,
+   draw raw=11133441295003937015 masked=1910069258149161207 n=8
+   idx=7): client assumptions code-verified (paranoid_checks +
+   verify_checksums read+iter, HandleError throw on non-NotFound);
+   corruption arm — 1-byte table corruption -> 86/5000 keys
+   Corruption-surfaced, 0 silent-wrong (CONFORM); bg-error arm —
+   dir-rename fault -> next Put fails NotFound immediately
+   (CONFORM); harness lesson: chmod faults invalid as root
+   (CAP_DAC_OVERRIDE), use dir-rename. Both arms DISMISSED;
+   MANIFEST/descriptor recovery = goal 125 queue.
    Cycle 303 (goal 114 threat-model->oracle, draw
    raw=17746324290832141658 masked=8522952253977365850 n=9 idx=3):
    clock-skew security-gate sweep (35 NodeClock/GetTime sites)
