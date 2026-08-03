@@ -1072,6 +1072,22 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 320 (watch): ALL STATIC except one evaporation.
+   upstream master e27c179db2 unchanged; author remote 1363
+   heads, 0 new; qa-assets == pin 918cdd3; watch PRs
+   35744/35859/35818/35620/35654 all open, unmerged.
+   dup-txid CI EVIDENCE EVAPORATED: commit 8dfa501356 still
+   exists on bitcoin/bitcoin but now reports 0 check-runs and
+   0 statuses (was 40 success / 3 failures: 2x NetBSD Cross +
+   riscv32 bare metal, all on the AUTHOR's own test flow).
+   Settlement unaffected — our a9a78f2907 verdict never relied
+   on their CI; the "dup-txid CI final verdict" resume
+   condition is now moot and is dropped from the watch set.
+   scheduled_pair 20k STILL IN FLIGHT (bash-mrh5b21j, PID
+   1758265, 1h29m elapsed at snapshot, 98% CPU, RSS ~518 MB
+   stable, Rl) — heavy seeds (2x1000 entries + up to 256 ops);
+   blockfilter comparison took 46 min. Commit of the target
+   waits on "Done 20000 runs" clean.
    Cycle 319 (verification): REGRESSION #9 GREEN — full
    test_bitcoin suite on the final lineage (includes all test
    adoptions: goal10/goal48 oracles, totals roundtrip, blockmanager
