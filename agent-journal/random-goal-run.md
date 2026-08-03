@@ -12,6 +12,35 @@
 - Timestamp: `2026-08-03T02:44:33Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-107`
 
+## Cycle 317 Result
+
+- The matrix compared the deployed BIP324 v1.0.2 table with current Core,
+  rust-bitcoin, btcd, and Core's Python v2 peer. Core's table covers IDs 1--28,
+  reserved slots 29--36, and BIP434 FEATURE 37; its transport parser accepts
+  both short and valid long forms. The repeated empty slots make an internally
+  constructed empty message name map to reserved ID 29, which is an edge
+  contract for the next harness campaign, not a proven network defect.
+- Current rust-bitcoin `19436dde9ae7f56b9b999560120a66ad08958810` still has the
+  Cycle 307 external gap: long zero-payload `mempool` reaches its Unknown
+  decoder while short `0f` reaches MemPool. This is a recurrence at a newer
+  upstream commit and was not counted as a new Core finding. Current btcd
+  `05585e037ba0690572208dbc46d121a49cc0c4c9` omits compact-block IDs because
+  its wire package has no corresponding message types; supported entries use
+  long fallback and short decoding.
+- Core's `v2transport_test` exercises only selected short IDs plus long `tx`,
+  and the Python peer always emits short form for commands in `SHORTID` even
+  though it can receive long form. No local production defect was proven.
+- Learned suspicious surface: make BIP324 alternate-form fixtures explicit in
+  both directions, cover FEATURE/version and undefined IDs, and ensure the
+  test helpers can force noncanonical-but-valid long forms. Added Goal 117,
+  `bip324-alt-form-harness`, with seed journal
+  `agent-journal/bip324-alt-form-harness.md`.
+- Evidence limits: no rustc/cargo/go are installed; the existing Core net test
+  binary aborted during fixture setup because `/` and `/data` had no free
+  space. Exact source snapshots and plaintext fixtures are preserved in the
+  cycle journal. The known rust-bitcoin report and intentional btcd omission
+  must not be rediscovered without changed behavior.
+
 ## Cycle 316
 
 - Selected index: `106`
