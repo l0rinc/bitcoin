@@ -81,3 +81,16 @@ build-after/src/libleveldb.a build-after/src/libcrc32c.a -lpthread
   at teardown (check_globals.cpp:54). NOT an index-logic defect.
   Repair: SetMockTime(1231006505) after seeding; seed then executes
   clean; 20k campaign re-verified after repair.
+
+## wallet_transaction_can_be_bumped crash seeds (4 harness-contract misses, all repaired)
+- `canbebumped-crash-seed-empty-da39a3ee` (empty) — mock-clock
+  contract (check_globals.cpp:54); repaired with SetMockTime.
+- `canbebumped-crash-seed-addtowallet-e37af3a8` — direct
+  mapWallet::emplace skips mapTxSpends; repaired via AddToWallet.
+- `canbebumped-crash-seed-mapspend-f89f87f2` — HasWalletSpend is
+  independent of base's mapWallet presence; control decoupled.
+- `canbebumped-crash-seed-blockconflict-e33d219e` —
+  TxStateBlockConflicted requires height >= 0 (wallet.cpp:3409
+  contract assert); repaired to non-negative range.
+All replay clean; 20k campaign clean (994d841b48). Replay:
+FUZZ=wallet_transaction_can_be_bumped ./build_fuzz/bin/fuzz <seeds...>

@@ -449,3 +449,42 @@ wallet/GUI-scoped (deprioritized).
   line re-read (the 4 deepest carry the risk weight; the rest
   are restatements of the same rules).
 - wallet/GUI comment cells remain deprioritized.
+
+## Cycle 6 (2026-08-03, cycle-324 r39, raw=4578459854551380609 -> idx 1): queue cell — net_processing/txmempool fork-comment claim sweep, 4/4 TRUE
+
+### Cell
+From the rebuilt pending queue: verify fork-authored comments in
+net_processing.{cpp,h} and txmempool.{cpp,h} against implementation
+(merge-base 18c05d9301 diff comment extraction).
+
+### Claims and verdicts
+1. txmempool check(): "compare diagram points with the
+   transaction-order prefix only while the prefix and its same-sign
+   buckets all remain representable" — TRUE. Guards at
+   txmempool.cpp:541 (comparison gated on !overflowed &&
+   !order_dependent), 551-559 (per-bucket flag accumulation),
+   639 (final fee assert equally gated).
+2. PrioritiseTransaction: "derive the modified fee from the
+   cumulative delta so saturated intermediate updates do not leave
+   stale modified fees" — TRUE. txmempool.cpp:747
+   SaturatingAdd(GetFee(), new_delta) from cumulative mapDeltas,
+   never incrementally from a possibly-saturated prior value.
+3. Headers slot: "released peer keeps its request timestamp as a
+   backoff; scheduler does not hand the slot straight back; fresh
+   block evidence lets one request through" — TRUE. Release branch
+   skips the timestamp clear (net_processing.cpp:3071-3078);
+   scheduler gates on HEADERS_RESPONSE_TIME since
+   m_last_getheaders_timestamp (:2918); fresh-evidence clear at :4281.
+4. Chain-sync timeout: "once set it stays armed until cleared below;
+   releasing the sync slot does not disarm" — TRUE. Arm condition
+   :5349 includes m_timeout != 0s independent of fSyncStarted;
+   clear only on demonstrated work >= tip (:5357-5359).
+
+### Verdict
+DISMISSED (all four fork claims mechanically verified against code).
+Cell closed; queue cell count decremented.
+
+### Limitations / queue
+- Upstream-authored comments in the two files not re-swept this
+  cycle (c4's 106-claim sweep covered the shared surface; upstream
+  drift since is fuzz/lint/gui-only).
