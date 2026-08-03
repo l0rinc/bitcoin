@@ -200,6 +200,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 93 | system-fault-injection | CYCLE-1 | 2026-07-29 | mid-flush crash injection: recovery rolls forward identically (3 crashes, 415 blocks, no corruption) |
 | 93 | system-fault-injection | CYCLE-2 (COMPLETE) | 2026-08-01 | fs/permission faults: unreadable blk = loud attributed abort; unwritable blocksdir = loud write-fail; full recovery both |
 | 59 | supply-chain-security-gates | CYCLE-2 | 2026-07-29 | workflow byte-identical to upstream (mutable tags, no permissions block); posture upstream-accepted |
+| 59 | supply-chain-security-gates | CYCLE-3 | 2026-08-03 | PR 35754 CI pinning adopted: pip hashes, action commits, image digests, tool sha256; F23 |
 | 75 | build-throughput-cacheability | CYCLE-2 | 2026-07-29 | header-cost via -ftime-trace: validation.h 6.1s (20%), no anomaly |
 | 73 | network-state-machine | CYCLE-2 | 2026-07-29 | handshake EOF sweep: 7/7 v2 offsets + v1 partial close clean, zero half-open peers |
 | 73 | network-state-machine | CYCLE-4 | 2026-07-31 | slow-drip ellswift reaped at 64s mid-handshake (V2 handshake timeout); real peer unaffected; DISMISSED |
@@ -1058,6 +1059,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 274 (suspicion-mined): PR 35754 CI pinning CONFIRMED
+   gap + ADOPTED (4 arms verified); F23.
    Cycle 273 (suspicion-mined): PR 35205 kernel dbcache
    setter: API extension, no defect; no adoption.
    Cycle 272 (suspicion-mined): PR 35797 PSBT abort: lineage
