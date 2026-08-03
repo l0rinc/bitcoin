@@ -1008,3 +1008,29 @@ divergence at HEAD; the corruption arm belongs to 35654's watch.
 ### Limitations
 - If 35654 lands (undecodable-key rejection), the Exists()
   fast path remains correct (rejection happens at read).
+
+## Cycle 24 (2026-08-03, draw 277, raw=622899200797962770, suspicion-mined): PR 34132 error-catcher removal — critical-path simplification refactor; fatal-on-read-error behavior verified working at HEAD (#93/#95 family); NO adoption
+
+### Assessment
+- The PR drops CCoinsViewErrorCatcher + ExecuteBackedWrapper in
+  favor of centralized fatal read handling (part of #34280
+  caching cleanup). Motivation is complexity on the read hot
+  path, not a defect.
+- Our lineage's fatal-on-read-error behavior is verified end-
+  to-end (#93 fs-fault family: unreadable blk = loud abort;
+  #95 durability: corruption always loud). The catcher is
+  upstream-identical and functional.
+- The refactor changes consensus-adjacent error semantics (the
+  order/venue of fatality) — high review bar, zero defect value
+  for us.
+
+### Verdict
+Assess-only, NO adoption: simplification refactor; current
+fatal handling verified working.
+
+### Exact commands
+- curl PR body; #93/#95 family refs above.
+
+### Limitations
+- If #34280's cleanup lands wholesale, our fs-fault tests are
+  the regression oracle for the behavior contract (recorded).
