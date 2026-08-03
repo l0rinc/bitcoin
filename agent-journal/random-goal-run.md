@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 314
+
+- Selected index: `96`
+- Goal slug: `todo-deferred-work`
+- Goal title: TODO, FIXME, stub, and deferred-work challenge audit
+- Selection command: `shuf -i 0-113 -n 1`
+- Catalog SHA-256: `7012173cab79a6d83c1b465e41c6015bbe42c408dbee283b7191b8771404b2c5`
+- Base commit: `52f7c73943d6b0b957db00f33adf2718ddb012ab`
+- Branch: `uber-cycle-314-todo-deferred-work-20260802`
+- Timestamp: `2026-08-03T01:41:53Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-96`
+
 ## Cycle 313
 
 - Selected index: `67`
