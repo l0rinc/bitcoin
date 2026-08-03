@@ -56,3 +56,30 @@ convention holds everywhere except single-fwrite small files
 - Regression #7 on the final lineage (covers F28-F32).
 - Next rotation: re-rank draw (goal 119 exhausted for this shape
   in-tree; cross-project LevelDB arm = goals 125-127's own draws).
+
+## Cycle 2 (2026-08-03, goal 115 committed-diff reviewer pass, draw raw=12596182104518000101 masked=3372810067663224293 n=12 idx=5)
+Independent reviewer-pass over this session's adopted diffs
+(scout/fixer vs reviewer separation). Verdicts:
+- F26 xor-key (2110abf119): catch-all `catch (...)` runs
+  fs::remove(xor_key_path) even when the fopen itself failed —
+  if "wbx" failed because ANOTHER process created the file in the
+  exists->create race window, the catch deletes the FOREIGN valid
+  key file. Reachability: the datadir process lock makes two live
+  bitcoinds impossible; a foreign writer racing a startup create
+  is contrived. Benign sub-case: fopen fails (perms/ENOSPC/fd) ->
+  remove is a no-op + one noise LogError. Verdict: ACCEPTED RISK,
+  documented; upstream/parallel has the same shape; a `created`
+  guard is a cosmetic follow-up, not a defect fix. fclose-failure
+  path correct (removes possibly-corrupt own file).
+- F27 snapshot write (3c9090b644): typed catch (ios_base::failure
+  only) after IsNull check; fopen "wb" truncation of an existing
+  marker is by design; cleanup_bad_snapshot wipes the whole
+  chainstate dir including the marker — consistent, no masking.
+  CLEAN.
+- F30 headers clamp (35473f91b4): HeadersSyncState is per-sync-
+  attempt; a later attempt with a caught-up clock recomputes a
+  positive bound — no permanent lockout. elapsed>0 path unchanged.
+  CLEAN.
+- F28/F29 option guards: negative-only/overflow-only rejections;
+  0 stays accepted for both (matches their boundary tests); no
+  previously-valid config rejected. CLEAN.
