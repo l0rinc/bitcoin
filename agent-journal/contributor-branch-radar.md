@@ -875,3 +875,29 @@ call. NO adoption (flipping it locally would contradict
 ### Limitations / queue
 - RSS arm unmeasured (needs /usr/bin/time long-run, out of
   cycle); the tradeoff's RSS side stays #16957's number.
+
+## Cycle 19 (2026-08-03, draw 269, raw=3084566507676408966, suspicion-mined): PR 34864 cache-state-invariants refactor — large refactor of BATTERY-VERIFIED working code; no defect at HEAD; NO adoption
+
+### Assessment
+- Scope: 9 files, +150/-191 — a design refactor (remove
+  standalone FRESH, pass freshness through SetDirty, drop the
+  separate DIRTY bit rationale), reviving #30673/#33018 parts.
+- Our coverage of the CURRENT discipline: coins_tests State-
+  matrix (:848-875 CLEAN/DIRTY/FRESH/DIRTY_FRESH x SPENT),
+  dirty_count contracts test (:475), Assume snapshots
+  (coins.cpp:34-107) — all green (#57 c5). The 'harder to
+  reason about' motivation is design-quality, not a defect:
+  every current state transition is battery-pinned.
+- Adoption would mean rewriting a verified discipline for a
+  reasoning-cleanup — explicitly NOT minimal-diff policy, and
+  the upstream series is in active review.
+
+### Verdict
+Assess-only: no defect to adopt; watch the series upstream.
+
+### Exact commands
+- curl PR files (9, +150/-191); #57 c5 battery refs above.
+
+### Limitations
+- If upstream lands it, our dirty_count/state batteries need
+  a translation pass (recorded as the adoption gate).
