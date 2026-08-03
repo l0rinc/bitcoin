@@ -1072,6 +1072,27 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 296 (radar-flood continuation + catalog migration to
+   128-goal mutable, hash ba7b1dd0a2ab7203): goal10-snapshot-
+   basehash COVERED-AHEAD (fork a146380c8e 2026-07-02 guards the
+   read arm; their regression test adopted, passes: archive
+   297175a4aa); goal38-snapshot-write CONFIRMED + ADOPTED —
+   deterministic LD_PRELOAD path-targeted short-write on the
+   base_blockhash stream: pre-fix RPC generic -1 raw exception +
+   orphaned chainstate_snapshot with 1-byte marker; post-fix
+   designed -32603 'could not write base blockhash' + orphan
+   removed + clean retry (audit/adopt-snapshot-write-cleanup
+   3c9090b644, archive 86533108ab; F27). Canonical regtest
+   height-299 snapshot reproduced bit-exact (0c552ced ==
+   chainparams) via framework cache + feature_assumeutxo recipe;
+   framework trap recorded: default setup_nodes mines +1 block
+   (IBD-exit), override setup_network for recipe-exact chains.
+   goal33 parse-oracles COVERED (all parsers have in-tree fuzz
+   targets + 112,382-seed corpus). Consolidated regression #4
+   GREEN (full test_bitcoin on 297175a4aa). URGENT at 10 (F27 in,
+   dbwrapper-leak pruned to history). Unrelated worktree deletion
+   of agent-journal/campaign-goals-99.md (user-side catalog
+   migration) left untouched, never staged.
    Cycle 295b (same radar-flood cycle): goal93-xor-key
    (d7d3559a30) CONFIRMED + ADOPTED — deterministic LD_PRELOAD
    short-write pair: pre-fix 1-byte xor.dat left + restart
