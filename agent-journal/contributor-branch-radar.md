@@ -1034,3 +1034,26 @@ fatal handling verified working.
 ### Limitations
 - If #34280's cleanup lands wholesale, our fs-fault tests are
   the regression oracle for the behavior contract (recorded).
+
+## Cycle 25 (2026-08-03, draw 279, raw=2213819187314186345, suspicion-mined): PR 35820 typed durations — broad type-safety refactor; no live unit-mixing at HEAD; NO adoption
+
+### Assessment
+- The PR threads std::chrono types through duration calculations
+  (GUI formatting, peer bans, scheduler, block timestamps,
+  target spacing) to make unit-mixing unrepresentable.
+- No live defect: no concrete unit-mixing bug is claimed or
+  found at HEAD; our sanitizer matrices + functional timing
+  paths (#50, #108 families) are green. Potential-class
+  hardening by construction.
+- Broad refactor touching consensus-adjacent time math (block
+  timestamps/target spacing) — upstream review territory.
+
+### Verdict
+Assess-only, NO adoption: hardening refactor, zero live defect.
+
+### Exact commands
+- curl PR body (problem/fix above).
+
+### Limitations
+- If it lands, the block-timestamp paths get a #67-style
+  differential re-run (recorded gate).
