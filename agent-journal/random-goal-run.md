@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 323 Selection
+
+- Selected index: `3`
+- Goal slug: `current-pr-leftovers`
+- Goal title: Current branch and PR leftover sweep
+- Selection command: `shuf -i 0-122 -n 1`
+- Catalog SHA-256: `da5a2650e39932fe39d952c139a8f547fe319819c4f663d71a055f4f6298a153`
+- Base commit: `405d9e76b9`
+- Branch: `uber-cycle-323-current-pr-leftovers-20260802`
+- Timestamp: `2026-08-03T04:40:12Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-3`
+
 ## Cycle 322 Selection
 
 - Selected index: `12`
