@@ -12,6 +12,14 @@
 - Timestamp: `2026-08-03T00:17:20Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-15`
 
+## Cycle 310 Result
+
+- The selected public-object-validation queue excluded the previously fixed compact-header, Taproot x-only, descriptor-inference, PSBT serialized-key, direct-xpub, and raw-P2PK cells. The remaining direct parser variants were checked against history and compatibility tests. The concrete new hypothesis was that `CExtPubKey::operator<` treated only public key and chain code as ordered-container identity even though `operator==` also includes depth, parent fingerprint, and child number.
+- A valid deterministic xpub fixture cloned one BIP32 vector key and changed only depth to `1`, fingerprint to `11 22 33 44`, and child to `1`. The old `std::set<CExtPubKey>` collapsed the unequal objects, and the old `std::map<CExtPubKey, CExtKey>` update pattern used by `gethdkeys` retained one key while overwriting its private-value metadata. Production descriptor parsing of `wsh(multi(2,xpub1,xpub2))` likewise extracted one xpub. The pre-fix regression expectation failed with `1 != 2` for the set and private map.
+- Confirmed and fixed in `7bc2afcf91` (`pubkey: preserve extended key metadata in ordered containers`), authored by `Lőrinc <pap.lorinc@gmail.com>`. The comparator now orders public key, chain code, depth, fingerprint, and child number, matching `operator==`; version bytes remain deliberately excluded from the generic equality and comparator, while PSBT retains its complete serialized-key comparator. The permanent BIP32 regression also checks neutering each returned xprv back to the matching xpub and descriptor extraction of both keys.
+- Repaired validation: `TMPDIR=/data/my_storage/tmp/cycle310-public-object ninja -C /data/my_storage/tmp/cycle246-wallet test_bitcoin -j4` exited 0; the focused `bip32_tests/extpubkey_metadata_identity` passed with no errors; and `bip32_tests,descriptor_tests,psbt_tests,wallet_rpc_tests` passed 38 selected cases with seed `31003` and no errors. `git diff --check` passed. No sanitizer, 32-bit, or functional daemon run was attempted because `/data` and `/` remain full; existing protected workloads were preserved.
+- Learned suspicious surface: extended-key identity differs by context between derivation-material grouping, complete BIP32 metadata, complete wire serialization, and key-origin output. Added Goal 110, `extpubkey-identity-matrix`, with seed journal `agent-journal/extpubkey-identity-matrix.md`. The catalog now contains 111 contiguous goals (`0..110`); catalog SHA-256 is `77cacbe449eee1955686e5fbebac74b1db6c85fb9270bc84e0e3aec609a06b52`, manifest SHA-256 is `8e0263e80bfad7fe1fba978f76637b78d51c411c422cc14252dd723b92be1714`, random prompt SHA-256 is `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`, and generator SHA-256 is `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`.
+
 ## Cycle 309
 
 - Selected index: `94`
