@@ -1358,3 +1358,17 @@ upstream 556988790a vulnerable.
 Sibling goal43-cluster-size (108e3a118b): count arm COVERED-AHEAD
 (in-tree both-bounds check :110-115); clustersize arm (negative/
 overflow vKB) still live — next-cycle candidate.
+
+### goal43-cluster-size (108e3a118b): count arm COVERED-AHEAD, size arm CONFIRMED + ADOPTED
+Count arm (-limitclustercount 1..64): already enforced in-tree at
+mempool_args.cpp:115-120 (our 5e0a80ade5 + pre-existing upper
+bound); the parallel test's count assertions pass unmodified.
+Size arm (-limitclustersize): negative KiB -> negative
+cluster_size_vbytes (TxGraph limit < 0); astronomical KiB ->
+int64 overflow at ingestion (vkb*1'000) or at the *40 graph-limit
+multiply. Failing-before: MempoolClusterLimitOptions '-1' and
+max_kvb+1 accepted (2 BOOST failures). Passing-after: full
+mempool_tests green. Minimal variant adopted (guard pre-ingestion
+in the outer function; their helper-refactor variant noted as
+equivalent behavior) — audit/adopt-clustersize-validation
+a3253e6396. Config-gated, no consensus impact; upstream vulnerable.

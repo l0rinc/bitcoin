@@ -18,6 +18,7 @@
 #include <validation.h>
 
 #include <test/util/setup_common.h>
+#include <txgraph.h>
 
 #include <boost/test/unit_test.hpp>
 #include <cstddef>
@@ -42,6 +43,28 @@ BOOST_AUTO_TEST_CASE(MempoolExpiryOptionTest)
     CTxMemPool::Options positive_opts;
     BOOST_CHECK(ApplyArgsManOptions(positive_args, ::Params(), positive_opts));
     BOOST_CHECK_EQUAL(positive_opts.expiry, std::chrono::hours{1});
+}
+
+BOOST_AUTO_TEST_CASE(MempoolClusterLimitOptions)
+{
+    const auto accepts = [](const std::string& option, const std::string& value) {
+        ArgsManager args;
+        args.ForceSetArg(option, value);
+        CTxMemPool::Options options;
+        return bool(ApplyArgsManOptions(args, Params(), options));
+    };
+
+    const auto max_cluster_size_kvb = std::numeric_limits<int64_t>::max() / 40'000;
+    BOOST_CHECK(accepts("-limitclustersize", "0"));
+    BOOST_CHECK(accepts("-limitclustersize", std::to_string(max_cluster_size_kvb)));
+    BOOST_CHECK(!accepts("-limitclustersize", "-1"));
+    BOOST_CHECK(!accepts("-limitclustersize", std::to_string(max_cluster_size_kvb + 1)));
+
+    BOOST_CHECK(accepts("-limitclustercount", "1"));
+    BOOST_CHECK(accepts("-limitclustercount", std::to_string(MAX_CLUSTER_COUNT_LIMIT)));
+    BOOST_CHECK(!accepts("-limitclustercount", "-1"));
+    BOOST_CHECK(!accepts("-limitclustercount", "0"));
+    BOOST_CHECK(!accepts("-limitclustercount", std::to_string(MAX_CLUSTER_COUNT_LIMIT + 1)));
 }
 
 class MemPoolTest final : public CTxMemPool
