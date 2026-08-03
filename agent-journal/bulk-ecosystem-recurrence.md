@@ -442,3 +442,20 @@ REGRESSION #8: full test_bitcoin GREEN on the cycle-312 lineage
   teardown abort on a fresh transplant is most often the target's
   OWN contract gap (SetMockTime), not the code under test —
   reproduce on a minimal seed FIRST before touching production code.
+
+### goal61-stateful private_broadcast (b89f93f175): COVERED-AHEAD, no transplant
+Their upgraded target grafts an independent state model (per-tx
+time_added, per-peer sent/received records; exact GetTxForNode,
+DidNodeConfirmReception, GetStale thresholds, GetBroadcastInfo
+field equality, priority ordering). Our target has had the same
+model since 2026-07-02 (fork-only dbef68896c "privatebroadcast:
+check send status contracts"): AssertMatchesModel covers
+GetBroadcastInfo field equality, HavePendingTransactions,
+GetTxForNode, DidNodeConfirmReception, GetStale with
+INITIAL_STALE/STALE_DURATION, plus PriorityTuple ordering and
+AssertSameBroadcastInfo whole-vector equality — a superset of
+their check set. Independent re-discovery; upstream master's
+target is the blind version both forks upgraded. NO adoption.
+Flood item list now COMPLETE: every src-touching branch of the
+498-branch flood has a recorded verdict (assessed/adopted/
+covered/dismissed/deferred).
