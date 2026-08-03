@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 321 Selection
+
+- Selected index: `43`
+- Goal slug: `option-api-lifecycle`
+- Goal title: Option and API lifecycle audit
+- Selection command: `shuf -i 0-120 -n 1`
+- Catalog SHA-256: `12a885d6e83e495aca1030563565e88251a74ac08a08cdefe6c2fd189aa048d8`
+- Base commit: `286f85f5f229b0ce6fbac1f50ff0d5647f418d70`
+- Branch: `uber-cycle-321-option-api-lifecycle-20260802`
+- Timestamp: `2026-08-03T03:38:45Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-43`
+
 ## Cycle 320 Selection
 
 - Selected index: `14`
