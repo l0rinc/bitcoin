@@ -1072,6 +1072,12 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 315 (watch): upstream master advanced again dcc2ed52b8
+   -> 30f6b05857 (merge #35860 rpc fuzz rework, fuzz-only 112
+   lines; second fuzz advance). Both advances merge-tree CLEAN
+   against our modified rpc.cpp/tx_pool.cpp (0 conflicts) — no
+   adoption (upstream fuzz coverage lands on next rebase), no
+   rebase hazard. Author remote static (1363 heads, 0 new).
    Cycle 314 (goal 111 tail — goal87 series disposition):
    STRUCTURAL MISMATCH — their 4 test-only branches extend their
    fork's divergent persistence cases (MempoolV1DependencyOrdering
