@@ -1072,6 +1072,18 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 314 (goal 111 tail — goal87 series disposition):
+   STRUCTURAL MISMATCH — their 4 test-only branches extend their
+   fork's divergent persistence cases (MempoolV1DependencyOrdering
+   family, 0 matches in-tree); extension impossible. Gap found:
+   no GetTotalFee/GetTotalTxSize roundtrip coverage in-tree.
+   Native test MempoolTotalsPreservedAcrossDumpLoad written
+   (matured-coinbase spends via ProcessTransaction, dump, wipe,
+   reload, identical totals); first run caught
+   bad-txns-premature-spend-of-coinbase (mineBlocks(3) maturity
+   pattern); full mempool_tests GREEN. audit/transplant-goal87-
+   tests 8146b1fd8a, archive 9ee781a1bd. Flood manifest now fully
+   closed: every src-touching branch has a recorded verdict.
    Cycle 313 (watch + verification): upstream master ADVANCED
    556988790a -> dcc2ed52b8 (single merge #35856, fuzz-only 48
    lines in tx_pool.cpp; no src changes, no adopted-area overlap;
