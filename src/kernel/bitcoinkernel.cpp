@@ -233,7 +233,33 @@ btck_Warning cast_btck_warning(kernel::Warning warning)
 }
 
 struct LoggingConnection {
-    std::unique_ptr<std::list<std::function<void(const std::string&)>>::iterator> m_connection;
+    using CallbackIterator = std::list<std::function<void(const std::string&)>>::iterator;
+
+    class CallbackCleanup
+    {
+    private:
+        CallbackIterator m_connection;
+        bool m_first_connection;
+        bool m_released{false};
+
+    public:
+        CallbackCleanup(CallbackIterator connection, bool first_connection)
+            : m_connection{connection}, m_first_connection{first_connection} {}
+
+        ~CallbackCleanup()
+        {
+            if (m_released) return;
+            if (m_first_connection) {
+                LogInstance().DisconnectTestLogger();
+            } else {
+                LogInstance().DeleteCallback(m_connection);
+            }
+        }
+
+        void Release() { m_released = true; }
+    };
+
+    std::unique_ptr<CallbackIterator> m_connection;
     void* m_user_data;
     std::function<void(void* user_data)> m_deleter;
 
@@ -241,23 +267,22 @@ struct LoggingConnection {
     {
         LOCK(cs_main);
 
-        auto connection{LogInstance().PushBackCallback([callback, user_data](const std::string& str) { callback(user_data, str.c_str(), str.length()); })};
+        const auto connection{LogInstance().PushBackCallback([callback, user_data](const std::string& str) { callback(user_data, str.c_str(), str.length()); })};
 
         // Only start logging if we just added the connection.
-        if (LogInstance().NumConnections() == 1 && !LogInstance().StartLogging()) {
+        const bool first_connection{LogInstance().NumConnections() == 1};
+        CallbackCleanup cleanup{connection, first_connection};
+        if (first_connection && !LogInstance().StartLogging()) {
             LogError("Logger start failed.");
-            LogInstance().DeleteCallback(connection);
-            if (user_data && user_data_destroy_callback) {
-                user_data_destroy_callback(user_data);
-            }
             throw std::runtime_error("Failed to start logging");
         }
 
-        m_connection = std::make_unique<std::list<std::function<void(const std::string&)>>::iterator>(connection);
+        m_connection = std::make_unique<CallbackIterator>(connection);
         m_user_data = user_data;
         m_deleter = user_data_destroy_callback;
 
         LogDebug(BCLog::KERNEL, "Logger connected.");
+        cleanup.Release();
     }
 
     ~LoggingConnection()
@@ -788,8 +813,16 @@ void btck_logging_disable()
 
 btck_LoggingConnection* btck_logging_connection_create(btck_LogCallback callback, void* user_data, btck_DestroyCallback user_data_destroy_callback)
 {
+    const auto destroy_user_data{[user_data_destroy_callback](void* data) {
+        if (data && user_data_destroy_callback) {
+            user_data_destroy_callback(data);
+        }
+    }};
+    std::unique_ptr<void, decltype(destroy_user_data)> user_data_guard{user_data, destroy_user_data};
     try {
-        return btck_LoggingConnection::create(callback, user_data, user_data_destroy_callback);
+        auto* connection{btck_LoggingConnection::create(callback, user_data, user_data_destroy_callback)};
+        user_data_guard.release();
+        return connection;
     } catch (const std::exception&) {
         return nullptr;
     }

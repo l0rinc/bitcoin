@@ -925,9 +925,10 @@ BITCOINKERNEL_API void btck_logging_disable_category(btck_LogCategory category);
  *
  * @param[in] log_callback               Non-null, function through which messages will be logged.
  * @param[in] user_data                  Nullable, holds a user-defined opaque structure. Is passed back
- *                                       to the user through the callback. If the user_data_destroy_callback
- *                                       is also defined it is assumed that ownership of the user_data is passed
- *                                       to the created logging connection.
+ *                                       to the user through the callback. If user_data_destroy_callback is
+ *                                       also defined, ownership of user_data is passed to this
+ *                                       function. The destroy callback is called before this function
+ *                                       returns null on error, or when the logging connection is destroyed.
  * @param[in] user_data_destroy_callback Nullable, function for freeing the user data.
  * @return                               A new kernel logging connection, or null on error.
  */
