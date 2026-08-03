@@ -1,5 +1,52 @@
 # Random Goal Run Ledger
 
+## Cycle 309
+
+- Selected index: `94`
+- Goal slug: `bindings-ffi-parity`
+- Goal title: Bindings, FFI, and language-wrapper parity audit
+- Selection command: `shuf -i 0-108 -n 1`
+- Catalog SHA-256: `6284d0369462c9c426d557943b9c4b71fd20e06658f7993aba04f1811ecb686a`
+- Base commit: `d8bb0bf76632b6436aaea56b54e526db9d5b3363`
+- Branch: `uber-cycle-309-bindings-ffi-parity-20260802`
+- Timestamp: `2026-08-03T00:01:37Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-94`
+
+## Cycle 309 Result
+
+- Finding: `btck_chainstate_manager_import_blocks` accepted malformed raw C
+  path arrays. With count `1`, a null path entry and a null lengths array both
+  returned success instead of `-1`; the implementation also used a `uint32_t`
+  loop index for a public `size_t` count.
+- Verdict: confirmed and fixed in `d3dc50785a` (`kernel: validate import path
+  arrays`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- Fix: reject missing arrays for nonzero counts, reject null path elements,
+  iterate with `size_t`, and use `fs::PathFromString` for length-delimited
+  paths. The C++ wrapper's valid vector conversion remains unchanged.
+- Before evidence: the focused kernel test with only the regression added
+  exited `201`; both new checks observed `0` instead of `-1` and `9/11`
+  assertions passed.
+- After evidence: the focused kernel test passed `11/11` assertions; the full
+  kernel suite passed 20 cases and `3726/3726` assertions. The build was
+  `/data/my_storage/tmp/cycle278-kernel-build` with `CCACHE_DISABLE=1`.
+- Learned suspicious surface: raw `libbitcoinkernel` C consumers can express
+  nullability, callback, borrowed-lifetime, status/exception, and width states
+  that the C++ wrapper normalizes away. Added Goal 109,
+  `kernel-c-abi-boundary-matrix`, with seed journal
+  `agent-journal/kernel-c-abi-boundary-matrix.md`.
+- Goal/catalog/seed commit: `f36360f865` (`goal: add kernel C ABI boundary
+  matrix`). Catalog now contains 110 goals with IDs `0..109`; catalog SHA-256
+  is `0f3f6c11ee008c76cb88250fdbc6f6abd713e72206f1c3b94daeb8e9983ed172`,
+  manifest SHA-256 is
+  `ce1280118624afc5fc58847e7b59bc3cabb3a08eeb978748df67f7e0bc5013f4`,
+  generator SHA-256 is
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random-run prompt SHA-256 is
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- Limitations: no sanitizer or 32-bit build was run because `/data` and `/`
+  are full and protected long-running jobs remain alive. Scratch state is
+  isolated under `/data/my_storage/tmp/cycle309-kernel-*`.
+
 ## Cycle 308
 
 - Selected index: `6`
