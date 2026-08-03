@@ -201,6 +201,10 @@ if(BUILD_FOR_FUZZING)
   )
 endif()
 
+if(BUILD_UTIL_CHAINSTATE AND NOT BUILD_KERNEL_LIB)
+  message(FATAL_ERROR "BUILD_UTIL_CHAINSTATE requires BUILD_KERNEL_LIB=ON.")
+endif()
+
 #=============================
 # Check and set PIC/PIE
 #=============================
