@@ -959,3 +959,25 @@ Assess-only, NO adoption; watch 32043 for the finished shape.
 
 ### Limitations
 - The IBD perf family (#22) may revisit when 32043 settles.
+
+## Cycle 22 (2026-08-03, draw 273, raw=16401672073795400746, suspicion-mined): PR 35205 kernel dbcache setter — API EXTENSION (feature gap, not a defect); kernel's fixed 450MiB fallback is safe-but-inflexible; NO adoption
+
+### Assessment
+- Since #34692 the node picks 450MiB/1GiB from RAM while the
+  kernel library always uses 450MiB; the PR adds a chainstate
+  dbcache setter + clarifies the naming split. Feature, not bug:
+  the fixed fallback cannot overrun memory (the unsafe direction
+  would be an unbounded default — not present).
+- Our kernel-API families (#46 output-on-failure, #47 export
+  consumer, #92 ABI battery) cover the current surface; an API
+  extension belongs to the upstream kernel-API design process.
+
+### Verdict
+Assess-only, NO adoption: feature PR, no defect at HEAD.
+
+### Exact commands
+- curl PR body (problem/fix above).
+
+### Limitations
+- If the setter lands upstream, the #92 ABI layout battery
+  needs a new row for the options struct (recorded gate).
