@@ -121,7 +121,6 @@ def check_manifests(ci_type):
         "fuzz.exe",
         "bench_bitcoin.exe",
         "test_bitcoin-qt.exe",
-        "bitcoin-chainstate.exe",
     }
     for entry in release_dir.iterdir():
         if entry.suffix.lower() != ".exe":
