@@ -1753,7 +1753,18 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    CI cache keys, header-cost -ftime-report).
 
 ## Handoff
-Updated after every rotation. PROGRAM STATE 2026-08-03 (resumed
+Updated after every rotation. PROGRAM STATE 2026-08-03 FINAL:
+all internal work complete and re-verified — 26-PR sweep fully
+covered (6 adopted incl. dup-txid skip fix, 2 covered-ahead, 17
+assess-only, 5 standing-watch); strong-random guards adopted;
+consolidated regression #3 all-green (test_bitcoin + test_kernel
++ 8 functional instances on the final lineage). Open external
+items only: dup-txid branch CI (queued, 0 failures), upstream
+master 556988790a (static), qa-assets pin 918cdd3 (current).
+Resume on: any upstream advance, new/force-updated author
+branch, qa-assets moving past the pin, or host tooling (lld,
+clang-tidy, more disk, second host).
+PROGRAM STATE 2026-08-03 (resumed
 suspicion-mining protocol): the 26-PR author sweep is FULLY COVERED —
 6 adopted with failing-before/passing-after pairs (F19 flush-failure,
 F20 log injection, F21 empty-HMAC UB, F22 empty-headers stall, F23 CI
