@@ -83,3 +83,14 @@ Independent reviewer-pass over this session's adopted diffs
 - F28/F29 option guards: negative-only/overflow-only rejections;
   0 stays accepted for both (matches their boundary tests); no
   previously-valid config rejected. CLEAN.
+
+### Working-tree scope audit (goal 115 iter 2)
+Tracked: clean — zero uncommitted modifications (the user's
+unstaged campaign-goals-99.md deletion was restored by an earlier
+reset --hard during cherry-pick cleanup; content == HEAD, recorded
+in cycle-297 ledger entry). Untracked: user's own files only
+(.ls.swp, campaign-goals.md = the 128-goal catalog, node_modules,
+package*.json) + 20 stale fuzz artifacts (crash-*/slow-unit-*,
+analyzed cycle 255, left untouched per protocol). No debris from
+this session's experiments (/tmp harnesses documented in journals).
+Verdict: CLEAN.
