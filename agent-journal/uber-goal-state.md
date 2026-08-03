@@ -1072,6 +1072,20 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 317 (fuzz transplants + flood close-out): txospenderindex
+   crash ROOT-CAUSED — harness-contract violation (parallel target
+   seeds RNG, never SetMockTime; BaseIndex::Sync reads NodeClock;
+   CheckGlobalsImpl teardown abort at check_globals.cpp:54; NOT
+   index logic; 4-byte seed 76 00 43 00 preserved in artifacts/);
+   repaired with SetMockTime(1231006505), 20k clean (70f5b19656).
+   blockmanager malformed-disk native test green (cf33694d3c).
+   dbwrapper_scheduled_pair transplanted with full-value Oracle
+   adaptation (their fork's key→size vs ours key→value; 2 compile
+   errors fixed; 20k running). private_broadcast goal61-stateful
+   COVERED-AHEAD — our target has the complete independent state
+   model since dbef68896c (2026-07-02, fork-only): AssertMatches
+   Model + AssertSameBroadcastInfo superset theirs. FLOOD CLOSED:
+   52/52 src-touching branches have recorded verdicts.
    Cycle 316 (verification + goal48 closure): REGRESSION #8 GREEN
    (full test_bitcoin on the cycle-312 lineage with F34/F35 +
    blockfilter). goal48 oracle series all 4 VERIFIED GREEN +
