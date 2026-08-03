@@ -5874,3 +5874,41 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   exact selector `shuf -i 0-108 -n 1`, a dedicated Cycle 309 branch, and the
   new persisted-GCS recovery cell when selected. Preserve all unrelated
   untracked artifacts and protected processes.
+
+## Cycle 309 Completion
+
+- Goal 94 (`bindings-ffi-parity`) was selected by exact `shuf -i 0-108 -n 1`
+  -> `94` on branch
+  `uber-cycle-309-bindings-ffi-parity-20260802`. The cycle-start/base HEAD was
+  `d8bb0bf76632b6436aaea56b54e526db9d5b3363`; the selected catalog SHA-256 was
+  `6284d0369462c9c426d557943b9c4b71fd20e06658f7993aba04f1811ecb686a`.
+- The raw `libbitcoinkernel` C import boundary accepted a null path entry and
+  a null lengths array with a nonzero count, silently returning success; its
+  loop also narrowed the public `size_t` count to `uint32_t`. The C++ wrapper
+  concealed the malformed states by always building valid parallel vectors.
+  Detached history contained related fixes, but neither was an ancestor of
+  this base; the regression was reproduced on the current tree before repair.
+- Source/test/journal commit `d3dc50785a` (`kernel: validate import path
+  arrays`) rejects missing arrays and null entries, iterates with `size_t`, and
+  uses the length-delimited filesystem conversion. The pre-fix focused test
+  exited `201` with `9/11` assertions; the post-fix focused test passed
+  `11/11`, and the full kernel suite passed 20 cases and `3726/3726`
+  assertions.
+- Added learned Goal 109 `kernel-c-abi-boundary-matrix` and seed journal
+  `agent-journal/kernel-c-abi-boundary-matrix.md`. Goal/catalog/seed commit
+  `f36360f865` extends the catalog to 110 contiguous goals (`0..109`), with
+  catalog SHA-256
+  `0f3f6c11ee008c76cb88250fdbc6f6abd713e72206f1c3b94daeb8e9983ed172` and
+  manifest SHA-256
+  `ce1280118624afc5fc58847e7b59bc3cabb3a08eeb978748df67f7e0bc5013f4`.
+- Cycle result ledger commit `9632c9343e` (`journal: record cycle 309
+  result`) records the source, tests, catalog hashes, learned queue, and
+  storage/process limitations. `git fetch origin master` completed and
+  `git rebase origin/master` reported the branch already up to date. The
+  post-rebase HEAD is `9632c9343ec631a507887de12c1514ee89795e60`, origin is
+  `556988790a7f961693a8fd93f73725baea66476a`, and divergence is `0 1425`.
+- `/data` and `/` remain full; sanitizer, 32-bit, and broad alternate-binding
+  execution were not available. Protected long-running processes and
+  unrelated untracked artifacts were preserved. No repository-completion
+  claim is made. The next action is a fresh gate, exact selector
+  `shuf -i 0-109 -n 1`, and a dedicated Cycle 310 branch.
