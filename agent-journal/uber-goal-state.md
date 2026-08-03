@@ -1735,7 +1735,18 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    CI cache keys, header-cost -ftime-report).
 
 ## Handoff
-Updated after every rotation. PROGRAM STATE 2026-08-02 (session
+Updated after every rotation. PROGRAM STATE 2026-08-03 (resumed
+suspicion-mining protocol): the 26-PR author sweep is FULLY COVERED —
+6 adopted with failing-before/passing-after pairs (F19 flush-failure,
+F20 log injection, F21 empty-HMAC UB, F22 empty-headers stall, F23 CI
+pinning, merkle doc+test), 2 covered-ahead (35797 PSBT via 53506a51e9,
+35662 txdata via 67239a4a19), 17 assess-only (no defect/design/feature/
+draft), 5 standing-watch (35744/35859/35818/35620/35654). The strong-
+random-contracts branch was adopted on arrival (#104 RNG contracts
+pinned behaviorally + statically). Catalog/corpus programs complete
+(112,382 seeds green, 6/6 mutation clean, consolidated regression green
+on the integrated lineage incl. all adopted fixes).
+PROGRAM STATE 2026-08-02 (session
 summary): the full 110-goal catalog has been cycled; the corpus
 import program is COMPLETE (112,382 upstream qa-assets seeds
 validated through the fork's hardened build across 8 families,
