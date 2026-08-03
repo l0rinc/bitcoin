@@ -19,6 +19,7 @@ from test_framework.address import (
     script_to_p2sh,
     script_to_p2wsh,
 )
+from test_framework.blocktools import CONSENSUS_CLEANUP_NEVER_ACTIVE
 from test_framework.descriptors import descsum_create
 from test_framework.key import ECPubKey
 from test_framework.test_framework import BitcoinTestFramework
@@ -47,7 +48,7 @@ class WalletMigrationTest(BitcoinTestFramework):
         self.supports_cli = False
         # Disable the consensus cleanup for this test as it creates block with an old node, which
         # does not set nLockTime in coinbase to block height - 1.
-        self.extra_args = [["-vbparams=consensuscleanup:0:0"], ["-deprecatedrpc=create_bdb"]]
+        self.extra_args = [[CONSENSUS_CLEANUP_NEVER_ACTIVE], ["-deprecatedrpc=create_bdb"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -261,7 +262,7 @@ class WalletMigrationTest(BitcoinTestFramework):
         self.assert_list_txs_equal(listtransactions_compatibility(basic1_restored.listtransactions()), txs)
 
         # restart master node and verify that everything is still there
-        self.restart_node(0, extra_args=self.extra_args[0])
+        self.restart_node(0)
         self.connect_nodes(0, 1)
         default = self.master_node.get_wallet_rpc(self.default_wallet_name)
         self.master_node.loadwallet("basic1")
@@ -1694,7 +1695,7 @@ class WalletMigrationTest(BitcoinTestFramework):
         shutil.copyfile(self.old_node.wallets_path / "wallet.dat", self.master_node.wallets_path / "wallet.dat")
 
         # Generate blocks just so the wallet best block is pruned
-        self.restart_node(0, ["-fastprune", "-prune=1", "-nowallet"])
+        self.restart_node(0, self.extra_args[0] + ["-fastprune", "-prune=1", "-nowallet"])
         self.connect_nodes(0, 1)
         self.generate(self.master_node, 450, sync_fun=self.no_op)
         self.master_node.pruneblockchain(250)
