@@ -44,3 +44,16 @@ with fresh eyes? No — mechanism-proven. R4: attack the "no production raw
 CFeeRate deserialization" claim from G-slice-1 by searching NEW
 serialization users since (none added — verify quickly next cycle if a new
 READWRITE appears). Otherwise rotate per ledger: #56 stale PR resurrection.)
+
+## Cycle (2026-08-03, cycle-324 r54, raw=4384128710462411582 -> idx 62): R4 queue cell CLOSED — "no production raw CFeeRate deserialization" survives
+
+### Attack
+grep for new CFeeRate serialization users (READWRITE/*fee* across
+src/, tests excluded): ONLY src/policy/feerate.h:128
+SERIALIZE_METHODS(CFeeRate, obj) { READWRITE(obj.m_feerate.fee,
+obj.m_feerate.size) } — the sat/vB wrapper pair, not a raw CFeeRate.
+git log origin/master --since=2026-07-25 on transaction.h/core_io.h:
+empty (no new serialization sites upstream either).
+### Verdict
+Claim SURVIVES (no new users). R4 closed; R3 remains
+mechanism-proven; queue rotates per ledger.

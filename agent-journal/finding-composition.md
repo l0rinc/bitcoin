@@ -125,3 +125,47 @@ lineage merges.
   the recorded mechanisms), not re-derived empirically this cycle.
 - Standing rule unchanged: composition passes evaluate CONFIRMED
   capabilities only.
+
+## Cycle 3 (2026-08-03, cycle-324 draw r6, raw=8142385977759109223 -> idx 103): F25-F35 flood findings as nodes — all new edges broken; no realizable chain; DISMISSED
+
+### Reopen trigger
+Standing hygiene rule fired: 11 new confirmed findings (F25-F35,
+2026-08-03 flood adoptions) not yet composed. All FIXED in-lineage
+with regression evidence; edges evaluated on PRE-fix capabilities
+per c2 rule.
+
+### Edge walk (new-node pairs and cross-generation pairs)
+- F26 (xor.dat short-write -> unbootable datadir) x F27 (snapshot
+  base-blockhash write abort): mutually exclusive orderings, not a
+  chain — F27's snapshot path needs a booted node, F26 prevents
+  boot. BROKEN.
+- F33 (txospenderindex false-synced) x F35 (blockfilter wedge):
+  different indexes, no shared state; F33's false report can MASK
+  F35's symptom at the RPC client — diagnostic ambiguity, not a
+  capability grant. Indexes are read-only observers; no validation
+  influence. BROKEN.
+- F34 (descriptor INT32_MAX RPC thread kill) x F28/F29 (negative
+  config acceptance): disjoint preconditions (live authenticated
+  RPC session vs startup flags). BROKEN.
+- F30 (headers cap wrap under lagging clock) x F33/F35: indexes
+  consume connected blocks post-validation; commitment-cap wrap
+  affects header acceptance, not index state. BROKEN.
+- F31/F32 (i2p/tor key persistence) x F30: service-restart failure
+  degrades peer diversity environmentally; does not grant the
+  lagging-clock precondition. BROKEN.
+- F25 (txdb cursor over malformed key) x F33/F35: corrupt-keyspace
+  precondition foreign to index findings (no coins-DB cursor use).
+  BROKEN.
+
+### Verdict
+DISMISSED: no realizable multi-step chain. Every new capability is
+local-boundary (config/filesystem/RPC-session/observer-index),
+pairwise-independent in preconditions, and repair-masked. The two
+Medium items (F33, F35) are observer faults; neither composes into
+a validation or remote primitive.
+
+### Limitations / queue
+- Severity composition is judgment bounded by recorded mechanisms
+  (same caveat as c2).
+- Standing rule unchanged: re-run on any new CONFIRMED finding or
+  out-of-lineage merge.

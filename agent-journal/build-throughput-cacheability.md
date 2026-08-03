@@ -288,3 +288,13 @@ entries are the rotation's own failure/edit residue. No action.
 - The 6 modified-during-compile instances are not individually
   attributed (timestamps not kept); class-level attribution
   suffices (no daemon/CI ran concurrently).
+
+## Cycle (2026-08-03, cycle-324 r55, raw=6487531322071883467 -> idx 75): CI cache-key arm assessed — no defect
+
+ccache restore (ci.yml:169-173): primary key
+job+job-type+ccache+run_id (unique per run), prefix restore-key
+(rolling cache). Content-addressed ccache makes stale restores
+harmless; per-job-type isolation intact; no cross-branch poisoning
+path (restored entries only accelerate). vcpkg binary/downloads
+caches keyed by computed primary keys (steps.*.outputs).
+actions/cache@v5 current. Verdict: no defect; queue arm closed.
