@@ -854,4 +854,18 @@ BOOST_AUTO_TEST_CASE(rpc_arg_helper)
     CheckRpc(params, UniValue{JSON(R"([5, "hello", 4, "test", true, 1.23, "world"])")}, check_positional);
 }
 
+BOOST_AUTO_TEST_CASE(rpc_descriptor_range_max_int32)
+{
+    UniValue scan_object(UniValue::VOBJ);
+    scan_object.pushKV("desc", "wpkh(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/*)");
+    UniValue range(UniValue::VARR);
+    range.push_back(2147483647);
+    range.push_back(2147483647);
+    scan_object.pushKV("range", range);
+
+    FlatSigningProvider provider;
+    const auto scripts{EvalDescriptorStringOrObject(scan_object, provider)};
+    BOOST_CHECK_EQUAL(scripts.size(), 1);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
