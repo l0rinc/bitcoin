@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 313
+
+- Selected index: `67`
+- Goal slug: `release-version-differential`
+- Goal title: Release-to-release behavioral and consensus differential
+- Selection command: `shuf -i 0-112 -n 1`
+- Catalog SHA-256: `9704269e8b150f9f1c2d9acaa83b49dd40b862cbd15defb0e948d41099f9175d`
+- Base commit: `e6ea2efbcacfb8df2fcefac60be7628bbe76ba9d`
+- Branch: `uber-cycle-313-release-version-differential-20260802`
+- Timestamp: `2026-08-03T01:27:51Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-67`
+
 ## Cycle 312
 
 - Selected index: `7`
