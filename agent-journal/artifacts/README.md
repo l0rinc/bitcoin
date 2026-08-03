@@ -70,3 +70,14 @@ obfuscation-record tooling for scratch chainstates. Build:
 `g++ -O1 -I src/leveldb/include agent-journal/artifacts/xor_tool.cpp
 build-after/src/libleveldb.a build-after/src/libcrc32c.a -lpthread
 -o /tmp/xor_tool` (see #41 c3 journal for usage).
+
+## txospenderindex crash seed (harness-contract violation, repaired)
+- `txospenderindex-crash-seed-145f1c0b` (4 bytes: 76 00 43 00) —
+  found 2026-08-03 on first 20k campaign of the transplanted
+  txospenderindex target (8bdb064dbc). Root cause: the parallel
+  target calls SeedRandomStateForTest but not SetMockTime;
+  BaseIndex::Sync reads NodeClock for log pacing, so
+  CheckGlobalsImpl::~CheckGlobalsImpl aborts on g_used_system_time
+  at teardown (check_globals.cpp:54). NOT an index-logic defect.
+  Repair: SetMockTime(1231006505) after seeding; seed then executes
+  clean; 20k campaign re-verified after repair.
