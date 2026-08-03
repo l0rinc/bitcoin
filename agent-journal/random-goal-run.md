@@ -12,6 +12,13 @@
 - Timestamp: `2026-08-03T01:27:51Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-67`
 
+## Cycle 313 Result
+
+- The selected release-differential queue excluded prior RPC, script/vector, synthetic-mainnet, reorg/restart, prune, wallet-migration, P2P-transcript, and compact-block cells. The distinct hypothesis was the BIP32 seed-length contract added after v31.1.
+- v31.1 accepted a 15-byte CExtKey seed and generated a valid private key. The source-matched temporary contract test failed with exit code 201 because NonFatalCheckError was not raised; a second old-release control passed after asserting key.key.IsValid(). Current rejects both 15- and 65-byte seeds, and the permanent regression passed 2 assertions.
+- The permanent test and release-differential journal were committed in ccbf9d6de6 (test: cover BIP32 seed length contract), authored as Lőrinc <pap.lorinc@gmail.com>. The current full bip32_tests suite passed 10 cases and 709 assertions. No production change was needed because current already contains upstream fix 2cf9d79d84.
+- Learned Goal 113, bip32-seed-contract-parity, with seed journal agent-journal/bip32-seed-contract-parity.md. Goal/catalog/seed commit is a98d52265e (agent: add BIP32 seed contract parity goal). The catalog now contains 114 contiguous goals (0..113); catalog SHA-256 is 7012173cab79a6d83c1b465e41c6015bbe42c408dbee283b7191b8771404b2c5, manifest SHA-256 is 5fa8ce1c051d5b212d7289a5a0f234215f689d410b5b2f9046ce45ddd7d861b9, generator SHA-256 remains 297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03, and random prompt SHA-256 remains 56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2.
+
 ## Cycle 312
 
 - Selected index: `7`
