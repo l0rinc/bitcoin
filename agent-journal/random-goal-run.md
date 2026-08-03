@@ -1,5 +1,50 @@
 # Random Goal Run Ledger
 
+## Cycle 308
+
+- Selected index: `6`
+- Goal slug: `serialization-untrusted-input`
+- Goal title: Serialization, deserialization, and untrusted-input sweep
+- Selection command: `shuf -i 0-107 -n 1`
+- Catalog SHA-256: `633bb1216c6ddf55f6e4bdeda2a99dfb3eb8bb1878b0e6370dd49521c05069c9`
+- Base commit: `49b264dd560a024702c81ca5c3493e180e5322d3`
+- Branch: `uber-cycle-308-serialization-untrusted-input-20260802`
+- Timestamp: `2026-08-02T23:36:21Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-6`
+
+## Cycle 308 Result
+
+- Finding: `wallet::DatabaseBatch::Read()` deserialized persisted values
+  directly into caller-owned objects. The exact malformed value
+  `01 00 00 00 02 03` changed a sentinel `PartiallyDecoded::first` to `1`
+  before returning `false` in both SQLite and in-memory SQLite backends.
+- Verdict: confirmed and fixed in `72c003fef9` (`walletdb: preserve outputs on
+  decode failure`), authored as `Lőrinc <pap.lorinc@gmail.com>`.
+- Fix: decode into a temporary, value-initialize trivially default-constructible
+  outputs, and commit only after successful deserialization. The focused
+  regression passed 16/16 assertions after the fix; the combined
+  `db_tests,walletdb_tests,walletload_tests` run passed 12 cases and 643
+  assertions.
+- GCS candidate: the local block-filter index skips semantic Golomb-Rice
+  validation after checking its coupled database hash. A huge-N payload is a
+  learned bounded-work/recovery hypothesis, not a current finding, because
+  ordinary one-sided file corruption fails the stored hash and a malformed
+  hash-consistent record requires coupled local corruption or a writer defect.
+- Learned suspicious surface: persisted GCS filter payload validation and
+  file/LevelDB recovery symmetry. Added contiguous Goal 108,
+  `persisted-gcs-filter-validation`, with seed journal
+  `agent-journal/persisted-gcs-filter-validation.md`.
+- Goal/catalog/seed commit: `7edd1f9112` (`goal: add persisted GCS filter
+  validation campaign`). Catalog now contains 109 goals with IDs `0..108`;
+  catalog SHA-256 is `6284d0369462c9c426d557943b9c4b71fd20e06658f7993aba04f1811ecb686a`,
+  manifest SHA-256 is `280600d2c11b4437ff7d0bccee1211231aaa7c3620075cf03c0ecb08b7562c68`,
+  generator SHA-256 is `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`,
+  and random-run prompt SHA-256 is
+  `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`.
+- Validation limitation: `/data` and `/` are full, so no sanitizer rebuild or
+  broad wallet suite was attempted; protected long-running jobs were kept
+  alive and all scratch state is isolated under `/data/my_storage/tmp/cycle308-*`.
+
 ## Cycle 304
 
 - Selected index: `52`
