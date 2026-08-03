@@ -145,3 +145,27 @@ wrap) are exactly that class; no third member exists in-tree.
 Future findings in this family are valid ONLY for: unclocked
 remote-input gates or margins < 70min. Verdict: sweep complete,
 no new defect candidate; recorded as boundary knowledge.
+
+## Cycle 304 (goal 127 LevelDB corruption/checksums/bg-errors, draw raw=11133441295003937015 masked=1910069258149161207 n=8 idx=7)
+- Client assumptions verified in code: dbwrapper sets
+  paranoid_checks=true, verify_checksums=true on read+iter options
+  (dbwrapper.cpp:150,237-238); ReadImpl maps NotFound->nullopt and
+  everything else -> HandleError -> dbwrapper_error THROW
+  (fail-loud); WriteBatch failures surface to F19-hardened paths.
+- Iter 1 (corruption/checksum arm): single-byte corruption deep in
+  a compacted .ldb table; reopen OK; 86/5000 keys surface
+  Status::Corruption on read, 0 silent-wrong (uncorrupted keys
+  read fine). Table-block corruption = loud on read, never silent.
+  CONFORM — DISMISSED as defect.
+- Iter 2 (background-error arm): deterministic db-dir rename fault
+  -> background compaction file creation fails -> the very next
+  Put returns NotFound (error propagates, writes do NOT silently
+  succeed). CONFORM — DISMISSED as defect.
+- Harness lesson recorded: chmod faults are invalid as root
+  (CAP_DAC_OVERRIDE); use dir-rename.
+- Boundary: MANIFEST/CURRENT/descriptor corruption recovery is
+  goal 125's queued cell (WAL/MANIFEST fixtures, per
+  database-semantics journal c1 note); reopen-time checksum gaps
+  for non-data files live there, not here.
+Campaign #127 verdict for the audited arms: DISMISSED; assumptions
+hold with two independent verifier forms (harness + code).

@@ -45,3 +45,12 @@ recipe-exact chains must override `setup_network` with
   build-after/src/libleveldb.a build-after/src/libcrc32c.a -lpthread
   -o /tmp/<name>` (build-after's libleveldb is ASan-instrumented;
   the harness must link the same sanitizer runtime).
+
+## Goal 127 LevelDB corruption/bg-error harnesses (cycle 304, CONFORM)
+- `ldb_corrupt_conf.cpp` — single-byte table corruption ->
+  reads surface Status::Corruption, never silent wrong data.
+- `ldb_bgerr_conf.cpp` — db-dir rename fault -> background
+  compaction error surfaces on the very next Put.
+  LESSON: chmod-based fault injection is invalid when running as
+  root (CAP_DAC_OVERRIDE bypasses permission checks) — first
+  attempt false-negatived 2,400 writes; use dir-rename instead.
