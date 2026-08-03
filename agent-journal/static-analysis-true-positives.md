@@ -1,5 +1,96 @@
 # Static-analysis true-positive campaign
 
+## Cycle 322: wallet-enabled analyzer and TXO cache lifetime
+
+### Selection and scope
+
+- Exact selector: `shuf -i 0-121 -n 1` returned `12`.
+- Branch: `uber-cycle-322-static-analysis-true-positives-20260802`.
+- Start HEAD: `3d9f1a12d786f18e7ed18b1b5ea7ed6a1d3a8507`; catalog SHA-256:
+  `6ce33c08973b96f7f1c25f755a774ef4303f8e23920358594feb120565979cab`.
+- Fresh gate passed before selection: tracked tree clean, `git diff --check`
+  clean, origin/master fetched, and all persistent test processes remained
+  alive. The first analyzer attempt used relative report paths from the wrong
+  working directory and was discarded as a harness failure.
+- The corrected Clang 19 scan used the existing wallet-off/IPC-off compilation
+  database for nine current core units and a new configure-only Clang 19
+  database at `/data/my_storage/tmp/cycle322-wallet-analyzer` with
+  `ENABLE_WALLET=ON`, `ENABLE_IPC=OFF`, tests/bench/fuzz binaries off, and
+  ZMQ/ccache off. The wallet scan covered database, migration, SQLite, crypter,
+  wallet, initialization, coin selection, fee, receive, descriptor, spending,
+  transaction, utility, and wallet RPC units. GCC 12 `-fanalyzer` independently
+  checked walletdb, migration, RPC encrypt, and RPC spend.
+
+### Analyzer results and classification
+
+- The core scan produced only the already recorded `NodeImpl::startShutdown`
+  warning at `src/node/interfaces.cpp:161`; it is the Cycle 172 nullable test
+  hook contract and was not reopened.
+- The wallet scan produced two reports. `src/policy/feerate.h:54` reported a
+  possible division by zero in `ExactFeeRateSum`. Both operands are required to
+  have positive `FeeFrac::size`, and `std::gcd` is therefore positive. The only
+  malformed serialized `CFeeRate` path is the deserialize fuzzer, which already
+  rejects invalid size states before invoking comparisons. No production path
+  deserializes `CFeeRate`; the report is an analyzer inability to model the
+  `Assume`-backed invariant, not a confirmed source defect.
+- `src/wallet/spend.cpp:529` reported dereferencing the result of
+  `Assert(wallet.GetWalletTx(outpoint.hash))`. `ListCoins` reaches this helper
+  through `AvailableCoins`, which iterates the wallet-owned TXO cache under
+  `cs_wallet`; the cache entries are expected to refer to transactions in
+  `mapWallet`. The warning itself is contract-backed, but tracing the cache
+  lifetime exposed a separate real issue described below.
+
+### Confirmed finding: witness upgrade left WalletTXO references stale
+
+`WalletTXO` stores references to both a `CWalletTx` and its `CTxOut`, without
+owning the transaction. `CWallet::AddToWallet()` has a historical upgrade path
+that replaces a witness-stripped `CWalletTx::tx` with a witness-bearing
+transaction having the same txid. It then calls `RefreshTXOsFromTx()`, whose old
+implementation skipped every existing output. The TXO cache consequently kept
+a reference into the old transaction. Once the old `CTransactionRef` was
+released, later `AvailableCoins`, balance, or list-coins use could read a
+dangling output.
+
+The regression `wallet_tests/wallet_txos_follow_witness_upgrade` adds an owned
+output to a stripped transaction, adds a witness-bearing replacement with the
+same txid, and checks that the cached output is the current transaction's
+output. With the old implementation temporarily restored, the test failed:
+
+```text
+check &txo.GetTxOut() == &wallet_tx.tx->vout.at(outpoint.n) has failed
+[0x55afe2830b60 != 0x55afe283db10]
+6 assertions out of 7 passed
+```
+
+The fix erases and re-inserts only entries whose wallet-transaction or output
+reference differs, before the old transaction can be released. The final
+normal wallet build passed the focused test with 7/7 assertions and the
+combined `wallet_tests,spend_tests` selection with 34 cases and 277 assertions.
+The source/test fix is committed separately with the exact before/after proof.
+
+### Evidence and limitations
+
+- Raw Clang HTML reports are retained under
+  `/data/my_storage/tmp/cycle322-wallet-analyzer-reports`, including the two
+  dismissed analyzer reports. The GCC analyzer produced no diagnostics.
+- The first attempt to rebuild the inactive ASan wallet tree failed because
+  its stale `/root/.cache/ccache/tmp` directory was unavailable. Validation
+  therefore used the existing normal wallet-enabled RelWithDebInfo build with
+  an explicit `/data/my_storage/tmp/cycle322-ccache` directory. No ASan
+  replay was claimed. The pointer-identity negative control and source
+  ownership trace establish the pre-fix stale-reference behavior; ASan remains
+  a follow-up verification cell.
+- Unavailable tools remain clang-tidy, CodeQL, Semgrep, cppcheck, and IWYU.
+  No unrelated untracked artifacts were modified.
+
+### Next queue and learned campaign
+
+Prioritize the new `wallet-txo-cache-lifetime` campaign: audit every cache that
+stores references into replaceable wallet transactions or descriptor-owned
+objects, then exercise replacement, import, migration, restart, and deletion
+paths with pointer identity and sanitizer controls. Keep the known analyzer
+contracts excluded unless a new caller or independent runtime evidence appears.
+
 ## Cycle 172 start: newly reached core analyzer paths
 
 ### Selection and fresh gate

@@ -117,6 +117,33 @@ BOOST_FIXTURE_TEST_CASE(load_to_wallet_failure_does_not_retain_transaction, Wall
     BOOST_CHECK(!m_wallet.mapWallet.contains(database_hash));
 }
 
+BOOST_FIXTURE_TEST_CASE(wallet_txos_follow_witness_upgrade, WalletTestingSetup)
+{
+    const CKey key{GenerateRandomKey()};
+    BOOST_REQUIRE(CreateDescriptor(m_wallet, "combo(" + EncodeSecret(key) + ")", /*success=*/true));
+    const CScript script{GetScriptForDestination(PKHash(key.GetPubKey()))};
+
+    CMutableTransaction stripped_tx;
+    stripped_tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+    stripped_tx.vout.emplace_back(1 * COIN, script);
+    const CTransactionRef stripped_ref{MakeTransactionRef(stripped_tx)};
+    const COutPoint outpoint{stripped_ref->GetHash(), 0};
+    BOOST_REQUIRE(m_wallet.AddToWallet(stripped_ref, TxStateInactive{}));
+
+    CMutableTransaction witness_tx{stripped_tx};
+    witness_tx.vin[0].scriptWitness.stack.emplace_back(1, 1);
+    const CTransactionRef witness_ref{MakeTransactionRef(witness_tx)};
+    BOOST_REQUIRE(witness_ref->HasWitness());
+    BOOST_CHECK_EQUAL(witness_ref->GetHash(), stripped_ref->GetHash());
+    BOOST_REQUIRE(m_wallet.AddToWallet(witness_ref, TxStateInactive{}));
+
+    LOCK(m_wallet.cs_wallet);
+    const CWalletTx& wallet_tx{*Assert(m_wallet.GetWalletTx(outpoint.hash))};
+    const auto& txo{m_wallet.GetTXOs().at(outpoint)};
+    BOOST_CHECK_EQUAL(&txo.GetWalletTx(), &wallet_tx);
+    BOOST_CHECK_EQUAL(&txo.GetTxOut(), &wallet_tx.tx->vout.at(outpoint.n));
+}
+
 BOOST_FIXTURE_TEST_CASE(migration_transaction_write_failure_is_reported, WalletTestingSetup)
 {
     CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());

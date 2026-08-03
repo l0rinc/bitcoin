@@ -4733,10 +4733,14 @@ void CWallet::RefreshTXOsFromTx(const CWalletTx& wtx)
         const CTxOut& txout = wtx.tx->vout.at(i);
         if (!IsMine(txout)) continue;
         COutPoint outpoint(wtx.GetHash(), i);
-        if (m_txos.contains(outpoint)) {
-        } else {
-            m_txos.emplace(outpoint, WalletTXO{wtx, txout});
+        auto it = m_txos.find(outpoint);
+        if (it != m_txos.end()) {
+            // Wallet transactions can be replaced by a witness-bearing version.
+            // Rebind the cached output before the old transaction is released.
+            if (&it->second.GetWalletTx() == &wtx && &it->second.GetTxOut() == &txout) continue;
+            m_txos.erase(it);
         }
+        m_txos.emplace(outpoint, WalletTXO{wtx, txout});
     }
 }
 
