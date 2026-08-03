@@ -2070,7 +2070,39 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    CI cache keys, header-cost -ftime-report).
 
 ## Handoff
-Updated after every rotation. PROGRAM STATE 2026-08-03 v2
+Updated after every rotation. PROGRAM STATE 2026-08-03 v3
+(post-flood, cycle 319): the 2026-08-03 branch flood (498 new
+l0rinc branches, 865->1363) is FULLY TRIAGED — goal-111 manifest:
+52 src-touching branches, ALL with recorded verdicts. Adopted
+with failing-before/passing-after pairs: F25 txdb cursor, F26
+xor.dat, F27 snapshot write, F28 mempoolexpiry, F29 clustersize,
+F30 headers clock-lag, F31 i2p key, F32 tor key, F33 txospender
+stale tip 🟠, F34 descriptor INT32_MAX, F35 blockfilter reorg 🟠.
+Test adoptions: goal10 snapshot read arm, goal6-merkle reuse,
+goal48 series (mtp boundary, AccessByTxid sparse, proof relation,
+BitSet Fill), goal87 totals (native), blockmanager malformed-disk,
+dbwrapper_scheduled_pair (full-value Oracle adaptation),
+txospenderindex fuzz target (with SetMockTime harness repair —
+4-byte crash seed in artifacts/, root-caused to missing mock
+time, NOT index logic). Covered-ahead: goal26, goal98, goal43-
+reindex, goal61-private_broadcast (our dbef68896c state model
+superset theirs), goal98 pair, goal33 parse oracles. Dismissed:
+goal92-abi (uint8_t byte-alias), P3 bad_alloc trio (OOM-only),
+goal7-getblocktxn (3 existing bounds), goal7-descriptor? NO —
+F34 adopted. LevelDB trio (125/126/127) CONFORM-dismissed with
+harnesses in agent-journal/artifacts/ (+ replay README; fuzz runs
+need build_fuzz + FUZZ=<target>). dup-txid settlement externally
+corroborated (author CI red on own test flow; our fix identical).
+Regressions #4/#6/#7/#8/#9 + test_kernel ALL GREEN on the
+evolving lineage. URGENT at 10 (F33+F35 🟠, F30, rest ✅; 🔴
+UTXO-scan upstream-only watch). Open external: upstream master
+e27c179db2 (4 fuzz/lint-only advances this session; F23 pin-
+lockfile refresh needed on next rebase), dup-txid CI (2 NetBSD
+failures = author's own test), watch PRs 35744/35859/35818/
+35620/35654 (open), qa-assets pin 918cdd3, host tooling (lld,
+clang-tidy, Sparrow repo). In flight: blockfilter_index +
+dbwrapper_scheduled_pair 20k fuzz campaigns.
+PROGRAM STATE 2026-08-03 v2
 (post-flood): the 2026-08-03 branch flood (498 new l0rinc
 branches, 865->1363) is FULLY TRIAGED — goal-111 manifest: 52
 src-touching branches, all dispositions recorded. Session totals:
