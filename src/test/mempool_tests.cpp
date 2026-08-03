@@ -666,6 +666,61 @@ BOOST_AUTO_TEST_CASE(MempoolDumpLoadV1PrioritisationRoundtrip)
     fs::remove(mempool_path + ".new");
 }
 
+BOOST_FIXTURE_TEST_CASE(MempoolTotalsPreservedAcrossDumpLoad, TestChain100Setup)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    const CScript output_script{GetScriptForDestination(PKHash(coinbaseKey.GetPubKey()))};
+    constexpr CAmount fee{10'000};
+    mineBlocks(3); // mature the fixture coinbases before spending them
+
+    const auto submit = [&](const CTransactionRef& tx) {
+        LOCK(cs_main);
+        const MempoolAcceptResult result{m_node.chainman->ProcessTransaction(tx)};
+        BOOST_REQUIRE_MESSAGE(result.m_result_type == MempoolAcceptResult::ResultType::VALID, result.m_state.ToString());
+    };
+
+    std::vector<CTransactionRef> txs;
+    for (size_t i{0}; i < 3; ++i) {
+        const auto& coinbase{m_coinbase_txns.at(i)};
+        auto tx{MakeTransactionRef(CreateValidMempoolTransaction(
+            coinbase, /*input_vout=*/0, /*input_height=*/0, coinbaseKey,
+            output_script, coinbase->vout.at(0).nValue - fee, /*submit=*/false))};
+        submit(tx);
+        txs.push_back(tx);
+    }
+
+    CAmount total_fee_before;
+    size_t total_size_before;
+    {
+        LOCK(pool.cs);
+        total_fee_before = pool.GetTotalFee();
+        total_size_before = pool.GetTotalTxSize();
+    }
+    BOOST_REQUIRE_EQUAL(total_fee_before, 3 * fee);
+
+    const fs::path mempool_path{m_args.GetDataDirBase() / "mempool_totals_roundtrip.dat"};
+    fs::remove(mempool_path);
+    fs::remove(mempool_path + ".new");
+    BOOST_REQUIRE(node::DumpMempool(pool, mempool_path));
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        for (const auto& tx : txs) pool.removeRecursive(CTransaction(*tx), REMOVAL_REASON_DUMMY);
+    }
+    BOOST_REQUIRE_EQUAL(pool.size(), 0U);
+
+    BOOST_REQUIRE(node::LoadMempool(pool, mempool_path, m_node.chainman->ActiveChainstate(), {}));
+    BOOST_REQUIRE_EQUAL(pool.size(), 3U);
+    {
+        LOCK(pool.cs);
+        BOOST_CHECK_EQUAL(pool.GetTotalFee(), total_fee_before);
+        BOOST_CHECK_EQUAL(pool.GetTotalTxSize(), total_size_before);
+    }
+
+    fs::remove(mempool_path);
+    fs::remove(mempool_path + ".new");
+}
+
 BOOST_AUTO_TEST_CASE(MempoolLoadSkipsDisabledPrioritisation)
 {
     CTxMemPool& pool{*Assert(m_node.mempool)};
