@@ -1323,3 +1323,38 @@ Fixture builder: /tmp/snap_builder2.py (framework cache +
 feature_assumeutxo recipe; asserts base_hash == committed regtest
 height-299 hash). Node prep: copy /tmp/snapcache/node0 datadir
 (199-chain), submitheader 200..299 from a 299-tip donor node.
+
+### goal26-cross-subsystem (1d05b4ac4f, null-mempool DeleteChainstate): COVERED-AHEAD
+Our lineage fixed the identical defect 2026-07-19 (fork-only
+0a2deeea1d "validation: guard null mempool in DeleteChainstate
+assert") — with a kernel-API reproducer (btck wipe path ->
+DeleteChainstate -> SIGSEGV), gdb backtrace, and regression test
+validation_chainstatemanager_tests/chainstatemanager_delete_chainstate
+_no_mempool, all green. The parallel goal26 (2026-07-31) duplicates
+the same guard + a variant test; semantic-duplicate of ours (same
+fixture flow; adds only fs assertions). Upstream master 556988790a
+remains unguarded (their commit's parent-revision crash). NO
+adoption (test would be duplicate coverage).
+
+### goal43-mempoolexpiry (36810f178c): CONFIRMED + ADOPTED
+Mechanism: -mempoolexpiry=-1 accepted; negative std::chrono::hours
+makes LimitMempoolSize compare entry_times < now - (negative) ->
+every entry instantly expired (mempool self-empties on any trim).
+Trust boundary: local config error (daemon flag/RPC-free); not
+network reachable; policy/availability only, no consensus impact.
+Evidence (build-after ASan Debug):
+- FAILING-BEFORE: mempool_tests/MempoolExpiryOptionTest negative
+  arm — ApplyArgsManOptions(-1) unexpectedly returns success
+  (1 BOOST failure).
+- PASSING-AFTER: fix rejects <0 at ApplyArgsManOptions; full
+  mempool_tests suite green.
+- Second verifier: parallel daemon reproducer (evicted tx under
+  -1; retained under 336h) per their commit message.
+Why existing tests missed it: option-validation only covered the
+upper maxmempool bound; no negative-value cases for chrono opts.
+Adoption: audit/adopt-mempoolexpiry-negative 0e0b3d6576 (fix +
+their test). Severity: low-Medium (config-gated mempool emptying);
+upstream 556988790a vulnerable.
+Sibling goal43-cluster-size (108e3a118b): count arm COVERED-AHEAD
+(in-tree both-bounds check :110-115); clustersize arm (negative/
+overflow vKB) still live — next-cycle candidate.

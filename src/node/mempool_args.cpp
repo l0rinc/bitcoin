@@ -54,7 +54,12 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& argsman, const CChainP
         mempool_opts.max_size_bytes = *mb * 1'000'000;
     }
 
-    if (auto hours = argsman.GetIntArg("-mempoolexpiry")) mempool_opts.expiry = std::chrono::hours{*hours};
+    if (auto hours = argsman.GetIntArg("-mempoolexpiry")) {
+        if (*hours < 0) {
+            return util::Error{Untranslated(strprintf("-mempoolexpiry must be non-negative (got %d).", *hours))};
+        }
+        mempool_opts.expiry = std::chrono::hours{*hours};
+    }
 
     // incremental relay fee sets the minimum feerate increase necessary for replacement in the mempool
     // and the amount the mempool min fee increases above the feerate of txs evicted due to mempool limiting.
