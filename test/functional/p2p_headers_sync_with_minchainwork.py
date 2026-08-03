@@ -54,6 +54,16 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
         for n in self.nodes:
             n.setmocktime(time)
 
+    def create_low_work_headers_message(self, node):
+        new_blocks = []
+        hashPrevBlock = int(node.getblockhash(0), 16)
+        for i in range(2000):
+            block = create_block(hashprev = hashPrevBlock, tmpl=node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS))
+            block.solve()
+            new_blocks.append(block)
+            hashPrevBlock = block.hash_int
+        return msg_headers(headers=new_blocks)
+
     def test_chains_sync_when_long_enough(self):
         self.log.info("Generate blocks on the node with no required chainwork, and verify nodes 1 and 2 have no new headers in their headers tree")
         with (
@@ -130,16 +140,7 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
             self.generate(node, 3000-current_height, sync_fun=self.no_op)
 
         # Send a group of 2000 headers, forking from genesis.
-        new_blocks = []
-        hashPrevBlock = int(node.getblockhash(0), 16)
-        for i in range(2000):
-            block = create_block(hashprev = hashPrevBlock, tmpl=node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS))
-            block.solve()
-            new_blocks.append(block)
-            hashPrevBlock = block.hash_int
-
-        headers_message = msg_headers(headers=new_blocks)
-        p2p.send_and_ping(headers_message)
+        p2p.send_and_ping(self.create_low_work_headers_message(node))
 
         # getpeerinfo should show a sync in progress
         assert_equal(node.getpeerinfo()[0]['presynced_headers'], 2000)
