@@ -5,6 +5,7 @@
 #include <common/args.h>
 #include <common/system.h>
 #include <key_io.h>
+#include <memusage.h>
 #include <node/mempool_args.h>
 #include <node/mempool_persist.h>
 #include <policy/policy.h>
@@ -1454,7 +1455,7 @@ BOOST_AUTO_TEST_CASE(MempoolUnbroadcastMemoryUsage)
 
     const size_t before{pool.DynamicMemoryUsage()};
     pool.AddUnbroadcastTx(txid);
-    BOOST_CHECK_EQUAL(pool.DynamicMemoryUsage() - before, 0); // TODO: Include the retained set node in reported usage
+    BOOST_CHECK_EQUAL(pool.DynamicMemoryUsage() - before, memusage::DynamicUsage(std::set<Txid>{txid}));
 
     pool.RemoveUnbroadcastTx(txid);
     BOOST_CHECK_EQUAL(pool.DynamicMemoryUsage(), before);
