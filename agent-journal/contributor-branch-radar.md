@@ -1264,3 +1264,18 @@ base58/base32) and all passed through our 112,382-seed corpus
 program with zero crashes. Their oracles encode current behavior
 (contract pins), not defect fixes — no src/ changes in the series.
 Verdict: assess-only; coverage already in lineage.
+
+### goal10-snapshot-basehash (83900a69ea): COVERED-AHEAD + test adopted
+Read-side truncated base_blockhash marker: our lineage fixed this
+2026-07-02 (fork-only a146380c8e "snapshot: tolerate truncated base
+blockhash" — try/catch -> std::nullopt, PLUS trailing-data check).
+The parallel goal10 (2026-08-02) independently fixed the same
+defect against upstream master (unguarded afile >> base_blockhash
+-> uncaught ios_base::failure on restart with truncated marker).
+Failing-before N/A in-tree (guard predates); their regression test
+adopted and PASSES (empty/1/31-byte rejected, 32-byte accepted):
+audit/adopt-snapshot-basehash 07c8ce5392. Upstream 556988790a
+remains vulnerable; lineage covered-ahead.
+Write-side sibling goal38 (1fe00d5a05, WriteSnapshotBaseBlockhash
+unguarded at utxo_snapshot.cpp:39) is STILL LIVE in-tree — queued
+for fault-injection verification.
