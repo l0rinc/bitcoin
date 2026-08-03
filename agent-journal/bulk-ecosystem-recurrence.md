@@ -459,3 +459,14 @@ target is the blind version both forks upgraded. NO adoption.
 Flood item list now COMPLETE: every src-touching branch of the
 498-branch flood has a recorded verdict (assessed/adopted/
 covered/dismissed/deferred).
+
+### dup-txid CI update (cycle 320 watch): third failure appeared
+l0rinc/l0rinc/disconnect-pool-duplicate-txids @ 8dfa501356 now has
+3 completed-failure jobs: 2x NetBSD Cross + riscv32 bare metal
+(static libbitcoin_consensus) — all in the branch's own two CI
+runs; 40 success / 12 queued / 2 in_progress. Consistent with the
+settlement: the author's branch is red across platforms on their
+own iteration (their feature_block.py flow fails identically in
+our tree — bad-txns-BIP30/genesis-fork disconnect); our archive
+carries the identical fix + working tests. No action; the author
+knows their branch is red.
