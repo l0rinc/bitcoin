@@ -169,3 +169,23 @@ no new defect candidate; recorded as boundary knowledge.
   for non-data files live there, not here.
 Campaign #127 verdict for the audited arms: DISMISSED; assumptions
 hold with two independent verifier forms (harness + code).
+
+## Cycle 305 (goal 117 calibration w/ mutants + negative controls, draw raw=17929826660396438331 masked=8706454623541662523 n=7 idx=4)
+Question: are this session's adopted regression oracles still LIVE
+on the final lineage (not rotted/masked by later changes)? Method:
+re-inject the original defect as a one-line mutant on the current
+tip, expect the oracle to kill it; restore after each.
+- M1 txdb.cpp Cursor(): drop the !GetKey(entry) check ->
+  coins_tests/malformed_first_coin_key_cursor_invalid FAILS
+  (2 BOOST failures, identical shape to F25 failing-before).
+  KILLED; restored.
+- M2 mempool_args.cpp: disable the negative-expiry guard ->
+  MempoolExpiryOptionTest negative arm FAILS. KILLED; restored.
+- M3 headerssync.cpp: remove the >0 clamp -> future_chain_start_
+  mtp_bounds_commitments stays PRESYNC (0 != FINAL 2). KILLED;
+  restored.
+Verdict: 3/3 oracles live on the final lineage (5158a4cbe0+);
+calibration CONFIRMS the adoption evidence chain end-to-end
+(failing-before shapes bit-identical to adoption-day runs).
+Negative-control note: each mutant's failure was verified to come
+from the mutation itself (restore + prior green runs), not drift.
