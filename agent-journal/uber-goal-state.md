@@ -2413,3 +2413,60 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
    txmempool mechanically TRUE (fee-diagram gating, cumulative
    prioritise delta, slot backoff, chain-sync timeout arm).
    DISMISSED. PROGRESS — counter reset.
+ r58 RESOLUTION: #21 'tx-heavy reindex' queue cell is STALE —
+   the shape was already profiled (c3/c4 tx-heavy validation
+   ~86% EC floor, 11.2k/9.0k tx/s; P2P replay DISMISSED with
+   both perf fixes holding). Re-running would repeat a passing
+   campaign (banned). Reopen FAILS. NP 5/20.
+   HYGIENE: the rebuilt pending queue (line ~2145) contains
+   cells closed by later cycles — verify a queued cell against
+   the campaign journal's tail BEFORE running it; stale entries
+   are dispositions, not work.
+ r40 raw=4752554715248549790 -> #30 logging: reopen FAIL (no new
+   sensitive-log surface). NP 1/20.
+ r41 raw=468637566481318323 -> #51 invariant/metamorphic: reopen
+   FAIL (queue empty since c4). NP 2/20.
+ r42 raw=3827339193675755333 -> #69 backend differential: reopen
+   FAIL (census EXHAUSTED; subtree static). NP 3/20.
+ r43 raw=2485718795254551173 -> #5 boundary: reopen FAIL (B1-B4
+   dismissed; queue line predates completion). NP 4/20.
+ r44 raw=5895462584797331385 -> #57 local-reasoning: reopen FAIL.
+   NP 5/20.
+ r45 raw=5490421205003542221 -> #77: reopen FAIL (repeat). NP 6/20.
+ r46 raw=7947883501842484060 -> #92 ABI: reopen FAIL (dismissed).
+   NP 7/20.
+ r47 raw=9087582544950080135 -> #7 resource-exhaustion: reopen
+   FAIL (bound census EXHAUSTED). NP 8/20.
+ r48 raw=4386889321707434081 -> #97 taxonomy: reopen FAIL
+   (univalue cap CLOSED). NP 9/20.
+ r49 raw=5934478352033471761 -> #17 build-matrix: reopen FAIL (no
+   new configs). NP 10/20.
+ r50 raw=5063344343642976282 -> #26 cross-subsystem: reopen FAIL
+   (covered-ahead; F31/F32 both fixed). NP 11/20.
+ r51 raw=2448207445445773577 -> #9 coverage: reopen FAIL. NP 12/20.
+ r52 raw=4822070957417687195 -> #27 error-path: reopen FAIL (DONE).
+   NP 13/20.
+ r53 raw=2621441907783068962 -> #34 uncovered-code: reopen FAIL
+   (EXHAUSTED). NP 14/20.
+ r54 raw=4384128710462411582 -> #62 resurrection: REOPEN PASSED
+   (R4 cell). No raw CFeeRate deserialization survives (feerate.h
+   :128 wrapper-only). PROGRESS.
+ r55 raw=6487531322071883467 -> #75 build-throughput: REOPEN
+   PASSED (cache-key arm). Key scheme sound (content-addressed,
+   per-job-type, run-scoped). PROGRESS.
+ r56 raw=7501994009375076656 -> #48: reopen FAIL (repeat). NP 1/20.
+ r57 raw=6804942942423672658 -> #82 field/scalar: reopen FAIL
+   (DONE both backends). NP 2/20.
+ r59 raw=5435247506559607046 -> #6 serialization: reopen FAIL (no
+   new surface; R4 re-verified). NP 3/20.
+ r60 raw=4456010924563360126 -> #126 LevelDB semantics: reopen
+   FAIL (scheduled_pair REINFORCED CONFORM). NP 4/20.
+ r61 raw=4448128743023419431 -> #39 determinism: reopen FAIL
+   (tooling-blocked stands). NP 6/20 (with r58=5/20).
+ r62 raw=5500669145823087467 -> #107 conformance transplant:
+   reopen FAIL (vectors pinned). NP 7/20.
+ r63 raw=8740963129023560924 -> #92: reopen FAIL (repeat). NP 8/20.
+ r64 raw=1873147239249806595 -> #3 leftover sweep: mini-sweep
+   CLEAN (worktree=ledger-only, tmp worktrees removed, stash
+   empty); caught the r40-r63 logging gap (closed here). VERDICT
+   PASS — logging hygiene restored.
