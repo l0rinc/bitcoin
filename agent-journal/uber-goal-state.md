@@ -348,6 +348,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 42 | ci-review-bot-followup | CYCLE-11 | 2026-08-02 | trigger re-check: all quiet |
 | 42 | ci-review-bot-followup | CYCLE-12 | 2026-08-02 | PR 35714: flush-failure write-through CONFIRMED+ADOPTED (f90291ffb9), F19 |
 | 42 | ci-review-bot-followup | CYCLE-13 | 2026-08-03 | master static; dup-txid CI progressing, 0 failures so far |
+| 42 | ci-review-bot-followup | CYCLE-14 | 2026-08-03 | flush characterize = pre-fix anti-test; dropped, fix oracle kept; S18 |
 | 10 | fuzz-target-gaps | CYCLE-3 | 2026-07-29 | load_wallet widened (crypted/ACTIVE*SPK/BESTBLOCK); LoadActiveScriptPubKeyMan assert on corrupt DB documented (upstream-matching) |
 | 80 | fuzz-engine-differential | CYCLE-6 | 2026-07-29 | MuSig2 PSBT seeding: differential clean (A=0, E=100); format-from-source worked first try |
 | 95 | database-semantics-differential | CYCLE-5 | 2026-07-31 | write-flush-windowed kill: _Exit inside all 4 batch commits (idx/coins/shutdown); identical tip recovery, 0 corruption; DISMISSED |
@@ -1071,6 +1072,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 290: flush-failure characterize adoption REDIRECTED
+   (pre-fix anti-test dropped; fix oracle kept; S18).
    Cycle 289 (watch): master static; dup-txid CI progressing,
    0 failures so far (settlement holds).
    Cycle 288: divergence settled — BIP30 identical to

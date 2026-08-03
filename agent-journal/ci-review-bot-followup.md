@@ -458,18 +458,29 @@ passing-after pair. Upstream vehicle: PR 35714 (open).
   (second conflict, skipped — the boundary test in the fix
   commit is the regression oracle; noted).
 
-## Cycle 13 (2026-08-03, draw 289, raw=15767129454938790102): trigger re-check — master static; dup-txid CI progressing (26 queued / 3 in_progress / 1 success / 0 failures so far); consistent with the settlement
+## Cycle 14 (2026-08-03, draw 290, raw=10324526070669823199): flush-failure characterization test adoption — REDIRECTED: the characterize commit's expectation documents the PRE-FIX broken behavior (would fail against the F19 fix); duplicate dropped, fix oracle kept; suite green
 
-### Watch
-- origin/master: still 556988790a (0 new).
-- l0rinc branches: no new since strong-random/dup-txid.
-- Dup-txid branch CI: 26 queued, 3 in_progress, 1 completed
-  (success), ZERO failures so far — nothing contradicting the
-  cycle-288 settlement (BIP30 identical to upstream; test flow
-  is the author's iteration).
+### Assessment
+0f04fbee2f adds chainstate_flush_failure_boundary with the
+PRE-FIX expectations (flushed && valid + new_tip, 'TODO: Return
+the flush error') — a historical-characterization artifact that
+can only pass on the UNFIXED tree. With F19 adopted it is an
+anti-test. The fix commit's own test (exit EXIT_FAILURE +
+!flushed + old_flushed) is the current oracle.
+- Action: cherry-picked 0f04fbee2f (include unions), then
+  dropped the outdated duplicate; chainstate_write_tests green.
+- The failing-before evidence for F19 was already produced in
+  cycle 264 (test fails 2 assertions pre-fix), so nothing is
+  lost by dropping the duplicate.
 
 ### Verdict
-Quiet; nothing actionable. Next check when CI completes.
+NOT ADOPTED (anti-test by construction); the characterize
+commit's historical expectation is recorded here instead.
+
+### Suspicion-mining
+- S18: characterize tests written pre-fix become anti-tests
+  post-fix — adopting them verbatim inverts the suite. Always
+  diff expectations against the fixed behavior first.
 
 ### Exact commands
-- git fetch (lines above); check-runs API counts above.
+- cherry-pick + drop above; suite run above.
