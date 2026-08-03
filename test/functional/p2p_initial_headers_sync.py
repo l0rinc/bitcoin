@@ -2,20 +2,23 @@
 # Copyright (c) 2022-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Test initial headers download and timeout behavior
+"""Test initial headers download, empty responses, and timeout behavior
 
-Test that we only try to initially sync headers from one peer (until our chain
-is close to caught up), and that each block announcement results in only one
-additional peer receiving a getheaders message.
+Test that only one peer at a time initially syncs headers and each block
+announcement triggers one additional getheaders.
 
 Also test peer timeout during initial headers sync, including normal peer
-disconnection vs noban peer behavior.
+disconnection vs noban behavior, and old-chain eviction after releasing a sync slot.
 """
 
 from test_framework.test_framework import BitcoinTestFramework
+from test_framework.blocktools import REGTEST_N_BITS
 from test_framework.messages import (
+    CBlock,
+    CBlockHeader,
     CInv,
     MSG_BLOCK,
+    from_hex,
     msg_headers,
     msg_inv,
 )
@@ -31,8 +34,10 @@ import random
 import time
 
 # Constants from net_processing
+CHAIN_SYNC_TIMEOUT_SEC = 20 * 60
 HEADERS_DOWNLOAD_TIMEOUT_BASE_SEC = 15 * 60
 HEADERS_DOWNLOAD_TIMEOUT_PER_HEADER_MS = 1
+HEADERS_RESPONSE_TIME_SEC = 2 * 60
 POW_TARGET_SPACING_SEC = 10 * 60
 
 
@@ -55,9 +60,12 @@ class HeadersSyncTest(BitcoinTestFramework):
         for p in peers:
             p.send_and_ping(new_block_announcement)
 
-    def assert_single_getheaders_recipient(self, peers):
-        count = 0
-        receiving_peer = None
+    def getheaders_recipients(self, peers):
+        with p2p_lock:
+            return [p for p in peers if "getheaders" in p.last_message]
+
+    def wait_for_single_getheaders(self, peers, block_hash):
+        self.wait_until(lambda: self.getheaders_recipients(peers))
         for p in peers:
             with p2p_lock:
                 if "getheaders" in p.last_message:
@@ -66,8 +74,38 @@ class HeadersSyncTest(BitcoinTestFramework):
         assert_equal(count, 1)
         return receiving_peer
 
+    def test_released_slot_outbound_eviction(self):
+        self.log.info("Test outbound eviction after releasing a headers sync slot")
+        self.restart_node(0)
+        node = self.nodes[0]
+        node.setmocktime(node.getblockchaininfo()["time"] + 1)
+        self.generate(node, 2)
+        old_header = from_hex(CBlockHeader(), node.getblockheader(node.getblockhash(1), False))
+        node.setmocktime(int(time.time()))
+
+        peer = node.add_outbound_p2p_connection(P2PInterface(), p2p_idx=0, connection_type="outbound-full-relay")
+        peer.wait_for_getheaders()
+        peer.send_and_ping(msg_headers())
+
+        # Occupy the released slot so `peer` stays released; its eviction timeout then
+        # has to keep running on m_chain_sync.m_timeout alone.
+        sync_peer = node.add_p2p_connection(P2PInterface())
+        sync_peer.wait_for_getheaders()
+
+        node.bumpmocktime(CHAIN_SYNC_TIMEOUT_SEC + 1)
+        peer.sync_with_ping()
+        with p2p_lock:
+            assert_equal("getheaders" in peer.last_message, True)
+
+        peer.send_and_ping(msg_headers([old_header]))
+        with node.assert_debug_log(["Outbound peer has old chain"]):
+            node.bumpmocktime(HEADERS_RESPONSE_TIME_SEC + 1)
+            peer.wait_for_disconnect()
+
     def test_initial_headers_sync(self):
         self.log.info("Test initial headers sync")
+        self.restart_node(0)
+        self.nodes[0].setmocktime(int(time.time()))
 
         self.log.info("Adding a peer to node0")
         peer1 = self.nodes[0].add_p2p_connection(P2PInterface())
@@ -75,10 +113,6 @@ class HeadersSyncTest(BitcoinTestFramework):
 
         # Wait for peer1 to receive a getheaders
         peer1.wait_for_getheaders(block_hash=best_block_hash)
-        # An empty reply will clear the outstanding getheaders request,
-        # allowing additional getheaders requests to be sent to this peer in
-        # the future.
-        peer1.send_without_ping(msg_headers())
 
         self.log.info("Connecting two more peers to node0")
         # Connect 2 more peers; they should not receive a getheaders yet
@@ -94,17 +128,17 @@ class HeadersSyncTest(BitcoinTestFramework):
             assert "getheaders" not in peer2.last_message
             assert "getheaders" not in peer3.last_message
 
+        self.nodes[0].bumpmocktime(HEADERS_RESPONSE_TIME_SEC + 1)
         self.log.info("Have all peers announce a new block")
         self.announce_random_block(all_peers)
 
         self.log.info("Check that peer1 receives a getheaders in response")
         peer1.wait_for_getheaders(block_hash=best_block_hash)
-        peer1.send_without_ping(msg_headers()) # Send empty response, see above
 
         self.log.info("Check that exactly 1 of {peer2, peer3} received a getheaders in response")
-        peer_receiving_getheaders = self.assert_single_getheaders_recipient([peer2, peer3])
-        peer_receiving_getheaders.send_without_ping(msg_headers()) # Send empty response, see above
+        peer_receiving_getheaders = self.wait_for_single_getheaders([peer2, peer3], best_block_hash)
 
+        self.nodes[0].bumpmocktime(HEADERS_RESPONSE_TIME_SEC + 1)
         self.log.info("Announce another new block, from all peers")
         self.announce_random_block(all_peers)
 
@@ -174,12 +208,14 @@ class HeadersSyncTest(BitcoinTestFramework):
             assert_equal(self.nodes[0].num_test_p2p_connections(), 2)
 
         self.log.info("Check that exactly 1 of {peer1, peer2} receives a getheaders")
-        self.assert_single_getheaders_recipient([peer1, peer2])
+        self.wait_for_single_getheaders([peer1, peer2], int(self.nodes[0].getbestblockhash(), 16))
 
     def run_test(self):
+        self.test_empty_headers_sync_slot()
         self.test_initial_headers_sync()
         self.test_normal_peer_timeout()
         self.test_noban_peer_timeout()
+        self.test_released_slot_outbound_eviction()
 
 
 if __name__ == '__main__':

@@ -785,3 +785,57 @@ vehicle; our lineage carries it for the next profiles.
 - 1,600-tx scale hides the vector term in RSS; a maxmempool-
   scale churn would show the accounting delta directly (disk/
   time-bounded out).
+
+## Cycle 17 (2026-08-02/03, draw 267, raw=18287398478253595800, suspicion-mined from the 26-PR sweep): PR 35839 empty-headers sync slot — stall CONFIRMED at HEAD with the PR's own test (failing-before) + ADOPTED (passing-after green)
+
+### Defect (liveness, headers-sync layer)
+During IBD a sync peer may answer valid EMPTY headers (truthfully
+at/behind our height, or adversarially). At HEAD: the empty
+response does NOT release the peer's sync slot —
+IsContinuationOfLowWorkHeadersSync returns success=false for
+empty input (headersync.cpp:76-77), m_last_getheaders_timestamp
+is not cleared, and the slot-release check at
+net_processing.cpp:6300 only fires when a replacement exists
+(m_num_preferred_download_peers - fPreferredDownload >= 1). So
+IBD stalls on a slot the peer will never fill.
+- FAILING-BEFORE: the PR's new test ('Test empty headers
+  response during initial sync') FAILS at unfixed HEAD
+  (AssertionError not(True == False)) — the stall is live in
+  our lineage, proven by upstream's own regression test.
+
+### Adoption (audit/adopt-empty-headers, 5 commits)
+- Stack picked: 297c0f7ca7 (name stale check), 7de4fba5b8
+  (extract cleanup), 79aca0b97f (main fix), 92a98ffb30
+  (characterize), 6d10e8e193 (continue pending disconnect).
+- Conflict resolutions recorded: (a) ReleaseHeadersSyncSlot
+  decl+impl kept — 297c0f7ca7 deletes it as an EARLIER stack
+  commit applied last by my order (the helper survives to the
+  branch tip, 4 mentions); (b) test-file wholesale take after a
+  bad block-union mixed helpers (labeled repair commit).
+- PASSING-AFTER: p2p_initial_headers_sync.py Tests successful
+  (old timeout cases + new empty-slot + eviction cases);
+  bitcoind builds clean.
+
+### Verdict
+CONFIRMED + ADOPTED: the empty-headers stall is real at HEAD
+(liveness class, IBD-relevant); the author's state-machine fix
+(release the slot, select another peer) is carried with
+upstream's own test as the regression oracle. Upstream vehicle:
+PR 35839 (open, 2026-07-29).
+
+### Suspicion-mining
+- S9: stack commits can DEPEND on sibling commits' deletions —
+  always verify helper survival to the branch tip before
+  resolving (rule added to the adoption checklist).
+- S10: the in-code :5977-5981 pprev mitigation only re-requests
+  from one-earlier — it does NOT release the slot (the PR's own
+  scoping comment matches).
+
+### Exact commands
+- git fetch l0rinc l0rinc/p2p-empty-headers-sync; failing-before
+  run (/tmp/btc267, AssertionError above); cherry-picks +
+  resolutions above; passing run (/tmp/btc267c).
+
+### Limitations / queue
+- The noban-peer eviction arm relies on the PR's test (not
+  separately driven).

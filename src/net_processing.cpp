@@ -101,6 +101,9 @@ static constexpr auto HEADERS_DOWNLOAD_TIMEOUT_BASE = 15min;
 static constexpr auto HEADERS_DOWNLOAD_TIMEOUT_PER_HEADER = 1ms;
 /** How long to wait for a peer to respond to a getheaders request */
 static constexpr auto HEADERS_RESPONSE_TIME{2min};
+/** Age threshold for considering ourselves far behind: initial headers sync is then
+ *  limited to one peer at a time, and a stalling peer's slot is released. */
+static constexpr auto BEST_HEADER_STALE_AGE{24h};
 /** Protect at least this many outbound peers from disconnection due to slow/
  * behind headers chain.
  */
@@ -5524,7 +5527,9 @@ void PeerManagerImpl::ConsiderEviction(CNode& pto, Peer& peer, std::chrono::seco
 
     CNodeState &state = *State(pto.GetId());
 
-    if (!state.m_chain_sync.m_protect && pto.IsOutboundOrBlockRelayConn() && state.fSyncStarted) {
+    // Syncing headers from this peer arms the check; once a timeout is set it stays
+    // armed until cleared below, so releasing the sync slot does not disarm it.
+    if (!state.m_chain_sync.m_protect && pto.IsOutboundOrBlockRelayConn() && (state.fSyncStarted || state.m_chain_sync.m_timeout != 0s)) {
         // This is an outbound peer subject to disconnection if they don't
         // announce a block with as much work as the current tip within
         // CHAIN_SYNC_TIMEOUT + HEADERS_RESPONSE_TIME seconds (note: if
@@ -6175,7 +6180,7 @@ bool PeerManagerImpl::SendMessages(CNode& node)
 
         if (!state.fSyncStarted && CanServeBlocks(peer) && !m_chainman.m_blockman.LoadingBlocks()) {
             // Only actively request headers from a single peer, unless we're close to today.
-            if ((nSyncStarted == 0 && sync_blocks_and_headers_from_peer) || m_chainman.m_best_header->Time() > NodeClock::now() - 24h) {
+            if ((nSyncStarted == 0 && sync_blocks_and_headers_from_peer) || !IsBestHeaderStale()) {
                 const CBlockIndex* pindexStart = m_chainman.m_best_header;
                 /* If possible, start at the block preceding the currently
                    best known header.  This ensures that we always get a
@@ -6500,7 +6505,7 @@ bool PeerManagerImpl::SendMessages(CNode& node)
         // Check for headers sync timeouts
         if (state.fSyncStarted && peer.m_headers_sync_timeout < std::chrono::microseconds::max()) {
             // Detect whether this is a stalling initial-headers-sync peer
-            if (m_chainman.m_best_header->Time() <= NodeClock::now() - 24h) {
+            if (IsBestHeaderStale()) {
                 if (current_time > peer.m_headers_sync_timeout && nSyncStarted == 1 && (m_num_preferred_download_peers - state.fPreferredDownload >= 1)) {
                     // Disconnect a peer (without NetPermissionFlags::NoBan permission) if it is our only sync peer,
                     // and we have others we could be using instead.
