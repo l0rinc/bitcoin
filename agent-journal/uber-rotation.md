@@ -223,3 +223,20 @@ self-consistent at the current archive tip (3501032880).
 FINAL INTEGRATED GREEN: the resumed protocol's adopted fix set
 (F19-F23 + merkle doc + strong-random guards) is self-consistent
 with the earlier lineage.
+
+## Consolidated regression sweep #3 (cycle 291, draw raw=9004530287176757306, 2026-08-03): final lineage all-green incl. dup-txid skip fix
+
+### Scope
+- test_bitcoin (full suite incl. disconnected_transactions
+  skip-semantics tests): green. test_kernel: green.
+- Functional: feature_block, p2p_compactblocks, rpc_blockchain
+  (v1+v2), p2p_initial_headers_sync, rpc_whitelist,
+  feature_reindex — ALL 8 instances Passed, 121s accumulated,
+  /tmp/btc291. No processes left.
+- Dup-txid branch unchanged since adoption (tip 8dfa501356);
+  branch CI still queued/in-progress, no failures.
+
+### Verdict
+FINAL INTEGRATED GREEN (sweep 3): the full adopted set —
+F19-F23, merkle doc, strong-random guards, dup-txid skip fix —
+is self-consistent.
