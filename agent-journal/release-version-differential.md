@@ -552,3 +552,38 @@ transaction/block replay, release-branch cherry-pick/backport equivalence,
 and new protocol changes with a provenance-preserving common transcript. Do
 not repeat these four v31.1 P2P matrices unless a new source change or fixture
 provides a distinct hypothesis.
+
+## Cycle 313: v31.1 BIP32 seed-length contract differential
+
+### Selection and scope
+
+- Exact selector: shuf -i 0-112 -n 1 -> 67 (release-version-differential).
+- Branch: uber-cycle-313-release-version-differential-20260802.
+- Cycle-start/base HEAD: e6ea2efbcacfb8df2fcefac60be7628bbe76ba9d.
+- Selection commit: 18e51e361a.
+- Prior release-differential cells covering RPC/genesis, script and transaction vectors, synthetic mainnet-style blocks, reorg/restart, pruning, wallet migration, P2P transcripts, and compact-block reconstruction were excluded. The remaining backport-equivalence sweep selected the BIP32 seed contract because it is a public key API invariant introduced after v31.1.
+
+### Hypothesis and source evidence
+
+BIP32 constrains the master seed to 128--512 bits, or 16--64 bytes. The v31.1 CExtKey::SetSeed implementation accepted every span length, HMACed it with Bitcoin seed, and installed the resulting 32-byte output as a private key. Current commit 2cf9d79d84cb485e31e2d78a5744c1e4dc5f5f44 (merged as 26b730cdbf2c77c12f684fd50bd376212b725394) adds Assert(16 <= seed.size() && seed.size() <= 64). The fix is an ancestor of origin/master and is not an ancestor of v31.1; the merge base is 613a548648880314e78c3045d0ded12e29a4f036.
+
+The trust boundary is the CExtKey public C++ API, wallet seed-generation callers, descriptor/fuzz callers, and any downstream binding or release branch that supplies seed bytes. Normal wallet generation supplies 32 bytes, so this is not a claim that ordinary RPC wallet creation sends attacker-controlled seed lengths. It is a release/API contract gap: an internal or external caller could pass a too-short seed and receive an apparently valid master key with reduced input entropy.
+
+### Independent old/new reproduction
+
+The same temporary Boost test was applied to the isolated v31.1 source tree at /data/my_storage/tmp/cycle109-release-differential/v31.1-src and the current source tree, then removed and both test binaries were rebuilt from their original sources. The test used a 15-byte seed and expected the current invariant exception.
+
+- The v31.1 build /data/my_storage/tmp/cycle125-v311-test rebuilt with CCACHE_DISABLE=1. Its contract test failed with exit code 201: exception NonFatalCheckError expected but not raised. The full temporary bip32_tests run showed 6 pre-existing valid/depth cases passed (650 of 651 assertions) and only the new contract assertion failed.
+- A second v31.1-only control called SetSeed with the same 15-byte seed and asserted key.key.IsValid(). It passed 1 case and 1 assertion, proving the old release generated a valid private key from an out-of-domain seed rather than merely returning an error.
+- The current build /data/my_storage/tmp/cycle246-wallet passed the same contract test with 2 assertions for 15 and 65 bytes. Its full bip32_tests suite passed 10 cases and 709 assertions. Existing BIP32 vectors cover valid 16-byte and 64-byte boundaries as well as the 32-byte vector.
+- The first v31.1 rebuild failed because the system ccache temporary directory was absent; CCACHE_DISABLE=1 made the build pass. The first test invocation failed because its explicitly named TMPDIR had not been created; creating the scratch directory made the old/new results above reproducible. These are setup failures, not product behavior.
+
+### Test hardening and classification
+
+The current source already contains the production fix, so no duplicate production patch is justified. The current suite did not explicitly exercise invalid seed boundaries. A permanent bip32_seed_length_contract regression now asserts that 15-byte and 65-byte seeds raise NonFatalCheckError; the focused run passed 1 case and 2 assertions, and the complete current BIP32 suite passed 10 cases and 709 assertions. The test keeps the source contract visible and prevents a future release/backport or refactor from silently reopening the gap.
+
+Classification: confirmed historical release/API contract gap, already fixed upstream, with a current test-oracle improvement. The v31.1 behavior is source-backed and independently executable; the current behavior is source-backed and passes the permanent regression. No network-reachable wallet exploit was demonstrated, and the normal wallet seed path remains within the specified domain.
+
+### Limitations and learned queue
+
+The comparison used source-matched unit binaries rather than a public RPC or FFI consumer, because SetSeed is a C++ API and wallet RPC does not accept arbitrary master-seed bytes. No 32-bit, binding, or downstream release build was run. The next learned queue is to audit BIP32 seed length and failure semantics across wallet seed import/generation, descriptor/fuzz entry points, bindings, and maintained release branches, including 16/64 valid boundaries, 15/65 invalid boundaries, and error versus assertion behavior. Do not repeat the repaired CExtKey::SetSeed source change without a different caller or wrapper contract.

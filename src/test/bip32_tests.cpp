@@ -255,6 +255,14 @@ BOOST_AUTO_TEST_CASE(bip32_max_depth) {
     BOOST_CHECK(!pubkey_parent.Derive(pubkey_child, 0));
 }
 
+BOOST_AUTO_TEST_CASE(bip32_seed_length_contract)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    CExtKey key;
+    BOOST_CHECK_THROW(key.SetSeed(std::vector<std::byte>(15)), NonFatalCheckError);
+    BOOST_CHECK_THROW(key.SetSeed(std::vector<std::byte>(65)), NonFatalCheckError);
+}
+
 BOOST_AUTO_TEST_CASE(bip32_invalid_derivation_inputs)
 {
     const CExtKey valid_key{DecodeExtKey(test1.vDerive[0].prv)};
