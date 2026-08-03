@@ -45,8 +45,12 @@
   `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
   random prompt SHA-256 remains
   `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
-- State-close, rebase, final gate, and the next exact selector remain
-  pending. Preserve unrelated files and protected processes.
+- State-close commit `dc51ca1b67` is on HEAD; `git fetch origin master` and
+  `git rebase origin/master` were no-ops. The final gate passed with tracked
+  cleanliness, clean `git diff --check`, 124 contiguous prompts with valid
+  byte metadata and all prompts below 4000 bytes, seven protected processes
+  alive, and `0/1486` divergence from `origin/master`. Preserve unrelated
+  files and protected processes; the next exact selector remains pending.
 
 ## Cycle 322 Selection
 
