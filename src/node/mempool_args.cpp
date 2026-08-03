@@ -20,6 +20,7 @@
 #include <util/translation.h>
 
 #include <chrono>
+#include <limits>
 #include <memory>
 
 using common::AmountErrMsg;
@@ -30,15 +31,28 @@ using kernel::MemPoolOptions;
 static constexpr int MAX_32BIT_MEMPOOL_MB{500};
 
 namespace {
-void ApplyArgsManOptions(const ArgsManager& argsman, MemPoolLimits& mempool_limits)
+util::Result<void> ApplyArgsManOptions(const ArgsManager& argsman, MemPoolLimits& mempool_limits)
 {
-    mempool_limits.cluster_count = argsman.GetIntArg("-limitclustercount", mempool_limits.cluster_count);
+    if (auto value = argsman.GetIntArg("-limitclustercount")) {
+        if (*value < 1 || *value > MAX_CLUSTER_COUNT_LIMIT) {
+            return util::Error{Untranslated(strprintf("-limitclustercount must be between 1 and %d", MAX_CLUSTER_COUNT_LIMIT))};
+        }
+        mempool_limits.cluster_count = *value;
+    }
 
-    if (auto vkb = argsman.GetIntArg("-limitclustersize")) mempool_limits.cluster_size_vbytes = *vkb * 1'000;
+    if (auto vkb = argsman.GetIntArg("-limitclustersize")) {
+        constexpr int64_t MAX_CLUSTER_SIZE_KVB{std::numeric_limits<int64_t>::max() / 40'000};
+        if (*vkb < 0 || *vkb > MAX_CLUSTER_SIZE_KVB) {
+            return util::Error{Untranslated(strprintf("-limitclustersize must be between 0 and %d", MAX_CLUSTER_SIZE_KVB))};
+        }
+        mempool_limits.cluster_size_vbytes = *vkb * 1'000;
+    }
 
     mempool_limits.ancestor_count = argsman.GetIntArg("-limitancestorcount", mempool_limits.ancestor_count);
 
     mempool_limits.descendant_count = argsman.GetIntArg("-limitdescendantcount", mempool_limits.descendant_count);
+
+    return {};
 }
 }
 
@@ -105,11 +119,7 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& argsman, const CChainP
 
     mempool_opts.persist_v1_dat = argsman.GetBoolArg("-persistmempoolv1", mempool_opts.persist_v1_dat);
 
-    ApplyArgsManOptions(argsman, mempool_opts.limits);
-
-    if (mempool_opts.limits.cluster_count > MAX_CLUSTER_COUNT_LIMIT) {
-        return util::Error{Untranslated(strprintf("limitclustercount must be less than or equal to %d", MAX_CLUSTER_COUNT_LIMIT))};
-    }
+    if (auto result{ApplyArgsManOptions(argsman, mempool_opts.limits)}; !result) return result;
 
     return {};
 }

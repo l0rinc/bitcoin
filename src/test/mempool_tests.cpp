@@ -2,16 +2,21 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <chainparams.h>
+#include <common/args.h>
 #include <common/system.h>
+#include <node/mempool_args.h>
 #include <policy/policy.h>
 #include <test/util/time.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
+#include <txgraph.h>
 #include <util/time.h>
 
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <limits>
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
@@ -23,6 +28,28 @@ class MemPoolTest final : public CTxMemPool
 public:
     using CTxMemPool::GetMinFee;
 };
+
+BOOST_AUTO_TEST_CASE(MempoolClusterLimitOptions)
+{
+    const auto accepts = [](const std::string& option, const std::string& value) {
+        ArgsManager args;
+        args.ForceSetArg(option, value);
+        CTxMemPool::Options options;
+        return bool(ApplyArgsManOptions(args, Params(), options));
+    };
+
+    const auto max_cluster_size_kvb = std::numeric_limits<int64_t>::max() / 40'000;
+    BOOST_CHECK(accepts("-limitclustersize", "0"));
+    BOOST_CHECK(accepts("-limitclustersize", std::to_string(max_cluster_size_kvb)));
+    BOOST_CHECK(!accepts("-limitclustersize", "-1"));
+    BOOST_CHECK(!accepts("-limitclustersize", std::to_string(max_cluster_size_kvb + 1)));
+
+    BOOST_CHECK(accepts("-limitclustercount", "1"));
+    BOOST_CHECK(accepts("-limitclustercount", std::to_string(MAX_CLUSTER_COUNT_LIMIT)));
+    BOOST_CHECK(!accepts("-limitclustercount", "-1"));
+    BOOST_CHECK(!accepts("-limitclustercount", "0"));
+    BOOST_CHECK(!accepts("-limitclustercount", std::to_string(MAX_CLUSTER_COUNT_LIMIT + 1)));
+}
 
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
 {
