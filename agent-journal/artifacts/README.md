@@ -63,3 +63,10 @@ recipe-exact chains must override `setup_network` with
 - `ldb_current_conf.cpp` — CURRENT deleted + create_if_missing ->
   opens EMPTY, live tables silently orphaned (VERIFIED HAZARD,
   client-choice contract — not a LevelDB defect).
+
+## xor_tool.cpp (campaign #41 c3, obfuscation-key archaeology)
+Modes: dump | corruptkey | delkey | flipcoin — LevelDB-internal
+obfuscation-record tooling for scratch chainstates. Build:
+`g++ -O1 -I src/leveldb/include agent-journal/artifacts/xor_tool.cpp
+build-after/src/libleveldb.a build-after/src/libcrc32c.a -lpthread
+-o /tmp/xor_tool` (see #41 c3 journal for usage).

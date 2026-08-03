@@ -234,3 +234,21 @@ from the draw, per urgent-preempt rule).
 Harnesses preserved in artifacts/. Campaign #125: crash-recovery
 arms verified; the single hazard is a documented client-choice.
 Regression #7 GREEN (full test_bitcoin, final tip).
+
+## Cycle 309 (goal 118 sandbox/isolation audit, draw raw=3903574178988509641 n=2 idx=1)
+Own operational hygiene verified + repaired:
+- Processes: 0 bitcoind/fuzz/test processes running (protocol
+  requirement met at cycle close).
+- Scratch dirs: /tmp leftovers from cycles 295-308 cleaned
+  (ldb_* binaries/DBs, snapcache, xor-test-*, interposer .so);
+  foreign /tmp/ldb_oracle_merger.cc left untouched (not ours).
+- CONTINUITY REPAIR: all harness sources now canonical in
+  agent-journal/artifacts/ (12 files + README): goal-125/126/127
+  LevelDB harnesses, snap_builder2.py + interposers, xor_experiment
+  driver, and the RESCUED xor_tool.cpp from campaign #41 c3
+  (obfuscation-key archaeology tool — was /tmp-only since 2026-07-29).
+- Credentials: regtest cookie-auth scratch datadirs only, all
+  deleted; no real wallets/keys/.env touched at any point.
+- Dirty state: tracked tree clean; user untracked files intact.
+Verdict: isolation COMPLIANT after the /tmp sweep; the artifacts/
+dir is now the single harness home (replay README maintained).
