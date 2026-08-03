@@ -158,3 +158,26 @@ revert).
 ## Rotation note
 Three bounded cycles complete; queue exhausted per evidence above (not
 claimed on the whole area — new benches arrive continuously).
+
+## Cycle 3 (2026-08-03, draw 282, raw=4975303670458742466, suspicion-mined): PR 32554 bench block generator — bench modernization (replaces dated embedded block); our bench harness green; NO adoption
+
+### Assessment
+- The PR replaces the hardcoded 2016 block 413567 (~1MB
+  embedded binary, pre-SegWit/Taproot) with a configurable
+  generator producing modern script types.
+- Bench-only: our benchmark harness works for its purpose
+  (used across #23/#25/#268 profile cycles); the dated block
+  skews absolute numbers vs modern chains but doesn't make
+  them wrong for A/B work (same block both sides).
+- Not a defect; upstream review territory.
+
+### Verdict
+Assess-only, NO adoption: bench modernization PR; our A/B
+methodology is unaffected (comparisons are self-relative).
+
+### Exact commands
+- curl PR body; bench usage refs (#23/#25/#268 journals).
+
+### Limitations
+- If it lands, re-baseline any absolute benchmark comparisons
+  against pre-generator numbers (recorded).
