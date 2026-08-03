@@ -1,5 +1,90 @@
 # Current Branch and PR Leftover Sweep
 
+## Cycle 323: Taproot fee-estimation test workaround
+
+### Selection and scope
+
+- Exact selector: `shuf -i 0-122 -n 1` returned `3`.
+- Branch: `uber-cycle-323-current-pr-leftovers-20260802`.
+- Selection commit: `3a96d968e0`; cycle-start HEAD:
+  `3a96d968e0`; cycle-start catalog SHA-256:
+  `da5a2650e39932fe39d952c139a8f547fe319819c4f663d71a055f4f6298a153`.
+- The prior dedicated current-PR checkpoint was Cycle 293 (`d7705e2474`).
+  The new scope was the source/test stack after that checkpoint, including
+  wallet/database recovery, fuzz input preservation, filesystem allocation,
+  PSBT and descriptor parsing, minisketch bounds, generated secp256k1
+  vectors, kernel C ABI validation, build configuration, p2p serialization,
+  release differential tests, generated-source checks, CI artifact checks,
+  secret ctime coverage, and the Cycle 322 wallet cache fix.
+- No merge commits or online PR metadata occur in this local post-checkpoint
+  range. Prior findings and unrelated untracked files were excluded; each
+  source change was checked for analogous callers, tests, generated/build
+  lists, stale comments, and cleanup paths.
+
+### Candidate inventory and dismissed leftovers
+
+- The secp256k1 vector-comment sanitizer covers every current generator that
+  emits external comments into C block comments. `test_vectors_musig2_generate.py`
+  uses comments only to choose fixed error enums and emits no raw comment text;
+  the new helper is included in `Makefile.am` distribution. No generated-file
+  omission was found.
+- The paired Unix fallback and Windows `AllocateFileRange` changes both have
+  preservation tests, and their remaining platform branches use separate
+  file-size semantics. No unmodified analogous allocation path or build-list
+  omission was established.
+- The kernel import-path validation checks both arrays, every element, and
+  length-aware path conversion; its C ABI test covers null element and missing
+  length arrays. The zero-count nullable-array case is valid by contract and
+  did not justify a source change.
+- The remaining recent commits have focused regression tests or intentional
+  configuration-only behavior. A passing current suite alone did not turn
+  execution-only coverage or speculative documentation edits into findings.
+
+### Confirmed leftover: stale Taproot fee-rate workaround
+
+`2ac99aac74` corrected `TRDescriptor::MaxSatisfactionWeight()` and
+`MaxSatisfactionElems()` for known script paths and removed the two comments in
+`test/functional/wallet_taproot.py` that said `fee_rate=200` compensated for
+the old inability to estimate script-path fees. Blame shows both explicit
+`fee_rate=200` values were introduced with those comments by
+`6efcdf6b7f6`; they remained after the comments were removed. The functional
+test therefore retained the behavior workaround while appearing to assert the
+post-fix fee path, a partial test migration.
+
+The independent descriptor regression already gives the exact contract oracle:
+for `tr(NUMS,pk(NUMS))`, the old implementation returned a 66-byte
+key-path-only satisfaction and one witness element, while the corrected code
+returns 135 bytes and three elements. A focused functional test should use the
+normal estimator rather than force an unrelated 200 sat/vB rate. The smallest
+fix removes the explicit fee-rate option from both `sendtoaddress` and
+`walletcreatefundedpsbt`; no production behavior changes.
+
+Before the edit, Python compilation passed. After removing both stale
+overrides, the rebuilt current wallet-enabled `bitcoind` was exercised by:
+
+```text
+python3 test/functional/wallet_taproot.py \
+  --configfile=/data/my_storage/tmp/cycle246-wallet/test/config.ini \
+  --cachedir=/data/my_storage/tmp/cycle323-wallet-taproot-cache-0405 \
+  --tmpdir=/data/my_storage/tmp/cycle323-wallet-taproot-run-0406 \
+  --portseed=323 --randomseed=32301 --timeout-factor=2 --loglevel=INFO
+```
+
+The run covered all address, `sendtoaddress`, and PSBT cases, including NUMS
+internal keys that force script-path satisfaction, and exited 0 with
+`Tests successful`. The cached and temporary datadirs were isolated under
+`/data/my_storage/tmp`; no protected process was stopped.
+
+### Verdict and handoff
+
+**Confirmed and fixed as a test leftover:** the two explicit fee-rate
+overrides were stale remnants of the defect repaired by `2ac99aac74` and
+prevented the functional test from exercising the default estimator. The
+test-only source edit and this journal are one self-contained finding. The
+next current-PR pass should begin after the state-close and catalog gate, and
+should not reopen the dismissed generator, allocation, or kernel-array cells
+without a changed contract or new evidence.
+
 ## Cycle 293 Selection and Gate
 
 - The fresh post-Cycle-292 gate selected `3` (`current-pr-leftovers`) with the exact selector command `shuf -i 0-98 -n 1`; the selector output was `3`. The dedicated branch is `uber-cycle-293-current-pr-leftovers-20260802`. Start HEAD was `b219fa6352c776ba73a90b4c4d8f76bc78503576`, `origin/master` was `556988790a7f961693a8fd93f73725baea66476a`, merge-base was `a2aab6df97d9f3e1186e8c3fc57ad909cc8aef9b`, and start divergence was `origin/master...HEAD = 45 1376`.
