@@ -214,3 +214,61 @@ The c2 note is upgraded from reasoning to executable evidence.
   arm) remains exercised only by the historical mainnet blocks
   (#57/#40 families covered its review).
 - #51 cells: sim-hook (c3), BIP30 domain (c4) — queue empty.
+
+## Cycle 5 (2026-08-03, draw 287, radar-hit force-updated branch): disconnect-pool duplicate txids — Assert-fires confirmed at HEAD + skip-fix ADOPTED (unit-verified); functional fork-scenario fails at the BIP30-validation layer independent of the fix (divergence recorded)
+
+### Radar hit
+Force-updated branch l0rinc/disconnect-pool-duplicate-txids
+(8dfa501356 fix + e8f94f3da4 characterization, 2026-08-03).
+
+### Defect (confirmed at HEAD)
+AddTransactionsFromBlock did `Assert(inserted)` (fork's Assume
+form of upstream's assert) — a duplicate txid across two blocks
+in a reorg aborts (assert builds) or silently corrupts the pool
+(release: Assume erased -> txid maps to the LAST iterator while
+queuedTx holds the tx twice -> removeForBlock removes one ->
+stranded entry). Mainnet reachability needs a reorg over the
+historical BIP30 dup pairs (~91k heights) — latent in practice
+today, but the corrupt-in-release direction is real.
+
+### Adoption (audit/adopt-dup-txid)
+- Cherry-picked e8f94f3da4 (characterize) + 8dfa501356 (skip
+  fix): index each txid, skip duplicates; queue/index/usage
+  stay synchronized.
+- Fork-test repair (89b150976d): the fork's own
+  disconnectpool_rejects_duplicate_txids expected the OLD throw
+  — updated to the skip semantics (and closed a lost brace).
+- disconnected_transactions suite: GREEN (across-blocks and
+  within-block duplicate cases now skip cleanly).
+
+### Functional divergence (documented)
+The PR's feature_block.py fork scenario ('Submit a genesis
+fork') fails in our tree at the BIP30-VALIDATION layer: the
+fork's height-120 block with the duplicate coinbase is
+rejected 'bad-txns-BIP30, tried to overwrite transaction'
+(the dup's UTXO from b_dup_2 is unspent when the fork block
+connects — independent of the pool fix; identical failure with
+or without it). Root cause unsettled here: our tree's
+validation ordering vs the PR's test flow (the fork's #40
+family touched CheckBlock dup paths). The PR's own CI is the
+settlement oracle; the unit-level oracle is green and the fix
+is semantically sound regardless.
+
+### Verdict
+CONFIRMED + ADOPTED (unit-verified): the skip fix is correct
+and now carried; the functional fork-scenario is recorded as
+an open divergence (not a fix defect — a test-flow/validation-
+ordering question for upstream CI or a fork-specific variant).
+
+### Suspicion-mining
+- S17: adopting a fork-branch onto a tree whose OWN tests
+  encode the old behavior requires the repair commit — always
+  grep the adopted area's in-tree tests for stale expectations.
+
+### Exact commands
+- cherry-picks above; suite run above; feature_block.py run
+  (/tmp/btc287, BIP30 rejection above).
+
+### Limitations / queue
+- Functional arm inconclusive pending upstream CI / a
+  fork-specific test variant.
