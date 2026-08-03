@@ -457,3 +457,19 @@ passing-after pair. Upstream vehicle: PR 35714 (open).
 - The 0f04fbee2f characterization-test commit was NOT adopted
   (second conflict, skipped — the boundary test in the fix
   commit is the regression oracle; noted).
+
+## Cycle 13 (2026-08-03, draw 289, raw=15767129454938790102): trigger re-check — master static; dup-txid CI progressing (26 queued / 3 in_progress / 1 success / 0 failures so far); consistent with the settlement
+
+### Watch
+- origin/master: still 556988790a (0 new).
+- l0rinc branches: no new since strong-random/dup-txid.
+- Dup-txid branch CI: 26 queued, 3 in_progress, 1 completed
+  (success), ZERO failures so far — nothing contradicting the
+  cycle-288 settlement (BIP30 identical to upstream; test flow
+  is the author's iteration).
+
+### Verdict
+Quiet; nothing actionable. Next check when CI completes.
+
+### Exact commands
+- git fetch (lines above); check-runs API counts above.
