@@ -1057,3 +1057,27 @@ Assess-only, NO adoption: hardening refactor, zero live defect.
 ### Limitations
 - If it lands, the block-timestamp paths get a #67-style
   differential re-run (recorded gate).
+
+## Cycle 26 (2026-08-03, draw 281, raw=10628413581544249711, suspicion-mined): PR 32729 sigop coverage — test/refactor; sigopcount_tests already in-tree; no defect at HEAD; NO adoption
+
+### Assessment
+- The PR adds malformed-PUSHDATA sigop coverage and splits the
+  GetSigOpCount overload (direct vs P2SH redeemScript).
+- Our state: sigopcount_tests.cpp exists (basic templates) and
+  script_tests vector corpus covers sigop paths via script
+  execution; the malformed-PUSHDATA sigop edge is a coverage
+  nicety, not a correctness finding (no wrong-count claim at
+  HEAD).
+- The overload split is API surface — upstream review
+  territory; test-only additions against upstream's own review
+  are low-value to duplicate.
+
+### Verdict
+Assess-only, NO adoption: coverage refactor, no defect at HEAD.
+
+### Exact commands
+- curl PR body; ls/grep sigopcount_tests.cpp above.
+
+### Limitations
+- If it lands, the malformed-PUSHDATA vectors drop into our
+  script differential family (#106) as a new cell (recorded).

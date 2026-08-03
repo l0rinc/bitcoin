@@ -333,6 +333,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 65 | contributor-branch-radar | CYCLE-23 | 2026-08-03 | PR 34320: presence==unspent by discipline; NO adoption |
 | 65 | contributor-branch-radar | CYCLE-24 | 2026-08-03 | PR 34132 catcher-removal refactor; fatal handling verified; NO adoption |
 | 65 | contributor-branch-radar | CYCLE-25 | 2026-08-03 | PR 35820 typed durations: hardening, no live defect; NO adoption |
+| 65 | contributor-branch-radar | CYCLE-26 | 2026-08-03 | PR 32729 sigop coverage: test refactor, no defect; NO adoption |
 | 80 | fuzz-engine-differential | CYCLE-5 | 2026-07-29 | rich PSBTv2 differential: A=0/400, E=115, R=4 guard-contained; BIP371 value-layout lesson (6-seed iterations) |
 | 42 | ci-review-bot-followup | CYCLE-4 | 2026-07-29 | corecheck sweep: bench deltas noise-shaped (same +10-33% on unrelated bloom PR); regression reading corrected |
 | 42 | ci-review-bot-followup | CYCLE-6 | 2026-08-02 | watch @556988790a: 5 commits (2 out-of-scope merges), PRs static, F13/F14/F16 offerability re-confirmed |
@@ -1065,6 +1066,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 281 (suspicion-mined): PR 32729 sigop coverage: test
+   refactor, no defect; no adoption.
    Cycle 280 (suspicion-mined): PR 35161 merkle doc+test
    ADOPTED (pins #99-c6's proven contract in-tree).
    Cycle 279 (suspicion-mined): PR 35820 typed durations:
