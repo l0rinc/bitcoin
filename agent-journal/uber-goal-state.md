@@ -1072,6 +1072,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 300 (goal 115 committed-diff/working-tree audit, draw
+   raw=12596182104518000101 masked=3372810067663224293 n=12
+   idx=5): reviewer-pass over session adoptions — F26 catch-all
+   remove could delete a foreign-created xor.dat only in a
+   datadir-lock-impossible race: ACCEPTED RISK documented;
+   F27/F30/F28/F29 CLEAN (typed catches, per-attempt recovery,
+   no valid-config rejections). Working-tree: tracked clean,
+   untracked = user files + 20 stale corpus artifacts (untouched
+   per protocol). Verdicts journaled in bulk-ecosystem-recurrence
+   cycle 2.
    Cycle 299 (goal 119 bulk-ecosystem-recurrence, draw
    raw=6652536966674966662 n=13 idx=9): write-failure bug shape
    NORMALIZED (restart-authoritative file, direct write, failure
