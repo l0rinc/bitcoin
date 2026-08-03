@@ -675,6 +675,29 @@ BOOST_AUTO_TEST_CASE(btck_context_tests)
     }
 }
 
+BOOST_AUTO_TEST_CASE(btck_context_options_callback_ownership)
+{
+    auto notifications = std::make_shared<TestKernelNotifications>();
+    std::weak_ptr<TestKernelNotifications> weak_notifications{notifications};
+    {
+        ContextOptions options{};
+        options.SetNotifications(std::move(notifications));
+        BOOST_CHECK(notifications == nullptr);
+        BOOST_CHECK(!weak_notifications.expired());
+    }
+    BOOST_CHECK(weak_notifications.expired());
+
+    auto validation_interface = std::make_shared<TestValidationInterface>();
+    std::weak_ptr<TestValidationInterface> weak_validation_interface{validation_interface};
+    {
+        ContextOptions options{};
+        options.SetValidationInterface(std::move(validation_interface));
+        BOOST_CHECK(validation_interface == nullptr);
+        BOOST_CHECK(!weak_validation_interface.expired());
+    }
+    BOOST_CHECK(weak_validation_interface.expired());
+}
+
 BOOST_AUTO_TEST_CASE(btck_block_header_tests)
 {
     // Block header format: version(4) + prev_hash(32) + merkle_root(32) + timestamp(4) + bits(4) + nonce(4) = 80 bytes

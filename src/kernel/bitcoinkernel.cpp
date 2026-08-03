@@ -102,6 +102,29 @@ public:
     }
 };
 
+class UserDataGuard
+{
+private:
+    void* m_user_data;
+    btck_DestroyCallback m_destroy;
+
+public:
+    UserDataGuard(void* user_data, btck_DestroyCallback destroy)
+        : m_user_data{user_data}, m_destroy{destroy} {}
+
+    ~UserDataGuard()
+    {
+        if (m_user_data && m_destroy) {
+            m_destroy(m_user_data);
+        }
+    }
+
+    void Release()
+    {
+        m_user_data = nullptr;
+    }
+};
+
 template <typename C, typename CPP>
 struct Handle {
     static C* ref(CPP* cpp_type)
@@ -852,14 +875,18 @@ void btck_context_options_set_chainparams(btck_ContextOptions* options, const bt
 void btck_context_options_set_notifications(btck_ContextOptions* options, btck_NotificationInterfaceCallbacks notifications)
 {
     // The KernelNotifications are copy-initialized, so the caller can free them again.
+    UserDataGuard user_data_guard{notifications.user_data, notifications.user_data_destroy};
     LOCK(btck_ContextOptions::get(options).m_mutex);
     btck_ContextOptions::get(options).m_notifications = std::make_shared<KernelNotifications>(notifications);
+    user_data_guard.Release();
 }
 
 void btck_context_options_set_validation_interface(btck_ContextOptions* options, btck_ValidationInterfaceCallbacks vi_cbs)
 {
+    UserDataGuard user_data_guard{vi_cbs.user_data, vi_cbs.user_data_destroy};
     LOCK(btck_ContextOptions::get(options).m_mutex);
     btck_ContextOptions::get(options).m_validation_interface = std::make_shared<KernelValidationInterface>(vi_cbs);
+    user_data_guard.Release();
 }
 
 void btck_context_options_destroy(btck_ContextOptions* options)
