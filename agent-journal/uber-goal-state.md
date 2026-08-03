@@ -1072,6 +1072,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 301 (goal 112 replay/continuity/FP-revalidation, draw
+   raw=8554301223849903997 n=11 idx=2): CONTINUITY GAP FIXED —
+   fault-injection harnesses lived only in /tmp (ephemeral);
+   preserved into agent-journal/artifacts/ (xor_interpose.c,
+   snap_interpose.c, xor_experiment.sh, snap_builder2.py +
+   replay README; commit b99892faab). FP revalidation: goal92-abi
+   dismissal RE-CONFIRMED with 3rd/4th independent verifiers
+   (gcc -fsanitize=undefined no-recover exit 0; gcc -O3 -flto
+   -fstrict-aliasing exit 0). Regression #6 GREEN (full
+   test_bitcoin on 8996d8c1e8). Regression #7 running on final tip.
    Cycle 300 (goal 115 committed-diff/working-tree audit, draw
    raw=12596182104518000101 masked=3372810067663224293 n=12
    idx=5): reviewer-pass over session adoptions — F26 catch-all
