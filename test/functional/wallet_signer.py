@@ -54,6 +54,10 @@ class WalletSignerTest(BitcoinTestFramework):
     def clear_mock_result(self, node):
         os.remove(os.path.join(node.cwd, "mock_result"))
 
+    def enable_mock_psbt_signing(self, node):
+        with open(os.path.join(node.cwd, "mock_sign_psbt"), "w") as f:
+            f.write(str(node.datadir_path))
+
     def run_test(self):
         self.test_valid_signer()
         self.test_disconnected_signer()
@@ -176,42 +180,41 @@ class WalletSignerTest(BitcoinTestFramework):
         assert_equal(result[1], {'success': True})
         assert_equal(mock_wallet.getwalletinfo()["txcount"], 1)
         dest = self.nodes[0].getnewaddress(address_type='bech32')
-        mock_psbt = mock_wallet.walletcreatefundedpsbt([], {dest:0.5}, 0, {'replaceable': True}, True)['psbt']
-        mock_psbt_signed = mock_wallet.walletprocesspsbt(psbt=mock_psbt, sign=True, sighashtype="ALL", bip32derivs=True)
-        mock_tx = mock_psbt_signed["hex"]
-        assert mock_wallet.testmempoolaccept([mock_tx])[0]["allowed"]
+        alternate_dest = self.nodes[0].getnewaddress(address_type='bech32')
+        alternate_psbt = mock_wallet.walletcreatefundedpsbt(
+            [], {alternate_dest:0.4}, 0, {'replaceable': True}, True)['psbt']
+        alternate_psbt_signed = mock_wallet.walletprocesspsbt(
+            psbt=alternate_psbt, sign=True, sighashtype="ALL", bip32derivs=True)
+        assert mock_wallet.testmempoolaccept([alternate_psbt_signed["hex"]])[0]["allowed"]
 
         assert_equal(hww.getwalletinfo()["txcount"], 1)
 
-        assert hww.testmempoolaccept([mock_tx])[0]["allowed"]
-
         with open(os.path.join(self.nodes[1].cwd, "mock_psbt"), "w") as f:
-            f.write(mock_psbt_signed["psbt"])
+            f.write(alternate_psbt_signed["psbt"])
+
+        # The signer must not be able to replace the requested transaction.
+        assert_raises_rpc_error(
+            -25, "External signer failed to sign", hww.send, outputs={dest:0.5}, add_to_wallet=False)
+
+        self.enable_mock_psbt_signing(self.nodes[1])
 
         self.log.info('Test send using hww1')
 
-        # Don't broadcast transaction yet so the RPC returns the raw hex
+        # Don't broadcast transaction yet so the RPC returns the raw hex.
         res = hww.send(outputs={dest:0.5},add_to_wallet=False)
         assert res["complete"]
-        assert_equal(res["hex"], mock_tx)
+        assert hww.testmempoolaccept([res["hex"]])[0]["allowed"]
 
         self.log.info('Test sendall using hww1')
 
         res = hww.sendall(recipients=[{dest:0.5}, hww.getrawchangeaddress()], add_to_wallet=False)
         assert res["complete"]
-        assert_equal(res["hex"], mock_tx)
+        assert hww.testmempoolaccept([res["hex"]])[0]["allowed"]
         # Broadcast transaction so we can bump the fee
         hww.sendrawtransaction(res["hex"])
 
-        self.log.info('Prepare fee bumped mock PSBT')
-
-        # Now that the transaction is broadcast, bump fee in mock wallet:
+        # Now that the transaction is broadcast, bump fee with the mock signer:
         orig_tx_id = res["txid"]
-        mock_psbt_bumped = mock_wallet.psbtbumpfee(orig_tx_id)["psbt"]
-        mock_psbt_bumped_signed = mock_wallet.walletprocesspsbt(psbt=mock_psbt_bumped, sign=True, sighashtype="ALL", bip32derivs=True)
-
-        with open(os.path.join(self.nodes[1].cwd, "mock_psbt"), "w") as f:
-            f.write(mock_psbt_bumped_signed["psbt"])
 
         self.log.info('Test bumpfee using hww1')
 

@@ -118,6 +118,13 @@ bool ExternalSigner::SignTransaction(PartiallySignedTransaction& psbtx, std::str
         return false;
     }
 
+    const auto tx = psbtx.GetUnsignedTx();
+    const auto signer_tx = signer_psbtx->GetUnsignedTx();
+    if (!tx || !signer_tx || tx->GetHash() != signer_tx->GetHash()) {
+        error = "Signer returned a PSBT for a different transaction";
+        return false;
+    }
+
     psbtx = *signer_psbtx;
 
     return true;

@@ -3,10 +3,12 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+import argparse
+import base64
+import json
 import os
 import sys
-import argparse
-import json
+import urllib.request
 
 def perform_pre_checks():
     mock_result_path = os.path.join(os.getcwd(), "mock_result")
@@ -56,12 +58,49 @@ def displayaddress(args):
 
     return sys.stdout.write(json.dumps({"address": expected_desc[args.desc]}))
 
+def sign_with_mock_wallet(args):
+    with open(os.path.join(os.getcwd(), "mock_sign_psbt"), "r") as f:
+        datadir = f.read().strip()
+
+    with open(os.path.join(datadir, args.chain, ".cookie"), "rb") as f:
+        credentials = base64.b64encode(f.read()).decode()
+
+    rpc_port = None
+    in_chain_section = False
+    with open(os.path.join(datadir, "bitcoin.conf"), "r") as f:
+        for line in f:
+            line = line.strip()
+            if line == f"[{args.chain}]":
+                in_chain_section = True
+            elif line.startswith("["):
+                in_chain_section = False
+            elif in_chain_section and line.startswith("rpcport="):
+                rpc_port = line.split("=", 1)[1]
+                break
+    assert rpc_port is not None
+
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{rpc_port}/wallet/mock",
+        data=json.dumps({
+            "jsonrpc": "1.0",
+            "id": "mock-signer",
+            "method": "walletprocesspsbt",
+            "params": [args.psbt, True, "ALL", True],
+        }).encode(),
+        headers={"Authorization": f"Basic {credentials}"},
+    )
+    with urllib.request.urlopen(request) as response:
+        return json.load(response)["result"]["psbt"]
+
 def signtx(args):
     if args.fingerprint != "00000001":
         return sys.stdout.write(json.dumps({"error": "Unexpected fingerprint", "fingerprint": args.fingerprint}))
 
-    with open(os.path.join(os.getcwd(), "mock_psbt"), "r") as f:
-        mock_psbt = f.read()
+    if os.path.isfile(os.path.join(os.getcwd(), "mock_sign_psbt")):
+        mock_psbt = sign_with_mock_wallet(args)
+    else:
+        with open(os.path.join(os.getcwd(), "mock_psbt"), "r") as f:
+            mock_psbt = f.read()
 
     if args.fingerprint == "00000001" :
         sys.stdout.write(json.dumps({
