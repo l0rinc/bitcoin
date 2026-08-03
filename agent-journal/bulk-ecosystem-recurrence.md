@@ -291,3 +291,16 @@ an at-count reject: same rejection, earlier — redundant third
 bound, no new security boundary. NO adoption (hygiene, not a
 defect). Manifest updated: unreviewed-core -> goal6-merkle-
 recurrence next.
+
+### goal6-merkle-recurrence (e95f910237): COVERED-AHEAD + test adopted
+ExtractMatches cleared vMatch but not vnIndex (stale output on
+reused vectors). Our lineage fixed it 2026-06-27 (fork-only
+1e7ca53c1b: vnIndex.clear() + Assume output invariants: size
+equality, bounds, strictly increasing) — 5 weeks ahead of the
+parallel fix. Their reuse regression test adopted and PASSES
+(audit/adopt-merkle-reuse-test 24b1185250). Upstream 556988790a
+still clears only vMatch; lineage covered-ahead.
+### goal7-getblocktxn: see above (DISMISSED, 3 existing bounds).
+Remaining unreviewed core queue: goal72 settings durability x2
+(write-family siblings), goal86 index-reorg x2, goal43-reindex-
+interrupt, goal7-descriptor-range.
