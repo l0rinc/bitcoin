@@ -273,3 +273,21 @@ Manifest: 106 i9/codex branches -> 52 carry unique src/ commits
 Incomplete coverage admitted: the 12 test/fuzz-only oracles were
 classified by commit message + scope, not individually verified.
 Cell to close next: goal7-getblocktxn (highest reachability).
+
+### goal7-getblocktxn (9a1531ee8b): DISMISSED with evidence
+Claim: getblocktxn BlockTransactionsRequest.indexes deserialization
+unbounded -> peer-driven memory DoS. Reality: THREE existing bounds:
+(1) VectorFormatter::Unser allocates in 5MiB batches, never up to
+the claimed count (serialize.h:685-693 — "attacker needs to provide
+X MiB of data to make us allocate X+5 MiB"); (2) DifferenceFormatter
+::Unser throws "differential value overflow" once accumulated
+indexes exceed uint16_max — entry 65,536 at most (blockencodings.h
+:40-46); (3) MAX_PROTOCOL_MESSAGE_LENGTH 4MB transport cap.
+Proof: a discriminating stream (count=65,537 with all entries
+present, zero-diff) throws at entry 65,536 from the value overflow
+— the count-limit test PASSES pre-fix (for the overflow reason).
+The parallel commit converts an entry-65,536-overflow reject into
+an at-count reject: same rejection, earlier — redundant third
+bound, no new security boundary. NO adoption (hygiene, not a
+defect). Manifest updated: unreviewed-core -> goal6-merkle-
+recurrence next.
