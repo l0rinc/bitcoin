@@ -1072,6 +1072,21 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 312 (goal 111 cell closures, end): goal86-prune-restart
+   (blockfilter) CONFIRMED + ADOPTED — height-only ReadFilterHeader
+   rejects own index after reorg + unclean kill; failing-before
+   init exit 1 with exact 'unexpected block ... Cannot read last
+   block filter header'; passing-after clean restart, full
+   feature_index_prune green (--timeout-factor=8 for ASan speed);
+   audit/adopt-blockfilter-reorg-recovery 8b9a20b114, archive
+   fe8d015755, F35 🟠 in URGENT (txgraph-retained evicted to
+   history). Repair: feature_txospenderindex registered in
+   test_runner (7b46cbcc5d). Flood queue now EXHAUSTED per the
+   goal-111 manifest: all 52 src-touching branches have recorded
+   dispositions (8 adopted F25-F35 span + goal10/goal6 tests,
+   2 dismissed-with-evidence, rest covered/deferred/test-only).
+   Catalog pool returns to watches-only (116 tool-blocked,
+   120-124 repo-blocked, 0-109 cycled, 110-119/125-127 done).
    Cycle 311 (goal 111 cell closures, continued): goal7-descriptor-
    range CONFIRMED + ADOPTED — int loop counter overflows after the
    valid INT32_MAX endpoint; failing-before test process KILLED BY
