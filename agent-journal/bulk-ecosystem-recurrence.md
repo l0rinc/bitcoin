@@ -117,3 +117,31 @@ Harnesses preserved in agent-journal/artifacts/ (+ build note:
 link against the ASan-instrumented in-tree libleveldb).
 Campaign #126 verdict: DISMISSED for the audited arms; WAL/
 MANIFEST corruption fixtures remain queued under goal 125.
+
+## Cycle 303 (goal 114 threat-model -> oracle conversion, draw raw=17746324290832141658 masked=8522952253977365850 n=9 idx=3)
+Threat model converted: "clock-skew breaks security gates" (F22/F30
+proven instances) -> full sweep of time-gated security checks.
+Method: enumerate NodeClock/GetTime gates in net_processing,
+validation, txmempool, banman, addrman (35 sites); classify each
+gate's skew margin vs attacker influence (adjusted-time attacker
+bound = +/-70 min via the 199-sample peer median).
+Classification (all remaining gates SAFE BY DESIGN MARGIN):
+- IsStaleTip/BEST_HEADER_STALE_AGE (net_processing.cpp:1388): 24h
+  margin, uses SYSTEM clock (not attacker-influenceable adjusted
+  time); backward skew only degrades own sync liveness (no
+  attacker primitive — attacker cannot set the clock). Degraded-
+  mode, by design.
+- Tip recency (:1407, spacing*20 = 200min): 3.3h margin > 70min.
+- Ping timeout: >=20min margin vs no remote clock influence.
+- BanMan ban durations: hours-level, self-inflicted at worst.
+- Block timestamp acceptance (MAX_FUTURE_BLOCK_TIME=2h): computed
+  from adjusted time itself — self-consistent by construction.
+- fee_estimates MAX_FILE_AGE: hours-level.
+NEGATIVE RESULT (narrows the threat model): the only gates that
+can fail under attacker-relevant conditions are those with
+sub-minute effective margins AND remote-controlled inputs — the
+two proven instances (F22 empty-header slot, F30 commitment-cap
+wrap) are exactly that class; no third member exists in-tree.
+Future findings in this family are valid ONLY for: unclocked
+remote-input gates or margins < 70min. Verdict: sweep complete,
+no new defect candidate; recorded as boundary knowledge.
