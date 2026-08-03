@@ -67,78 +67,30 @@ independently verified.
 - Next: track PR 35714 upstream; adopt 0f04fbee2f characterization test
   if the author reworks it.
 
-## ✅ btck_chainstate_manager_destroy null deref — lineage fix restored (#16 c4)
-- Mechanism: 22 btck_*_destroy functions, 21 are delete-only (null-safe
-  free() convention); btck_chainstate_manager_destroy flushed chainstates
-  through btck_ChainstateManager::get(chainman) first — destroy(nullptr)
-  was a null dereference. FFI error-path cleanup after a failed create
-  hits it directly.
-- Evidence: HEAD had the unguarded deref (the c3 fix 55f1fa334f lived
-  only on audit/api-misuse — #66-c1 lineage class, second recurrence);
-  cherry-picked onto audit/api-misuse-c4 (union conflict + 2 labeled
-  repairs); test_kernel destroy_null green (crashes pre-fix), full
-  suite green. Upstream master @556988790a still unguarded (:1126-1130).
-- Branch/commits: fix 55f1fa334f -> restored 32643f9f98 + repairs on
-  audit/api-misuse-c4; archive commit this cycle; journal #16 c4.
-- Next: offer upstream (still vulnerable); sweep other pre-rotation
-  journals/fixes missing from the lineage.
+## ✅ txdb cursor valid over malformed first key (F25, adopted 8481b1f27f)
+- Mechanism: CCoinsViewDB::Cursor() cached the default DB_COIN tag
+  when first-key decode failed -> Valid()/GetKey() reported a usable
+  cursor over an undecodable key; Next() already invalidated it.
+- Trigger: corrupt or foreign-written chainstate keyspace (readable
+  value under a malformed coin key); not network reachable.
+- Evidence: failing-before (Valid/GetKey true over one-byte 'C'
+  key) / passing-after (focused + coins_tests green).
+- Branch/commit: audit/adopt-txdb-cursor-firstkey 8481b1f27f;
+  archive 35548eb2ba; upstream PR 35654 open (covered-ahead).
+- Next: track 35654 merge.
 
-## ✅ psbt fuzz target missing ECC init — SEGV on first valid key (fixed, #50 c4)
-- Mechanism: the #50 c2 signing pass (08590b364d) made the psbt fuzz
-  target do ECC work but the target had no .init;
-  secp256k1_context_sign stays null and the FIRST valid fuzz key
-  crashes in FillableSigningProvider::AddKey -> CKey::GetPubKey ->
-  secp256k1_ec_pubkey_create(NULL, ...).
-- Evidence: failing-before (pre-fix HEAD target, ASan+UBSan):
-  key.cpp:198 null-pointer UBSan + ASan SEGV on 0x0 READ,
-  first-invalid frame secp256k1_ecmult_gen_context_is_built <-
-  ec_pubkey_create <- CKey::GetPubKey (key.cpp:198) <- AddKey
-  (signingprovider.h:323) <- psbt_fuzz_target. Passing-after: fixed
-  target clean on both correlated seeds + 500-run corpus (97 s);
-  PSBTv2 correlated seed drives SignPSBTInput to OK +
-  PSBTInputSignedAndVerified=1 (final_script_sig=106 B) with the
-  fuzz-provided key; independent RPC verifier (walletprocesspsbt /
-  finalizepsbt complete=True).
-- Reachability: decodable doc + >=64 front key bytes — only via the
-  hybrid whole-doc mode, hence invisible to truncation-mode corpora.
-  Test-infra only, fork-local.
-- Branch/commit: audit/introspector-blockers-c4 (this cycle);
-  journal fuzz-introspector-blockers.md c4. Archive: agent/all-findings
-  pick this cycle.
-- Next: multi-input multi-key correlated docs; taproot/witness
-  variants; qa-assets-style corpus-dir import.
-
-## ✅ Rolling-bloom reset-per-tip-change CPU storm (fixed c8f53e58d9)
-- Mechanism: TxDownloadManagerImpl::ActiveTipChange reset two ~863 KiB
-  rolling bloom filters per accepted block once the regtest IBD latch
-  (minwork=0 + fresh timestamps) flipped is_ibd=false; 40.6% of P2P
-  IBD CPU in memset.
-- Strongest evidence: perf attribution (42.05% __memset_zva64 from
-  CRollingBloomFilter::reset), before/after user CPU 3.2s -> 1.35s
-  (-58%), identical final tip hash, bloom_tests green.
-- Branch/commit: audit/full-sync-ibd-c2 @ c8f53e58d9; journal
-  full-sync-ibd-profile.md c2. Integration: in ledger lineage
-  (ancestor of current tip).
-- Next: none locally; optionally upstreamable (trivial, provably
-  identical post-state, re-salt preserved).
-
-## ✅ -limitclustercount=0 accepted at startup (fixed 5e0a80ade5, #52 c2)
-- Mechanism: only the upper bound of -limitclustercount was
-  validated; 0 slipped to TxGraph's Assume(max_cluster_count >= 1)
-  — startup abort in assert builds, or silent rejection of EVERY
-  mempool transaction in release builds (total_count >= 1 > 0).
-- Evidence: failing-before (regtest node starts and runs with 0,
-  Release) + code chain (mempool_args.cpp:35/:110, txmempool.cpp
-  :222, txgraph.cpp:699-700/:2143); passing-after: startup fails
-  with 'limitclustercount must be at least 1', boundary cases
-  (0 and 65) in mempool_cluster.py, full suite green.
-- Severity: small (DEBUG_TEST option, config-triggered) but
-  byte-identical gap present in upstream master (7dea464d6b).
-- Branch/commit: audit/assertion-invariant-c2 @ 5e0a80ade5;
-  journal assertion-invariant-audit.md c2. Archive pick this cycle.
-- Next: offer upstream (one-line validation, mirrors the existing
-  upper-bound error); re-verified NOT duplicated upstream @
-  9611a35603 (#42 c5 — file is src/node/mempool_args.cpp there).
+## ✅ xor.dat short-write leaves unbootable datadir (F26, adopted 2110abf119)
+- Mechanism: InitBlocksdirXorKey left a truncated xor.dat when the
+  key write/close failed; next startup read it as authoritative ->
+  AutoFile::read: end of file -> unbootable until manual deletion.
+- Trigger: local IO fault (disk full/quota/transient) on first key
+  creation; loud failure, availability only. F19 write-failure family.
+- Evidence: deterministic one-shot LD_PRELOAD fwrite interposer —
+  pre-fix 1-byte xor.dat + restart EOF; post-fix file removed,
+  restart regenerates key, getblockcount=0, clean stop.
+- Branch/commit: audit/adopt-xor-key-shortwrite 2110abf119;
+  archive ebd42ea45e; upstream master vulnerable.
+- Next: none locally; offerable upstream with the injection harness.
 
 ## 🔴 UTXO-scan/resize race — upstream master (fixed in-tree e049f064e1)
 - Mechanism: gettxoutsetinfo/scantxoutset create a LevelDB cursor

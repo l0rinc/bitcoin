@@ -221,6 +221,49 @@ comment-drift family as F1 (LockPoints).
 - Dedup note: completes the F9 (script_assets) / F18 (qa-assets)
   supply-chain family across all four remaining input classes.
 
+## F24: disconnect-pool duplicate-txid abort (BIP30 reorg) — FIXED 2026-08-03
+- Mechanism: DisconnectedBlockTransactions asserted txid uniqueness,
+  but a BIP30 historical duplicate coinbase can be disconnected
+  together on a stronger-genesis-fork reorg -> Assert abort.
+- Evidence: adopted from the author's PR branch (a9a78f2907) +
+  test-repair 89b150976d; archive a3ba4aff55; unit green in-tree.
+  CROSS-CONFIRMED 2026-08-03 by the parallel campaign's independent
+  implementation 4061d3763d — identical skip semantics (try_emplace,
+  no queue append, no memory charge, first reverse-order occurrence).
+- Severity: reorg-with-BIP30-duplicates availability (assert-only
+  path in release? Assert aborts in all builds here); remote trigger
+  requires crafting a stronger genesis fork containing both
+  duplicates — narrow but real.
+- Upstream: PR branch CI (l0rinc 8dfa501356) still queued, 0
+  failures at last check; fork-scenario feature_block.py divergence
+  settled as the author's open iteration (upstream-CI oracle).
+
+## F25: txdb cursor valid over malformed first key (PR 35654) — FIXED 2026-08-03
+- Mechanism: CCoinsViewDB::Cursor() cached the default DB_COIN tag
+  when first-key decode failed -> Valid()/GetKey() reported a usable
+  cursor over an undecodable key (Next() already invalidated it).
+- Evidence: failing-before (cursor Valid/GetKey true over a
+  one-byte 'C' malformed key) / passing-after (focused +
+  coins_tests green); audit/adopt-txdb-cursor-firstkey 8481b1f27f;
+  archive 35548eb2ba.
+- Reachability: corrupt/foreign-written chainstate keyspace only;
+  not network reachable. Severity Medium-low robustness.
+- Upstream: PR 35654 open; lineage covered-ahead.
+
+## F26: xor.dat short-write leaves unbootable datadir (goal93) — FIXED 2026-08-03
+- Mechanism: InitBlocksdirXorKey created blocksdir/xor.dat and a
+  short write threw before the fclose check, leaving a truncated
+  key file; next startup read it as authoritative -> AutoFile::read:
+  end of file -> unbootable until manual deletion.
+- Evidence: deterministic one-shot LD_PRELOAD fwrite interposer:
+  pre-fix 1-byte xor.dat left + restart EOF failure; post-fix file
+  removed, restart regenerates 8-byte key, getblockcount=0, clean
+  stop. Harness preserved in contributor-branch-radar journal.
+  audit/adopt-xor-key-shortwrite 2110abf119; archive ebd42ea45e.
+- Reachability: local IO fault on first key creation (disk
+  full/quota/transient); loud failure, availability only. Same
+  write-failure family as F19. Upstream master vulnerable.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
