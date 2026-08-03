@@ -273,3 +273,49 @@ The count-only input is intentionally truncated so the old path's allocation can
 ### Handoff
 
 The source/test changes are ready for one self-contained finding commit. After committing, append the source commit and exact validation to `agent-journal/uber-goal-state.md`, make the separate state-close commit, then perform the fresh gate and exact selector draw for the next cycle. Do not repeat the closed BIP37 vector cell without a distinct caller, limit, or cleanup failure.
+
+## Cycle 312: GETBLOCKTXN request count before allocation
+
+### Selection and scope
+
+- Exact selector: `shuf -i 0-111 -n 1` -> `7` (`resource-exhaustion-variants`).
+- Branch: `uber-cycle-312-resource-exhaustion-variants-20260802`.
+- Cycle-start/base HEAD: `260f3a2081b3893120c09eb8d8fe11da7802a755`.
+- Selection commit: `b57a9f0abe` (`journal: select cycle 312 resource exhaustion variants`).
+- The earlier cfilters, BIP35, locator, relay-backlog, receive-buffer, transport-send-queue, REST `getutxos`, duplicate descriptor, BIP37 filter, and generic INV/GETDATA or ADDR/ADDRV2 allocation cells remain excluded. This cycle selected a distinct count-before-allocation path using `DifferenceFormatter`.
+
+### Hypothesis and source trace
+
+`GETBLOCKTXN` is a public P2P request. `BlockTransactionsRequest` deserialized its `indexes` through the generic `VectorFormatter`, which reads a CompactSize count and reserves the vector before `DifferenceFormatter` validates the strictly increasing `uint16_t` domain. The request can contain at most the complete `uint16_t` index domain, 65,536 entries, so a count-only malformed message should be rejected before reserve, element construction, or differential decoding.
+
+The minimal old input was a 32-byte block hash followed by a five-byte CompactSize count declaring 2,500,000 indexes. The old parser accepted the count, reserved capacity for 2,500,000 `uint16_t` values (5,000,000 bytes), constructed one default element, and then failed at EOF. The complete attacker input was only 37 bytes; no index delta bytes were needed. The old probe output was:
+
+```text
+error=DataStream::read(): end of data: iostream error capacity=2500000 size=1 remaining=0
+```
+
+The valid maximum is 65,536 entries `[0, 65535]`, already exercised by the existing zero-delta boundary test. The prior 65,537-entry test proves the differential domain overflow, but it did not prevent a much larger count from reaching the generic allocator.
+
+### Fix and regression
+
+`BlockTransactionsRequest` now uses `LimitedVectorFormatter<65536, DifferenceFormatter>`. This preserves the compact differential wire format and rejects a count above the representable index domain before vector allocation. The regression serializes only the block hash and an oversized count, then asserts an exception, empty output, and zero capacity. The fixed probe output is:
+
+```text
+error=Vector length limit exceeded: iostream error capacity=0 size=0 remaining=0
+```
+
+This fixes the avoidable allocation and partial construction while preserving valid requests and the existing malformed-message handling. It does not claim to remove the already bounded network message buffer or to change the peer penalty policy for malformed `GETBLOCKTXN` input.
+
+### Validation
+
+- `mkdir -p /data/my_storage/tmp/cycle312-getblocktxn-build-tmp && CCACHE_DISABLE=1 TMPDIR=/data/my_storage/tmp/cycle312-getblocktxn-build-tmp ninja -C /data/my_storage/tmp/cycle246-wallet test_bitcoin -j2`: passed, including all header-dependent rebuild steps.
+- `TMPDIR=/data/my_storage/tmp/cycle312-getblocktxn-test /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=blockencodings_tests/TransactionsRequestDeserializationRejectsOversizedCount --log_level=test_suite --report_level=short`: passed 1 case and 3 assertions.
+- `TMPDIR=/data/my_storage/tmp/cycle312-getblocktxn-fulltest /data/my_storage/tmp/cycle246-wallet/bin/test_bitcoin --run_test=blockencodings_tests --log_level=message --report_level=short`: passed 31 cases and 372 assertions.
+- The first verbose full-suite attempt was blocked by its output pipe after the test runner had started; it was stopped as the cycle-owned process and replaced with the low-output run. The earlier focused attempt failed only because its `TMPDIR` did not exist; creating the scratch directory made it pass. Neither was a product failure.
+- `git diff --check` passed. The independent pre-fix and fixed probe binaries were compiled outside the repository; the source probe remains untracked and is not part of the finding commit.
+
+### Classification and next queue
+
+Classification: confirmed remotely reachable P2P resource-exhaustion and input-boundary defect. A peer could use a count-only 37-byte `GETBLOCKTXN` payload to force a five-megabyte vector reservation before the index-domain check. The fix moves the bound to the count trust boundary and leaves valid serialization, differential decoding, and existing 65,537 overflow behavior intact.
+
+Limitations: no fresh daemon socket functional test was run because the host filesystems are full and the existing long-running workloads were preserved. The serializer regression, old/new allocation probes, source trace, and full block-encoding suite independently establish the mechanism and fix. The next learned queue is to audit every custom difference/varint/CompactSize vector formatter for the same mismatch between a representable element domain, a declared count, allocation timing, and malformed-input accounting; do not repeat this repaired caller without a distinct formatter or contract.

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cassert>
 #include <functional>
+#include <limits>
 
 class CTxMemPool;
 class BlockValidationState;
@@ -53,7 +54,9 @@ public:
 
     SERIALIZE_METHODS(BlockTransactionsRequest, obj)
     {
-        READWRITE(obj.blockhash, Using<VectorFormatter<DifferenceFormatter>>(obj.indexes));
+        // The index type bounds a strictly increasing request to the complete uint16_t domain.
+        static constexpr size_t MAX_INDEXES{std::numeric_limits<uint16_t>::max() + 1U};
+        READWRITE(obj.blockhash, Using<LimitedVectorFormatter<MAX_INDEXES, DifferenceFormatter>>(obj.indexes));
         for (size_t i{1}; i < obj.indexes.size(); ++i) {
             Assume(obj.indexes[i] > obj.indexes[i - 1]);
         }

@@ -1650,6 +1650,18 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationCardinalityBoundaryTest)
     BOOST_CHECK_THROW(overflow_stream >> overflow, std::ios_base::failure);
 }
 
+BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationRejectsOversizedCount)
+{
+    DataStream stream{};
+    stream << uint256{};
+    WriteCompactSize(stream, std::numeric_limits<uint16_t>::max() + 2U);
+
+    BlockTransactionsRequest request;
+    BOOST_CHECK_THROW(stream >> request, std::ios_base::failure);
+    BOOST_CHECK(request.indexes.empty());
+    BOOST_CHECK_EQUAL(request.indexes.capacity(), 0U);
+}
+
 BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationOverflowTest) {
     // Any set of index deltas that starts with N values that sum to (0x10000 - N)
     // causes the edge-case overflow that was originally not checked for. Such
