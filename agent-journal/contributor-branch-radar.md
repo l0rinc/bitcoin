@@ -1372,3 +1372,22 @@ mempool_tests green. Minimal variant adopted (guard pre-ingestion
 in the outer function; their helper-refactor variant noted as
 equivalent behavior) — audit/adopt-clustersize-validation
 a3253e6396. Config-gated, no consensus impact; upstream vulnerable.
+
+### P3 kernel setter-exception ownership trio (9b5bdd99fc, 8c5db6e36e, 309226ff53): DISMISSED as defects
+All three commits guard user_data ownership when a kernel
+registration/ctor throws AFTER the caller released ownership:
+goal54 pair — logging-connection make_unique/ctor bad_alloc after
+the log callback registered (callback stays, user_data leaks);
+goal104 — UserDataGuard for notifications/validation-interface
+setters (make_shared throw -> destroy callback skipped).
+Shared shape: every trigger is a bad_alloc during a small
+allocation (OOM path) — the process is already failing; the
+consequence is a leak-under-OOM with no observable behavior delta
+outside it. No realistic non-OOM trigger exists: the registered
+operations (list push_back, shared_ptr make, iterator copy) only
+throw on allocation failure. Contract note: even reading the btck
+destroy-callback contract as exactly-once, impact stays
+leak-under-OOM. Per the no-inflation rule (and our F17 contrast —
+F17 was a null deref on a REAL error path, not bad_alloc), these
+are hygiene hardening, not defects. NO adoption. Resume if a
+non-allocation throw path into these setters is identified.
