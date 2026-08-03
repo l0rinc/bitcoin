@@ -2016,7 +2016,29 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    CI cache keys, header-cost -ftime-report).
 
 ## Handoff
-Updated after every rotation. PROGRAM STATE 2026-08-03 FINAL
+Updated after every rotation. PROGRAM STATE 2026-08-03 v2
+(post-flood): the 2026-08-03 branch flood (498 new l0rinc
+branches, 865->1363) is FULLY TRIAGED — goal-111 manifest: 52
+src-touching branches, all dispositions recorded. Session totals:
+9 adoptions with failing-before/passing-after pairs (F25 txdb
+cursor, F26 xor.dat, F27 snapshot write, F28 mempoolexpiry, F29
+clustersize, F30 headers clock-lag, F31 i2p key, F32 tor key,
+F33 txospender stale tip 🟠, F34 descriptor INT32_MAX, F35
+blockfilter reorg 🟠 — F25-F35 span), 2 test adoptions (goal10,
+goal6-merkle covered-ahead), 3 dismissals with evidence
+(goal92-abi, P3 bad_alloc trio, goal7-getblocktxn), 3 covered-
+ahead (goal26, goal98, goal43-reindex), dup-txid settlement
+externally corroborated (author CI red on own test flow; our fix
+identical). LevelDB trio (125/126/127) CONFORM-dismissed with
+harnesses preserved in agent-journal/artifacts/ (12 files +
+replay README). URGENT at 10 (F33+F35 🟠, F30, rest ✅; 🔴
+UTXO-scan upstream-only watch). Open external: upstream master
+dcc2ed52b8 (fuzz-only advance), dup-txid CI (2 NetBSD failures =
+author's own test), watch PRs 35744/35859/35818/35620/35654
+(open), qa-assets pin 918cdd3, host tooling (lld, clang-tidy,
+Sparrow repo). Regression #8 full suite in flight; #8b kernel
+GREEN.
+PROGRAM STATE 2026-08-03 FINAL
 (blocked 3x zero-delta after resume, cycles 292-294):
 all internal work complete and re-verified — 26-PR sweep fully
 covered (6 adopted incl. dup-txid skip fix, 2 covered-ahead, 17
