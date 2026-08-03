@@ -207,6 +207,20 @@ comment-drift family as F1 (LockPoints).
 - Dedup note: liveness sibling of the CVE-2024-52922 stalling family
   (#49 c10 markers) — that was withholding; this is truthful-empty.
 
+## F23: CI external inputs unpinned (pip/actions/images/tool binaries) — FIXED 2026-08-03
+- Mechanism: CI installed test pip deps unpinned, pulled actions by
+  floating tags, ran OCI images by tag, and downloaded lint tool
+  binaries unverified — all mutable between runs without a
+  repository change.
+- Evidence: gap greps at HEAD (01_base_install.sh:61 unpinned pip,
+  @v6/@v5 floating tags, FROM ...ubuntu:26.04 tag); adoption verified
+  in-tree: --require-hashes + 190-hash lockfiles, actions@full-commits,
+  images @sha256 digests, shellcheck/mlc sha256sum blocks; bash -n OK.
+- Fix: PR 35754's 4 commits (5671b32614, 9bf68d70bc, 0f0eb35c8b,
+  49cc4e8cab) adopted with one union resolution.
+- Dedup note: completes the F9 (script_assets) / F18 (qa-assets)
+  supply-chain family across all four remaining input classes.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
