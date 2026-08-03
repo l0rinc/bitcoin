@@ -88,7 +88,7 @@ class P2PConnectionLimits(BitcoinTestFramework):
         peer1.wait_for_verack()
         with node.assert_debug_log(['received: mempool'], timeout=2):
             peer1.send_without_ping(msg_mempool())
-        self.wait_until(lambda: peer1.is_connected is True)  # TODO: A BIP35 request makes this a transaction-relaying peer
+        self.wait_until(lambda: peer1.is_connected is False)
 
         self.log.info('Test different values of inboundrelaypercent')
         self.restart_node(0, ['-maxconnections=13', '-inboundrelaypercent=0'])

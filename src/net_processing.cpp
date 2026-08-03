@@ -5175,6 +5175,10 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         }
 
         if (auto tx_relay = peer.GetTxRelay(); tx_relay != nullptr) {
+            if (pfrom.IsInboundConn()) {
+                pfrom.m_relays_txs = true;
+                if (MaybeDisconnectForTxRelayCapacity(pfrom, msg_type) || pfrom.fDisconnect) return;
+            }
             LOCK(tx_relay->m_tx_inventory_mutex);
             tx_relay->m_send_mempool = true;
         }
