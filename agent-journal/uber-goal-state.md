@@ -140,6 +140,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 67 | release-version-differential | CYCLE-2 | 2026-07-31 | wtxid/txid inventory across v0.21 boundary: negotiation/inv/getdata all per BIP339; DISMISSED |
 | 67 | release-version-differential | CYCLE-3 | 2026-08-01 | downgrade read: v28.2 clean; v0.20.1 loud abort on blocksxor-obfuscated blk files (upstream #28052); its mutations forward-safe |
 | 67 | release-version-differential | COMPLETE | 2026-08-01 | c4: mempool.dat v0.20.1<->HEAD bidirectional + coinstatsindex v28.2/HEAD suites PASS with exact binaries; feature_backwards_compatibility absent in fork |
+| 67 | release-version-differential | CYCLE-5 | 2026-08-03 | PR 33324 reobf: feature, boundary already verified; NO adoption |
 | 24 | disk-io-amplification | CYCLE-1 | 2026-07-28 | regtest IBD: ~2x byte amplification (undo+index), bounded 16MB prealloc; no pathological growth |
 | 63 | loupe-style-pipeline | CYCLE-1 | 2026-07-28 | fee-estimator zero-state waste confirmed+fixed (675011ba86): 20.4%->0 samples, -34% IBD user |
 | 63 | loupe-style-pipeline | CYCLE-6 | 2026-08-02 | banlist.dat archaeology: 3 distinct loud paths (legacy/corrupt/missing), corrupt arm fault-injected; DISMISSED |
@@ -1062,6 +1063,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 278 (suspicion-mined): PR 33324 reobfuscation:
+   feature, boundary verified; no adoption.
    Cycle 277 (suspicion-mined): PR 34132 error-catcher
    refactor; fatal handling verified; no adoption.
    Cycle 276 (suspicion-mined): PR 34320 HaveCoin/Exists split:
