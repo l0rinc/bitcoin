@@ -45,6 +45,32 @@ BOOST_AUTO_TEST_CASE(skiplist_test)
     }
 }
 
+BOOST_AUTO_TEST_CASE(median_time_past_property)
+{
+    // Include an out-of-order 12th predecessor so the eleven-block window is
+    // checked independently at its exact boundary.
+    const uint32_t times[] = {
+        500, 0, 1, 2, 3, 4, 5, 100, 101, 102, 103, 104, 6,
+        0xffffffffU, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+    };
+    std::vector<CBlockIndex> blocks(sizeof(times) / sizeof(times[0]));
+    for (size_t i{0}; i < blocks.size(); ++i) {
+        blocks[i].nHeight = i;
+        blocks[i].nTime = times[i];
+        blocks[i].pprev = i == 0 ? nullptr : &blocks[i - 1];
+    }
+
+    for (size_t i{0}; i < blocks.size(); ++i) {
+        std::vector<uint32_t> window;
+        for (const CBlockIndex* block{&blocks[i]}; block && window.size() < CBlockIndex::nMedianTimeSpan; block = block->pprev) {
+            window.push_back(block->nTime);
+        }
+        std::sort(window.begin(), window.end());
+        BOOST_REQUIRE(!window.empty());
+        BOOST_CHECK_EQUAL(blocks[i].GetMedianTimePast(), window[window.size() / 2]);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(getlocator_test)
 {
     // Build a main chain 100000 blocks long.
