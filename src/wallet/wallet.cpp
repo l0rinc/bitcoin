@@ -4293,6 +4293,27 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
 {
     AssertLockHeld(wallet.cs_wallet);
 
+    const auto add_descriptor = [&](CWallet& target, const std::string& desc_str, const uint64_t creation_time) {
+        // Convert descriptor-storage exceptions into the normal migration failure path, which restores the legacy backup.
+        FlatSigningProvider keys;
+        std::string parse_err;
+        std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_err, /*require_checksum=*/ true);
+        assert(descs.size() == 1); // LegacyScriptPubKeyMan should only produce valid, non-multipath descriptors.
+        assert(!descs.at(0)->IsRange()); // Legacy watch-only and solvable descriptors are not ranged.
+
+        WalletDescriptor w_desc(std::move(descs.at(0)), creation_time, 0, 0, 0);
+        try {
+            if (auto spkm_res = target.AddWalletDescriptor(w_desc, keys, "", false); !spkm_res) {
+                error = util::ErrorString(spkm_res);
+                return false;
+            }
+        } catch (const std::exception& e) {
+            error = Untranslated(e.what());
+            return false;
+        }
+        return true;
+    };
+
     // Get all of the descriptors from the legacy wallet
     std::optional<MigrationData> data = wallet.GetDescriptorsForLegacy(error);
     if (data == std::nullopt) return false;
@@ -4337,18 +4358,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
 
             // Parse the descriptors and add them to the new wallet
             for (const auto& [desc_str, creation_time] : data->watch_descs) {
-                // Parse the descriptor
-                FlatSigningProvider keys;
-                std::string parse_err;
-                std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_err, /*require_checksum=*/ true);
-                assert(descs.size() == 1); // It shouldn't be possible to have the LegacyScriptPubKeyMan make an invalid descriptor or a multipath descriptors
-                assert(!descs.at(0)->IsRange()); // It shouldn't be possible to have LegacyScriptPubKeyMan make a ranged watchonly descriptor
-
-                // Add to the wallet
-                WalletDescriptor w_desc(std::move(descs.at(0)), creation_time, 0, 0, 0);
-                if (auto spkm_res = data->watchonly_wallet->AddWalletDescriptor(w_desc, keys, "", false); !spkm_res) {
-                    throw std::runtime_error(util::ErrorString(spkm_res).original);
-                }
+                if (!add_descriptor(*data->watchonly_wallet, desc_str, creation_time)) return false;
             }
         }
         if (data->solvable_descs.size() > 0) {
@@ -4373,18 +4383,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
 
             // Parse the descriptors and add them to the new wallet
             for (const auto& [desc_str, creation_time] : data->solvable_descs) {
-                // Parse the descriptor
-                FlatSigningProvider keys;
-                std::string parse_err;
-                std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_err, /*require_checksum=*/ true);
-                assert(descs.size() == 1); // It shouldn't be possible to have the LegacyScriptPubKeyMan make an invalid descriptor or a multipath descriptors
-                assert(!descs.at(0)->IsRange()); // It shouldn't be possible to have LegacyScriptPubKeyMan make a ranged watchonly descriptor
-
-                // Add to the wallet
-                WalletDescriptor w_desc(std::move(descs.at(0)), creation_time, 0, 0, 0);
-                if (auto spkm_res = data->solvable_wallet->AddWalletDescriptor(w_desc, keys, "", false); !spkm_res) {
-                    throw std::runtime_error(util::ErrorString(spkm_res).original);
-                }
+                if (!add_descriptor(*data->solvable_wallet, desc_str, creation_time)) return false;
             }
         }
     }

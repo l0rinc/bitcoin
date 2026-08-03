@@ -585,3 +585,38 @@ Next queue:
 1. Review historical migration changes outside `MigrateToSQLite()` and `ApplyMigrationData()`, especially reload, backup, path, and cleanup follow-ups not covered by cycles 167, 173, 193, 259, or 261.
 2. Compare current wallet migration tests with failure schedules that stop after the replacement database is created but before descriptor loading, excluding the already closed settings and auxiliary-wallet cleanup cell.
 3. Re-rank against the whole-history queue after the next fresh selector draw; do not manufacture a fix when the only evidence is an intentional assertion policy.
+
+## Cycle 324: auxiliary descriptor exceptions bypassed migration rollback
+
+### Selection and gate
+
+- Selector: exact `shuf -i 0-123 -n 1` draw `32`, `history-incomplete-fixes`.
+- Branch: `uber-cycle-324-history-incomplete-fixes-20260802`.
+- Selection commit: `fd66e34f5b`.
+- The pre-cycle catalog had 124 contiguous goals (`0..123`); the prior migration cells for unchecked writes, settings cleanup, best-block recovery, GUI load policy, SQLite fail-fast behavior, and HTTP retention were searched before selecting this distinct exception boundary.
+
+### Historical hypothesis and reproduction
+
+The migration implementation added by the historical legacy-to-descriptor work (`0bf7b38bff`) creates auxiliary watch-only and solvable wallets before applying the main migration transaction. `DoMigration()` converted a false `AddWalletDescriptor()` result into `std::runtime_error`, while `MigrateLegacyToDescriptor()` only restored the Berkeley DB backup and removed created wallets when `DoMigration()` returned `false`. An exception from an auxiliary descriptor write could therefore skip the caller's cleanup block.
+
+The pre-fix path was reproduced with a real v28.4 Berkeley DB wallet containing an imported watch-only public key. A daemon-only `LD_PRELOAD` SQLite shim was configured to fail the third `COMMIT TRANSACTION`, the commit used by `legacy_watchonly->AddWalletDescriptor()`. The exact current daemon command used scratch datadir `/data/my_storage/tmp/cycle324-migration-exception-fail3`, RPC port `32405`, and `FAIL_SQLITE_COMMIT_NUMBER=3`; it returned `Unable to write descriptor cache` but left `wallets/legacy/wallet.dat` as SQLite, left `legacy_1786003000.legacy.bak`, and left `legacy_watchonly/wallet.dat`. The daemon log recorded the failed commit followed by release of both wallets. This is a real product-path cleanup failure, not a test-only exception.
+
+### Fix and independent verification
+
+- Replace the duplicated parse/add loops with a local helper that preserves the existing descriptor invariants, converts a false result to `error`, catches descriptor-storage `std::exception` failures, and returns `false`. The outer migration code then executes its established auxiliary-wallet removal and legacy-backup restoration path.
+- Rebuilt the wallet-enabled `bitcoind` from the changed source with `cmake --build /data/my_storage/tmp/cycle246-wallet --target bitcoind -j2`.
+- Replayed the same third-commit fault on fresh datadir `/data/my_storage/tmp/cycle324-migration-exception-fixed`. RPC returned error code `-4` with `Unable to write descriptor cache`; `file` identified both `legacy/wallet.dat` and `legacy_1786003001.legacy.bak` as Berkeley DB, their SHA-256 values matched the original fixture (`fb589cdbdb8d25d7aca016b4c692640cada2c7dc7e123ea48090d9f7884ca9df`), and `legacy_watchonly` was absent. `listwalletdir` reported `legacy` as a legacy wallet requiring migration.
+- Ran a no-fault control on the same watch-only fixture in `/data/my_storage/tmp/cycle324-migration-exception-success`. `migratewallet legacy` returned both `legacy` and `legacy_watchonly`; `file` identified both as SQLite and the backup as Berkeley DB; `listwallets` loaded both wallets and `getwalletinfo` confirmed `legacy_watchonly` is a descriptor, private-key-disabled wallet.
+- `git diff --check` passed and all seven protected processes remained alive. The rebuilt focused `wallet_tests,scriptpubkeyman_tests` invocation was attempted but could not complete because the host low-disk guard fired during fixture setup (`/data` had 499M free and `/` had 0 bytes free); it was stopped after the unrelated fixture assertions and is recorded as an environment limitation, not passing evidence.
+
+### Verdict and handoff
+
+Verdict: confirmed and fixed. The old exception boundary could strand a partially migrated main wallet and an auxiliary wallet. The change is limited to error translation in `DoMigration()` and does not alter successful migration format, descriptor parsing, or the intentional fail-fast behavior inside `MigrateToSQLite()`.
+
+Source/finding commit and journal commit are pending. Before closing the cycle, add a dedicated campaign for exception-versus-error rollback boundaries in migration and persistence code. Its first queue should cover other `throw` sites reached after file creation, database replacement, settings mutation, reload, or auxiliary-wallet registration, with the same fault-injection and restart invariants.
+
+Next queue:
+
+1. Search current migration and recovery helpers for remaining throws that bypass a caller's cleanup or backup-restore contract; exclude the fixed descriptor loops and the intentional `MigrateToSQLite()` assertion unless new build evidence changes the contract.
+2. Compare auxiliary-wallet creation, settings registration, reload, and path cleanup across watch-only, solvable, descriptor, and legacy compatibility modes.
+3. Preserve the exact fixed and failed fixture commands, then re-rank against non-wallet historical incomplete fixes after the next selector.
