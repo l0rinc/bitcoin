@@ -1072,6 +1072,23 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 322 (watch, zero-delta x3 -> BLOCKED): three
+   consecutive quiet watch turns after the cycle-321 close:
+   upstream 1ed14c6122 static, author 1363 heads static,
+   qa-assets == pin 918cdd3, watch PRs
+   35744/35859/35818/35620/35654 all open-unmerged, worktree
+   clean, zero jobs, disk 1.8G free. No pending internal work:
+   catalog watches-only, flood 52/52, fuzz campaigns done,
+   archive synced (tip 28e5f215b5). Goal -> blocked.
+   RESUME CONDITIONS: (1) upstream master advance;
+   (2) new or force-updated l0rinc branch; (3) qa-assets past
+   pin; (4) any watch-PR merge/state change; (5) host tooling
+   (lld, clang-tidy, Sparrow repo) appearing; (6) user
+   instruction. On resume: assess-and-adopt per the standing
+   protocol (confirm mechanism at HEAD -> feature branch from
+   agent/all-findings -> failing-before/passing-after ->
+   journal -> archive with Source mapping -> verify archive
+   tip green).
    Cycle 321 (verification close): dbwrapper_scheduled_pair
    20k CLEAN ('Done 20000 runs in 10436 second(s)', ~0.52
    s/input; zero crashes/asserts/artifacts; process reaped, no
