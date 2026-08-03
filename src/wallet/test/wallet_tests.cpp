@@ -71,6 +71,26 @@ static void AddKey(CWallet& wallet, const CKey& key)
     Assert(wallet.AddWalletDescriptor(w_desc, provider, "", false));
 }
 
+BOOST_FIXTURE_TEST_CASE(wallet_seed_ignores_deterministic_rng, TestingSetup)
+{
+    const auto generate_destination{[&] {
+        CWallet wallet{m_node.chain.get(), "", CreateMockableWalletDatabase()};
+        wallet.m_keypool_size = 1;
+        {
+            LOCK(wallet.cs_wallet);
+            wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+            wallet.SetupDescriptorScriptPubKeyMans();
+        }
+        return getNewDestination(wallet, OutputType::BECH32);
+    }};
+
+    SeedRandomForTest(SeedRand::ZEROS);
+    const CTxDestination first_destination{generate_destination()};
+    SeedRandomForTest(SeedRand::ZEROS);
+    const CTxDestination second_destination{generate_destination()};
+    BOOST_CHECK(first_destination != second_destination);
+}
+
 BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
 {
     CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
