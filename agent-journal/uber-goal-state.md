@@ -325,6 +325,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 65 | contributor-branch-radar | CYCLE-19 | 2026-08-03 | PR 34864 large refactor of verified code; no defect; NO adoption |
 | 65 | contributor-branch-radar | CYCLE-20 | 2026-08-03 | PR 33637 comparator perf refactor: not hot on our profiles, NO adoption |
 | 65 | contributor-branch-radar | CYCLE-21 | 2026-08-03 | PR 31868 author-draft, not adoptable; watch 32043 |
+| 65 | contributor-branch-radar | CYCLE-22 | 2026-08-03 | PR 35205 kernel dbcache setter: API extension, no defect; NO adoption |
 | 80 | fuzz-engine-differential | CYCLE-5 | 2026-07-29 | rich PSBTv2 differential: A=0/400, E=115, R=4 guard-contained; BIP371 value-layout lesson (6-seed iterations) |
 | 42 | ci-review-bot-followup | CYCLE-4 | 2026-07-29 | corecheck sweep: bench deltas noise-shaped (same +10-33% on unrelated bloom PR); regression reading corrected |
 | 42 | ci-review-bot-followup | CYCLE-6 | 2026-08-02 | watch @556988790a: 5 commits (2 out-of-scope merges), PRs static, F13/F14/F16 offerability re-confirmed |
@@ -1057,6 +1058,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 273 (suspicion-mined): PR 35205 kernel dbcache
+   setter: API extension, no defect; no adoption.
    Cycle 272 (suspicion-mined): PR 35797 PSBT abort: lineage
    already protected (53506a51e9); upstream still vulnerable.
    Cycle 271 (suspicion-mined): PR 31868 author-draft; no
