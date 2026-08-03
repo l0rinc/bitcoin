@@ -1072,6 +1072,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 307 (goal 113 risk ranking, draw
+   raw=12828903349424140929 masked=3605531312569365121 n=5 idx=1):
+   live-queue risk table (severity x reachability x confidence x
+   proof-value / cost) — 125 WAL/MANIFEST recovery is the only
+   non-trivial marginal yield (proof-val 4, low cost, reopen-time
+   blast radius, harness pattern proven); 116 tool-blocked (no
+   clang-tidy); 111/118 bookkeeping; standing watches zero local
+   marginal yield. Stop-depth audit: 126/127 dismissals correctly
+   bounded. Decision recorded: 125 preempts next cycle if not
+   drawn (urgent-preempt rule).
    Cycle 306 (goal 110 catalog evolution + entropy audit, draw
    raw=6547846130219125632 n=6 idx=0): proposed-goals resolutions
    logged — P1 EXECUTED (goal 119 c1), P2 DELIVERED (snap_builder2
