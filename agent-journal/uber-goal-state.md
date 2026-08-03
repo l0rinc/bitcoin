@@ -1072,6 +1072,17 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 294 (watch, zero-delta x3 after resume — BLOCKED audit
+   threshold met): origin/master static 556988790a; l0rinc fetch
+   zero ref updates (865 heads); qa-assets HEAD 918cdd3 == CI pin;
+   dup-txid CI 44 queued/9 in_progress/3 success/1 skipped/0
+   failures — no verdict; watch PRs 35744/35859/35818/35620/35654
+   all open, unmerged. All internal work complete (catalog cycled,
+   corpus 112,382 seeds green, 6/6 mutation clean, regression #3
+   green on 01abf72d0b lineage). Goal marked BLOCKED on external-
+   signal impasse; resume on: any upstream advance, new/force-
+   updated author branch, qa-assets past pin, dup-txid CI verdict,
+   watch-PR merge, or host tooling (lld, clang-tidy, disk, 2nd host).
    Cycle 293 (watch, zero-delta x2 after resume): origin/master
    static 556988790a; l0rinc fetch zero ref updates (865 heads);
    qa-assets HEAD 918cdd3 == CI pin; dup-txid CI 44 queued/9
@@ -1767,7 +1778,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    CI cache keys, header-cost -ftime-report).
 
 ## Handoff
-Updated after every rotation. PROGRAM STATE 2026-08-03 FINAL:
+Updated after every rotation. PROGRAM STATE 2026-08-03 FINAL
+(blocked 3x zero-delta after resume, cycles 292-294):
 all internal work complete and re-verified — 26-PR sweep fully
 covered (6 adopted incl. dup-txid skip fix, 2 covered-ahead, 17
 assess-only, 5 standing-watch); strong-random guards adopted;
