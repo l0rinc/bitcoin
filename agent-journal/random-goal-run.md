@@ -12,6 +12,14 @@
 - Timestamp: `2026-08-03T01:41:53Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-96`
 
+## Cycle 314 Result
+
+- The deferred-work inventory excluded vendored dependencies and Goal 29's already-reviewed stale-code cells. The distinct live marker was the Taproot `TRDescriptor` FIXME: known `tr()` script paths were estimated as keypath-only by wallet input sizing.
+- `src/script/sign.cpp` appends the selected leaf script and control block to a successful script-path witness, while `src/wallet/spend.cpp` consumes the descriptor byte bound and separately adds the witness element count. For `tr(NUMS_H,pk(NUMS_H))`, the old bound was 66 bytes and one element; the corrected bound is 135 bytes and three elements, changing the illustrative input estimate from 58 to 75 vbytes.
+- Finding commit `2ac99aac74` (`descriptor: account for Taproot script path satisfaction size`) is authored by `Lőrinc <pap.lorinc@gmail.com>`. `TRDescriptor` now takes the maximum over keypath and every known leaf, including compact-size-prefixed script and depth-derived control block; `RawTRDescriptor` remains keypath-only because its tree is unknown. The commit includes the focused cycle journal and removes only the stale explanatory comments from the Taproot functional test workaround.
+- The rebuilt scratch binary `/data/my_storage/tmp/cycle314-test_bitcoin` passed `descriptor_tests/taproot_script_path_satisfaction_size` and all 14 `descriptor_tests` cases. Both runs ended with `*** No errors detected`; `git diff --check` passed.
+- Learned Goal 114, `taproot-satisfaction-fee-boundaries`, with seed journal `agent-journal/taproot-satisfaction-fee-boundaries.md`. Catalog/goal commit is `b6d9c2a751` (`goals: add Taproot fee-bound differential campaign`). The catalog now contains 115 contiguous goals (`0..114`); catalog SHA-256 is `51e561f5a1ea1c1db165416a0ff29b698a9e380279179a3878745517ca7ace7c`, manifest SHA-256 is `27695e51702f85048b251b0e1793037b06c9492aa6d925a7ae1564f0481821d6`, generator SHA-256 remains `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and random prompt SHA-256 remains `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`.
+
 ## Cycle 313
 
 - Selected index: `67`
