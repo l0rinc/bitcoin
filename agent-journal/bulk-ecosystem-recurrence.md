@@ -94,3 +94,26 @@ package*.json) + 20 stale fuzz artifacts (crash-*/slow-unit-*,
 analyzed cycle 255, left untouched per protocol). No debris from
 this session's experiments (/tmp harnesses documented in journals).
 Verdict: CLEAN.
+
+## Cycle 302 (goal 126 LevelDB semantics, draw raw=7175895203802760358 n=10 idx=8)
+Scope: comparator/snapshot/iterator/filter/compaction semantics of
+the in-tree pinned LevelDB subtree.
+- Comparator: N/A — dbwrapper uses default BytewiseComparator
+  everywhere (no custom comparator in-tree; contract trivially
+  satisfied). Bloom filter: standard 10 bits/key.
+- Iter 1: iterator-vs-concurrent-writes conformance harness —
+  20 rounds, half-in-range Put/Delete storms from a writer thread
+  while iterators scan: 0 torn keys/values, 0 post-snapshot keys,
+  0 status errors, ASan+UBSan silent. DISMISSED (contract holds).
+- Iter 2: pinned iterator + overwrite 1/2 + delete 1/4 + full
+  CompactRange: complete original snapshot (20,000 keys, gen-0
+  values) observed post-compaction. DISMISSED (version refcounting
+  holds as documented).
+- Boundary note: the one real iterator hazard (DB reset/destruction
+  mid-scan, 35744 family) is already covered-ahead in-tree
+  (UniqueLock cursor lifetime). dbwrapper contract layer verified
+  previously (database-semantics-differential journal).
+Harnesses preserved in agent-journal/artifacts/ (+ build note:
+link against the ASan-instrumented in-tree libleveldb).
+Campaign #126 verdict: DISMISSED for the audited arms; WAL/
+MANIFEST corruption fixtures remain queued under goal 125.

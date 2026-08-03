@@ -34,3 +34,14 @@ finding in findings-index.md. Build/run from the repo root.
 Default `setup_nodes` mines +1 IBD-exit block after the cache copy;
 recipe-exact chains must override `setup_network` with
 `add_nodes` + `start_nodes` only (see snap_builder2.py).
+
+## Goal 126 LevelDB conformance harnesses (cycle 302, verdicts CONFORM)
+- `ldb_iter_conformance.cpp` — iterator snapshot isolation under
+  concurrent writes/deletes (20 rounds, half-range mutations).
+- `ldb_compact_conf.cpp` — pinned iterator survives
+  overwrite+delete+full CompactRange with full snapshot view.
+- Build (repo root): `g++ -O1 -fsanitize=address,undefined
+  -fno-sanitize-recover=all -I src/leveldb/include <file>
+  build-after/src/libleveldb.a build-after/src/libcrc32c.a -lpthread
+  -o /tmp/<name>` (build-after's libleveldb is ASan-instrumented;
+  the harness must link the same sanitizer runtime).
