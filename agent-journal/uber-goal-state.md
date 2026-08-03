@@ -5912,3 +5912,52 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   unrelated untracked artifacts were preserved. No repository-completion
   claim is made. The next action is a fresh gate, exact selector
   `shuf -i 0-109 -n 1`, and a dedicated Cycle 310 branch.
+
+## Cycle 310 Completion
+
+- Goal 15 (`public-object-validation`) was selected by exact
+  `shuf -i 0-109 -n 1` -> `15` on branch
+  `uber-cycle-310-public-object-validation-20260802`. The cycle-start/base
+  HEAD was `199365c2793ca9ece8692dc65946864a5fe1d1d8`; selection commit
+  `601460a135cebd0236bb2a4b99033fa61d2df2d8`; selected catalog SHA-256
+  `0f3f6c11ee008c76cb88250fdbc6f6abd713e72206f1c3b94daeb8e9983ed172`; and
+  the pre-entry state-file SHA-256 was
+  `6314afe4140a3b7b69d4178f02a92340ff8dde80fda175fa782925a7863e0aa0`.
+- The remaining Goal 15 candidate was `CExtPubKey` ordered-container identity.
+  `operator==` includes depth, parent fingerprint, child number, chain code,
+  and public key, but the old `operator<` compared only public key and chain
+  code. Valid xpubs with identical derivation material and different metadata
+  collapsed in descriptor extraction and in the `gethdkeys` xpub/xprv map
+  pattern. The old focused regression observed one set/map entry and could
+  overwrite the retained private metadata with the second object.
+- Confirmed and fixed in source/test/journal commit `7bc2afcf91`
+  (`pubkey: preserve extended key metadata in ordered containers`), authored
+  as `Lőrinc <pap.lorinc@gmail.com>`. The comparator now matches the generic
+  equality fields; version bytes remain a PSBT-specific complete-wire
+  distinction. The regression checks set/map cardinality, xprv neutering, and
+  production descriptor extraction.
+- Repaired validation used the scratch build
+  `/data/my_storage/tmp/cycle246-wallet`: `test_bitcoin` rebuilt with `-j4`,
+  the focused `bip32_tests/extpubkey_metadata_identity` passed, and the
+  combined `bip32_tests,descriptor_tests,psbt_tests,wallet_rpc_tests` run
+  passed 38 selected cases with seed `31003` and no errors. `git diff --check`
+  passed. Sanitizer, 32-bit, and functional daemon validation were blocked by
+  full `/data` and `/`; protected PIDs `777094`, `956381`, `1138182`, `1157959`,
+  `1312049`, `1312050`, and `1346200` remained alive and untouched.
+- Learned Goal 110 (`extpubkey-identity-matrix`) was added with seed journal
+  `agent-journal/extpubkey-identity-matrix.md`; catalog/seed commit
+  `0612d20e92` extends the catalog to 111 contiguous goals (`0..110`). The
+  cycle result commit is `21c9bae29e`; current catalog SHA-256 is
+  `77cacbe449eee1955686e5fbebac74b1db6c85fb9270bc84e0e3aec609a06b52`,
+  manifest SHA-256 is
+  `8e0263e80bfad7fe1fba978f76637b78d51c411c422cc14252dd723b92be1714`, and
+  random prompt/generator SHA-256 values remain
+  `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2` and
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`.
+- `git fetch origin master` and `git rebase origin/master` completed with no
+  conflicts. The post-rebase HEAD before this state close is
+  `21c9bae29e0142a227ab8e21bb81ffd2d03e3d73`, origin is
+  `556988790a7f961693a8fd93f73725baea66476a`, and divergence is `0 1430`.
+  No repository-completion claim is made. After this state-only commit, run a
+  fresh gate, draw exactly one selector with `shuf -i 0-110 -n 1`, create a
+  dedicated Cycle 311 branch, and continue.
