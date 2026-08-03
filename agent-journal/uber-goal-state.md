@@ -1,3 +1,49 @@
+# Cycle 317 Completion
+
+- Goal 107 (`bip324-short-id-parity`) was selected by the exact command
+  `shuf -i 0-116 -n 1` -> `107` on branch
+  `uber-cycle-317-bip324-short-id-parity-20260802`. Cycle-start HEAD was
+  `23be1ca3a470a0b511a4c87e8e3ff43bfa043239`; the selection commit was
+  `22ce16206e92a110fe37f632d401ad507017b7dd`; and the pre-cycle catalog SHA
+  was `960a42b979b9e4c5ed2cd86f78b8f2fdb3a83fb06b97d30f67eaff07a352e7f2`.
+- The selected matrix compared BIP324 v1.0.2's IDs 1--28 and long forms with
+  current Core, rust-bitcoin, btcd, and Core's Python v2 peer. Core's
+  production parser handles valid short and long forms. Current rust-bitcoin
+  `19436dde9ae7f56b9b999560120a66ad08958810` still reproduces the prior
+  external long `mempool` -> `Unknown` gap, while btcd's compact-block ID
+  omissions are explained by absent compact-block wire types. Neither is a
+  new local Core finding.
+- The distinct local evidence is a test-oracle gap: Core's `v2transport_test`
+  covers selected short IDs and one long `tx`, while the Python peer always
+  emits short form for known optimized commands and has no per-message way to
+  force the valid long form. The empty-slot insertion in `V2MessageMap` maps
+  an internally constructed empty message name to reserved ID 29; this is an
+  edge contract queued for follow-up, not independently proven harmful.
+- No source defect was confirmed. Goal/catalog/seed commit
+  `75e306c688d5ac511c6b57304f459a34aea88d27` adds Goal 117,
+  `bip324-alt-form-harness`, and its seed journal. The catalog now has 118
+  contiguous goals `0..117`; catalog SHA-256 is
+  `82fe4d3eefbf266fa38a76d9949344be6e8c454a881c0411fa567fa010c34019`,
+  manifest SHA-256 is
+  `55589c70894cd0459369bfc8d2c4543b579113d8be73937a2e8dc34881a41445`,
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`.
+- Verification was source-based with exact plaintext fixtures. rustc/cargo/go
+  are unavailable, and the existing Core net test binary aborted during
+  chain fixture setup because `/` and `/data` had no free space. `git fetch
+  origin master` and `git rebase origin/master` completed with no conflicts;
+  post-rebase HEAD is `75e306c688d5ac511c6b57304f459a34aea88d27`, origin is
+  `556988790a7f961693a8fd93f73725baea66476a`, and divergence is `0 1461`.
+- `/data` remains full with approximately 1.3G available. Protected PIDs
+  `777094`, `956381`, `1138182`, `1157959`, `1312049`, `1312050`, and
+  `1346200` remain alive and untouched; unrelated untracked probes and user
+  files remain preserved. Verdict: **no local production finding; harness
+  gap queued**. After this state-close commit, run a fresh gate, draw exactly
+  one selector with `shuf -i 0-117 -n 1`, create a dedicated Cycle 318 branch,
+  and continue.
+
 # Cycle 316 Completion
 
 - The exact selector from the 116-goal catalog was `shuf -i 0-115 -n 1` ->
