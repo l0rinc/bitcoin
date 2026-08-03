@@ -12,6 +12,16 @@
 - Timestamp: `2026-08-03T05:15:56Z`
 - Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-18`
 
+## Cycle 325 Result
+
+- Goal 18 completed on branch `uber-cycle-325-exhaustive-algebraic-20260802`. The distinct persistence identity was `TxoSpenderIndex::FindSpender()` treating a malformed serialized entry key as a clean not-found result because `GetKey()` was embedded in the loop condition.
+- The real disk-backed regression wrote a truncated key with the correct SipHash prefix ahead of a valid spender key. The unmodified source exited 201 with 5/6 assertions because `Expected` remained value-bearing with an empty optional. The fixed source returns `Unexpected` after logging the decode error.
+- Finding commit: `29aeeba6d0` (`index: report corrupt txospender keys`). The fixed focused replay passed 1 case/6 assertions; an old-loop mutation failed the same oracle; and the complete `txospenderindex_tests` suite passed 6 cases/1,098 assertions.
+- The final rebuild briefly hit the 445MB archive versus low-disk limit, then succeeded after removing only cycle-owned disposable test datadirs. `/data` remained critically constrained and `/` full; all protected processes remained alive.
+- Learning added Goal 125, `persisted-index-key-oracles`, with seed journal `agent-journal/persisted-index-key-oracles.md`. Goal/catalog commit `4904de45c7` generated 126 contiguous goals `0..125`.
+- Post-learning hashes: catalog `eec305dfa0d12fc3619f7a793b137aab8d9bc652b83d5c24cda5582f6d60b8ce`, manifest `6e7997619ff37d5d2ab7a9cbeb8efce7ced19964d325620157560c798f63bfe9`, generator `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, random prompt `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- Rebase and final gate remain pending; the next selector must wait for the fresh gate and draw from `0..125`.
+
 ## Cycle 324 Selection
 
 - Selected index: `32`
