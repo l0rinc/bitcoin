@@ -6,7 +6,8 @@
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.messages import (
     msg_version,
-    msg_filterload
+    msg_filterload,
+    msg_mempool,
 )
 from test_framework.p2p import (
     P2PInterface,
@@ -79,6 +80,15 @@ class P2PConnectionLimits(BitcoinTestFramework):
         with node.assert_debug_log(['connection dropped after filterload message'], timeout=2):
             peer1.send_without_ping(msg_filterload(data=b'\xbb'*(100)))
         self.wait_until(lambda: len(node.getpeerinfo()) == 1)
+
+        self.log.info('Check BIP35 requests against inbound transaction-relay capacity')
+        self.restart_node(0, ['-maxconnections=13', '-peerbloomfilters', '-inboundrelaypercent=0'])
+        peer1 = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
+        peer1.send_without_ping(self.create_blocks_only_version())
+        peer1.wait_for_verack()
+        with node.assert_debug_log(['received: mempool'], timeout=2):
+            peer1.send_without_ping(msg_mempool())
+        self.wait_until(lambda: peer1.is_connected is True)  # TODO: A BIP35 request makes this a transaction-relaying peer
 
         self.log.info('Test different values of inboundrelaypercent')
         self.restart_node(0, ['-maxconnections=13', '-inboundrelaypercent=0'])
