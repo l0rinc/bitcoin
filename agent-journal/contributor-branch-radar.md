@@ -1432,3 +1432,39 @@ identical. Conclusion: the author's own branch is red on their
 own test flow (their open iteration), independent of tree; our
 archive carries the identical fix + HEAD's green feature_block.py
 + the unit coverage. No action; watch for the author's test fix.
+
+## Cycle 299 (goal 119 bulk-ecosystem-recurrence): write-failure family normalized + swept
+Draw: seed raw=6652536966674966662, masked=6652536966674966662,
+n=13 (goals 110-119+125-127; 120-124 Sparrow skipped, no repo),
+idx=9 -> goal 119.
+Bug shape (now proven across SIX independent instances):
+restart-authoritative file written directly (no temp+rename);
+write/close failure leaves a truncated artifact OR escapes the
+designed error path; next startup treats the artifact as valid
+and either fails unrecoverably or never retries generation.
+Iter 1 (recurrence sweep of all persistence producers in-tree):
+- mempool.dat (mempool_persist.cpp:222-264): .new + RenameOver —
+  ATOMIC, safe. peers.dat/anchors.dat (SerializeFileDB,
+  addrdb.cpp:54-95): temp-random + Commit + remove-on-failure +
+  RenameOver — ATOMIC, safe. banlist.dat (BanMan::DumpBanlist ->
+  CBanDB::Write + is_dirty retry): covered by #41 c6 (write-fail-
+  retry cell). fee_estimates.dat (FlushFeeEstimates direct write):
+  NON-atomic BUT read path discards on any error + scheduler
+  rewrites hourly — benign by design (loses estimates, self-heals).
+- i2p persistent key (i2p.cpp:374-385): LIVE — WriteBinaryFile
+  short-write leaves truncated key; session treats it as existing,
+  generation never retried. CONFIRMED + ADOPTED (32167c5c58):
+  failing-before persistent_key_write_failure_is_not_reused
+  (truncated file exists + retry Connect fails); passing-after
+  full i2p_tests green. audit/adopt-i2p-key-removal e976e68fc9.
+- tor onion_v3_private_key (torcontrol.cpp:554-558): LIVE — same
+  shape; CONFIRMED + ADOPTED (ae32c111a3): failing-before
+  tor_private_key_write_failure_removes_path (key path as
+  directory, portable write failure); passing-after full
+  torcontrol_tests green. audit/adopt-tor-key-removal 5cf00e1380.
+Verdict on the sweep: the atomic-rename convention holds
+everywhere EXCEPT single-fwrite small files (WriteBinaryFile
+users) and one-off AutoFile writers (xor.dat, base_blockhash —
+both adopted earlier). Sweep EXHAUSTED for src/ producers;
+settings.json uses WriteSettings (same WriteBinaryFile shape but
+content is non-authoritative UI settings — assessed, benign).

@@ -12,6 +12,7 @@
 #include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <util/readwritefile.h>
+#include <util/strencodings.h>
 #include <util/threadinterrupt.h>
 
 #include <boost/test/unit_test.hpp>
@@ -197,6 +198,46 @@ BOOST_AUTO_TEST_CASE(damaged_private_key)
             BOOST_CHECK(!session.Connect(CService{}, conn, proxy_error));
         }
     }
+}
+
+BOOST_AUTO_TEST_CASE(persistent_key_write_failure_is_not_reused)
+{
+    const auto private_key_file = m_args.GetDataDirNet() / "fault_i2p_private_key";
+    fs::remove(private_key_file);
+    BOOST_REQUIRE(fs::create_directory(private_key_file));
+
+    const std::string private_key_b64 = EncodeBase64(std::string(400, '\0'));
+    size_t socket_count{0};
+    CreateSock = [&socket_count, &private_key_b64](int, int, int) {
+        ++socket_count;
+        if (socket_count <= 2) {
+            return std::make_unique<StaticContentsSock>(
+                std::string{"HELLO REPLY RESULT=OK VERSION=3.1\n"} +
+                "DEST REPLY RESULT=OK PRIV=" + private_key_b64 + "\n"
+                "SESSION STATUS RESULT=OK\n");
+        }
+        return std::make_unique<StaticContentsSock>(
+            "HELLO REPLY RESULT=OK VERSION=3.1\n"
+            "NAMING REPLY RESULT=OK VALUE=dummy\n"
+            "STREAM CONNECT RESULT=OK\n");
+    };
+
+    auto interrupt{std::make_shared<CThreadInterrupt>()};
+    const CService addr{in6_addr(COMPAT_IN6ADDR_LOOPBACK_INIT), /*port=*/7656};
+    const Proxy sam_proxy{addr, /*tor_stream_isolation=*/false};
+
+    i2p::sam::Session session{private_key_file, sam_proxy, interrupt};
+    i2p::Connection conn;
+    bool proxy_error;
+    BOOST_REQUIRE(!session.Connect(CService{}, conn, proxy_error));
+    BOOST_CHECK(!fs::exists(private_key_file));
+
+    i2p::sam::Session retry{private_key_file, sam_proxy, interrupt};
+    i2p::Connection retry_conn;
+    BOOST_REQUIRE(retry.Connect(CService{}, retry_conn, proxy_error));
+    BOOST_CHECK_EQUAL(fs::file_size(private_key_file), 400U);
+
+    fs::remove(private_key_file);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
