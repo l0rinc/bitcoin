@@ -1072,6 +1072,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 295b (same radar-flood cycle): goal93-xor-key
+   (d7d3559a30) CONFIRMED + ADOPTED — deterministic LD_PRELOAD
+   short-write pair: pre-fix 1-byte xor.dat left + restart
+   'AutoFile::read: end of file' (unbootable); post-fix file
+   removed, restart regenerates 8-byte key, getblockcount=0,
+   clean stop. audit/adopt-xor-key-shortwrite 2110abf119 +
+   journal 8334dcfa8e. Harness preserved in radar journal
+   (one-shot fwrite interposer + driver script).
    Cycle 295 (RESUME TRIGGER FIRED — radar flood): 498 new l0rinc
    branches (865->1363), a parallel audit campaign's working set.
    Triage + verdicts: goal56-disconnect-duplicate (4061d3763d)
