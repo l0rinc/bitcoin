@@ -1072,6 +1072,11 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 319 (verification): REGRESSION #9 GREEN — full
+   test_bitcoin suite on the final lineage (includes all test
+   adoptions: goal10/goal48 oracles, totals roundtrip, blockmanager
+   malformed-disk, coins/pow tests + F34/F35 fixes). Two fuzz
+   campaigns still in flight (blockfilter, scheduled_pair).
    Cycle 318 (watch): upstream master advanced 30f6b05857 ->
    e27c179db2 (merge #35869 lint: re-add guix Python linting;
    ci/lint/requirements.txt +1 dep, guix security/symbol-check,
