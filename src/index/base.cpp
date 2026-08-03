@@ -233,9 +233,19 @@ void BaseIndex::Sync()
             }
 
             const CBlockIndex* pindex_next = WITH_LOCK(cs_main, return NextSyncBlock(pindex, m_chainstate->m_chain));
-            // If pindex_next is null, it means pindex is the chain tip, so
-            // commit data indexed so far.
+            // If pindex_next is null, pindex is normally the chain tip. It can
+            // also be a stale tip from a side chain whose fork is the current
+            // chain tip, in which case the index must rewind before it can be
+            // considered synced.
             if (!pindex_next) {
+                const CBlockIndex* pindex_fork = WITH_LOCK(cs_main, return pindex ? m_chainstate->m_chain.FindFork(*pindex) : nullptr);
+                if (pindex_fork != pindex) {
+                    if (!Rewind(pindex, pindex_fork)) {
+                        FatalErrorf("Failed to rewind %s to a previous chain tip", GetName());
+                        return;
+                    }
+                    pindex = pindex_fork;
+                }
                 SetBestBlockIndex(pindex);
                 // No need to handle errors in Commit. See rationale above.
                 Commit();

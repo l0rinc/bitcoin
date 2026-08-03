@@ -319,3 +319,26 @@ Reachability: crash window only; settings loss, parse-tolerant
 read side (119-sweep verified); durability arm of the write-
 failure family. Adoption: audit/adopt-settings-durability
 f194e4482e (both commits, one stack). Upstream vulnerable.
+
+### goal86-txospender-reorg (5fd55edf5d): CONFIRMED + ADOPTED
+Mechanism: BaseIndex::Sync null-next path treats any successorless
+persisted tip as synced; a stale tip from a side chain whose fork
+is the active tip never rewinds -> index retains a disconnected
+block's data -> gettxspendingprevout reports the invalidated
+spender after restart. Reachability: PUBLIC RPC wrong spend status
+(correctness/integrity, crash+invalidation gated, optional index);
+not consensus.
+Evidence (functional, build-after bitcoind):
+- FAILING-BEFORE: feature_txospenderindex.py — post-restart
+  gettxspendingprevout returns prevout WITH spendingtxid +
+  spendingtx + blockhash of the invalidated block (chain 200,
+  index 201); assertion mismatch.
+- PASSING-AFTER: rewind-to-fork on the null-next path -> prevout
+  unspent (chain and index both 200); Tests successful.
+- Second verifier: their RelWithDebInfo run (commit message).
+Why existing tests missed it: index tests don't combine
+invalidateblock + durable flush + unclean kill + restart; the
+null-next path assumed successorless == active tip.
+Adoption: audit/adopt-txospender-stale-rewind 6cd9d75a67 (fix +
+their functional test). Severity: 🟠 Medium (public-RPC wrong
+data, persistent, narrow gate). URGENT candidate.
