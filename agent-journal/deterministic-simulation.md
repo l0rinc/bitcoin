@@ -393,4 +393,14 @@ harness-contract gap (txospenderindex mock-time class) BEFORE
 touching production code.
 
 ### Verdict
-PENDING (campaign in flight).
+DISMISSED (coverage verified, no divergence): 'Done 20000 runs
+in 10436 second(s)' (~0.52 s/input; cost dominated by 2x1000-entry
+seeds + full-DB VerifyIterator arms — future smoke runs of this
+target should use -runs=2000, not 20000). Zero crashes, zero
+oracle asserts, zero new artifacts. The non-FIFO
+deferred-compaction schedule space (2 DBs, reopen-while-live,
+arbitrary seeks, drain-at-shutdown) reaches no state divergence:
+LevelDB deferred-work ordering is schedule-insensitive across
+this cell. Cell CLOSED; target retained as permanent coverage
+(af32701739, same adoption class as blockfilter_index
+20a58c2fb7). Campaign #71 back to EXHAUSTED (queue EMPTY).
