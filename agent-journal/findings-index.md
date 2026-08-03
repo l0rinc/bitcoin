@@ -321,6 +321,25 @@ comment-drift family as F1 (LockPoints).
 - Reachability: remote peer + local clock skew >2h; upstream
   556988790a vulnerable. Same surface as F22.
 
+## F31: truncated I2P key never regenerated (goal93-i2p) — FIXED 2026-08-03
+- Mechanism: WriteBinaryFile short-write leaves a truncated
+  persistent I2P private key; the session treats it as an existing
+  key and never retries generation — I2P unavailable until manual
+  removal.
+- Evidence: failing-before persistent_key_write_failure_is_not_reused
+  (file persists + retry Connect fails); passing-after full
+  i2p_tests green. audit/adopt-i2p-key-removal e976e68fc9;
+  archive 3e5c7b1368. Write-failure family instance #5.
+
+## F32: truncated onion key blocks service restart (goal93-tor) — FIXED 2026-08-03
+- Mechanism: ADD_ONION succeeds but caching the private key fails;
+  WriteBinaryFile leaves a truncated onion_v3_private_key that a
+  later startup reuses, keeping the service down.
+- Evidence: failing-before tor_private_key_write_failure_removes_path
+  (key path as directory, portable write failure); passing-after
+  full torcontrol_tests green. audit/adopt-tor-key-removal
+  5cf00e1380; archive 3e5c7b1368. Write-failure family instance #6.
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |

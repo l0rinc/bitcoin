@@ -1072,6 +1072,20 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 299 (goal 119 bulk-ecosystem-recurrence, draw
+   raw=6652536966674966662 n=13 idx=9): write-failure bug shape
+   NORMALIZED (restart-authoritative file, direct write, failure
+   leaves truncated artifact or escapes designed error path) and
+   swept across all in-tree persistence producers: mempool.dat/
+   peers.dat/anchors.dat atomic (.new/temp+RenameOver); banlist
+   #41-c6 covered; fee_estimates.dat non-atomic but read-discard
+   + hourly rewrite = benign; settings.json parse-tolerant =
+   benign; i2p + tor persistent keys LIVE — CONFIRMED + ADOPTED
+   (i2p e976e68fc9 failing-before truncated-key-persists+retry-
+   fails / passing-after suite green; tor 5cf00e1380 key-path-as-
+   directory portable write failure); archive 3e5c7b1368; F31/F32.
+   Family total now 6 confirmed instances (F19/F26/F27/F31/F32 +
+   goal38), 5 adopted this session. Sweep EXHAUSTED for src/.
    Cycle 298 (radar-flood tail): P3 kernel ownership trio
    (9b5bdd99fc/8c5db6e36e/309226ff53) DISMISSED — every trigger is
    a bad_alloc on the OOM path (leak-under-OOM, no non-allocation
