@@ -1,3 +1,55 @@
+# Cycle 314 Completion
+
+- The exact selector from the 114-goal catalog was `shuf -i 0-113 -n 1` ->
+  goal `96` (`todo-deferred-work`). The dedicated branch is
+  `uber-cycle-314-todo-deferred-work-20260802`. Cycle-start HEAD was
+  `52f7c73943d6b0b957db00f33adf2718ddb012ab`; fetched `origin/master` was
+  `556988790a7f961693a8fd93f73725baea66476a`; merge-base equaled
+  `origin/master`; start divergence was `0 1446`; and the selection entry was
+  committed as `bad6746928`.
+- The live deferred marker was the Taproot `TRDescriptor` keypath-only
+  satisfaction estimate. `src/script/sign.cpp` appends the leaf script and
+  control block for script-path spends, while `src/wallet/spend.cpp` consumes
+  the descriptor byte bound and separately adds the witness-element count.
+  For `tr(NUMS_H,pk(NUMS_H))`, the old estimate was 66 bytes and one element;
+  the corrected bound is 135 bytes and three elements, changing the
+  illustrative input estimate from 58 to 75 vbytes. `RawTRDescriptor` remains
+  keypath-only because its tree metadata is unknown.
+- Finding commit `2ac99aac74` (`descriptor: account for Taproot script path
+  satisfaction size`) is authored by `Lőrinc <pap.lorinc@gmail.com>`. It
+  includes the descriptor regression and the cycle journal. The focused test
+  `descriptor_tests/taproot_script_path_satisfaction_size` and all 14
+  `descriptor_tests` cases passed in the rebuilt scratch binary
+  `/data/my_storage/tmp/cycle314-test_bitcoin`; both ended with
+  `*** No errors detected`. `git diff --check` passed.
+- The strongest new suspicious surface is the boundary between descriptor
+  satisfaction formulas, actual Taproot witness serialization, and wallet or
+  PSBT fee estimation. Goal `114`, `taproot-satisfaction-fee-boundaries`, was
+  added with seed journal `agent-journal/taproot-satisfaction-fee-boundaries.md`.
+  Catalog/goal commit is `b6d9c2a751` (`goals: add Taproot fee-bound
+  differential campaign`), and the cycle result ledger is `d9e032ce1d`.
+  The catalog now contains 115 contiguous goals `0..114`. Catalog SHA-256 is
+  `51e561f5a1ea1c1db165416a0ff29b698a9e380279179a3878745517ca7ace7c`,
+  manifest SHA-256 is
+  `27695e51702f85048b251b0e1793037b06c9492aa6d925a7ae1564f0481821d6`, the
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  the random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`.
+- `git fetch origin master` followed by `git rebase origin/master` was a
+  no-op. At this close before the state commit, HEAD is
+  `d9e032ce1dbc94b5ea16077ba505a0114e62edfc`, `origin/master` remains
+  `556988790a7f961693a8fd93f73725baea66476a`, and divergence is `0 1450`.
+  Tracked source work is clean. Existing untracked probes, generated
+  artifacts, and user files remain preserved.
+- Protected PIDs `777094`, `956381`, `1138182`, `1157959`, `1312049`,
+  `1312050`, and `1346200` were alive and untouched. `/data` remains full
+  with approximately 1.3G available; no large rebuild was attempted.
+- Verdict: **confirmed and fixed**. After this state-close commit, perform a
+  fresh gate, draw exactly one selector with `shuf -i 0-114 -n 1`, create a
+  new `uber-cycle-315-*` branch, and continue with Goal 114 available for
+  selection.
+
 # Cycle 306 Completion
 
 - The exact selector from the 105-goal catalog was `shuf -i 0-105 -n 1` ->
