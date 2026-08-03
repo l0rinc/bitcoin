@@ -295,6 +295,19 @@ comment-drift family as F1 (LockPoints).
   consensus impact. Same family as -limitclustercount=0 (5e0a80ade5).
   Upstream master vulnerable.
 
+## F29: negative/overflowing -limitclustersize accepted (goal43 size arm) — FIXED 2026-08-03
+- Mechanism: -limitclustersize KiB value ingested unvalidated;
+  negative -> negative TxGraph cluster limit; astronomical ->
+  int64 overflow at the *1'000 ingestion or *40 graph-limit
+  multiply.
+- Evidence: failing-before MempoolClusterLimitOptions (-1 and
+  max_kvb+1 accepted, 2 BOOST failures); passing-after full
+  mempool_tests green. Minimal pre-ingestion guard variant
+  (parallel 108e3a118b refactors the helper; same behavior).
+  audit/adopt-clustersize-validation a3253e6396; archive e9cb3e3f02.
+- Reachability: local config error only; no consensus impact.
+  Count arm covered in-tree already (mempool_args.cpp:115-120).
+
 ## Oracles/harnesses delivered (test infrastructure, mutation-verified)
 
 O1 | CompactSize exhaustive boundary + non-canonical battery |
