@@ -1072,6 +1072,30 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 323 (RESUMED; resume condition FIRED, then assessed):
+   author remote 1363 -> 1364: new branch
+   l0rinc/descriptor-range-counter-overflow 264555af3c
+   (+143a13fb2b characterization test), built on current master
+   1ed14c6122. SEMANTIC DUPLICATE of our F34 62e05ae526:
+   identical root cause (EvalDescriptorStringOrObject int
+   expansion counter overflows on ++i at the INT32_MAX
+   endpoint), identical fix mechanism (int -> int64_t loop
+   counter at the same line), same boundary. Deltas are
+   cosmetic: ours adds static_cast<int> at the Expand/
+   ExpandPrivate call sites and a unit-level
+   rpc_descriptor_range_max_int32 with the -ftrapv signal-kill
+   failing-before (exit 133); theirs re-tests functionally
+   (rpc_scantxoutset range_end 2**31-2 TODO -> 2**31-1).
+   Verdict: COVERED-AHEAD, no adoption. Signals: the author
+   re-derived the fix on current master -> likely headed
+   upstream; REBASE-WATCH: same-hunk divergence (our
+   static_cast lines vs their plain narrowing) may conflict on
+   next rebase — absorb theirs if it lands. PR 35859: head
+   UNCHANGED 7b18a0c88c (18:39Z update was social: DrahtBot +
+   an ACK independently reproducing our KDF mechanism
+   'UINT_MAX hangs past 45s on master, returns immediately
+   here' — third-party confirmation of the fixed finding).
+   Zero-delta counter reset to 0.
    Cycle 322 (watch, zero-delta x3 -> BLOCKED): three
    consecutive quiet watch turns after the cycle-321 close:
    upstream 1ed14c6122 static, author 1363 heads static,
