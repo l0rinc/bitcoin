@@ -5961,3 +5961,45 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   No repository-completion claim is made. After this state-only commit, run a
   fresh gate, draw exactly one selector with `shuf -i 0-110 -n 1`, create a
   dedicated Cycle 311 branch, and continue.
+
+## Cycle 311 Completion
+
+- Goal 17 (`build-matrix-modules`) was selected by exact `shuf -i 0-110 -n 1`
+  -> `17` on branch
+  `uber-cycle-311-build-matrix-modules-20260802`. Cycle-start/base HEAD was
+  `9ac0b27e2ec97d612941a9c9fdd1ab33c8f66edf`; selection commit was
+  `afe1acd689`; the pre-entry state-file SHA-256 was
+  `92bf29b2e60936a0bbda84eeadcf1257f35e692cf7ef66791bcb71585f850d48`; and
+  selected catalog SHA-256 was
+  `77cacbe449eee1955686e5fbebac74b1db6c85fb9270bc84e0e3aec609a06b52`.
+- The campaign found that independent `BUILD_UTIL_CHAINSTATE` and
+  `BUILD_KERNEL_LIB` cache settings permitted `BUILD_UTIL_CHAINSTATE=ON` with
+  `BUILD_KERNEL_LIB=OFF`. CMake printed chainstate enabled and generated
+  `ENABLE_BITCOIN_CHAINSTATE=true`, but the nested source guard omitted the
+  target and Ninja reported `unknown target 'bitcoin-chainstate'`. History
+  traced this to `7990463b105`, which moved the pure utility under the kernel
+  guard without validating the option dependency.
+- Confirmed and fixed in `657e4c64eb` (`cmake: reject chainstate without kernel
+  library`), authored by `Lőrinc <pap.lorinc@gmail.com>`. The option graph now
+  fails early with `BUILD_UTIL_CHAINSTATE requires BUILD_KERNEL_LIB=ON.` The
+  invalid-cell configure in
+  `/data/my_storage/tmp/cycle311-chainstate-without-kernel-2` exited 1; a
+  valid both-ON configure in `/data/my_storage/tmp/cycle311-chainstate-valid-1`
+  exited 0 and exposed chainstate, bitcoinkernel, and libbitcoinkernel targets.
+  `git diff --check` passed. A full compile was not attempted because `/data`
+  and `/` are full; protected workloads were preserved.
+- Added learned Goal 111 (`kernel-chainstate-config-parity`) and seed journal
+  `agent-journal/kernel-chainstate-config-parity.md`. Goal/catalog/seed commit
+  `eefdbe5211` extends the catalog to 112 contiguous goals (`0..111`), with
+  catalog SHA-256
+  `ffadac8632c7f62b066b42bcf04b77ce2bb75dca3d8f7917546f141ad289c2dc` and
+  manifest SHA-256
+  `8fbfd9b83f01a7431418656504bb649b934afc56a654b82735d0bb301198d812`.
+- Cycle result ledger commit is `fd5296d457` (`journal: record cycle 311
+  build matrix result`). `git fetch origin master` completed and
+  `git rebase origin/master` reported the branch already up to date. Before
+  this state close, HEAD was `fd5296d457ca0f1312ca67022799caa731e470dc`,
+  origin was `556988790a7f961693a8fd93f73725baea66476a`, and divergence was
+  `0 1435`. No repository-completion claim is made. After this state-only
+  commit, run a fresh gate, draw exactly one selector with
+  `shuf -i 0-111 -n 1`, create a dedicated Cycle 312 branch, and continue.
