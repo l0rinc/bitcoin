@@ -32,3 +32,64 @@ First queue:
 Do not claim that escaping alone proves supply-chain integrity. Record corpus
 provenance, pinning, review evidence, output limits, and the exact downstream
 consumer for each candidate.
+
+## Cycle 316: `mpgen` include annotation source injection
+
+Status: confirmed and fixed on `uber-cycle-316-generated-source-boundaries-20260802`.
+
+### Hypothesis and boundary
+
+`$Proxy.include()` and `$Proxy.includeTypes()` are declared as `Text` values
+described as extra header paths, but `src/ipc/libmultiprocess/src/mp/gen.cpp`
+copied them directly between the quotes of generated `#include` directives.
+The schema is a build-time source boundary. It is not a runtime network input,
+but an accidental quote, backslash, or control byte can change the generated
+C++ translation unit and make a reviewed schema generate unrelated code.
+
+The Cycle 306 vector-comment finding was searched first and excluded as an
+exact repeat. History shows the include annotations were introduced as the
+public replacement for hardcoded generated includes; current in-tree values
+are ordinary relative header paths.
+
+### Independent reproduction
+
+Scratch fixture `/data/my_storage/tmp/cycle316-mpgen/evil.capnp` has SHA-256
+`a428179b274a17c59ca7102cf8d9bcba6f994d16a280e575e5636ca72799dbd5` and
+contains an escaped quote, a newline, and `int generated_marker = 1;` in the
+`include` annotation. Before the fix, the exact `mpgen` invocation returned
+status 0. Its generated `evil.capnp.proxy.h` (SHA-256
+`698f794fd11ea5c97d178bfdde37cf5e3e23953106987b07f6314121b6f3bd7a`)
+contained:
+
+    #include "safe.h"
+    int generated_marker = 1; //" // IWYU pragma: export
+
+The generated header passed `g++ -std=c++20 -fsyntax-only`, so the injected
+declaration was accepted by the downstream consumer rather than merely
+causing a syntax error. A second fixture isolated the same behavior in
+`includeTypes`.
+
+### Fix and regression coverage
+
+`ValidateIncludePath()` now rejects empty paths, quotes, backslashes, and all
+ASCII control bytes. `Generate()` validates both annotation IDs immediately
+after Cap'n Proto parsing and before opening any `mpgen` output stream. The
+existing annotation interface and ordinary paths remain unchanged.
+
+Permanent fixtures and `mpgen_test.cmake` exercise both annotation types. Each
+test requires a nonzero generator result, the expected diagnostic, and no
+proxy output files. A clean schema using `safe.h` and `safe-types.h` generated
+successfully and its proxy header passed `g++ -std=c++20 -fsyntax-only`.
+
+Validation:
+
+- `ninja -C /data/my_storage/tmp/cycle246-mp-inject mptest` passed after CMake
+  regeneration and rebuilt `mpgen` plus normal generated proxy sources.
+- `ctest --test-dir /data/my_storage/tmp/cycle246-mp-inject -R '^mpgen_rejects_' --output-on-failure` passed both tests.
+- `ctest --test-dir /data/my_storage/tmp/cycle246-mp-inject -R '^mptest$' --output-on-failure` passed.
+- `git diff --check` passed.
+
+The fix is intentionally limited to header-path annotations. Namespace,
+wrapper, exception, and renamed identifier annotations are separate generated
+C++ identifier boundaries and remain on the next queue for an independent
+contract audit rather than being conflated with this finding.

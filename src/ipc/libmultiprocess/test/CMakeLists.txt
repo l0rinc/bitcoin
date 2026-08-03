@@ -38,4 +38,17 @@ if(BUILD_TESTING AND TARGET CapnProto::kj-test)
 
   add_dependencies(mptests mptest)
   add_test(NAME mptest COMMAND mptest)
+
+  foreach(unsafe_schema IN ITEMS unsafe-includes unsafe-include-types)
+    add_test(
+      NAME mpgen_rejects_${unsafe_schema}
+      COMMAND ${CMAKE_COMMAND}
+        -DMPGEN=$<TARGET_FILE:mpgen>
+        -DSRC_PREFIX=${CMAKE_CURRENT_SOURCE_DIR}/mp/test
+        -DINCLUDE_PREFIX=${CMAKE_CURRENT_SOURCE_DIR}/mp/test
+        -DSOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/mp/test/${unsafe_schema}.capnp
+        -DIMPORT_PATH=${CMAKE_CURRENT_SOURCE_DIR}/../include
+        -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/mpgen-${unsafe_schema}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/mpgen_test.cmake)
+  endforeach()
 endif()
