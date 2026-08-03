@@ -6047,3 +6047,46 @@ Cycle 38 used `/data/my_storage/tmp/option-api-lifecycle-cycle38-before-src/` an
   No repository-completion claim is made. After this state-only commit, run a
   fresh gate, draw exactly one selector with `shuf -i 0-112 -n 1`, create a
   dedicated Cycle 313 branch, and continue.
+
+## Cycle 313 Completion
+
+- Goal 67 (release-version-differential) was selected by exact
+  `shuf -i 0-112 -n 1` -> `67` on branch
+  `uber-cycle-313-release-version-differential-20260802`. Cycle-start/base
+  HEAD was `e6ea2efbcacfb8df2fcefac60be7628bbe76ba9d`; selection commit was
+  `18e51e361a`; selected catalog SHA-256 was
+  `9704269e8b150f9f1c2d9acaa83b49dd40b862cbd15defb0e948d41099f9175d`; and
+  the pre-entry state-file SHA-256 was
+  `4e9c5c5c428712825933bb3d5754e010abd7f819709efd46f2485845ee1cb2b7`.
+- The distinct finding was a v31.1/current BIP32 seed contract gap. v31.1
+  accepted a 15-byte CExtKey seed and generated a valid private key, while
+  current rejects 15- and 65-byte seeds under the upstream fix
+  `2cf9d79d84`. A source-matched old-release contract test failed because
+  NonFatalCheckError was not raised; a separate old-release control passed
+  after checking `key.key.IsValid()`. The current focused regression passed
+  2 assertions and the full current `bip32_tests` suite passed 10 cases and
+  709 assertions.
+- The production fix is already in current, so no duplicate source patch was
+  made. A permanent test for both invalid boundaries and the differential
+  journal were committed in `ccbf9d6de6` (`test: cover BIP32 seed length
+  contract`), authored as `Lőrinc <pap.lorinc@gmail.com>`. Scratch v31.1
+  test edits were removed and both isolated test binaries were rebuilt.
+- Learned Goal 113 (`bip32-seed-contract-parity`) and seed journal
+  `agent-journal/bip32-seed-contract-parity.md` were added.
+  Goal/catalog/seed commit is `a98d52265e`; result ledger commit is
+  `bfc7da3f7c`; the catalog now contains 114 contiguous goals
+  (`0..113`) with catalog SHA-256
+  `7012173cab79a6d83c1b465e41c6015bbe42c408dbee283b7191b8771404b2c5`
+  and manifest SHA-256
+  `5fa8ce1c051d5b212d7289a5a0f234215f689d410b5b2f9046ce45ddd7d861b9`.
+  Generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`;
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b5548228bde2d96a2b485ab9fe3a1cd55c2`.
+- `git fetch origin master` and `git rebase origin/master` completed with
+  no conflicts. Before this state close, HEAD was
+  `bfc7da3f7c02c509f1ab2e623869f535449e53c3`, origin was
+  `556988790a7f961693a8fd93f73725baea66476a`, and divergence was `0 1445`.
+  No repository-completion claim is made. After this state-only commit, run a
+  fresh gate, draw exactly one selector with `shuf -i 0-113 -n 1`, create a
+  dedicated Cycle 314 branch, and continue.
