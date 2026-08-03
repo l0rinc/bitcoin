@@ -1081,3 +1081,42 @@ Assess-only, NO adoption: coverage refactor, no defect at HEAD.
 ### Limitations
 - If it lands, the malformed-PUSHDATA vectors drop into our
   script differential family (#106) as a new cell (recorded).
+
+## Cycle 27 (2026-08-03, draw 283, raw=7552889903550214197, suspicion-mined): PR 35260 doc-only + 32189 closed-with-continuation — the 26-PR suspicion sweep is now fully covered
+
+### Assessments
+- 35260 (doc: clarify test placement guidance): doc-only, no
+  adoption (documentation guidance belongs to upstream review).
+- 32189 (refactor: Txid type safety, parent PR): CLOSED
+  2025-08-01 by the author, pointing to the successor series
+  (#32238, #326...) — work continues there; nothing to adopt
+  from the closed parent.
+
+### Sweep completion (26 open PRs, all assessed)
+ADOPTED (confirmed + failing-before/passing-after):
+- 35714 flush-failure write-stop (F19), 35833 log injection
+  (F20), 35688 empty-HMAC UB (F21), 35839 empty-headers stall
+  (F22), 35754 CI pinning (F23), 35161 merkle doc+test.
+COVERED AHEAD (lineage already protected):
+- 35797 PSBT output-before-input (53506a51e9), 35662 txdata
+  reuse (67239a4a19).
+ASSESS-ONLY (no defect / deliberate design / feature / draft):
+- 35195 hash-cache tradeoff, 34864 cache-state refactor, 33637
+  comparator perf, 31868 author-draft, 35205 kernel dbcache
+  setter, 34320 HaveCoin/Exists, 34132 error-catcher, 33324
+  reobfuscation, 35820 typed durations, 32729 sigop coverage,
+  32554 bench block gen, 35260 doc, 32189 closed-continuation.
+TRACKED SEPARATELY: 35744/35859/35818/35620/35654 (the standing
+watch set).
+
+### Verdict
+Sweep complete: every one of the 26 author PRs now has a
+recorded disposition with evidence.
+
+### Exact commands
+- api.github.com per-PR states above; the adopted cycles'
+  failing-before/passing-after proofs in their journals.
+
+### Limitations / queue
+- Successor series of 32189 (#32238+) becomes a new radar cell
+  when it settles.
