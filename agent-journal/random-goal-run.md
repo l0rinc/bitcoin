@@ -1,5 +1,17 @@
 # Random Goal Run Ledger
 
+## Cycle 312
+
+- Selected index: `7`
+- Goal slug: `resource-exhaustion-variants`
+- Goal title: Untrusted-interface resource-exhaustion variant analysis
+- Selection command: `shuf -i 0-111 -n 1`
+- Catalog SHA-256: `ffadac8632c7f62b066b42bcf04b77ce2bb75dca3d8f7917546f141ad289c2dc`
+- Base commit: `260f3a2081b3893120c09eb8d8fe11da7802a755`
+- Branch: `uber-cycle-312-resource-exhaustion-variants-20260802`
+- Timestamp: `2026-08-03T01:11:54Z`
+- Prompt source: `agent-goals/REUSABLE_AGENT_GOALS.md#goal-7`
+
 ## Cycle 311
 
 - Selected index: `17`
