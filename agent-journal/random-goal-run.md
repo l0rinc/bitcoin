@@ -50,9 +50,13 @@
   `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
   random prompt SHA-256 remains
   `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
-- The confirmed production fix and the catalog extension are complete. The
-  state-close commit, fresh fetch/rebase, final gate, and next selector remain
-  pending; preserve unrelated files and protected processes.
+- The confirmed production fix and the catalog extension are complete. State
+  close commit `723a11b8f7` is on HEAD; `git fetch origin master` and
+  `git rebase origin/master` were no-ops. The final gate passed with tracked
+  cleanliness, clean `git diff --check`, 123 contiguous prompts with valid
+  byte metadata, seven protected processes alive, and `0/1481` divergence
+  from `origin/master`. Preserve unrelated files and protected processes;
+  the next exact selector remains pending.
 
 ## Cycle 321 Selection
 
