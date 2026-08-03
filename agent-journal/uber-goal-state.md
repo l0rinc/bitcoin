@@ -1072,6 +1072,16 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 308 (goal 125 WAL/MANIFEST/VersionSet recovery; draw
+   raw=139903139087397213 idx=1 -> 116 tool-blocked, recorded
+   125-preempt): MANIFEST corruption fails loud even with
+   create_if_missing (CONFORM); WAL mid-record corruption —
+   paranoid=true loud / default keeps intact prefix 1,755/2,000
+   0 torn (CONFORM); CURRENT-loss + create_if_missing opens EMPTY
+   with live tables silently orphaned — VERIFIED HAZARD NOTE
+   (documented client-choice contract; atomic temp+rename writes
+   make the window external-only; mitigation seed recorded).
+   Regression #7 GREEN. LevelDB trio (125/126/127) all covered.
    Cycle 307 (goal 113 risk ranking, draw
    raw=12828903349424140929 masked=3605531312569365121 n=5 idx=1):
    live-queue risk table (severity x reachability x confidence x
