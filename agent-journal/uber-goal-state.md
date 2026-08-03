@@ -1072,6 +1072,17 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 306 (goal 110 catalog evolution + entropy audit, draw
+   raw=6547846130219125632 n=6 idx=0): proposed-goals resolutions
+   logged — P1 EXECUTED (goal 119 c1), P2 DELIVERED (snap_builder2
+   artifact), P3 DISMISSED (bad_alloc-only), P4 ADOPTED (F30);
+   queue EMPTY. Entropy-quality verdict: genuine shape/boundary
+   returns each cycle (write-failure family, clock-margin table,
+   LevelDB conformance harnesses, harness-preservation fix,
+   chmod-as-root blind spot); no promotion-ready new seeds (bar =
+   evidence-backed nonduplicate). Catalog file hash unchanged
+   (ba7b1dd0a2ab7203); regeneration needs user's generator
+   (prompt-chars metadata is machine-written) — documented.
    Cycle 305 (goal 117 calibration, draw
    raw=17929826660396438331 masked=8706454623541662523 n=7 idx=4):
    mutation-catch battery on the final lineage — 3/3 adopted
