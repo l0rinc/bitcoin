@@ -1072,6 +1072,14 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 309 (goal 118 sandbox/isolation audit, draw
+   raw=3903574178988509641 n=2 idx=1): 0 stray processes; /tmp
+   scratch swept (foreign ldb_oracle_merger.cc untouched);
+   CONTINUITY REPAIR — all harness sources canonical in
+   agent-journal/artifacts/ (12 files + replay README) incl.
+   rescued xor_tool.cpp (#41 c3, /tmp-only since 2026-07-29);
+   credentials/dirty-state compliant. Pool after: {111} workable
+   + 116 tool-blocked + Sparrow repo-blocked.
    Cycle 308 (goal 125 WAL/MANIFEST/VersionSet recovery; draw
    raw=139903139087397213 idx=1 -> 116 tool-blocked, recorded
    125-preempt): MANIFEST corruption fails loud even with
