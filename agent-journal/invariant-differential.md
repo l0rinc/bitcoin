@@ -1,5 +1,106 @@
 # Invariant, Differential, and Metamorphic Audit
 
+## Cycle 315
+
+- Date: 2026-08-03 UTC
+- Goal index: 51
+- Slug: `invariant-differential`
+- Branch: `uber-cycle-315-invariant-differential-20260802`
+- Base: `origin/master` at `556988790a7f961693a8fd93f73725baea66476a`
+- Cycle-start HEAD: `fdd1720c84961aaf40eb16f3bf460856b0f84f22`
+- Selector command/result: `shuf -i 0-114 -n 1` -> `51`
+- Catalog SHA256: `51e561f5a1ea1c1db165416a0ff29b698a9e380279179a3878745517ca7ace7c`
+
+### Scope and prior-finding exclusions
+
+Exclude the previous Goal 51 chain-parameter hash representation fix, the
+transaction-request tracker and layered UTXO-cache model campaigns, and the
+recent formatter, BIP32, and Taproot descriptor cells. This cycle targets
+state/output invariants that cross a real storage or serialization boundary,
+using an independent model or transformation rather than implementation-copy
+tests.
+
+Initial queue:
+
+1. Database batch/cursor failure schedules: compare logical state, iterator
+   visibility, and retry/restart behavior when writes, sync, or cursor reads
+   fail at each operation.
+2. Transaction, block, undo, and coin serialization round trips: compare
+   canonical bytes, hashes, decoded state, and failure-state outputs for
+   truncated, noncanonical, and boundary encodings.
+3. `CBlockUndo` and chainstate transformations: compare connect/disconnect,
+   serialize/deserialize, and replay under empty, duplicate, and maximum-size
+   entries.
+4. A distinct stateful relation selected from any suspicious code found while
+   tracing the first three cells.
+
+Current hypothesis: a storage or serialization helper may report failure
+after partially changing caller-visible state, causing a retry or restart to
+observe a state that is not equivalent to the successful operation's prefix.
+
+### Evidence ledger
+
+| ID | Surface | Status | Next evidence |
+| --- | --- | --- | --- |
+| C315-1 | Database batch/cursor failure symmetry | queued | Trace real callers and inject one deterministic failure at a time. |
+| C315-2 | Transaction/block/undo serialization metamorphisms | queued | Inventory paired serializers and existing negative tests. |
+| C315-3 | Chainstate connect/disconnect and replay invariants | queued | Use scratch fixtures only after the lower-level contracts are known. |
+| C315-4 | Oversized compressed-script replacement invariant | confirmed | Commit the minimal clear-before-replace fix and extend the catalog with a focused recurrence campaign. |
+
+### C315-4: oversized compressed scripts depend on destination state
+
+Hypothesis: `ScriptCompression::Unser` may violate the deserialize invariant
+that identical bytes produce identical output regardless of the destination's
+prior contents. The oversized-script branch at `src/compressor.h` subtracts
+`nSpecialScripts`, detects a decoded length above `MAX_SCRIPT_SIZE`, and the
+comment says it will "replace" the script with `OP_RETURN`. Before this cycle,
+it appended the opcode instead. `DecompressScript` already clears its output
+on its own invalid-key failure paths, but that prior cleanup does not cover
+this successful oversized-input branch.
+
+The historical rationale is commit `5d0434d13d` (2016-04-24), which changed
+an unbounded resize/read into the bounded `s.ignore(nSize)` path to prevent an
+OOM from an invalid UTXO script length. The replacement wording and the
+bounded-read behavior support treating the destination as an output, not an
+accumulator.
+
+The deterministic fixture encodes amount 1, then
+`MAX_SCRIPT_SIZE + nSpecialScripts + 1` (10007) as the compressed script size,
+followed by exactly 10001 ignored bytes. On the unchanged binary,
+`compress_script_oversize_deserialize_replaces_output` failed when decoding
+into `CTxOut{1, CScript{} << OP_TRUE}`: the result retained `OP_TRUE` before
+`OP_RETURN`. The same bytes decoded into a fresh output produced only
+`OP_RETURN`. The failing run is recorded in
+`/data/my_storage/tmp/cycle315-compress-before.log` with status 201.
+
+The production path is reachable through `Coin::Unserialize` in
+`src/coins.h:83-90` and `TxInUndoFormatter::Unser` in `src/undo.h:36-49`.
+More importantly, `CDBIterator::GetValue` first constructs a decoded value
+from the caller's existing `Coin` (`src/dbwrapper.h:208-217`) and
+`CCoinsViewDBCursor::GetValue` passes its caller's object through that path
+(`src/txdb.cpp:283-288`). `WriteUTXOSnapshot` reuses one `Coin` across its
+cursor loop (`src/rpc/blockchain.cpp:3420-3449`), so malformed persisted UTXO
+entries can make one decoded result depend on the preceding result. Common
+point lookups start from a fresh local `Coin`, which limits the normal impact,
+but it does not make the formatter's public output contract state-dependent.
+
+Fix: clear `script` immediately before appending the replacement `OP_RETURN`.
+The regression decodes the identical byte stream into both a pre-populated and
+a fresh `CTxOut`, then compares both scripts with the expected one-opcode
+script. With the fix, the targeted case and all 8 cases in `compress_tests`
+passed in `/data/my_storage/tmp/cycle315-after-test_bitcoin`; the after run is
+recorded in `/data/my_storage/tmp/cycle315-compress-after.log`.
+
+Independent checks: the unchanged binary failed the pre-populated-output
+oracle, while the fixed binary passed both destination states; the full
+compression suite retained all existing amount, special-script, and invalid
+pubkey checks. The change is limited to malformed oversized serialized input;
+it does not alter serialization of valid scripts or consensus validation.
+
+Verdict: confirmed local parser/output-state correctness defect. Fix is
+self-contained in `src/compressor.h` with a focused regression test; no broad
+caller changes or suppressions are justified.
+
 ## Cycle 231
 
 - Date: 2026-07-31 UTC

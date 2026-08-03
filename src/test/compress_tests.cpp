@@ -153,6 +153,27 @@ BOOST_AUTO_TEST_CASE(compress_script_to_uncompressed_pubkey_id)
     BOOST_CHECK_EQUAL(out[0], 0x04 | (script[65] & 0x01)); // least significant bit (lsb) of last char of pubkey is mapped into out[0]
 }
 
+BOOST_AUTO_TEST_CASE(compress_script_oversize_deserialize_replaces_output)
+{
+    const unsigned int encoded_size{MAX_SCRIPT_SIZE + ScriptCompression::nSpecialScripts + 1};
+    DataStream stream{};
+    stream << VARINT(CompressAmount(1)) << VARINT(encoded_size);
+    const std::vector<unsigned char> ignored_bytes(encoded_size - ScriptCompression::nSpecialScripts, 0x00);
+    stream.write(MakeByteSpan(ignored_bytes));
+    DataStream fresh_stream{stream};
+
+    CTxOut output{1, CScript{} << OP_TRUE};
+    stream >> Using<TxOutCompression>(output);
+    CTxOut fresh_output;
+    fresh_stream >> Using<TxOutCompression>(fresh_output);
+
+    const CScript expected{CScript{} << OP_RETURN};
+    BOOST_CHECK_EQUAL(output.nValue, 1);
+    BOOST_CHECK(output.scriptPubKey == expected);
+    BOOST_CHECK(fresh_output.scriptPubKey == expected);
+    BOOST_CHECK(output.scriptPubKey == fresh_output.scriptPubKey);
+}
+
 BOOST_AUTO_TEST_CASE(compress_p2pk_scripts_not_on_curve)
 {
     XOnlyPubKey x_not_on_curve;
