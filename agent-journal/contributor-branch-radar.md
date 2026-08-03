@@ -901,3 +901,41 @@ Assess-only: no defect to adopt; watch the series upstream.
 ### Limitations
 - If upstream lands it, our dirty_count/state batteries need
   a translation pass (recorded as the adoption gate).
+
+## Cycle 20 (2026-08-03, draw 270, raw=11982930432993450964, suspicion-mined): PR 33637 comparator optimization — perf refactor with consensus-adjacent tie-break surface; comparator NOT hot on our profiles (#23 c4); NO adoption
+
+### Assessment
+- The PR: inline the CBlockIndexWorkComparator to the header,
+  simplify arith_uint256 compare, add bench (1.4-6.8x claim on
+  the fast path). Current comparator (blockstorage.cpp:186-204)
+  is the branchy 3-key chain (chainwork/sequenceId/pointer).
+- Risk surface: comparator tie-break semantics feed
+  setBlockIndexCandidates ordering (chain-selection-adjacent) —
+  a perf refactor here needs exact semantic identity, not just
+  tests.
+- Local relevance: #23 c4 measured the comparator as O(1)
+  early-exit and NOT a hot share on our ComplexMemPool/IBD
+  profiles — the 6.8x fast-path win does not move our measured
+  bottlenecks (validation is ~86-87% EC math, #21/#22).
+- Not a defect: current comparator is correct (verified in
+  #23 c4's reads and the fork's Assume-hardened chainstate
+  tests).
+
+### Verdict
+Assess-only, NO adoption: perf refactor with semantic-sensitive
+surface and no measured hot path on this host; upstream's bench
+is the right vehicle.
+
+### Suspicion-mining
+- S13: comparator tie-break = pointer address for same-id
+  blocks (disk-loaded) — any rewrite must preserve EXACT order
+  semantics or it alters candidate ordering; the PR's own
+  review must carry that proof, ours need not duplicate it.
+
+### Exact commands
+- curl PR files (arith_uint256.{h,cpp}, blockstorage.{h,cpp},
+  bench/blockstorage.cpp); reads above.
+
+### Limitations
+- If upstream lands it with bench-attached semantic-identity
+  evidence, adoption becomes cheap (recorded gate).
