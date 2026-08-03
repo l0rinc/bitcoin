@@ -1,3 +1,38 @@
+# Cycle 319 Completion
+
+- Goal 70 (`compiler-optimization-differential`) was selected by the exact
+  command `shuf -i 0-118 -n 1` -> `70` on branch
+  `uber-cycle-319-compiler-optimization-differential-20260802`. Cycle-start
+  HEAD was `9297c44a83d4e684ab584a30c44e7b96eebb3da2`; selection commit was
+  `9f8d780825`; pre-cycle catalog SHA-256 was
+  `163eef986907fafe04cc3e27c87a892ed785fcc754f706cd4f318a521516deb4`.
+- Current-source GCC O2, GCC LTO, and Clang 19 actual O3 libsecp builds passed
+  focused ECDH, MuSig, and EllSwift tests. Full `tests` and `noverify_tests`
+  suites passed under GCC O2 and Clang 19 actual O3 with fixed seeds; no
+  source, CMake, compiler, optimization, LTO, hardening, or constant-time
+  defect was independently confirmed.
+- The important rejected hypothesis was a Release O3 flag mismatch. Generated
+  commands, rather than summaries alone, showed that nested libsecp deliberately
+  rewrites base Release O3 to O2; `SECP256K1_APPEND_CFLAGS=-O3` supplies the
+  actual final O3. This configuration lesson is now a separate audit surface.
+- Journal handoff commit: `fd1238745d` (`journal: close cycle 319 compiler differential`),
+  authored by `Lőrinc <pap.lorinc@gmail.com>`. No production source change was
+  made. BOLT, Valgrind, and Alive2 were unavailable; a new full top-level build
+  was avoided because storage is critically constrained.
+- Learning from this cycle added Goal 119, `optimization-mode-flag-parity`,
+  with seed journal `agent-journal/optimization-mode-flag-parity.md`. Goal and
+  catalog commit: `13014e33b3` (`goals: add optimization mode parity audit`)
+  generated 120 contiguous goals `0..119`. Catalog SHA-256 is
+  `ab29054cb7ab84cae8ca1afd6a0e43bd955650231aa219f9cd21da205da2b424`,
+  manifest SHA-256 is
+  `028ce2f22b37f6b2a61fb2345915f18062fdd66143c2336c4a3a66178b363d40`,
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- Rebase and final gate remain pending for this cycle. Preserve unrelated
+  untracked probes and user files, and do not stop the protected processes.
+
 # Cycle 318 Completion
 
 - Goal 47 (`build-ci-parity`) was selected by the exact command

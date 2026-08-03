@@ -1,5 +1,38 @@
 # Random Goal Run Ledger
 
+## Cycle 319 Result
+
+- Goal 70 (`compiler-optimization-differential`) completed on branch
+  `uber-cycle-319-compiler-optimization-differential-20260802`. Selection commit
+  was `9f8d780825`; the journal-only handoff commit was `fd1238745d`.
+- Current-source libsecp focused `ecdh`, `musig`, and `ellswift` tests passed at
+  32 iterations under GCC O2, GCC LTO, and Clang 19 actual O3. Full `tests` and
+  `noverify_tests` suites also passed under GCC O2 and Clang 19 actual O3 with
+  fixed seeds `319010` and `319011`; all four exited 0.
+- Generated-rule evidence confirmed GCC LTO flags and explained the apparent
+  Release O3 mismatch: nested libsecp intentionally normalizes base Release
+  O3 to O2, while `SECP256K1_APPEND_CFLAGS=-O3` produces actual final O3
+  commands. No source, compiler, CMake, LTO, hardening, or constant-time defect
+  was independently confirmed. No source fix was justified.
+- Learning added Goal 119, `optimization-mode-flag-parity`, with seed journal
+  `agent-journal/optimization-mode-flag-parity.md`. Goal/catalog commit was
+  `13014e33b3` (`goals: add optimization mode parity audit`). The catalog now
+  has 120 contiguous goals `0..119`; catalog SHA-256 is
+  `ab29054cb7ab84cae8ca1afd6a0e43bd955650231aa219f9cd21da205da2b424`,
+  manifest SHA-256 is
+  `028ce2f22b37f6b2a61fb2345915f18062fdd66143c2336c4a3a66178b363d40`,
+  generator SHA-256 remains
+  `297256d5dc173c5be13ed1d1021d161576d319b12fe86d8711c5c3c6bedf2b03`, and
+  random prompt SHA-256 remains
+  `56f2d4093caa99fcc54c8709bd18b55482208bde2d96a2b485ab9fe3a1cd55c2`.
+- Limitations: no current full top-level Bitcoin build, Clang 14/PGO rerun,
+  BOLT, Valgrind, or Alive2 because the relevant cells are already covered or
+  unavailable and storage is critically constrained. Preserve unrelated user
+  files and existing scratch/protected processes.
+- Next queue: fetch/rebase, run the fresh 120-goal gate, and select exactly one
+  index from `0..119`. Goal 119 should inspect generated rules and cache values
+  only when a distinct mode, generator, toolchain, or source change exists.
+
 ## Cycle 319 Selection
 
 - Selected index: `70`
