@@ -1072,6 +1072,32 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 311 (goal 111 cell closures, continued): goal7-descriptor-
+   range CONFIRMED + ADOPTED — int loop counter overflows after the
+   valid INT32_MAX endpoint; failing-before test process KILLED BY
+   SIGNAL (exit 133, -ftrapv build); passing-after full rpc_tests
+   green; audit/adopt-descriptor-range-overflow 62e05ae526,
+   archive 759755b6c5, F34. goal43-reindex-interrupt COVERED
+   (upstream c1313b199f in master + in-tree feature_init boundary
+   test; parallel 6d29ab1a1e duplicates). goal86-prune-restart
+   (blockfilter) failing-before run in flight (first attempt died
+   to ASan-speed RPC timeout, re-run at --timeout-factor=8).
+   Cycle 310 (goal 111 coverage manifest + cell closures): flood
+   manifest — 106 i9/codex branches -> 52 with unique src/ commits:
+   17 assessed, 9 wallet-deferred, 2 release-branch, 12 test-only,
+   2 minor, 6 unreviewed-core ranked, 4 misc. Cell 1 goal7-
+   getblocktxn DISMISSED (VectorFormatter 5MiB batching +
+   DifferenceFormatter uint16 overflow + 4MB cap = 3 existing
+   bounds; failing-before unobtainable). Cell 2 goal6-merkle
+   COVERED-AHEAD (fork 1e7ca53c1b 2026-06-27: vnIndex.clear() +
+   Assume invariants; their reuse test adopted, green; archive
+   c949f83780). Cell 3 goal72 settings durability CONFIRMED +
+   ADOPTED (strace syscall pair: 0 fsync/fdatasync pre-fix,
+   present post-fix; argsman suite green; f194e4482e, archive
+   e3fc515b7d). Cell 4 goal86-txospender CONFIRMED + ADOPTED
+   (public-RPC wrong spend status post-crash; functional failing-
+   before with invalidated spender returned; 6cd9d75a67, archive
+   902d84a97f, F33 🟠 in URGENT, F26 evicted).
    Cycle 309 (goal 118 sandbox/isolation audit, draw
    raw=3903574178988509641 n=2 idx=1): 0 stray processes; /tmp
    scratch swept (foreign ldb_oracle_merger.cc untouched);
