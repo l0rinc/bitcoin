@@ -309,3 +309,21 @@ diverge from upstream for zero reachable benefit).
 
 ## Rotation note
 Seven cycles; the VarInt family is fully closed.
+
+## Cycle 366 (2026-08-04, r219) — TxSource accounting mutant KILLED by the rebase-added assert
+
+Draw r219 (raw=2107072799016534179 -> #35). Fresh-code mutation cell:
+blockencodings.cpp extra_count accounting (upstream's TxSource enum,
+in-tree since the first rebase). Mutant: `extra_count -= (tx_source
+== EXTRA)` -> unconditional `extra_count--` (the exact underflow
+shape our pre-enum lineage had patched with have_extra_txn).
+
+Result: KILLED by the in-code accounting assert —
+assert(count(tx_source == EXTRA) == extra_count) at blockencodings.cpp:208
+fires (abort, ASan build). That assert is the one I re-expressed in
+enum terms during the cycle-332 rebase conflict resolution — the
+adaptation is a LIVE ORACLE for the accounting regression class.
+Passing-after: revert -> blockencodings_tests 158/158 green.
+
+Verdict: oracle adequate for the new accounting code; the
+mutation-kill validates the rebase adaptation's precision.
