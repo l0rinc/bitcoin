@@ -3127,3 +3127,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
 
  r205 raw=4309181058810946098 -> #50: SKIP (cooldown until r229;
  drawn r204). NP 11/20.
+
+ r206 raw=7334143503361858420 -> #116 cross-scanner: reopen FAIL
+ (needs >=2 scanners; host has only clang-18 — cppcheck/clang-tidy
+ still absent; delta code is warning-clean under clang).
+ NP 12/20.
