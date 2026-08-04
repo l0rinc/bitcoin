@@ -2741,3 +2741,13 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  per the user's 20-round rule (reopen-pass cycles that end
  DISMISSED-with-evidence still count as rounds without NEW findings).
  Next: r154.
+
+ ## Cycle 336 (2026-08-04) — #74 reopen on delay-queue memory; DISMISSED
+
+ r154 raw=5622971247541037514 -> #74 (was "campaign complete";
+ reopened by delta-A's new global inv delay-queue memory surface).
+ Backlog boundedness PROVEN from the ExtractBestByMiningScoreWithTopology
+ contract (txmempool.cpp:648): dead wtxids dropped every pass, vector
+ drains, dedup guaranteed; residual growth = live accepted txs only,
+ fee-cost-bounded; operator heartbeat at 30bpm. DISMISSED; closes the
+ cycle-332 queue's delay-queue boundedness cell. NP 2/20. Next: r155.
