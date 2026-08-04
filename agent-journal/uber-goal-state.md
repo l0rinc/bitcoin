@@ -2867,3 +2867,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  m_inv_to_send_mutex (GetInfo); deficit-negative values are by
  design; DISMISSED. Nit: info() lacks a lock annotation (cosmetic,
  recorded, not adopted). NP 4/20. Next: r169.
+
+ r169 raw=8592214137012378382 -> #14 secret-control-flow: reopen FAIL
+ (cycle DONE; deltas add no reachable secret-handling code —
+ silentpayments unreachable per cycle 338, scalar changes
+ verify-only, SetSeed assert is on public length metadata). NP 5/20.
