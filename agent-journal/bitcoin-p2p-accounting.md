@@ -287,3 +287,32 @@ and the sequence watermark are consistent by construction). In-tree
 via the rebase. The cycle-327 NOT-APPLICABLE verdict for the author's
 inbound-capacity machinery is unaffected (different mechanism; still
 absent upstream).
+
+## Cycle 358 (2026-08-04) — cycle-327 NOT-APPLICABLE verdict SUPERSEDED; PR 35874 CONFIRMED live + ADOPTED
+
+CORRECTION: cycle 327 assessed bip35-relay-capacity NOT-APPLICABLE
+("our lineage lacks the inbound tx-relay capacity machinery"). That
+was true at the pre-rebase base; the 18c05d9301..17c5e33e9c delta
+brought MaybeDisconnectForTxRelayCapacity + m_relays_txs into the
+lineage. The cycle-357-era tree HAS the machinery — and with it, the
+BIP35 bypass: an inbound peer with fRelay=false could send mempool
+requests and receive full dumps while consuming no tx-relay capacity
+(MEMPOOL handler checked NODE_BLOOM + OutboundTargetReached but not
+the relay capacity). Reachability is gated on -peerbloomfilters
+(non-default), so master-relative severity is low-to-medium
+(bandwidth-amplification hardening), not a default-config exposure.
+
+PR 35874 (author's own upstream fix, open, 3 commits) adopted:
+- audit/adopt-bip35-relay-limit: be0d60c51d (characterize) +
+  12fc6ec039 (refactor) + a13e00bdc6 (fix: mark the requester
+  m_relays_txs=true and run MaybeDisconnectForTxRelayCapacity before
+  queuing the first BIP35 response).
+- FAILING-BEFORE: p2p_connection_limits.py (with the PR's new BIP35
+  case) AssertionError on the unfixed source.
+- PASSING-AFTER: same suite Tests successful with the fix (ASan).
+- Integration branch carries the stack as 03e137f25e/4ced0a8cb6/
+  dbf71405d7.
+
+This also settles the watch-cell mechanism: the bip35 capacity
+question is no longer blocked on machinery presence — the fix is
+in-tree and verified.

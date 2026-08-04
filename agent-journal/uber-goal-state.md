@@ -3053,3 +3053,19 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r193 raw=1397617075517926906 -> #122 Sparrow: reopen FAIL
  (repo-blocked standing; no Sparrow checkout on the host —
  /mnt/my_storage listing rechecked; same as #120/#123). NP 9/20.
+
+ ## Cycle 358 (2026-08-04) — #3 sweep found 12 new author PRs; 35874 CONFIRMED live + ADOPTED
+
+ r194 #3: watch PRs all still open; 12 NEW author PRs found. PR
+ 35874 (BIP35 relay-limit enforcement) — cycle-327's NOT-APPLICABLE
+ superseded (the capacity machinery arrived via the rebase deltas);
+ bypass CONFIRMED live in our tree (failing-before AssertionError on
+ unfixed source; passing-after Tests successful). Adopted:
+ audit/adopt-bip35-relay-limit be0d60c51d/12fc6ec039/a13e00bdc6 +
+ integration 03e137f25e/4ced0a8cb6/dbf71405d7. Severity: low-medium
+ (gated on non-default -peerbloomfilters; bandwidth-amplification
+ hardening). Other new PRs triaged: 35878 (unique tx INVs) and
+ 35880 (fuzz oversized msg) noted for future cells; 35872 is our
+ own adopted descriptor-range fix now PRed upstream (converged);
+ 35873 CVE-2024-38365 tx_valid vector (test-only, rides upstream).
+ NP reset (confirmed+adopted): 0/20. Next: r195.
