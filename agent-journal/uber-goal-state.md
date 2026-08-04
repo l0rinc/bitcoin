@@ -2872,3 +2872,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  (cycle DONE; deltas add no reachable secret-handling code —
  silentpayments unreachable per cycle 338, scalar changes
  verify-only, SetSeed assert is on public length metadata). NP 5/20.
+
+ r170 raw=6741477614070442076 -> #92 ABI: reopen FAIL. The one
+ ABI-adjacent delta (vchFingerprint[4] -> KeyFingerprint) proven
+ layout-compatible by measurement (sizeof/alignof 12/4 both forms;
+ std::array<unsigned char,4> == raw array here); kernel surface
+ untouched in the deltas (chainparams testnet-seed removal only).
+ NP 6/20.
