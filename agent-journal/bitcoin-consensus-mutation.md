@@ -111,3 +111,32 @@ residual mutants worth future cycles:
   is exercised implicitly everywhere — find the explicit oracle or note gap)
 - script interpreter flag mutants (SCRIPT_VERIFY_DERSIG/NULLDUMMY/CLEANSTACK
   skips) — p2p_segwit.py + feature_taproot.py oracles)
+
+## Cycle 334 (2026-08-04) — site N (GetBlockSubsidy): oracle ADEQUATE
+
+Draw r152 (raw=7688654847386061781 -> #85; live queue, not exhausted).
+Site N: subsidy halving off-by-one.
+
+Oracle inventory (pre-existing, upstream): validation_tests.cpp
+TestBlockSubsidyHalvings (equality chain nSubsidy == nPrevious/2 at
+every halving boundary + 64-halvings->0 edge) and subsidy_limit_test
+(total-supply integral nSum == 2099999997690000 + per-step <= 50*COIN).
+An explicit oracle EXISTS — the cycle-1 note's "implicitly exercised
+only" suspicion is resolved: coverage is explicit and exact.
+
+MUTANT N1 (falsifiable): validation.cpp:1870 halvings =
+nHeight/interval + 1 (halve one step early). Predicted kill at the
+first boundary check. Result: KILLED — validation_tests 2 cases
+failed (block_subsidy, subsidy_limit_test), 4 assertions failed
+(build-after ASan, exact command: test_bitcoin
+--run_test=validation_tests). Passing-after: mutant reverted, suite
+green again (verified in the same cycle).
+
+Equivalent-mutant note: halvings>=64 -> >=63 is equivalent (subsidy
+already 0 by halving 34; both boundaries return 0) — recorded so a
+future battery doesn't burn a build on it. The >=64 -> >64 (or
+removed-guard) mutant shifts by 64 = UB; on aarch64 the shift masks
+to >>0, returning 50*COIN at the 64th halving — killed by the 64-edge
+check, but the UB makes it a dirty mutant; skipped by design.
+
+Site N CLOSED (oracle adequate). Queue: sites E, F, G, I, J/K/L.

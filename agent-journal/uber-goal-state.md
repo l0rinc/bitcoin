@@ -2717,3 +2717,13 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  Harness false-alarm lesson recorded (endianness parse anchor rule).
  Reference script preserved at /tmp/siphash13uj_ref.py (scratch).
  NP counter: progress-bearing cycle -> NP 0/20. Next: r152.
+
+ ## Cycle 334 (2026-08-04) — #85 mutation site N: oracle adequate
+
+ r152 raw=7688654847386061781 -> #85 (live queue). Site N
+ (GetBlockSubsidy off-by-one): explicit oracle inventory recorded
+ (validation_tests halving-chain + total-supply pin). Mutant N1
+ (halve one step early): KILLED (2 cases, 4 assertions fail);
+ revert -> green (28502/28502). Equivalent-mutant and UB-mutant
+ notes recorded (>=63 equivalent; >64 dirty-by-UB, skipped).
+ Site N CLOSED. #85 queue: E, F, G, I, J/K/L. NP 0/20. Next: r153.
