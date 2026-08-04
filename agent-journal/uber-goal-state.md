@@ -3199,3 +3199,15 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  20k runs over the new qa-assets inputs, +879 new coverage units,
  zero artifacts, 647M peak RSS. Stale-header caveat recorded
  (behavior-neutral). NP 2/20. Next: r217.
+
+ r217 raw=7430361117048829486 -> #46: SKIP (cooldown until r231).
+ NP 3/20.
+
+ r218 raw=2275052485344956923 -> #123 Sparrow: reopen FAIL
+ (repo-blocked standing). NP 4/20.
+
+ ## Cycle 366 (2026-08-04) — #35: TxSource accounting mutant killed by the rebase assert
+
+ r219 raw=2107072799016534179 -> #35. Unconditional extra_count--
+ mutant KILLED by the cycle-332 enum accounting assert (revert ->
+ green). The rebase adaptation is a live oracle. NP 5/20. Next: r220.
