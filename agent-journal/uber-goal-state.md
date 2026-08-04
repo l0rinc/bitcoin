@@ -3165,3 +3165,6 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
 
  r212 raw=1301364351502434350 -> #46: SKIP (cooldown until r231).
  NP 18/20.
+
+ r213 raw=3490150342751373688 -> #120 Sparrow: reopen FAIL
+ (repo-blocked standing; verified absent at r193). NP 19/20.
