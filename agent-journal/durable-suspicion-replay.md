@@ -211,3 +211,29 @@ question is closed with a complete census.
   specific dictionary state to trip is theoretically possible
   but immaterial (the inputs would be in that target's corpus
   if so).
+
+## Cycle 347 (2026-08-04, r174) — register two new durable watch cells
+
+Draw r174 (raw=7825786041129320806 -> #102). New suspicion artifacts
+since the last replay, registered for cross-model replay:
+
+W-delayqueue-starvation (from cycles 332/336): the global tx-relay
+token buckets replace per-peer rate limiting; one sustained flooder
+can consume the global budget and delay honest relay (accepted
+upstream tradeoff; backlog drains by mining score so high-fee txs
+stay prioritized). REPLAY TRIGGER: any public report of relay
+starvation, or mempool/relay functional regressions after a flood
+test. Replay experiment: two-node harness, flood inbound from peer A
+at >14 tx/s sustained, measure peer B's honest-tx announcement delay
+distribution vs pre-delay-queue behavior.
+
+W-silentpayments-first-caller (from cycle 338): the BIP352 module is
+compiled into Core builds (subtree default ON, no Core pin) but has
+zero Core callers today. REPLAY TRIGGER: upstream adds the first
+Core caller of secp256k1_silentpayments_*. Replay: constant-time /
+secret-handling review of the shared-secret and label-tweak paths
+becomes live surface (goal #14/#45 scopes), plus reachability of the
+wallet-side key paths.
+
+Neither cell has a failing test today; both are watch-only with
+concrete triggers and first experiments recorded.

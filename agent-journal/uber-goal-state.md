@@ -2899,3 +2899,9 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  cycle-332 extra_txn lesson) searched for second instances via the
  r171 assertion census: all production-novel Assumes are
  internal-state; no second instance. NP 9/20.
+
+ ## Cycle 347 (2026-08-04) — #102: two watch cells registered
+
+ r174 raw=7825786041129320806 -> #102. Registered
+ W-delayqueue-starvation and W-silentpayments-first-caller with
+ replay triggers + first experiments. NP 10/20. Next: r175.
