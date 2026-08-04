@@ -2979,3 +2979,11 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  now ~700M). Regenerable if ever needed. qa-assets now at
  3981cb99b3 (300 fresh corpus inputs available for future fuzz
  cycles). NP reset (progress-bearing cycle): 0/20. Next: r185.
+
+ ## Cycle 350 (2026-08-04) — #107: BIP352 vectors executed, conformance CONFIRMED
+
+ r185 raw=5661128680711004139 -> #107. Official BIP352 vectors (28
+ groups) executed via standalone subtree test build: full suite green
+ incl. the silentpayments module. Conformance of the compiled-in
+ module CONFIRMED at this revision; watch cell W-silentpayments
+ updated. /tmp/sp-build removed. NP 1/20. Next: r186.
