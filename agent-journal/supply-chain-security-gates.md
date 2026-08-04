@@ -218,3 +218,20 @@ only). Upstream vehicle: PR 35754.
 ### Limitations / queue
 - The lockfiles age (pip releases new versions) — a periodic
   lockfile-refresh note rides the #42 watch.
+
+## Cycle 332 (2026-08-04) — SDK-verify arm UPSTREAMED
+
+Upstream master 1ed14c6122..17c5e33e9c contains 873550bea3 "ci: verify
+cross-build SDK archives" — byte-identical patch to our adopted
+9ba60fbbce (same author/date/message; applied by upstream onto their
+tree). The SDK-digest-verification arm of the PR-35754 stack is now
+covered BY UPSTREAM, not just in-tree. Rebase onto 17c5e33e9c had one
+conflict from this: ci/test/00_setup_env_netbsd_cross.sh digests —
+upstream additionally UPDATED the NetBSD SDK (2c87337efe, fixing their
+download failure), so upstream's newer SHA512 values were taken; the
+verification mechanism (ours, now also upstream's) is unchanged.
+Remaining stack arms (uv.lock/pyproject, Git-source pins,
+shellcheck/mlc sha256sum) are NOT upstream: ci/lint/requirements.txt
+still exists upstream (fd15b55c2e) — the uv migration stays fork-local
+for now; watch for upstream adopting it (would conflict with our
+deletion again, same resolution applies).

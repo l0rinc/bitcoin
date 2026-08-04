@@ -47,3 +47,24 @@ regression evidence.
 LESSON (calibration integrity): for every adopted fix, verify the
 regression test EXISTS IN-TREE — adoption-day evidence run from
 the author's branch does not count as in-tree coverage.
+
+## Cycle 332 data point — wrong-subject assertion survived upstream CI
+
+Upstream #35863 (5559fa464b, merged 8a4bab8e97): script_p2sh_tests.cpp
+ValidateInputsStandardness asserted
+GetP2SHSigOpCount(CTransaction(txToNonStd2), coins) == 20U where the
+constructed subject under test was txToNonStd2_no_scriptSig (expected
+0U). The assertion computed on the WRONG transaction — it passed because
+the substitute subject legitimately had 20 sigops. Bug shape:
+oracle-substitution — the asserted expression names a sibling variable
+from the enclosing scope, not the case-local one; the test still passes
+because the sibling's property coincidentally matches the literal.
+Detection heuristic for our own test review: in multi-case test bodies,
+diff each assertion's argument list against the case's constructed
+variables; flag any assertion whose subject is not constructed inside
+the current case scope. (756afe14b5 in the same PR gives each case its
+own scope — the structural fix preventing the shape.) Our tree carries
+the fix via the 17c5e33e9c rebase; our rebase-era audit of
+ValidateInputsStandardness did not catch it either (we never audited
+that test body) — recorded as a genuine miss class, not a process
+failure: scope-shadowed case tests were never a drawn cell.
