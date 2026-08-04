@@ -274,3 +274,21 @@ c4 sweep queue item is closed with a clean re-measurement.
 
 ### Exact commands
 - ls-tree loop + comm above (counts above).
+
+## Cycle 344 (2026-08-04, r166) — new knob -txsendrate: misuse-resistant
+
+Draw r166 (raw=1542894218260582672 -> #16). Reopen hook: the
+delay-queue subsystem added the first new user-facing relay knob
+since the last cycle: -txsendrate (init.cpp:720, DEBUG_ONLY).
+
+Misuse review (node/peerman_args.cpp:27-29): GetIntArg ->
+optional<int64_t> (unparseable input falls back to the default 14
+tx/s), std::clamp<int64_t>(*value, 1, 1000) BEFORE the uint32_t cast
+(no arithmetic before the clamp -> no overflow path); extremes map to
+1 (stop-ship minimum) or 1000 (generous cap); DEBUG_ONLY keeps it
+out of general-use guidance. getnetworkinfo reports the effective
+value (4842903ac1) — operator-visible.
+
+Verdict: DISMISSED (clamped + defaulted + debug-only + reported).
+No sibling unclamped relay knobs introduced by the deltas
+(-blockreconstructionextratxn already clamped the same way).

@@ -2846,3 +2846,9 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  SetSeed assert: all callers pass fixed 32-byte CKeys or fixed-size
  xprv decodes; assert unreachable from input; defense-in-depth only.
  SWEEP CLEAN. NP 1/20. Next: r166.
+
+ ## Cycle 344 (2026-08-04) — #16: -txsendrate misuse-resistant
+
+ r166 raw=1542894218260582672 -> #16. New knob from the delay-queue
+ subsystem reviewed: optional parse -> clamp [1,1000] before cast ->
+ DEBUG_ONLY -> getnetworkinfo-reported. DISMISSED. NP 2/20. Next: r167.
