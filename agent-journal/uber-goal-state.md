@@ -3132,3 +3132,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  (needs >=2 scanners; host has only clang-18 — cppcheck/clang-tidy
  still absent; delta code is warning-clean under clang).
  NP 12/20.
+
+ r207 raw=2350822243482145515 -> #107 conformance-transplant: reopen
+ FAIL (cycle-350 BIP352 execution is 22 rounds old; no new external
+ suite/vector landed since). NP 13/20.
