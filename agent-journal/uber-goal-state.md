@@ -3000,3 +3000,13 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r187 raw=3940667579847397380 -> #4. The new kernel setter's header
  contract matches the implementation exactly (range, default, split,
  return, annotations). DISMISSED. NP 3/20. Next: r188.
+
+ ## Cycle 353 (2026-08-04) — #36 Release gap closed; corpus queue noted
+
+ Release/NDEBUG verification of the delta code: build-clang-func
+ rebuilt to HEAD; interface_http/p2p_getdata/p2p_compactblocks/
+ feature_index_prune all Tests successful under NDEBUG. 4/5 verifier
+ forms now green; static analyzers remain tooling-blocked. Queue:
+ corpus-backed fuzz run with the new qa-assets inputs (tx_pool 1743,
+ process_messages 1588, coins_view_db 1570, cmpctblock 1389 new
+ seeds) when a fuzz campaign is next drawn. NP 3/20. Next: r188.

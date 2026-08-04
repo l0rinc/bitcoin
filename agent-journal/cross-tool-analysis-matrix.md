@@ -391,3 +391,19 @@ cycle). Coverage of the inherited delta code on this host:
 Deferred-scope record per the matrix goal: delta code is covered by
 3 of 5 verifier forms; release-NDEBUG and static analysis remain
 open conditions (blocked by disk/tooling, not by choice).
+
+## Cycle 353 (2026-08-04) — Release/NDEBUG gap CLOSED for the delta code
+
+Follow-up to cycle 339's deferred-scope record. build-clang-func
+(Release -g0, clang-18, BUILD_TESTS=OFF) rebuilt incrementally to
+HEAD; delta-relevant functional set run under NDEBUG semantics:
+interface_http, p2p_getdata, p2p_compactblocks, feature_index_prune
+— ALL "Tests successful". The assert-erasure surface (Assume/Assert
+compiled out) for the 193+26+9 inherited commits is now verified for
+the P2P/http/cmpctblock/index paths — the areas where our F-family
+fixes live. Matrix state: ASan-Debug battery + UBSan/ASan fuzz +
+ASan functional + Release functional = 4/5 verifier forms green;
+static analyzers remain the only open cell (host tooling absent).
+(First run's filter caught cleanup lines instead of verdicts —
+rerun captured "Tests successful" x4; filter lesson: grep the
+verdict, don't tail-pipe it.)
