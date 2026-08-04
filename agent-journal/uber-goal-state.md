@@ -3104,3 +3104,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  upstream 32-bit CI row is gone until it lands — our 32-bit checks
  are local anyway), guix python-minimal move (build hygiene).
  No cache-key or poisoning surface change. NP 6/20.
+
+ r201 raw=8123677559870388775 -> #39: SKIP (cooldown until r211 per
+ the cycle-357 amendment; no fresh generated-artifact trigger).
+ NP 7/20.
