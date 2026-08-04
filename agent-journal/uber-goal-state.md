@@ -2852,3 +2852,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r166 raw=1542894218260582672 -> #16. New knob from the delay-queue
  subsystem reviewed: optional parse -> clamp [1,1000] before cast ->
  DEBUG_ONLY -> getnetworkinfo-reported. DISMISSED. NP 2/20. Next: r167.
+
+ ## Cycle 345 (2026-08-04) — #58 delta helpers: no duplication
+
+ r167 raw=3933342799363965114 -> #58. Delta helper inventory clean:
+ SaltedCoinsCacheHasher is a deliberate 1-3-UJ specialization (not a
+ duplicate of the 2-4 family); TokenBucket and the LineReader rewrite
+ are unique. DISMISSED. NP 3/20. Next: r168.
