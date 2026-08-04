@@ -2777,3 +2777,12 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  substitution read the archive tip). Corrected in
  agent-journal/artifacts/commit-message-corrections.md (archive tip
  5f46478afb). Substitution rule recorded in the calibration journal.
+
+ ## Draw rounds on base 17c5e33e9c (logged per round)
+
+ r157 raw=417910111332754708 -> #20 micro-optimization: reopen FAIL
+ (last cycle's measured win stands; sole new-code candidate —
+ std::sort vs nth_element in ExtractBestByMiningScoreWithTopology —
+ below materiality: backlog is fee-bounded in size and the call
+ cadence is the bucket-check, not per-tx; waived with reason).
+ NP 5/20.
