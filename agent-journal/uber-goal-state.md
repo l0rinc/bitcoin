@@ -2751,3 +2751,11 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  drains, dedup guaranteed; residual growth = live accepted txs only,
  fee-cost-bounded; operator heartbeat at 30bpm. DISMISSED; closes the
  cycle-332 queue's delay-queue boundedness cell. NP 2/20. Next: r155.
+
+ ## Cycle 337 (2026-08-04) — #114 oracle inventory: upstream already covers the new contract
+
+ r155 raw=6951087399641815666 -> #114 (knowledge-base-executable-oracles).
+ Reopen inputs: cycle-333 reference artifact (archived), cycle-336
+ extraction contract. Finding: upstream's fuzz tx_pool:608-630 already
+ asserts the contract (drain/dead-drop/dedup + eviction/expiry
+ composition), smoke-verified. No new oracle needed. NP 3/20. Next: r156.
