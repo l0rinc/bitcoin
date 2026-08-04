@@ -1468,3 +1468,31 @@ users) and one-off AutoFile writers (xor.dat, base_blockhash —
 both adopted earlier). Sweep EXHAUSTED for src/ producers;
 settings.json uses WriteSettings (same WriteBinaryFile shape but
 content is non-authoritative UI settings — assessed, benign).
+
+## Cycle 342 (2026-08-04) — 1366th branch: mempool-unbroadcast-memory CONFIRMED + ADOPTED
+
+Radar trigger: author remote 1365 -> 1366 heads; events API shows
+CreateEvent l0rinc/mempool-unbroadcast-memory 2026-08-04T18:28Z.
+
+Mechanism: CTxMemPool::DynamicMemoryUsage() omitted
+m_unbroadcast_txids — the per-tx set node retained for locally
+submitted transactions awaiting first broadcast was invisible to
+memory accounting (bounded by one entry per mempool tx; accounting
+truth, not a leak). Live at our HEAD (txmempool.cpp:962 pre-fix).
+
+Adoption (audit/adopt-unbroadcast-memory):
+- 57bed93c20 characterize test (documents gap: usage delta == 0
+  after AddUnbroadcastTx) — cherry-picked clean; PASSES on unfixed
+  tree (gap documented executably).
+- Failing-before: flipped expectation
+  (memusage::DynamicUsage(std::set<Txid>{txid})) on UNFIXED code ->
+  exactly 1 assertion failed (mempool_tests, ASan build-after).
+- ac08a4c663 fix (+DynamicUsage(m_unbroadcast_txids)) — include
+  conflicts resolved (memusage.h/set added alongside our extra
+  includes); passing-after: mempool_tests 24 cases / 418 assertions
+  green.
+
+Severity: low (mempool memory-accounting precision; set bounded by
+mempool size; aligns with the retained-capacity accounting-truth
+family). Watch: upstream PR state unknown — check for a PR from this
+branch next sweep.
