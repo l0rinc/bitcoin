@@ -2867,3 +2867,41 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  m_inv_to_send_mutex (GetInfo); deficit-negative values are by
  design; DISMISSED. Nit: info() lacks a lock annotation (cosmetic,
  recorded, not adopted). NP 4/20. Next: r169.
+
+ r169 raw=8592214137012378382 -> #14 secret-control-flow: reopen FAIL
+ (cycle DONE; deltas add no reachable secret-handling code —
+ silentpayments unreachable per cycle 338, scalar changes
+ verify-only, SetSeed assert is on public length metadata). NP 5/20.
+
+ r170 raw=6741477614070442076 -> #92 ABI: reopen FAIL. The one
+ ABI-adjacent delta (vchFingerprint[4] -> KeyFingerprint) proven
+ layout-compatible by measurement (sizeof/alignof 12/4 both forms;
+ std::array<unsigned char,4> == raw array here); kernel surface
+ untouched in the deltas (chainparams testnet-seed removal only).
+ NP 6/20.
+
+ r171 raw=2817708817377695362 -> #2 assertion-reachability: reopen
+ FAIL. Delta assertion census: 21 Assert + 7 Assume + 20 VERIFY_CHECK
+ + 26 assert, of which production-novel only: the null-mempool guard
+ (cycle-332 converged), SetSeed assert (cycle-343 unreachable-from-
+ input), joinable() shutdown Assume (internal ordering), static_
+ asserts (compile-time). The addrman vvTried Assumes are PRE-EXISTING
+ (our bc7d905046 lineage) shown as moved context. NP 7/20.
+
+ r172 raw=1033579463861012371 -> #19 benchmark-integrity: reopen
+ FAIL-with-review. Delta added SipHash24/13UJ 32b/36b benches
+ (crypto_hash.cpp): doNotOptimizeAway present, input mutated per
+ iteration, deterministic seed, 13UJ uses the production Hash()
+ fast path — measures what it claims. No integrity issue. NP 8/20.
+
+ r173 raw=3643367468732838426 -> #26 cross-subsystem shapes: reopen
+ FAIL. Newest shape (Assume stronger than the API contract —
+ cycle-332 extra_txn lesson) searched for second instances via the
+ r171 assertion census: all production-novel Assumes are
+ internal-state; no second instance. NP 9/20.
+
+ ## Cycle 347 (2026-08-04) — #102: two watch cells registered
+
+ r174 raw=7825786041129320806 -> #102. Registered
+ W-delayqueue-starvation and W-silentpayments-first-caller with
+ replay triggers + first experiments. NP 10/20. Next: r175.
