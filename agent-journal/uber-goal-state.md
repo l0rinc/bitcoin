@@ -3069,3 +3069,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  own adopted descriptor-range fix now PRed upstream (converged);
  35873 CVE-2024-38365 tx_valid vector (test-only, rides upstream).
  NP reset (confirmed+adopted): 0/20. Next: r195.
+
+ r195 raw=4884820737375313496 -> #88 wallet-recovery: reopen FAIL
+ (deprioritized surface; deltas touched no wallet encryption/backup/
+ keypool code). NP 1/20.
