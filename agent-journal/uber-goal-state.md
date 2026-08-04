@@ -2777,3 +2777,20 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  substitution read the archive tip). Corrected in
  agent-journal/artifacts/commit-message-corrections.md (archive tip
  5f46478afb). Substitution rule recorded in the calibration journal.
+
+ ## Draw rounds on base 17c5e33e9c (logged per round)
+
+ r157 raw=417910111332754708 -> #20 micro-optimization: reopen FAIL
+ (last cycle's measured win stands; sole new-code candidate —
+ std::sort vs nth_element in ExtractBestByMiningScoreWithTopology —
+ below materiality: backlog is fee-bounded in size and the call
+ cadence is the bucket-check, not per-tx; waived with reason).
+ NP 5/20.
+
+ ## Cycle 339 (2026-08-04) — #36 delta-code matrix inventory
+
+ r158 raw=6552722183626261412 -> #36. Reopen PASS (new inherited
+ code). Matrix: ASan battery + UBSan/ASan fuzz smoke + functional all
+ green on the delta code; Release-NDEBUG and static analyzers OPEN
+ (disk 780M, tooling absent — deferred-scope record filed, not a
+ clean bill). NP 6/20. Next: r159.

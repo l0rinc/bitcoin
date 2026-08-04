@@ -366,3 +366,28 @@ differential (c2), UBSan (c3), _GLIBCXX_ASSERTIONS (c4), TSan
   the 6 tests were chosen for consensus/P2P density).
 - build-clang-func kept for now (Release -g0, ~small); delete on
   next disk squeeze. clang version string: Ubuntu clang 18.1.x.
+
+## Cycle 339 (2026-08-04) — r158 #36: delta-code coverage matrix (post-rebase inventory)
+
+Reopen PASS (193+26 upstream commits = new code since the last matrix
+cycle). Coverage of the inherited delta code on this host:
+
+- ASan Debug (build-after, -O0 -ftrapv): unit battery 229 cases /
+  1.29M assertions green incl. crypto/blockencodings/coins/http/
+  torcontrol/rpc/descriptor/chainstatemanager suites.
+- UBSan+ASan+fuzzer (build_fuzz, RelWithDebInfo): smoke 2000 runs x
+  {partially_downloaded_block, http_request, torcontrol, rpc, tx_pool,
+  coins_view, integer} — all DONE, zero artifacts.
+- Functional (ASan bitcoind): interface_http, feature_index_prune,
+  p2p_getdata, p2p_compactblocks — Tests successful (incl. upstream's
+  new empty-getblocktxn subtest).
+- Release (NDEBUG): NOT RUN on the new tree — build-before is stale
+  (pre-rebase) and disk is at 780M free (no new tree possible).
+  Assert-erasure divergence is therefore UNVERIFIED for the delta code.
+  Condition to close: disk headroom for a release tree (or reuse of
+  build-before after a clean).
+- clang-tidy/cppcheck/cbmc/klee: absent on host (rechecked).
+
+Deferred-scope record per the matrix goal: delta code is covered by
+3 of 5 verifier forms; release-NDEBUG and static analysis remain
+open conditions (blocked by disk/tooling, not by choice).
