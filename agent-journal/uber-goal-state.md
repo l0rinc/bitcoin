@@ -3226,3 +3226,9 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r223 raw=7407799704019341012 -> #84 secp-nonce/session: reopen FAIL
  (the subtree update touched no nonce/signing/musig session code —
  scalar/extrakeys/silentpayments only; module unreachable). NP 9/20.
+
+ r224 raw=9009151584913082427 -> #59 supply-chain: reopen FAIL with
+ note. Merged deltas' supply surface is covered by our upstreamed
+ SDK-digest verification (873550bea3); open author PR 35885
+ (sourceware mirror switch for riscv) is unmerged CI-only — radar-
+ noted. NP 10/20.
