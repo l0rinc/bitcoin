@@ -2771,3 +2771,9 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  compiled into Core builds (subtree default ON, no Core pin; 16
  symbols in libsecp256k1.a vs 0 pre-update) but UNREACHABLE from Core
  — watch cell if upstream adds the first caller. NP 4/20. Next: r157.
+
+ Process note (cycle 338): archive commits 40cb7b602b/05af0ca0f2/
+ b8477fa5c6 have correct content but cycle-335 labels (message
+ substitution read the archive tip). Corrected in
+ agent-journal/artifacts/commit-message-corrections.md (archive tip
+ 5f46478afb). Substitution rule recorded in the calibration journal.

@@ -68,3 +68,15 @@ the fix via the 17c5e33e9c rebase; our rebase-era audit of
 ValidateInputsStandardness did not catch it either (we never audited
 that test body) — recorded as a genuine miss class, not a process
 failure: scope-shadowed case tests were never a drawn cell.
+
+## Cycle 338 process lesson — archive message lag
+
+Three archive commits (40cb7b602b, 05af0ca0f2, b8477fa5c6) carried
+cycle-335's message with later cycles' content: the commit-message
+substitution read `git log -1` from the ARCHIVE worktree's tip instead
+of the source hash. Content was always correct (cherry-pick used the
+explicit source hash); only labels lagged. Detection: reading the
+worktree-add output line against the expected cycle number.
+Correction: agent-journal/artifacts/commit-message-corrections.md on
+agent/all-findings (append-only, no rewrite). Rule: always
+`git log -1 --format=%B <explicit-source-hash>` in substitutions.
