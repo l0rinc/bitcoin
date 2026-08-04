@@ -3215,3 +3215,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r220 raw=888285348936740872 -> #8 locking: reopen FAIL (cycle-356
  guard walk stands; the only new lock use since — the dbcache
  setter's LOCK(opts.m_mutex) — was verified in cycle 349). NP 6/20.
+
+ r221 raw=7326210377572713343 -> #127 LevelDB: reopen FAIL (cycle-335
+ class-closure stands; the d3cfd02bd7 delta touched no
+ dbwrapper/txdb/leveldb code). NP 7/20.
