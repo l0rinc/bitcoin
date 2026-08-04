@@ -3211,3 +3211,46 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r219 raw=2107072799016534179 -> #35. Unconditional extra_count--
  mutant KILLED by the cycle-332 enum accounting assert (revert ->
  green). The rebase adaptation is a live oracle. NP 5/20. Next: r220.
+
+ r220 raw=888285348936740872 -> #8 locking: reopen FAIL (cycle-356
+ guard walk stands; the only new lock use since — the dbcache
+ setter's LOCK(opts.m_mutex) — was verified in cycle 349). NP 6/20.
+
+ r221 raw=7326210377572713343 -> #127 LevelDB: reopen FAIL (cycle-335
+ class-closure stands; the d3cfd02bd7 delta touched no
+ dbwrapper/txdb/leveldb code). NP 7/20.
+
+ r222 raw=5864970395167062091 -> #75: SKIP (cooldown until r225).
+ NP 8/20.
+
+ r223 raw=7407799704019341012 -> #84 secp-nonce/session: reopen FAIL
+ (the subtree update touched no nonce/signing/musig session code —
+ scalar/extrakeys/silentpayments only; module unreachable). NP 9/20.
+
+ r224 raw=9009151584913082427 -> #59 supply-chain: reopen FAIL with
+ note. Merged deltas' supply surface is covered by our upstreamed
+ SDK-digest verification (873550bea3); open author PR 35885
+ (sourceware mirror switch for riscv) is unmerged CI-only — radar-
+ noted. NP 10/20.
+
+ r225 raw=8839534602467631460 -> #100 sink-reachability: reopen FAIL
+ (COMPLETE; the deltas' new sinks — delay-queue memory, RPC outputs,
+ the dbcache setter — all reviewed in their cycles; no new dangerous
+ sink). NP 11/20.
+
+ r226 raw=2697985369670968890 -> #58 helper-reuse: reopen FAIL
+ (cooldown expired; the only new helper in the latest delta —
+ wallet ReadWtxVariants — is single-purpose new functionality, not a
+ duplicate). NP 12/20.
+
+ r227 raw=8779276494697155129 -> #57 local-reasoning: reopen FAIL
+ (the newest deltas' contracts — dbcache setter, BIP35 capacity,
+ Compare ordering, CWalletTx encapsulation — each verified in their
+ cycles: 349/352/354/358/363). NP 13/20.
+
+ ## Cycle 367 (2026-08-04) — #31: -txsendrate doc drift recorded (MINOR)
+
+ r228 raw=2048606694529714847 -> #31. Help/RPC text says inbound-only;
+ the implementation scales both buckets (mult on outbound). MINOR
+ (debug-only knob, operator-facing surprise only); recorded for an
+ upstream doc PR, not committed in-tree. NP 14/20. Next: r229.
