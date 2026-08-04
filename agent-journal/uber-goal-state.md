@@ -3088,3 +3088,59 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  delay-queue-starvation WEAK (gated/accepted arms), vs F33 none, vs
  mempool-content privacy marginal. No new composite cell. NP 3/20.
  Next: r198.
+
+ r198 raw=1708434803457951917 -> #45 constant-time: reopen FAIL
+ (cycle-338 review stands; the secp work since — BIP352 vectors
+ c350, 8x32 differential c355 — ran under #107/#82; no new
+ declassification surface). NP 4/20.
+
+ r199 raw=1468366814387663462 -> #102 suspicion-replay: reopen FAIL
+ (watch cells registered in cycle 347 stand; cycle-358 resolved into
+ an adoption, cycle-359 produced no new cell). NP 5/20.
+
+ r200 raw=5876746077372843723 -> #75 build/CI: reopen FAIL with note.
+ Delta CI changes: NetBSD SDK fix (author's own, rebase-handled),
+ riscv32 GHA temporarily removed (tracked in issue #35853; the one
+ upstream 32-bit CI row is gone until it lands — our 32-bit checks
+ are local anyway), guix python-minimal move (build hygiene).
+ No cache-key or poisoning surface change. NP 6/20.
+
+ r201 raw=8123677559870388775 -> #39: SKIP (cooldown until r211 per
+ the cycle-357 amendment; no fresh generated-artifact trigger).
+ NP 7/20.
+
+ r202 raw=1951894466169606438 -> #38 failure-cleanup/crash-safety:
+ reopen FAIL with review. The 35205 setter mutates runtime options
+ only (mutex-guarded, feeds DB cache params at LoadChainstate);
+ no persistent-state write -> no partial-apply crash window.
+ NP 8/20.
+
+ r203 raw=5022657391546445068 -> #12 static-analysis: reopen FAIL
+ (DONE; host tooling still absent — rechecked this session; the
+ delta code compiles warning-free under clang-18 -Wall -Wextra
+ -Wthread-safety in both build trees). NP 9/20.
+
+ r204 raw=3991266328302985522 -> #50 fuzz-introspector: reopen FAIL
+ (COMPLETE; no new targets in the deltas; adjacent note: author's
+ open PR 35880 tunes the process_messages fuzz harness — radar-
+ tracked, not a blocker cell). NP 10/20.
+
+ r205 raw=4309181058810946098 -> #50: SKIP (cooldown until r229;
+ drawn r204). NP 11/20.
+
+ r206 raw=7334143503361858420 -> #116 cross-scanner: reopen FAIL
+ (needs >=2 scanners; host has only clang-18 — cppcheck/clang-tidy
+ still absent; delta code is warning-clean under clang).
+ NP 12/20.
+
+ r207 raw=2350822243482145515 -> #107 conformance-transplant: reopen
+ FAIL (cycle-350 BIP352 execution is 22 rounds old; no new external
+ suite/vector landed since). NP 13/20.
+
+ ## Cycle 360 (2026-08-04) — #118 first cycle: session isolation audit PASS
+
+ r208 raw=6222684131047347318 -> #118 (genuinely pending; journal
+ created). Executable self-audit: no untracked staging (30-commit
+ grep), archive reflog append-only, single worktree, zero leftover
+ jobs, scratch confined to /tmp, no credential reads, user files
+ untouched. PASS on all seven checks. NP 14/20. Next: r209.
