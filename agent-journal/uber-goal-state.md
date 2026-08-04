@@ -3032,3 +3032,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  all accesses locked (GetInfo/ProcessInvBacklog/InitiateTxBroadcastToAll),
  order declared, no reverse-nesting path. DISMISSED. NP 6/20.
  Next: r191.
+
+ r191 raw=2543107550760492339 -> #51 differential-metamorphic:
+ reopen FAIL (dup-txid settlement holds: no PR exists from the
+ author's branch, no pushes since, cycle-320 evidence-evaporation
+ state unchanged; our skip-fix adopted + unit-verified). NP 7/20.
