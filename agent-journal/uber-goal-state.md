@@ -2893,3 +2893,9 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  (crypto_hash.cpp): doNotOptimizeAway present, input mutated per
  iteration, deterministic seed, 13UJ uses the production Hash()
  fast path — measures what it claims. No integrity issue. NP 8/20.
+
+ r173 raw=3643367468732838426 -> #26 cross-subsystem shapes: reopen
+ FAIL. Newest shape (Assume stronger than the API contract —
+ cycle-332 extra_txn lesson) searched for second instances via the
+ r171 assertion census: all production-novel Assumes are
+ internal-state; no second instance. NP 9/20.
