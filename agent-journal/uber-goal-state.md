@@ -2818,3 +2818,13 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  by upstream's ReceiveWithExtraTransactions +
  EmptyExtraTransactionsDoNotSatisfyShortIds + the partially_downloaded_
  block fuzz target + cycle-332/333 verification). NP 10/20.
+
+ ## Cycle 341 (2026-08-04) — #115 first cycle: rebase-resolution diff audited, CLEAN
+
+ r163 raw=5739169061478724851 -> #115 (never-run pending goal; first
+ cycle + journal created). Audited the hand-resolved rebase diff
+ (pre-rebase backup vs HEAD) hunk-by-hunk: all contract changes are
+ upstream's or documented restorations of upstream semantics (the
+ over-strong extra_txn Assume); fork fixes' substances intact.
+ Verdict: no security regression; DISMISSED for this diff.
+ NP 11/20. Next: r164.
