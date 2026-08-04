@@ -3157,3 +3157,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  failures, both unrelated infra (riscv32 known-broken-removed;
  NetBSD SDK transient, since fixed). Adoption stands, no follow-up.
  NP 16/20. Next: r211.
+
+ r211 raw=5783508757687497134 -> #46 output-on-failure: reopen FAIL
+ (cooldown expired but the only new failure-output surface — the
+ dbcache setter's -1 + LogError path — was verified in cycle 349).
+ NP 17/20.
