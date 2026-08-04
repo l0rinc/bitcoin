@@ -2828,3 +2828,14 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  over-strong extra_txn Assume); fork fixes' substances intact.
  Verdict: no security regression; DISMISSED for this diff.
  NP 11/20. Next: r164.
+
+ ## Cycle 342 (2026-08-04) — radar: branch 1366 adopted (unbroadcast memory accounting)
+
+ r164 raw=169536432173798081 -> #65 radar. Reopen PASS: author remote
+ advanced to 1366 heads (new branch l0rinc/mempool-unbroadcast-memory,
+ created 18:28Z). Assessment: DynamicMemoryUsage omitted
+ m_unbroadcast_txids — CONFIRMED live at HEAD; ADOPTED on
+ audit/adopt-unbroadcast-memory (57bed93c20 characterize + ac08a4c663
+ fix; failing-before = 1 assertion fails on unfixed code;
+ passing-after 418/418 green). Severity low (accounting truth).
+ NP counter: progress-bearing adoption -> NP 0/20. Next: r165.
