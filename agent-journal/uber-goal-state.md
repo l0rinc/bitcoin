@@ -2928,3 +2928,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  inherited deltas touch neither F33's resize path nor F35's index
  code, so no composition change; cycle-342 was accounting precision,
  not a vuln finding). NP 13/20.
+
+ r178 raw=5267670635711121417 -> #9 hit-frequency: reopen FAIL (no
+ new fuzz targets in the deltas; qa-assets pin 918cdd3 static;
+ corpus-compat question unchanged). NP 14/20.
