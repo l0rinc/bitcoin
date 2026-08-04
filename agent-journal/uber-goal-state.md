@@ -2879,3 +2879,11 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  std::array<unsigned char,4> == raw array here); kernel surface
  untouched in the deltas (chainparams testnet-seed removal only).
  NP 6/20.
+
+ r171 raw=2817708817377695362 -> #2 assertion-reachability: reopen
+ FAIL. Delta assertion census: 21 Assert + 7 Assume + 20 VERIFY_CHECK
+ + 26 assert, of which production-novel only: the null-mempool guard
+ (cycle-332 converged), SetSeed assert (cycle-343 unreachable-from-
+ input), joinable() shutdown Assume (internal ordering), static_
+ asserts (compile-time). The addrman vvTried Assumes are PRE-EXISTING
+ (our bc7d905046 lineage) shown as moved context. NP 7/20.
