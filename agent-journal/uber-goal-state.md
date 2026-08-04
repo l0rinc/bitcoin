@@ -3080,3 +3080,11 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  setter enforces — that sharing IS the PR's point); our fork's
  txospenderindex 5% split integrated into the upstream budget logic.
  Consistent. NP 2/20.
+
+ ## Cycle 359 (2026-08-04) — #103: 35874 composition = no chain
+
+ r197 raw=5253234977363943783 -> #103 (standing rule fired over the
+ cooldown: cycle-358 CONFIRMED finding). Composition vs
+ delay-queue-starvation WEAK (gated/accepted arms), vs F33 none, vs
+ mempool-content privacy marginal. No new composite cell. NP 3/20.
+ Next: r198.

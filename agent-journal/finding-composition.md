@@ -169,3 +169,27 @@ a validation or remote primitive.
   (same caveat as c2).
 - Standing rule unchanged: re-run on any new CONFIRMED finding or
   out-of-lineage merge.
+
+## Cycle 359 (2026-08-04, r197) — compose the 35874 bypass against live cells
+
+Draw r197 (raw=5253234977363943783 -> #103; cooldown overridden by
+the standing rule: cycle 358 produced a new CONFIRMED finding).
+
+Composition candidates for the BIP35-capacity bypass (inbound
+fRelay=false peer gets mempool dumps without consuming relay
+capacity):
+- x W-delayqueue-starvation (cycle 347): an attacker floods the
+  global relay budget AND dumps the mempool to observe what is
+  stuck. Both arms are gated (bloom filters non-default) or accepted
+  tradeoffs; the composite adds observation capability to an
+  accepted-delay cell — no severity multiplication. WEAK.
+- x F33 (UTXO-scan race): no shared state (RPC-local crash vs P2P
+  bandwidth). NONE.
+- x mempool-content privacy: a dumped mempool reveals unconfirmed
+  tx inventory to a requester that opted out of relay — marginal
+  (any NODE_BLOOM peer could do this within capacity; the bypass
+  only removes the capacity accounting). MARGINAL.
+
+Verdict: no chain strengthens; the bypass stands alone at
+low-medium (gated hardening), fixed in-lineage via the adoption.
+Matrix row recorded; no new composite cell.
