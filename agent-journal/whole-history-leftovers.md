@@ -90,3 +90,19 @@ method; no further families identified.
 ### Limitations / queue
 - New leftover families would arrive via new fix commits
   (standing rule: each new fix seeds a sibling sweep in #105).
+
+## Cycle 343 (2026-08-04, r165) — sibling sweep: BIP32 SetSeed assert
+
+Draw r165 (raw=4350338465014240544 -> #32). Standing rule fired:
+new fix 2cf9d79d84 (Assert 16..64-byte seeds in CExtKey::SetSeed)
+seeds a sibling sweep for sites reaching SetSeed with unchecked
+length.
+
+Sweep (all callers): wallet.cpp:3695, scriptpubkeyman.cpp:641/685 —
+seed_key is always a CKey (fixed 32 bytes, in-range). rpc/wallet.cpp
+addhdkey: GenerateRandomKey (32 B) or DecodeExtKey (fixed 74-byte
+xprv decode; key validity checked via IsValid() with a clean RPC
+error). NO caller can pass an out-of-range seed; the assert is
+unreachable-from-input defense-in-depth (debug+abort hygiene), not a
+live abort path. Our Derive-side input rejection (5b0e492d19) covers
+the adjacent layer. SWEEP CLEAN — no incomplete-fix leftover.
