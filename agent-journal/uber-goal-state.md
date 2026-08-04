@@ -2623,3 +2623,34 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  zero jobs). Goal -> blocked. RESUME CONDITIONS unchanged
  (upstream advance; author branch 1366+; qa-assets; watch-PR
  merge; host tooling; catalog mutation; user instruction).
+
+ ## 2026-08-04 post-halt maintenance — REBASE (user instruction, goal stayed blocked)
+
+ audit/transplant-index-fuzz rebased: 1245 commits replayed, base
+ 18c05d9301 -> origin/master 1ed14c6122 (193 upstream commits brought
+ under the lineage; master itself STATIC at the pin since sweep #3,
+ so this was branch-base catch-up, not a new upstream advance past
+ the pin). Pre-rebase tip: backup/transplant-index-fuzz-pre-rebase-1ed14c
+ (2b4ee58377). ~20 conflict stops resolved (keep-both / adapted to
+ upstream API rewrites / dropped as superseded / ported across
+ upstream's ipc_test.cpp->ipc_tests.cpp combine). Labeled repair
+ 5e0a9d153d fixes post-replay API drift (7 files) incl. one real
+ semantic issue the rebase exposed: our Assume(wtxid ==
+ tx->GetWitnessHash()) in InitData violated upstream's "extra_txn key
+ is a claim" contract (upstream's own ReceiveWithExtraTransactions
+ exercises dishonest pairs) — dropped; debug verification restricted
+ to MEMPOOL slots; null-slot skip kept. Verification on 5e0a9d153d
+ (ASan Debug clang-18): test_bitcoin+bitcoind build 100%; 8 targeted
+ suites 200 cases/1,255,425 assertions pass; ipc_tests pass; fuzz
+ build 100% + 6 touched targets x 2000 runs clean; interface_http.py
+ and feature_index_prune.py (F35 section) pass. agent/all-findings:
+ cherry-pick of the repair is base-relative and NOT applicable to the
+ archive's pre-rebase tree — archived instead as patch artifact +
+ provenance README at agent-journal/artifacts/rebase-1ed14c6122/
+ (archive tip a5e7cef768). New HEAD: 5e0a9d153d. RESUME CONDITIONS
+ now evaluated against base 1ed14c6122: the 193 newly-inherited
+ upstream commits have NOT been through assess-and-adopt; first
+ resumed cycle should treat the base delta as the highest-priority
+ reopen input (notably: upstream HTTP rewrite, TxSource enum
+ blockencodings rewrite, UniValue-params rpc fuzz harness, ipc_test
+ combine — all areas where our adopted fixes were re-verified above).
