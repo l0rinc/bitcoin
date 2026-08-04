@@ -3136,3 +3136,11 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r207 raw=2350822243482145515 -> #107 conformance-transplant: reopen
  FAIL (cycle-350 BIP352 execution is 22 rounds old; no new external
  suite/vector landed since). NP 13/20.
+
+ ## Cycle 360 (2026-08-04) — #118 first cycle: session isolation audit PASS
+
+ r208 raw=6222684131047347318 -> #118 (genuinely pending; journal
+ created). Executable self-audit: no untracked staging (30-commit
+ grep), archive reflog append-only, single worktree, zero leftover
+ jobs, scratch confined to /tmp, no credential reads, user files
+ untouched. PASS on all seven checks. NP 14/20. Next: r209.
