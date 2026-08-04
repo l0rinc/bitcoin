@@ -2705,3 +2705,15 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  beyond smoke; (3) watch uv-migration arms still fork-local
  (requirements.txt still exists upstream); (4) draw-loop resumes
  from NP 0/20 on the next turn per the user's 20-round rule.
+
+ ## Cycle 333 (2026-08-04) — draw loop resumed on new base; #81 reopen -> DISMISSED
+
+ r151 raw=3980817170312243793 -> #81 spec-vector-drift. REOPEN PASS
+ (SipHash-1-3-UJ = new crypto since the goal's exhaustion note).
+ Independent Python reference (doc-only) vs pinned vectors: 64/64
+ 13uj + 146/146 2-4 MATCH; jumbo-zero-extension invariant 1000/1000;
+ C++ == reference by transitivity via green hash_tests battery.
+ DISMISSED (conformance confirmed, two independent verifiers).
+ Harness false-alarm lesson recorded (endianness parse anchor rule).
+ Reference script preserved at /tmp/siphash13uj_ref.py (scratch).
+ NP counter: progress-bearing cycle -> NP 0/20. Next: r152.
