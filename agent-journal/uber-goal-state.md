@@ -2811,3 +2811,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  resweep clean both sides; calibration lesson recorded. No code
  impact (journal-only). This was evidence-producing hygiene, not a
  catalog-cell advance — NP 9/20. Next: r162.
+
+ r162 raw=2281721509338666339 -> #99 clean-room differential: reopen
+ FAIL (method applied 3 cycles ago to the newest crypto; the one
+ fresh candidate — the InitData TxSource rewrite — is already pinned
+ by upstream's ReceiveWithExtraTransactions +
+ EmptyExtraTransactionsDoNotSatisfyShortIds + the partially_downloaded_
+ block fuzz target + cycle-332/333 verification). NP 10/20.
