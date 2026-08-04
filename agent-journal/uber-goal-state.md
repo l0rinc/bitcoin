@@ -3219,3 +3219,6 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r221 raw=7326210377572713343 -> #127 LevelDB: reopen FAIL (cycle-335
  class-closure stands; the d3cfd02bd7 delta touched no
  dbwrapper/txdb/leveldb code). NP 7/20.
+
+ r222 raw=5864970395167062091 -> #75: SKIP (cooldown until r225).
+ NP 8/20.
