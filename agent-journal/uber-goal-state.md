@@ -3184,3 +3184,11 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  build-after test_bitcoin+bitcoind 100%; wallet_tests/spend_tests/
  coinselector_tests 34 cases / 11059 assertions green (the resolution
  verified against the upstream rework). NP reset: 0/20. Next: r215.
+
+ ## Cycle 364 (2026-08-04) — #23: SipHash-1-3-UJ 2.37x measured on aarch64
+
+ r215 raw=6301138574641835543 -> #23. Scratch micro-harness (input
+ mutated per iteration): SipHash24 31.7 ns/op vs 13UJ 13.4 ns/op =
+ 2.37x, reproducible. Upstream's perf claim verified locally; nothing
+ committed (measurement-only cell). Methodology caveat recorded
+ (folding/mixed-opt-level traps). NP 1/20. Next: r216.

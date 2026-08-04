@@ -283,3 +283,28 @@ fix must flip). No defect beyond the known 🟡.
   was an attribution cell riding the 🟡.
 - Post-adoption re-run of #22 c4's churn profile is the
   verification step (#22 c4 queue).
+
+## Cycle 364 (2026-08-04, r215) — SipHash-1-3-UJ speedup measured on aarch64
+
+Draw r215 (raw=6301138574641835543 -> #23). Reopen hook: the deltas
+adopted SipHash-1-3-UJ into CCoinsMap (upstream's perf-motivated
+change) with benchmark integrity verified at r172 but no local
+measurement. No bench-enabled build tree exists (disk), so a
+scratch micro-harness (clang++-18 -O2, siphash.cpp compiled in,
+input mutated per iteration to defeat loop-invariant folding):
+
+  SipHash24(uint256)           31.70 ns/op  (run2: 31.71)
+  SipHash13UJ::Hash(uint256)   13.36 ns/op  (run2: 13.37)
+  speedup: 2.37x (stable across runs)
+
+Verdict: the 1-3-UJ adoption is a real, reproducible ~2.4x hashing
+win on this host for the coins-map key shape (uint256 jumbo). Not a
+defect — a verified upstream perf claim (evidence, per this goal's
+"no forced commits" rule: nothing committed to src/).
+
+Methodology note (calibration): the first harness run produced a
+bogus 5095x "speedup" — the 13UJ call was loop-invariant-folded to
+zero work while the 2-4 call went to the -O0 ASan lib object. Two
+rules: (1) never mix -O0-lib calls with -O2-harness inlines in a
+micro-bench; (2) mutate the input every iteration or the compiler
+folds the whole loop. Both recorded.
