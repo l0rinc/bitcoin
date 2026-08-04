@@ -3108,3 +3108,9 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r201 raw=8123677559870388775 -> #39: SKIP (cooldown until r211 per
  the cycle-357 amendment; no fresh generated-artifact trigger).
  NP 7/20.
+
+ r202 raw=1951894466169606438 -> #38 failure-cleanup/crash-safety:
+ reopen FAIL with review. The 35205 setter mutates runtime options
+ only (mutex-guarded, feeds DB cache params at LoadChainstate);
+ no persistent-state write -> no partial-apply crash window.
+ NP 8/20.
