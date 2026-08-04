@@ -2727,3 +2727,17 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  revert -> green (28502/28502). Equivalent-mutant and UB-mutant
  notes recorded (>=63 equivalent; >64 dirty-by-UB, skipped).
  Site N CLOSED. #85 queue: E, F, G, I, J/K/L. NP 0/20. Next: r153.
+
+ ## Cycle 335 (2026-08-04) — #127 reopen via F33 class; class closed
+
+ r153 raw=5637745048392333951 -> #127. Reopen PASS on the F33
+ client-assumption class (not new upstream code). Evidence walk on
+ 17c5e33e9c: m_db_mutex contract closed on both sides (cursor
+ lifetime lock txdb.cpp:252; ResizeCache locks before reset); all
+ other LevelDB iterator users scope-local, no concurrent reset.
+ F33-class DISMISSED beyond the fix; fix verified intact post-rebase.
+ NP counter: this was a verification-of-existing-fix cycle with a
+ genuine reopen; evidence produced but no new defect -> NP 1/20
+ per the user's 20-round rule (reopen-pass cycles that end
+ DISMISSED-with-evidence still count as rounds without NEW findings).
+ Next: r154.
