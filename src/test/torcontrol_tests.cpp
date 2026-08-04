@@ -20,14 +20,6 @@
 std::pair<std::string, std::string> SplitTorReplyLine(const std::string& s);
 std::map<std::string, std::string> ParseTorReplyMapping(const std::string& s);
 
-namespace {
-std::vector<std::byte> ToBytes(std::string_view str)
-{
-    const auto* data{reinterpret_cast<const std::byte*>(str.data())};
-    return {data, data + str.size()};
-}
-} // namespace
-
 BOOST_AUTO_TEST_SUITE(torcontrol_tests)
 
 static void CheckSplitTorReplyLine(std::string input, std::string command, std::string args)
@@ -229,7 +221,7 @@ BOOST_AUTO_TEST_CASE(torcontrol_process_buffer_preserves_suffix)
     constexpr std::string_view first_reply{"250-PROTOCOLINFO 1\r\n250 OK\r\n"};
     constexpr std::string_view second_reply{"250 AUTHENTICATE\r\n"};
     constexpr std::string_view suffix{"250-AUTH METHODS=NULL"};
-    TorControlConnectionTest::ReceiveBuffer(conn) = ToBytes(std::string{first_reply} + std::string{second_reply} + std::string{suffix});
+    TorControlConnectionTest::ReceiveBuffer(conn) = std::string{first_reply} + std::string{second_reply} + std::string{suffix};
 
     BOOST_CHECK(TorControlConnectionTest::ProcessBuffer(conn));
 
@@ -239,9 +231,9 @@ BOOST_AUTO_TEST_CASE(torcontrol_process_buffer_preserves_suffix)
     BOOST_CHECK_EQUAL(replies[1].code, TOR_REPLY_OK);
     BOOST_TEST(replies[1].lines == std::vector<std::string>({"AUTHENTICATE"}));
     BOOST_CHECK(TorControlConnectionTest::Message(conn).lines.empty());
-    BOOST_CHECK(TorControlConnectionTest::ReceiveBuffer(conn) == ToBytes(suffix));
+    BOOST_CHECK(TorControlConnectionTest::ReceiveBuffer(conn) == suffix);
 
-    const std::vector<std::byte> partial_before{TorControlConnectionTest::ReceiveBuffer(conn)};
+    const std::string partial_before{TorControlConnectionTest::ReceiveBuffer(conn)};
     BOOST_CHECK(TorControlConnectionTest::ProcessBuffer(conn));
     BOOST_CHECK(TorControlConnectionTest::ReceiveBuffer(conn) == partial_before);
 }
@@ -255,7 +247,7 @@ BOOST_AUTO_TEST_CASE(torcontrol_process_buffer_rejects_excess_reply_lines)
     for (size_t i{0}; i < 1001; ++i) {
         reply += "250-line\r\n";
     }
-    const std::vector<std::byte> original_buffer{ToBytes(reply)};
+    const std::string original_buffer{reply};
     TorControlConnectionTest::ReceiveBuffer(conn) = original_buffer;
 
     BOOST_CHECK_EXCEPTION(
@@ -273,7 +265,7 @@ BOOST_AUTO_TEST_CASE(torcontrol_process_buffer_rejects_overlong_line)
     TorControlConnection conn{interrupt};
 
     constexpr size_t max_line_length{100000};
-    const std::vector<std::byte> original_buffer(max_line_length + 1, std::byte{'x'});
+    const std::string original_buffer(max_line_length + 1, 'x');
     TorControlConnectionTest::ReceiveBuffer(conn) = original_buffer;
 
     BOOST_CHECK_EXCEPTION(

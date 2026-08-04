@@ -230,13 +230,6 @@ public:
     SERIALIZE_METHODS(TestHeaderAndShortIDs, obj) { READWRITE(obj.header, obj.nonce, Using<VectorFormatter<CustomUintFormatter<CBlockHeaderAndShortTxIDs::SHORTTXIDS_LENGTH>>>(obj.shorttxids), obj.prefilledtxn); }
 };
 
-struct TestPartiallyDownloadedBlock : PartiallyDownloadedBlock {
-    using PartiallyDownloadedBlock::PartiallyDownloadedBlock;
-
-    size_t GetMempoolCount() const { return mempool_count; }
-    size_t GetExtraCount() const { return extra_count; }
-};
-
 BOOST_AUTO_TEST_CASE(HeaderAndShortIDsDeserializationRejectsTooManyTransactions)
 {
     auto rand_ctx(FastRandomContext(uint256{42}));
@@ -603,8 +596,8 @@ BOOST_AUTO_TEST_CASE(ReceiveWithExtraTransactions) {
         BOOST_CHECK_EQUAL(partial_block_with_extra_collision.InitData(cmpctblock, extra_txn), READ_STATUS_OK);
         BOOST_CHECK(partial_block_with_extra_collision.IsTxAvailable(1));
         BOOST_CHECK(!partial_block_with_extra_collision.IsTxAvailable(2));
-        BOOST_CHECK_EQUAL(partial_block_with_extra_collision.GetMempoolCount(), 1U);
-        BOOST_CHECK_EQUAL(partial_block_with_extra_collision.GetExtraCount(), 1U);
+        BOOST_CHECK_EQUAL(partial_block_with_extra_collision.MempoolCount(), 1U);
+        BOOST_CHECK_EQUAL(partial_block_with_extra_collision.ExtraCount(), 1U);
 
         // Now also collide the extra-sourced slot: both counters decrement exactly once.
         extra_txn[3] = {block.vtx[1]->GetWitnessHash(), non_block_tx};
@@ -612,8 +605,8 @@ BOOST_AUTO_TEST_CASE(ReceiveWithExtraTransactions) {
         BOOST_CHECK_EQUAL(partial_block_with_extra_source_collision.InitData(cmpctblock, extra_txn), READ_STATUS_OK);
         BOOST_CHECK(!partial_block_with_extra_source_collision.IsTxAvailable(1));
         BOOST_CHECK(!partial_block_with_extra_source_collision.IsTxAvailable(2));
-        BOOST_CHECK_EQUAL(partial_block_with_extra_source_collision.GetMempoolCount(), 0U);
-        BOOST_CHECK_EQUAL(partial_block_with_extra_source_collision.GetExtraCount(), 0U);
+        BOOST_CHECK_EQUAL(partial_block_with_extra_source_collision.MempoolCount(), 0U);
+        BOOST_CHECK_EQUAL(partial_block_with_extra_source_collision.ExtraCount(), 0U);
 
         // Collided slots are terminal: not even the genuine transactions refill them.
         extra_txn[4] = {block.vtx[2]->GetWitnessHash(), block.vtx[2]};
@@ -622,8 +615,8 @@ BOOST_AUTO_TEST_CASE(ReceiveWithExtraTransactions) {
         BOOST_CHECK_EQUAL(partial_block_no_refill.InitData(cmpctblock, extra_txn), READ_STATUS_OK);
         BOOST_CHECK(!partial_block_no_refill.IsTxAvailable(1));
         BOOST_CHECK(!partial_block_no_refill.IsTxAvailable(2));
-        BOOST_CHECK_EQUAL(partial_block_no_refill.GetMempoolCount(), 0U);
-        BOOST_CHECK_EQUAL(partial_block_no_refill.GetExtraCount(), 0U);
+        BOOST_CHECK_EQUAL(partial_block_no_refill.MempoolCount(), 0U);
+        BOOST_CHECK_EQUAL(partial_block_no_refill.ExtraCount(), 0U);
     }
 }
 

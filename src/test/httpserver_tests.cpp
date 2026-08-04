@@ -920,15 +920,13 @@ BOOST_AUTO_TEST_CASE(http_request_tests)
             /*id=*/0,
             CService{},
             std::make_unique<StaticContentsSock>(""))};
-        client->m_recv_buffer = ToBytes(std::string{first} + std::string{second});
+        client->m_recv_buffer = std::string{first} + std::string{second};
 
         HTTPRequest first_req{client};
         BOOST_REQUIRE(client->ReadRequest(first_req));
         BOOST_CHECK_EQUAL(first_req.GetURI(), "/first");
         BOOST_CHECK_EQUAL(first_req.ReadBody(), "hello");
-        const std::vector<std::byte> second_bytes{ToBytes(second)};
-        BOOST_CHECK_EQUAL(client->m_recv_buffer.size(), second_bytes.size());
-        BOOST_CHECK(std::ranges::equal(client->m_recv_buffer, second_bytes));
+        BOOST_CHECK(client->m_recv_buffer == second);
 
         HTTPRequest second_req{client};
         BOOST_REQUIRE(client->ReadRequest(second_req));
@@ -941,8 +939,8 @@ BOOST_AUTO_TEST_CASE(http_request_tests)
             /*id=*/0,
             CService{},
             std::make_unique<StaticContentsSock>(""))};
-        client->m_recv_buffer = ToBytes("POST /partial HTTP/1.1\r\nContent-Length: 5\r\n\r\nhe");
-        const std::vector<std::byte> recv_buffer_before{client->m_recv_buffer};
+        client->m_recv_buffer = "POST /partial HTTP/1.1\r\nContent-Length: 5\r\n\r\nhe";
+        const std::string recv_buffer_before{client->m_recv_buffer};
 
         HTTPRequest req{client};
         BOOST_CHECK(!client->ReadRequest(req));

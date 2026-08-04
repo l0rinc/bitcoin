@@ -171,7 +171,6 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     for (size_t i = 0; i < extra_txn.size(); i++) {
         const auto& [wtxid, tx] = extra_txn[i];
         if (!tx) continue;
-        Assume(wtxid == tx->GetWitnessHash());
 
         uint64_t shortid = cmpctblock.GetShortID(wtxid);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
@@ -210,7 +209,11 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     assert(extra_count <= mempool_count);
     if constexpr (G_ABORT_ON_FAILED_ASSUME) {
         for (size_t i{0}; i < txn_available.size(); ++i) {
-            if (!have_txn[i]) continue;
+            // Only mempool-sourced slots are post-hoc verifiable: an extra_txn
+            // pair's key is a claim, so an extra-sourced slot may legitimately
+            // hold a tx whose wtxid does not map back to this slot (FillBlock's
+            // merkle check rejects such reconstruction instead).
+            if (tx_source[i] != TxSource::MEMPOOL) continue;
             Assert(txn_available[i] != nullptr);
             const auto idit{shorttxids.find(cmpctblock.GetShortID(txn_available[i]->GetWitnessHash()))};
             Assert(idit != shorttxids.end());

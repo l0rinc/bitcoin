@@ -7,13 +7,12 @@
 
 #include <torcontrol.h>
 
-#include <cstddef>
 #include <deque>
-#include <vector>
+#include <string>
 
 struct TorControlConnectionTest
 {
-    static std::vector<std::byte>& ReceiveBuffer(TorControlConnection& conn) { return conn.m_recv_buffer; }
+    static std::string& ReceiveBuffer(TorControlConnection& conn) { return conn.m_recv_buffer; }
     static TorControlReply& Message(TorControlConnection& conn) { return conn.m_message; }
     static std::deque<TorControlConnection::ReplyHandlerCB>& ReplyHandlers(TorControlConnection& conn) { return conn.m_reply_handlers; }
     static bool ProcessBuffer(TorControlConnection& conn) { return conn.ProcessBuffer(); }

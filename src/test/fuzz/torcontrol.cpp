@@ -36,7 +36,7 @@ bool IsExpectedProcessBufferRuntimeError(std::string_view error)
            error == "Control port reply exceeded 1000 lines, disconnecting";
 }
 
-TorProcessBufferModel ModelTorProcessBuffer(const std::vector<std::byte>& recv_buffer, size_t handler_count)
+TorProcessBufferModel ModelTorProcessBuffer(const std::string_view recv_buffer, size_t handler_count)
 {
     TorProcessBufferModel model;
     model.remaining_handlers = handler_count;
@@ -69,7 +69,7 @@ TorProcessBufferModel ModelTorProcessBuffer(const std::vector<std::byte>& recv_b
     return model;
 }
 
-void AssertProcessBufferContracts(const std::vector<std::byte>& recv_buffer, size_t handler_count)
+void AssertProcessBufferContracts(const std::string_view recv_buffer, size_t handler_count)
 {
     CThreadInterrupt interrupt;
     TorControlConnection conn{interrupt};
@@ -96,7 +96,7 @@ void AssertProcessBufferContracts(const std::vector<std::byte>& recv_buffer, siz
     }
 
     assert(model.consumed <= recv_buffer.size());
-    const std::vector<std::byte> expected_remaining{recv_buffer.begin() + model.consumed, recv_buffer.end()};
+    const std::string expected_remaining{recv_buffer.substr(model.consumed)};
     assert(TorControlConnectionTest::ReceiveBuffer(conn) == expected_remaining);
     assert(TorControlConnectionTest::ReplyHandlers(conn).size() == model.remaining_handlers);
     assert(handled_replies.size() == model.handled_replies.size());
@@ -121,7 +121,7 @@ FUZZ_TARGET(torcontrol, .init = initialize_torcontrol)
     TorControlConnection conn{interrupt};
 
     AssertProcessBufferContracts(
-        ConsumeRandomLengthByteVector<std::byte>(fuzzed_data_provider, /*max_length=*/4000),
+        fuzzed_data_provider.ConsumeRandomLengthString(4000),
         fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 64));
 
     LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000)
