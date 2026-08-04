@@ -2932,3 +2932,6 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r178 raw=5267670635711121417 -> #9 hit-frequency: reopen FAIL (no
  new fuzz targets in the deltas; qa-assets pin 918cdd3 static;
  corpus-compat question unchanged). NP 14/20.
+
+ r179 raw=9205276635863558081 -> #65 radar: reopen FAIL (author
+ remote static at 1366 since the cycle-342 adoption). NP 15/20.
