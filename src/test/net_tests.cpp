@@ -1413,7 +1413,7 @@ BOOST_AUTO_TEST_CASE(v1transport_message_limits)
     CheckMessageAcceptance(oversized_type_transport, MakeNetMessage(MAX_MESSAGE_TYPE + 'x', 1), false);
 
     V1Transport oversized_payload_transport{NodeId{0}};
-    CheckMessageAcceptance(oversized_payload_transport, MakeNetMessage(MAX_MESSAGE_TYPE, MAX_PROTOCOL_MESSAGE_LENGTH + 1), true); // TODO: Oversized payloads should be rejected before encoding
+    CheckMessageAcceptance(oversized_payload_transport, MakeNetMessage(MAX_MESSAGE_TYPE, MAX_PROTOCOL_MESSAGE_LENGTH + 1), false);
 }
 
 BOOST_AUTO_TEST_CASE(v2transport_test)
@@ -1554,7 +1554,7 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         // Accepted messages occupy the send buffer, so use a separate ready transport for each case.
         if (i == 0) CheckMessageAcceptance(tester.GetTransport(), MakeNetMessage(MAX_MESSAGE_TYPE, 1), true);
         if (i == 1) CheckMessageAcceptance(tester.GetTransport(), MakeNetMessage(MAX_MESSAGE_TYPE + 'x', 1), false);
-        if (i == 2) CheckMessageAcceptance(tester.GetTransport(), MakeNetMessage(MAX_MESSAGE_TYPE, MAX_PROTOCOL_MESSAGE_LENGTH + 1), true); // TODO: Oversized payloads should be rejected before encoding
+        if (i == 2) CheckMessageAcceptance(tester.GetTransport(), MakeNetMessage(MAX_MESSAGE_TYPE, MAX_PROTOCOL_MESSAGE_LENGTH + 1), false);
     }
 
     // Too long garbage (initiator).

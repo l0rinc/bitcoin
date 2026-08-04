@@ -845,10 +845,16 @@ CNetMessage V1Transport::GetReceivedMessage(NodeClock::time_point time, bool& re
     return msg;
 }
 
+static bool IsMessageWithinLimits(const CSerializedNetMsg& msg) noexcept
+{
+    return msg.m_type.size() <= CMessageHeader::MESSAGE_TYPE_SIZE
+        && msg.data.size()   <= MAX_PROTOCOL_MESSAGE_LENGTH;
+}
+
 bool V1Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
 {
     AssertLockNotHeld(m_send_mutex);
-    if (msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return false;
+    if (!IsMessageWithinLimits(msg)) return false;
     // Determine whether a new message can be set.
     LOCK(m_send_mutex);
     if (m_sending_header || m_bytes_sent < m_message_to_send.data.size()) return false;
@@ -1490,7 +1496,7 @@ CNetMessage V2Transport::GetReceivedMessage(NodeClock::time_point time, bool& re
 bool V2Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
 {
     AssertLockNotHeld(m_send_mutex);
-    if (msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return false;
+    if (!IsMessageWithinLimits(msg)) return false;
     LOCK(m_send_mutex);
     if (m_send_state == SendState::V1) return m_v1_fallback.SetMessageToSend(msg);
     // We only allow adding a new message to be sent when in the READY state (so the packet cipher
@@ -4165,7 +4171,10 @@ static bool IsOutboundMessageAllowedInPrivateBroadcast(std::string_view type) no
 void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 {
     AssertLockNotHeld(m_total_bytes_sent_mutex);
-    if (msg.m_type.size() > CMessageHeader::MESSAGE_TYPE_SIZE) return;
+    if (!IsMessageWithinLimits(msg)) {
+        LogDebug(BCLog::NET, "Dropping oversized message (%u-byte type, %u-byte payload), %s", msg.m_type.size(), msg.data.size(), pnode->LogPeer());
+        return;
+    }
 
     if (pnode->IsPrivateBroadcastConn() && !IsOutboundMessageAllowedInPrivateBroadcast(msg.m_type)) {
         LogDebug(BCLog::PRIVBROADCAST, "Omitting send of message '%s', %s", msg.m_type, pnode->LogPeer());

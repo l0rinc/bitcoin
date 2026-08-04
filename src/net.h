@@ -61,7 +61,7 @@ static constexpr std::chrono::minutes TIMEOUT_INTERVAL{20};
 static constexpr auto FEELER_INTERVAL = 2min;
 /** Run the extra block-relay-only connection loop once every 5 minutes. **/
 static constexpr auto EXTRA_BLOCK_RELAY_ONLY_PEER_INTERVAL = 5min;
-/** Maximum length of incoming protocol messages (no message over 4 MB is currently acceptable). */
+/** Maximum length of protocol message payloads (no message over 4 MB is currently acceptable). */
 static const unsigned int MAX_PROTOCOL_MESSAGE_LENGTH = 4 * 1000 * 1000;
 /** Maximum length of the user agent string in `version` message */
 static const unsigned int MAX_SUBVERSION_LENGTH = 256;
@@ -301,8 +301,8 @@ public:
     /** Set the next message to send.
      *
      * If no message can currently be set (perhaps because the previous one is not yet done being
-     * sent), or its type exceeds the wire limit, returns false, and msg will be unmodified.
-     * Otherwise msg is enqueued (and possibly moved-from) and true is returned.
+     * sent), or its type or payload exceeds the wire limits, returns false, and msg will be
+     * unmodified. Otherwise msg is enqueued (and possibly moved-from) and true is returned.
      */
     virtual bool SetMessageToSend(CSerializedNetMsg& msg) noexcept = 0;
 
