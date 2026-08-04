@@ -276,3 +276,37 @@ the dropped guards): FUZZ=crypto -runs=2000 /tmp/empty_seed
 executes clean — the fuzz path now exercises empty inputs
 directly instead of skipping them (previously guard-resized).
 Cycle 266 fully closed.
+
+## Cycle 338 (2026-08-04) — REOPENED by secp256k1 subtree update + upstream BIP32 SetSeed assert
+
+Draw r156 (raw=7213982357476630317 -> #45). Two new inputs since
+cycle 266:
+
+1. Upstream 2cf9d79d84 (BIP32 SetSeed length assert, 16..64 bytes)
+   vs our 5b0e492d19 (Derive input rejection + write-after-success):
+   COMPLEMENTARY layers (SetSeed vs Derive), both in-tree post-rebase
+   (key.cpp:413 verified). No duplication, no conflict.
+2. c26d4e2d6f secp256k1 subtree update. Constant-time review of the
+   non-module diffs:
+   - scalar get_bits*: VERIFY_CHECK precondition rewrites
+     (offset <= 256 - count replaces offset + count <= 256 —
+     overflow-safe formulation, same accepted domain), same-limb
+     checks added; scalar_low_impl offset>=32 fix affects only
+     EXHAUSTIVE_TEST_ORDER builds. No timing behavior change;
+     get_bits_var remains documented non-CT in offset/count, as before.
+   - extrakeys: VERIFY-mode even-Y check on x-only save (defensive).
+   - secp256k1.c: one-line selftest loop change.
+   VERDICT: DISMISSED (no declassification/timing delta).
+
+SIDE OBSERVATION (not a #45 defect): the subtree's own CMakeLists
+defaults SECP256K1_ENABLE_MODULE_SILENTPAYMENTS=ON and Core's wrapper
+(cmake/secp256k1.cmake) pins only ECDH/RECOVERY/MUSIG — so the BIP352
+module is now COMPILED INTO Core builds (build-after libsecp256k1.a
+carries 16 silentpayments symbols; build-before carried 0). Zero Core
+callers exist (grep across src/ outside the subtree): unreachable =>
+no runtime surface today. This is upstream-master state too (no Core
+override at 17c5e33e9c), not fork divergence. WATCH CELL: if upstream
+adds the first Core caller, the module's CT/secret-handling properties
+(shared-secret derivation, label tweaks) become live review surface;
+the compiled-in-but-unused state is an upstream packaging choice worth
+noting in any future upstream-facing summary.
