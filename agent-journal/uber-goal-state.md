@@ -3144,3 +3144,9 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  grep), archive reflog append-only, single worktree, zero leftover
  jobs, scratch confined to /tmp, no credential reads, user files
  untouched. PASS on all seven checks. NP 14/20. Next: r209.
+
+ ## Cycle 361 (2026-08-04) — #47: new btck symbol exported in shared build
+
+ r209 raw=3175892403215613487 -> #47. build-kernel-shared rebuilt;
+ nm -D shows btck_chainstate_manager_options_set_database_cache_bytes
+ exported (T). Export parity CONFIRMED. NP 15/20. Next: r210.

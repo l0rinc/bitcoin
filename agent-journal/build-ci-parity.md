@@ -225,3 +225,14 @@ c3 static consumer; c4 shared consumer. No cells remain queued.
 - Consumer exercises create/options/destroy only (same scope as
   c3); full validation-drive through the C API is a kernel-test
   matter, not an export-parity one.
+
+## Cycle 361 (2026-08-04, r209) — kernel-shared export of the new setter CONFIRMED
+
+Draw r209 (raw=3175892403215613487 -> #47). Reopen hook: #35205 added
+the first new BITCOINKERNEL_API symbol since the last parity cycle.
+Executable check: build-kernel-shared (GCC -O2 -fPIC) rebuilt to HEAD;
+nm -D libbitcoinkernel.so now exports
+btck_chainstate_manager_options_set_database_cache_bytes (T, global).
+Export parity CONFIRMED — the new API is visible to shared-library
+consumers exactly like its siblings (134 btck_ symbols pre-rebuild,
+the new one included post-rebuild).
