@@ -3168,3 +3168,19 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
 
  r213 raw=3490150342751373688 -> #120 Sparrow: reopen FAIL
  (repo-blocked standing; verified absent at r193). NP 19/20.
+
+ ## Cycle 363 (2026-08-04) — NP-20 sweep fired master advance #3: d3cfd02bd7 (17 commits)
+
+ Halt sweep found master advanced again (c6ef42d7db -> d3cfd02bd7):
+ #35501 wallet witness-variant storage, #35773 hasher-truncation
+ suppression, uint256::Compare GCC-14 workaround, #35790 fuzz wallet
+ TXO. Rebase: 1320 commits, ONE conflict (spend.cpp — our null
+ coinControl guard merged with upstream's GetTx() accessor; both
+ kept). Assessments: Compare spaceship rewrite = ordering-identical
+ to memcmp (clean workaround); the SaltedCoinsCacheHasher truncation
+ suppression is by-design on 32-bit (hash truncation for table
+ sizing); wallet witness-variant storage is deprioritized-surface
+ but its downgrade-compat test rides upstream. Verification:
+ build-after test_bitcoin+bitcoind 100%; wallet_tests/spend_tests/
+ coinselector_tests 34 cases / 11059 assertions green (the resolution
+ verified against the upstream rework). NP reset: 0/20. Next: r215.
