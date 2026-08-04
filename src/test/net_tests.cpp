@@ -1093,8 +1093,9 @@ public:
 
     /** Send/receive scheduled/available bytes and messages.
      *
-     * This is the only function that interacts with the transport being tested; everything else is
-     * scheduling things done by Interact(), or processing things learned by it.
+     * Aside from GetTransport(), this is the only function that interacts with the transport being
+     * tested; everything else is scheduling things done by Interact(), or processing things learned
+     * by it.
      */
     InteractResult Interact()
     {
@@ -1146,6 +1147,9 @@ public:
 
     /** Expose the cipher. */
     BIP324Cipher& GetCipher() { return m_cipher; }
+
+    /** Expose the transport being tested. */
+    Transport& GetTransport() { return m_transport; }
 
     /** Schedule bytes to be sent to the transport. */
     void Send(std::span<const uint8_t> data)
@@ -1374,7 +1378,40 @@ public:
     }
 };
 
+const std::string MAX_MESSAGE_TYPE(CMessageHeader::MESSAGE_TYPE_SIZE, 'x');
+
+CSerializedNetMsg MakeNetMessage(std::string type, size_t payload_size)
+{
+    auto msg{NetMsg::Make(std::move(type))};
+    msg.data.resize(payload_size, uint8_t{0x01});
+    return msg;
+}
+
+void CheckMessageAcceptance(Transport& transport, CSerializedNetMsg msg, bool expected_acceptance)
+{
+    auto expected{msg.Copy()};
+    BOOST_REQUIRE_EQUAL(transport.SetMessageToSend(msg), expected_acceptance);
+    if (!expected_acceptance) {
+        BOOST_CHECK_EQUAL(msg.m_type, expected.m_type);
+        BOOST_CHECK_EQUAL_COLLECTIONS(msg.data.begin(), msg.data.end(), expected.data.begin(), expected.data.end());
+    }
+}
+
 } // namespace
+
+BOOST_AUTO_TEST_CASE(v1transport_message_limits)
+{
+    V1Transport max_type_transport{NodeId{0}};
+    CheckMessageAcceptance(max_type_transport, MakeNetMessage(MAX_MESSAGE_TYPE, 1), true);
+
+    auto [header, more, message_type]{max_type_transport.GetBytesToSend(/*have_next_message=*/false)};
+    BOOST_CHECK_EQUAL(header.size(), CMessageHeader::HEADER_SIZE);
+    BOOST_CHECK(more);
+    BOOST_CHECK_EQUAL(message_type, MAX_MESSAGE_TYPE);
+
+    V1Transport oversized_payload_transport{NodeId{0}};
+    CheckMessageAcceptance(oversized_payload_transport, MakeNetMessage(MAX_MESSAGE_TYPE, MAX_PROTOCOL_MESSAGE_LENGTH + 1), true); // TODO: Oversized payloads should be rejected before encoding
+}
 
 BOOST_AUTO_TEST_CASE(v2transport_test)
 {
@@ -1511,6 +1548,10 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         BOOST_CHECK(!(*ret)[2]);
         BOOST_CHECK((*ret)[3] && (*ret)[3]->m_type == "foobar" && (*ret)[3]->m_recv.empty());
         tester.ReceiveMessage("barfoo", {});
+        // Accepted messages occupy the send buffer, so use a separate ready transport for each case.
+        if (i == 0) CheckMessageAcceptance(tester.GetTransport(), MakeNetMessage(MAX_MESSAGE_TYPE, 1), true);
+        if (i == 1) CheckMessageAcceptance(tester.GetTransport(), MakeNetMessage(MAX_MESSAGE_TYPE + 'x', 1), true); // TODO: Oversized message types should be rejected before encoding
+        if (i == 2) CheckMessageAcceptance(tester.GetTransport(), MakeNetMessage(MAX_MESSAGE_TYPE, MAX_PROTOCOL_MESSAGE_LENGTH + 1), true); // TODO: Oversized payloads should be rejected before encoding
     }
 
     // Too long garbage (initiator).
