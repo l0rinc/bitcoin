@@ -3162,3 +3162,6 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  (cooldown expired but the only new failure-output surface — the
  dbcache setter's -1 + LogError path — was verified in cycle 349).
  NP 17/20.
+
+ r212 raw=1301364351502434350 -> #46: SKIP (cooldown until r231).
+ NP 18/20.
