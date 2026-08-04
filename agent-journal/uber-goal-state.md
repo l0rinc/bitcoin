@@ -2951,3 +2951,31 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
 
  r183 raw=3023786648682037011 -> #19: reopen FAIL (repeat of r172,
  11 rounds later; nothing new in bench/). NP 19/20.
+
+ ## Cycle 349 (2026-08-04) — NP-20 sweep FIRED two resume conditions: master c6ef42d7db + qa-assets move
+
+ Halt #3 averted: the NP-20 halt sweep found master advanced
+ (17c5e33e9c -> c6ef42d7db, 9 commits, PR #35205 kernel dbcache —
+ the author's share-dbcache-defaults radar work LANDED upstream) and
+ qa-assets moved (918cdd3 -> 3981cb99b3, "Murch's inputs August
+ 2026", 300 new corpus files; local clone fast-forwarded).
+
+ Rebase: 1285 commits replayed onto c6ef42d7db; ONE conflict
+ (caches_tests.cpp include, keep-both). Pre-rebase tip e219099aff.
+
+ #35205 assessment (kernel-ABI scope): new
+ btck_chainstate_manager_options_set_database_cache_bytes — additive
+ C API, range-validated against the colocated
+ MIN/MAX_DBCACHE_BYTES (4 MiB .. 1 GiB on 32-bit / UINT64_MAX on
+ 64-bit), options-mutex-guarded, WARN_UNUSED_RESULT, LogError +
+ return -1 on out-of-range. Misuse-resistant; no struct/layout
+ change (the #92 ABI battery's assumptions unaffected). Our
+ cache-overflow regression test (large_dbcache_index_allocation) and
+ upstream's new oversized_dbcache_warning coexist: caches_tests
+ 2 cases / 17 assertions GREEN on the merged tree (ASan build 100%).
+
+ Housekeeping: build-before (stale pre-rebase tree) DELETED to
+ guarantee link headroom (disk bottomed at 278M during the build;
+ now ~700M). Regenerable if ever needed. qa-assets now at
+ 3981cb99b3 (300 fresh corpus inputs available for future fuzz
+ cycles). NP reset (progress-bearing cycle): 0/20. Next: r185.
