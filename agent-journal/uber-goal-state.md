@@ -3150,3 +3150,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r209 raw=3175892403215613487 -> #47. build-kernel-shared rebuilt;
  nm -D shows btck_chainstate_manager_options_set_database_cache_bytes
  exported (T). Export parity CONFIRMED. NP 15/20. Next: r210.
+
+ ## Cycle 362 (2026-08-04) — #42: 35874 CI green modulo unrelated infra failures
+
+ r210 raw=5648046428848452906 -> #42. 35874 CI: 55 success + 2
+ failures, both unrelated infra (riscv32 known-broken-removed;
+ NetBSD SDK transient, since fixed). Adoption stands, no follow-up.
+ NP 16/20. Next: r211.
