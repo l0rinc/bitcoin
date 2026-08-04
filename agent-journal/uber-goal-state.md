@@ -2794,3 +2794,20 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  green on the delta code; Release-NDEBUG and static analyzers OPEN
  (disk 780M, tooling absent — deferred-scope record filed, not a
  clean bill). NP 6/20. Next: r159.
+
+ r159 raw=2841918797994518218 -> #74: reopen FAIL (cycle-336 delay-
+ queue boundedness proof is 5 rounds old; nothing new). NP 7/20.
+ r160 raw=3461903559368661472 -> #96: reopen FAIL. Delta TODO/FIXME
+ enumeration: exactly 1 new marker (secp256k1/examples/silentpayments.c
+ light-client-scanning note — subtree example code, not Core debt);
+ the 2 other grep hits are string literals. NP 8/20.
+
+ ## Cycle 340 (2026-08-04) — r161 #51: journal-integrity finding + repair
+
+ r161 raw=8504107050922376883 -> #51 (differential-metamorphic).
+ Reading the journal tail exposed COMMITTED conflict markers
+ (ae60c8eea5 artifact; cycle-332 sweep too narrow to catch them).
+ Repaired on branch (5d7c72933a) and archive (7756517b79); wide
+ resweep clean both sides; calibration lesson recorded. No code
+ impact (journal-only). This was evidence-producing hygiene, not a
+ catalog-cell advance — NP 9/20. Next: r162.
