@@ -3222,3 +3222,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
 
  r222 raw=5864970395167062091 -> #75: SKIP (cooldown until r225).
  NP 8/20.
+
+ r223 raw=7407799704019341012 -> #84 secp-nonce/session: reopen FAIL
+ (the subtree update touched no nonce/signing/musig session code —
+ scalar/extrakeys/silentpayments only; module unreachable). NP 9/20.
