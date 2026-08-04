@@ -97,3 +97,22 @@ the #45 code-read. No timing-leak signal on any axis tested.
 - ctime_tests covers the library's own suites; Core-side usage
   patterns (nonce function choice etc.) are covered by the #45
   family code-reads, not valgrind.
+
+## Cycle 368 (2026-08-04, r231) — ctime cell BLOCKED on host tooling (valgrind/glibc)
+
+Draw r231 (raw=6440143675938188469 -> #53; cooldown expired). The
+executable cell for the new subtree code: secp256k1 ctime_tests under
+valgrind. valgrind EXISTS on the host (3.22.0) but fatals at startup:
+"function redirection which is mandatory for this platform-tool
+combination" — valgrind 3.22 predates this host's glibc on aarch64
+(aarch64 + new glibc break its redirection table). ctime_tests built
+fine (Release, /tmp/sp-ctime, deleted after); execution is impossible
+without a newer valgrind (>=3.23/3.24 with current-glibc aarch64
+support) — NOT installable here (no new system packages per scope
+rules; a /tmp build of valgrind is a multi-hundred-MB project, and
+disk is ~660M).
+
+Verdict: BLOCKED-with-record. The subtree's scalar/nonce CT
+properties rest on upstream's x86 CI (ctime_tests run there). Local
+verification gap: recorded as tooling-blocked, not clean. Trigger to
+close: host valgrind upgrade, or an x86 worker.

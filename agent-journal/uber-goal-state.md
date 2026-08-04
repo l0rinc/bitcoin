@@ -3254,3 +3254,18 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  the implementation scales both buckets (mult on outbound). MINOR
  (debug-only knob, operator-facing surprise only); recorded for an
  upstream doc PR, not committed in-tree. NP 14/20. Next: r229.
+
+ r229 raw=9067522298787170617 -> #57: SKIP (cooldown until r252;
+ drawn r227). NP 15/20.
+
+ r230 raw=2412092988037375171 -> #67 release-differential: reopen
+ FAIL (no new release surface; the wallet witness-variant downgrade
+ compat is upstream-tested by 99bdcb064c; the reobfuscation gate
+ unlanded). NP 16/20.
+
+ ## Cycle 368 (2026-08-04) — #53: ctime blocked on valgrind-3.22/glibc (recorded)
+
+ r231 raw=6440143675938188469 -> #53. ctime_tests built but valgrind
+ 3.22 fatals on this aarch64 host's glibc (redirection table).
+ BLOCKED-with-record (not clean); upstream x86 CI covers it; close
+ on a valgrind upgrade or an x86 worker. NP 17/20. Next: r232.
