@@ -2922,3 +2922,9 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  module + its example file, the safe bench mutation pattern, and
  std::copy_n in the KeyFingerprint migration. No live defect site.
  NP 12/20.
+
+ r177 raw=6997961576698939751 -> #103 finding-composition: reopen
+ FAIL (no new CONFIRMED finding since the last composition; the
+ inherited deltas touch neither F33's resize path nor F35's index
+ code, so no composition change; cycle-342 was accounting precision,
+ not a vuln finding). NP 13/20.
