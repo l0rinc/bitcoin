@@ -27,7 +27,7 @@ class P2PConnectionLimits(BitcoinTestFramework):
     def run_test(self):
         self.test_inbound_limits()
 
-    def create_blocks_only_version(self):
+    def create_relay_disabled_version(self):
         no_txrelay_version_msg = msg_version()
         no_txrelay_version_msg.nVersion = P2P_VERSION
         no_txrelay_version_msg.strSubVer = P2P_SUBVERSION
@@ -44,6 +44,13 @@ class P2PConnectionLimits(BitcoinTestFramework):
         version_msg.relay = 0
         return version_msg
 
+    def send_mempool(self, peer, *, expect_disconnect):
+        peer.send_without_ping(msg_mempool())
+        if expect_disconnect:
+            peer.wait_for_disconnect()
+        else:
+            peer.sync_with_ping()
+
     def test_inbound_limits(self):
         node = self.nodes[0]
 
@@ -59,7 +66,7 @@ class P2PConnectionLimits(BitcoinTestFramework):
 
         self.log.info('Connect a block-relay inbound peer - test that second full relay peer is accepted')
         peer1 = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
-        peer1.send_without_ping(self.create_blocks_only_version())
+        peer1.send_without_ping(self.create_relay_disabled_version())
         peer1.wait_for_verack()
 
         node.add_p2p_connection(P2PInterface())
@@ -73,7 +80,7 @@ class P2PConnectionLimits(BitcoinTestFramework):
         self.log.info('Run with bloom filter support and check that a switch to tx relay during runtime can trigger eviction')
         self.restart_node(0, ['-maxconnections=13', '-peerbloomfilters'])
         peer1 = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
-        peer1.send_without_ping(self.create_blocks_only_version())
+        peer1.send_without_ping(self.create_relay_disabled_version())
         peer1.wait_for_verack()
 
         node.add_p2p_connection(P2PInterface())
@@ -85,19 +92,19 @@ class P2PConnectionLimits(BitcoinTestFramework):
         self.log.info('Check BIP35 requests do not enable ongoing transaction relay')
         self.restart_node(0, ['-maxconnections=13', '-peerbloomfilters', '-inboundrelaypercent=100'])
         peer1 = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
-        peer1.send_without_ping(self.create_blocks_only_version())
+        peer1.send_without_ping(self.create_relay_disabled_version())
         peer1.wait_for_verack()
-        peer1.send_and_ping(msg_mempool())
+        self.send_mempool(peer1, expect_disconnect=False)
         assert_equal(node.getpeerinfo()[0]['relaytxes'], False)
 
         self.log.info('Check BIP35 requests against inbound transaction-relay capacity')
         # NODE_BLOOM permits BIP35, while zero capacity exposes whether the requester is accounted.
         self.restart_node(0, ['-maxconnections=13', '-peerbloomfilters', '-inboundrelaypercent=0'])
         peer1 = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
-        peer1.send_without_ping(self.create_blocks_only_version())
+        peer1.send_without_ping(self.create_relay_disabled_version())
         peer1.wait_for_verack()
         with node.assert_debug_log(['received: mempool'], timeout=2):
-            peer1.send_and_ping(msg_mempool())  # TODO: Account BIP35 service against inbound tx-relay capacity
+            self.send_mempool(peer1, expect_disconnect=False)  # TODO: Account BIP35 service against inbound tx-relay capacity
 
         self.log.info('Test different values of inboundrelaypercent')
         self.restart_node(0, ['-maxconnections=13', '-inboundrelaypercent=0'])
