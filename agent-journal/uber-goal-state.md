@@ -3119,3 +3119,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  (DONE; host tooling still absent — rechecked this session; the
  delta code compiles warning-free under clang-18 -Wall -Wextra
  -Wthread-safety in both build trees). NP 9/20.
+
+ r204 raw=3991266328302985522 -> #50 fuzz-introspector: reopen FAIL
+ (COMPLETE; no new targets in the deltas; adjacent note: author's
+ open PR 35880 tunes the process_messages fuzz harness — radar-
+ tracked, not a blocker cell). NP 10/20.
