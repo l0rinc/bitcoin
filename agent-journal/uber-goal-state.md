@@ -3242,3 +3242,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  (cooldown expired; the only new helper in the latest delta —
  wallet ReadWtxVariants — is single-purpose new functionality, not a
  duplicate). NP 12/20.
+
+ r227 raw=8779276494697155129 -> #57 local-reasoning: reopen FAIL
+ (the newest deltas' contracts — dbcache setter, BIP35 capacity,
+ Compare ordering, CWalletTx encapsulation — each verified in their
+ cycles: 349/352/354/358/363). NP 13/20.
