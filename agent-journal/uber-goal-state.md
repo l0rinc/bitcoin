@@ -3262,3 +3262,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  FAIL (no new release surface; the wallet witness-variant downgrade
  compat is upstream-tested by 99bdcb064c; the reobfuscation gate
  unlanded). NP 16/20.
+
+ ## Cycle 368 (2026-08-04) — #53: ctime blocked on valgrind-3.22/glibc (recorded)
+
+ r231 raw=6440143675938188469 -> #53. ctime_tests built but valgrind
+ 3.22 fatals on this aarch64 host's glibc (redirection table).
+ BLOCKED-with-record (not clean); upstream x86 CI covers it; close
+ on a valgrind upgrade or an x86 worker. NP 17/20. Next: r232.
