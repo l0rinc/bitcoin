@@ -2811,3 +2811,20 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  resweep clean both sides; calibration lesson recorded. No code
  impact (journal-only). This was evidence-producing hygiene, not a
  catalog-cell advance — NP 9/20. Next: r162.
+
+ r162 raw=2281721509338666339 -> #99 clean-room differential: reopen
+ FAIL (method applied 3 cycles ago to the newest crypto; the one
+ fresh candidate — the InitData TxSource rewrite — is already pinned
+ by upstream's ReceiveWithExtraTransactions +
+ EmptyExtraTransactionsDoNotSatisfyShortIds + the partially_downloaded_
+ block fuzz target + cycle-332/333 verification). NP 10/20.
+
+ ## Cycle 341 (2026-08-04) — #115 first cycle: rebase-resolution diff audited, CLEAN
+
+ r163 raw=5739169061478724851 -> #115 (never-run pending goal; first
+ cycle + journal created). Audited the hand-resolved rebase diff
+ (pre-rebase backup vs HEAD) hunk-by-hunk: all contract changes are
+ upstream's or documented restorations of upstream semantics (the
+ over-strong extra_txn Assume); fork fixes' substances intact.
+ Verdict: no security regression; DISMISSED for this diff.
+ NP 11/20. Next: r164.
