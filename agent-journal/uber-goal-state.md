@@ -3088,3 +3088,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  delay-queue-starvation WEAK (gated/accepted arms), vs F33 none, vs
  mempool-content privacy marginal. No new composite cell. NP 3/20.
  Next: r198.
+
+ r198 raw=1708434803457951917 -> #45 constant-time: reopen FAIL
+ (cycle-338 review stands; the secp work since — BIP352 vectors
+ c350, 8x32 differential c355 — ran under #107/#82; no new
+ declassification surface). NP 4/20.
