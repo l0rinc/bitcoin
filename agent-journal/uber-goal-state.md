@@ -2887,3 +2887,9 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  input), joinable() shutdown Assume (internal ordering), static_
  asserts (compile-time). The addrman vvTried Assumes are PRE-EXISTING
  (our bc7d905046 lineage) shown as moved context. NP 7/20.
+
+ r172 raw=1033579463861012371 -> #19 benchmark-integrity: reopen
+ FAIL-with-review. Delta added SipHash24/13UJ 32b/36b benches
+ (crypto_hash.cpp): doNotOptimizeAway present, input mutated per
+ iteration, deterministic seed, 13UJ uses the production Hash()
+ fast path — measures what it claims. No integrity issue. NP 8/20.
