@@ -3010,3 +3010,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  corpus-backed fuzz run with the new qa-assets inputs (tx_pool 1743,
  process_messages 1588, coins_view_db 1570, cmpctblock 1389 new
  seeds) when a fuzz campaign is next drawn. NP 3/20. Next: r188.
+
+ ## Cycle 354 (2026-08-04) — #94: btck setter parity CONFIRMED + test gap closed
+
+ r188 raw=7061454821748463070 -> #94. The new kernel setter had zero
+ in-tree callers; added the contract test (817a6dd34d, test_kernel
+ 25/25 green). This is a test-gap close-out (no defect). NP 4/20.
+ Next: r189.

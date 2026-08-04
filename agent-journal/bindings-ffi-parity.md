@@ -219,3 +219,15 @@ arm; upstream's redesign PR is its vehicle. No adoption.
 ### Limitations / queue
 - If upstream lands the non-default-constructible shape, our
   Init-reset stays compatible (reset is a superset behavior).
+
+## Cycle 354 (2026-08-04, r188) — new btck setter: parity verified + coverage gap CLOSED
+
+Draw r188 (raw=7061454821748463070 -> #94). The #35205 setter is the
+first new btck C API since the last parity cycle. C/C++ wrapper
+parity verified by reading (wrapper returns ==0; header contract
+exact — cycle 352). Coverage finding: NO in-tree caller existed —
+upstream's test_kernel.cpp never calls the new public function.
+Closed the gap with btck_chainstate_manager_options_database_cache_
+tests (817a6dd34d): below-min rejected, in-range accepted, 32-bit
+upper bound conditional. test_kernel 25/25 cases, 3736 assertions
+green (ASan). Parity verdict: CONFIRMED via executable contract.
