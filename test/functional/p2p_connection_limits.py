@@ -6,7 +6,8 @@
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.messages import (
     msg_version,
-    msg_filterload
+    msg_filterload,
+    msg_mempool,
 )
 from test_framework.p2p import (
     P2PInterface,
@@ -14,6 +15,7 @@ from test_framework.p2p import (
     P2P_SUBVERSION,
     P2P_VERSION,
 )
+from test_framework.util import assert_equal
 
 
 class P2PConnectionLimits(BitcoinTestFramework):
@@ -79,6 +81,23 @@ class P2PConnectionLimits(BitcoinTestFramework):
         with node.assert_debug_log(['connection dropped after filterload message'], timeout=2):
             peer1.send_without_ping(msg_filterload(data=b'\xbb'*(100)))
         self.wait_until(lambda: len(node.getpeerinfo()) == 1)
+
+        self.log.info('Check BIP35 requests do not enable ongoing transaction relay')
+        self.restart_node(0, ['-maxconnections=13', '-peerbloomfilters', '-inboundrelaypercent=100'])
+        peer1 = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
+        peer1.send_without_ping(self.create_blocks_only_version())
+        peer1.wait_for_verack()
+        peer1.send_and_ping(msg_mempool())
+        assert_equal(node.getpeerinfo()[0]['relaytxes'], False)
+
+        self.log.info('Check BIP35 requests against inbound transaction-relay capacity')
+        # NODE_BLOOM permits BIP35, while zero capacity exposes whether the requester is accounted.
+        self.restart_node(0, ['-maxconnections=13', '-peerbloomfilters', '-inboundrelaypercent=0'])
+        peer1 = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
+        peer1.send_without_ping(self.create_blocks_only_version())
+        peer1.wait_for_verack()
+        with node.assert_debug_log(['received: mempool'], timeout=2):
+            peer1.send_and_ping(msg_mempool())  # TODO: Account BIP35 service against inbound tx-relay capacity
 
         self.log.info('Test different values of inboundrelaypercent')
         self.restart_node(0, ['-maxconnections=13', '-inboundrelaypercent=0'])
