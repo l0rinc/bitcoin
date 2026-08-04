@@ -103,8 +103,8 @@ class P2PConnectionLimits(BitcoinTestFramework):
         peer1 = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
         peer1.send_without_ping(self.create_relay_disabled_version())
         peer1.wait_for_verack()
-        with node.assert_debug_log(['received: mempool'], timeout=2):
-            self.send_mempool(peer1, expect_disconnect=False)  # TODO: Account BIP35 service against inbound tx-relay capacity
+        with node.assert_debug_log(['connection dropped after mempool message'], timeout=2):
+            self.send_mempool(peer1, expect_disconnect=True)
 
         self.log.info('Test different values of inboundrelaypercent')
         self.restart_node(0, ['-maxconnections=13', '-inboundrelaypercent=0'])
