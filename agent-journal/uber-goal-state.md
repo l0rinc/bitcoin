@@ -3069,3 +3069,22 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  own adopted descriptor-range fix now PRed upstream (converged);
  35873 CVE-2024-38365 tx_valid vector (test-only, rides upstream).
  NP reset (confirmed+adopted): 0/20. Next: r195.
+
+ r195 raw=4884820737375313496 -> #88 wallet-recovery: reopen FAIL
+ (deprioritized surface; deltas touched no wallet encryption/backup/
+ keypool code). NP 1/20.
+
+ r196 raw=5521600410373856299 -> #43 option-lifecycle: reopen FAIL
+ with review. -dbcache lifecycle post-35205: parse -> saturate ->
+ clamp to the colocated [MIN,MAX] (the same bounds the new kernel
+ setter enforces — that sharing IS the PR's point); our fork's
+ txospenderindex 5% split integrated into the upstream budget logic.
+ Consistent. NP 2/20.
+
+ ## Cycle 359 (2026-08-04) — #103: 35874 composition = no chain
+
+ r197 raw=5253234977363943783 -> #103 (standing rule fired over the
+ cooldown: cycle-358 CONFIRMED finding). Composition vs
+ delay-queue-starvation WEAK (gated/accepted arms), vs F33 none, vs
+ mempool-content privacy marginal. No new composite cell. NP 3/20.
+ Next: r198.
