@@ -3093,3 +3093,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  (cycle-338 review stands; the secp work since — BIP352 vectors
  c350, 8x32 differential c355 — ran under #107/#82; no new
  declassification surface). NP 4/20.
+
+ r199 raw=1468366814387663462 -> #102 suspicion-replay: reopen FAIL
+ (watch cells registered in cycle 347 stand; cycle-358 resolved into
+ an adoption, cycle-359 produced no new cell). NP 5/20.
