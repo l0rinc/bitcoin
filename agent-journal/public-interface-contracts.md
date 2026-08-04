@@ -106,3 +106,17 @@ no defect (retraction verified sound).
 ### Limitations / queue
 - The "Next queue" sections above (c1/c2 era) stand; both were
   superseded by the retraction and later campaigns' arg sweeps.
+
+## Cycle 352 (2026-08-04, r187) — new btck API doc/impl contract match
+
+Draw r187 (raw=3940667579847397380 -> #4). New public interface from
+#35205: btck_chainstate_manager_options_set_database_cache_bytes
+(bitcoinkernel.h:1199-1212). Contract-vs-implementation check:
+- "below 4 MiB rejected / above 1 GiB rejected on 32-bit" ==
+  MIN/MAX_DBCACHE_BYTES guard exactly (bitcoinkernel.cpp:1101).
+- "defaults to 450 MiB if not called" == DEFAULT_KERNEL_CACHE.
+- "split internally" == CacheSizes-driven block_tree_db + total.
+- ARG_NONNULL(1) + WARN_UNUSED_RESULT present; -1 on failure.
+Verdict: DISMISSED — the documented contract matches the
+implementation exactly. (Also cross-checked by cycle 349's
+misuse-resistance read.)

@@ -2994,3 +2994,9 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  byte-for-byte from the pinned JSON via the in-tree pure-Python
  generator (4747 lines, diff-identical). CONFIRMED deterministic.
  NP 2/20. Next: r187.
+
+ ## Cycle 352 (2026-08-04) — #4: btck dbcache API doc == impl
+
+ r187 raw=3940667579847397380 -> #4. The new kernel setter's header
+ contract matches the implementation exactly (range, default, split,
+ return, annotations). DISMISSED. NP 3/20. Next: r188.
