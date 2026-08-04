@@ -2905,3 +2905,13 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r174 raw=7825786041129320806 -> #102. Registered
  W-delayqueue-starvation and W-silentpayments-first-caller with
  replay triggers + first experiments. NP 10/20. Next: r175.
+
+ ## Cycle 348 (2026-08-04) — #111 first cycle: catalog coverage manifest
+
+ r175 raw=4360443421740232303 -> #111 (never-run; journal created).
+ Manifest: 81 done/exhausted, 26 queue-live, 28 marker-unclear,
+ 18 never-run/journal-less (verdicts in the ledger; spot-checked
+ 5/52/64/77/110/112/120-127). Convention: journals created at first
+ falsifiable iteration, not for pure reopen-FAILs. #113/#116/#118
+ flagged as possibly-genuinely-pending if the ledger lacks verdicts.
+ NP 11/20. Next: r176.
