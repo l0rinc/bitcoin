@@ -211,3 +211,21 @@ All cells closed with executable evidence.
 - Tamper drive used a +1sat coinbase (merkle mismatch). The
   witness-commitment arm of IsBlockMutated shares the same gate and
   was covered by the c1 code read; not re-driven live.
+
+## Cycle 346 (2026-08-04, r168) — getnetworkinfo inv_buckets: lock-correct
+
+Draw r168 (raw=2110661024325470317 -> #109). New public path from
+the delay-queue subsystem: getnetworkinfo gained tx_send_rate +
+inv_buckets (backlog/count_tok/size_tok per direction, 4842903ac1).
+
+Public-path review: the RPC reads a PeerManagerInfo snapshot produced
+by PeerManagerImpl::GetInfo(), which holds LOCK(m_inv_to_send_mutex)
+across both bucket .info() reads (net_processing.cpp:2009-2018) — no
+race with the backlog mutation paths. Values: doubles can go negative
+by design (deficit spending); UniValue NUM carries that fine; no
+NaN/inf source (rate x finite elapsed). Nit (not a defect):
+InvToSendBucket::info() lacks an EXCLUSIVE_LOCKS_REQUIRED annotation
+though its only caller locks — noted, not adopted (upstream style
+choice, zero behavioral content).
+
+Verdict: DISMISSED (lock-correct, value-safe, operator-visible).

@@ -2859,3 +2859,11 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  SaltedCoinsCacheHasher is a deliberate 1-3-UJ specialization (not a
  duplicate of the 2-4 family); TokenBucket and the LineReader rewrite
  are unique. DISMISSED. NP 3/20. Next: r168.
+
+ ## Cycle 346 (2026-08-04) — #109: inv_buckets RPC lock-correct
+
+ r168 raw=2110661024325470317 -> #109. getnetworkinfo's new
+ inv_buckets/tx_send_rate read path: snapshot taken under
+ m_inv_to_send_mutex (GetInfo); deficit-negative values are by
+ design; DISMISSED. Nit: info() lacks a lock annotation (cosmetic,
+ recorded, not adopted). NP 4/20. Next: r169.
