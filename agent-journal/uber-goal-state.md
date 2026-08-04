@@ -2503,6 +2503,21 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r84 raw=6042916750713161832 -> #104 analogical: reopen FAIL
    (RNG contracts pinned at c4; no new external events). NP 20/20.
 
+ Cycle 327 (RESUMED; author 1364 -> 1365):
+ l0rinc/bip35-relay-capacity c83a7c79f9 assessed to the
+ mechanism step and DISMISSED as NOT-APPLICABLE: our lineage
+ lacks the entire inbound tx-relay capacity machinery the fix
+ hooks (no MaybeDisconnectForTxRelayCapacity, no
+ -inboundrelaypercent, m_relays_txs is write-only here). The
+ BIP35 handler's missing reclassification is real but has no
+ capacity counter to evade in this tree; upstream's TODO +
+ author's fix become relevant only on a rebase past the
+ upstream feature (REBASE-WATCH, journaled in
+ bitcoin-p2p-accounting.md). Process note: the wholesale
+ author test-file checkout briefly replaced our (absent) test
+ version — caught via the unfamiliar eviction-log assertion in
+ the failing-before run; assess test applicability against OUR
+ suite before running, not just the diffstat.
  HALT (user's 20-round rule, cycle 326): 20 consecutive
  reopen-fails, every one with a recorded reason; no
  progress-bearing work in flight (all fuzz campaigns done and
