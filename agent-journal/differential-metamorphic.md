@@ -272,7 +272,6 @@ ordering question for upstream CI or a fork-specific variant).
 ### Limitations / queue
 - Functional arm inconclusive pending upstream CI / a
   fork-specific test variant.
-<<<<<<< HEAD
 
 ## Cycle 6 (2026-08-03, draw 288): cycle-287 functional divergence SETTLED — our BIP30 check is byte-identical to upstream master's; the PR's fork-scenario expectation fails on master semantics too (author's CI all queued, likely iterating); NOT a fork issue
 
@@ -308,5 +307,3 @@ completes, the check-runs URL is the settlement oracle
 - If a later push makes the upstream test pass, re-run the PR's
   feature_block.py variant in our tree (identical semantics
   expected by point 2).
-=======
->>>>>>> 98917aff71 (journal: #51 cycle 5 — disconnect-pool duplicate txids: Assert-fires CONFIRMED at HEAD (abort in assert builds, silent pool corruption in release with Assume erased) + skip-fix ADOPTED (index-and-skip, unit suite green incl. fork-test repair to new semantics); functional fork-scenario fails at the BIP30-validation layer INDEPENDENT of the fix (divergence recorded, upstream-CI oracle); suspicion S17; rotate)
