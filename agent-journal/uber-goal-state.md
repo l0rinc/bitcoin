@@ -3269,3 +3269,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  3.22 fatals on this aarch64 host's glibc (redirection table).
  BLOCKED-with-record (not clean); upstream x86 CI covers it; close
  on a valgrind upgrade or an x86 worker. NP 17/20. Next: r232.
+
+ r232 raw=1830740592258377576 -> #104 analogical-translation: reopen
+ FAIL with review. CVE-2024-38365 (btcd FindAndDelete chain-split):
+ Core matches whole pushes at opcode boundaries only; our lineage's
+ FindAndDelete is upstream-identical (no fork changes to the
+ interpreter). PR 35873's tx_valid vector is test-only and rides
+ upstream on merge. No translation needed. NP 18/20.
