@@ -3192,3 +3192,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  2.37x, reproducible. Upstream's perf claim verified locally; nothing
  committed (measurement-only cell). Methodology caveat recorded
  (folding/mixed-opt-level traps). NP 1/20. Next: r216.
+
+ ## Cycle 365 (2026-08-04) — #108: process_messages corpus campaign clean (+879 units)
+
+ r216 raw=1159213591404523244 -> #108. Queued corpus cell executed:
+ 20k runs over the new qa-assets inputs, +879 new coverage units,
+ zero artifacts, 647M peak RSS. Stale-header caveat recorded
+ (behavior-neutral). NP 2/20. Next: r217.
