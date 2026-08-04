@@ -221,3 +221,69 @@ amplification). REBASE-WATCH: when the fork rebases past the
 upstream capacity-eviction feature, this branch becomes the fix
 (upstream master 1ed14c6122 still carries the TODO, author's
 test flips it; adopt then if upstream hasn't merged it).
+
+## Cycle 332 (2026-08-04) — upstream #35832 assess-and-adopt (getblocktxn/bloom hardening)
+
+Upstream merged #35832 (975a314667): two new net_processing checks,
+both now in-tree via the 17c5e33e9c rebase.
+
+1. 28641fd195 — GETBLOCKTXN with empty req.indexes -> disconnect
+   (previously: passed deserialization, vacuously passed the
+   strictly-increasing loop, then did a pointless block disk read).
+   Sender-side safety PROVEN: our sender never emits empty indexes —
+   net_processing.cpp:5014-5015 sets fProcessBLOCKTXN=true and skips
+   the send when nothing is missing; GETBLOCKTXN is only pushed in
+   non-empty branches. Disconnect cannot punish an honest peer.
+2. 9871fb726c — MSG_FILTERED_BLOCK inv from a peer when we don't
+   advertise NODE_BLOOM -> disconnect BEFORE the block lookup
+   (previously: ignored only after reading the block from disk).
+   BIP37 filtered blocks require NODE_BLOOM; the request is
+   protocol-invalid by construction. No interplay with our lineage:
+   the bip35/tx-relay-capacity machinery remains absent here
+   (cycle-327 NOT-APPLICABLE stands), and no fork hunks touch either
+   function.
+
+Verdict: DISMISSED as a defect source (correct, well-scoped DoS
+hardening; disk-read avoidance confirmed by code motion only, not
+profiled). Adopted by rebase. p2p_getdata.py (upstream's new
+split-subcase form) + p2p_compactblocks.py run as the executable
+confirmation — result recorded in the ledger entry for cycle 332.
+
+### Delay-queue subsystem scout (delta-A, commits df31ee57aa/026f70e05f/e1b7490fbc/46c8c471dc/74a47a5207/4842903ac1/6307bd034b)
+
+Upstream replaced per-peer tx-inv rate limiting with a GLOBAL dual
+token-bucket delay queue (util::TokenBucket<NodeClock>: count 14/s
+cap 420, size 12MB/600s cap 50MB; new util/tokenbucket.h). Review
+notes:
+
+- TokenBucket arithmetic SOUND by inspection: refill clamped to cap,
+  backward-time safe (no refill, baseline update only), deficit
+  spending deliberate (decrement may take balance negative; senders
+  gate on value()).
+- Backlog = std::vector<Wtxid> per direction (inbound/outbound);
+  InitiateTxBroadcastToAll pushes unconditionally; entries are 32-byte
+  wtxids only. No explicit size cap — bounded indirectly: every
+  broadcast tx passed ATMP (mempool caps distinct live txs); stale
+  wtxids of evicted txs drain at bucket rate via
+  ExtractBestByMiningScoreWithTopology skipping missing entries.
+  No unbounded-state defect identified; DROPPED as a cell.
+- Capacity hygiene: shrink-to-300-cap only when backlog empties
+  (line ~2436) — under sustained flood capacity stays, which is then
+  justified. Our retained-capacity shrink_to_fit (cycle-263 adoption)
+  survives in the rewritten per-peer drain lambda (line ~6472).
+- Accepted tradeoff (not a bug): one flooder can consume the global
+  bucket and delay honest relay; upstream chose this over per-peer
+  storage/compute costs. Watch cell: if a public report shows global
+  starvation in the wild, re-open with a starvation-differential
+  experiment (flood one inbound, measure honest outbound delay).
+
+### bip35 sequencing note (delta-A 46c8c471dc)
+
+Upstream now bumps m_last_inv_sequence to m_mempool.GetSequence()
+explicitly when answering BIP35 mempool requests, instead of relying
+on the incidental bump from the normal INV path. This guarantees a
+follow-up GETDATA for any just-announced tx is honored (announced set
+and the sequence watermark are consistent by construction). In-tree
+via the rebase. The cycle-327 NOT-APPLICABLE verdict for the author's
+inbound-capacity machinery is unaffected (different mechanism; still
+absent upstream).

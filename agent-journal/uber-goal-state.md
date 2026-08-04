@@ -2654,3 +2654,54 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  reopen input (notably: upstream HTTP rewrite, TxSource enum
  blockencodings rewrite, UniValue-params rpc fuzz harness, ipc_test
  combine — all areas where our adopted fixes were re-verified above).
+
+ ## Cycle 332 (2026-08-04) — RESUMED: upstream advance 1ed14c6122 -> 17c5e33e9c
+
+ Resume trigger: user instruction + falsification sweep fired (master
+ +26 commits; author 1365 static; qa-assets 918cdd3 static; catalog
+ ba7b1dd0 unchanged; watch PRs 35744/35859/35818/35620/35654/32554
+ all still OPEN).
+
+ ACTIONS: rebased audit/transplant-index-fuzz onto 17c5e33e9c (1247
+ commits, ONE conflict stop: NetBSD SDK digests -> upstream's updated
+ values; our verification mechanism unchanged). Pre-rebase tip
+ aa1e84b24d recorded in history.
+
+ ASSESS-AND-ADOPT (delta-B, 26 commits): #35832 (getblocktxn empty
+ -> disconnect; filtered-inv when !NODE_BLOOM -> early disconnect)
+ reviewed: sender-side proof that honest peers never send empty
+ indexes (net_processing.cpp:5014 fProcessBLOCKTXN short-circuit);
+ both DISMISSED as defect sources, adopted via rebase, and verified
+ by upstream's own new test_empty_getblocktxn_disconnects running
+ green on our tree. #35863 wrong-subject sigop assertion = upstream
+ test-oracle fix, recorded as calibration data point (goal #117).
+ Our SDK-archive-verify commit UPSTREAMED as 873550bea3 (arm of the
+ PR-35754 stack now covered by upstream itself).
+
+ DELTA-A (193 inherited commits) triage: null-mempool DeleteChainstate
+ converged (upstream a99b27f192 == our guard, single instance, our
+ thorough test covers it); retained-capacity shrink_to_fit alive in
+ the rewritten drain path (net_processing.cpp:6472); SipHash-1-3-UJ
+ documented weak-by-design hashtable variant, conformance via
+ crypto_tests vectors + integer.cpp differential harness; global
+ tx delay-queue/token-bucket subsystem scouted (sound arithmetic,
+ no unbounded state; global-starvation tradeoff = watch-only cell);
+ bip35 explicit last_inv_sequence bump (46c8c471dc) noted — does
+ not affect the cycle-327 NOT-APPLICABLE verdict.
+
+ VERIFICATION (ASan Debug clang-18 on the rebased tree):
+ test_bitcoin+bitcoind build 100%; battery 229 cases / 1,285,894
+ assertions ALL PASS (crypto_tests, script_p2sh_tests,
+ blockencodings_tests, coins_tests, httpserver_tests,
+ torcontrol_tests, util_tests, validation_chainstatemanager_tests,
+ rpc_tests, descriptor_tests); p2p_getdata.py + p2p_compactblocks.py
+ Tests successful (empty-getblocktxn subtest proven in-log);
+ build_fuzz 100%; FUZZ=integer/partially_downloaded_block/http_request
+ x 2000 runs clean. Zero leftover jobs.
+
+ QUEUE: (1) full delta-A deep-review of the delay-queue subsystem
+ remains the largest unreviewed new P2P surface (only scouted);
+ (2) SipHash-1-3-UJ corpus-backed fuzz run (integer + coins_view)
+ beyond smoke; (3) watch uv-migration arms still fork-local
+ (requirements.txt still exists upstream); (4) draw-loop resumes
+ from NP 0/20 on the next turn per the user's 20-round rule.
