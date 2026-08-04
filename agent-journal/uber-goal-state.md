@@ -3269,3 +3269,35 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  3.22 fatals on this aarch64 host's glibc (redirection table).
  BLOCKED-with-record (not clean); upstream x86 CI covers it; close
  on a valgrind upgrade or an x86 worker. NP 17/20. Next: r232.
+
+ r232 raw=1830740592258377576 -> #104 analogical-translation: reopen
+ FAIL with review. CVE-2024-38365 (btcd FindAndDelete chain-split):
+ Core matches whole pushes at opcode boundaries only; our lineage's
+ FindAndDelete is upstream-identical (no fork changes to the
+ interpreter). PR 35873's tx_valid vector is test-only and rides
+ upstream on merge. No translation needed. NP 18/20.
+
+ r233 raw=5080810966375160788 -> #84: SKIP (cooldown until r248).
+ NP 19/20.
+
+ r234 raw=8082767748365481460 -> #116 cross-scanner: reopen FAIL
+ (cooldown expired; host still single-scanner — no cppcheck/
+ clang-tidy; nothing new to differential). NP 20/20 — halt sweep:
+ master d3cfd02bd7 static (= our base), author 1366 static,
+ qa-assets 3981cb99b3 static, catalog ba7b1dd0 unchanged, 7 watch
+ PRs (incl. adopted 35874) all open, zero jobs running.
+
+ HALT #4 (user's 20-round rule, cycle 363+): 20 consecutive
+ no-progress rounds (r215-r234 minus the progress-bearing 366-368
+ era cells — the last confirmed+adopted was cycle 358; r215-r234
+ produced measurements/verdicts but no new defect). Everything
+ static at halt time. Goal -> blocked.
+
+ RESUME CONDITIONS (any one): upstream master past d3cfd02bd7;
+ author remote != 1366 heads or force-update; qa-assets past
+ 3981cb99b3; any watch-PR state change (35744, 35859, 35818,
+ 35620, 35654, 32554, 35874); host tooling appears (lld,
+ clang-tidy, cbmc/klee, cppcheck, newer valgrind >=3.23, Sparrow
+ repo); catalog hash change from ba7b1dd0; user instruction.
+ Resume = run the sweep, then the draw loop from NP 0/20 with the
+ cycle-357 cooldown registry in force.
