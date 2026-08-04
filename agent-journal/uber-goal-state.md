@@ -2794,3 +2794,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  green on the delta code; Release-NDEBUG and static analyzers OPEN
  (disk 780M, tooling absent — deferred-scope record filed, not a
  clean bill). NP 6/20. Next: r159.
+
+ r159 raw=2841918797994518218 -> #74: reopen FAIL (cycle-336 delay-
+ queue boundedness proof is 5 rounds old; nothing new). NP 7/20.
+ r160 raw=3461903559368661472 -> #96: reopen FAIL. Delta TODO/FIXME
+ enumeration: exactly 1 new marker (secp256k1/examples/silentpayments.c
+ light-client-scanning note — subtree example code, not Core debt);
+ the 2 other grep hits are string literals. NP 8/20.
