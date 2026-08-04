@@ -3037,3 +3037,15 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  reopen FAIL (dup-txid settlement holds: no PR exists from the
  author's branch, no pushes since, cycle-320 evidence-evaporation
  state unchanged; our skip-fix adopted + unit-verified). NP 7/20.
+
+ ## Cycle 357 (2026-08-04) — #113 first cycle: yield measured, cooldown amendment adopted
+
+ r192 raw=706951372696882673 -> #113 (genuinely pending; journal
+ created). Yield r151-r190: 29/40 evidence-bearing, 11 reopen-FAIL.
+ Stopping rule validated (halt+sweep worked). Amendment: reopen-FAIL
+ goals get a 25-draw cooldown absent a fresh trigger (repeat-draw
+ waste measured: #74 r154/r159, #19 r172/r183, #51 r161/r191).
+ Cooldown set: {#74 until r184+25, #19 until r208, #51 until r216,
+ #36 until r213, #14 r194, #53 r205, #46 r206, #44 r207, #95 r209,
+ #9 r203, #65 r204, #2 r196, #26 r198, #20 r182, #99 r187, #97 r201,
+ #96 r185, #103 r202, #92 r195}. NP 8/20. Next: r193.
