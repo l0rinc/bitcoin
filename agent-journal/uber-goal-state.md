@@ -3254,3 +3254,6 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  the implementation scales both buckets (mult on outbound). MINOR
  (debug-only knob, operator-facing surprise only); recorded for an
  upstream doc PR, not committed in-tree. NP 14/20. Next: r229.
+
+ r229 raw=9067522298787170617 -> #57: SKIP (cooldown until r252;
+ drawn r227). NP 15/20.
