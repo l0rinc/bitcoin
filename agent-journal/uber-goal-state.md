@@ -2532,3 +2532,17 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  instruction. On resume: same assess-and-adopt protocol;
  verify queue cells against campaign-journal tails first
  (stale-cell hygiene, cycle-324 note).
+ Cycle 328 (fresh-audit draw r95, raw=2399434307952902088 ->
+ idx 72): #72 FIRST cycle (never run; pending goal). blk*.dat
+ crash-consistency on scratch regtest (XOR-aware fault
+ injection): TRUNC torn-write DETECTED at startup tip-read
+ (EOF at FlatFilePos(0,11565) -> 'Corrupted block database
+ detected' -> init abort; fail-loud, no false progress,
+ bounded) CONFORM; FLIP mid-file payload bit-rot NOT detected
+ (startup re-reads tip only; index validity flags stand;
+ corrupted block served to RPC/peers) DISMISSED as defect —
+ datadir trust boundary, no per-record checksum by design, XOR
+ is obfuscation not integrity. Journal
+ filesystem-crash-consistency.md c1. Remaining distinct
+ surface noted: torn LevelDB compaction. PROGRESS — counter
+ reset. Scratch dirs removed; zero bitcoind left.
