@@ -3199,3 +3199,6 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  20k runs over the new qa-assets inputs, +879 new coverage units,
  zero artifacts, 647M peak RSS. Stale-header caveat recorded
  (behavior-neutral). NP 2/20. Next: r217.
+
+ r217 raw=7430361117048829486 -> #46: SKIP (cooldown until r231).
+ NP 3/20.
