@@ -11,11 +11,11 @@ from test_framework.p2p import (
 )
 
 from test_framework.messages import (
+    MAX_HEADERS_RESULTS,
     msg_headers,
 )
 
 from test_framework.blocktools import (
-    NORMAL_GBT_REQUEST_PARAMS,
     create_block,
 )
 
@@ -55,14 +55,15 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
             n.setmocktime(time)
 
     def create_low_work_headers_message(self, node):
-        new_blocks = []
-        hashPrevBlock = int(node.getblockhash(0), 16)
-        for i in range(2000):
-            block = create_block(hashprev = hashPrevBlock, tmpl=node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS))
+        genesis = node.getblock(node.getblockhash(0))
+        headers = []
+        hash_prev_block = int(genesis['hash'], 16)
+        for height in range(1, MAX_HEADERS_RESULTS + 1):
+            block = create_block(hashprev=hash_prev_block, height=height, ntime=genesis['time'] + height)
             block.solve()
-            new_blocks.append(block)
-            hashPrevBlock = block.hash_int
-        return msg_headers(headers=new_blocks)
+            headers.append(block)
+            hash_prev_block = block.hash_int
+        return msg_headers(headers=headers)
 
     def test_chains_sync_when_long_enough(self):
         self.log.info("Generate blocks on the node with no required chainwork, and verify nodes 1 and 2 have no new headers in their headers tree")
@@ -139,11 +140,11 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
         if (current_height < 3000):
             self.generate(node, 3000-current_height, sync_fun=self.no_op)
 
-        # Send a group of 2000 headers, forking from genesis.
+        # Send a full headers message, forking from genesis.
         p2p.send_and_ping(self.create_low_work_headers_message(node))
 
         # getpeerinfo should show a sync in progress
-        assert_equal(node.getpeerinfo()[0]['presynced_headers'], 2000)
+        assert_equal(node.getpeerinfo()[0]['presynced_headers'], MAX_HEADERS_RESULTS)
 
     def test_large_reorgs_can_succeed(self):
         self.log.info("Test that a 2000+ block reorg, starting from a point that is more than 2000 blocks before a locator entry, can succeed")
