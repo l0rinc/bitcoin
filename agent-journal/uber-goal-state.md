@@ -3025,3 +3025,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  + 133.8s green). scalar_low config noted as the one uncovered
  (exhaustive-only, trivially correct by inspection). NP 5/20.
  Next: r190.
+
+ ## Cycle 356 (2026-08-04) — #8: delay-queue mutex discipline complete
+
+ r190 raw=9092658967074186760 -> #8. m_inv_to_send_mutex guard walk:
+ all accesses locked (GetInfo/ProcessInvBacklog/InitiateTxBroadcastToAll),
+ order declared, no reverse-nesting path. DISMISSED. NP 6/20.
+ Next: r191.

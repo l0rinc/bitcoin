@@ -63,3 +63,22 @@ Rotation: uber-ledger marks #8 DONE, next #15.
 ## Next queue
 (T1 first: read CScheduler Stop/StopRequested/AreThreadsServicingQueue +
 destructor path)
+
+## Cycle 356 (2026-08-04, r190) — delay-queue mutex discipline: complete
+
+Draw r190 (raw=9092658967074186760 -> #8). Reopen hook: the
+delay-queue subsystem added m_inv_to_send_mutex-guarded global state
+(the two InvToSendBuckets).
+
+Guard walk (all access sites): GetInfo LOCKs at :2010;
+ProcessInvBacklog LOCKs at :2452 (covers the heartbeat reads, the
+extraction, the per-peer drain loop, and the no-connection clears);
+InitiateTxBroadcastToAll LOCKs at :2528; ctor inits are
+single-threaded. Every public entry carries the negative annotation
+(!m_inv_to_send_mutex). Lock ORDER: m_inv_to_send_mutex is
+ACQUIRED_BEFORE(m_mempool.cs) (:1219); the only nesting is
+m_inv_to_send_mutex -> tx_relay->m_tx_inventory_mutex
+(ProcessInvBacklog's drain loop), and no path takes them in reverse
+(ProcessInvBacklog's SendMessages call site at :6187 holds no
+inventory lock; GetInfo/InitiateTxBroadcastToAll are lock-free at
+entry). No deadlock shape, no unguarded access. DISMISSED.
