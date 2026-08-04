@@ -216,3 +216,17 @@ manufactured (journal-only per policy).
 - qt/GUI helper copies remain deprioritized.
 - A future shared CLI-RPC error-mapping helper would only pay
   off if a THIRD copy appears (standing rule from c3).
+
+## Cycle 345 (2026-08-04, r167) — delta helper additions: no duplication
+
+Draw r167 (raw=3933342799363965114 -> #58). Delta helper inventory
+(util/ + common/): SaltedOutpointHasher ctor change, LineReader
+string_view rewrite, TokenBucket<Clock> template — plus
+SaltedCoinsCacheHasher (coins.h:240) splitting off the
+SaltedOutpointHasher family. The split is a deliberate
+specialization (SipHasher13UJ jumbo fast path + deterministic option
+for the coins map) with distinct semantics from the SipHash-2-4
+PresaltedSipHasher family — NOT a duplicate (different hash function,
+different performance contract, documented in the delta commits).
+TokenBucket has no in-tree equivalent. LineReader's rewrite replaced
+rather than copied. Verdict: DISMISSED (no reuse violation).
