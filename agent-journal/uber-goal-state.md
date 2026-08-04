@@ -2915,3 +2915,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  falsifiable iteration, not for pure reopen-FAILs. #113/#116/#118
  flagged as possibly-genuinely-pending if the ledger lacks verdicts.
  NP 11/20. Next: r176.
+
+ r176 raw=1234608353979572449 -> #97 defect-taxonomy: reopen FAIL.
+ Delta pattern sweep (reinterpret_cast/memcpy/shifts/operator[]/
+ data()[]): only fixed-size memcpys in the unreachable silentpayments
+ module + its example file, the safe bench mutation pattern, and
+ std::copy_n in the KeyFingerprint migration. No live defect site.
+ NP 12/20.
