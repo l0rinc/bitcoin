@@ -3237,3 +3237,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  (COMPLETE; the deltas' new sinks — delay-queue memory, RPC outputs,
  the dbcache setter — all reviewed in their cycles; no new dangerous
  sink). NP 11/20.
+
+ r226 raw=2697985369670968890 -> #58 helper-reuse: reopen FAIL
+ (cooldown expired; the only new helper in the latest delta —
+ wallet ReadWtxVariants — is single-purpose new functionality, not a
+ duplicate). NP 12/20.
