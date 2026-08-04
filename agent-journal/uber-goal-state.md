@@ -3073,3 +3073,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r195 raw=4884820737375313496 -> #88 wallet-recovery: reopen FAIL
  (deprioritized surface; deltas touched no wallet encryption/backup/
  keypool code). NP 1/20.
+
+ r196 raw=5521600410373856299 -> #43 option-lifecycle: reopen FAIL
+ with review. -dbcache lifecycle post-35205: parse -> saturate ->
+ clamp to the colocated [MIN,MAX] (the same bounds the new kernel
+ setter enforces — that sharing IS the PR's point); our fork's
+ txospenderindex 5% split integrated into the upstream budget logic.
+ Consistent. NP 2/20.
