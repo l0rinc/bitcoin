@@ -3211,3 +3211,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r219 raw=2107072799016534179 -> #35. Unconditional extra_count--
  mutant KILLED by the cycle-332 enum accounting assert (revert ->
  green). The rebase adaptation is a live oracle. NP 5/20. Next: r220.
+
+ r220 raw=888285348936740872 -> #8 locking: reopen FAIL (cycle-356
+ guard walk stands; the only new lock use since — the dbcache
+ setter's LOCK(opts.m_mutex) — was verified in cycle 349). NP 6/20.
