@@ -2940,3 +2940,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  FAIL (same reasoning as r169 #14: no new reachable secret-handling
  timing surface in the deltas; scalar changes verify-only,
  silentpayments unreachable). NP 16/20.
+
+ r181 raw=4447006226470320302 -> #46 output-on-failure: reopen FAIL
+ (no new fallible-output APIs in the deltas; getnetworkinfo additions
+ are read-only reporting verified in cycle 346). NP 17/20.
