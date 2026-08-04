@@ -80,3 +80,14 @@ worktree-add output line against the expected cycle number.
 Correction: agent-journal/artifacts/commit-message-corrections.md on
 agent/all-findings (append-only, no rewrite). Rule: always
 `git log -1 --format=%B <explicit-source-hash>` in substitutions.
+
+## Cycle 340 lesson — marker sweep pattern was over-narrow
+
+The cycle-332 post-rebase conflict sweep used `git grep -l '^<<<<<<< $'`
+(END anchor after the space) — it misses real `<<<<<<< HEAD` markers.
+The r161 #51 draw found a LIVE marker block committed in
+differential-metamorphic.md since ae60c8eea5 (cherry-pick resolution
+artifact). Correct sweep: `grep -rn '^<<<<<<<\|^=======$\|^>>>>>>>'`.
+Both branch (5d7c72933a) and archive (7756517b79) repaired; tree-wide
+resweep clean. Rule: after ANY rebase/cherry-pick session, run the
+wide pattern over agent-journal/ AND src/ (not just the touched set).
