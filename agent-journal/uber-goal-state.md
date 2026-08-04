@@ -2584,3 +2584,42 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  goal-117 journal created (agent-calibration-benchmark.md).
  NP counter: r111-r130 streak notes r110-reset; counter at 0
  after this close.
+ Cycle-330 post-draw log (fresh counter after the calibration close):
+ r131 raw=2938840905758032006 -> #6: reopen FAIL (repeat). NP 1/20.
+ r132 raw=3315242383041482769 -> #17: reopen FAIL (no new configs). NP 2/20.
+ r133 raw=3815775175155988512 -> #32 history mining: reopen FAIL
+   (queue empty; no new migrations). NP 3/20.
+ r134 raw=5431932780681017386 -> #42: reopen FAIL (repeat). NP 4/20.
+ r135 raw=6747013885889659429 -> #37: reopen FAIL (repeat). NP 5/20.
+ r136 raw=21921106321885463 -> #23 perf: reopen FAIL (no anomalies). NP 6/20.
+ r137 raw=252996740739588640 -> #32: reopen FAIL (repeat). NP 7/20.
+ r138 raw=2247158572473740433 -> #17: reopen FAIL (repeat). NP 8/20.
+ r139 raw=840705724560388344 -> #120 Sparrow: reopen FAIL (repo-blocked). NP 9/20.
+ r140 raw=857531096801958977 -> #65 radar: fresh count 1365 STATIC
+   (radar quiet since cycle-327 assessment). NP 10/20.
+ r141 raw=7060851176577655177 -> #9: reopen FAIL (repeat). NP 11/20.
+ r142 raw=23164727491994864 -> #112 continuity: reopen FAIL
+   (artifacts canonical; no new FPs). NP 12/20.
+ r143 raw=6076834830893582638 -> #46 API output-on-failure: reopen
+   FAIL (no new API surfaces). NP 13/20.
+ r144 raw=3749346324430645698 -> #66: reopen FAIL (repeat). NP 14/20.
+ r145 raw=28761052870795466 -> #74: reopen FAIL (repeat). NP 15/20.
+ r146 raw=7042033791023562999 -> #119 ecosystem: reopen FAIL
+   (bip35 not-applicable; nothing new). NP 16/20.
+ r147 raw=7743056593471204206 -> #110 catalog evolution: reopen
+   FAIL (cycle-326-330 entropy = process/calibration notes only;
+   promotion bar unmet). NP 17/20.
+ r148 raw=3830739161243820613 -> #69: reopen FAIL (repeat). NP 18/20.
+ r149 raw=6977424927984692870 -> #6: reopen FAIL (repeat). NP 19/20.
+ r150 raw=8467744152953029362 -> #114 threat-model: reopen FAIL
+   (no new gates/threat inputs). NP 20/20.
+ Falsification sweep #3 (during r148): upstream 1ed14c6122,
+ author 1365, qa-assets 918cdd3, catalog ba7b1dd0, 6 PRs open —
+ ALL STATIC.
+
+ HALT #2 (user's 20-round rule, cycle 331): 20 consecutive
+ reopen-fails with recorded reasons; nothing progress-bearing in
+ flight (calibration cycle fully closed, archive tip 1b377cfe25;
+ zero jobs). Goal -> blocked. RESUME CONDITIONS unchanged
+ (upstream advance; author branch 1366+; qa-assets; watch-PR
+ merge; host tooling; catalog mutation; user instruction).
