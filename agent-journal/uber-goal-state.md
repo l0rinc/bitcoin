@@ -2948,3 +2948,6 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r182 raw=102861783856265004 -> #44 secret-copy/optimization: reopen
  FAIL (no new reachable secret-copy sites in the deltas; secure_erase
  hit is subtree example code; module unreachable). NP 18/20.
+
+ r183 raw=3023786648682037011 -> #19: reopen FAIL (repeat of r172,
+ 11 rounds later; nothing new in bench/). NP 19/20.
