@@ -3049,3 +3049,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  #36 until r213, #14 r194, #53 r205, #46 r206, #44 r207, #95 r209,
  #9 r203, #65 r204, #2 r196, #26 r198, #20 r182, #99 r187, #97 r201,
  #96 r185, #103 r202, #92 r195}. NP 8/20. Next: r193.
+
+ r193 raw=1397617075517926906 -> #122 Sparrow: reopen FAIL
+ (repo-blocked standing; no Sparrow checkout on the host —
+ /mnt/my_storage listing rechecked; same as #120/#123). NP 9/20.
