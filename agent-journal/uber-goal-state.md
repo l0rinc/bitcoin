@@ -2935,3 +2935,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
 
  r179 raw=9205276635863558081 -> #65 radar: reopen FAIL (author
  remote static at 1366 since the cycle-342 adoption). NP 15/20.
+
+ r180 raw=1990592028176963253 -> #53 timing-side-channel: reopen
+ FAIL (same reasoning as r169 #14: no new reachable secret-handling
+ timing surface in the deltas; scalar changes verify-only,
+ silentpayments unreachable). NP 16/20.
