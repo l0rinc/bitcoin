@@ -2546,3 +2546,41 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  filesystem-crash-consistency.md c1. Remaining distinct
  surface noted: torn LevelDB compaction. PROGRESS — counter
  reset. Scratch dirs removed; zero bitcoind left.
+ Cycle 329 (fresh-audit r110, raw=3384471374599513077 -> idx
+ 117): goal-117 calibration on the POST-305 adoptions (cycle-305
+ battery covered F25/F28/F30 only). Re-injection results:
+ F34 (rpc/util.cpp int64_t->int): oracle rpc_descriptor_range_
+ max_int32 KILLED rc=133 SIGTRAP (aarch64 -ftrapv); restored,
+ green, tree byte-identical. MEASUREMENT TRAP recorded: '...
+ | tail -4; echo exit:$?' reports TAIL's status, not the test
+ binary's — first read said exit:0 (oracle-dead scare); PIPE
+ STATUS/direct re-run showed the true kill. F33 (base.cpp
+ FindFork-rewind removed): feature_txospenderindex FAILED with
+ the exact adoption-day signature (stale spendingtx returned vs
+ expected bare outpoint). Restore+re-run in flight. F35 queued.
+ F35 note (cycle 329 continuation): the F35 fix 8b9a20b114 was
+ adopted WITHOUT its regression test — the author's 26-line
+ feature_index_prune.py kill/restart extension (6ce88f28f7) never
+ landed; stock test does NOT cover the reorg-kill scenario
+ (mutant run passed stock, which first looked like oracle death).
+ Author's extension now checked out and running against the
+ mutant (bash-h67xes53); on kill-confirmed, commit the test as
+ the missing F35 regression evidence (closes the adoption gap).
+ LESSON (calibration integrity): for every adopted fix, verify
+ the regression test EXISTS IN-TREE — adoption-day evidence run
+ from the author's branch does not count as in-tree coverage.
+ Cycle 330 (calibration close): goal-117 battery 2 COMPLETE —
+ F34 killed (rc=133, trap sanity-verified), F33 killed (exact
+ stale-spender signature), F35 killed (extended kill/restart:
+ init abort 'Failed to start indexes'); all restored green,
+ trees byte-identical. ADOPTION GAP CLOSED: F35's regression
+ test (author's 26-line feature_index_prune.py extension)
+ committed 80fe97f1ae with mutant-kill/passing-after evidence.
+ Misreads recorded: (1) pipeline tail-status is not the
+ subject's rc; (2) the stock test's EXPECTED init-failure
+ section is not a regression — read the failing SECTION before
+ alarming. Companion-stack concern (9982aab84f/89035b3439)
+ resolved as NOT needed for the extended test on our tree.
+ goal-117 journal created (agent-calibration-benchmark.md).
+ NP counter: r111-r130 streak notes r110-reset; counter at 0
+ after this close.
