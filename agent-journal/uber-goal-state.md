@@ -3257,3 +3257,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
 
  r229 raw=9067522298787170617 -> #57: SKIP (cooldown until r252;
  drawn r227). NP 15/20.
+
+ r230 raw=2412092988037375171 -> #67 release-differential: reopen
+ FAIL (no new release surface; the wallet witness-variant downgrade
+ compat is upstream-tested by 99bdcb064c; the reobfuscation gate
+ unlanded). NP 16/20.
