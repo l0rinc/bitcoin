@@ -496,3 +496,15 @@ commit's historical expectation is recorded here instead.
 
 ### Verdict
 Quiet on every trigger; nothing actionable.
+
+## Cycle 362 (2026-08-04, r210) — adopted-PR CI check: 35874 green modulo unrelated infra
+
+Draw r210 (raw=5648046428848452906 -> #42). CI states: 35744 (29/29
+success), 35859 (29/29), 35874 (55 success, 2 failure). The 35874
+failures are "riscv32 bare metal" (known-broken config, removed from
+GHA by fa06ea4244 for issue #35853) and "NetBSD Cross" (the SDK
+download transient fixed by 2c87337efe) — both infrastructure, both
+unrelated to the BIP35 change, both since resolved by upstream.
+Adoption risk note: the fix's own code is CI-green on every real
+config; no follow-up needed. Watch PRs 35818/35620/35654/32554
+unchanged (open, no new state).
