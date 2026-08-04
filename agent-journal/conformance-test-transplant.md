@@ -158,3 +158,25 @@ comparison-lax case accepted).
   matching BIP324).
 - FSChaCha20Poly1305 (the rekeying wrapper) covered by its own
   in-tree tests; not part of this external suite.
+
+## Cycle 350 (2026-08-04, r185) — BIP352 vectors transplanted-and-executed
+
+Draw r185 (raw=5661128680711004139 -> #107). Reopen PASS: the
+secp256k1 subtree update (c26d4e2d6f) added the OFFICIAL BIP352
+conformance vectors (bip352_send_and_receive_test_vectors.json, 28
+groups) — present in-tree but never executed by Core builds (Core
+does not build secp256k1's own test suite).
+
+Transplant experiment: standalone subtree build (cmake
+-DCMAKE_BUILD_TYPE=Release, tests ON, exhaustive/ctime/bench/examples
+OFF, /tmp/sp-build scratch) — /tmp/sp-build/bin/tests full suite
+GREEN (rc=0, 127.8s), with MAKE_TEST_MODULE(silentpayments)
+registered (tests.c:8076) and the module's tests_impl.h (which drives
+the BIP352 vector JSON) included. The official vectors pass against
+the exact module code compiled into Core's libsecp256k1.
+
+Verdict: conformance CONFIRMED for the compiled-in module (execution
+evidence, not just presence). Feeds watch cell
+W-silentpayments-first-caller (cycle 347): the module's compiled
+state is vector-clean at this revision. Scratch build deleted
+(disk). No Core defect; no Core change made.
