@@ -2839,3 +2839,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  fix; failing-before = 1 assertion fails on unfixed code;
  passing-after 418/418 green). Severity low (accounting truth).
  NP counter: progress-bearing adoption -> NP 0/20. Next: r165.
+
+ ## Cycle 343 (2026-08-04) — #32 sibling sweep clean
+
+ r165 raw=4350338465014240544 -> #32. Sibling sweep for the new
+ SetSeed assert: all callers pass fixed 32-byte CKeys or fixed-size
+ xprv decodes; assert unreachable from input; defense-in-depth only.
+ SWEEP CLEAN. NP 1/20. Next: r166.
