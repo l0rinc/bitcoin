@@ -2987,3 +2987,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  incl. the silentpayments module. Conformance of the compiled-in
  module CONFIRMED at this revision; watch cell W-silentpayments
  updated. /tmp/sp-build removed. NP 1/20. Next: r186.
+
+ ## Cycle 351 (2026-08-04) — #39: vectors.h regeneration byte-identical
+
+ r186 raw=4104481830402854695 -> #39. BIP352 vectors.h regenerates
+ byte-for-byte from the pinned JSON via the in-tree pure-Python
+ generator (4747 lines, diff-identical). CONFIRMED deterministic.
+ NP 2/20. Next: r187.
