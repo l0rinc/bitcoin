@@ -2759,3 +2759,15 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  extraction contract. Finding: upstream's fuzz tx_pool:608-630 already
  asserts the contract (drain/dead-drop/dedup + eviction/expiry
  composition), smoke-verified. No new oracle needed. NP 3/20. Next: r156.
+
+ ## Cycle 338 (2026-08-04) — #45 reopen: subtree update reviewed; DISMISSED + side observation
+
+ r156 raw=7213982357476630317 -> #45. Reopen PASS (secp256k1 subtree
+ update c26d4e2d6f + upstream BIP32 SetSeed assert 2cf9d79d84).
+ BIP32 fixes complementary (SetSeed vs Derive layers), both in-tree.
+ Scalar get_bits changes = overflow-safe VERIFY_CHECK rewrites, no
+ timing delta; extrakeys even-Y VERIFY check defensive. DISMISSED.
+ Side observation (informational): BIP352 silentpayments module now
+ compiled into Core builds (subtree default ON, no Core pin; 16
+ symbols in libsecp256k1.a vs 0 pre-update) but UNREACHABLE from Core
+ — watch cell if upstream adds the first caller. NP 4/20. Next: r157.
