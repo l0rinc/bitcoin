@@ -357,3 +357,41 @@ pruning IO) — campaign COMPLETE.
 
 ## Rotation note
 Six cycles; campaign complete.
+
+## Cycle 336 (2026-08-04) — REOPENED by delta-A's global inv delay-queue; boundedness PROVEN, DISMISSED
+
+Draw r154 (raw=5622971247541037514 -> #74). Reopen hook: upstream's
+global tx-relay delay queue (df31ee57aa et al., now in-tree) added a
+new retained-memory surface (per-direction std::vector<Wtxid>
+backlogs) after this campaign's completion.
+
+HYPOTHESIS: under sustained flood + mempool eviction, dead wtxids
+could accumulate in the backlogs faster than the 14/s drain —
+unbounded retained-memory growth.
+
+EVIDENCE (code contract, txmempool.cpp:648
+ExtractBestByMiningScoreWithTopology):
+- "wtxids that do not correspond to a mempool entry are dropped" —
+  dead entries are removed at EVERY extraction, not just on drain.
+- "updates the input wtxids so that multiple calls ... drain that
+  vector to empty" + "no duplicates, either with itself or with the
+  updated wtxids input" — re-added live entries are deduped; a
+  double-broadcast of the same tx self-cleans on the next pass.
+- Residual growth is therefore limited to live, accepted-but-unannounced
+  txs: 32 B/entry x 2 directions; sustaining growth requires getting
+  distinct txs into our mempool continuously, which is fee-cost-bounded
+  (mempool min-fee escalation under pressure). Operator visibility:
+  30 bpm heartbeat log once a backlog crosses HEARTBEAT_MIN.
+- Capacity hygiene verified in cycle 332: shrink-to-300 when the
+  backlog empties (net_processing.cpp ~2436).
+
+VERDICT: DISMISSED. Not a memory defect; the design trades bounded
+retained memory for fee-cost-bounded global rate limiting (upstream's
+stated intent). This closes the cycle-332 queue item "delay-queue
+deep-review" for the boundedness question; the starvation tradeoff
+stays watch-only (no public starvation report).
+
+Limitation: contract evidence is by code reading, not a live flood
+profile; a live-flood RSS experiment would need a scripted
+multi-peer flood harness (heavyweight; only worth it if a public
+report appears).
