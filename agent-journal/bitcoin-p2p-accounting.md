@@ -189,3 +189,35 @@ for future cycles:
 - Rotation: next campaign per severity-first order — goal 88 (wallet
   key-loss) was passed over for this goal; return to it or to goal 86
   (chainstate crash-symmetry).
+
+## Branch assessment (2026-08-04, author flood+1): l0rinc/bip35-relay-capacity c83a7c79f9 — NOT-APPLICABLE to this lineage (rebase-watch)
+
+### Claim
+Inbound fRelay=false peer escapes inbound tx-relay capacity
+accounting via BIP35 mempool requests; author's fix reclassifies
+(m_relays_txs=true) + MaybeDisconnectForTxRelayCapacity before
+queuing the response.
+
+### Lineage check (failing the adoption at the mechanism step)
+- Our net_processing has the OLD handler: no reclassification,
+  CONFIRMED (net_processing.cpp:5044-5070).
+- BUT our lineage LACKS the entire inbound-relay capacity
+  machinery the fix hooks: zero MaybeDisconnectForTxRelayCapacity,
+  zero -inboundrelaypercent, no eviction-candidate logic, and
+  m_relays_txs is WRITE-ONLY here (set at 3797/5119/5167, no
+  consumers). There is no capacity counter for a BIP35 peer to
+  evade — the defect is specific to upstream's newer feature
+  (post-base 18c05d9301).
+- The author's test file is upstream-current content (+117 lines
+  vs our suite); our lineage doesn't carry
+  p2p_connection_limits.py at all (untracked here — removed after
+  assessment).
+
+### Verdict
+DISMISSED for this tree (mechanism not realizable); severity
+Medium-low even upstream (DEFAULT_PEERBLOOMFILTERS=false gates
+reachability; existing OutboundTargetReached gate bounds
+amplification). REBASE-WATCH: when the fork rebases past the
+upstream capacity-eviction feature, this branch becomes the fix
+(upstream master 1ed14c6122 still carries the TODO, author's
+test flips it; adopt then if upstream hasn't merged it).
