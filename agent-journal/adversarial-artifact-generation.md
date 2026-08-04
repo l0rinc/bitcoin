@@ -328,3 +328,24 @@ c4/c5 xswiftec, c6 post-handshake slowloris) — campaign COMPLETE.
 
 ## Rotation note
 Six cycles; campaign complete.
+
+## Cycle 365 (2026-08-04, r216) — corpus-backed process_messages campaign: clean, +879 units
+
+Draw r216 (raw=1159213591404523244 -> #108). Executed the queued
+corpus-backed cell with the new qa-assets inputs (3981cb99b3,
+"Murch's inputs August 2026"): FUZZ=process_messages over the fresh
+corpus, -runs=20000, ASan+UBSan fuzz build.
+
+Result: DONE 20000 runs in 1051s; 879 NEW coverage units added on
+top of the community corpus (the fuzzer found paths the submitted
+inputs missed); zero crash/UB artifacts; peak RSS 647M. Caveat:
+the fuzz binary was one header-delta stale (uint256.h Compare
+workaround — behavior-neutral on clang; wallet code not exercised
+by this target). The new units live in the /tmp/qa-assets scratch
+clone's process_messages dir (local clone mutated, remote
+untouched).
+
+Verdict: no defect; the fresh-corpus delta produced additional
+coverage (879 units) without tripping anything — evidence the
+process_messages surface is holding up under the newest
+community-discovered adversarial inputs.
