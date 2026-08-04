@@ -139,3 +139,19 @@ covered surface.
 ### Limitations / queue
 - Placeholder-versus-generated drift at release time is a
   release-process cell (out of rotation scope on this host).
+
+## Cycle 351 (2026-08-04, r186) — BIP352 vectors.h: regeneration deterministic
+
+Draw r186 (raw=4104481830402854695 -> #39). New generated artifact
+in the deltas: src/secp256k1/src/modules/silentpayments/vectors.h
+(4747 lines) + its generator tools/tests_silentpayments_generate.py
+(pure Python: hashlib/json/sys only — no sage/binding deps).
+
+Experiment: cd src/secp256k1 && python3 tools/tests_silentpayments_
+generate.py src/modules/silentpayments/bip352_send_and_receive_test_
+vectors.json > /tmp/vectors_regen.h; diff vs the committed header.
+Result: BYTE-IDENTICAL (4747/4747 lines). Verdict: determinism
+CONFIRMED for the subtree's new generated artifact; the committed
+header is exactly what the generator + pinned JSON produce. No
+drift, no host-dependence observed (hashlib/json are stable across
+CPython versions; sort orders in the generator are explicit).
