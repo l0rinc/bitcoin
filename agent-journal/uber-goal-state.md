@@ -3017,3 +3017,11 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  in-tree callers; added the contract test (817a6dd34d, test_kernel
  25/25 green). This is a test-gap close-out (no defect). NP 4/20.
  Next: r189.
+
+ ## Cycle 355 (2026-08-04) — #82 backend differential green (4x64 + 8x32)
+
+ r189 raw=805302865996046802 -> #82. Subtree scalar changes verified
+ on both wide-mul backends via the subtree's own test suite (127.8s
+ + 133.8s green). scalar_low config noted as the one uncovered
+ (exhaustive-only, trivially correct by inspection). NP 5/20.
+ Next: r190.

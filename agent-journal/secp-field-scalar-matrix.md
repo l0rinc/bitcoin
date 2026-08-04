@@ -91,3 +91,22 @@ S2 field differential (green), S3 scalar differential (green),
 S4 magnitude contract (tests/noverify pair green), S5 32-bit limbs
 (by construction). No divergence on either backend. Rotation:
 uber-ledger marks #82 DONE, next #83 secp group/ecmult.
+
+## Cycle 355 (2026-08-04, r189) — subtree scalar changes: backend differential green
+
+Draw r189 (raw=805302865996046802 -> #82). Reopen PASS: the subtree
+update touched scalar_4x64_impl.h, scalar_8x32_impl.h, and
+scalar_low_impl.h (get_bits precondition rewrites + exhaustive-only
+fix). The matrix goal's method applies: run the subtree's own suite
+on BOTH wide-mul backends.
+
+- int128 (4x64) default build: full `tests` green, 127.8s
+  (cycle 350's run doubles as this backend's evidence).
+- int64 (8x32) via -DSECP256K1_TEST_OVERRIDE_WIDE_MULTIPLY=int64:
+  full `tests` green, 133.8s (this cycle).
+
+Verdict: no backend divergence from the get_bits precondition
+rewrites. The scalar_low_impl offset>=32 fix affects only
+EXHAUSTIVE_TEST_ORDER builds (not built here — noted as the one
+uncovered config; the fix is trivially correct by inspection:
+out-of-limb reads return 0). #82 returns to DONE.
