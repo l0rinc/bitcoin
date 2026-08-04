@@ -3097,3 +3097,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r199 raw=1468366814387663462 -> #102 suspicion-replay: reopen FAIL
  (watch cells registered in cycle 347 stand; cycle-358 resolved into
  an adoption, cycle-359 produced no new cell). NP 5/20.
+
+ r200 raw=5876746077372843723 -> #75 build/CI: reopen FAIL with note.
+ Delta CI changes: NetBSD SDK fix (author's own, rebase-handled),
+ riscv32 GHA temporarily removed (tracked in issue #35853; the one
+ upstream 32-bit CI row is gone until it lands — our 32-bit checks
+ are local anyway), guix python-minimal move (build hygiene).
+ No cache-key or poisoning surface change. NP 6/20.
