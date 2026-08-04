@@ -3247,3 +3247,10 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  (the newest deltas' contracts — dbcache setter, BIP35 capacity,
  Compare ordering, CWalletTx encapsulation — each verified in their
  cycles: 349/352/354/358/363). NP 13/20.
+
+ ## Cycle 367 (2026-08-04) — #31: -txsendrate doc drift recorded (MINOR)
+
+ r228 raw=2048606694529714847 -> #31. Help/RPC text says inbound-only;
+ the implementation scales both buckets (mult on outbound). MINOR
+ (debug-only knob, operator-facing surprise only); recorded for an
+ upstream doc PR, not committed in-tree. NP 14/20. Next: r229.

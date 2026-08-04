@@ -240,3 +240,25 @@ The c4 extraction methodology found no second instance.
   flagged only if the format ever ships.
 - descriptors.md Reference prose (c4 queue) remains the only
   open surface.
+
+## Cycle 367 (2026-08-04, r228) — -txsendrate help text vs dual-bucket implementation: MINOR doc drift
+
+Draw r228 (raw=2048606694529714847 -> #31). Cross-layer check of the
+newest public knob: init.cpp:721 help says "Set the maximum ongoing
+rate for sending transactions to (inbound) peers" — but
+net_processing.cpp:2185-2186 constructs BOTH
+m_inbound_inv_bucket(rate=tx_send_rate, mult=1.0) AND
+m_outbound_inv_bucket(rate=tx_send_rate, mult=OUTBOUND_INVENTORY_
+BUCKET_MULTIPLIER). The knob scales relay rate in BOTH directions
+(outbound via the interval-ratio multiplier), and getnetworkinfo's
+inv_buckets reports both — while the help text and the RPC doc both
+say "inbound".
+
+Evidence: the two construction lines + the help text, quoted above.
+Severity: MINOR — DEBUG_ONLY knob, zero consensus/correctness impact;
+the surprise is operator-facing (tuning -txsendrate also retunes
+outbound). Class: doc-drift (text predates the dual-bucket
+implementation). Not committed in-tree: help-text churn on a
+debug-only option is below the fork's materiality bar; the finding
+is recorded for an upstream doc PR (the author's own code, so the
+channel is direct). Reopen if the knob ever loses DEBUG_ONLY.
