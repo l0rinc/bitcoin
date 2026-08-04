@@ -197,10 +197,36 @@ class FeatureIndexPruneTest(BitcoinTestFramework):
                 pruneheight_new = node.pruneblockchain(2500)
                 assert_equal(pruneheight_new, 2013)
 
+        durable_tip = self.nodes[0].getbestblockhash()
+
         self.log.info("ensure that prune locks don't prevent indices from failing in a reorg scenario")
         with self.nodes[0].assert_debug_log(['basic block filter index prune lock moved back to 2480']):
             self.nodes[3].invalidateblock(self.nodes[0].getblockhash(2480))
             self.generate(self.nodes[3], 30, sync_fun=lambda: self.linear_sync(self.nodes[3], height_from=2480))
+
+        self.sync_index(height=2509)
+        reorged_tip = self.nodes[3].getbestblockhash()
+        for node in self.nodes[:3]:
+            assert_equal(node.getbestblockhash(), reorged_tip)
+
+        self.log.info("kill independently indexed nodes after reorg and restart them")
+        for i in range(2):
+            self.nodes[i].kill_process()
+        for i in range(2):
+            self.restart_node(i, extra_args=self.extra_args[i])
+
+        expected_filter = {
+            'basic block filter index': {'synced': True, 'best_block_height': 2500},
+        }
+        self.wait_until(lambda: self.nodes[0].getindexinfo() == expected_filter)
+        expected_stats = {
+            'coinstatsindex': {'synced': True, 'best_block_height': 2500},
+        }
+        self.wait_until(lambda: self.nodes[1].getindexinfo() == expected_stats)
+        assert_equal(self.nodes[0].getbestblockhash(), durable_tip)
+        assert_equal(self.nodes[1].getbestblockhash(), durable_tip)
+        assert_greater_than(len(self.nodes[0].getblockfilter(durable_tip)['filter']), 0)
+        assert self.nodes[1].gettxoutsetinfo(hash_type="muhash", hash_or_height=durable_tip)['muhash']
 
 
 if __name__ == '__main__':
