@@ -3276,3 +3276,6 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  FindAndDelete is upstream-identical (no fork changes to the
  interpreter). PR 35873's tx_valid vector is test-only and rides
  upstream on merge. No translation needed. NP 18/20.
+
+ r233 raw=5080810966375160788 -> #84: SKIP (cooldown until r248).
+ NP 19/20.
