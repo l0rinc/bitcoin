@@ -2944,3 +2944,7 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  r181 raw=4447006226470320302 -> #46 output-on-failure: reopen FAIL
  (no new fallible-output APIs in the deltas; getnetworkinfo additions
  are read-only reporting verified in cycle 346). NP 17/20.
+
+ r182 raw=102861783856265004 -> #44 secret-copy/optimization: reopen
+ FAIL (no new reachable secret-copy sites in the deltas; secure_erase
+ hit is subtree example code; module unreachable). NP 18/20.
