@@ -911,6 +911,36 @@ BOOST_AUTO_TEST_CASE(btck_import_blocks_null_path_lens_tests)
     btck_chain_parameters_destroy(chain_params);
 }
 
+BOOST_AUTO_TEST_CASE(btck_chainstate_manager_options_database_cache_tests)
+{
+    // Contract (bitcoinkernel.h): values below 4 MiB are rejected; on 32-bit
+    // systems, values above 1 GiB are rejected as well.
+    auto test_directory{TestDirectory{"dbcache_options_bitcoin_kernel"}};
+    btck_ContextOptions* context_options{btck_context_options_create()};
+    btck_ChainParameters* chain_params{btck_chain_parameters_create(btck_ChainType_REGTEST)};
+    btck_context_options_set_chainparams(context_options, chain_params);
+    btck_Context* context{btck_context_create(context_options)};
+    BOOST_REQUIRE(context != nullptr);
+    const std::string data_dir{PathToString(test_directory.m_directory)};
+    const std::string blocks_dir{PathToString(test_directory.m_directory / "blocks")};
+    btck_ChainstateManagerOptions* options{btck_chainstate_manager_options_create(context, data_dir.c_str(), data_dir.size(), blocks_dir.c_str(), blocks_dir.size())};
+    BOOST_REQUIRE(options != nullptr);
+
+    BOOST_CHECK_EQUAL(btck_chainstate_manager_options_set_database_cache_bytes(options, 4_MiB - 1), -1);
+    BOOST_CHECK_EQUAL(btck_chainstate_manager_options_set_database_cache_bytes(options, 4_MiB), 0);
+    BOOST_CHECK_EQUAL(btck_chainstate_manager_options_set_database_cache_bytes(options, 450_MiB), 0);
+    if (sizeof(void*) == 4) {
+        BOOST_CHECK_EQUAL(btck_chainstate_manager_options_set_database_cache_bytes(options, 1_GiB + 1), -1);
+    } else {
+        BOOST_CHECK_EQUAL(btck_chainstate_manager_options_set_database_cache_bytes(options, 1_GiB + 1), 0);
+    }
+
+    btck_chainstate_manager_options_destroy(options);
+    btck_context_destroy(context);
+    btck_context_options_destroy(context_options);
+    btck_chain_parameters_destroy(chain_params);
+}
+
 void chainman_reindex_test(TestDirectory& test_directory)
 {
     auto notifications{std::make_shared<TestKernelNotifications>()};
