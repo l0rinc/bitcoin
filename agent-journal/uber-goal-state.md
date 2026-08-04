@@ -3114,3 +3114,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  only (mutex-guarded, feeds DB cache params at LoadChainstate);
  no persistent-state write -> no partial-apply crash window.
  NP 8/20.
+
+ r203 raw=5022657391546445068 -> #12 static-analysis: reopen FAIL
+ (DONE; host tooling still absent — rechecked this session; the
+ delta code compiles warning-free under clang-18 -Wall -Wextra
+ -Wthread-safety in both build trees). NP 9/20.
