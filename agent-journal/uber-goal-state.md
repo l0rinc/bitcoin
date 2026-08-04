@@ -3232,3 +3232,8 @@ full-catalog draws incl. new; recorded raws, 63-bit, mod 128):
  SDK-digest verification (873550bea3); open author PR 35885
  (sourceware mirror switch for riscv) is unmerged CI-only — radar-
  noted. NP 10/20.
+
+ r225 raw=8839534602467631460 -> #100 sink-reachability: reopen FAIL
+ (COMPLETE; the deltas' new sinks — delay-queue memory, RPC outputs,
+ the dbcache setter — all reviewed in their cycles; no new dangerous
+ sink). NP 11/20.
