@@ -184,18 +184,18 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
             for p in extra_peers:
                 p.send_and_ping(continuation_message)
 
-        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), MAX_UNRESERVED_HEADERS_REDOWNLOADS + 2)  # TODO: Excess non-full-outbound peers enter REDOWNLOAD instead of being rejected
-        assert_equal(self.count_presynced(node, -1), 1)  # TODO: Excess non-full-outbound peers keep REDOWNLOAD state instead of releasing it
+        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), MAX_UNRESERVED_HEADERS_REDOWNLOADS + 1)
+        assert_equal(self.count_presynced(node, -1), len(extra_peers))
 
         # Existing REDOWNLOAD states can continue after the limit is reached.
         for p in admitted_peers:
             p.send_and_ping(headers_message)
-        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), MAX_UNRESERVED_HEADERS_REDOWNLOADS + 2)  # TODO: Excess non-full-outbound peers continue instead of leaving only admitted REDOWNLOAD states active
+        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), MAX_UNRESERVED_HEADERS_REDOWNLOADS + 1)
 
         # Release two states so a new inbound peer can enter REDOWNLOAD.
         inbound_peers[0].send_and_ping(msg_headers())
         full_outbound_peer.send_and_ping(msg_headers())
-        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), MAX_UNRESERVED_HEADERS_REDOWNLOADS)  # TODO: A block-relay-only peer retains REDOWNLOAD state, leaving no slot for replacement_peer
+        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), MAX_UNRESERVED_HEADERS_REDOWNLOADS - 1)
         replacement_peer = node.add_p2p_connection(P2PInterface())
         replacement_peer.send_and_ping(headers_message)
         replacement_peer.send_and_ping(continuation_message)

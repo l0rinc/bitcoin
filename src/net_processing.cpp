@@ -2934,7 +2934,7 @@ void PeerManagerImpl::ClearHeadersSyncState(Peer& peer)
 
 bool PeerManagerImpl::MayStartHeadersRedownload(const CNode& pfrom)
 {
-    if (!pfrom.IsInboundConn() || !m_chainman.IsInitialBlockDownload()) return true;
+    if (pfrom.IsFullOutboundConn() || !m_chainman.IsInitialBlockDownload()) return true;
     LOCK(m_headers_presync_mutex);
     // Entries without presync height/time are in REDOWNLOAD.
     return std::ranges::count_if(m_headers_presync_stats, [](auto& entry) { return !entry.second.second; }) < MAX_OUTBOUND_FULL_RELAY_CONNECTIONS;
