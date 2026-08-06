@@ -235,10 +235,10 @@ BOOST_AUTO_TEST_CASE(concurrent_redownload_buffers)
     for (size_t i{0}; i < CONCURRENT_SYNCS; ++i) {
         auto& sync{syncs.emplace_back(CreateState())};
         auto result{sync.ProcessNextHeaders(first_chain, true)};
-        BOOST_REQUIRE(result.success && result.request_more);
+        BOOST_REQUIRE(result.success && result.request_more && result.entered_redownload);
         BOOST_REQUIRE_EQUAL(sync.GetState(), State::REDOWNLOAD);
         result = sync.ProcessNextHeaders({first_chain.begin(), REDOWNLOAD_BUFFER_SIZE}, true);
-        BOOST_REQUIRE(result.success && result.request_more);
+        BOOST_REQUIRE(result.success && result.request_more && !result.entered_redownload);
         BOOST_CHECK_EQUAL(sync.GetRedownloadBufferSize(), REDOWNLOAD_BUFFER_SIZE);
         retained_bytes += sync.GetRedownloadBufferSize() * sizeof(CompressedHeader);
     }

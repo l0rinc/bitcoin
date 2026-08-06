@@ -148,6 +148,7 @@ public:
         std::vector<CBlockHeader> pow_validated_headers;
         bool success{false};
         bool request_more{false};
+        bool entered_redownload{false};
     };
 
     /** Process a batch of headers, once a sync via this mechanism has started
@@ -169,6 +170,7 @@ public:
      *                       aborted; true otherwise.
      * ProcessingResult.request_more: if true, the caller is suggested to call
      *                       NextHeadersRequestLocator and send a getheaders message using it.
+     * ProcessingResult.entered_redownload: true if this call entered REDOWNLOAD.
      */
     ProcessingResult ProcessNextHeaders(std::span<const CBlockHeader>
             received_headers, bool full_headers_message);

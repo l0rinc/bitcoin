@@ -767,6 +767,8 @@ private:
         EXCLUSIVE_LOCKS_REQUIRED(peer.m_headers_sync_mutex, !m_headers_presync_mutex, g_msgproc_mutex);
     void ClearHeadersSyncState(Peer& peer)
         EXCLUSIVE_LOCKS_REQUIRED(peer.m_headers_sync_mutex, !m_headers_presync_mutex);
+    bool MayStartHeadersRedownload(const CNode& pfrom)
+        EXCLUSIVE_LOCKS_REQUIRED(!m_headers_presync_mutex);
     /** Check work on a headers chain to be processed, and if insufficient,
      * initiate our anti-DoS headers sync mechanism.
      *
@@ -2930,12 +2932,26 @@ void PeerManagerImpl::ClearHeadersSyncState(Peer& peer)
     WITH_LOCK(m_headers_presync_mutex, m_headers_presync_stats.erase(peer.m_id));
 }
 
+bool PeerManagerImpl::MayStartHeadersRedownload(const CNode& pfrom)
+{
+    if (!pfrom.IsInboundConn() || !m_chainman.IsInitialBlockDownload()) return true;
+    LOCK(m_headers_presync_mutex);
+    // Entries without presync height/time are in REDOWNLOAD.
+    return std::ranges::count_if(m_headers_presync_stats, [](auto& entry) { return !entry.second.second; }) < MAX_OUTBOUND_FULL_RELAY_CONNECTIONS;
+}
+
 bool PeerManagerImpl::IsContinuationOfLowWorkHeadersSync(Peer& peer, CNode& pfrom, std::vector<CBlockHeader>& headers)
 {
     if (peer.m_headers_sync) {
         auto result = peer.m_headers_sync->ProcessNextHeaders(headers, headers.size() == m_opts.max_headers_result);
         // If it is a valid continuation, we should treat the existing getheaders request as responded to.
         if (result.success) peer.m_last_getheaders_timestamp = {};
+        if (result.entered_redownload && !MayStartHeadersRedownload(pfrom)) {
+            LogDebug(BCLog::NET, "Ignoring low-work chain (height=%d) from peer=%d: too many headers redownloads in progress", peer.m_headers_sync->GetPresyncHeight(), pfrom.GetId());
+            ClearHeadersSyncState(peer);
+            headers.clear();
+            return true;
+        }
         if (result.request_more) {
             auto locator = peer.m_headers_sync->NextHeadersRequestLocator();
             // If we were instructed to ask for a locator, it should not be empty.
