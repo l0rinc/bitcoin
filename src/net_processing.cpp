@@ -765,6 +765,8 @@ private:
     bool IsContinuationOfLowWorkHeadersSync(Peer& peer, CNode& pfrom,
             std::vector<CBlockHeader>& headers)
         EXCLUSIVE_LOCKS_REQUIRED(peer.m_headers_sync_mutex, !m_headers_presync_mutex, g_msgproc_mutex);
+    void ClearHeadersSyncState(Peer& peer)
+        EXCLUSIVE_LOCKS_REQUIRED(peer.m_headers_sync_mutex, !m_headers_presync_mutex);
     /** Check work on a headers chain to be processed, and if insufficient,
      * initiate our anti-DoS headers sync mechanism.
      *
@@ -2922,6 +2924,12 @@ bool PeerManagerImpl::CheckHeadersAreContinuous(const std::vector<CBlockHeader>&
     return true;
 }
 
+void PeerManagerImpl::ClearHeadersSyncState(Peer& peer)
+{
+    peer.m_headers_sync.reset();
+    WITH_LOCK(m_headers_presync_mutex, m_headers_presync_stats.erase(peer.m_id));
+}
+
 bool PeerManagerImpl::IsContinuationOfLowWorkHeadersSync(Peer& peer, CNode& pfrom, std::vector<CBlockHeader>& headers)
 {
     if (peer.m_headers_sync) {
@@ -2945,13 +2953,10 @@ bool PeerManagerImpl::IsContinuationOfLowWorkHeadersSync(Peer& peer, CNode& pfro
         }
 
         if (peer.m_headers_sync->GetState() == HeadersSyncState::State::FINAL) {
-            peer.m_headers_sync.reset(nullptr);
-
             // Delete this peer's entry in m_headers_presync_stats.
             // If this is m_headers_presync_bestpeer, it will be replaced later
             // by the next peer that triggers the else{} branch below.
-            LOCK(m_headers_presync_mutex);
-            m_headers_presync_stats.erase(pfrom.GetId());
+            ClearHeadersSyncState(peer);
         } else {
             // Build statistics for this peer's sync.
             HeadersPresyncStats stats;
@@ -3210,11 +3215,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, Peer& peer,
         // message suggests that the peer suddenly has nothing to give us
         // (perhaps it reorged to our chain). Clear download state for this peer.
         LOCK(peer.m_headers_sync_mutex);
-        if (peer.m_headers_sync) {
-            peer.m_headers_sync.reset(nullptr);
-            LOCK(m_headers_presync_mutex);
-            m_headers_presync_stats.erase(pfrom.GetId());
-        }
+        if (peer.m_headers_sync) ClearHeadersSyncState(peer);
         // A headers message with no headers cannot be an announcement, so assume
         // it is a response to our last getheaders request, if there is one.
         peer.m_last_getheaders_timestamp = {};
