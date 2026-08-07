@@ -77,15 +77,10 @@ static RPCMethod gettxoutproof()
                 if (!pblockindex) {
                     throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
                 }
-            } else {
+            // Allow txindex to catch up before we acquire cs_main, and only scan the UTXO set if it cannot answer.
+            } else if (!g_txindex || !g_txindex->BlockUntilSyncedToCurrentChain()) {
                 LOCK(cs_main);
                 pblockindex = FindBlockByUTXO(chainman.ActiveChainstate(), setTxids);
-            }
-
-
-            // Allow txindex to catch up if we need to query it and before we acquire cs_main.
-            if (g_txindex && !pblockindex) {
-                g_txindex->BlockUntilSyncedToCurrentChain();
             }
 
             if (pblockindex == nullptr) {
