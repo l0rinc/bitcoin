@@ -206,6 +206,30 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
         self.reconnect_all()
         self.sync_all()
 
+    def test_post_ibd_headers_redownloads(self):
+        self.log.info("Test concurrent headers redownloads after IBD")
+
+        node = self.nodes[2]
+        assert not node.getblockchaininfo()['initialblockdownload']
+        self.disconnect_all()
+
+        peers = [node.add_p2p_connection(P2PInterface()) for _ in range(MAX_UNRESERVED_HEADERS_REDOWNLOADS + 2)]
+        headers_message = self.create_low_work_headers_message(node)
+        continuation_message = self.create_low_work_headers_message(
+            node,
+            start_height=MAX_HEADERS_RESULTS + 1,
+            hash_prev_block=headers_message.headers[-1].hash_int,
+        )
+        for p in peers:
+            p.send_and_ping(headers_message)
+            p.send_and_ping(continuation_message)
+
+        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), len(peers))
+
+        node.disconnect_p2ps()
+        self.reconnect_all()
+        self.sync_all()
+
     def test_large_reorgs_can_succeed(self):
         self.log.info("Test that a 2000+ block reorg, starting from a point that is more than 2000 blocks before a locator entry, can succeed")
 
@@ -233,6 +257,8 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
         self.test_ibd_headers_redownload_admission()
 
         self.test_chains_sync_when_long_enough()
+
+        self.test_post_ibd_headers_redownloads()
 
         self.test_large_reorgs_can_succeed()
 
