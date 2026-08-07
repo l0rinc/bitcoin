@@ -137,6 +137,13 @@ struct CBlockLocator
         READWRITE(obj.vHave);
     }
 
+    template <size_t Limit, typename Stream>
+    void LimitedRead(Stream& s)
+    {
+        s.ignore(sizeof(DUMMY_VERSION));
+        s >> LIMITED_VECTOR(vHave, Limit);
+    }
+
     void SetNull()
     {
         vHave.clear();
