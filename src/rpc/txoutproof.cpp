@@ -18,7 +18,19 @@
 #include <util/strencodings.h>
 #include <validation.h>
 
+#include <set>
+
 using node::GetTransaction;
+
+static const CBlockIndex* FindBlockByUTXO(Chainstate& active_chainstate, const std::set<Txid>& txids) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+{
+    // Loop through txids and try to find which block they're in. Exit loop once a block is found.
+    for (const auto& tx : txids) {
+        const Coin& coin{AccessByTxid(active_chainstate.CoinsTip(), tx)};
+        if (!coin.IsSpent()) return active_chainstate.m_chain[coin.nHeight];
+    }
+    return nullptr;
+}
 
 static RPCMethod gettxoutproof()
 {
@@ -67,16 +79,7 @@ static RPCMethod gettxoutproof()
                 }
             } else {
                 LOCK(cs_main);
-                Chainstate& active_chainstate = chainman.ActiveChainstate();
-
-                // Loop through txids and try to find which block they're in. Exit loop once a block is found.
-                for (const auto& tx : setTxids) {
-                    const Coin& coin{AccessByTxid(active_chainstate.CoinsTip(), tx)};
-                    if (!coin.IsSpent()) {
-                        pblockindex = active_chainstate.m_chain[coin.nHeight];
-                        break;
-                    }
-                }
+                pblockindex = FindBlockByUTXO(chainman.ActiveChainstate(), setTxids);
             }
 
 
