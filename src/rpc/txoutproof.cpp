@@ -18,16 +18,30 @@
 #include <util/strencodings.h>
 #include <validation.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <set>
 
 using node::GetTransaction;
 
-static const CBlockIndex* FindBlockByUTXO(Chainstate& active_chainstate, const std::set<Txid>& txids) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+//! Find the block creating the first unspent output of any of `txids`. `cs_main` is released
+//! between batches, so the scan does not observe a single chainstate snapshot.
+static const CBlockIndex* FindBlockByUTXO(ChainstateManager& chainman, const std::set<Txid>& txids)
 {
-    // Loop through txids and try to find which block they're in. Exit loop once a block is found.
-    for (const auto& tx : txids) {
-        const Coin& coin{AccessByTxid(active_chainstate.CoinsTip(), tx)};
-        if (!coin.IsSpent()) return active_chainstate.m_chain[coin.nHeight];
+    static constexpr uint64_t UTXO_LOOKUP_BATCH_SIZE{1'000};
+    for (const Txid& txid : txids) {
+        uint32_t output_index{0};
+        for (uint64_t lookups{0}; lookups < MAX_OUTPUTS_PER_BLOCK;) {
+            {
+                LOCK(cs_main);
+                Chainstate& active_chainstate{chainman.ActiveChainstate()};
+                const CCoinsViewCache& coins{active_chainstate.CoinsTip()};
+                for (const uint64_t batch_end{std::min(lookups + UTXO_LOOKUP_BATCH_SIZE, MAX_OUTPUTS_PER_BLOCK)}; lookups < batch_end; ++lookups, ++output_index) {
+                    const Coin& coin{coins.AccessCoin(COutPoint{txid, output_index})};
+                    if (!coin.IsSpent()) return active_chainstate.m_chain[coin.nHeight];
+                }
+            }
+        }
     }
     return nullptr;
 }
@@ -79,8 +93,7 @@ static RPCMethod gettxoutproof()
                 }
             // Allow txindex to catch up before we acquire cs_main, and only scan the UTXO set if it cannot answer.
             } else if (!g_txindex || !g_txindex->BlockUntilSyncedToCurrentChain()) {
-                LOCK(cs_main);
-                pblockindex = FindBlockByUTXO(chainman.ActiveChainstate(), setTxids);
+                pblockindex = FindBlockByUTXO(chainman, setTxids);
             }
 
             if (pblockindex == nullptr) {
