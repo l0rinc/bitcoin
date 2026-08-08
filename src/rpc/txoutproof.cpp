@@ -9,6 +9,7 @@
 #include <index/txindex.h>
 #include <merkleblock.h>
 #include <node/blockstorage.h>
+#include <node/context.h>
 #include <primitives/transaction.h>
 #include <rpc/blockchain.h>
 #include <rpc/server.h>
@@ -20,13 +21,14 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <set>
 
 using node::GetTransaction;
 
 //! Find the block creating the first unspent output of any of `txids`. `cs_main` is released
 //! between batches, so the scan does not observe a single chainstate snapshot.
-static const CBlockIndex* FindBlockByUTXO(ChainstateManager& chainman, const std::set<Txid>& txids)
+static const CBlockIndex* FindBlockByUTXO(ChainstateManager& chainman, const std::set<Txid>& txids, const std::function<void()>& interruption_point)
 {
     static constexpr uint64_t UTXO_LOOKUP_BATCH_SIZE{1'000};
     for (const Txid& txid : txids) {
@@ -41,6 +43,7 @@ static const CBlockIndex* FindBlockByUTXO(ChainstateManager& chainman, const std
                     if (!coin.IsSpent()) return active_chainstate.m_chain[coin.nHeight];
                 }
             }
+            interruption_point();
         }
     }
     return nullptr;
@@ -83,7 +86,8 @@ static RPCMethod gettxoutproof()
 
             const CBlockIndex* pblockindex = nullptr;
             uint256 hashBlock;
-            ChainstateManager& chainman = EnsureAnyChainman(request.context);
+            const node::NodeContext& node{EnsureAnyNodeContext(request.context)};
+            ChainstateManager& chainman{EnsureChainman(node)};
             if (!request.params[1].isNull()) {
                 LOCK(cs_main);
                 hashBlock = ParseHashV(request.params[1], "blockhash");
@@ -93,7 +97,7 @@ static RPCMethod gettxoutproof()
                 }
             // Allow txindex to catch up before we acquire cs_main, and only scan the UTXO set if it cannot answer.
             } else if (!g_txindex || !g_txindex->BlockUntilSyncedToCurrentChain()) {
-                pblockindex = FindBlockByUTXO(chainman, setTxids);
+                pblockindex = FindBlockByUTXO(chainman, setTxids, node.rpc_interruption_point);
             }
 
             if (pblockindex == nullptr) {
