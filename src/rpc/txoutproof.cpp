@@ -26,25 +26,30 @@
 
 using node::GetTransaction;
 
-//! Find the block creating the first unspent output of any of `txids`. `cs_main` is released
-//! between batches, so the scan does not observe a single chainstate snapshot.
+//! Find the block creating the first unspent output of any of `txids`, scanning the UTXO set
+//! round-robin (every txid at output 0, then every txid at output 1, ...) so that one shared
+//! MAX_OUTPUTS_PER_BLOCK budget cannot be exhausted by the first txid alone. `cs_main` is
+//! released between batches, so the scan does not observe a single chainstate snapshot.
 static const CBlockIndex* FindBlockByUTXO(ChainstateManager& chainman, const std::set<Txid>& txids, const std::function<void()>& interruption_point)
 {
     static constexpr uint64_t UTXO_LOOKUP_BATCH_SIZE{1'000};
-    for (const Txid& txid : txids) {
-        uint32_t output_index{0};
-        for (uint64_t lookups{0}; lookups < MAX_OUTPUTS_PER_BLOCK;) {
-            {
-                LOCK(cs_main);
-                Chainstate& active_chainstate{chainman.ActiveChainstate()};
-                const CCoinsViewCache& coins{active_chainstate.CoinsTip()};
-                for (const uint64_t batch_end{std::min(lookups + UTXO_LOOKUP_BATCH_SIZE, MAX_OUTPUTS_PER_BLOCK)}; lookups < batch_end; ++lookups, ++output_index) {
-                    const Coin& coin{coins.AccessCoin(COutPoint{txid, output_index})};
-                    if (!coin.IsSpent()) return active_chainstate.m_chain[coin.nHeight];
+    auto txid{txids.begin()};
+    uint32_t output_index{0};
+    for (uint64_t lookups{0}; lookups < MAX_OUTPUTS_PER_BLOCK;) {
+        {
+            LOCK(cs_main);
+            Chainstate& active_chainstate{chainman.ActiveChainstate()};
+            const CCoinsViewCache& coins{active_chainstate.CoinsTip()};
+            for (const uint64_t batch_end{std::min(lookups + UTXO_LOOKUP_BATCH_SIZE, MAX_OUTPUTS_PER_BLOCK)}; lookups < batch_end; ++lookups) {
+                const Coin& coin{coins.AccessCoin(COutPoint{*txid, output_index})};
+                if (!coin.IsSpent()) return active_chainstate.m_chain[coin.nHeight];
+                if (++txid == txids.end()) {
+                    txid = txids.begin();
+                    ++output_index;
                 }
             }
-            interruption_point();
         }
+        interruption_point();
     }
     return nullptr;
 }
@@ -55,7 +60,9 @@ static RPCMethod gettxoutproof()
         "gettxoutproof",
         "Returns a hex-encoded proof that \"txid\" was included in a block.\n"
         "\nNOTE: By default this function only works sometimes. This is when there is an\n"
-        "unspent output in the utxo for this transaction. To make it always work,\n"
+        "unspent output in the utxo for this transaction. A request for multiple\n"
+        "transactions may fail even when one has an unspent output because all txids\n"
+        "share one UTXO lookup budget. To make it always work,\n"
         "you need to maintain a transaction index, using the -txindex command line option or\n"
         "specify the block in which the transaction is included manually (by blockhash).\n",
         {
