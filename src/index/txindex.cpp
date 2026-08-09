@@ -11,6 +11,7 @@
 #include <index/disktxpos.h>
 #include <interfaces/chain.h>
 #include <node/blockstorage.h>
+#include <node/context.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <serialize.h>
@@ -97,7 +98,8 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
         return false;
     }
 
-    AutoFile file{m_chainstate->m_blockman.OpenBlockFile(postx, true)};
+    // Unlike m_chainstate, chainman->m_blockman is never reassigned on index restart.
+    AutoFile file{m_chain->context()->chainman->m_blockman.OpenBlockFile(postx, /*fReadOnly=*/true)};
     if (file.IsNull()) {
         LogError("OpenBlockFile failed");
         return false;
