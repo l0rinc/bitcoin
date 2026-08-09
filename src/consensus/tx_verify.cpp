@@ -167,12 +167,42 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     return nSigOps;
 }
 
-bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee)
+bool Consensus::CheckSigopsBIP54(const CTransaction& tx, const CCoinsViewCache& inputs)
+{
+    Assert(!tx.IsCoinBase());
+
+    unsigned int sigops{0};
+    for (const auto& txin: tx.vin) {
+        const auto& prev_txo{inputs.AccessCoin(txin.prevout).out};
+
+        // Unlike the existing block-wide limit, BIP54 does not count sigops in
+        // outputs created by this transaction. It statically counts the scripts
+        // associated with each input, whether or not execution reaches a sigop.
+        // BIP16 accurate accounting charges CHECKMULTISIG and
+        // CHECKMULTISIGVERIFY according to an immediately preceding OP_1
+        // through OP_16; all other forms cost 20.
+        // The GetSigOpCount call on the previous scriptPubKey counts both bare and P2SH sigops.
+        sigops += txin.scriptSig.GetSigOpCount(/*fAccurate=*/true);
+        sigops += prev_txo.scriptPubKey.GetSigOpCount(txin.scriptSig);
+
+        if (sigops > MAX_TX_BIP54_SIGOPS) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee, bool enforce_bip54)
 {
     // are the actual inputs available?
     if (!inputs.HaveInputs(tx)) {
         return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent",
                          strprintf("%s: inputs missing/spent", __func__));
+    }
+
+    if (enforce_bip54 && !Consensus::CheckSigopsBIP54(tx, inputs)) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-legacy-sigops", "too many legacy sigops (BIP54)");
     }
 
     CAmount nValueIn = 0;

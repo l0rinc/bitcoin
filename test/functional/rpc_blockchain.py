@@ -244,6 +244,19 @@ class BlockchainTest(BitcoinTestFramework):
                 },
                 'active': False
             },
+            'consensuscleanup': {
+                'type': 'bip9',
+                'bip9': {
+                    'start_time': -1,
+                    'timeout': 9223372036854775807,
+                    'min_activation_height': 0,
+                    'status': 'active',
+                    'status_next': 'active',
+                    'since': 0,
+                },
+                'height': 0,
+                'active': True
+            }
           }
         })
 
@@ -253,13 +266,29 @@ class BlockchainTest(BitcoinTestFramework):
 
         self.log.info("Test getdeploymentinfo")
         self.stop_node(0)
-        self.start_node(0, extra_args=[
+        deployment_args = [
             '-testactivationheight=bip34@2',
             '-testactivationheight=dersig@3',
             '-testactivationheight=cltv@4',
             '-testactivationheight=csv@5',
             '-testactivationheight=segwit@6',
+        ]
+        self.start_node(0, extra_args=deployment_args + [
+            '-vbparams=consensuscleanup:-2:9223372036854775807',
         ])
+        assert_equal(self.nodes[0].getdeploymentinfo()['deployments']['consensuscleanup'], {
+            'type': 'bip9',
+            'active': False,
+            'bip9': {
+                'start_time': -2,
+                'timeout': 9223372036854775807,
+                'min_activation_height': 0,
+                'status': 'failed',
+                'since': 0,
+                'status_next': 'failed',
+            },
+        })
+        self.restart_node(0, extra_args=deployment_args)
 
         gbci207 = self.nodes[0].getblockchaininfo()
         self.check_signalling_deploymentinfo_result(self.nodes[0].getdeploymentinfo(), gbci207["blocks"], gbci207["bestblockhash"], "started")

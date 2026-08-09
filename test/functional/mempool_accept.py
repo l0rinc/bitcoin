@@ -26,6 +26,7 @@ from test_framework.messages import (
     WITNESS_SCALE_FACTOR,
     MAX_MONEY,
     SEQUENCE_FINAL,
+    TX_MAX_STANDARD_VERSION,
     tx_from_hex,
 )
 from test_framework.script import (
@@ -421,8 +422,18 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         assert_greater_than(len(tx.serialize()), 64)
 
         self.check_mempool_result(
-            result_expected=[{'txid': tx.txid_hex, 'allowed': False, 'reject-reason': 'tx-size-small'}],
+            result_expected=[{'txid': tx.txid_hex, 'allowed': False, 'reject-reason': 'txn-size-64'}],
             rawtxs=[tx.serialize().hex()],
+            maxfeerate=0,
+        )
+
+        self.log.info('A 64-byte transaction is consensus-invalid even when it also violates policy')
+        nonstandard_version_tx = deepcopy(tx)
+        nonstandard_version_tx.version = TX_MAX_STANDARD_VERSION + 1
+        assert_equal(len(nonstandard_version_tx.serialize_without_witness()), 64)
+        self.check_mempool_result(
+            result_expected=[{'txid': nonstandard_version_tx.txid_hex, 'allowed': False, 'reject-reason': 'txn-size-64'}],
+            rawtxs=[nonstandard_version_tx.serialize().hex()],
             maxfeerate=0,
         )
 

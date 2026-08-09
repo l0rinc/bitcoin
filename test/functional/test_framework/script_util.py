@@ -41,8 +41,8 @@ from test_framework.util import (
     assert_equal,
 )
 
-# Maximum number of potentially executed legacy signature operations in validating a transaction.
-MAX_STD_LEGACY_SIGOPS = 2_500
+# Maximum static non-witness sigops associated with a transaction's inputs under BIP54.
+MAX_TX_BIP54_SIGOPS = 2_500
 
 # Maximum number of sigops per standard P2SH redeemScript.
 MAX_STD_P2SH_SIGOPS = 15

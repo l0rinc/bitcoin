@@ -28,10 +28,28 @@ static const size_t MIN_SERIALIZABLE_TRANSACTION_WEIGHT = WITNESS_SCALE_FACTOR *
 static constexpr unsigned int LOCKTIME_VERIFY_SEQUENCE = (1 << 0);
 
 /**
+ * Under BIP54, the first block in a difficulty adjustment period must not be more than 2
+ * hours (7200 seconds) earlier than the last block of the previous period.
+ */
+static constexpr int64_t MAX_TIMEWARP_BIP54{2 * 60 * 60};
+
+/**
  * Maximum number of seconds that the timestamp of the first
  * block of a difficulty adjustment period is allowed to
  * be earlier than the last block of the previous period (BIP94).
  */
-static constexpr int64_t MAX_TIMEWARP = 600;
+static constexpr int64_t MAX_TIMEWARP_TESTNET4 = 600;
+
+/**
+ * Maximum static non-witness sigops in the scriptSig, spent scriptPubKey, and
+ * P2SH redeemScript of a noncoinbase transaction under BIP16 accounting.
+ */
+static constexpr unsigned int MAX_TX_BIP54_SIGOPS{2'500};
+
+/**
+ * 64-byte transactions are invalid (BIP 54) due to serious flaws in the Merkle tree algorithm
+ * that make it so that such transactions may be re-interpreted as inner tree nodes.
+ */
+static constexpr unsigned int INVALID_TX_NONWITNESS_SIZE{64};
 
 #endif // BITCOIN_CONSENSUS_CONSENSUS_H

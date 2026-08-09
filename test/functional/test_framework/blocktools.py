@@ -38,6 +38,7 @@ from .script import (
     OP_0,
     OP_RETURN,
     OP_TRUE,
+    OP_DROP,
 )
 from .script_util import (
     key_to_p2pk_script,
@@ -65,7 +66,8 @@ WITNESS_COMMITMENT_HEADER = b"\xaa\x21\xa9\xed"
 
 NULL_OUTPOINT = COutPoint(0, 0xffffffff)
 
-NORMAL_GBT_REQUEST_PARAMS = {"rules": ["segwit"]}
+NORMAL_GBT_REQUEST_PARAMS = {"rules": ["segwit", "consensuscleanup"]}
+CONSENSUS_CLEANUP_NEVER_ACTIVE = "-vbparams=consensuscleanup:-2:9223372036854775807"
 VERSIONBITS_LAST_OLD_BLOCK_VERSION = 4
 MIN_BLOCKS_TO_KEEP = 288
 
@@ -193,7 +195,8 @@ def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_scr
     elif script_pubkey is not None:
         coinbaseoutput.scriptPubKey = script_pubkey
     else:
-        coinbaseoutput.scriptPubKey = CScript([OP_TRUE])
+        # Use two OP_TRUEs and an OP_DROP to ensure we're always > 64 bytes in non-witness size
+        coinbaseoutput.scriptPubKey = CScript([OP_TRUE, OP_TRUE, OP_DROP])
     coinbase.vout = [coinbaseoutput]
     if extra_output_script is not None:
         coinbaseoutput2 = CTxOut()
@@ -289,6 +292,17 @@ class TestFrameworkBlockTools(unittest.TestCase):
         assert_equal(CScriptNum.decode(block.vtx[0].vin[0].scriptSig), 200)
 
     def test_create_coinbase(self):
-        height = 20
-        coinbase_tx = create_coinbase(height=height)
-        assert_equal(CScriptNum.decode(coinbase_tx.vin[0].scriptSig), height)
+        for height in [1, 16, 17, 127, 128, 255, 256, 32767, 32768]:
+            with self.subTest(height=height):
+                coinbase_tx = create_coinbase(height=height)
+                height_opcode, height_data, _ = next(CScript(coinbase_tx.vin[0].scriptSig).raw_iter())
+                if height_data is None:
+                    self.assertTrue(height_opcode.is_small_int())
+                    coinbase_height = height_opcode.decode_op_n()
+                else:
+                    # CScriptNum.decode skips the serialized push-length byte.
+                    coinbase_height = CScriptNum.decode(b"\x00" + height_data)
+                assert_equal(coinbase_height, height)
+                assert_equal(coinbase_tx.nLockTime, height - 1)
+                assert_equal(coinbase_tx.vin[0].nSequence, MAX_SEQUENCE_NONFINAL)
+                self.assertGreaterEqual(len(coinbase_tx.serialize_without_witness()), 65)

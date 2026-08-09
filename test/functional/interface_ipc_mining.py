@@ -692,14 +692,14 @@ class IPCMiningTest(BitcoinTestFramework):
                 invalid_block.vtx[0].nLockTime = 2**32 - 1
                 invalid_block.hashMerkleRoot = invalid_block.calc_merkle_root()
                 invalid_block.solve()
-                self.log.debug("submitBlock should reject the non-final block")
+                self.log.debug("submitBlock should reject the invalid coinbase locktime")
                 await self.assert_submit_block(
                     mining2,
                     ctx2,
                     invalid_block,
                     result=False,
-                    reason="bad-txns-nonfinal",
-                    debug="non-final transaction",
+                    reason="bad-cb-locktime",
+                    debug="block height mismatch in coinbase nLockTime",
                 )
                 self.log.debug("submitBlock should report duplicate-invalid for the same block")
                 await self.assert_submit_block(

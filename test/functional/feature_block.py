@@ -193,7 +193,7 @@ class FullBlockTest(BitcoinTestFramework):
             blockname = f"for_invalid.{TxTemplate.__name__}"
             self.next_block(blockname)
             badtx = template.get_tx()
-            if TxTemplate != invalid_txs.InputMissing:
+            if TxTemplate != invalid_txs.InputMissing and TxTemplate != invalid_txs.SizeExactly64:
                 self.sign_tx(badtx, attempt_spend_tx)
             badblock = self.update_block(blockname, [badtx])
             reject_reason = (template.block_reject_reason or template.reject_reason)
@@ -844,6 +844,10 @@ class FullBlockTest(BitcoinTestFramework):
         self.send_blocks([b60], True)
         self.save_spendable_output()
 
+        # Disable the consensus cleanup for the BIP30 checks.
+        self.restart_node(0, ["-vbparams=consensuscleanup:0:0"])
+        self.reconnect_p2p()
+
         # Test BIP30 (reject duplicate)
         #
         # -> b39 (11) -> b42 (12) -> b43 (13) -> b53 (14) -> b55 (15) -> b57 (16) -> b60 ()
@@ -886,6 +890,10 @@ class FullBlockTest(BitcoinTestFramework):
         # The duplicate has less confirmations
         assert_equal(self.nodes[0].gettxout(txid=duplicate_tx.txid_hex, n=0)['confirmations'], 1)
 
+        # Re-enable the consensus cleanup now that BIP30 checks were performed.
+        self.restart_node(0)
+        self.reconnect_p2p()
+
         # Test tx.isFinal is properly rejected (not an exhaustive tx.isFinal test, that should be in data-driven transaction tests)
         #
         # -> b_spend_dup_cb (b_dup_cb) -> b_dup_2 ()
@@ -913,7 +921,7 @@ class FullBlockTest(BitcoinTestFramework):
         b63.vtx[0].nLockTime = 0xffffffff
         b63.vtx[0].vin[0].nSequence = 0xDEADBEEF
         b63 = self.update_block(63, [])
-        self.send_blocks([b63], success=False, reject_reason='bad-txns-nonfinal', reconnect=True)
+        self.send_blocks([b63], success=False, reject_reason='bad-cb-locktime', reconnect=True)
 
         #  This checks that a block with a bloated VARINT between the block_header and the array of tx such that
         #  the block is > MAX_BLOCK_WEIGHT with the bloated varint, but <= MAX_BLOCK_WEIGHT without the bloated varint,
