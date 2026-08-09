@@ -273,9 +273,9 @@ class InvalidMessagesTest(BitcoinTestFramework):
         self.nodes[0].disconnect_p2ps()
 
     def test_count_only_oversized_inv_messages(self):
-        self.check_count_only_oversized_inv_message(b'inv', ['ProcessMessages(inv, 5 bytes): Exception'], [], False)  # TODO: The oversized count reaches entry parsing before rejection.
-        self.check_count_only_oversized_inv_message(b'getdata', ['ProcessMessages(getdata, 5 bytes): Exception'], [], False)  # TODO: The oversized count reaches entry parsing before rejection.
-        self.check_count_only_oversized_inv_message(b'notfound', ['ProcessMessages(notfound, 5 bytes): Exception'], [], False)  # TODO: The oversized count reaches entry parsing before being ignored.
+        self.check_count_only_oversized_inv_message(b'inv', ['inv message size = 1000000'], [], True)
+        self.check_count_only_oversized_inv_message(b'getdata', ['getdata message size = 1000000'], [], True)
+        self.check_count_only_oversized_inv_message(b'notfound', [], ['ProcessMessages(notfound'], False)
 
     def test_oversized_msg(self, msg, size):
         msg_type = msg.msgtype.decode('ascii')
