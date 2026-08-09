@@ -5240,7 +5240,12 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             return;
         }
         CBloomFilter filter;
-        vRecv >> filter;
+        try {
+            vRecv >> filter;
+        } catch (const LimitedVectorExceededError&) {
+            Misbehaving(peer, "too-large bloom filter");
+            return;
+        }
 
         if (!filter.IsWithinSizeConstraints())
         {
@@ -5266,7 +5271,12 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             return;
         }
         std::vector<unsigned char> vData;
-        vRecv >> vData;
+        try {
+            vRecv >> LIMITED_VECTOR(vData, MAX_SCRIPT_ELEMENT_SIZE);
+        } catch (const LimitedVectorExceededError&) {
+            Misbehaving(peer, "bad filteradd message");
+            return;
+        }
 
         // Nodes must NEVER send a data item > MAX_SCRIPT_ELEMENT_SIZE bytes (the max size for a script data object,
         // and thus, the maximum size any matched object can have) in a filteradd message
