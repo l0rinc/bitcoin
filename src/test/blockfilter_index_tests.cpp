@@ -5,15 +5,12 @@
 #include <addresstype.h>
 #include <blockfilter.h>
 #include <chain.h>
-#include <consensus/merkle.h>
 #include <consensus/validation.h>
 #include <index/base.h>
 #include <index/blockfilterindex.h>
 #include <interfaces/chain.h>
-#include <interfaces/mining.h>
 #include <key.h>
 #include <node/blockstorage.h>
-#include <pow.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
@@ -47,7 +44,6 @@ using node::BlockManager;
 BOOST_AUTO_TEST_SUITE(blockfilter_index_tests)
 
 struct BuildChainTestingSetup : public TestChain100Setup {
-    CBlock CreateBlock(const CBlockIndex* prev, const std::vector<CMutableTransaction>& txns, const CScript& scriptPubKey);
     bool BuildChain(const CBlockIndex* pindex, const CScript& coinbase_script_pub_key, size_t length, std::vector<std::shared_ptr<CBlock>>& chain);
 };
 
@@ -83,37 +79,6 @@ static bool CheckFilterLookups(BlockFilterIndex& filter_index, const CBlockIndex
     filter_hashes.clear();
     last_header = filter_header;
     return true;
-}
-
-CBlock BuildChainTestingSetup::CreateBlock(const CBlockIndex* prev,
-    const std::vector<CMutableTransaction>& txns,
-    const CScript& scriptPubKey)
-{
-    auto mining{interfaces::MakeMining(m_node)};
-    auto block_template{mining->createNewBlock({
-        .coinbase_output_script = scriptPubKey,
-    }, /*cooldown=*/false)};
-    BOOST_REQUIRE(block_template);
-    CBlock block{block_template->getBlock()};
-    block.hashPrevBlock = prev->GetBlockHash();
-    block.nTime = prev->nTime + 1;
-
-    // Replace mempool-selected txns with just coinbase plus passed-in txns:
-    block.vtx.resize(1);
-    for (const CMutableTransaction& tx : txns) {
-        block.vtx.push_back(MakeTransactionRef(tx));
-    }
-    {
-        CMutableTransaction tx_coinbase{*block.vtx.at(0)};
-        tx_coinbase.nLockTime = static_cast<uint32_t>(prev->nHeight);
-        tx_coinbase.vin.at(0).scriptSig = CScript{} << prev->nHeight + 1;
-        block.vtx.at(0) = MakeTransactionRef(std::move(tx_coinbase));
-        block.hashMerkleRoot = BlockMerkleRoot(block);
-    }
-
-    while (!CheckProofOfWork(block.GetHash(), block.nBits, m_node.chainman->GetConsensus())) ++block.nNonce;
-
-    return block;
 }
 
 bool BuildChainTestingSetup::BuildChain(const CBlockIndex* pindex,

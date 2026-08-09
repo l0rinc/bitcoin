@@ -131,6 +131,7 @@ struct Testnet4Setup : public TestingSetup {
 };
 
 class CBlock;
+class CBlockIndex;
 class CScript;
 
 /**
@@ -153,6 +154,15 @@ struct TestChain100Setup : public TestingSetup {
      * scriptPubKey.
      */
     CBlock CreateBlock(
+        const std::vector<CMutableTransaction>& txns,
+        const CScript& scriptPubKey);
+
+    /**
+     * Create a new block on top of prev with just given transactions,
+     * coinbase paying to scriptPubKey. The block is not processed.
+     */
+    CBlock CreateBlock(
+        const CBlockIndex* prev,
         const std::vector<CMutableTransaction>& txns,
         const CScript& scriptPubKey);
 
