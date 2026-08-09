@@ -15,11 +15,13 @@ from test_framework.messages import (
     MAX_PROTOCOL_MESSAGE_LENGTH,
     MSG_TX,
     from_hex,
+    msg_generic,
     msg_getdata,
     msg_headers,
     msg_inv,
     msg_ping,
     msg_version,
+    ser_compact_size,
     ser_string,
 )
 from test_framework.p2p import (
@@ -71,6 +73,7 @@ class InvalidMessagesTest(BitcoinTestFramework):
         self.test_addrv2_no_addresses()
         self.test_addrv2_too_long_address()
         self.test_addrv2_unrecognized_network()
+        self.test_count_only_oversized_inv_messages()
         self.test_oversized_inv_msg()
         self.test_oversized_getdata_msg()
         self.test_oversized_headers_msg()
@@ -255,6 +258,24 @@ class InvalidMessagesTest(BitcoinTestFramework):
                 '04' +     # address length (COMPACTSIZE(4))
                 '09' * 4 + # address
                 '208d'))   # port
+
+    def check_count_only_oversized_inv_message(self, msg_type, expected_msgs, unexpected_msgs, disconnect):
+        size = 1_000_000
+        msg_name = msg_type.decode()
+        self.log.info(f"Test count-only oversized {msg_name} message")
+        conn = self.nodes[0].add_p2p_connection(P2PInterface())
+        with self.nodes[0].assert_debug_log(expected_msgs, unexpected_msgs=unexpected_msgs):
+            conn.send_without_ping(msg_generic(msg_type, ser_compact_size(size)))
+            if disconnect:
+                conn.wait_for_disconnect(timeout=1)
+            else:
+                conn.sync_with_ping(timeout=1)
+        self.nodes[0].disconnect_p2ps()
+
+    def test_count_only_oversized_inv_messages(self):
+        self.check_count_only_oversized_inv_message(b'inv', ['ProcessMessages(inv, 5 bytes): Exception'], [], False)  # TODO: The oversized count reaches entry parsing before rejection.
+        self.check_count_only_oversized_inv_message(b'getdata', ['ProcessMessages(getdata, 5 bytes): Exception'], [], False)  # TODO: The oversized count reaches entry parsing before rejection.
+        self.check_count_only_oversized_inv_message(b'notfound', ['ProcessMessages(notfound, 5 bytes): Exception'], [], False)  # TODO: The oversized count reaches entry parsing before being ignored.
 
     def test_oversized_msg(self, msg, size):
         msg_type = msg.msgtype.decode('ascii')
