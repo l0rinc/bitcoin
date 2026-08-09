@@ -2,10 +2,6 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <test/data/tx_invalid.json.h>
-#include <test/data/tx_valid.json.h>
-#include <test/util/setup_common.h>
-
 #include <checkqueue.h>
 #include <clientversion.h>
 #include <consensus/amount.h>
@@ -26,22 +22,25 @@
 #include <script/signingprovider.h>
 #include <script/solver.h>
 #include <streams.h>
+#include <test/data/tx_invalid.json.h>
+#include <test/data/tx_valid.json.h>
 #include <test/util/common.h>
 #include <test/util/json.h>
 #include <test/util/random.h>
 #include <test/util/script.h>
+#include <test/util/setup_common.h>
 #include <test/util/transaction_utils.h>
+#include <univalue.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+#include <util/vector.h>
 #include <validation.h>
+
+#include <boost/test/unit_test.hpp>
 
 #include <functional>
 #include <map>
 #include <string>
-
-#include <boost/test/unit_test.hpp>
-
-#include <univalue.h>
 
 using namespace util::hex_literals;
 using util::SplitString;
@@ -371,6 +370,56 @@ BOOST_AUTO_TEST_CASE(tx_oversized)
         TxValidationState state;
         BOOST_CHECK_MESSAGE(!CheckTransaction(createTransaction(maxPayloadSize), state), "Oversized transaction should be invalid");
         BOOST_CHECK(state.GetRejectReason() == "bad-txns-oversize");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(transaction_byte_vector_limits)
+{
+    constexpr size_t MAX_BASE_SIZE{MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR};
+    constexpr std::string_view EXPECTED_ERROR{"end of data"};
+    auto make_stream{[](const auto&... args) {
+        DataStream stream;
+        SerializeMany(stream, args...);
+        return stream;
+    }};
+    auto make_witness_stream{[&](const auto&... args) {
+        return make_stream(CTransaction::CURRENT_VERSION, uint8_t{0}, uint8_t{1}, Vector(CTxIn{}), Vector(CTxOut{}), args...);
+    }};
+
+    // Input script
+    {
+        CTxIn txin;
+        make_stream(COutPoint{}, std::vector<uint8_t>(MAX_BASE_SIZE), CTxIn::SEQUENCE_FINAL) >> txin;
+        BOOST_CHECK_EQUAL(txin.scriptSig.size(), MAX_BASE_SIZE);
+    }
+    {
+        CTxIn txin;
+        BOOST_CHECK_EXCEPTION(make_stream(COutPoint{}, CompactSizeWriter{MAX_BASE_SIZE + 1}) >> txin, std::ios_base::failure, HasReason(EXPECTED_ERROR));
+        BOOST_CHECK_EQUAL(txin.scriptSig.size(), MAX_BASE_SIZE + 1); // TODO: Reject before allocating.
+    }
+
+    // Output script
+    {
+        CTxOut txout;
+        make_stream(CAmount{0}, std::vector<uint8_t>(MAX_BASE_SIZE)) >> txout;
+        BOOST_CHECK_EQUAL(txout.scriptPubKey.size(), MAX_BASE_SIZE);
+    }
+    {
+        CTxOut txout;
+        BOOST_CHECK_EXCEPTION(make_stream(CAmount{0}, CompactSizeWriter{MAX_BASE_SIZE + 1}) >> txout, std::ios_base::failure, HasReason(EXPECTED_ERROR));
+        BOOST_CHECK_EQUAL(txout.scriptPubKey.size(), MAX_BASE_SIZE + 1); // TODO: Reject before allocating.
+    }
+
+    // Witness stack element
+    {
+        CMutableTransaction tx;
+        make_witness_stream(Vector(std::vector<uint8_t>(MAX_BLOCK_WEIGHT)), uint32_t{0}) >> TX_WITH_WITNESS(tx);
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.at(0).size(), MAX_BLOCK_WEIGHT);
+    }
+    {
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(make_witness_stream(CompactSizeWriter{1}, CompactSizeWriter{MAX_BLOCK_WEIGHT + 1}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason(EXPECTED_ERROR));
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.at(0).size(), MAX_BLOCK_WEIGHT + 1); // TODO: Reject before allocating.
     }
 }
 
