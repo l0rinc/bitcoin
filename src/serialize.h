@@ -649,6 +649,30 @@ struct LimitedStringFormatter
     }
 };
 
+template<typename Stream, unsigned int N, typename T>
+void UnserializeByteVectorElements(Stream& is, prevector<N, T>& v, unsigned int nSize)
+{
+    unsigned int i = 0;
+    while (i < nSize) {
+        unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
+        v.resize_uninitialized(i + blk);
+        is.read(std::as_writable_bytes(std::span{&v[i], blk}));
+        i += blk;
+    }
+}
+
+template<typename Stream, typename T, typename A>
+void UnserializeByteVectorElements(Stream& is, std::vector<T, A>& v, unsigned int nSize)
+{
+    unsigned int i = 0;
+    while (i < nSize) {
+        unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
+        v.resize(i + blk);
+        is.read(std::as_writable_bytes(std::span{&v[i], blk}));
+        i += blk;
+    }
+}
+
 /** Formatter to serialize/deserialize vector elements using another formatter
  *
  * Example:
@@ -877,14 +901,7 @@ void Unserialize(Stream& is, prevector<N, T>& v)
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
-        unsigned int nSize = ReadCompactSize(is);
-        unsigned int i = 0;
-        while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
-            v.resize_uninitialized(i + blk);
-            is.read(std::as_writable_bytes(std::span{&v[i], blk}));
-            i += blk;
-        }
+        UnserializeByteVectorElements(is, v, ReadCompactSize(is));
     } else {
         Unserialize(is, Using<VectorFormatter<DefaultFormatter>>(v));
     }
@@ -920,14 +937,7 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
-        unsigned int nSize = ReadCompactSize(is);
-        unsigned int i = 0;
-        while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
-            v.resize(i + blk);
-            is.read(std::as_writable_bytes(std::span{&v[i], blk}));
-            i += blk;
-        }
+        UnserializeByteVectorElements(is, v, ReadCompactSize(is));
     } else {
         Unserialize(is, Using<VectorFormatter<DefaultFormatter>>(v));
     }
