@@ -649,27 +649,21 @@ struct LimitedStringFormatter
     }
 };
 
-template<typename Stream, unsigned int N, typename T>
-void UnserializeByteVectorElements(Stream& is, prevector<N, T>& v, unsigned int nSize)
+// Limit size per read so bogus size value won't cause out of memory
+template<typename Stream, typename V>
+void UnserializeByteVectorElements(Stream& s, V& v, size_t size)
 {
-    unsigned int i = 0;
-    while (i < nSize) {
-        unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
-        v.resize_uninitialized(i + blk);
-        is.read(std::as_writable_bytes(std::span{&v[i], blk}));
-        i += blk;
-    }
-}
-
-template<typename Stream, typename T, typename A>
-void UnserializeByteVectorElements(Stream& is, std::vector<T, A>& v, unsigned int nSize)
-{
-    unsigned int i = 0;
-    while (i < nSize) {
-        unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
-        v.resize(i + blk);
-        is.read(std::as_writable_bytes(std::span{&v[i], blk}));
-        i += blk;
+    static_assert(BasicByte<typename V::value_type>);
+    for (size_t allocated{0}; allocated < size;) {
+        const size_t block{std::min(size - allocated, size_t{MAX_VECTOR_ALLOCATE})};
+        const size_t next{allocated + block};
+        if constexpr (requires { v.resize_uninitialized(next); }) {
+            v.resize_uninitialized(next);
+        } else {
+            v.resize(next);
+        }
+        s.read(MakeWritableByteSpan(v).subspan(allocated, block));
+        allocated = next;
     }
 }
 
@@ -899,7 +893,6 @@ template <typename Stream, unsigned int N, typename T>
 void Unserialize(Stream& is, prevector<N, T>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
-        // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         UnserializeByteVectorElements(is, v, ReadCompactSize(is));
     } else {
@@ -935,7 +928,6 @@ template <typename Stream, typename T, typename A>
 void Unserialize(Stream& is, std::vector<T, A>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
-        // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         UnserializeByteVectorElements(is, v, ReadCompactSize(is));
     } else {
