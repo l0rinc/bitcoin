@@ -1655,7 +1655,7 @@ BOOST_AUTO_TEST_CASE(getdata_response_memory_limit)
         const auto& [_bytes, _more, msg_type] = peer->m_transport->GetBytesToSend(false);
         responses += msg_type == NetMsgType::BLOCK;
     }
-    BOOST_CHECK_EQUAL(responses, peers.size()); // TODO: Limit the number of retained responses across peers.
+    BOOST_CHECK_EQUAL(responses, CConnman::MAX_RESPONSE_MEMORY / CConnman::RESPONSE_MEMORY_RESERVATION);
 
     for (const auto& peer : peers) m_node.peerman->FinalizeNode(*peer);
 }
