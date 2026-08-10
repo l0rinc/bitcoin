@@ -51,6 +51,7 @@
 class AddrMan;
 class BanMan;
 class CChainParams;
+class CConnman;
 class CNode;
 class CScheduler;
 struct bilingual_str;
@@ -119,6 +120,25 @@ struct AddedNodeInfo {
 class CNodeStats;
 class CClientUIInterface;
 
+/** Tracks memory reserved for a large peer response. */
+class ResponseMemoryReservation
+{
+    friend class CConnman;
+
+    CConnman* m_connman{nullptr};
+    size_t m_size{0};
+
+    ResponseMemoryReservation(CConnman& connman, size_t size);
+
+public:
+    ResponseMemoryReservation() = default;
+    ResponseMemoryReservation(ResponseMemoryReservation&& other) noexcept;
+    ResponseMemoryReservation& operator=(ResponseMemoryReservation&& other) noexcept;
+    ResponseMemoryReservation(const ResponseMemoryReservation&) = delete;
+    ResponseMemoryReservation& operator=(const ResponseMemoryReservation&) = delete;
+    ~ResponseMemoryReservation();
+};
+
 struct CSerializedNetMsg {
     CSerializedNetMsg() = default;
     CSerializedNetMsg(CSerializedNetMsg&&) = default;
@@ -137,6 +157,7 @@ struct CSerializedNetMsg {
 
     std::vector<unsigned char> data;
     std::string m_type;
+    ResponseMemoryReservation m_response_memory_reservation;
 
     /** Compute total memory usage of this object (own memory + any dynamic memory). */
     size_t GetMemoryUsage() const noexcept;
@@ -615,6 +636,8 @@ private:
     std::vector<uint8_t> m_send_garbage GUARDED_BY(m_send_mutex);
     /** Type of the message being sent. */
     std::string m_send_type GUARDED_BY(m_send_mutex);
+    /** Memory reserved for the message being sent. */
+    ResponseMemoryReservation m_response_memory_reservation GUARDED_BY(m_send_mutex);
     /** Current sender state. */
     SendState m_send_state GUARDED_BY(m_send_mutex);
     /** Whether we've sent at least 24 bytes (which would trigger disconnect for V1 peers). */
@@ -1084,6 +1107,11 @@ protected:
 class CConnman
 {
 public:
+    /** Bound large responses across peers before serialization. */
+    static constexpr size_t RESPONSE_MEMORY_RESERVATION{MAX_PROTOCOL_MESSAGE_LENGTH};
+    static constexpr size_t MAX_RESPONSE_MEMORY{8 * RESPONSE_MEMORY_RESERVATION};
+    /** A filtered block can consist of a merkle block plus its matching transactions. */
+    static constexpr size_t FILTERED_BLOCK_RESPONSE_MEMORY_RESERVATION{2 * RESPONSE_MEMORY_RESERVATION};
 
     struct Options
     {
@@ -1154,7 +1182,10 @@ public:
         m_capture_messages = connOptions.m_capture_messages;
     }
 
+    std::optional<ResponseMemoryReservation> TryReserveResponseMemory(size_t reservation);
+
     // test only
+    size_t GetResponseMemoryUsage() const { return m_response_memory_usage.load(); }
     void SetCaptureMessages(bool cap) { m_capture_messages = cap; }
 
     CConnman(uint64_t seed0,
@@ -1430,6 +1461,9 @@ public:
     bool MultipleManualOrFullOutboundConns(Network net) const EXCLUSIVE_LOCKS_REQUIRED(m_nodes_mutex);
 
 private:
+    friend class ResponseMemoryReservation;
+
+    void ReleaseResponseMemory(size_t reservation);
     struct ListenSocket {
     public:
         std::shared_ptr<Sock> sock;
@@ -1646,6 +1680,7 @@ private:
 
     unsigned int nSendBufferMaxSize{0};
     unsigned int nReceiveFloodSize{0};
+    std::atomic<size_t> m_response_memory_usage{0};
 
     std::vector<ListenSocket> vhListenSocket;
     std::atomic<bool> fNetworkActive{true};

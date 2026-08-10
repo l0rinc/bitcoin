@@ -120,9 +120,53 @@ GlobalMutex g_maplocalhost_mutex;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost GUARDED_BY(g_maplocalhost_mutex);
 std::string strSubVersion;
 
+ResponseMemoryReservation::ResponseMemoryReservation(CConnman& connman, size_t size)
+    : m_connman{&connman}, m_size{size}
+{
+}
+
+ResponseMemoryReservation::ResponseMemoryReservation(ResponseMemoryReservation&& other) noexcept
+    : m_connman{other.m_connman}, m_size{other.m_size}
+{
+    other.m_connman = nullptr;
+    other.m_size = 0;
+}
+
+ResponseMemoryReservation& ResponseMemoryReservation::operator=(ResponseMemoryReservation&& other) noexcept
+{
+    if (this == &other) return *this;
+    if (m_connman) m_connman->ReleaseResponseMemory(m_size);
+    m_connman = other.m_connman;
+    m_size = other.m_size;
+    other.m_connman = nullptr;
+    other.m_size = 0;
+    return *this;
+}
+
+ResponseMemoryReservation::~ResponseMemoryReservation()
+{
+    if (m_connman) m_connman->ReleaseResponseMemory(m_size);
+}
+
 size_t CSerializedNetMsg::GetMemoryUsage() const noexcept
 {
     return sizeof(*this) + memusage::DynamicUsage(m_type) + memusage::DynamicUsage(data);
+}
+
+std::optional<ResponseMemoryReservation> CConnman::TryReserveResponseMemory(size_t reservation)
+{
+    Assume(reservation > 0 && reservation <= MAX_RESPONSE_MEMORY);
+    size_t current{m_response_memory_usage.load()};
+    do {
+        if (current > MAX_RESPONSE_MEMORY - reservation) return std::nullopt;
+    } while (!m_response_memory_usage.compare_exchange_weak(current, current + reservation));
+    return ResponseMemoryReservation{*this, reservation};
+}
+
+void CConnman::ReleaseResponseMemory(size_t reservation)
+{
+    const size_t previous{m_response_memory_usage.fetch_sub(reservation)};
+    assert(previous >= reservation);
 }
 
 size_t CNetMessage::GetMemoryUsage() const noexcept
@@ -900,9 +944,11 @@ void V1Transport::MarkBytesSent(size_t bytes_sent) noexcept
         // We're done sending a message's header. Switch to sending its data bytes.
         m_sending_header = false;
         m_bytes_sent = 0;
+        if (m_message_to_send.data.empty()) m_message_to_send.m_response_memory_reservation = {};
     } else if (!m_sending_header && m_bytes_sent == m_message_to_send.data.size()) {
         // We're done sending a message's data. Wipe the data vector to reduce memory consumption.
         ClearShrink(m_message_to_send.data);
+        m_message_to_send.m_response_memory_reservation = {};
         m_bytes_sent = 0;
     }
 }
@@ -1513,6 +1559,7 @@ bool V2Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
     m_send_buffer.resize(contents.size() + BIP324Cipher::EXPANSION);
     m_cipher.Encrypt(MakeByteSpan(contents), {}, false, MakeWritableByteSpan(m_send_buffer));
     m_send_type = msg.m_type;
+    m_response_memory_reservation = std::move(msg.m_response_memory_reservation);
     // Release memory
     ClearShrink(msg.data);
     return true;
@@ -1554,6 +1601,7 @@ void V2Transport::MarkBytesSent(size_t bytes_sent) noexcept
     if (m_send_pos == m_send_buffer.size()) {
         m_send_pos = 0;
         ClearShrink(m_send_buffer);
+        m_response_memory_reservation = {};
     }
 }
 
