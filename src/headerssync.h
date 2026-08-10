@@ -142,7 +142,8 @@ public:
      */
     HeadersSyncState(NodeId id, const Consensus::Params& consensus_params,
                      const HeadersSyncParams& params, const CBlockIndex& chain_start,
-                     const arith_uint256& minimum_required_work);
+                     const arith_uint256& minimum_required_work,
+                     uint64_t max_commitments);
 
     /** Result data structure for ProcessNextHeaders. */
     struct ProcessingResult {

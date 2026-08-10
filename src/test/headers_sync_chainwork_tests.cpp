@@ -10,6 +10,8 @@
 #include <pow.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
+#include <util/check.h>
+#include <util/expected.h>
 #include <util/time.h>
 #include <validation.h>
 
@@ -86,11 +88,14 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
 
     HeadersSyncState CreateState()
     {
+        util::Expected max_commitments{HeadersSyncState::ComputeMaxCommitments(PARAMS, chain_start, Now<NodeSeconds>())};
+
         return {/*id=*/0,
                 Params().GetConsensus(),
                 PARAMS,
                 chain_start,
-                /*minimum_required_work=*/CHAIN_WORK};
+                /*minimum_required_work=*/CHAIN_WORK,
+                /*max_commitments=*/*Assert(max_commitments)};
     }
 
 private:

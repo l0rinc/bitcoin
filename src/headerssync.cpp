@@ -36,7 +36,8 @@ HeadersSyncState::HeadersSyncState(NodeId id,
                                    const Consensus::Params& consensus_params,
                                    const HeadersSyncParams& params,
                                    const CBlockIndex& chain_start,
-                                   const arith_uint256& minimum_required_work)
+                                   const arith_uint256& minimum_required_work,
+                                   const uint64_t max_commitments)
     : m_commit_offset((assert(params.commitment_period > 0), // HeadersSyncParams field must be initialized to non-zero.
                        FastRandomContext().randrange(params.commitment_period))),
       m_id(id),
@@ -45,11 +46,10 @@ HeadersSyncState::HeadersSyncState(NodeId id,
       m_chain_start(chain_start),
       m_minimum_required_work(minimum_required_work),
       m_current_chain_work(chain_start.nChainWork),
+      m_max_commitments(max_commitments),
       m_last_header_received(m_chain_start.GetBlockHeader()),
       m_current_height(chain_start.nHeight)
 {
-    m_max_commitments = *Assert(ComputeMaxCommitments(m_params, m_chain_start, Now<NodeSeconds>()));
-
     LogDebug(BCLog::NET, "Initial headers sync started with peer=%d: height=%i, max_commitments=%i, min_work=%s\n", m_id, m_current_height, m_max_commitments, m_minimum_required_work.ToString());
 }
 
