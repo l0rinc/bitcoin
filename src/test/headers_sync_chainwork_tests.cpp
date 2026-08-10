@@ -10,6 +10,7 @@
 #include <pow.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
+#include <util/time.h>
 #include <validation.h>
 
 #include <cstddef>
@@ -50,6 +51,10 @@ constexpr arith_uint256 CHAIN_WORK{TARGET_BLOCKS * 2};
 // required to reach the CHAIN_WORK threshold, to behave similarly to mainnet.
 constexpr size_t REDOWNLOAD_BUFFER_SIZE{TARGET_BLOCKS - (MAX_HEADERS_RESULTS + 123)};
 constexpr size_t COMMITMENT_PERIOD{600}; // Somewhat close to mainnet.
+constexpr HeadersSyncParams PARAMS{
+    .commitment_period = COMMITMENT_PERIOD,
+    .redownload_buffer_size = REDOWNLOAD_BUFFER_SIZE,
+};
 
 struct HeadersGeneratorSetup : public RegTestingSetup {
     const CBlock& genesis{Params().GenesisBlock()};
@@ -83,10 +88,7 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
     {
         return {/*id=*/0,
                 Params().GetConsensus(),
-                HeadersSyncParams{
-                    .commitment_period = COMMITMENT_PERIOD,
-                    .redownload_buffer_size = REDOWNLOAD_BUFFER_SIZE,
-                },
+                PARAMS,
                 chain_start,
                 /*minimum_required_work=*/CHAIN_WORK};
     }
@@ -250,6 +252,13 @@ BOOST_AUTO_TEST_CASE(too_little_work)
         /*exp_request_more=*/false,
         /*exp_headers_size=*/0, /*exp_pow_validated_prev=*/std::nullopt,
         /*exp_locator_hash=*/std::nullopt);
+}
+
+BOOST_AUTO_TEST_CASE(system_clock_lagging_behind_chain_start)
+{
+    const NodeSeconds boundary{(chain_start.GetMedianTimePast() - MAX_FUTURE_BLOCK_TIME) * 1s};
+    BOOST_CHECK( HeadersSyncState::ComputeMaxCommitments(PARAMS, chain_start, boundary));
+    BOOST_CHECK( HeadersSyncState::ComputeMaxCommitments(PARAMS, chain_start, boundary - 1s)); // TODO: A negative elapsed interval should return an error.
 }
 
 BOOST_AUTO_TEST_SUITE_END()
