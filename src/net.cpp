@@ -1882,6 +1882,13 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
         return;
     }
 
+    // Keep bytes awaiting delivery to stalled inbound peers in Core's bounded
+    // response memory rather than moving them into per-peer kernel buffers.
+    if (sock->SetSockOpt(SOL_SOCKET, SO_SNDBUF, &INBOUND_SOCKET_SEND_BUFFER, sizeof(INBOUND_SOCKET_SEND_BUFFER)) == SOCKET_ERROR) {
+        LogDebug(BCLog::NET, "connection from %s dropped: unable to bound socket send buffer\n", addr.ToStringAddrPort());
+        return;
+    }
+
     if (nInbound >= m_max_inbound)
     {
         if (!AttemptToEvictConnection(/*evict_tx_relay_peer_only=*/false)) {

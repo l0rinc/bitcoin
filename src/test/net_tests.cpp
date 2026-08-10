@@ -140,6 +140,36 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
     BOOST_CHECK_EQUAL(pnode4->ConnectedThroughNetwork(), Network::NET_ONION);
 }
 
+BOOST_AUTO_TEST_CASE(inbound_socket_send_buffer)
+{
+    class SendBufferSock final : public ZeroSock
+    {
+        std::optional<int>& m_send_buffer;
+
+    public:
+        explicit SendBufferSock(std::optional<int>& send_buffer) : m_send_buffer{send_buffer} {}
+
+        int SetSockOpt(int level, int option, const void* value, socklen_t length) const override
+        {
+            if (level == SOL_SOCKET && option == SO_SNDBUF) {
+                BOOST_REQUIRE_EQUAL(length, sizeof(int));
+                m_send_buffer = *static_cast<const int*>(value);
+            }
+            return 0;
+        }
+    };
+
+    std::optional<int> send_buffer;
+    auto socket{std::make_unique<SendBufferSock>(send_buffer)};
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    const size_t node_count{connman.TestNodes().size()};
+    connman.CreateNodeFromAcceptedSocketPublic(std::move(socket), NetPermissionFlags::None, CAddress{}, CAddress{});
+
+    BOOST_REQUIRE_EQUAL(connman.TestNodes().size(), node_count + 1);
+    BOOST_REQUIRE(send_buffer);
+    BOOST_CHECK_EQUAL(*send_buffer, INBOUND_SOCKET_SEND_BUFFER);
+}
+
 BOOST_AUTO_TEST_CASE(cnetaddr_basic)
 {
     CNetAddr addr;
