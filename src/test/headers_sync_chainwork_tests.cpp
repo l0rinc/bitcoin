@@ -263,7 +263,7 @@ BOOST_AUTO_TEST_CASE(system_clock_lagging_behind_chain_start)
 {
     const NodeSeconds boundary{(chain_start.GetMedianTimePast() - MAX_FUTURE_BLOCK_TIME) * 1s};
     BOOST_CHECK( HeadersSyncState::ComputeMaxCommitments(PARAMS, chain_start, boundary));
-    BOOST_CHECK( HeadersSyncState::ComputeMaxCommitments(PARAMS, chain_start, boundary - 1s)); // TODO: A negative elapsed interval should return an error.
+    BOOST_CHECK(!HeadersSyncState::ComputeMaxCommitments(PARAMS, chain_start, boundary - 1s));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

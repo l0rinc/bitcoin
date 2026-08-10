@@ -774,8 +774,8 @@ private:
      * @param[in]   chain_start_header  Where these headers connect in our index.
      * @param[in,out]   headers             The headers to be processed.
      *
-     * @return      True if chain was low work (headers will be empty after
-     *              calling); false otherwise.
+     * @return      True if chain was low work or headers sync could not be started
+     *              (headers will be empty after calling); false otherwise.
      */
     bool TryLowWorkHeadersSync(Peer& peer, CNode& pfrom,
                                const CBlockIndex& chain_start_header,
@@ -3032,10 +3032,16 @@ bool PeerManagerImpl::TryLowWorkHeadersSync(Peer& peer, CNode& pfrom, const CBlo
             // advancing to the first unknown header would be a small effect.
 
             const util::Expected max_commitments{HeadersSyncState::ComputeMaxCommitments(m_chainparams.HeadersSync(), chain_start_header, Now<NodeSeconds>())};
+            if (!max_commitments) {
+                // Initiate shutdown and avoid further processing of these headers.
+                m_chainman.GetNotifications().fatalError(Untranslated(max_commitments.error()));
+                headers = {};
+                return true;
+            }
             LOCK(peer.m_headers_sync_mutex);
             peer.m_headers_sync.reset(new HeadersSyncState(peer.m_id, m_chainparams.GetConsensus(),
                 m_chainparams.HeadersSync(), chain_start_header, minimum_chain_work,
-                /*max_commitments=*/*Assert(max_commitments)));
+                *max_commitments));
 
             // Now a HeadersSyncState object for tracking this synchronization
             // is created, process the headers using it as normal. Failures are
@@ -3310,8 +3316,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, Peer& peer,
     // processing.
     if (!already_validated_work && TryLowWorkHeadersSync(peer, pfrom,
                                                          *chain_start_header, headers)) {
-        // If we successfully started a low-work headers sync, then there
-        // should be no headers to process any further.
+        // If we successfully started a low-work headers sync (or aborted and are
+        // shutting down), then there should be no headers to process any further.
         Assume(headers.empty());
         return;
     }

@@ -130,6 +130,8 @@ public:
     /** Return the amount of work in the chain received during the PRESYNC phase. */
     arith_uint256 GetPresyncWork() const { return m_current_chain_work; }
 
+    /** Compute the memory bound on presync commitments, or return an error if
+     *  the chain-start MTP is too far ahead of the local system time. */
     static util::Expected<uint64_t, std::string> ComputeMaxCommitments(const HeadersSyncParams& params, const CBlockIndex& chain_start, NodeSeconds now);
 
     /** Construct a HeadersSyncState object representing a headers sync via this
