@@ -8,6 +8,7 @@
 
 #include <attributes.h>
 #include <consensus/amount.h>
+#include <consensus/consensus.h>
 #include <primitives/transaction_identifier.h> // IWYU pragma: export
 #include <script/script.h>
 #include <serialize.h>
@@ -121,7 +122,7 @@ public:
     explicit CTxIn(COutPoint prevoutIn, CScript scriptSigIn=CScript(), uint32_t nSequenceIn=SEQUENCE_FINAL);
     CTxIn(Txid hashPrevTx, uint32_t nOut, CScript scriptSigIn=CScript(), uint32_t nSequenceIn=SEQUENCE_FINAL);
 
-    SERIALIZE_METHODS(CTxIn, obj) { READWRITE(obj.prevout, obj.scriptSig, obj.nSequence); }
+    SERIALIZE_METHODS(CTxIn, obj) { READWRITE(obj.prevout, LIMITED_BYTE_VECTOR(obj.scriptSig, MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR), obj.nSequence); }
 
     friend bool operator==(const CTxIn& a, const CTxIn& b)
     {
@@ -149,7 +150,7 @@ public:
 
     CTxOut(const CAmount& nValueIn, CScript scriptPubKeyIn);
 
-    SERIALIZE_METHODS(CTxOut, obj) { READWRITE(obj.nValue, obj.scriptPubKey); }
+    SERIALIZE_METHODS(CTxOut, obj) { READWRITE(obj.nValue, LIMITED_BYTE_VECTOR(obj.scriptPubKey, MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR)); }
 
     void SetNull()
     {
@@ -179,6 +180,7 @@ struct TransactionSerParams {
 };
 static constexpr TransactionSerParams TX_WITH_WITNESS{.allow_witness = true};
 static constexpr TransactionSerParams TX_NO_WITNESS{.allow_witness = false};
+using WitnessStackFormatter = VectorFormatter<LimitedByteVectorFormatter<MAX_BLOCK_WEIGHT>>;
 
 /**
  * Basic transaction serialization format:
@@ -223,7 +225,7 @@ void UnserializeTransaction(TxType& tx, Stream& s, const TransactionSerParams& p
         /* The witness flag is present, and we support witnesses. */
         flags ^= 1;
         for (size_t i = 0; i < tx.vin.size(); i++) {
-            s >> tx.vin[i].scriptWitness.stack;
+            s >> Using<WitnessStackFormatter>(tx.vin[i].scriptWitness.stack);
         }
         if (!tx.HasWitness()) {
             /* It's illegal to encode witnesses when all witness stacks are empty. */
@@ -261,7 +263,7 @@ void SerializeTransaction(const TxType& tx, Stream& s, const TransactionSerParam
     s << tx.vout;
     if (flags & 1) {
         for (size_t i = 0; i < tx.vin.size(); i++) {
-            s << tx.vin[i].scriptWitness.stack;
+            s << Using<WitnessStackFormatter>(tx.vin[i].scriptWitness.stack);
         }
     }
     s << tx.nLockTime;
