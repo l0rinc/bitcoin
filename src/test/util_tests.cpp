@@ -1898,6 +1898,9 @@ BOOST_AUTO_TEST_CASE(ceil_div_test)
 
     // `serialize.h` varint scratch-buffer pattern.
     BOOST_CHECK_EQUAL(CeilDiv(sizeof(uint64_t) * 8, 7u), (sizeof(uint64_t) * 8 + 6) / 7);
+
+    // `init.cpp` first-run pruning estimate.
+    BOOST_CHECK_EQUAL(CeilDiv(550_MiB, 1_GB), 1);
 }
 
 BOOST_AUTO_TEST_CASE(gib_string_literal_test)
