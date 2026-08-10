@@ -1625,6 +1625,35 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
     }
 }
 
+BOOST_AUTO_TEST_CASE(getdata_response_memory_limit)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    const uint256 block_hash{WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip()->GetBlockHash())};
+    std::vector<std::unique_ptr<CNode>> peers;
+
+    for (NodeId id{0}; id < 9; ++id) {
+        auto peer{std::make_unique<CNode>(id, /*sock=*/nullptr, /*addrIn=*/CAddress{}, /*nKeyedNetGroupIn=*/0, /*nLocalHostNonceIn=*/0, /*addrBindIn=*/CService{}, /*addrNameIn=*/"", /*conn_type_in=*/ConnectionType::INBOUND, /*inbound_onion=*/false, /*network_key=*/0)};
+        connman.Handshake(*peer, /*successfully_connected=*/true, /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS), /*local_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS), /*version=*/PROTOCOL_VERSION, /*relay_txs=*/true);
+        connman.FlushSendBuffer(*peer);
+
+        BOOST_REQUIRE(connman.ReceiveMsgFrom(*peer, NetMsg::Make(NetMsgType::GETDATA, std::vector{CInv{MSG_WITNESS_BLOCK, block_hash}})));
+        peer->fPauseSend = false;
+        connman.ProcessMessagesOnce(*peer);
+        peers.push_back(std::move(peer));
+    }
+
+    size_t responses{0};
+    for (const auto& peer : peers) {
+        LOCK(peer->cs_vSend);
+        const auto& [_bytes, _more, msg_type] = peer->m_transport->GetBytesToSend(false);
+        responses += msg_type == NetMsgType::BLOCK;
+    }
+    BOOST_CHECK_EQUAL(responses, peers.size()); // TODO: Limit the number of retained responses across peers.
+
+    for (const auto& peer : peers) m_node.peerman->FinalizeNode(*peer);
+}
+
 BOOST_AUTO_TEST_CASE(private_broadcast_version_does_not_update_addrman_services)
 {
     LOCK(NetEventsInterface::g_msgproc_mutex);
