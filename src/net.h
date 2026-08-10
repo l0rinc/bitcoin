@@ -100,6 +100,7 @@ inline constexpr bool DEFAULT_DNSSEED{true};
 inline constexpr bool DEFAULT_FIXEDSEEDS{true};
 inline constexpr size_t DEFAULT_MAXRECEIVEBUFFER = 5 * 1000;
 inline constexpr size_t DEFAULT_MAXSENDBUFFER    = 1 * 1000;
+inline constexpr int INBOUND_SOCKET_SEND_BUFFER{64 * 1000};
 
 inline constexpr bool DEFAULT_V2_TRANSPORT{true};
 
