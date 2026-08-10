@@ -376,7 +376,7 @@ BOOST_AUTO_TEST_CASE(tx_oversized)
 BOOST_AUTO_TEST_CASE(transaction_byte_vector_limits)
 {
     constexpr size_t MAX_BASE_SIZE{MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR};
-    constexpr std::string_view EXPECTED_ERROR{"end of data"};
+    constexpr std::string_view EXPECTED_ERROR{"Vector length limit exceeded"};
     auto make_stream{[](const auto&... args) {
         DataStream stream;
         SerializeMany(stream, args...);
@@ -395,7 +395,7 @@ BOOST_AUTO_TEST_CASE(transaction_byte_vector_limits)
     {
         CTxIn txin;
         BOOST_CHECK_EXCEPTION(make_stream(COutPoint{}, CompactSizeWriter{MAX_BASE_SIZE + 1}) >> txin, std::ios_base::failure, HasReason(EXPECTED_ERROR));
-        BOOST_CHECK_EQUAL(txin.scriptSig.size(), MAX_BASE_SIZE + 1); // TODO: Reject before allocating.
+        BOOST_CHECK_EQUAL(txin.scriptSig.size(), 0);
     }
 
     // Output script
@@ -407,7 +407,7 @@ BOOST_AUTO_TEST_CASE(transaction_byte_vector_limits)
     {
         CTxOut txout;
         BOOST_CHECK_EXCEPTION(make_stream(CAmount{0}, CompactSizeWriter{MAX_BASE_SIZE + 1}) >> txout, std::ios_base::failure, HasReason(EXPECTED_ERROR));
-        BOOST_CHECK_EQUAL(txout.scriptPubKey.size(), MAX_BASE_SIZE + 1); // TODO: Reject before allocating.
+        BOOST_CHECK_EQUAL(txout.scriptPubKey.size(), 0);
     }
 
     // Witness stack element
@@ -419,7 +419,7 @@ BOOST_AUTO_TEST_CASE(transaction_byte_vector_limits)
     {
         CMutableTransaction tx;
         BOOST_CHECK_EXCEPTION(make_witness_stream(CompactSizeWriter{1}, CompactSizeWriter{MAX_BLOCK_WEIGHT + 1}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason(EXPECTED_ERROR));
-        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.at(0).size(), MAX_BLOCK_WEIGHT + 1); // TODO: Reject before allocating.
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.at(0).size(), 0);
     }
 }
 

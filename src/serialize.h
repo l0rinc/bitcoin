@@ -495,6 +495,7 @@ static inline Wrapper<Formatter, T&> Using(T&& t) { return Wrapper<Formatter, T&
 #define COMPACTSIZE(obj) Using<CompactSizeFormatter<true>>(obj)
 #define LIMITED_STRING(obj,n) Using<LimitedStringFormatter<n>>(obj)
 #define LIMITED_VECTOR(obj,n) Using<LimitedVectorFormatter<n>>(obj)
+#define LIMITED_BYTE_VECTOR(obj,n) Using<LimitedByteVectorFormatter<n>>(obj)
 
 /** Serialization wrapper class for integers in VarInt format. */
 template<VarIntMode Mode>
@@ -666,6 +667,24 @@ void UnserializeByteVectorElements(Stream& s, V& v, size_t size)
         allocated = next;
     }
 }
+
+template<size_t Limit>
+struct LimitedByteVectorFormatter
+{
+    template<typename Stream, typename V>
+    void Unser(Stream& s, V& v)
+    {
+        v.clear();
+        if (uint64_t size{ReadCompactSize(s)}; size <= Limit) {
+            UnserializeByteVectorElements(s, v, size);
+        } else {
+            throw std::ios_base::failure("Vector length limit exceeded");
+        }
+    }
+
+    template<typename Stream, typename V>
+    void Ser(Stream& s, const V& v) { s << v; }
+};
 
 /** Formatter to serialize/deserialize vector elements using another formatter
  *
