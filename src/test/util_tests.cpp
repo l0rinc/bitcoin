@@ -1931,6 +1931,36 @@ BOOST_AUTO_TEST_CASE(gib_string_literal_test)
     BOOST_CHECK_EQUAL(32_GiB, 32768_MiB);
 }
 
+BOOST_AUTO_TEST_CASE(mb_string_literal_test)
+{
+    BOOST_CHECK_EQUAL(0_MB, 0);
+    BOOST_CHECK_EQUAL(1_MB, 1'000'000);
+    BOOST_CHECK_EQUAL(2ULL * 1_MB, 2'000'000ULL);
+    BOOST_CHECK_EQUAL(3_MB / 1_MB, 3);
+
+    // 4294 MB fits in uint32_t bytes. 4295 MB requires the uint64_t return type.
+    static_assert( BraceInitializesTo<uint32_t, 4294_MB>);
+    static_assert(!BraceInitializesTo<uint32_t, 4295_MB>);
+    static_assert( BraceInitializesTo<uint64_t, 4295_MB>);
+    BOOST_CHECK_EQUAL(4294_MB, uint32_t{4'294'000'000});
+    BOOST_CHECK_EQUAL(4295_MB, uint64_t{4'295'000'000});
+}
+
+BOOST_AUTO_TEST_CASE(gb_string_literal_test)
+{
+    BOOST_CHECK_EQUAL(0_GB, 0);
+    BOOST_CHECK_EQUAL(1_GB, 1'000'000'000);
+    BOOST_CHECK_EQUAL(2ULL * 1_GB, 2'000'000'000ULL);
+    BOOST_CHECK_EQUAL(3_GB / 1_GB, 3);
+
+    // 4 GB fits in uint32_t bytes. 5 GB requires the uint64_t return type.
+    static_assert( BraceInitializesTo<uint32_t, 4_GB>);
+    static_assert(!BraceInitializesTo<uint32_t, 5_GB>);
+    static_assert( BraceInitializesTo<uint64_t, 5_GB>);
+    BOOST_CHECK_EQUAL(4_GB, uint32_t{4'000'000'000});
+    BOOST_CHECK_EQUAL(5_GB, uint64_t{5'000'000'000});
+}
+
 BOOST_AUTO_TEST_CASE(token_bucket_initial_value)
 {
     // Initial value is clamped to cap

@@ -21,6 +21,7 @@
 #include <primitives/transaction.h>
 #include <protocol.h>
 #include <script/script.h>
+#include <util/byte_units.h>
 #include <util/chaintype.h>
 #include <util/exception.h>
 #include <util/fs.h>
@@ -821,12 +822,12 @@ QString formatBytes(uint64_t bytes)
 {
     if (bytes < 1'000)
         return QObject::tr("%1 B").arg(bytes);
-    if (bytes < 1'000'000)
+    if (bytes < 1_MB)
         return QObject::tr("%1 kB").arg(bytes / 1'000);
-    if (bytes < 1'000'000'000)
-        return QObject::tr("%1 MB").arg(bytes / 1'000'000);
+    if (bytes < 1_GB)
+        return QObject::tr("%1 MB").arg(bytes / 1_MB);
 
-    return QObject::tr("%1 GB").arg(bytes / 1'000'000'000);
+    return QObject::tr("%1 GB").arg(bytes / 1_GB);
 }
 
 qreal calculateIdealFontSize(int width, const QString& text, QFont font, qreal minPointSize, qreal font_size) {

@@ -5,6 +5,8 @@
 #ifndef BITCOIN_QT_GUICONSTANTS_H
 #define BITCOIN_QT_GUICONSTANTS_H
 
+#include <util/byte_units.h>
+
 #include <chrono>
 #include <cstdint>
 
@@ -55,7 +57,7 @@ static const int TOOLTIP_WRAP_THRESHOLD = 80;
 #define QAPP_APP_NAME_REGTEST "Bitcoin-Qt-regtest"
 
 /* One gigabyte (GB) in bytes */
-static constexpr uint64_t GB_BYTES{1000000000};
+static constexpr uint64_t GB_BYTES{1_GB};
 
 // Default prune target displayed in GUI.
 static constexpr int DEFAULT_PRUNE_TARGET_GB{2};
