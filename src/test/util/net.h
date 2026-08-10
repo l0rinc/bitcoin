@@ -114,6 +114,8 @@ struct ConnmanTestMsg : public CConnman {
 
     bool AlreadyConnectedToAddressPublic(const CNetAddr& addr) { return AlreadyConnectedToAddress(addr); };
 
+    size_t GetResponseMemoryUsage() const { return m_response_memory_usage.load(); }
+
     CNode* ConnectNodePublic(PeerManager& peerman, const char* pszDest, ConnectionType conn_type)
         EXCLUSIVE_LOCKS_REQUIRED(!m_unused_i2p_sessions_mutex);
 };
