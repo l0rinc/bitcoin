@@ -5,9 +5,11 @@
 #include <addresstype.h>
 #include <clientversion.h>
 #include <coins.h>
+#include <dbwrapper.h>
 #include <streams.h>
 #include <test/util/coins.h>
 #include <test/util/common.h>
+#include <test/util/logging.h>
 #include <test/util/poolresourcetester.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
@@ -1084,6 +1086,19 @@ BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
 
     BOOST_CHECK(*Assert(base.GetCoin(outpoint)) == coin);
     BOOST_CHECK_EQUAL(base.GetBestBlock(), block_hash);
+}
+
+BOOST_AUTO_TEST_CASE(malformed_first_coin_key_cursor)
+{
+    const fs::path path{m_args.GetDataDirBase() / "malformed_first_coin_key_cursor"};
+    {
+        CDBWrapper dbw{{.path = path, .cache_bytes = 1_MiB, .wipe_data = true}};
+        dbw.Write(uint8_t{'C'}, uint8_t{0});
+    }
+
+    CCoinsViewDB view{{.path = path, .cache_bytes = 1_MiB, .read_error_cb = [] { throw dbwrapper_error{"coins cursor test read error"}; }}, {}};
+    ASSERT_DEBUG_LOG("Corrupted database entry in");
+    BOOST_CHECK_EXCEPTION(view.Cursor(), dbwrapper_error, HasReason{"coins cursor test read error"});
 }
 
 BOOST_AUTO_TEST_CASE(ccoins_cache_behavior)

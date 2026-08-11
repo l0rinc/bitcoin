@@ -243,7 +243,7 @@ std::unique_ptr<CCoinsViewCursor> CCoinsViewDB::Cursor() const
     // Cache key of first record
     if (i->pcursor->Valid()) {
         CoinEntry entry(&i->keyTmp.second);
-        i->pcursor->GetKey(entry);
+        i->pcursor->GetKey(entry, DB_COIN);
         i->keyTmp.first = entry.key;
     } else {
         i->keyTmp.first = 0; // Make sure Valid() and GetKey() return false
@@ -275,7 +275,7 @@ void CCoinsViewDBCursor::Next()
 {
     pcursor->Next();
     CoinEntry entry(&keyTmp.second);
-    if (!pcursor->Valid() || !pcursor->GetKey(entry)) {
+    if (!pcursor->Valid() || !pcursor->GetKey(entry, DB_COIN)) {
         keyTmp.first = 0; // Invalidate cached key after last record so that Valid() and GetKey() return false
     } else {
         keyTmp.first = entry.key;

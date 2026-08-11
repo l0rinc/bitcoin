@@ -147,6 +147,7 @@ private:
     void SeekImpl(std::span<const std::byte> key);
     std::span<const std::byte> GetKeyImpl() const;
     std::span<const std::byte> GetValueImpl() const;
+    [[noreturn]] void FatalReadError(const std::exception& e) const;
 
 public:
 
@@ -179,6 +180,21 @@ public:
         }
     }
 
+    /** Treat a decode failure under another prefix as range termination, but one under the expected prefix as fatal. */
+    template <typename K>
+    bool GetKey(K& key, uint8_t expected_prefix)
+    {
+        try {
+            SpanReader ssKey{GetKeyImpl()};
+            ssKey >> key;
+            return true;
+        } catch (const std::exception& e) {
+            uint8_t prefix;
+            if (!GetKey(prefix) || prefix == expected_prefix) FatalReadError(e);
+            return false;
+        }
+    }
+
     template<typename V> bool GetValue(V& value) {
         try {
             ScopedDataStreamUsage scoped_scratch{m_scratch};
@@ -186,8 +202,8 @@ public:
             dbwrapper_private::GetObfuscation(parent)(m_scratch);
             m_scratch >> value;
             return true;
-        } catch (const std::exception&) {
-            return false;
+        } catch (const std::exception& e) {
+            FatalReadError(e);
         }
     }
 };
@@ -196,6 +212,7 @@ struct LevelDBContext;
 
 class CDBWrapper
 {
+    friend class CDBIterator;
     friend const Obfuscation& dbwrapper_private::GetObfuscation(const CDBWrapper&);
 private:
     //! holds all leveldb-specific fields of this class

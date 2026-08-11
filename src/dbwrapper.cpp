@@ -377,6 +377,11 @@ CDBIterator::CDBIterator(const CDBWrapper& _parent, std::unique_ptr<IteratorImpl
     m_scratch.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
 }
 
+[[noreturn]] void CDBIterator::FatalReadError(const std::exception& e) const
+{
+    parent.FatalReadError(strprintf("Corrupted database entry in %s: %s", parent.m_name, e.what()));
+}
+
 CDBIterator* CDBWrapper::NewIterator()
 {
     return new CDBIterator{*this, std::make_unique<CDBIterator::IteratorImpl>(DBContext().pdb->NewIterator(DBContext().iteroptions))};
