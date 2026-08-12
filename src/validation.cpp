@@ -60,7 +60,6 @@
 #include <util/signalinterrupt.h>
 #include <util/strencodings.h>
 #include <util/string.h>
-#include <util/thread.h>
 #include <util/threadpool.h>
 #include <util/time.h>
 #include <util/trace.h>
@@ -70,17 +69,16 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
-#include <condition_variable>
 #include <cstddef>
 #include <deque>
+#include <exception>
 #include <future>
-#include <map>
+#include <iterator>
 #include <numeric>
 #include <optional>
 #include <ranges>
 #include <span>
 #include <string>
-#include <thread>
 #include <tuple>
 #include <utility>
 
@@ -3204,12 +3202,44 @@ void Chainstate::PruneBlockIndexCandidates() {
 
 class Chainstate::BlockPrefetcher
 {
+    struct ReadRequest {
+        const CBlockIndex* index;
+        uint256 hash;
+        FlatFilePos pos;
+    };
+
+    struct PendingRead {
+        const CBlockIndex* index;
+        std::future<std::shared_ptr<const CBlock>> future;
+    };
+
+    const BlockManager& m_blockman;
+    ThreadPool m_thread_pool{"blkload"};
+    std::deque<PendingRead> m_pending;
+    size_t m_depth{0};
+    bool m_started{false};
+
+    std::shared_ptr<const CBlock> Wait(PendingRead& pending) noexcept
+    {
+        try {
+            return pending.future.get();
+        } catch (...) {
+            return nullptr;
+        }
+    }
+
+    void Discard(PendingRead& pending)
+    {
+        Wait(pending);
+    }
+
 public:
     explicit BlockPrefetcher(const BlockManager& blockman) : m_blockman{blockman} {}
+
     ~BlockPrefetcher() LOCKS_EXCLUDED(::cs_main)
     {
         AssertLockNotHeld(::cs_main);
-        Stop();
+        Clear();
     }
 
     BlockPrefetcher(const BlockPrefetcher&) = delete;
@@ -3217,107 +3247,82 @@ public:
 
     void Start(int32_t depth, int32_t threads)
     {
-        if (depth <= 0 || threads <= 0 || Enabled()) return;
+        if (depth <= 0 || threads <= 0 || m_started) return;
         m_depth = static_cast<size_t>(depth);
-        WITH_LOCK(m_mutex, m_stop = false);
-        m_threads.reserve(threads);
-        for (int32_t i{0}; i < threads; ++i) {
-            m_threads.emplace_back(&util::TraceThread, strprintf("blockread.%d", i), [this] { ReaderThread(); });
+        try {
+            m_thread_pool.Start(std::min(depth, threads));
+            m_started = true;
+        } catch (const std::exception&) {
+            m_depth = 0;
         }
     }
 
-    void Stop()
-    {
-        if (Enabled()) {
-            WITH_LOCK(m_mutex, m_stop = true);
-            m_cv.notify_all();
-            for (auto& thread : m_threads)
-                thread.join();
-            m_threads.clear();
-        }
-        DropBuffered();
-    }
-
-    bool Enabled() const { return !m_threads.empty(); }
+    bool Enabled() const { return m_started; }
 
     void Prime(const std::vector<CBlockIndex*>& to_connect, const CBlockIndex* skip) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
+        AssertLockHeld(::cs_main);
         if (!Enabled()) return;
-        InFlightMap next;
-        bool queued_any{false};
-        {
-            LOCK(m_mutex);
-            for (CBlockIndex* pindex : to_connect | std::views::reverse) {
-                if (next.size() >= m_depth) break;
-                if (pindex == skip) continue;
-                if (next.contains(pindex)) continue;
-                if (auto in_flight{m_inflight.extract(pindex)}) {
-                    next.insert(std::move(in_flight));
-                    continue;
-                }
-                if (!(pindex->nStatus & BLOCK_HAVE_DATA)) continue;
-                const FlatFilePos pos{pindex->GetBlockPos()};
-                if (pos.IsNull()) continue;
-                const uint256 hash{pindex->GetBlockHash()};
-                ReadTask task{[blockman = &m_blockman, pos, hash]() -> std::shared_ptr<const CBlock> {
+
+        std::vector<ReadRequest> desired;
+        desired.reserve(m_depth);
+        for (CBlockIndex* index : to_connect | std::views::reverse) {
+            if (desired.size() >= m_depth) break;
+            if (index == skip || !(index->nStatus & BLOCK_HAVE_DATA)) continue;
+            const FlatFilePos pos{index->GetBlockPos()};
+            if (pos.IsNull()) continue;
+            desired.push_back({index, index->GetBlockHash(), pos});
+        }
+
+        bool pending_matches{m_pending.size() <= desired.size()};
+        for (size_t i{0}; pending_matches && i < m_pending.size(); ++i) {
+            pending_matches = m_pending[i].index == desired[i].index;
+        }
+        if (!pending_matches) Clear();
+
+        for (size_t i{m_pending.size()}; i < desired.size(); ++i) {
+            const ReadRequest request{desired[i]};
+            const BlockManager* const blockman{&m_blockman};
+            // The worker receives only values copied under cs_main. It must not use
+            // ReadBlock(CBlockIndex), because validation can wait here while holding cs_main.
+            auto future{m_thread_pool.Submit([blockman, request] {
+                try {
                     auto block{std::make_shared<CBlock>()};
-                    if (!blockman->ReadBlock(*block, pos, hash)) return nullptr;
-                    return block;
-                }};
-                next.emplace(pindex, task.get_future());
-                m_queue.push_back(std::move(task));
-                queued_any = true;
-            }
-        }
-        m_inflight = std::move(next);
-        if (queued_any) m_cv.notify_all();
-    }
-
-    std::shared_ptr<const CBlock> Take(const CBlockIndex* pindex) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
-    {
-        auto it{m_inflight.find(pindex)};
-        if (it == m_inflight.end()) return nullptr;
-        std::shared_ptr<const CBlock> block{it->second.get()};
-        m_inflight.erase(it);
-        return block;
-    }
-
-    void Clear() EXCLUSIVE_LOCKS_REQUIRED(::cs_main) { DropBuffered(); }
-
-private:
-    using ReadTask = std::packaged_task<std::shared_ptr<const CBlock>()>;
-    using InFlightMap = std::map<const CBlockIndex*, std::future<std::shared_ptr<const CBlock>>>;
-
-    void DropBuffered()
-    {
-        m_inflight.clear();
-        WITH_LOCK(m_mutex, m_queue.clear());
-    }
-
-    void ReaderThread()
-    {
-        for (;;) {
-            ReadTask task;
-            {
-                WAIT_LOCK(m_mutex, lock);
-                m_cv.wait(lock, [&]() EXCLUSIVE_LOCKS_REQUIRED(m_mutex) { return m_stop || !m_queue.empty(); });
-                if (m_stop) return;
-                task = std::move(m_queue[0]);
-                m_queue.pop_front();
-            }
-            task();
+                    if (!blockman->ReadBlock(*block, request.pos, request.hash)) block.reset();
+                    return std::shared_ptr<const CBlock>{std::move(block)};
+                } catch (...) {
+                    return std::shared_ptr<const CBlock>{};
+                }
+            })};
+            if (!future) return;
+            m_pending.push_back({request.index, std::move(*future)});
         }
     }
 
-    const BlockManager& m_blockman;
-    std::vector<std::thread> m_threads;
-    size_t m_depth{0};
-    InFlightMap m_inflight;
+    std::shared_ptr<const CBlock> Take(const CBlockIndex* index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        AssertLockHeld(::cs_main);
+        const auto match{std::ranges::find(m_pending, index, &PendingRead::index)};
+        if (match == m_pending.end()) return nullptr;
 
-    Mutex m_mutex;
-    std::condition_variable m_cv;
-    std::deque<ReadTask> m_queue GUARDED_BY(m_mutex);
-    bool m_stop GUARDED_BY(m_mutex){false};
+        const size_t stale_count{static_cast<size_t>(std::distance(m_pending.begin(), match))};
+        for (size_t i{0}; i < stale_count; ++i) {
+            Discard(m_pending[0]);
+            m_pending.pop_front();
+        }
+
+        PendingRead pending{std::move(m_pending[0])};
+        m_pending.pop_front();
+        return Wait(pending);
+    }
+
+    void Clear()
+    {
+        while (!m_pending.empty()) {
+            Discard(m_pending[0]);
+            m_pending.pop_front();
+        }
+    }
 };
 
 /**
