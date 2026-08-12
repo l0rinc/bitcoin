@@ -530,8 +530,8 @@ BOOST_AUTO_TEST_CASE(block_transaction_count_allocation)
     DataStream oversized_stream;
     oversized_stream << CBlockHeader{} << CompactSizeWriter{MAX_COUNT + 1};
     CBlock oversized_block;
-    BOOST_CHECK_EXCEPTION(oversized_stream >> TX_WITH_WITNESS(oversized_block), std::ios_base::failure, HasReason("end of data")); // TODO: Reject an impossible block transaction count before parsing.
-    BOOST_CHECK_GT(oversized_block.vtx.capacity(), MAX_COUNT); // TODO: Reject before allocating transaction references.
+    BOOST_CHECK_EXCEPTION(oversized_stream >> TX_WITH_WITNESS(oversized_block), std::ios_base::failure, HasReason("Vector length limit exceeded"));
+    BOOST_CHECK_EQUAL(oversized_block.vtx.capacity(), 0);
 }
 
 constexpr DerivedAndBaseFormat RAW_LOWER{{BaseFormat::RAW}, DerivedAndBaseFormat::DerivedFormat::LOWER};
