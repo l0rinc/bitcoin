@@ -453,7 +453,7 @@ BOOST_AUTO_TEST_CASE(transaction_witness_stack_count_allocation)
     CMutableTransaction growing_tx;
     make_stream(growing_stack, uint32_t{0}) >> TX_WITH_WITNESS(growing_tx);
     const auto& decoded_stack{growing_tx.vin.at(0).scriptWitness.stack};
-    BOOST_CHECK_GT(decoded_stack.capacity(), decoded_stack.size()); // TODO: Do not retain unused geometric capacity.
+    BOOST_CHECK_EQUAL(decoded_stack.capacity(), decoded_stack.size());
 }
 
 BOOST_AUTO_TEST_CASE(basic_transaction_tests)

@@ -872,6 +872,10 @@ struct NonPreallocatedLimitedVectorFormatter
             throw std::ios_base::failure("Vector length limit exceeded");
         }
         for (size_t i{0}; i < size; ++i) {
+            if (v.size() == v.capacity()) {
+                const size_t growth{std::max<size_t>(v.size(), 1)};
+                v.reserve(v.size() + std::min(growth, size - v.size()));
+            }
             v.emplace_back();
             formatter.Unser(s, v.back());
         }
