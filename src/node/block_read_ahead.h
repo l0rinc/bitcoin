@@ -32,7 +32,11 @@ class BlockReadAhead
 {
 public:
     explicit BlockReadAhead(const BlockManager& blockman) : m_blockman{blockman} {}
-    ~BlockReadAhead() { Stop(); }
+    ~BlockReadAhead() LOCKS_EXCLUDED(::cs_main)
+    {
+        AssertLockNotHeld(::cs_main);
+        Stop();
+    }
 
     BlockReadAhead(const BlockReadAhead&) = delete;
     BlockReadAhead& operator=(const BlockReadAhead&) = delete;
@@ -61,7 +65,7 @@ public:
 
     bool Enabled() const { return !m_threads.empty(); }
 
-    void Prime(const std::vector<CBlockIndex*>& to_connect) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    void Prime(const std::vector<CBlockIndex*>& to_connect, const CBlockIndex* skip) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         if (!Enabled()) return;
         InFlightMap next;
@@ -70,6 +74,7 @@ public:
             LOCK(m_mutex);
             for (CBlockIndex* pindex : to_connect | std::views::reverse) {
                 if (next.size() >= m_depth) break;
+                if (pindex == skip) continue;
                 if (next.contains(pindex)) continue;
                 if (auto in_flight{m_inflight.extract(pindex)}) {
                     next.insert(std::move(in_flight));

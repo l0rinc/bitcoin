@@ -1882,8 +1882,6 @@ Chainstate::Chainstate(
       m_assumeutxo(from_snapshot_blockhash ? Assumeutxo::UNVALIDATED : Assumeutxo::VALIDATED),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
 
-Chainstate::~Chainstate() = default;
-
 fs::path Chainstate::StoragePath() const
 {
     fs::path path{m_chainman.m_options.datadir / "chainstate"};
@@ -1947,14 +1945,6 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     assert(m_coins_views != nullptr);
     m_coinstip_cache_size_bytes = cache_size_bytes;
     m_coins_views->InitCache(m_chainman.m_options.prevoutfetch_threads_num);
-
-    const int32_t readahead_depth{m_chainman.m_options.block_readahead_depth};
-    const int32_t readahead_threads{m_chainman.m_options.block_readahead_threads};
-    m_block_readahead = std::make_unique<node::BlockReadAhead>(m_blockman);
-    m_block_readahead->Start(readahead_depth, readahead_threads);
-    if (m_block_readahead->Enabled()) {
-        LogInfo("Block read-ahead buffering up to %d blocks on %d threads", readahead_depth, readahead_threads);
-    }
 }
 
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
@@ -3044,10 +3034,6 @@ bool Chainstate::ConnectTip(
     assert(pindexNew->pprev == m_chain.Tip());
     // Read block from disk.
     const auto time_1{SteadyClock::now()};
-    if (m_block_readahead) {
-        auto pre_read{m_block_readahead->Take(pindexNew)};
-        if (!block_to_connect) block_to_connect = std::move(pre_read);
-    }
     if (!block_to_connect) {
         std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
         if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
@@ -3217,7 +3203,7 @@ void Chainstate::PruneBlockIndexCandidates() {
  *
  * @returns true unless a system error occurred
  */
-bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
+bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, node::BlockReadAhead& block_read_ahead, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
 {
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
@@ -3243,7 +3229,7 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
         fBlocksDisconnected = true;
     }
 
-    if (fBlocksDisconnected && m_block_readahead) m_block_readahead->Clear();
+    if (fBlocksDisconnected) block_read_ahead.Clear();
 
     // Build list of new blocks to connect (in descending height order).
     std::vector<CBlockIndex*> vpindexToConnect;
@@ -3262,13 +3248,15 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
         }
         nHeight = nTargetHeight;
 
-        if (m_block_readahead && vpindexToConnect.size() > 1) {
-            m_block_readahead->Prime(vpindexToConnect);
+        if (vpindexToConnect.size() > 1) {
+            block_read_ahead.Prime(vpindexToConnect, pblock ? &index_most_work : nullptr);
         }
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
-            if (!ConnectTip(state, pindexConnect, pindexConnect == &index_most_work ? pblock : std::shared_ptr<const CBlock>(), connected_blocks, disconnectpool)) {
+            std::shared_ptr<const CBlock> block_to_connect{pindexConnect == &index_most_work ? pblock : nullptr};
+            if (!block_to_connect) block_to_connect = block_read_ahead.Take(pindexConnect);
+            if (!ConnectTip(state, pindexConnect, std::move(block_to_connect), connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
                     if (state.GetResult() != BlockValidationResult::BLOCK_MUTATED) {
@@ -3378,6 +3366,14 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
         return Assume(false);
     }
 
+    const int32_t readahead_depth{m_chainman.m_options.block_readahead_depth};
+    const int32_t readahead_threads{m_chainman.m_options.block_readahead_threads};
+    node::BlockReadAhead block_read_ahead{m_blockman};
+    block_read_ahead.Start(readahead_depth, readahead_threads);
+    if (block_read_ahead.Enabled()) {
+        LogInfo("Block read-ahead buffering up to %d blocks on %d threads", readahead_depth, readahead_threads);
+    }
+
     CBlockIndex *pindexMostWork = nullptr;
     CBlockIndex *pindexNewTip = nullptr;
     bool exited_ibd{false};
@@ -3418,7 +3414,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
                 // in case snapshot validation is completed during ActivateBestChainStep, the
                 // result of GetRole() changes from BACKGROUND to NORMAL.
                const ChainstateRole chainstate_role{this->GetRole()};
-                if (!ActivateBestChainStep(state, *pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connected_blocks)) {
+                if (!ActivateBestChainStep(state, *pindexMostWork, block_read_ahead, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connected_blocks)) {
                     // A system error occurred
                     return false;
                 }
