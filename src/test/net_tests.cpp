@@ -1703,6 +1703,16 @@ BOOST_AUTO_TEST_CASE(getdata_response_memory_limit)
     BOOST_CHECK_EQUAL(responses, response_limit);
     BOOST_CHECK_EQUAL(connman.GetResponseMemoryUsage(), CConnman::MAX_RESPONSE_MEMORY);
 
+    auto& blocked_peer{*peers.at(response_limit)};
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(blocked_peer, NetMsg::Make(NetMsgType::PING, uint64_t{1})));
+    blocked_peer.fPauseSend = false;
+    BOOST_CHECK(!connman.ProcessMessagesOnce(blocked_peer));
+    {
+        LOCK(blocked_peer.cs_vSend);
+        const auto& [_bytes, _more, msg_type] = blocked_peer.m_transport->GetBytesToSend(false);
+        BOOST_CHECK_NE(msg_type, NetMsgType::PONG); // TODO: Do not let response pressure block a ping.
+    }
+
     // Releasing one response allows the blocked request to be retried.
     connman.FlushSendBuffer(*peers.at(0));
     peers.at(response_limit)->fPauseSend = false;
