@@ -858,6 +858,32 @@ struct LimitedVectorFormatter
     }
 };
 
+/** Limited vector formatter that only allocates elements as they are decoded. */
+template<size_t Limit, class Formatter = DefaultFormatter>
+struct NonPreallocatedLimitedVectorFormatter
+{
+    template<typename Stream, typename V>
+    void Unser(Stream& s, V& v)
+    {
+        Formatter formatter;
+        v.clear();
+        size_t size = ReadCompactSize(s);
+        if (size > Limit) {
+            throw std::ios_base::failure("Vector length limit exceeded");
+        }
+        for (size_t i{0}; i < size; ++i) {
+            v.emplace_back();
+            formatter.Unser(s, v.back());
+        }
+    }
+
+    template<typename Stream, typename V>
+    void Ser(Stream& s, const V& v)
+    {
+        VectorFormatter<Formatter>{}.Ser(s, v);
+    }
+};
+
 
 
 

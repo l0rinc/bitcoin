@@ -10,6 +10,7 @@
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <core_io.h>
+#include <hash.h>
 #include <key.h>
 #include <policy/policy.h>
 #include <policy/settings.h>
@@ -430,17 +431,17 @@ BOOST_AUTO_TEST_CASE(transaction_witness_stack_count_allocation)
         SerializeMany(stream, CTransaction::CURRENT_VERSION, uint8_t{0}, uint8_t{1}, Vector(CTxIn{}), Vector(CTxOut{}), args...);
         return stream;
     }};
-    constexpr size_t PREALLOCATED{MAX_VECTOR_ALLOCATE / sizeof(std::vector<uint8_t>)};
-
     {
         CMutableTransaction tx;
-        BOOST_CHECK_EXCEPTION(make_stream(CompactSizeWriter{MAX_BLOCK_WEIGHT + 1}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data")); // TODO: Reject an oversized witness stack before allocating.
-        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), PREALLOCATED); // TODO: Do not preallocate from the untrusted element count.
+        BOOST_CHECK_EXCEPTION(make_stream(CompactSizeWriter{MAX_BLOCK_WEIGHT + 1}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("Vector length limit exceeded"));
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), 0);
     }
     {
+        auto stream{make_stream(CompactSizeWriter{MAX_BLOCK_WEIGHT})};
+        HashVerifier<DataStream> verifier{stream};
         CMutableTransaction tx;
-        BOOST_CHECK_EXCEPTION(make_stream(CompactSizeWriter{MAX_BLOCK_WEIGHT}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data"));
-        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), PREALLOCATED); // TODO: Grow only as witness elements are decoded.
+        BOOST_CHECK_EXCEPTION(verifier >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data"));
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), 1);
     }
 
     const auto stack{Vector(std::vector<uint8_t>{1, 2}, std::vector<uint8_t>{})};
