@@ -212,6 +212,11 @@ static size_t GetInvVectorSerializedSize(size_t inv_count)
     return GetSizeOfCompactSize(inv_count) + inv_count * CINV_SERIALIZED_SIZE;
 }
 
+static size_t GetUint256VectorSerializedSize(size_t item_count)
+{
+    return GetSizeOfCompactSize(item_count) + item_count * uint256::size();
+}
+
 // Internal stuff
 namespace {
 /** Blocks that are in flight, and that are in the queue to be downloaded. */
@@ -3671,11 +3676,16 @@ void PeerManagerImpl::ProcessGetCFHeaders(CNode& node, Peer& peer, DataStream& v
         return;
     }
 
-    MakeAndPushMessage(node, NetMsgType::CFHEADERS,
-              filter_type_ser,
-              stop_index->GetBlockHash(),
-              prev_header,
-              filter_hashes);
+    const size_t response_reservation{sizeof(uint8_t) + uint256::size() + uint256::size() + GetUint256VectorSerializedSize(filter_hashes.size())};
+    auto response_memory{m_connman.TryReserveResponseMemory(response_reservation)};
+    if (!response_memory) return;
+    auto msg{NetMsg::Make(NetMsgType::CFHEADERS,
+                          filter_type_ser,
+                          stop_index->GetBlockHash(),
+                          prev_header,
+                          filter_hashes)};
+    msg.m_response_memory_reservation = std::move(*response_memory);
+    PushMessage(node, std::move(msg));
 }
 
 void PeerManagerImpl::ProcessGetCFCheckPt(CNode& node, Peer& peer, DataStream& vRecv)
@@ -3710,10 +3720,15 @@ void PeerManagerImpl::ProcessGetCFCheckPt(CNode& node, Peer& peer, DataStream& v
         }
     }
 
-    MakeAndPushMessage(node, NetMsgType::CFCHECKPT,
-              filter_type_ser,
-              stop_index->GetBlockHash(),
-              headers);
+    const size_t response_reservation{sizeof(uint8_t) + uint256::size() + GetUint256VectorSerializedSize(headers.size())};
+    auto response_memory{m_connman.TryReserveResponseMemory(response_reservation)};
+    if (!response_memory) return;
+    auto msg{NetMsg::Make(NetMsgType::CFCHECKPT,
+                          filter_type_ser,
+                          stop_index->GetBlockHash(),
+                          headers)};
+    msg.m_response_memory_reservation = std::move(*response_memory);
+    PushMessage(node, std::move(msg));
 }
 
 void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked)

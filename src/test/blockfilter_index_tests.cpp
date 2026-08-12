@@ -422,7 +422,7 @@ BOOST_FIXTURE_TEST_CASE(compact_filter_header_response_memory_limit, BlockFilter
             LOCK(peer.cs_vSend);
             const auto& [_bytes, _more, response_type] = peer.m_transport->GetBytesToSend(false);
             const std::string expected_type{msg_type == NetMsgType::GETCFHEADERS ? NetMsgType::CFHEADERS : NetMsgType::CFCHECKPT};
-            BOOST_CHECK_EQUAL(response_type, expected_type); // TODO: Do not retain compact-filter headers when aggregate response memory is full.
+            BOOST_CHECK_NE(response_type, expected_type);
         }
         connman.FlushSendBuffer(peer);
     }
