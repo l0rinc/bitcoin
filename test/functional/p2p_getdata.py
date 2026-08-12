@@ -70,8 +70,7 @@ class GetdataTest(BitcoinTestFramework):
             NetworkThread.network_event_loop.call_soon_threadsafe(peer._transport.pause_reading)
 
         with node.assert_debug_log(
-            expected_msgs=received_logs,
-            unexpected_msgs=[limit_log],  # TODO: Bound aggregate GETDATA request queues.
+            expected_msgs=[*received_logs, limit_log],
             timeout=30,
         ):
             for peer in peers:

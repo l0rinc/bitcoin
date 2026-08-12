@@ -600,10 +600,10 @@ public:
 
     /** Implement NetEventsInterface */
     void InitializeNode(const CNode& node, ServiceFlags our_services) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_tx_download_mutex);
-    void FinalizeNode(const CNode& node) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_headers_presync_mutex, !m_tx_download_mutex);
+    void FinalizeNode(const CNode& node) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_headers_presync_mutex, !m_tx_download_mutex, !m_getdata_requests_count_mutex);
     bool HasAllDesirableServiceFlags(ServiceFlags services) const override;
     bool ProcessMessages(CNode& node, std::atomic<bool>& interrupt) override
-        EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, !m_headers_presync_mutex, g_msgproc_mutex, !m_tx_download_mutex, !m_inv_to_send_mutex);
+        EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, !m_headers_presync_mutex, g_msgproc_mutex, !m_tx_download_mutex, !m_inv_to_send_mutex, !m_getdata_requests_count_mutex);
     bool SendMessages(CNode& node) override
         EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, g_msgproc_mutex, !m_tx_download_mutex, !m_inv_to_send_mutex);
 
@@ -632,7 +632,7 @@ public:
 private:
     void ProcessMessage(Peer& peer, CNode& pfrom, const std::string& msg_type, DataStream& vRecv, NodeClock::time_point time_received,
                         const std::atomic<bool>& interruptMsgProc)
-        EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, !m_headers_presync_mutex, g_msgproc_mutex, !m_tx_download_mutex, !m_inv_to_send_mutex);
+        EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, !m_headers_presync_mutex, g_msgproc_mutex, !m_tx_download_mutex, !m_inv_to_send_mutex, !m_getdata_requests_count_mutex);
 
     /** Consider evicting an outbound peer based on the amount of time they've been behind our tip */
     void ConsiderEviction(CNode& pto, Peer& peer, std::chrono::seconds time_in_seconds) EXCLUSIVE_LOCKS_REQUIRED(cs_main, g_msgproc_mutex);
@@ -880,6 +880,13 @@ private:
     Mutex m_tx_download_mutex ACQUIRED_BEFORE(m_mempool.cs);
     node::TxDownloadManager m_txdownloadman GUARDED_BY(m_tx_download_mutex);
 
+    /** Bounds the aggregate number of inventory items retained in peer GETDATA queues. */
+    Mutex m_getdata_requests_count_mutex;
+    size_t m_getdata_requests_count GUARDED_BY(m_getdata_requests_count_mutex){0};
+
+    bool TryAddGetDataRequests(size_t count) EXCLUSIVE_LOCKS_REQUIRED(!m_getdata_requests_count_mutex);
+    void RemoveGetDataRequests(size_t count) EXCLUSIVE_LOCKS_REQUIRED(!m_getdata_requests_count_mutex);
+
     std::unique_ptr<TxReconciliationTracker> m_txreconciliation;
 
     /** The height of the best chain */
@@ -1062,8 +1069,8 @@ private:
         EXCLUSIVE_LOCKS_REQUIRED(!m_most_recent_block_mutex, !tx_relay.m_tx_inventory_mutex);
 
     void ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic<bool>& interruptMsgProc)
-        EXCLUSIVE_LOCKS_REQUIRED(!m_most_recent_block_mutex, peer.m_getdata_requests_mutex, NetEventsInterface::g_msgproc_mutex)
-        LOCKS_EXCLUDED(::cs_main);
+        EXCLUSIVE_LOCKS_REQUIRED(!m_most_recent_block_mutex, peer.m_getdata_requests_mutex, NetEventsInterface::g_msgproc_mutex, !m_getdata_requests_count_mutex)
+            LOCKS_EXCLUDED(::cs_main);
 
     /** Process a new block. Perform any post-processing housekeeping */
     void ProcessBlock(CNode& node, const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked);
@@ -1791,6 +1798,7 @@ void PeerManagerImpl::ReattemptPrivateBroadcast(CScheduler& scheduler)
 void PeerManagerImpl::FinalizeNode(const CNode& node)
 {
     NodeId nodeid = node.GetId();
+    PeerRef peer;
     {
     LOCK(cs_main);
     {
@@ -1799,7 +1807,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         // PeerRef, so the refcount is >= 1. Be careful not to do any
         // processing here that assumes Peer won't be changed before it's
         // destructed.
-        PeerRef peer = RemovePeer(nodeid);
+        peer = RemovePeer(nodeid);
         assert(peer != nullptr);
         m_wtxid_relay_peers -= peer->m_wtxid_relay;
         assert(m_wtxid_relay_peers >= 0);
@@ -1844,6 +1852,16 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         WITH_LOCK(m_tx_download_mutex, m_txdownloadman.CheckIsEmpty());
     }
     } // cs_main
+    size_t queued_getdata_requests;
+    {
+        std::deque<CInv> discarded_requests;
+        {
+            LOCK(peer->m_getdata_requests_mutex);
+            discarded_requests.swap(peer->m_getdata_requests);
+            queued_getdata_requests = discarded_requests.size();
+        }
+    }
+    RemoveGetDataRequests(queued_getdata_requests);
     if (node.fSuccessfullyConnected &&
         !node.IsBlockOnlyConn() && !node.IsPrivateBroadcastConn() && !node.IsInboundConn()) {
         // Only change visible addrman state for full outbound peers.  We don't
@@ -1863,6 +1881,21 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         m_connman.m_private_broadcast.NumToOpenAdd(1);
     }
     LogDebug(BCLog::NET, "Cleared nodestate for peer=%d\n", nodeid);
+}
+
+bool PeerManagerImpl::TryAddGetDataRequests(size_t count)
+{
+    LOCK(m_getdata_requests_count_mutex);
+    if (count > MAX_INV_SZ - m_getdata_requests_count) return false;
+    m_getdata_requests_count += count;
+    return true;
+}
+
+void PeerManagerImpl::RemoveGetDataRequests(size_t count)
+{
+    LOCK(m_getdata_requests_count_mutex);
+    if (!Assume(count <= m_getdata_requests_count)) return;
+    m_getdata_requests_count -= count;
 }
 
 bool PeerManagerImpl::HasAllDesirableServiceFlags(ServiceFlags services) const
@@ -2850,7 +2883,9 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
         // https://bitcoincore.org/en/2024/07/03/disclose-getdata-cpu.
     }
 
+    const size_t processed{static_cast<size_t>(std::distance(peer.m_getdata_requests.begin(), it))};
     peer.m_getdata_requests.erase(peer.m_getdata_requests.begin(), it);
+    RemoveGetDataRequests(processed);
 
     if (!vNotFound.empty()) {
         // Let the peer know that we didn't find what it asked for, so it doesn't
@@ -4560,6 +4595,11 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
         {
             LOCK(peer.m_getdata_requests_mutex);
+            if (!TryAddGetDataRequests(vInv.size())) {
+                LogDebug(BCLog::NET, "Ignoring getdata message because aggregate queued requests would exceed %u, peer=%d\n",
+                         MAX_INV_SZ, pfrom.GetId());
+                return;
+            }
             peer.m_getdata_requests.insert(peer.m_getdata_requests.end(), vInv.begin(), vInv.end());
             ProcessGetData(pfrom, peer, interruptMsgProc);
         }
@@ -4697,7 +4737,11 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         // actually receive all the data read from disk over the network.
         LogDebug(BCLog::NET, "Peer %d sent us a getblocktxn for a block > %i deep\n", pfrom.GetId(), MAX_BLOCKTXN_DEPTH);
         CInv inv{MSG_WITNESS_BLOCK, req.blockhash};
-        WITH_LOCK(peer.m_getdata_requests_mutex, peer.m_getdata_requests.push_back(inv));
+        {
+            LOCK(peer.m_getdata_requests_mutex);
+            if (!TryAddGetDataRequests(1)) return;
+            peer.m_getdata_requests.push_back(inv);
+        }
         // The message processing loop will go around again (without pausing) and we'll respond then
         return;
     }
