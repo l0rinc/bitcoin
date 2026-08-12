@@ -4369,7 +4369,16 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         };
 
         std::vector<CAddress> vAddr;
-        vRecv >> ser_params(vAddr);
+        const uint64_t addr_size{ReadCompactSize(vRecv)};
+        if (addr_size > MAX_ADDR_TO_SEND) {
+            Misbehaving(peer, strprintf("%s message size = %u", msg_type, static_cast<unsigned>(addr_size)));
+            return;
+        }
+        vAddr.reserve(addr_size);
+        for (uint64_t i{0}; i < addr_size; ++i) {
+            vAddr.emplace_back();
+            vRecv >> ser_params(vAddr.back());
+        }
         ProcessAddrs(msg_type, pfrom, peer, std::move(vAddr), interruptMsgProc);
         return;
     }

@@ -266,9 +266,9 @@ class InvalidMessagesTest(BitcoinTestFramework):
             if msg_type == b'addrv2':
                 conn.wait_for_sendaddrv2()
             self.log.info(f"Test count-only {msg_type.decode()} allocation")
-            with self.nodes[0].assert_debug_log([f'ProcessMessages({msg_type.decode()}, 5 bytes): Exception', 'end of data']):  # TODO: Reject an oversized address count as misbehavior before entry parsing.
+            with self.nodes[0].assert_debug_log(['Misbehaving', f'{msg_type.decode()} message size = {size}']):
                 conn.send_without_ping(msg_generic(msg_type, ser_compact_size(size)))
-                conn.sync_with_ping(timeout=1)  # TODO: Disconnect peers that send oversized address counts.
+                conn.wait_for_disconnect(timeout=1)
             self.nodes[0].disconnect_p2ps()
 
     def test_oversized_msg(self, msg, size):
