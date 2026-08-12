@@ -1909,6 +1909,84 @@ BOOST_AUTO_TEST_CASE(getblocks_response_memory_limit)
     m_node.peerman->FinalizeNode(peer);
 }
 
+BOOST_AUTO_TEST_CASE(compact_block_announcement_response_memory_limit)
+{
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    const uint256 tip_hash{WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip()->GetBlockHash())};
+    CBlockLocator locator;
+    locator.vHave = {tip_hash};
+    std::vector<std::unique_ptr<CNode>> peers;
+
+    {
+        LOCK(NetEventsInterface::g_msgproc_mutex);
+        for (NodeId id{0}; id < 2; ++id) {
+            auto peer{std::make_unique<CNode>(id,
+                                              /*sock=*/nullptr,
+                                              /*addrIn=*/CAddress{},
+                                              /*nKeyedNetGroupIn=*/0,
+                                              /*nLocalHostNonceIn=*/0,
+                                              /*addrBindIn=*/CService{},
+                                              /*addrNameIn=*/std::string{},
+                                              /*conn_type_in=*/ConnectionType::INBOUND,
+                                              /*inbound_onion=*/false,
+                                              /*network_key=*/0)};
+            connman.Handshake(*peer,
+                              /*successfully_connected=*/true,
+                              /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                              /*local_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                              /*version=*/PROTOCOL_VERSION,
+                              /*relay_txs=*/true);
+            connman.FlushSendBuffer(*peer);
+
+            BOOST_REQUIRE(connman.ReceiveMsgFrom(*peer, NetMsg::Make(NetMsgType::GETHEADERS, locator, uint256::ZERO)));
+            peer->fPauseSend = false;
+            connman.ProcessMessagesOnce(*peer);
+            connman.FlushSendBuffer(*peer);
+
+            BOOST_REQUIRE(connman.ReceiveMsgFrom(*peer, NetMsg::Make(NetMsgType::SENDCMPCT, /*high_bandwidth=*/true, CMPCTBLOCKS_VERSION)));
+            peer->fPauseSend = false;
+            connman.ProcessMessagesOnce(*peer);
+            connman.FlushSendBuffer(*peer);
+            peers.push_back(std::move(peer));
+        }
+    }
+
+    auto response_memory{connman.TryReserveResponseMemory(CConnman::MAX_RESPONSE_MEMORY)};
+    BOOST_REQUIRE(response_memory);
+    auto block{PrepareBlock(m_node, {.use_mempool = false})};
+    auto& chainman{static_cast<TestChainstateManager&>(*m_node.chainman)};
+    chainman.JumpOutOfIbd();
+
+    CNode* direct_peer{peers.at(0).release()};
+    CNode& queued_peer{*peers.at(1)};
+    connman.AddTestNode(*direct_peer);
+    m_node.validation_signals->RegisterValidationInterface(m_node.peerman.get());
+    MineBlock(m_node, block);
+    m_node.validation_signals->UnregisterValidationInterface(m_node.peerman.get());
+
+    {
+        LOCK(direct_peer->cs_vSend);
+        const auto& [bytes, _more, msg_type] = direct_peer->m_transport->GetBytesToSend(false);
+        const bool compact_block_queued{!bytes.empty() && msg_type == NetMsgType::CMPCTBLOCK};
+        BOOST_CHECK(compact_block_queued); // TODO: A full response pool should suppress the immediate announcement.
+    }
+    {
+        LOCK(NetEventsInterface::g_msgproc_mutex);
+        m_node.peerman->SendMessages(queued_peer);
+    }
+    {
+        LOCK(queued_peer.cs_vSend);
+        const auto& [bytes, _more, msg_type] = queued_peer.m_transport->GetBytesToSend(false);
+        const bool compact_block_queued{!bytes.empty() && msg_type == NetMsgType::CMPCTBLOCK};
+        BOOST_CHECK(compact_block_queued); // TODO: A full response pool should suppress the queued announcement.
+    }
+
+    m_node.peerman->FinalizeNode(*direct_peer);
+    m_node.peerman->FinalizeNode(queued_peer);
+    connman.ClearTestNodes();
+    chainman.ResetIbd();
+}
+
 BOOST_AUTO_TEST_CASE(private_broadcast_version_does_not_update_addrman_services)
 {
     LOCK(NetEventsInterface::g_msgproc_mutex);
