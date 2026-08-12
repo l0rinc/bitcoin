@@ -889,6 +889,13 @@ CNetMessage V1Transport::GetReceivedMessage(NodeClock::time_point time, bool& re
     return msg;
 }
 
+size_t V1Transport::GetReceiveMemoryUsage() const noexcept
+{
+    AssertLockNotHeld(m_recv_mutex);
+    LOCK(m_recv_mutex);
+    return hdrbuf.GetMemoryUsage() + vRecv.GetMemoryUsage();
+}
+
 bool V1Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
 {
     AssertLockNotHeld(m_send_mutex);

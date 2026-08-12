@@ -1072,6 +1072,24 @@ BOOST_AUTO_TEST_CASE(advertise_local_address)
     RemoveLocal(addr_cjdns);
 }
 
+BOOST_AUTO_TEST_CASE(v1transport_receive_memory_usage)
+{
+    V1Transport transport{NodeId{0}};
+    const size_t usage_before{transport.GetReceiveMemoryUsage()};
+
+    CMessageHeader header{Params().MessageStart(), NetMsgType::BLOCK, MAX_PROTOCOL_MESSAGE_LENGTH};
+    DataStream serialized_header;
+    serialized_header << header;
+    std::span<const uint8_t> header_bytes{UCharCast(serialized_header.data()), serialized_header.size()};
+    while (!header_bytes.empty()) BOOST_REQUIRE(transport.ReceivedBytes(header_bytes));
+
+    const std::array<uint8_t, 1> payload{0};
+    std::span<const uint8_t> payload_bytes{payload};
+    BOOST_REQUIRE(transport.ReceivedBytes(payload_bytes));
+    BOOST_CHECK(payload_bytes.empty());
+    BOOST_CHECK_GT(transport.GetReceiveMemoryUsage(), usage_before + 256 * 1024);
+}
+
 namespace {
 
 CKey GenerateRandomTestKey(FastRandomContext& rng) noexcept

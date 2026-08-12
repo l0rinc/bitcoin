@@ -470,6 +470,9 @@ public:
 
     CNetMessage GetReceivedMessage(NodeClock::time_point time, bool& reject_message) override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
 
+    /** Return memory owned by incomplete received data. */
+    size_t GetReceiveMemoryUsage() const noexcept EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
+
     bool SetMessageToSend(CSerializedNetMsg& msg) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
     BytesToSend GetBytesToSend(bool have_next_message) const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
     void MarkBytesSent(size_t bytes_sent) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
