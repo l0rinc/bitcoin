@@ -443,6 +443,11 @@ BOOST_AUTO_TEST_CASE(transaction_witness_stack_count_allocation)
         BOOST_CHECK_EXCEPTION(verifier >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data"));
         BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), 1);
     }
+    {
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(make_stream(CompactSizeWriter{MAX_BLOCK_WEIGHT}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data")); // TODO: Reject counts without enough element prefixes before allocating.
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), 1); // TODO: Reserve only after proving the declared elements are present.
+    }
 
     const auto stack{Vector(std::vector<uint8_t>{1, 2}, std::vector<uint8_t>{})};
     CMutableTransaction tx;
