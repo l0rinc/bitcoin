@@ -5,6 +5,9 @@
 
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.messages import (
+    CInv,
+    MSG_WTX,
+    msg_inv,
     msg_version,
     msg_filterload
 )
@@ -60,8 +63,19 @@ class P2PConnectionLimits(BitcoinTestFramework):
         peer1.send_without_ping(self.create_blocks_only_version())
         peer1.wait_for_verack()
 
-        node.add_p2p_connection(P2PInterface())
+        tx_peer = node.add_p2p_connection(P2PInterface())
         self.wait_until(lambda: len(node.getpeerinfo()) == 2)
+
+        self.log.info('A relay=0 peer can currently retain transaction download state outside the tx-relay limit')
+        peer1.send_and_ping(msg_inv([CInv(MSG_WTX, 1)]))
+        tx_peer.sync_with_ping()
+        assert len(node.getpeerinfo()) == 2  # TODO: Count inbound transaction announcers against tx-relay capacity.
+
+        peer1.peer_disconnect()
+        self.wait_until(lambda: len(node.getpeerinfo()) == 1)
+        peer1 = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
+        peer1.send_without_ping(self.create_blocks_only_version())
+        peer1.wait_for_verack()
 
         self.log.info('Connecting another full-relay peer triggers non-specific eviction')
         with node.assert_debug_log(['failed to find an eviction candidate - connection dropped (full)'], timeout=2):
