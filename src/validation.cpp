@@ -3203,13 +3203,12 @@ void Chainstate::PruneBlockIndexCandidates() {
 class Chainstate::BlockPrefetcher
 {
     struct ReadRequest {
-        const CBlockIndex* index;
         uint256 hash;
         FlatFilePos pos;
     };
 
     struct PendingRead {
-        const CBlockIndex* index;
+        uint256 hash;
         std::future<std::shared_ptr<const CBlock>> future;
     };
 
@@ -3281,12 +3280,12 @@ public:
             if (index == skip || !(index->nStatus & BLOCK_HAVE_DATA)) continue;
             const FlatFilePos pos{index->GetBlockPos()};
             if (pos.IsNull()) continue;
-            desired.push_back({index, index->GetBlockHash(), pos});
+            desired.push_back({index->GetBlockHash(), pos});
         }
 
         bool pending_matches{m_pending.size() <= desired.size()};
         for (size_t i{0}; pending_matches && i < m_pending.size(); ++i) {
-            pending_matches = m_pending[i].index == desired[i].index;
+            pending_matches = m_pending[i].hash == desired[i].hash;
         }
         if (!pending_matches) Clear();
 
@@ -3305,14 +3304,14 @@ public:
                 }
             })};
             if (!future) return;
-            m_pending.push_back({request.index, std::move(*future)});
+            m_pending.push_back({request.hash, std::move(*future)});
         }
     }
 
-    std::shared_ptr<const CBlock> Take(const CBlockIndex* index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    std::shared_ptr<const CBlock> Take(const uint256& expected_hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
-        const auto match{std::ranges::find(m_pending, index, &PendingRead::index)};
+        const auto match{std::ranges::find(m_pending, expected_hash, &PendingRead::hash)};
         if (match == m_pending.end()) return nullptr;
 
         const size_t stale_count{static_cast<size_t>(std::distance(m_pending.begin(), match))};
@@ -3392,8 +3391,9 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
+            const uint256 connect_hash{pindexConnect->GetBlockHash()};
             std::shared_ptr<const CBlock> block_to_connect{pindexConnect == &index_most_work ? pblock : nullptr};
-            if (!block_to_connect) block_to_connect = block_prefetcher.Take(pindexConnect);
+            if (!block_to_connect) block_to_connect = block_prefetcher.Take(connect_hash);
             if (!ConnectTip(state, pindexConnect, std::move(block_to_connect), connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
