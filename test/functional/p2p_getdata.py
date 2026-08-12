@@ -7,9 +7,11 @@ from collections import defaultdict
 
 from test_framework.messages import (
     CInv,
+    MAX_INV_SIZE,
+    MSG_BLOCK,
     msg_getdata,
 )
-from test_framework.p2p import P2PInterface
+from test_framework.p2p import NetworkThread, P2PInterface
 from test_framework.test_framework import BitcoinTestFramework
 
 
@@ -43,9 +45,53 @@ class GetdataTest(BitcoinTestFramework):
         p2p_block_store.send_and_ping(good_getdata)
         p2p_block_store.wait_until(lambda: p2p_block_store.blocks[best_block] == 1)
 
+    def test_aggregate_queue_limit(self):
+        self.log.info("test concurrent maximum-size GETDATA request queues")
+        node = self.nodes[0]
+        node.disconnect_p2ps()
+        peers = [node.add_p2p_connection(P2PStoreBlock(), supports_v2_p2p=False) for _ in range(4)]
+
+        def peer_id(peer):
+            sockname = peer._transport.get_extra_info("socket").getsockname()
+            address = f"{sockname[0]}:{sockname[1]}"
+            return next(info["id"] for info in node.getpeerinfo() if info["addr"] == address)
+
+        best_block = int(node.getbestblockhash(), 16)
+        getdata = msg_getdata([CInv(MSG_BLOCK, best_block)] * MAX_INV_SIZE)
+        request = peers[0].build_message(getdata)
+        received_logs = [
+            f"received: getdata ({len(getdata.serialize())} bytes) peer={peer_id(peer)}"
+            for peer in peers
+        ]
+        limit_log = f"aggregate queued requests would exceed {MAX_INV_SIZE}"
+
+        # Keep the first accepted request queued behind send backpressure.
+        for peer in peers:
+            NetworkThread.network_event_loop.call_soon_threadsafe(peer._transport.pause_reading)
+
+        with node.assert_debug_log(
+            expected_msgs=received_logs,
+            unexpected_msgs=[limit_log],  # TODO: Bound aggregate GETDATA request queues.
+            timeout=30,
+        ):
+            for peer in peers:
+                peer.send_raw_message(request)
+
+        # An individually valid maximum-size request remains accepted.
+        NetworkThread.network_event_loop.call_soon_threadsafe(peers[0]._transport.resume_reading)
+        peers[0].wait_until(lambda: peers[0].blocks[best_block] >= 1)
+        assert len(node.getpeerinfo()) == len(peers)
+
+        for peer in peers:
+            peer.peer_disconnect()
+        node.disconnect_p2ps()
+
+        # Disconnecting the queued peer releases its request capacity.
+        self.test_invalid_getdata()
 
     def run_test(self):
         self.test_invalid_getdata()
+        self.test_aggregate_queue_limit()
 
 
 if __name__ == '__main__':
