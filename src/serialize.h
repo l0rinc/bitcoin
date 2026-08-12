@@ -715,9 +715,15 @@ struct VectorFormatter
     template<typename Stream, typename V>
     void Unser(Stream& s, V& v)
     {
-        Formatter formatter;
         v.clear();
         size_t size = ReadCompactSize(s);
+        UnserElements(s, v, size);
+    }
+
+    template<typename Stream, typename V>
+    void UnserElements(Stream& s, V& v, size_t size)
+    {
+        Formatter formatter;
         size_t allocated = 0;
         while (allocated < size) {
             // For DoS prevention, do not blindly allocate as much as the stream claims to contain.
