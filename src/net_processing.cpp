@@ -203,6 +203,8 @@ static constexpr size_t MAX_ADDR_PROCESSING_TOKEN_BUCKET{MAX_ADDR_TO_SEND};
 static constexpr size_t NUM_PRIVATE_BROADCAST_PER_TX{3};
 /** Private broadcast connections must complete within this time. Disconnect the peer if it takes longer. */
 static constexpr auto PRIVATE_BROADCAST_MAX_CONNECTION_LIFETIME{3min};
+/** Maximum dynamic memory usage for a transaction retained for compact block reconstruction. */
+static constexpr size_t MAX_BLOCK_RECONSTRUCTION_EXTRA_TXN_USAGE{100'000};
 
 // Internal stuff
 namespace {
@@ -2002,7 +2004,7 @@ std::vector<CTransactionRef> PeerManagerImpl::AbortPrivateBroadcast(const uint25
 
 void PeerManagerImpl::AddToCompactExtraTransactions(const CTransactionRef& tx)
 {
-    if (m_opts.max_extra_txs == 0) return;
+    if (m_opts.max_extra_txs == 0 || RecursiveDynamicUsage(*tx) >= MAX_BLOCK_RECONSTRUCTION_EXTRA_TXN_USAGE) return;
     if (vExtraTxnForCompact.size() < m_opts.max_extra_txs) {
         if (vExtraTxnForCompact.empty()) vExtraTxnForCompact.reserve(m_opts.max_extra_txs);
         vExtraTxnForCompact.emplace_back(tx->GetWitnessHash(), tx);
@@ -3408,7 +3410,7 @@ std::optional<node::PackageToValidate> PeerManagerImpl::ProcessInvalidTx(NodeId 
 
     const auto& [add_extra_compact_tx, unique_parents, package_to_validate] = m_txdownloadman.MempoolRejectedTx(ptx, state, nodeid, first_time_failure);
 
-    if (add_extra_compact_tx && RecursiveDynamicUsage(*ptx) < 100000) {
+    if (add_extra_compact_tx) {
         AddToCompactExtraTransactions(ptx);
     }
     for (const Txid& parent_txid : unique_parents) {

@@ -605,7 +605,7 @@ class CompactBlocksTest(BitcoinTestFramework):
         test_node.send_and_ping(msg_cmpctblock(compact_block.to_p2p()))
         with p2p_lock:
             requested = "getblocktxn" in test_node.last_message
-        assert not requested  # TODO: Request replacements that exceed the reconstruction memory limit.
+        assert requested
         if requested:
             self.getblocktxn_expected(test_node, block.hash_int, indices=[1])
             response = msg_blocktxn()
