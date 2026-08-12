@@ -1968,7 +1968,7 @@ BOOST_AUTO_TEST_CASE(compact_block_announcement_response_memory_limit)
         LOCK(direct_peer->cs_vSend);
         const auto& [bytes, _more, msg_type] = direct_peer->m_transport->GetBytesToSend(false);
         const bool compact_block_queued{!bytes.empty() && msg_type == NetMsgType::CMPCTBLOCK};
-        BOOST_CHECK(compact_block_queued); // TODO: A full response pool should suppress the immediate announcement.
+        BOOST_CHECK(!compact_block_queued);
     }
     {
         LOCK(NetEventsInterface::g_msgproc_mutex);
@@ -1978,7 +1978,7 @@ BOOST_AUTO_TEST_CASE(compact_block_announcement_response_memory_limit)
         LOCK(queued_peer.cs_vSend);
         const auto& [bytes, _more, msg_type] = queued_peer.m_transport->GetBytesToSend(false);
         const bool compact_block_queued{!bytes.empty() && msg_type == NetMsgType::CMPCTBLOCK};
-        BOOST_CHECK(compact_block_queued); // TODO: A full response pool should suppress the queued announcement.
+        BOOST_CHECK(!compact_block_queued);
     }
 
     m_node.peerman->FinalizeNode(*direct_peer);

@@ -2281,12 +2281,14 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         // If the peer has, or we announced to them the previous block already,
         // but we don't think they have this one, go ahead and announce it
         if (state.m_requested_hb_cmpctblocks && !PeerHasHeader(&state, pindex) && PeerHasHeader(&state, pindex->pprev)) {
-
+            const CSerializedNetMsg& ser_cmpctblock{lazy_ser.get()};
+            auto response_memory{m_connman.TryReserveResponseMemory(ser_cmpctblock.data.size())};
+            if (!response_memory) return;
+            auto msg{ser_cmpctblock.Copy()};
+            msg.m_response_memory_reservation = std::move(*response_memory);
             LogDebug(BCLog::NET, "%s sending header-and-ids %s to peer=%d\n", "PeerManager::NewPoWValidBlock",
                     hashBlock.ToString(), pnode->GetId());
-
-            const CSerializedNetMsg& ser_cmpctblock{lazy_ser.get()};
-            PushMessage(*pnode, ser_cmpctblock.Copy());
+            PushMessage(*pnode, std::move(msg));
             state.pindexBestHeaderSent = pindex;
         }
     });
@@ -6325,9 +6327,6 @@ bool PeerManagerImpl::SendMessages(CNode& node)
                 if (vHeaders.size() == 1 && state.m_requested_hb_cmpctblocks) {
                     // We only send up to 1 block as header-and-ids, as otherwise
                     // probably means we're doing an initial-ish-sync or they're slow
-                    LogDebug(BCLog::NET, "%s sending header-and-ids %s to peer=%d\n", __func__,
-                            vHeaders.front().GetHash().ToString(), node.GetId());
-
                     std::optional<CSerializedNetMsg> cached_cmpctblock_msg;
                     {
                         LOCK(m_most_recent_block_mutex);
@@ -6335,16 +6334,23 @@ bool PeerManagerImpl::SendMessages(CNode& node)
                             cached_cmpctblock_msg = NetMsg::Make(NetMsgType::CMPCTBLOCK, *m_most_recent_compact_block);
                         }
                     }
-                    if (cached_cmpctblock_msg.has_value()) {
-                        PushMessage(node, std::move(cached_cmpctblock_msg.value()));
-                    } else {
+                    if (!cached_cmpctblock_msg.has_value()) {
                         CBlock block;
                         const bool ret{m_chainman.m_blockman.ReadBlock(block, *pBestIndex)};
                         assert(ret);
                         CBlockHeaderAndShortTxIDs cmpctblock{block, m_rng.rand64()};
-                        MakeAndPushMessage(node, NetMsgType::CMPCTBLOCK, cmpctblock);
+                        cached_cmpctblock_msg = NetMsg::Make(NetMsgType::CMPCTBLOCK, cmpctblock);
                     }
-                    state.pindexBestHeaderSent = pBestIndex;
+                    auto response_memory{m_connman.TryReserveResponseMemory(cached_cmpctblock_msg->data.size())};
+                    if (response_memory) {
+                        cached_cmpctblock_msg->m_response_memory_reservation = std::move(*response_memory);
+                        LogDebug(BCLog::NET, "%s sending header-and-ids %s to peer=%d\n", __func__,
+                                 vHeaders[0].GetHash().ToString(), node.GetId());
+                        PushMessage(node, std::move(*cached_cmpctblock_msg));
+                        state.pindexBestHeaderSent = pBestIndex;
+                    } else {
+                        fRevertToInv = true;
+                    }
                 } else if (peer.m_prefers_headers) {
                     if (vHeaders.size() > 1) {
                         LogDebug(BCLog::NET, "%s: %u headers, range (%s, %s), to peer=%d\n", __func__,
