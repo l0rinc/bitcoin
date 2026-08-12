@@ -144,6 +144,44 @@ public:
     SERIALIZE_METHODS(TestHeaderAndShortIDs, obj) { READWRITE(obj.header, obj.nonce, Using<VectorFormatter<CustomUintFormatter<CBlockHeaderAndShortTxIDs::SHORTTXIDS_LENGTH>>>(obj.shorttxids), obj.prefilledtxn); }
 };
 
+class InspectableHeaderAndShortIDs : public CBlockHeaderAndShortTxIDs
+{
+public:
+    size_t ShortIdCapacity() const { return shorttxids.capacity(); }
+    size_t ShortIdSize() const { return shorttxids.size(); }
+    size_t PrefilledCapacity() const { return prefilledtxn.capacity(); }
+};
+
+BOOST_AUTO_TEST_CASE(compact_block_count_allocation)
+{
+    constexpr size_t MAX_COUNT{std::numeric_limits<uint16_t>::max()};
+
+    {
+        DataStream stream;
+        stream << CBlockHeader{} << uint64_t{0} << CompactSizeWriter{MAX_COUNT + 1};
+        InspectableHeaderAndShortIDs block;
+        BOOST_CHECK_EXCEPTION(stream >> block, std::ios_base::failure, HasReason("end of data")); // TODO: Reject an oversized short-ID count before entry parsing.
+        BOOST_CHECK_EQUAL(block.ShortIdCapacity(), MAX_COUNT + 1); // TODO: Reject before allocating short IDs.
+        BOOST_CHECK_EQUAL(block.PrefilledCapacity(), 0);
+    }
+    {
+        DataStream stream;
+        stream << CBlockHeader{} << uint64_t{0} << CompactSizeWriter{0} << CompactSizeWriter{MAX_COUNT + 1};
+        InspectableHeaderAndShortIDs block;
+        BOOST_CHECK_EXCEPTION(stream >> block, std::ios_base::failure, HasReason("end of data")); // TODO: Reject an oversized prefilled count before entry parsing.
+        BOOST_CHECK_EQUAL(block.ShortIdCapacity(), 0);
+        BOOST_CHECK_EQUAL(block.PrefilledCapacity(), MAX_COUNT + 1); // TODO: Reject before allocating prefilled transactions.
+    }
+
+    DataStream stream;
+    stream << CBlockHeader{} << uint64_t{0} << CompactSizeWriter{MAX_COUNT};
+    stream.write(std::vector<std::byte>(MAX_COUNT * CBlockHeaderAndShortTxIDs::SHORTTXIDS_LENGTH));
+    stream << CompactSizeWriter{0};
+    InspectableHeaderAndShortIDs block;
+    stream >> block;
+    BOOST_CHECK_EQUAL(block.ShortIdSize(), MAX_COUNT);
+}
+
 struct TestPartiallyDownloadedBlock : PartiallyDownloadedBlock {
     using PartiallyDownloadedBlock::PartiallyDownloadedBlock;
 
