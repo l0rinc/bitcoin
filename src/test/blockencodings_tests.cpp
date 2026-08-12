@@ -506,7 +506,7 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationOverflowTest) {
 
 BOOST_AUTO_TEST_CASE(block_transactions_count_allocation)
 {
-    constexpr size_t MAX_COUNT{std::numeric_limits<uint16_t>::max()};
+    constexpr size_t MAX_COUNT{BlockTransactions::MAX_TX_COUNT};
 
     BlockTransactions max_response;
     max_response.txn.assign(MAX_COUNT, MakeTransactionRef(CMutableTransaction{}));
@@ -519,8 +519,8 @@ BOOST_AUTO_TEST_CASE(block_transactions_count_allocation)
     DataStream oversized_stream;
     oversized_stream << uint256::ZERO << CompactSizeWriter{MAX_COUNT + 1};
     BlockTransactions oversized_response;
-    BOOST_CHECK_EXCEPTION(oversized_stream >> oversized_response, std::ios_base::failure, HasReason("end of data")); // TODO: Reject an oversized transaction count before parsing.
-    BOOST_CHECK_EQUAL(oversized_response.txn.capacity(), MAX_COUNT + 1); // TODO: Reject before allocating transaction references.
+    BOOST_CHECK_EXCEPTION(oversized_stream >> oversized_response, std::ios_base::failure, HasReason("Vector length limit exceeded"));
+    BOOST_CHECK_EQUAL(oversized_response.txn.capacity(), 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

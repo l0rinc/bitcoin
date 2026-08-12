@@ -56,6 +56,8 @@ public:
 
 class BlockTransactions {
 public:
+    static constexpr size_t MAX_TX_COUNT{std::numeric_limits<uint16_t>::max()};
+
     // A BlockTransactions message
     uint256 blockhash;
     std::vector<CTransactionRef> txn;
@@ -66,7 +68,7 @@ public:
 
     SERIALIZE_METHODS(BlockTransactions, obj)
     {
-        READWRITE(obj.blockhash, TX_WITH_WITNESS(Using<VectorFormatter<TransactionCompression>>(obj.txn)));
+        READWRITE(obj.blockhash, TX_WITH_WITNESS(Using<LimitedVectorFormatter<MAX_TX_COUNT, TransactionCompression>>(obj.txn)));
     }
 };
 
