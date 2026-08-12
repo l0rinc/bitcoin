@@ -2025,7 +2025,7 @@ std::optional<std::pair<ScriptError, std::string>> CScriptCheck::operator()() {
     const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
     const CScriptWitness *witness = &ptxTo->vin[nIn].scriptWitness;
     ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
-    if (VerifyScript(scriptSig, m_tx_out.scriptPubKey, witness, m_flags, CachingTransactionSignatureChecker(ptxTo, nIn, m_tx_out.nValue, cacheStore, *m_signature_cache, *txdata), &error)) {
+    if (VerifyScript(scriptSig, m_tx_out->scriptPubKey, witness, m_flags, CachingTransactionSignatureChecker(ptxTo, nIn, m_tx_out->nValue, cacheStore, *m_signature_cache, *txdata), &error)) {
         return std::nullopt;
     } else {
         auto debug_str = strprintf("input %i of %s (wtxid %s), spending %s:%i", nIn, ptxTo->GetHash().ToString(), ptxTo->GetWitnessHash().ToString(), ptxTo->vin[nIn].prevout.hash.ToString(), ptxTo->vin[nIn].prevout.n);
@@ -2580,8 +2580,25 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             break;
         }
 
+        CTxUndo undoDummy;
+        if (i > 0) {
+            blockundo.vtxundo.emplace_back();
+        }
+        CTxUndo& txundo{i == 0 ? undoDummy : blockundo.vtxundo.back()};
+
         if (!tx.IsCoinBase() && fScriptChecks)
         {
+            // Move the spent outputs from the undo data into txdata instead of
+            // copying them. This keeps one copy alive for queued script checks;
+            // they are moved back after the checks complete below.
+            UpdateCoins(tx, view, txundo, pindex->nHeight);
+            std::vector<CTxOut> spent_outputs;
+            spent_outputs.reserve(txundo.vprevout.size());
+            for (Coin& coin : txundo.vprevout) {
+                spent_outputs.emplace_back(std::move(coin.out));
+            }
+            txsdata[i].Init(tx, std::move(spent_outputs));
+
             bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
             bool tx_ok;
             TxValidationState tx_state;
@@ -2600,13 +2617,9 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                               tx_state.GetRejectReason(), tx_state.GetDebugMessage());
                 break;
             }
+        } else {
+            UpdateCoins(tx, view, txundo, pindex->nHeight);
         }
-
-        CTxUndo undoDummy;
-        if (i > 0) {
-            blockundo.vtxundo.emplace_back();
-        }
-        UpdateCoins(tx, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
     }
     const auto time_3{SteadyClock::now()};
     m_chainman.time_connect += time_3 - time_2;
@@ -2625,6 +2638,18 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         auto parallel_result = control->Complete();
         if (parallel_result.has_value() && state.IsValid()) {
             state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, strprintf("block-script-verify-flag-failed (%s)", ScriptErrorString(parallel_result->first)), parallel_result->second);
+        }
+    }
+    // Queued CScriptChecks borrow the outputs in txsdata, so restore the undo
+    // data only after every check has completed.
+    for (size_t i = 1; i <= blockundo.vtxundo.size(); ++i) {
+        if (!txsdata[i].m_spent_outputs_ready) continue;
+        auto& prevouts{blockundo.vtxundo[i - 1].vprevout};
+        auto spent_outputs{std::move(txsdata[i].m_spent_outputs)};
+        txsdata[i] = PrecomputedTransactionData{};
+        assert(prevouts.size() == spent_outputs.size());
+        for (size_t j = 0; j < prevouts.size(); ++j) {
+            prevouts[j].out = std::move(spent_outputs[j]);
         }
     }
     if (!state.IsValid()) {

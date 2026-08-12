@@ -700,7 +700,7 @@ BOOST_AUTO_TEST_CASE(script_check_spent_output_ownership)
     CScriptCheck check{spent_output, tx, signature_cache, /*input_index=*/0, SCRIPT_VERIFY_NONE, /*cache_sig_store=*/false, &txdata};
 
     spent_output.scriptPubKey = CScript{} << OP_FALSE;
-    BOOST_CHECK(!check().has_value()); // TODO: Let script checks borrow stable spent outputs.
+    BOOST_CHECK(check().has_value());
 }
 
 SignatureData CombineSignatures(const CMutableTransaction& input1, const CMutableTransaction& input2, const CTransactionRef tx)
