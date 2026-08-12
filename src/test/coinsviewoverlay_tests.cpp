@@ -19,6 +19,7 @@
 #include <memory>
 #include <ranges>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -185,6 +186,40 @@ BOOST_AUTO_TEST_CASE(fetch_no_inputs)
         }
     }
     BOOST_CHECK_EQUAL(view.GetCacheSize(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(fetch_duplicate_input_once)
+{
+    CBlock block;
+    CMutableTransaction coinbase;
+    coinbase.vin.emplace_back();
+    block.vtx.push_back(MakeTransactionRef(coinbase));
+
+    const Txid txid{Txid::FromUint256(uint256::ONE)};
+    const COutPoint outpoint_a{txid, 0};
+    const COutPoint outpoint_b{txid, 1};
+    for (const auto& outpoint : {outpoint_a, outpoint_b, outpoint_a}) {
+        CMutableTransaction tx;
+        tx.vin.emplace_back(outpoint);
+        block.vtx.push_back(MakeTransactionRef(tx));
+    }
+
+    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewCache main_cache{&db};
+    for (const auto& [outpoint, value] : {std::pair{outpoint_a, 1}, std::pair{outpoint_b, 2}}) {
+        Coin coin{};
+        coin.out.nValue = value;
+        main_cache.EmplaceCoinInternalDANGER(COutPoint{outpoint}, std::move(coin));
+    }
+
+    CoinsViewOverlay view{&main_cache, MakeStartedThreadPool()};
+    const auto reset_guard{view.StartFetching(block)};
+    BOOST_CHECK_EQUAL(view.AccessCoin(outpoint_a).out.nValue, 1);
+    BOOST_CHECK(!view.AllInputsConsumed());
+    BOOST_CHECK(view.SpendCoin(outpoint_a));
+    BOOST_CHECK_EQUAL(view.AccessCoin(outpoint_b).out.nValue, 2);
+    BOOST_CHECK(!view.AllInputsConsumed()); // TODO: Queue duplicate external inputs only once.
+    BOOST_CHECK(view.AccessCoin(outpoint_a).IsSpent());
 }
 
 // Access coins that are not block inputs
