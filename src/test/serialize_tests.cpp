@@ -2,7 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <consensus/consensus.h>
 #include <hash.h>
+#include <primitives/block.h>
 #include <serialize.h>
 #include <streams.h>
 #include <test/util/common.h>
@@ -511,6 +513,25 @@ BOOST_AUTO_TEST_CASE(with_params_vector_of_base)
     stream >> HEX(v);
     BOOST_CHECK_EQUAL(v[0].m_base_data, 0x0F);
     BOOST_CHECK_EQUAL(v[1].m_base_data, 0xFF);
+}
+
+BOOST_AUTO_TEST_CASE(block_transaction_count_allocation)
+{
+    constexpr size_t MAX_COUNT{MAX_BLOCK_WEIGHT / MIN_TRANSACTION_WEIGHT};
+
+    CBlock max_block;
+    max_block.vtx.assign(MAX_COUNT, MakeTransactionRef(CMutableTransaction{}));
+    DataStream max_stream;
+    max_stream << TX_WITH_WITNESS(max_block);
+    CBlock max_roundtrip;
+    max_stream >> TX_WITH_WITNESS(max_roundtrip);
+    BOOST_CHECK_EQUAL(max_roundtrip.vtx.size(), MAX_COUNT);
+
+    DataStream oversized_stream;
+    oversized_stream << CBlockHeader{} << CompactSizeWriter{MAX_COUNT + 1};
+    CBlock oversized_block;
+    BOOST_CHECK_EXCEPTION(oversized_stream >> TX_WITH_WITNESS(oversized_block), std::ios_base::failure, HasReason("end of data")); // TODO: Reject an impossible block transaction count before parsing.
+    BOOST_CHECK_GT(oversized_block.vtx.capacity(), MAX_COUNT); // TODO: Reject before allocating transaction references.
 }
 
 constexpr DerivedAndBaseFormat RAW_LOWER{{BaseFormat::RAW}, DerivedAndBaseFormat::DerivedFormat::LOWER};
