@@ -385,6 +385,50 @@ BOOST_FIXTURE_TEST_CASE(cfilter_response_memory_limit, BlockFilterPeerTestingSet
     m_node.peerman->FinalizeNode(peer);
 }
 
+BOOST_FIXTURE_TEST_CASE(compact_filter_header_response_memory_limit, BlockFilterPeerTestingSetup)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    CNode peer{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/CAddress{},
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/std::string{},
+               /*conn_type_in=*/ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+    const ServiceFlags services{NODE_NETWORK | NODE_COMPACT_FILTERS};
+    connman.Handshake(peer,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/services,
+                      /*local_services=*/services,
+                      /*version=*/PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+    connman.FlushSendBuffer(peer);
+
+    const CBlockIndex& tip{*WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip())};
+    for (const std::string msg_type : {NetMsgType::GETCFHEADERS, NetMsgType::GETCFCHECKPT}) {
+        auto response_memory{connman.TryReserveResponseMemory(CConnman::MAX_RESPONSE_MEMORY)};
+        BOOST_REQUIRE(response_memory);
+        CSerializedNetMsg request{msg_type == NetMsgType::GETCFHEADERS
+            ? NetMsg::Make(msg_type, static_cast<uint8_t>(BlockFilterType::BASIC), uint32_t{0}, tip.GetBlockHash())
+            : NetMsg::Make(msg_type, static_cast<uint8_t>(BlockFilterType::BASIC), tip.GetBlockHash())};
+        BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, std::move(request)));
+        peer.fPauseSend = false;
+        connman.ProcessMessagesOnce(peer);
+        {
+            LOCK(peer.cs_vSend);
+            const auto& [_bytes, _more, response_type] = peer.m_transport->GetBytesToSend(false);
+            const std::string expected_type{msg_type == NetMsgType::GETCFHEADERS ? NetMsgType::CFHEADERS : NetMsgType::CFCHECKPT};
+            BOOST_CHECK_EQUAL(response_type, expected_type); // TODO: Do not retain compact-filter headers when aggregate response memory is full.
+        }
+        connman.FlushSendBuffer(peer);
+    }
+    m_node.peerman->FinalizeNode(peer);
+}
+
 class IndexReorgCrash : public BaseIndex
 {
 private:
