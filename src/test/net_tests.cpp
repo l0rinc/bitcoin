@@ -170,6 +170,34 @@ BOOST_AUTO_TEST_CASE(inbound_socket_send_buffer)
     BOOST_CHECK_EQUAL(*send_buffer, INBOUND_SOCKET_SEND_BUFFER);
 }
 
+BOOST_AUTO_TEST_CASE(inbound_tx_relay_slot_lifetime)
+{
+    ConnmanTestMsg connman{0x1337, 0x1337, *m_node.addrman, *m_node.netgroupman, Params()};
+    CConnman::Options options;
+    options.m_max_automatic_connections = 13;
+    options.m_full_relay_inbound_percent = 50;
+    connman.Init(options);
+
+    auto make_inbound = [](NodeId id) {
+        return std::make_unique<CNode>(id,
+                                       /*sock=*/nullptr,
+                                       CAddress{},
+                                       /*nKeyedNetGroupIn=*/0,
+                                       /*nLocalHostNonceIn=*/0,
+                                       CAddress{},
+                                       /*addrNameIn=*/"",
+                                       ConnectionType::INBOUND,
+                                       /*inbound_onion=*/false,
+                                       /*network_key=*/0);
+    };
+    auto peer_a{make_inbound(0)};
+    auto peer_b{make_inbound(1)};
+
+    BOOST_REQUIRE(connman.TryAcquireInboundTxRelaySlot(*peer_a));
+    peer_a->fDisconnect = true;
+    BOOST_CHECK(!connman.TryAcquireInboundTxRelaySlot(*peer_b));
+}
+
 BOOST_AUTO_TEST_CASE(cnetaddr_basic)
 {
     CNetAddr addr;

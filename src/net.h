@@ -920,6 +920,9 @@ public:
      * from false to true. It will never change back to false. */
     std::atomic_bool m_relays_txs{false};
 
+    /** Whether this inbound peer has acquired a transaction-relay resource slot. */
+    std::atomic_bool m_tx_relay_inbound_slot{false};
+
     /** Whether this peer has loaded a bloom filter. Used only in inbound
      *  eviction logic. */
     std::atomic_bool m_bloom_filter_loaded{false};
@@ -1406,6 +1409,9 @@ public:
      */
     bool EvictTxPeerIfFull(std::optional<NodeId> protect_peer = std::nullopt) EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
 
+    /** Acquire an inbound transaction-relay resource slot. */
+    bool TryAcquireInboundTxRelaySlot(CNode& node) EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
+
     bool AddNode(const AddedNodeParams& add) EXCLUSIVE_LOCKS_REQUIRED(!m_added_nodes_mutex);
     bool RemoveAddedNode(std::string_view node) EXCLUSIVE_LOCKS_REQUIRED(!m_added_nodes_mutex);
     bool AddedNodesContain(const CAddress& addr) const EXCLUSIVE_LOCKS_REQUIRED(!m_added_nodes_mutex);
@@ -1636,7 +1642,7 @@ private:
 
     void AddWhitelistPermissionFlags(NetPermissionFlags& flags, std::optional<CNetAddr> addr, const std::vector<NetWhitelistPermissions>& ranges) const;
 
-    void DeleteNode(CNode* pnode);
+    void DeleteNode(CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
 
     NodeId GetNewNodeId();
 
@@ -1791,6 +1797,7 @@ private:
     int m_max_automatic_outbound;
     int m_max_inbound;
     int m_max_inbound_full_relay;
+    int m_num_inbound_tx_relay_slots GUARDED_BY(m_nodes_mutex){0};
 
     bool m_use_addrman_outgoing;
     CClientUIInterface* m_client_interface;

@@ -2716,6 +2716,31 @@ bool CConnman::EvictTxPeerIfFull(std::optional<NodeId> protect_peer)
     return true;
 }
 
+bool CConnman::TryAcquireInboundTxRelaySlot(CNode& node)
+{
+    if (!node.IsInboundConn()) return true;
+
+    LOCK(m_nodes_mutex);
+    if (node.fDisconnect) return false;
+    if (node.m_tx_relay_inbound_slot) return true;
+    if (m_num_inbound_tx_relay_slots >= m_max_inbound_full_relay) return false;
+
+    int tx_inbound_peers{0};
+    if (!node.m_relays_txs) {
+        for (const CNode* peer : m_nodes) {
+            if (!peer->fDisconnect && peer->IsInboundConn() && peer->m_relays_txs) {
+                ++tx_inbound_peers;
+            }
+        }
+        if (tx_inbound_peers >= m_max_inbound_full_relay) return false;
+        node.m_relays_txs = true;
+    }
+
+    node.m_tx_relay_inbound_slot = true;
+    ++m_num_inbound_tx_relay_slots;
+    return true;
+}
+
 std::unordered_set<Network> CConnman::GetReachableEmptyNetworks() const
 {
     std::unordered_set<Network> networks{};
@@ -3935,6 +3960,11 @@ void CConnman::DeleteNode(CNode* pnode)
 {
     assert(pnode);
     m_msgproc->FinalizeNode(*pnode);
+    if (pnode->m_tx_relay_inbound_slot) {
+        LOCK(m_nodes_mutex);
+        assert(m_num_inbound_tx_relay_slots > 0);
+        --m_num_inbound_tx_relay_slots;
+    }
     delete pnode;
 }
 

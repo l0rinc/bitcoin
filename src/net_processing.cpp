@@ -4382,6 +4382,17 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         }
 
         const bool reject_tx_invs{RejectIncomingTxs(pfrom)};
+        if (!m_chainman.IsInitialBlockDownload() && !reject_tx_invs && pfrom.IsInboundConn()) {
+            for (const CInv& inv : vInv) {
+                if (!inv.IsGenTxMsg() || (peer.m_wtxid_relay && inv.IsMsgTx()) || (!peer.m_wtxid_relay && inv.IsMsgWtx())) continue;
+                if (!m_connman.TryAcquireInboundTxRelaySlot(pfrom)) {
+                    LogDebug(BCLog::NET, "inbound transaction-relay capacity full - connection dropped after %s message, peer=%d\n", msg_type, pfrom.GetId());
+                    pfrom.fDisconnect = true;
+                    return;
+                }
+                break;
+            }
+        }
         std::unordered_set<uint256, SaltedUint256Hasher> seen_txids{0, m_txhash_hasher};
         std::unordered_set<uint256, SaltedUint256Hasher> seen_wtxids{0, m_txhash_hasher};
 
@@ -4751,6 +4762,12 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
         CTransactionRef ptx;
         vRecv >> TX_WITH_WITNESS(ptx);
+
+        if (pfrom.IsInboundConn() && !m_connman.TryAcquireInboundTxRelaySlot(pfrom)) {
+            LogDebug(BCLog::NET, "inbound transaction-relay capacity full - connection dropped after %s message, peer=%d\n", msg_type, pfrom.GetId());
+            pfrom.fDisconnect = true;
+            return;
+        }
 
         const Txid& txid = ptx->GetHash();
         const Wtxid& wtxid = ptx->GetWitnessHash();

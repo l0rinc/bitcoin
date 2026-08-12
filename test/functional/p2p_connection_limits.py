@@ -66,13 +66,12 @@ class P2PConnectionLimits(BitcoinTestFramework):
         tx_peer = node.add_p2p_connection(P2PInterface())
         self.wait_until(lambda: len(node.getpeerinfo()) == 2)
 
-        self.log.info('A relay=0 peer can currently retain transaction download state outside the tx-relay limit')
-        peer1.send_and_ping(msg_inv([CInv(MSG_WTX, 1)]))
+        self.log.info('Drop a relay=0 transaction announcer when tx-relay capacity is full')
+        peer1.send_without_ping(msg_inv([CInv(MSG_WTX, 1)]))
+        peer1.wait_for_disconnect()
         tx_peer.sync_with_ping()
-        assert len(node.getpeerinfo()) == 2  # TODO: Count inbound transaction announcers against tx-relay capacity.
+        assert len(node.getpeerinfo()) == 1
 
-        peer1.peer_disconnect()
-        self.wait_until(lambda: len(node.getpeerinfo()) == 1)
         peer1 = self.nodes[0].add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
         peer1.send_without_ping(self.create_blocks_only_version())
         peer1.wait_for_verack()
