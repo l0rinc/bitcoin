@@ -85,7 +85,7 @@ void CCoinsViewDB::ResizeCache(size_t new_cache_size)
     }
 }
 
-std::optional<Coin> CCoinsViewDB::GetCoin(const COutPoint& outpoint) const
+std::optional<Coin> CCoinsViewDB::GetCoin(const COutPoint& outpoint) const noexcept
 {
     if (Coin coin; m_db->Read(CoinEntry(&outpoint), coin)) {
         Assert(!coin.IsSpent()); // The UTXO database should never contain spent coins
@@ -94,14 +94,9 @@ std::optional<Coin> CCoinsViewDB::GetCoin(const COutPoint& outpoint) const
     return std::nullopt;
 }
 
-std::optional<Coin> CCoinsViewDB::PeekCoin(const COutPoint& outpoint) const
+std::optional<Coin> CCoinsViewDB::PeekCoin(const COutPoint& outpoint) const noexcept
 {
     return GetCoin(outpoint);
-}
-
-bool CCoinsViewDB::HaveCoin(const COutPoint& outpoint) const
-{
-    return m_db->Exists(CoinEntry(&outpoint));
 }
 
 uint256 CCoinsViewDB::GetBestBlock() const {
@@ -248,7 +243,7 @@ std::unique_ptr<CCoinsViewCursor> CCoinsViewDB::Cursor() const
     // Cache key of first record
     if (i->pcursor->Valid()) {
         CoinEntry entry(&i->keyTmp.second);
-        i->pcursor->GetKey(entry);
+        i->pcursor->GetKey(entry, DB_COIN);
         i->keyTmp.first = entry.key;
     } else {
         i->keyTmp.first = 0; // Make sure Valid() and GetKey() return false
@@ -280,7 +275,7 @@ void CCoinsViewDBCursor::Next()
 {
     pcursor->Next();
     CoinEntry entry(&keyTmp.second);
-    if (!pcursor->Valid() || !pcursor->GetKey(entry)) {
+    if (!pcursor->Valid() || !pcursor->GetKey(entry, DB_COIN)) {
         keyTmp.first = 0; // Invalidate cached key after last record so that Valid() and GetKey() return false
     } else {
         keyTmp.first = entry.key;

@@ -70,6 +70,49 @@ BOOST_AUTO_TEST_CASE(dbwrapper)
     }
 }
 
+BOOST_AUTO_TEST_CASE(dbwrapper_read_deserialization_error)
+{
+    CDBWrapper dbw{{.path = "",
+                    .cache_bytes = 1_MiB,
+                    .memory_only = true,
+                    .read_error_cb = [] { throw dbwrapper_error{"dbwrapper test read error"}; }}};
+    constexpr uint8_t key{'k'};
+    dbw.Write(key, uint8_t{0x01});
+
+    uint256 value{};
+    BOOST_CHECK_EXCEPTION(dbw.Read(key, value), dbwrapper_error, HasReason{"dbwrapper test read error"}); // Check that callback is called before abort
+
+    constexpr uint8_t missing_key{'m'};
+    BOOST_CHECK(!dbw.Read(missing_key, value));
+}
+
+BOOST_AUTO_TEST_CASE(dbwrapper_iterator_deserialization_error)
+{
+    CDBWrapper dbw{{.path = "", .cache_bytes = 1_MiB, .memory_only = true, .read_error_cb = [] { throw dbwrapper_error{"dbwrapper test read error"}; }}};
+
+    constexpr uint8_t key{'k'};
+    dbw.Write(key, uint8_t{0x01});
+
+    {
+        const std::unique_ptr<CDBIterator> it{dbw.NewIterator()};
+        it->Seek(key);
+        uint256 key_res{};
+        // Another prefix ends a typed key range; a malformed matching key is fatal.
+        BOOST_CHECK(!it->GetKey(key_res, uint8_t{'x'}));
+        BOOST_CHECK_EXCEPTION(it->GetKey(key_res, key), dbwrapper_error, HasReason{"dbwrapper test read error"}); // Check that callback is called before abort
+    }
+
+    {
+        const std::unique_ptr<CDBIterator> it{dbw.NewIterator()};
+        it->Seek(key);
+        uint8_t key_res{};
+        it->GetKey(key_res);
+
+        uint256 val_res{};
+        BOOST_CHECK_EXCEPTION(it->GetValue(val_res), dbwrapper_error, HasReason{"dbwrapper test read error"}); // Check that callback is called before abort
+    }
+}
+
 BOOST_AUTO_TEST_CASE(dbwrapper_basic_data)
 {
     // Perform tests both obfuscated and non-obfuscated.
@@ -222,10 +265,6 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
 
         BOOST_REQUIRE(it->GetKey(key_res));
         BOOST_CHECK_EQUAL(key_res, key);
-        // A failed value decode must not leave the iterator's scratch stream dirty.
-        std::pair<uint256, uint8_t> value_too_large;
-        BOOST_CHECK(!it->GetValue(value_too_large));
-
         uint256 val_res;
         BOOST_REQUIRE(it->GetValue(val_res));
         BOOST_CHECK_EQUAL(val_res.ToString(), in.ToString());
