@@ -69,10 +69,11 @@ class ReceiveBufferTest(BitcoinTestFramework):
         bytes_before = bytes_received(trigger_id)
         peers[6].send_raw_message(trigger_message)
         self.wait_until(lambda: received_at_least(trigger_id, bytes_before + len(trigger_message)))
+        self.wait_until(lambda: len(node.getpeerinfo()) < len(peer_ids))
 
         connected_ids = {info["id"] for info in node.getpeerinfo()}
         assert trigger_id in connected_ids
-        assert len(set(large_consumer_ids) - connected_ids) == 0  # TODO: Bound aggregate receive memory.
+        assert len(set(large_consumer_ids) - connected_ids) == 1
         node.getblockcount()
 
 

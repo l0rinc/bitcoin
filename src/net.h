@@ -1127,6 +1127,9 @@ public:
     /** A filtered block can consist of a merkle block plus its matching transactions. */
     static constexpr size_t FILTERED_BLOCK_RESPONSE_MEMORY_RESERVATION{2 * RESPONSE_MEMORY_RESERVATION};
 
+    /** Bound aggregate buffered input for remotely scalable connection types. */
+    static constexpr size_t MAX_SCALABLE_RECEIVE_MEMORY{8 * MAX_PROTOCOL_MESSAGE_LENGTH};
+
     struct Options
     {
         ServiceFlags m_local_services = NODE_NONE;
@@ -1544,6 +1547,8 @@ private:
     void NotifyNumConnectionsChanged() EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
     /** Return true if the peer is inactive and should be disconnected. */
     bool InactivityCheck(const CNode& node, NodeClock::time_point now) const;
+    /** Return true for a remotely scalable connection covered by the aggregate receive limit. */
+    static bool IsReceiveMemoryLimited(const CNode& node);
 
     /**
      * Generate a collection of sockets to check for IO readiness.
@@ -1710,6 +1715,8 @@ private:
     mutable Mutex m_added_nodes_mutex;
     std::vector<CNode*> m_nodes GUARDED_BY(m_nodes_mutex);
     std::list<CNode*> m_nodes_disconnected;
+    /** Whether receive events for limited peers are temporarily suppressed. Socket thread only. */
+    bool m_receive_memory_exceeded{false};
     mutable Mutex m_nodes_mutex;
     std::atomic<NodeId> nLastNodeId{0};
     unsigned int nPrevNodeCount{0};

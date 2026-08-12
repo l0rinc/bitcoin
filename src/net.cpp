@@ -2179,6 +2179,12 @@ bool CConnman::InactivityCheck(const CNode& node, NodeClock::time_point now) con
     return false;
 }
 
+bool CConnman::IsReceiveMemoryLimited(const CNode& node)
+{
+    return (node.IsInboundConn() && !node.HasPermission(NetPermissionFlags::NoBan)) ||
+           node.IsPrivateBroadcastConn() || node.IsFeelerConn() || node.IsAddrFetchConn();
+}
+
 Sock::EventsPerSock CConnman::GenerateWaitSockets(std::span<CNode* const> nodes)
 {
     Sock::EventsPerSock events_per_sock;
@@ -2188,7 +2194,8 @@ Sock::EventsPerSock CConnman::GenerateWaitSockets(std::span<CNode* const> nodes)
     }
 
     for (CNode* pnode : nodes) {
-        bool select_recv = !pnode->fPauseRecv;
+        bool select_recv = !pnode->fPauseRecv &&
+                           !(m_receive_memory_exceeded && IsReceiveMemoryLimited(*pnode));
         bool select_send;
         {
             LOCK(pnode->cs_vSend);
@@ -2245,6 +2252,59 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
     AssertLockNotHeld(m_total_bytes_sent_mutex);
 
     const auto now{NodeClock::now()};
+    struct NodeReceiveMemory {
+        CNode* node;
+        size_t usage;
+        bool inbound;
+        bool connected;
+    };
+    auto enforce_receive_memory_limit = [&]() {
+        size_t total_usage{0};
+        size_t pending_release{0};
+        std::vector<NodeReceiveMemory> evictions;
+
+        for (CNode* node : nodes) {
+            if (!IsReceiveMemoryLimited(*node)) continue;
+            const size_t usage{node->GetReceiveMemoryUsage()};
+            total_usage += usage;
+            if (node->fDisconnect) {
+                pending_release += usage;
+                continue;
+            }
+            evictions.push_back({node, usage, node->IsInboundConn(), node->fSuccessfullyConnected.load()});
+        }
+        for (CNode* node : m_nodes_disconnected) {
+            if (!IsReceiveMemoryLimited(*node)) continue;
+            const size_t usage{node->GetReceiveMemoryUsage()};
+            total_usage += usage;
+            pending_release += usage;
+        }
+
+        size_t projected_usage{total_usage - pending_release};
+        if (total_usage > MAX_SCALABLE_RECEIVE_MEMORY &&
+            projected_usage > MAX_SCALABLE_RECEIVE_MEMORY) {
+            const auto eviction_order = [](const NodeReceiveMemory& a, const NodeReceiveMemory& b) {
+                if (a.usage != b.usage) return a.usage > b.usage;
+                if (a.inbound != b.inbound) return !a.inbound;
+                if (a.connected != b.connected) return !a.connected;
+                return a.node->GetId() > b.node->GetId();
+            };
+            std::ranges::sort(evictions, eviction_order);
+            for (const auto& candidate : evictions) {
+                if (projected_usage <= MAX_SCALABLE_RECEIVE_MEMORY) break;
+                LogDebug(BCLog::NET,
+                         "aggregate receive buffer limit exceeded (%u bytes), disconnecting %u-byte consumer, %s",
+                         total_usage, candidate.usage, candidate.node->DisconnectMsg());
+                candidate.node->CloseSocketDisconnect();
+                Assume(projected_usage >= candidate.usage);
+                projected_usage -= candidate.usage;
+            }
+        }
+        return std::pair{total_usage, total_usage > MAX_SCALABLE_RECEIVE_MEMORY};
+    };
+
+    auto [receive_memory_usage, receive_memory_exceeded] = enforce_receive_memory_limit();
+    m_receive_memory_exceeded = receive_memory_exceeded;
 
     for (CNode* pnode : nodes) {
         if (m_interrupt_net->interrupted()) {
@@ -2264,9 +2324,10 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             }
             const auto it = events_per_sock.find(pnode->m_sock);
             if (it != events_per_sock.end()) {
-                recvSet = it->second.occurred & Sock::RecvEvent;
+                const bool pause_receive{receive_memory_exceeded && IsReceiveMemoryLimited(*pnode)};
+                recvSet = !pause_receive && it->second.occurred & Sock::RecvEvent;
                 sendSet = it->second.occurred & Sock::SendEvent;
-                errorSet = it->second.occurred & Sock::ErrorEvent;
+                errorSet = !pause_receive && it->second.occurred & Sock::ErrorEvent;
             }
         }
 
@@ -2302,17 +2363,31 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             if (nBytes > 0)
             {
                 bool notify = false;
-                if (!pnode->ReceiveMsgBytes({pchBuf, (size_t)nBytes}, notify)) {
+                const bool account_memory{IsReceiveMemoryLimited(*pnode)};
+                const size_t memory_usage_before{account_memory ? pnode->GetReceiveMemoryUsage() : 0};
+                const bool receive_ok{pnode->ReceiveMsgBytes({pchBuf, (size_t)nBytes}, notify)};
+                const size_t memory_usage_after{account_memory ? pnode->GetReceiveMemoryUsage() : 0};
+                if (account_memory) {
+                    Assume(receive_memory_usage >= memory_usage_before);
+                    receive_memory_usage -= memory_usage_before;
+                    receive_memory_usage += memory_usage_after;
+                }
+                RecordBytesRecv(nBytes);
+
+                if (!receive_ok) {
                     LogDebug(BCLog::NET,
                         "receiving message bytes failed, %s",
                         pnode->DisconnectMsg()
                     );
                     pnode->CloseSocketDisconnect();
                 }
-                RecordBytesRecv(nBytes);
                 if (notify) {
                     pnode->MarkReceivedMsgsForProcessing();
                     WakeMessageHandler();
+                }
+                if (account_memory && receive_memory_usage > MAX_SCALABLE_RECEIVE_MEMORY) {
+                    std::tie(receive_memory_usage, receive_memory_exceeded) = enforce_receive_memory_limit();
+                    m_receive_memory_exceeded = receive_memory_exceeded;
                 }
             }
             else if (nBytes == 0)
