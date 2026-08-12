@@ -1139,6 +1139,20 @@ public:
      */
     using InteractResult = std::optional<std::vector<std::optional<CNetMessage>>>;
 
+    size_t GetReceiveMemoryUsage() const { return m_transport.GetReceiveMemoryUsage(); }
+
+    /** Feed at most bytes_to_send queued bytes to the tested transport. */
+    bool FeedTransport(size_t bytes_to_send)
+    {
+        const size_t to_send{std::min(bytes_to_send, m_to_send.size())};
+        std::span<const uint8_t> bytes{std::span{m_to_send}.first(to_send)};
+        while (!bytes.empty()) {
+            if (!m_transport.ReceivedBytes(bytes)) return false;
+        }
+        m_to_send.erase(m_to_send.begin(), m_to_send.begin() + to_send);
+        return true;
+    }
+
     /** Send/receive scheduled/available bytes and messages.
      *
      * This is the only function that interacts with the transport being tested; everything else is
@@ -1642,6 +1656,14 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         tester.ReceiveGarbage();
         tester.ReceiveVersion();
         tester.CompareSessionIDs();
+        const size_t receive_memory_before{tester.GetReceiveMemoryUsage()};
+        auto partial_msg{m_rng.randbytes<uint8_t>(300000)};
+        tester.SendMessage(uint8_t{4}, partial_msg);
+        BOOST_REQUIRE(tester.FeedTransport(100000));
+        BOOST_CHECK_GT(tester.GetReceiveMemoryUsage(), receive_memory_before + 50000);
+        ret = tester.Interact();
+        BOOST_REQUIRE(ret && ret->size() == 1);
+        BOOST_CHECK((*ret)[0] && std::ranges::equal((*ret)[0]->m_recv, MakeByteSpan(partial_msg)));
         auto msg_data_1 = m_rng.randbytes<uint8_t>(4000000); // test that receiving 4M payload works
         auto msg_data_2 = m_rng.randbytes<uint8_t>(4000000); // test that sending 4M payload works
         tester.SendMessage(uint8_t(m_rng.randrange(256 - BIP324_SHORTIDS_IMPLEMENTED) + BIP324_SHORTIDS_IMPLEMENTED), {}); // unknown short id

@@ -684,6 +684,9 @@ public:
     bool ReceivedBytes(std::span<const uint8_t>& msg_bytes) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex, !m_send_mutex);
     CNetMessage GetReceivedMessage(NodeClock::time_point time, bool& reject_message) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
 
+    /** Return memory owned by incomplete received data. */
+    size_t GetReceiveMemoryUsage() const noexcept EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
+
     // Send side functions.
     bool SetMessageToSend(CSerializedNetMsg& msg) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
     BytesToSend GetBytesToSend(bool have_next_message) const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);

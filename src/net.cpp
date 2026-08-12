@@ -1539,6 +1539,17 @@ CNetMessage V2Transport::GetReceivedMessage(NodeClock::time_point time, bool& re
     return msg;
 }
 
+size_t V2Transport::GetReceiveMemoryUsage() const noexcept
+{
+    AssertLockNotHeld(m_recv_mutex);
+    LOCK(m_recv_mutex);
+    if (m_recv_state == RecvState::V1) return m_v1_fallback.GetReceiveMemoryUsage();
+
+    return sizeof(m_recv_buffer) + memusage::DynamicUsage(m_recv_buffer) +
+           sizeof(m_recv_aad) + memusage::DynamicUsage(m_recv_aad) +
+           sizeof(m_recv_decode_buffer) + memusage::DynamicUsage(m_recv_decode_buffer);
+}
+
 bool V2Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
 {
     AssertLockNotHeld(m_send_mutex);
