@@ -599,9 +599,9 @@ public:
  * It provides the same interface as CCoinsViewCache.
  * It adds an additional StartFetching method to provide the block.
  *
- * When a block is passed to StartFetching, the inputs of the block are flattened into a vector of InputToFetch
- * objects. StartFetching then submits worker tasks to a ThreadPool and keeps the returned futures alive until fetching
- * is stopped.
+ * When a block is passed to StartFetching, its external input prevouts are flattened into a vector of InputToFetch
+ * objects, with repeated outpoints queued only once. StartFetching then submits worker tasks to a ThreadPool and keeps
+ * the returned futures alive until fetching is stopped.
  *
  * ProcessInput() atomically fetches and increments m_input_head, so each thread can only access a single element of the
  * m_inputs vector at a time. Workers race to claim inputs, so they may fetch elements in any order. If the fetched

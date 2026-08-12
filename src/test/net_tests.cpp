@@ -18,6 +18,7 @@
 #include <span.h>
 #include <streams.h>
 #include <test/util/common.h>
+#include <test/util/mining.h>
 #include <test/util/net.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
@@ -138,6 +139,64 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
     BOOST_CHECK(pnode4->IsInboundConn() == true);
     BOOST_CHECK(pnode4->m_inbound_onion == true);
     BOOST_CHECK_EQUAL(pnode4->ConnectedThroughNetwork(), Network::NET_ONION);
+}
+
+BOOST_AUTO_TEST_CASE(inbound_socket_send_buffer)
+{
+    class SendBufferSock final : public ZeroSock
+    {
+        std::optional<int>& m_send_buffer;
+
+    public:
+        explicit SendBufferSock(std::optional<int>& send_buffer) : m_send_buffer{send_buffer} {}
+
+        int SetSockOpt(int level, int option, const void* value, socklen_t length) const override
+        {
+            if (level == SOL_SOCKET && option == SO_SNDBUF) {
+                BOOST_REQUIRE_EQUAL(length, sizeof(int));
+                m_send_buffer = *static_cast<const int*>(value);
+            }
+            return 0;
+        }
+    };
+
+    std::optional<int> send_buffer;
+    auto socket{std::make_unique<SendBufferSock>(send_buffer)};
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    const size_t node_count{connman.TestNodes().size()};
+    connman.CreateNodeFromAcceptedSocketPublic(std::move(socket), NetPermissionFlags::None, CAddress{}, CAddress{});
+
+    BOOST_REQUIRE_EQUAL(connman.TestNodes().size(), node_count + 1);
+    BOOST_REQUIRE(send_buffer);
+    BOOST_CHECK_EQUAL(*send_buffer, INBOUND_SOCKET_SEND_BUFFER);
+}
+
+BOOST_AUTO_TEST_CASE(inbound_tx_relay_slot_lifetime)
+{
+    ConnmanTestMsg connman{0x1337, 0x1337, *m_node.addrman, *m_node.netgroupman, Params()};
+    CConnman::Options options;
+    options.m_max_automatic_connections = 13;
+    options.m_full_relay_inbound_percent = 50;
+    connman.Init(options);
+
+    auto make_inbound = [](NodeId id) {
+        return std::make_unique<CNode>(id,
+                                       /*sock=*/nullptr,
+                                       CAddress{},
+                                       /*nKeyedNetGroupIn=*/0,
+                                       /*nLocalHostNonceIn=*/0,
+                                       CAddress{},
+                                       /*addrNameIn=*/"",
+                                       ConnectionType::INBOUND,
+                                       /*inbound_onion=*/false,
+                                       /*network_key=*/0);
+    };
+    auto peer_a{make_inbound(0)};
+    auto peer_b{make_inbound(1)};
+
+    BOOST_REQUIRE(connman.TryAcquireInboundTxRelaySlot(*peer_a));
+    peer_a->fDisconnect = true;
+    BOOST_CHECK(!connman.TryAcquireInboundTxRelaySlot(*peer_b));
 }
 
 BOOST_AUTO_TEST_CASE(cnetaddr_basic)
@@ -1042,6 +1101,63 @@ BOOST_AUTO_TEST_CASE(advertise_local_address)
     RemoveLocal(addr_cjdns);
 }
 
+BOOST_AUTO_TEST_CASE(v1transport_receive_memory_usage)
+{
+    V1Transport transport{NodeId{0}};
+    const size_t usage_before{transport.GetReceiveMemoryUsage()};
+
+    CMessageHeader header{Params().MessageStart(), NetMsgType::BLOCK, MAX_PROTOCOL_MESSAGE_LENGTH};
+    DataStream serialized_header;
+    serialized_header << header;
+    std::span<const uint8_t> header_bytes{UCharCast(serialized_header.data()), serialized_header.size()};
+    while (!header_bytes.empty()) BOOST_REQUIRE(transport.ReceivedBytes(header_bytes));
+
+    const std::array<uint8_t, 1> payload{0};
+    std::span<const uint8_t> payload_bytes{payload};
+    BOOST_REQUIRE(transport.ReceivedBytes(payload_bytes));
+    BOOST_CHECK(payload_bytes.empty());
+    BOOST_CHECK_GT(transport.GetReceiveMemoryUsage(), usage_before + 256 * 1024);
+}
+
+BOOST_AUTO_TEST_CASE(cnode_receive_memory_usage)
+{
+    CNode node{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/CAddress{},
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/std::string{},
+               /*conn_type_in=*/ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+    const size_t usage_before{node.GetReceiveMemoryUsage()};
+
+    V1Transport sender{NodeId{1}};
+    CSerializedNetMsg message;
+    message.m_type = NetMsgType::BLOCK;
+    message.data.resize(100000);
+    BOOST_REQUIRE(sender.SetMessageToSend(message));
+
+    while (true) {
+        const auto& [bytes, _more, _msg_type] = sender.GetBytesToSend(false);
+        if (bytes.empty()) break;
+        std::span<const uint8_t> to_receive{bytes};
+        bool complete{false};
+        BOOST_REQUIRE(node.ReceiveMsgBytes(to_receive, complete));
+        sender.MarkBytesSent(bytes.size());
+        if (complete) {
+            const size_t usage_before_mark{node.GetReceiveMemoryUsage()};
+            node.MarkReceivedMsgsForProcessing();
+            BOOST_CHECK_EQUAL(node.GetReceiveMemoryUsage(), usage_before_mark);
+        }
+    }
+
+    BOOST_CHECK_GT(node.GetReceiveMemoryUsage(), usage_before + 90000);
+    BOOST_REQUIRE(node.PollMessage());
+    BOOST_CHECK_LT(node.GetReceiveMemoryUsage(), usage_before + 1000);
+}
+
 namespace {
 
 CKey GenerateRandomTestKey(FastRandomContext& rng) noexcept
@@ -1090,6 +1206,20 @@ public:
      *   - otherwise: a CNetMessage retrieved
      */
     using InteractResult = std::optional<std::vector<std::optional<CNetMessage>>>;
+
+    size_t GetReceiveMemoryUsage() const { return m_transport.GetReceiveMemoryUsage(); }
+
+    /** Feed at most bytes_to_send queued bytes to the tested transport. */
+    bool FeedTransport(size_t bytes_to_send)
+    {
+        const size_t to_send{std::min(bytes_to_send, m_to_send.size())};
+        std::span<const uint8_t> bytes{std::span{m_to_send}.first(to_send)};
+        while (!bytes.empty()) {
+            if (!m_transport.ReceivedBytes(bytes)) return false;
+        }
+        m_to_send.erase(m_to_send.begin(), m_to_send.begin() + to_send);
+        return true;
+    }
 
     /** Send/receive scheduled/available bytes and messages.
      *
@@ -1191,11 +1321,12 @@ public:
     }
 
     /** Schedule a message to be sent to us by the transport. */
-    void AddMessage(std::string m_type, std::vector<uint8_t> payload)
+    void AddMessage(std::string m_type, std::vector<uint8_t> payload, ResponseMemoryReservation reservation = {})
     {
         CSerializedNetMsg msg;
         msg.m_type = std::move(m_type);
         msg.data = std::move(payload);
+        msg.m_response_memory_reservation = std::move(reservation);
         m_msg_to_send.push_back(std::move(msg));
     }
 
@@ -1593,12 +1724,25 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         tester.ReceiveGarbage();
         tester.ReceiveVersion();
         tester.CompareSessionIDs();
+        const size_t receive_memory_before{tester.GetReceiveMemoryUsage()};
+        auto partial_msg{m_rng.randbytes<uint8_t>(300000)};
+        tester.SendMessage(uint8_t{4}, partial_msg);
+        BOOST_REQUIRE(tester.FeedTransport(100000));
+        BOOST_CHECK_GT(tester.GetReceiveMemoryUsage(), receive_memory_before + 50000);
+        ret = tester.Interact();
+        BOOST_REQUIRE(ret && ret->size() == 1);
+        BOOST_CHECK((*ret)[0] && std::ranges::equal((*ret)[0]->m_recv, MakeByteSpan(partial_msg)));
         auto msg_data_1 = m_rng.randbytes<uint8_t>(4000000); // test that receiving 4M payload works
         auto msg_data_2 = m_rng.randbytes<uint8_t>(4000000); // test that sending 4M payload works
         tester.SendMessage(uint8_t(m_rng.randrange(256 - BIP324_SHORTIDS_IMPLEMENTED) + BIP324_SHORTIDS_IMPLEMENTED), {}); // unknown short id
         tester.SendMessage(uint8_t(2), msg_data_1); // "block" short id
-        tester.AddMessage("blocktxn", msg_data_2); // schedule blocktxn to be sent to us
+        auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+        auto response_memory{connman.TryReserveResponseMemory(CConnman::RESPONSE_MEMORY_RESERVATION)};
+        BOOST_REQUIRE(response_memory);
+        tester.AddMessage("blocktxn", msg_data_2, std::move(*response_memory));
+        BOOST_CHECK_EQUAL(connman.GetResponseMemoryUsage(), CConnman::RESPONSE_MEMORY_RESERVATION);
         ret = tester.Interact();
+        BOOST_CHECK_EQUAL(connman.GetResponseMemoryUsage(), 0U);
         BOOST_REQUIRE(ret);
         BOOST_REQUIRE(ret->size() == 2);
         BOOST_CHECK(!(*ret)[0]);
@@ -1623,6 +1767,224 @@ BOOST_AUTO_TEST_CASE(v2transport_test)
         auto ret = tester.Interact();
         BOOST_CHECK(!ret);
     }
+}
+
+BOOST_AUTO_TEST_CASE(getdata_response_memory_limit)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    const uint256 block_hash{WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip()->GetBlockHash())};
+    std::vector<std::unique_ptr<CNode>> peers;
+
+    for (NodeId id{0}; id < 9; ++id) {
+        auto peer{std::make_unique<CNode>(id,
+                                          /*sock=*/nullptr,
+                                          /*addrIn=*/CAddress{},
+                                          /*nKeyedNetGroupIn=*/0,
+                                          /*nLocalHostNonceIn=*/0,
+                                          /*addrBindIn=*/CService{},
+                                          /*addrNameIn=*/std::string{},
+                                          /*conn_type_in=*/ConnectionType::INBOUND,
+                                          /*inbound_onion=*/false,
+                                          /*network_key=*/0)};
+        connman.Handshake(*peer,
+                          /*successfully_connected=*/true,
+                          /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                          /*local_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                          /*version=*/PROTOCOL_VERSION,
+                          /*relay_txs=*/true);
+        connman.FlushSendBuffer(*peer);
+
+        BOOST_REQUIRE(connman.ReceiveMsgFrom(*peer, NetMsg::Make(NetMsgType::GETDATA, std::vector{CInv{MSG_WITNESS_BLOCK, block_hash}})));
+        peer->fPauseSend = false;
+        connman.ProcessMessagesOnce(*peer);
+        peers.push_back(std::move(peer));
+    }
+
+    size_t responses{0};
+    for (const auto& peer : peers) {
+        LOCK(peer->cs_vSend);
+        const auto& [_bytes, _more, msg_type] = peer->m_transport->GetBytesToSend(false);
+        responses += msg_type == NetMsgType::BLOCK;
+    }
+    constexpr size_t response_limit{CConnman::MAX_RESPONSE_MEMORY / CConnman::RESPONSE_MEMORY_RESERVATION};
+    BOOST_CHECK_EQUAL(responses, response_limit);
+    BOOST_CHECK_EQUAL(connman.GetResponseMemoryUsage(), CConnman::MAX_RESPONSE_MEMORY);
+
+    auto& blocked_peer{*peers.at(response_limit)};
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(blocked_peer, NetMsg::Make(NetMsgType::PING, uint64_t{1})));
+    blocked_peer.fPauseSend = false;
+    BOOST_CHECK(!connman.ProcessMessagesOnce(blocked_peer));
+    {
+        LOCK(blocked_peer.cs_vSend);
+        const auto& [_bytes, _more, msg_type] = blocked_peer.m_transport->GetBytesToSend(false);
+        BOOST_CHECK_EQUAL(msg_type, NetMsgType::PONG);
+    }
+
+    // The request that could not reserve memory is not retained for retry.
+    connman.FlushSendBuffer(*peers.at(0));
+    BOOST_CHECK_EQUAL(connman.GetResponseMemoryUsage(), CConnman::MAX_RESPONSE_MEMORY - CConnman::RESPONSE_MEMORY_RESERVATION);
+
+    for (const auto& peer : peers) {
+        m_node.peerman->FinalizeNode(*peer);
+    }
+    peers.clear();
+    BOOST_CHECK_EQUAL(connman.GetResponseMemoryUsage(), 0U);
+}
+
+BOOST_AUTO_TEST_CASE(getheaders_response_memory_limit)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    CNode peer{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/CAddress{},
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/std::string{},
+               /*conn_type_in=*/ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+    connman.Handshake(peer,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/NODE_NETWORK,
+                      /*local_services=*/NODE_NETWORK,
+                      /*version=*/PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+    connman.FlushSendBuffer(peer);
+
+    CBlockLocator locator;
+    locator.vHave = {WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip()->GetBlockHash())};
+    auto response_memory{connman.TryReserveResponseMemory(CConnman::MAX_RESPONSE_MEMORY)};
+    BOOST_REQUIRE(response_memory);
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, NetMsg::Make(NetMsgType::GETHEADERS, locator, uint256::ZERO)));
+    peer.fPauseSend = false;
+    connman.ProcessMessagesOnce(peer);
+    {
+        LOCK(peer.cs_vSend);
+        const auto& [_bytes, _more, msg_type] = peer.m_transport->GetBytesToSend(false);
+        BOOST_CHECK_NE(msg_type, NetMsgType::HEADERS);
+    }
+    m_node.peerman->FinalizeNode(peer);
+}
+
+BOOST_AUTO_TEST_CASE(getblocks_response_memory_limit)
+{
+    MineBlock(m_node, {.use_mempool = false});
+
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    CNode peer{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/CAddress{},
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/std::string{},
+               /*conn_type_in=*/ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+    connman.Handshake(peer,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/NODE_NETWORK,
+                      /*local_services=*/NODE_NETWORK,
+                      /*version=*/PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+    connman.FlushSendBuffer(peer);
+
+    CBlockLocator locator;
+    locator.vHave = {Params().GenesisBlock().GetHash()};
+    auto response_memory{connman.TryReserveResponseMemory(CConnman::MAX_RESPONSE_MEMORY)};
+    BOOST_REQUIRE(response_memory);
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, NetMsg::Make(NetMsgType::GETBLOCKS, locator, uint256::ZERO)));
+    peer.fPauseSend = false;
+    connman.ProcessMessagesOnce(peer);
+    m_node.peerman->SendMessages(peer);
+    {
+        LOCK(peer.cs_vSend);
+        const auto& [_bytes, _more, msg_type] = peer.m_transport->GetBytesToSend(false);
+        BOOST_CHECK_NE(msg_type, NetMsgType::INV);
+    }
+    m_node.peerman->FinalizeNode(peer);
+}
+
+BOOST_AUTO_TEST_CASE(compact_block_announcement_response_memory_limit)
+{
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    const uint256 tip_hash{WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip()->GetBlockHash())};
+    CBlockLocator locator;
+    locator.vHave = {tip_hash};
+    std::vector<std::unique_ptr<CNode>> peers;
+
+    {
+        LOCK(NetEventsInterface::g_msgproc_mutex);
+        for (NodeId id{0}; id < 2; ++id) {
+            auto peer{std::make_unique<CNode>(id,
+                                              /*sock=*/nullptr,
+                                              /*addrIn=*/CAddress{},
+                                              /*nKeyedNetGroupIn=*/0,
+                                              /*nLocalHostNonceIn=*/0,
+                                              /*addrBindIn=*/CService{},
+                                              /*addrNameIn=*/std::string{},
+                                              /*conn_type_in=*/ConnectionType::INBOUND,
+                                              /*inbound_onion=*/false,
+                                              /*network_key=*/0)};
+            connman.Handshake(*peer,
+                              /*successfully_connected=*/true,
+                              /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                              /*local_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+                              /*version=*/PROTOCOL_VERSION,
+                              /*relay_txs=*/true);
+            connman.FlushSendBuffer(*peer);
+
+            BOOST_REQUIRE(connman.ReceiveMsgFrom(*peer, NetMsg::Make(NetMsgType::GETHEADERS, locator, uint256::ZERO)));
+            peer->fPauseSend = false;
+            connman.ProcessMessagesOnce(*peer);
+            connman.FlushSendBuffer(*peer);
+
+            BOOST_REQUIRE(connman.ReceiveMsgFrom(*peer, NetMsg::Make(NetMsgType::SENDCMPCT, /*high_bandwidth=*/true, CMPCTBLOCKS_VERSION)));
+            peer->fPauseSend = false;
+            connman.ProcessMessagesOnce(*peer);
+            connman.FlushSendBuffer(*peer);
+            peers.push_back(std::move(peer));
+        }
+    }
+
+    auto response_memory{connman.TryReserveResponseMemory(CConnman::MAX_RESPONSE_MEMORY)};
+    BOOST_REQUIRE(response_memory);
+    auto block{PrepareBlock(m_node, {.use_mempool = false})};
+    auto& chainman{static_cast<TestChainstateManager&>(*m_node.chainman)};
+    chainman.JumpOutOfIbd();
+
+    CNode* direct_peer{peers.at(0).release()};
+    CNode& queued_peer{*peers.at(1)};
+    connman.AddTestNode(*direct_peer);
+    m_node.validation_signals->RegisterValidationInterface(m_node.peerman.get());
+    MineBlock(m_node, block);
+    m_node.validation_signals->UnregisterValidationInterface(m_node.peerman.get());
+
+    {
+        LOCK(direct_peer->cs_vSend);
+        const auto& [bytes, _more, msg_type] = direct_peer->m_transport->GetBytesToSend(false);
+        const bool compact_block_queued{!bytes.empty() && msg_type == NetMsgType::CMPCTBLOCK};
+        BOOST_CHECK(!compact_block_queued);
+    }
+    {
+        LOCK(NetEventsInterface::g_msgproc_mutex);
+        m_node.peerman->SendMessages(queued_peer);
+    }
+    {
+        LOCK(queued_peer.cs_vSend);
+        const auto& [bytes, _more, msg_type] = queued_peer.m_transport->GetBytesToSend(false);
+        const bool compact_block_queued{!bytes.empty() && msg_type == NetMsgType::CMPCTBLOCK};
+        BOOST_CHECK(!compact_block_queued);
+    }
+
+    m_node.peerman->FinalizeNode(*direct_peer);
+    m_node.peerman->FinalizeNode(queued_peer);
+    connman.ClearTestNodes();
+    chainman.ResetIbd();
 }
 
 BOOST_AUTO_TEST_CASE(private_broadcast_version_does_not_update_addrman_services)

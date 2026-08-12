@@ -120,9 +120,53 @@ GlobalMutex g_maplocalhost_mutex;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost GUARDED_BY(g_maplocalhost_mutex);
 std::string strSubVersion;
 
+ResponseMemoryReservation::ResponseMemoryReservation(CConnman& connman, size_t size)
+    : m_connman{&connman}, m_size{size}
+{
+}
+
+ResponseMemoryReservation::ResponseMemoryReservation(ResponseMemoryReservation&& other) noexcept
+    : m_connman{other.m_connman}, m_size{other.m_size}
+{
+    other.m_connman = nullptr;
+    other.m_size = 0;
+}
+
+ResponseMemoryReservation& ResponseMemoryReservation::operator=(ResponseMemoryReservation&& other) noexcept
+{
+    if (this == &other) return *this;
+    if (m_connman) m_connman->ReleaseResponseMemory(m_size);
+    m_connman = other.m_connman;
+    m_size = other.m_size;
+    other.m_connman = nullptr;
+    other.m_size = 0;
+    return *this;
+}
+
+ResponseMemoryReservation::~ResponseMemoryReservation()
+{
+    if (m_connman) m_connman->ReleaseResponseMemory(m_size);
+}
+
 size_t CSerializedNetMsg::GetMemoryUsage() const noexcept
 {
     return sizeof(*this) + memusage::DynamicUsage(m_type) + memusage::DynamicUsage(data);
+}
+
+std::optional<ResponseMemoryReservation> CConnman::TryReserveResponseMemory(size_t reservation)
+{
+    Assume(reservation > 0 && reservation <= MAX_RESPONSE_MEMORY);
+    size_t current{m_response_memory_usage.load()};
+    do {
+        if (current > MAX_RESPONSE_MEMORY - reservation) return std::nullopt;
+    } while (!m_response_memory_usage.compare_exchange_weak(current, current + reservation));
+    return ResponseMemoryReservation{*this, reservation};
+}
+
+void CConnman::ReleaseResponseMemory(size_t reservation)
+{
+    const size_t previous{m_response_memory_usage.fetch_sub(reservation)};
+    assert(previous >= reservation);
 }
 
 size_t CNetMessage::GetMemoryUsage() const noexcept
@@ -709,6 +753,22 @@ bool CNode::ReceiveMsgBytes(std::span<const uint8_t> msg_bytes, bool& complete)
     return true;
 }
 
+size_t CNode::GetReceiveMemoryUsage()
+{
+    size_t usage{0};
+    {
+        LOCK(cs_vRecv);
+        usage += m_transport->GetReceiveMemoryUsage();
+        for (const auto& msg : vRecvMsg)
+            usage += msg.GetMemoryUsage();
+    }
+    {
+        LOCK(m_msg_process_queue_mutex);
+        usage += m_msg_process_queue_size;
+    }
+    return usage;
+}
+
 std::string CNode::LogPeer() const
 {
     auto peer_info{strprintf("peer=%d", GetId())};
@@ -845,6 +905,13 @@ CNetMessage V1Transport::GetReceivedMessage(NodeClock::time_point time, bool& re
     return msg;
 }
 
+size_t V1Transport::GetReceiveMemoryUsage() const noexcept
+{
+    AssertLockNotHeld(m_recv_mutex);
+    LOCK(m_recv_mutex);
+    return hdrbuf.GetMemoryUsage() + vRecv.GetMemoryUsage();
+}
+
 bool V1Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
 {
     AssertLockNotHeld(m_send_mutex);
@@ -900,9 +967,11 @@ void V1Transport::MarkBytesSent(size_t bytes_sent) noexcept
         // We're done sending a message's header. Switch to sending its data bytes.
         m_sending_header = false;
         m_bytes_sent = 0;
+        if (m_message_to_send.data.empty()) m_message_to_send.m_response_memory_reservation = {};
     } else if (!m_sending_header && m_bytes_sent == m_message_to_send.data.size()) {
         // We're done sending a message's data. Wipe the data vector to reduce memory consumption.
         ClearShrink(m_message_to_send.data);
+        m_message_to_send.m_response_memory_reservation = {};
         m_bytes_sent = 0;
     }
 }
@@ -1486,6 +1555,17 @@ CNetMessage V2Transport::GetReceivedMessage(NodeClock::time_point time, bool& re
     return msg;
 }
 
+size_t V2Transport::GetReceiveMemoryUsage() const noexcept
+{
+    AssertLockNotHeld(m_recv_mutex);
+    LOCK(m_recv_mutex);
+    if (m_recv_state == RecvState::V1) return m_v1_fallback.GetReceiveMemoryUsage();
+
+    return sizeof(m_recv_buffer) + memusage::DynamicUsage(m_recv_buffer) +
+           sizeof(m_recv_aad) + memusage::DynamicUsage(m_recv_aad) +
+           sizeof(m_recv_decode_buffer) + memusage::DynamicUsage(m_recv_decode_buffer);
+}
+
 bool V2Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
 {
     AssertLockNotHeld(m_send_mutex);
@@ -1513,6 +1593,7 @@ bool V2Transport::SetMessageToSend(CSerializedNetMsg& msg) noexcept
     m_send_buffer.resize(contents.size() + BIP324Cipher::EXPANSION);
     m_cipher.Encrypt(MakeByteSpan(contents), {}, false, MakeWritableByteSpan(m_send_buffer));
     m_send_type = msg.m_type;
+    m_response_memory_reservation = std::move(msg.m_response_memory_reservation);
     // Release memory
     ClearShrink(msg.data);
     return true;
@@ -1554,6 +1635,7 @@ void V2Transport::MarkBytesSent(size_t bytes_sent) noexcept
     if (m_send_pos == m_send_buffer.size()) {
         m_send_pos = 0;
         ClearShrink(m_send_buffer);
+        m_response_memory_reservation = {};
     }
 }
 
@@ -1834,6 +1916,13 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
         return;
     }
 
+    // Keep bytes awaiting delivery to stalled inbound peers in Core's bounded
+    // response memory rather than moving them into per-peer kernel buffers.
+    if (sock->SetSockOpt(SOL_SOCKET, SO_SNDBUF, &INBOUND_SOCKET_SEND_BUFFER, sizeof(INBOUND_SOCKET_SEND_BUFFER)) == SOCKET_ERROR) {
+        LogDebug(BCLog::NET, "connection from %s dropped: unable to bound socket send buffer\n", addr.ToStringAddrPort());
+        return;
+    }
+
     if (nInbound >= m_max_inbound)
     {
         if (!AttemptToEvictConnection(/*evict_tx_relay_peer_only=*/false)) {
@@ -2090,6 +2179,12 @@ bool CConnman::InactivityCheck(const CNode& node, NodeClock::time_point now) con
     return false;
 }
 
+bool CConnman::IsReceiveMemoryLimited(const CNode& node)
+{
+    return (node.IsInboundConn() && !node.HasPermission(NetPermissionFlags::NoBan)) ||
+           node.IsPrivateBroadcastConn() || node.IsFeelerConn() || node.IsAddrFetchConn();
+}
+
 Sock::EventsPerSock CConnman::GenerateWaitSockets(std::span<CNode* const> nodes)
 {
     Sock::EventsPerSock events_per_sock;
@@ -2099,7 +2194,8 @@ Sock::EventsPerSock CConnman::GenerateWaitSockets(std::span<CNode* const> nodes)
     }
 
     for (CNode* pnode : nodes) {
-        bool select_recv = !pnode->fPauseRecv;
+        bool select_recv = !pnode->fPauseRecv &&
+                           !(m_receive_memory_exceeded && IsReceiveMemoryLimited(*pnode));
         bool select_send;
         {
             LOCK(pnode->cs_vSend);
@@ -2156,6 +2252,59 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
     AssertLockNotHeld(m_total_bytes_sent_mutex);
 
     const auto now{NodeClock::now()};
+    struct NodeReceiveMemory {
+        CNode* node;
+        size_t usage;
+        bool inbound;
+        bool connected;
+    };
+    auto enforce_receive_memory_limit = [&]() {
+        size_t total_usage{0};
+        size_t pending_release{0};
+        std::vector<NodeReceiveMemory> evictions;
+
+        for (CNode* node : nodes) {
+            if (!IsReceiveMemoryLimited(*node)) continue;
+            const size_t usage{node->GetReceiveMemoryUsage()};
+            total_usage += usage;
+            if (node->fDisconnect) {
+                pending_release += usage;
+                continue;
+            }
+            evictions.push_back({node, usage, node->IsInboundConn(), node->fSuccessfullyConnected.load()});
+        }
+        for (CNode* node : m_nodes_disconnected) {
+            if (!IsReceiveMemoryLimited(*node)) continue;
+            const size_t usage{node->GetReceiveMemoryUsage()};
+            total_usage += usage;
+            pending_release += usage;
+        }
+
+        size_t projected_usage{total_usage - pending_release};
+        if (total_usage > MAX_SCALABLE_RECEIVE_MEMORY &&
+            projected_usage > MAX_SCALABLE_RECEIVE_MEMORY) {
+            const auto eviction_order = [](const NodeReceiveMemory& a, const NodeReceiveMemory& b) {
+                if (a.usage != b.usage) return a.usage > b.usage;
+                if (a.inbound != b.inbound) return !a.inbound;
+                if (a.connected != b.connected) return !a.connected;
+                return a.node->GetId() > b.node->GetId();
+            };
+            std::ranges::sort(evictions, eviction_order);
+            for (const auto& candidate : evictions) {
+                if (projected_usage <= MAX_SCALABLE_RECEIVE_MEMORY) break;
+                LogDebug(BCLog::NET,
+                         "aggregate receive buffer limit exceeded (%u bytes), disconnecting %u-byte consumer, %s",
+                         total_usage, candidate.usage, candidate.node->DisconnectMsg());
+                candidate.node->CloseSocketDisconnect();
+                Assume(projected_usage >= candidate.usage);
+                projected_usage -= candidate.usage;
+            }
+        }
+        return std::pair{total_usage, total_usage > MAX_SCALABLE_RECEIVE_MEMORY};
+    };
+
+    auto [receive_memory_usage, receive_memory_exceeded] = enforce_receive_memory_limit();
+    m_receive_memory_exceeded = receive_memory_exceeded;
 
     for (CNode* pnode : nodes) {
         if (m_interrupt_net->interrupted()) {
@@ -2175,9 +2324,10 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             }
             const auto it = events_per_sock.find(pnode->m_sock);
             if (it != events_per_sock.end()) {
-                recvSet = it->second.occurred & Sock::RecvEvent;
+                const bool pause_receive{receive_memory_exceeded && IsReceiveMemoryLimited(*pnode)};
+                recvSet = !pause_receive && it->second.occurred & Sock::RecvEvent;
                 sendSet = it->second.occurred & Sock::SendEvent;
-                errorSet = it->second.occurred & Sock::ErrorEvent;
+                errorSet = !pause_receive && it->second.occurred & Sock::ErrorEvent;
             }
         }
 
@@ -2213,17 +2363,31 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             if (nBytes > 0)
             {
                 bool notify = false;
-                if (!pnode->ReceiveMsgBytes({pchBuf, (size_t)nBytes}, notify)) {
+                const bool account_memory{IsReceiveMemoryLimited(*pnode)};
+                const size_t memory_usage_before{account_memory ? pnode->GetReceiveMemoryUsage() : 0};
+                const bool receive_ok{pnode->ReceiveMsgBytes({pchBuf, (size_t)nBytes}, notify)};
+                const size_t memory_usage_after{account_memory ? pnode->GetReceiveMemoryUsage() : 0};
+                if (account_memory) {
+                    Assume(receive_memory_usage >= memory_usage_before);
+                    receive_memory_usage -= memory_usage_before;
+                    receive_memory_usage += memory_usage_after;
+                }
+                RecordBytesRecv(nBytes);
+
+                if (!receive_ok) {
                     LogDebug(BCLog::NET,
                         "receiving message bytes failed, %s",
                         pnode->DisconnectMsg()
                     );
                     pnode->CloseSocketDisconnect();
                 }
-                RecordBytesRecv(nBytes);
                 if (notify) {
                     pnode->MarkReceivedMsgsForProcessing();
                     WakeMessageHandler();
+                }
+                if (account_memory && receive_memory_usage > MAX_SCALABLE_RECEIVE_MEMORY) {
+                    std::tie(receive_memory_usage, receive_memory_exceeded) = enforce_receive_memory_limit();
+                    m_receive_memory_exceeded = receive_memory_exceeded;
                 }
             }
             else if (nBytes == 0)
@@ -2549,6 +2713,31 @@ bool CConnman::EvictTxPeerIfFull(std::optional<NodeId> protect_peer)
     if (tx_inbound_peers > m_max_inbound_full_relay) {
         return AttemptToEvictConnection(/*evict_tx_relay_peer_only=*/true, protect_peer);
     }
+    return true;
+}
+
+bool CConnman::TryAcquireInboundTxRelaySlot(CNode& node)
+{
+    if (!node.IsInboundConn()) return true;
+
+    LOCK(m_nodes_mutex);
+    if (node.fDisconnect) return false;
+    if (node.m_tx_relay_inbound_slot) return true;
+    if (m_num_inbound_tx_relay_slots >= m_max_inbound_full_relay) return false;
+
+    int tx_inbound_peers{0};
+    if (!node.m_relays_txs) {
+        for (const CNode* peer : m_nodes) {
+            if (!peer->fDisconnect && peer->IsInboundConn() && peer->m_relays_txs) {
+                ++tx_inbound_peers;
+            }
+        }
+        if (tx_inbound_peers >= m_max_inbound_full_relay) return false;
+        node.m_relays_txs = true;
+    }
+
+    node.m_tx_relay_inbound_slot = true;
+    ++m_num_inbound_tx_relay_slots;
     return true;
 }
 
@@ -3771,6 +3960,11 @@ void CConnman::DeleteNode(CNode* pnode)
 {
     assert(pnode);
     m_msgproc->FinalizeNode(*pnode);
+    if (pnode->m_tx_relay_inbound_slot) {
+        LOCK(m_nodes_mutex);
+        assert(m_num_inbound_tx_relay_slots > 0);
+        --m_num_inbound_tx_relay_slots;
+    }
     delete pnode;
 }
 

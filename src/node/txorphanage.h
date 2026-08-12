@@ -101,12 +101,12 @@ public:
     /** Get all orphan transactions */
     virtual std::vector<OrphanInfo> GetOrphanTransactions() const = 0;
 
-    /** Get the total usage (weight) of all orphans. If an orphan has multiple announcers, its usage is
+    /** Get the total accounted memory usage of all orphans. If an orphan has multiple announcers, its usage is
      * only counted once within this total. */
     virtual Usage TotalOrphanUsage() const = 0;
 
-    /** Total usage (weight) of orphans for which this peer is an announcer. If an orphan has multiple
-     * announcers, its weight will be accounted for in each PeerOrphanInfo, so the total of all
+    /** Total accounted memory usage of orphans for which this peer is an announcer. If an orphan has multiple
+     * announcers, its usage will be accounted for in each PeerOrphanInfo, so the total of all
      * peers' UsageByPeer() may be larger than TotalOrphanUsage(). Similarly, UsageByPeer() may be far higher than
      * ReservedPeerUsage(), particularly if many peers have provided the same orphans. */
     virtual Usage UsageByPeer(NodeId peer) const = 0;

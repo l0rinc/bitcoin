@@ -495,6 +495,7 @@ static inline Wrapper<Formatter, T&> Using(T&& t) { return Wrapper<Formatter, T&
 #define COMPACTSIZE(obj) Using<CompactSizeFormatter<true>>(obj)
 #define LIMITED_STRING(obj,n) Using<LimitedStringFormatter<n>>(obj)
 #define LIMITED_VECTOR(obj,n) Using<LimitedVectorFormatter<n>>(obj)
+#define LIMITED_BYTE_VECTOR(obj,n) Using<LimitedByteVectorFormatter<n>>(obj)
 
 /** Serialization wrapper class for integers in VarInt format. */
 template<VarIntMode Mode>
@@ -649,6 +650,42 @@ struct LimitedStringFormatter
     }
 };
 
+// Limit size per read so bogus size value won't cause out of memory
+template<typename Stream, typename V>
+void UnserializeByteVectorElements(Stream& s, V& v, size_t size)
+{
+    static_assert(BasicByte<typename V::value_type>);
+    for (size_t allocated{0}; allocated < size;) {
+        const size_t block{std::min(size - allocated, size_t{MAX_VECTOR_ALLOCATE})};
+        const size_t next{allocated + block};
+        if constexpr (requires { v.resize_uninitialized(next); }) {
+            v.resize_uninitialized(next);
+        } else {
+            v.resize(next);
+        }
+        s.read(MakeWritableByteSpan(v).subspan(allocated, block));
+        allocated = next;
+    }
+}
+
+template<size_t Limit>
+struct LimitedByteVectorFormatter
+{
+    template<typename Stream, typename V>
+    void Unser(Stream& s, V& v)
+    {
+        v.clear();
+        if (uint64_t size{ReadCompactSize(s)}; size <= Limit) {
+            UnserializeByteVectorElements(s, v, size);
+        } else {
+            throw std::ios_base::failure("Vector length limit exceeded");
+        }
+    }
+
+    template<typename Stream, typename V>
+    void Ser(Stream& s, const V& v) { s << v; }
+};
+
 /** Formatter to serialize/deserialize vector elements using another formatter
  *
  * Example:
@@ -678,9 +715,15 @@ struct VectorFormatter
     template<typename Stream, typename V>
     void Unser(Stream& s, V& v)
     {
-        Formatter formatter;
         v.clear();
         size_t size = ReadCompactSize(s);
+        UnserElements(s, v, size);
+    }
+
+    template<typename Stream, typename V>
+    void UnserElements(Stream& s, V& v, size_t size)
+    {
+        Formatter formatter;
         size_t allocated = 0;
         while (allocated < size) {
             // For DoS prevention, do not blindly allocate as much as the stream claims to contain.
@@ -791,6 +834,9 @@ struct DefaultFormatter
     static void Unser(Stream& s, T& t) { Unserialize(s, t); }
 };
 
+template<typename T>
+concept ConstSizedStream = requires(const std::remove_reference_t<T>& stream) { stream.size(); };
+
 /**
  * Limited vector formatter. Throws an error if a vector is oversized.
  */
@@ -801,14 +847,47 @@ struct LimitedVectorFormatter
     template<typename Stream, typename V>
     void Unser(Stream& s, V& v)
     {
+        v.clear();
+        size_t size = ReadCompactSize(s);
+        if (size > Limit) {
+            throw std::ios_base::failure("Vector length limit exceeded");
+        }
+        VectorFormatter<Formatter>{}.UnserElements(s, v, size);
+    }
+
+    template<typename Stream, typename V>
+    void Ser(Stream& s, const V& v)
+    {
+        VectorFormatter<Formatter>{}.Ser(s, v);
+    }
+};
+
+/** Limited vector formatter that only allocates elements as they are decoded. */
+template<size_t Limit, size_t MinElementSize = 0, class Formatter = DefaultFormatter>
+struct NonPreallocatedLimitedVectorFormatter
+{
+    template<typename Stream, typename V>
+    void Unser(Stream& s, V& v)
+    {
         Formatter formatter;
         v.clear();
         size_t size = ReadCompactSize(s);
         if (size > Limit) {
             throw std::ios_base::failure("Vector length limit exceeded");
         }
-        v.reserve(size);
-        for (size_t i = 0; i < size; ++i) {
+        if constexpr (MinElementSize > 0 && ConstSizedStream<Stream>) {
+            if (size > s.size() / MinElementSize) {
+                throw std::ios_base::failure("Vector length exceeds remaining data");
+            }
+            v.reserve(size);
+        }
+        for (size_t i{0}; i < size; ++i) {
+            if constexpr (MinElementSize == 0 || !ConstSizedStream<Stream>) {
+                if (v.size() == v.capacity()) {
+                    const size_t growth{std::max<size_t>(v.size(), 1)};
+                    v.reserve(v.size() + std::min(growth, size - v.size()));
+                }
+            }
             v.emplace_back();
             formatter.Unser(s, v.back());
         }
@@ -875,16 +954,8 @@ template <typename Stream, unsigned int N, typename T>
 void Unserialize(Stream& is, prevector<N, T>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
-        // Limit size per read so bogus size value won't cause out of memory
         v.clear();
-        unsigned int nSize = ReadCompactSize(is);
-        unsigned int i = 0;
-        while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
-            v.resize_uninitialized(i + blk);
-            is.read(std::as_writable_bytes(std::span{&v[i], blk}));
-            i += blk;
-        }
+        UnserializeByteVectorElements(is, v, ReadCompactSize(is));
     } else {
         Unserialize(is, Using<VectorFormatter<DefaultFormatter>>(v));
     }
@@ -918,16 +989,8 @@ template <typename Stream, typename T, typename A>
 void Unserialize(Stream& is, std::vector<T, A>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
-        // Limit size per read so bogus size value won't cause out of memory
         v.clear();
-        unsigned int nSize = ReadCompactSize(is);
-        unsigned int i = 0;
-        while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
-            v.resize(i + blk);
-            is.read(std::as_writable_bytes(std::span{&v[i], blk}));
-            i += blk;
-        }
+        UnserializeByteVectorElements(is, v, ReadCompactSize(is));
     } else {
         Unserialize(is, Using<VectorFormatter<DefaultFormatter>>(v));
     }
@@ -1190,7 +1253,7 @@ public:
     void read(std::span<std::byte> dst) { GetStream().read(dst); }
     void ignore(size_t num) { GetStream().ignore(num); }
     bool empty() const { return GetStream().empty(); }
-    size_t size() const { return GetStream().size(); }
+    size_t size() const requires ConstSizedStream<SubStream> { return GetStream().size(); }
 
     //! Get reference to stream parameters.
     template <typename P>

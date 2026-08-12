@@ -87,6 +87,7 @@ TEST_FRAMEWORK_UNIT_TESTS = 'feature_framework_unit_tests.py'
 EXTENDED_SCRIPTS = [
     # These tests are not run by default.
     # Longest test should go first, to favor running tests in parallel
+    'p2p_receive_memory_stress.py',
     'feature_pruning.py',
     'feature_dbcrash.py',
     'feature_index_prune.py',
@@ -153,6 +154,7 @@ BASE_SCRIPTS = [
     # vv Tests less than 30s vv
     'wallet_deprecated_rbf.py',
     'p2p_invalid_messages.py',
+    'p2p_receive_buffer.py',
     'rpc_echo_payload.py',
     'rpc_createmultisig.py',
     'p2p_timeouts.py --v1transport',

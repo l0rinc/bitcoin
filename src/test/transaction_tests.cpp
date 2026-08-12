@@ -2,10 +2,6 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <test/data/tx_invalid.json.h>
-#include <test/data/tx_valid.json.h>
-#include <test/util/setup_common.h>
-
 #include <checkqueue.h>
 #include <clientversion.h>
 #include <consensus/amount.h>
@@ -14,6 +10,7 @@
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <core_io.h>
+#include <hash.h>
 #include <key.h>
 #include <policy/policy.h>
 #include <policy/settings.h>
@@ -26,22 +23,25 @@
 #include <script/signingprovider.h>
 #include <script/solver.h>
 #include <streams.h>
+#include <test/data/tx_invalid.json.h>
+#include <test/data/tx_valid.json.h>
 #include <test/util/common.h>
 #include <test/util/json.h>
 #include <test/util/random.h>
 #include <test/util/script.h>
+#include <test/util/setup_common.h>
 #include <test/util/transaction_utils.h>
+#include <univalue.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+#include <util/vector.h>
 #include <validation.h>
+
+#include <boost/test/unit_test.hpp>
 
 #include <functional>
 #include <map>
 #include <string>
-
-#include <boost/test/unit_test.hpp>
-
-#include <univalue.h>
 
 using namespace util::hex_literals;
 using util::SplitString;
@@ -374,6 +374,136 @@ BOOST_AUTO_TEST_CASE(tx_oversized)
     }
 }
 
+BOOST_AUTO_TEST_CASE(transaction_byte_vector_limits)
+{
+    constexpr size_t MAX_BASE_SIZE{MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR};
+    constexpr std::string_view EXPECTED_ERROR{"Vector length limit exceeded"};
+    auto make_stream{[](const auto&... args) {
+        DataStream stream;
+        SerializeMany(stream, args...);
+        return stream;
+    }};
+    auto make_witness_stream{[&](const auto&... args) {
+        return make_stream(CTransaction::CURRENT_VERSION, uint8_t{0}, uint8_t{1}, Vector(CTxIn{}), Vector(CTxOut{}), args...);
+    }};
+
+    // Input script
+    {
+        CTxIn txin;
+        make_stream(COutPoint{}, std::vector<uint8_t>(MAX_BASE_SIZE), CTxIn::SEQUENCE_FINAL) >> txin;
+        BOOST_CHECK_EQUAL(txin.scriptSig.size(), MAX_BASE_SIZE);
+    }
+    {
+        CTxIn txin;
+        BOOST_CHECK_EXCEPTION(make_stream(COutPoint{}, CompactSizeWriter{MAX_BASE_SIZE + 1}) >> txin, std::ios_base::failure, HasReason(EXPECTED_ERROR));
+        BOOST_CHECK_EQUAL(txin.scriptSig.size(), 0);
+    }
+
+    // Output script
+    {
+        CTxOut txout;
+        make_stream(CAmount{0}, std::vector<uint8_t>(MAX_BASE_SIZE)) >> txout;
+        BOOST_CHECK_EQUAL(txout.scriptPubKey.size(), MAX_BASE_SIZE);
+    }
+    {
+        CTxOut txout;
+        BOOST_CHECK_EXCEPTION(make_stream(CAmount{0}, CompactSizeWriter{MAX_BASE_SIZE + 1}) >> txout, std::ios_base::failure, HasReason(EXPECTED_ERROR));
+        BOOST_CHECK_EQUAL(txout.scriptPubKey.size(), 0);
+    }
+
+    // Witness stack element
+    {
+        CMutableTransaction tx;
+        make_witness_stream(Vector(std::vector<uint8_t>(MAX_BLOCK_WEIGHT)), uint32_t{0}) >> TX_WITH_WITNESS(tx);
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.at(0).size(), MAX_BLOCK_WEIGHT);
+    }
+    {
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(make_witness_stream(CompactSizeWriter{1}, CompactSizeWriter{MAX_BLOCK_WEIGHT + 1}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason(EXPECTED_ERROR));
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.at(0).size(), 0);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(transaction_witness_stack_count_allocation)
+{
+    auto make_stream{[](const auto&... args) {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, uint8_t{0}, uint8_t{1}, Vector(CTxIn{}), Vector(CTxOut{}), args...);
+        return stream;
+    }};
+    {
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(make_stream(CompactSizeWriter{MAX_BLOCK_WEIGHT + 1}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("Vector length limit exceeded"));
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), 0);
+    }
+    {
+        auto stream{make_stream(CompactSizeWriter{MAX_BLOCK_WEIGHT})};
+        HashVerifier<DataStream> verifier{stream};
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(verifier >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data"));
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), 1);
+    }
+    {
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(make_stream(CompactSizeWriter{MAX_BLOCK_WEIGHT}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("Vector length exceeds remaining data"));
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), 0);
+    }
+
+    const auto stack{Vector(std::vector<uint8_t>{1, 2}, std::vector<uint8_t>{})};
+    CMutableTransaction tx;
+    make_stream(stack, uint32_t{0}) >> TX_WITH_WITNESS(tx);
+    BOOST_CHECK(tx.vin.at(0).scriptWitness.stack == stack);
+
+    const auto growing_stack{Vector(std::vector<uint8_t>{1}, std::vector<uint8_t>{}, std::vector<uint8_t>{})};
+    CMutableTransaction growing_tx;
+    make_stream(growing_stack, uint32_t{0}) >> TX_WITH_WITNESS(growing_tx);
+    const auto& decoded_stack{growing_tx.vin.at(0).scriptWitness.stack};
+    BOOST_CHECK_EQUAL(decoded_stack.capacity(), decoded_stack.size());
+}
+
+BOOST_AUTO_TEST_CASE(transaction_input_output_count_allocation)
+{
+    constexpr size_t MAX_INPUTS{MAX_BLOCK_WEIGHT / (WITNESS_SCALE_FACTOR * 41)};
+    constexpr size_t MAX_OUTPUTS{MAX_BLOCK_WEIGHT / (WITNESS_SCALE_FACTOR * 9)};
+
+    {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, CompactSizeWriter{MAX_INPUTS + 1});
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(stream >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("Vector length limit exceeded"));
+        BOOST_CHECK_EQUAL(tx.vin.capacity(), 0);
+    }
+    {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, uint8_t{0}, uint8_t{1}, CompactSizeWriter{MAX_INPUTS + 1});
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(stream >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("Vector length limit exceeded"));
+        BOOST_CHECK_EQUAL(tx.vin.capacity(), 0);
+    }
+    {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, Vector(CTxIn{}), CompactSizeWriter{MAX_OUTPUTS + 1});
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(stream >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("Vector length limit exceeded"));
+        BOOST_CHECK_EQUAL(tx.vout.capacity(), 0);
+    }
+
+    {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, std::vector<CTxIn>(MAX_INPUTS), Vector(CTxOut{}), uint32_t{0});
+        CMutableTransaction tx;
+        stream >> TX_WITH_WITNESS(tx);
+        BOOST_CHECK_EQUAL(tx.vin.size(), MAX_INPUTS);
+    }
+    {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, Vector(CTxIn{}), std::vector<CTxOut>(MAX_OUTPUTS), uint32_t{0});
+        CMutableTransaction tx;
+        stream >> TX_WITH_WITNESS(tx);
+        BOOST_CHECK_EQUAL(tx.vout.size(), MAX_OUTPUTS);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(basic_transaction_tests)
 {
     // Random real transaction (e2769b09e784f32f62ef849763d4f45b98e07ba658647343b915ff832b110436)
@@ -557,6 +687,20 @@ BOOST_AUTO_TEST_CASE(test_big_witness_transaction)
 
     bool controlCheck = !control.Complete().has_value();
     assert(controlCheck);
+}
+
+BOOST_AUTO_TEST_CASE(script_check_spent_output_ownership)
+{
+    CMutableTransaction mtx;
+    mtx.vin.emplace_back();
+    const CTransaction tx{mtx};
+    CTxOut spent_output{0, CScript{} << OP_TRUE};
+    PrecomputedTransactionData txdata;
+    SignatureCache signature_cache{DEFAULT_SIGNATURE_CACHE_BYTES};
+    CScriptCheck check{spent_output, tx, signature_cache, /*input_index=*/0, SCRIPT_VERIFY_NONE, /*cache_sig_store=*/false, &txdata};
+
+    spent_output.scriptPubKey = CScript{} << OP_FALSE;
+    BOOST_CHECK(check().has_value());
 }
 
 SignatureData CombineSignatures(const CMutableTransaction& input1, const CMutableTransaction& input2, const CTransactionRef tx)

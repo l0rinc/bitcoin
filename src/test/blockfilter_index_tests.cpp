@@ -12,6 +12,9 @@
 #include <interfaces/chain.h>
 #include <interfaces/mining.h>
 #include <key.h>
+#include <net.h>
+#include <net_processing.h>
+#include <netmessagemaker.h>
 #include <node/blockstorage.h>
 #include <pow.h>
 #include <primitives/block.h>
@@ -20,6 +23,7 @@
 #include <sync.h>
 #include <test/util/blockfilter.h>
 #include <test/util/common.h>
+#include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <tinyformat.h>
@@ -49,6 +53,18 @@ BOOST_AUTO_TEST_SUITE(blockfilter_index_tests)
 struct BuildChainTestingSetup : public TestChain100Setup {
     CBlock CreateBlock(const CBlockIndex* prev, const std::vector<CMutableTransaction>& txns, const CScript& scriptPubKey);
     bool BuildChain(const CBlockIndex* pindex, const CScript& coinbase_script_pub_key, size_t length, std::vector<std::shared_ptr<CBlock>>& chain);
+};
+
+struct BlockFilterPeerTestingSetup : public TestChain100Setup {
+    BlockFilterPeerTestingSetup()
+    {
+        BOOST_REQUIRE(InitBlockFilterIndex([&] { return interfaces::MakeChain(m_node); }, BlockFilterType::BASIC, 1_MiB, true));
+        auto& filter_index{*Assert(GetBlockFilterIndex(BlockFilterType::BASIC))};
+        BOOST_REQUIRE(filter_index.Init());
+        filter_index.Sync();
+    }
+
+    ~BlockFilterPeerTestingSetup() { DestroyAllBlockFilterIndexes(); }
 };
 
 static bool CheckFilterLookups(BlockFilterIndex& filter_index, const CBlockIndex* block_index,
@@ -327,6 +343,90 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_init_destroy, BasicTestingSetup)
 
     filter_index = GetBlockFilterIndex(BlockFilterType::BASIC);
     BOOST_CHECK(filter_index == nullptr);
+}
+
+BOOST_FIXTURE_TEST_CASE(cfilter_response_memory_limit, BlockFilterPeerTestingSetup)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    CNode peer{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/CAddress{},
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/std::string{},
+               /*conn_type_in=*/ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+    const ServiceFlags services{NODE_NETWORK | NODE_COMPACT_FILTERS};
+    connman.Handshake(peer,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/services,
+                      /*local_services=*/services,
+                      /*version=*/PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+    connman.FlushSendBuffer(peer);
+
+    const CBlockIndex& tip{*WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip())};
+    auto response_memory{connman.TryReserveResponseMemory(CConnman::MAX_RESPONSE_MEMORY)};
+    BOOST_REQUIRE(response_memory);
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, NetMsg::Make(NetMsgType::GETCFILTERS,
+                                                            static_cast<uint8_t>(BlockFilterType::BASIC),
+                                                            static_cast<uint32_t>(tip.nHeight),
+                                                            tip.GetBlockHash())));
+    peer.fPauseSend = false;
+    connman.ProcessMessagesOnce(peer);
+    {
+        LOCK(peer.cs_vSend);
+        const auto& [_bytes, _more, msg_type] = peer.m_transport->GetBytesToSend(false);
+        BOOST_CHECK_NE(msg_type, NetMsgType::CFILTER);
+    }
+    m_node.peerman->FinalizeNode(peer);
+}
+
+BOOST_FIXTURE_TEST_CASE(compact_filter_header_response_memory_limit, BlockFilterPeerTestingSetup)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    CNode peer{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/CAddress{},
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/std::string{},
+               /*conn_type_in=*/ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+    const ServiceFlags services{NODE_NETWORK | NODE_COMPACT_FILTERS};
+    connman.Handshake(peer,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/services,
+                      /*local_services=*/services,
+                      /*version=*/PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+    connman.FlushSendBuffer(peer);
+
+    const CBlockIndex& tip{*WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip())};
+    for (const std::string msg_type : {NetMsgType::GETCFHEADERS, NetMsgType::GETCFCHECKPT}) {
+        auto response_memory{connman.TryReserveResponseMemory(CConnman::MAX_RESPONSE_MEMORY)};
+        BOOST_REQUIRE(response_memory);
+        CSerializedNetMsg request{msg_type == NetMsgType::GETCFHEADERS
+            ? NetMsg::Make(msg_type, static_cast<uint8_t>(BlockFilterType::BASIC), uint32_t{0}, tip.GetBlockHash())
+            : NetMsg::Make(msg_type, static_cast<uint8_t>(BlockFilterType::BASIC), tip.GetBlockHash())};
+        BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, std::move(request)));
+        peer.fPauseSend = false;
+        connman.ProcessMessagesOnce(peer);
+        {
+            LOCK(peer.cs_vSend);
+            const auto& [_bytes, _more, response_type] = peer.m_transport->GetBytesToSend(false);
+            const std::string expected_type{msg_type == NetMsgType::GETCFHEADERS ? NetMsgType::CFHEADERS : NetMsgType::CFCHECKPT};
+            BOOST_CHECK_NE(response_type, expected_type);
+        }
+        connman.FlushSendBuffer(peer);
+    }
+    m_node.peerman->FinalizeNode(peer);
 }
 
 class IndexReorgCrash : public BaseIndex

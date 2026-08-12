@@ -6,6 +6,7 @@
 #ifndef BITCOIN_PRIMITIVES_BLOCK_H
 #define BITCOIN_PRIMITIVES_BLOCK_H
 
+#include <consensus/consensus.h>
 #include <primitives/transaction.h>
 #include <serialize.h>
 #include <uint256.h>
@@ -94,7 +95,8 @@ public:
 
     SERIALIZE_METHODS(CBlock, obj)
     {
-        READWRITE(AsBase<CBlockHeader>(obj), obj.vtx);
+        READWRITE(AsBase<CBlockHeader>(obj),
+                  Using<LimitedVectorFormatter<MAX_BLOCK_WEIGHT / MIN_TRANSACTION_WEIGHT>>(obj.vtx));
     }
 
     void SetNull()

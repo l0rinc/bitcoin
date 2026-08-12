@@ -4,6 +4,7 @@
 
 #include <consensus/amount.h>
 #include <consensus/validation.h>
+#include <core_memusage.h>
 #include <net_processing.h>
 #include <node/eviction.h>
 #include <node/txorphanage.h>
@@ -30,6 +31,13 @@
 #include <set>
 #include <utility>
 #include <vector>
+
+namespace {
+node::TxOrphanage::Usage GetOrphanUsage(const CTransaction& tx)
+{
+    return std::max<node::TxOrphanage::Usage>(GetTransactionWeight(tx), RecursiveDynamicUsage(tx));
+}
+} // namespace
 
 void initialize_orphanage()
 {
@@ -107,7 +115,7 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
             NodeId peer_id = fuzzed_data_provider.ConsumeIntegral<NodeId>();
             const auto total_bytes_start{orphanage->TotalOrphanUsage()};
             const auto total_peer_bytes_start{orphanage->UsageByPeer(peer_id)};
-            const auto tx_weight{GetTransactionWeight(*tx)};
+            const auto tx_usage{GetOrphanUsage(*tx)};
 
             CallOneOf(
                 fuzzed_data_provider,
@@ -313,7 +321,7 @@ FUZZ_TARGET(txorphan_protected, .init = initialize_orphanage)
                 [&] { // AddTx
                     bool have_tx_and_peer = orphanage->HaveTxFromPeer(wtxid, peer_id);
                     if (peer_is_protected && !have_tx_and_peer &&
-                        (orphanage->UsageByPeer(peer_id) + tx_weight > honest_mem_limit ||
+                        (orphanage->UsageByPeer(peer_id) + tx_usage > honest_mem_limit ||
                         orphanage->LatencyScoreFromPeer(peer_id) + (tx->vin.size() / 10) + 1 > honest_latency_limit)) {
                         // We never want our protected peer oversized or over-announced
                     } else {
@@ -328,7 +336,7 @@ FUZZ_TARGET(txorphan_protected, .init = initialize_orphanage)
                     // AddAnnouncer should return false if tx doesn't exist or we already HaveTxFromPeer.
                     {
                         if (peer_is_protected && !have_tx_and_peer &&
-                            (orphanage->UsageByPeer(peer_id) + tx_weight > honest_mem_limit ||
+                            (orphanage->UsageByPeer(peer_id) + tx_usage > honest_mem_limit ||
                             orphanage->LatencyScoreFromPeer(peer_id) + (tx->vin.size() / 10) + 1 > honest_latency_limit)) {
                             // We never want our protected peer oversized
                         } else {
@@ -464,7 +472,7 @@ FUZZ_TARGET(txorphanage_sim)
         wtxids.insert(txn[txorder[t]]->GetWitnessHash());
         auto weight = GetTransactionWeight(*txn[txorder[t]]);
         assert(weight < MAX_STANDARD_TX_WEIGHT);
-        total_usage += GetTransactionWeight(*txn[txorder[t]]);
+        total_usage += GetOrphanUsage(*txn[txorder[t]]);
     }
 
     //
@@ -553,7 +561,7 @@ FUZZ_TARGET(txorphanage_sim)
         for (auto& ann : sim_announcements) {
             if (ann.announcer != peer) continue;
             count += 1 + (txn[ann.tx]->vin.size() / 10);
-            usage += GetTransactionWeight(*txn[ann.tx]);
+            usage += GetOrphanUsage(*txn[ann.tx]);
         }
         return std::max<ByRatioNegSize<FeeFrac>>(FeeFrac{count, max_count}, FeeFrac{usage, max_usage});
     };
@@ -692,7 +700,7 @@ FUZZ_TARGET(txorphanage_sim)
             node::TxOrphanage::Count total_latency_score = sim_announcements.size();
             for (unsigned tx = 0; tx < NUM_TX; ++tx) {
                 if (have_tx_fn(tx)) {
-                    total_usage += GetTransactionWeight(*txn[tx]);
+                    total_usage += GetOrphanUsage(*txn[tx]);
                     total_latency_score += txn[tx]->vin.size() / 10;
                 }
             }
@@ -749,7 +757,7 @@ FUZZ_TARGET(txorphanage_sim)
     for (unsigned tx = 0; tx < NUM_TX; ++tx) {
         bool sim_have_tx = have_tx_fn(tx);
         if (sim_have_tx) {
-            orphan_usage += GetTransactionWeight(*txn[tx]);
+            orphan_usage += GetOrphanUsage(*txn[tx]);
             total_latency_score += txn[tx]->vin.size() / 10;
         }
         unique_orphans += sim_have_tx;
@@ -767,7 +775,7 @@ FUZZ_TARGET(txorphanage_sim)
         for (NodeId peer = 0; peer < NUM_PEERS; ++peer) {
             auto it_sim_ann = find_announce_fn(tx, peer);
             bool sim_have_ann = it_sim_ann != sim_announcements.end();
-            if (sim_have_ann) usage_by_peer[peer] += GetTransactionWeight(*txn[tx]);
+            if (sim_have_ann) usage_by_peer[peer] += GetOrphanUsage(*txn[tx]);
             count_by_peer[peer] += sim_have_ann;
             // GetOrphanTransactions (announcers presence)
             if (sim_have_ann) assert(sim_have_tx);

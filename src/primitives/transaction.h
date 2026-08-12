@@ -8,6 +8,7 @@
 
 #include <attributes.h>
 #include <consensus/amount.h>
+#include <consensus/consensus.h>
 #include <primitives/transaction_identifier.h> // IWYU pragma: export
 #include <script/script.h>
 #include <serialize.h>
@@ -121,7 +122,7 @@ public:
     explicit CTxIn(COutPoint prevoutIn, CScript scriptSigIn=CScript(), uint32_t nSequenceIn=SEQUENCE_FINAL);
     CTxIn(Txid hashPrevTx, uint32_t nOut, CScript scriptSigIn=CScript(), uint32_t nSequenceIn=SEQUENCE_FINAL);
 
-    SERIALIZE_METHODS(CTxIn, obj) { READWRITE(obj.prevout, obj.scriptSig, obj.nSequence); }
+    SERIALIZE_METHODS(CTxIn, obj) { READWRITE(obj.prevout, LIMITED_BYTE_VECTOR(obj.scriptSig, MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR), obj.nSequence); }
 
     friend bool operator==(const CTxIn& a, const CTxIn& b)
     {
@@ -149,7 +150,7 @@ public:
 
     CTxOut(const CAmount& nValueIn, CScript scriptPubKeyIn);
 
-    SERIALIZE_METHODS(CTxOut, obj) { READWRITE(obj.nValue, obj.scriptPubKey); }
+    SERIALIZE_METHODS(CTxOut, obj) { READWRITE(obj.nValue, LIMITED_BYTE_VECTOR(obj.scriptPubKey, MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR)); }
 
     void SetNull()
     {
@@ -179,6 +180,7 @@ struct TransactionSerParams {
 };
 static constexpr TransactionSerParams TX_WITH_WITNESS{.allow_witness = true};
 static constexpr TransactionSerParams TX_NO_WITNESS{.allow_witness = false};
+using WitnessStackFormatter = VectorFormatter<LimitedByteVectorFormatter<MAX_BLOCK_WEIGHT>>;
 
 /**
  * Basic transaction serialization format:
@@ -200,6 +202,8 @@ static constexpr TransactionSerParams TX_NO_WITNESS{.allow_witness = false};
 template<typename Stream, typename TxType>
 void UnserializeTransaction(TxType& tx, Stream& s, const TransactionSerParams& params)
 {
+    constexpr size_t MAX_INPUTS{MAX_BLOCK_WEIGHT / (WITNESS_SCALE_FACTOR * 41)};
+    constexpr size_t MAX_OUTPUTS{MAX_BLOCK_WEIGHT / (WITNESS_SCALE_FACTOR * 9)};
     const bool fAllowWitness = params.allow_witness;
 
     s >> tx.version;
@@ -207,23 +211,24 @@ void UnserializeTransaction(TxType& tx, Stream& s, const TransactionSerParams& p
     tx.vin.clear();
     tx.vout.clear();
     /* Try to read the vin. In case the dummy is there, this will be read as an empty vector. */
-    s >> tx.vin;
+    s >> LIMITED_VECTOR(tx.vin, MAX_INPUTS);
     if (tx.vin.size() == 0 && fAllowWitness) {
         /* We read a dummy or an empty vin. */
         s >> flags;
         if (flags != 0) {
-            s >> tx.vin;
-            s >> tx.vout;
+            s >> LIMITED_VECTOR(tx.vin, MAX_INPUTS);
+            s >> LIMITED_VECTOR(tx.vout, MAX_OUTPUTS);
         }
     } else {
         /* We read a non-empty vin. Assume a normal vout follows. */
-        s >> tx.vout;
+        s >> LIMITED_VECTOR(tx.vout, MAX_OUTPUTS);
     }
     if ((flags & 1) && fAllowWitness) {
         /* The witness flag is present, and we support witnesses. */
         flags ^= 1;
         for (size_t i = 0; i < tx.vin.size(); i++) {
-            s >> tx.vin[i].scriptWitness.stack;
+            // Every witness stack element has at least its CompactSize byte on the wire.
+            s >> Using<NonPreallocatedLimitedVectorFormatter<MAX_BLOCK_WEIGHT, 1, LimitedByteVectorFormatter<MAX_BLOCK_WEIGHT>>>(tx.vin[i].scriptWitness.stack);
         }
         if (!tx.HasWitness()) {
             /* It's illegal to encode witnesses when all witness stacks are empty. */
@@ -261,7 +266,7 @@ void SerializeTransaction(const TxType& tx, Stream& s, const TransactionSerParam
     s << tx.vout;
     if (flags & 1) {
         for (size_t i = 0; i < tx.vin.size(); i++) {
-            s << tx.vin[i].scriptWitness.stack;
+            s << Using<WitnessStackFormatter>(tx.vin[i].scriptWitness.stack);
         }
     }
     s << tx.nLockTime;

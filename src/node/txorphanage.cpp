@@ -5,6 +5,7 @@
 #include <node/txorphanage.h>
 
 #include <consensus/validation.h>
+#include <core_memusage.h>
 #include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <util/feefrac.h>
@@ -50,12 +51,13 @@ class TxOrphanageImpl final : public TxOrphanage {
         { }
 
         /** Get an approximation for "memory usage". The total memory is a function of the memory used to store the
-         * transaction itself, each entry in m_orphans, and each entry in m_outpoint_to_orphan_wtxids. We use weight because
-         * it is often higher than the actual memory usage of the transaction. This metric conveniently encompasses
-         * m_outpoint_to_orphan_wtxids usage since input data does not get the witness discount, and makes it easier to
-         * reason about each peer's limits using well-understood transaction attributes. */
+         * transaction itself, each entry in m_orphans, and each entry in m_outpoint_to_orphan_wtxids. Weight is often
+         * higher than the transaction's dynamic memory usage and conveniently encompasses m_outpoint_to_orphan_wtxids,
+         * since input data does not get the witness discount. However, container overhead can exceed weight for e.g.
+         * witnesses with many empty elements, so use the higher measure. */
         TxOrphanage::Usage GetMemUsage()  const {
-            return GetTransactionWeight(*m_tx);
+            return std::max<TxOrphanage::Usage>(
+                GetTransactionWeight(*m_tx), RecursiveDynamicUsage(*m_tx));
         }
 
         /** Get an approximation of how much this transaction contributes to latency in EraseForBlock and EraseForPeer.

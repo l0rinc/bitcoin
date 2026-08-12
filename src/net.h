@@ -51,6 +51,7 @@
 class AddrMan;
 class BanMan;
 class CChainParams;
+class CConnman;
 class CNode;
 class CScheduler;
 struct bilingual_str;
@@ -99,6 +100,7 @@ static constexpr bool DEFAULT_DNSSEED{true};
 static constexpr bool DEFAULT_FIXEDSEEDS{true};
 static const size_t DEFAULT_MAXRECEIVEBUFFER = 5 * 1000;
 static const size_t DEFAULT_MAXSENDBUFFER    = 1 * 1000;
+static constexpr int INBOUND_SOCKET_SEND_BUFFER{64 * 1000};
 
 static constexpr bool DEFAULT_V2_TRANSPORT{true};
 
@@ -119,6 +121,25 @@ struct AddedNodeInfo {
 class CNodeStats;
 class CClientUIInterface;
 
+/** Tracks memory reserved for a large peer response. */
+class ResponseMemoryReservation
+{
+    friend class CConnman;
+
+    CConnman* m_connman{nullptr};
+    size_t m_size{0};
+
+    ResponseMemoryReservation(CConnman& connman, size_t size);
+
+public:
+    ResponseMemoryReservation() = default;
+    ResponseMemoryReservation(ResponseMemoryReservation&& other) noexcept;
+    ResponseMemoryReservation& operator=(ResponseMemoryReservation&& other) noexcept;
+    ResponseMemoryReservation(const ResponseMemoryReservation&) = delete;
+    ResponseMemoryReservation& operator=(const ResponseMemoryReservation&) = delete;
+    ~ResponseMemoryReservation();
+};
+
 struct CSerializedNetMsg {
     CSerializedNetMsg() = default;
     CSerializedNetMsg(CSerializedNetMsg&&) = default;
@@ -137,6 +158,7 @@ struct CSerializedNetMsg {
 
     std::vector<unsigned char> data;
     std::string m_type;
+    ResponseMemoryReservation m_response_memory_reservation;
 
     /** Compute total memory usage of this object (own memory + any dynamic memory). */
     size_t GetMemoryUsage() const noexcept;
@@ -296,6 +318,9 @@ public:
      */
     virtual CNetMessage GetReceivedMessage(NodeClock::time_point time, bool& reject_message) = 0;
 
+    /** Return memory owned by incomplete received data. */
+    virtual size_t GetReceiveMemoryUsage() const noexcept = 0;
+
     // 2. Sending side functions, for converting messages into bytes to be sent over the wire.
 
     /** Set the next message to send.
@@ -447,6 +472,9 @@ public:
     }
 
     CNetMessage GetReceivedMessage(NodeClock::time_point time, bool& reject_message) override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
+
+    /** Return memory owned by incomplete received data. */
+    size_t GetReceiveMemoryUsage() const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
 
     bool SetMessageToSend(CSerializedNetMsg& msg) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
     BytesToSend GetBytesToSend(bool have_next_message) const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
@@ -615,6 +643,8 @@ private:
     std::vector<uint8_t> m_send_garbage GUARDED_BY(m_send_mutex);
     /** Type of the message being sent. */
     std::string m_send_type GUARDED_BY(m_send_mutex);
+    /** Memory reserved for the message being sent. */
+    ResponseMemoryReservation m_response_memory_reservation GUARDED_BY(m_send_mutex);
     /** Current sender state. */
     SendState m_send_state GUARDED_BY(m_send_mutex);
     /** Whether we've sent at least 24 bytes (which would trigger disconnect for V1 peers). */
@@ -656,6 +686,9 @@ public:
     bool ReceivedMessageComplete() const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
     bool ReceivedBytes(std::span<const uint8_t>& msg_bytes) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex, !m_send_mutex);
     CNetMessage GetReceivedMessage(NodeClock::time_point time, bool& reject_message) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
+
+    /** Return memory owned by incomplete received data. */
+    size_t GetReceiveMemoryUsage() const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
 
     // Send side functions.
     bool SetMessageToSend(CSerializedNetMsg& msg) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
@@ -887,6 +920,9 @@ public:
      * from false to true. It will never change back to false. */
     std::atomic_bool m_relays_txs{false};
 
+    /** Whether this inbound peer has acquired a transaction-relay resource slot. */
+    std::atomic_bool m_tx_relay_inbound_slot{false};
+
     /** Whether this peer has loaded a bloom filter. Used only in inbound
      *  eviction logic. */
     std::atomic_bool m_bloom_filter_loaded{false};
@@ -949,6 +985,10 @@ public:
      *          False if the peer should be disconnected from.
      */
     bool ReceiveMsgBytes(std::span<const uint8_t> msg_bytes, bool& complete) EXCLUSIVE_LOCKS_REQUIRED(!cs_vRecv);
+
+    /** Return memory owned by incomplete and queued received messages. */
+    size_t GetReceiveMemoryUsage()
+        EXCLUSIVE_LOCKS_REQUIRED(!cs_vRecv, !m_msg_process_queue_mutex);
 
     void SetCommonVersion(int greatest_common_version)
     {
@@ -1084,6 +1124,14 @@ protected:
 class CConnman
 {
 public:
+    /** Bound large responses across peers before serialization. */
+    static constexpr size_t RESPONSE_MEMORY_RESERVATION{MAX_PROTOCOL_MESSAGE_LENGTH};
+    static constexpr size_t MAX_RESPONSE_MEMORY{8 * RESPONSE_MEMORY_RESERVATION};
+    /** A filtered block can consist of a merkle block plus its matching transactions. */
+    static constexpr size_t FILTERED_BLOCK_RESPONSE_MEMORY_RESERVATION{2 * RESPONSE_MEMORY_RESERVATION};
+
+    /** Bound aggregate buffered input for remotely scalable connection types. */
+    static constexpr size_t MAX_SCALABLE_RECEIVE_MEMORY{8 * MAX_PROTOCOL_MESSAGE_LENGTH};
 
     struct Options
     {
@@ -1154,7 +1202,10 @@ public:
         m_capture_messages = connOptions.m_capture_messages;
     }
 
+    std::optional<ResponseMemoryReservation> TryReserveResponseMemory(size_t reservation);
+
     // test only
+    size_t GetResponseMemoryUsage() const { return m_response_memory_usage.load(); }
     void SetCaptureMessages(bool cap) { m_capture_messages = cap; }
 
     CConnman(uint64_t seed0,
@@ -1358,6 +1409,9 @@ public:
      */
     bool EvictTxPeerIfFull(std::optional<NodeId> protect_peer = std::nullopt) EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
 
+    /** Acquire an inbound transaction-relay resource slot. */
+    bool TryAcquireInboundTxRelaySlot(CNode& node) EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
+
     bool AddNode(const AddedNodeParams& add) EXCLUSIVE_LOCKS_REQUIRED(!m_added_nodes_mutex);
     bool RemoveAddedNode(std::string_view node) EXCLUSIVE_LOCKS_REQUIRED(!m_added_nodes_mutex);
     bool AddedNodesContain(const CAddress& addr) const EXCLUSIVE_LOCKS_REQUIRED(!m_added_nodes_mutex);
@@ -1430,6 +1484,9 @@ public:
     bool MultipleManualOrFullOutboundConns(Network net) const EXCLUSIVE_LOCKS_REQUIRED(m_nodes_mutex);
 
 private:
+    friend class ResponseMemoryReservation;
+
+    void ReleaseResponseMemory(size_t reservation);
     struct ListenSocket {
     public:
         std::shared_ptr<Sock> sock;
@@ -1496,6 +1553,8 @@ private:
     void NotifyNumConnectionsChanged() EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
     /** Return true if the peer is inactive and should be disconnected. */
     bool InactivityCheck(const CNode& node, NodeClock::time_point now) const;
+    /** Return true for a remotely scalable connection covered by the aggregate receive limit. */
+    static bool IsReceiveMemoryLimited(const CNode& node);
 
     /**
      * Generate a collection of sockets to check for IO readiness.
@@ -1583,7 +1642,7 @@ private:
 
     void AddWhitelistPermissionFlags(NetPermissionFlags& flags, std::optional<CNetAddr> addr, const std::vector<NetWhitelistPermissions>& ranges) const;
 
-    void DeleteNode(CNode* pnode);
+    void DeleteNode(CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
 
     NodeId GetNewNodeId();
 
@@ -1646,6 +1705,7 @@ private:
 
     unsigned int nSendBufferMaxSize{0};
     unsigned int nReceiveFloodSize{0};
+    std::atomic<size_t> m_response_memory_usage{0};
 
     std::vector<ListenSocket> vhListenSocket;
     std::atomic<bool> fNetworkActive{true};
@@ -1661,6 +1721,8 @@ private:
     mutable Mutex m_added_nodes_mutex;
     std::vector<CNode*> m_nodes GUARDED_BY(m_nodes_mutex);
     std::list<CNode*> m_nodes_disconnected;
+    /** Whether receive events for limited peers are temporarily suppressed. Socket thread only. */
+    bool m_receive_memory_exceeded{false};
     mutable Mutex m_nodes_mutex;
     std::atomic<NodeId> nLastNodeId{0};
     unsigned int nPrevNodeCount{0};
@@ -1735,6 +1797,7 @@ private:
     int m_max_automatic_outbound;
     int m_max_inbound;
     int m_max_inbound_full_relay;
+    int m_num_inbound_tx_relay_slots GUARDED_BY(m_nodes_mutex){0};
 
     bool m_use_addrman_outgoing;
     CClientUIInterface* m_client_interface;

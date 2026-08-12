@@ -144,6 +144,44 @@ public:
     SERIALIZE_METHODS(TestHeaderAndShortIDs, obj) { READWRITE(obj.header, obj.nonce, Using<VectorFormatter<CustomUintFormatter<CBlockHeaderAndShortTxIDs::SHORTTXIDS_LENGTH>>>(obj.shorttxids), obj.prefilledtxn); }
 };
 
+class InspectableHeaderAndShortIDs : public CBlockHeaderAndShortTxIDs
+{
+public:
+    size_t ShortIdCapacity() const { return shorttxids.capacity(); }
+    size_t ShortIdSize() const { return shorttxids.size(); }
+    size_t PrefilledCapacity() const { return prefilledtxn.capacity(); }
+};
+
+BOOST_AUTO_TEST_CASE(compact_block_count_allocation)
+{
+    constexpr size_t MAX_COUNT{CBlockHeaderAndShortTxIDs::MAX_BLOCK_TX_COUNT};
+
+    {
+        DataStream stream;
+        stream << CBlockHeader{} << uint64_t{0} << CompactSizeWriter{MAX_COUNT + 1};
+        InspectableHeaderAndShortIDs block;
+        BOOST_CHECK_EXCEPTION(stream >> block, std::ios_base::failure, HasReason("Vector length limit exceeded"));
+        BOOST_CHECK_EQUAL(block.ShortIdCapacity(), 0);
+        BOOST_CHECK_EQUAL(block.PrefilledCapacity(), 0);
+    }
+    {
+        DataStream stream;
+        stream << CBlockHeader{} << uint64_t{0} << CompactSizeWriter{0} << CompactSizeWriter{MAX_COUNT + 1};
+        InspectableHeaderAndShortIDs block;
+        BOOST_CHECK_EXCEPTION(stream >> block, std::ios_base::failure, HasReason("Vector length limit exceeded"));
+        BOOST_CHECK_EQUAL(block.ShortIdCapacity(), 0);
+        BOOST_CHECK_EQUAL(block.PrefilledCapacity(), 0);
+    }
+
+    DataStream stream;
+    stream << CBlockHeader{} << uint64_t{0} << CompactSizeWriter{MAX_COUNT};
+    stream.write(std::vector<std::byte>(MAX_COUNT * CBlockHeaderAndShortTxIDs::SHORTTXIDS_LENGTH));
+    stream << CompactSizeWriter{0};
+    InspectableHeaderAndShortIDs block;
+    stream >> block;
+    BOOST_CHECK_EQUAL(block.ShortIdSize(), MAX_COUNT);
+}
+
 struct TestPartiallyDownloadedBlock : PartiallyDownloadedBlock {
     using PartiallyDownloadedBlock::PartiallyDownloadedBlock;
 
@@ -464,6 +502,25 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationOverflowTest) {
         // deserialize should fail
         BOOST_CHECK(true); // Needed to suppress "Test case [...] did not check any assertions"
     }
+}
+
+BOOST_AUTO_TEST_CASE(block_transactions_count_allocation)
+{
+    constexpr size_t MAX_COUNT{BlockTransactions::MAX_TX_COUNT};
+
+    BlockTransactions max_response;
+    max_response.txn.assign(MAX_COUNT, MakeTransactionRef(CMutableTransaction{}));
+    DataStream max_stream;
+    max_stream << max_response;
+    BlockTransactions max_roundtrip;
+    max_stream >> max_roundtrip;
+    BOOST_CHECK_EQUAL(max_roundtrip.txn.size(), MAX_COUNT);
+
+    DataStream oversized_stream;
+    oversized_stream << uint256::ZERO << CompactSizeWriter{MAX_COUNT + 1};
+    BlockTransactions oversized_response;
+    BOOST_CHECK_EXCEPTION(oversized_stream >> oversized_response, std::ios_base::failure, HasReason("Vector length limit exceeded"));
+    BOOST_CHECK_EQUAL(oversized_response.txn.capacity(), 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
