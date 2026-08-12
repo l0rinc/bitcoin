@@ -318,6 +318,9 @@ public:
      */
     virtual CNetMessage GetReceivedMessage(NodeClock::time_point time, bool& reject_message) = 0;
 
+    /** Return memory owned by incomplete received data. */
+    virtual size_t GetReceiveMemoryUsage() const noexcept = 0;
+
     // 2. Sending side functions, for converting messages into bytes to be sent over the wire.
 
     /** Set the next message to send.
@@ -471,7 +474,7 @@ public:
     CNetMessage GetReceivedMessage(NodeClock::time_point time, bool& reject_message) override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
 
     /** Return memory owned by incomplete received data. */
-    size_t GetReceiveMemoryUsage() const noexcept EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
+    size_t GetReceiveMemoryUsage() const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
 
     bool SetMessageToSend(CSerializedNetMsg& msg) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
     BytesToSend GetBytesToSend(bool have_next_message) const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
@@ -685,7 +688,7 @@ public:
     CNetMessage GetReceivedMessage(NodeClock::time_point time, bool& reject_message) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
 
     /** Return memory owned by incomplete received data. */
-    size_t GetReceiveMemoryUsage() const noexcept EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
+    size_t GetReceiveMemoryUsage() const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
 
     // Send side functions.
     bool SetMessageToSend(CSerializedNetMsg& msg) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
@@ -979,6 +982,10 @@ public:
      *          False if the peer should be disconnected from.
      */
     bool ReceiveMsgBytes(std::span<const uint8_t> msg_bytes, bool& complete) EXCLUSIVE_LOCKS_REQUIRED(!cs_vRecv);
+
+    /** Return memory owned by incomplete and queued received messages. */
+    size_t GetReceiveMemoryUsage()
+        EXCLUSIVE_LOCKS_REQUIRED(!cs_vRecv, !m_msg_process_queue_mutex);
 
     void SetCommonVersion(int greatest_common_version)
     {

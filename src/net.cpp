@@ -753,6 +753,22 @@ bool CNode::ReceiveMsgBytes(std::span<const uint8_t> msg_bytes, bool& complete)
     return true;
 }
 
+size_t CNode::GetReceiveMemoryUsage()
+{
+    size_t usage{0};
+    {
+        LOCK(cs_vRecv);
+        usage += m_transport->GetReceiveMemoryUsage();
+        for (const auto& msg : vRecvMsg)
+            usage += msg.GetMemoryUsage();
+    }
+    {
+        LOCK(m_msg_process_queue_mutex);
+        usage += m_msg_process_queue_size;
+    }
+    return usage;
+}
+
 std::string CNode::LogPeer() const
 {
     auto peer_info{strprintf("peer=%d", GetId())};

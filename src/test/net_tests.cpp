@@ -1090,6 +1090,45 @@ BOOST_AUTO_TEST_CASE(v1transport_receive_memory_usage)
     BOOST_CHECK_GT(transport.GetReceiveMemoryUsage(), usage_before + 256 * 1024);
 }
 
+BOOST_AUTO_TEST_CASE(cnode_receive_memory_usage)
+{
+    CNode node{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/CAddress{},
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/std::string{},
+               /*conn_type_in=*/ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+    const size_t usage_before{node.GetReceiveMemoryUsage()};
+
+    V1Transport sender{NodeId{1}};
+    CSerializedNetMsg message;
+    message.m_type = NetMsgType::BLOCK;
+    message.data.resize(100000);
+    BOOST_REQUIRE(sender.SetMessageToSend(message));
+
+    while (true) {
+        const auto& [bytes, _more, _msg_type] = sender.GetBytesToSend(false);
+        if (bytes.empty()) break;
+        std::span<const uint8_t> to_receive{bytes};
+        bool complete{false};
+        BOOST_REQUIRE(node.ReceiveMsgBytes(to_receive, complete));
+        sender.MarkBytesSent(bytes.size());
+        if (complete) {
+            const size_t usage_before_mark{node.GetReceiveMemoryUsage()};
+            node.MarkReceivedMsgsForProcessing();
+            BOOST_CHECK_EQUAL(node.GetReceiveMemoryUsage(), usage_before_mark);
+        }
+    }
+
+    BOOST_CHECK_GT(node.GetReceiveMemoryUsage(), usage_before + 90000);
+    BOOST_REQUIRE(node.PollMessage());
+    BOOST_CHECK_LT(node.GetReceiveMemoryUsage(), usage_before + 1000);
+}
+
 namespace {
 
 CKey GenerateRandomTestKey(FastRandomContext& rng) noexcept
