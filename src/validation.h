@@ -63,7 +63,6 @@ namespace kernel {
 struct ChainstateRole;
 } // namespace kernel
 namespace node {
-class BlockReadAhead;
 class SnapshotMetadata;
 } // namespace node
 namespace Consensus {
@@ -859,7 +858,8 @@ public:
     std::pair<int, int> GetPruneRange(int last_height_can_prune) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
 protected:
-    bool ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, node::BlockReadAhead& block_read_ahead, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
+    class BlockPrefetcher;
+    bool ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, BlockPrefetcher& block_prefetcher, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
     bool ConnectTip(
         BlockValidationState& state,
         CBlockIndex* pindexNew,

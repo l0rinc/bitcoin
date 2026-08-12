@@ -29,7 +29,6 @@
 #include <kernel/types.h>
 #include <kernel/warning.h>
 #include <logging/timer.h>
-#include <node/block_read_ahead.h>
 #include <node/blockstorage.h>
 #include <node/utxo_snapshot.h>
 #include <policy/ephemeral_policy.h>
@@ -61,6 +60,7 @@
 #include <util/signalinterrupt.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+#include <util/thread.h>
 #include <util/threadpool.h>
 #include <util/time.h>
 #include <util/trace.h>
@@ -70,12 +70,17 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <condition_variable>
+#include <cstddef>
 #include <deque>
+#include <future>
+#include <map>
 #include <numeric>
 #include <optional>
 #include <ranges>
 #include <span>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 
@@ -3197,13 +3202,131 @@ void Chainstate::PruneBlockIndexCandidates() {
     assert(!setBlockIndexCandidates.empty());
 }
 
+class Chainstate::BlockPrefetcher
+{
+public:
+    explicit BlockPrefetcher(const BlockManager& blockman) : m_blockman{blockman} {}
+    ~BlockPrefetcher() LOCKS_EXCLUDED(::cs_main)
+    {
+        AssertLockNotHeld(::cs_main);
+        Stop();
+    }
+
+    BlockPrefetcher(const BlockPrefetcher&) = delete;
+    BlockPrefetcher& operator=(const BlockPrefetcher&) = delete;
+
+    void Start(int32_t depth, int32_t threads)
+    {
+        if (depth <= 0 || threads <= 0 || Enabled()) return;
+        m_depth = static_cast<size_t>(depth);
+        WITH_LOCK(m_mutex, m_stop = false);
+        m_threads.reserve(threads);
+        for (int32_t i{0}; i < threads; ++i) {
+            m_threads.emplace_back(&util::TraceThread, strprintf("blockread.%d", i), [this] { ReaderThread(); });
+        }
+    }
+
+    void Stop()
+    {
+        if (Enabled()) {
+            WITH_LOCK(m_mutex, m_stop = true);
+            m_cv.notify_all();
+            for (auto& thread : m_threads)
+                thread.join();
+            m_threads.clear();
+        }
+        DropBuffered();
+    }
+
+    bool Enabled() const { return !m_threads.empty(); }
+
+    void Prime(const std::vector<CBlockIndex*>& to_connect, const CBlockIndex* skip) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        if (!Enabled()) return;
+        InFlightMap next;
+        bool queued_any{false};
+        {
+            LOCK(m_mutex);
+            for (CBlockIndex* pindex : to_connect | std::views::reverse) {
+                if (next.size() >= m_depth) break;
+                if (pindex == skip) continue;
+                if (next.contains(pindex)) continue;
+                if (auto in_flight{m_inflight.extract(pindex)}) {
+                    next.insert(std::move(in_flight));
+                    continue;
+                }
+                if (!(pindex->nStatus & BLOCK_HAVE_DATA)) continue;
+                const FlatFilePos pos{pindex->GetBlockPos()};
+                if (pos.IsNull()) continue;
+                const uint256 hash{pindex->GetBlockHash()};
+                ReadTask task{[blockman = &m_blockman, pos, hash]() -> std::shared_ptr<const CBlock> {
+                    auto block{std::make_shared<CBlock>()};
+                    if (!blockman->ReadBlock(*block, pos, hash)) return nullptr;
+                    return block;
+                }};
+                next.emplace(pindex, task.get_future());
+                m_queue.push_back(std::move(task));
+                queued_any = true;
+            }
+        }
+        m_inflight = std::move(next);
+        if (queued_any) m_cv.notify_all();
+    }
+
+    std::shared_ptr<const CBlock> Take(const CBlockIndex* pindex) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        auto it{m_inflight.find(pindex)};
+        if (it == m_inflight.end()) return nullptr;
+        std::shared_ptr<const CBlock> block{it->second.get()};
+        m_inflight.erase(it);
+        return block;
+    }
+
+    void Clear() EXCLUSIVE_LOCKS_REQUIRED(::cs_main) { DropBuffered(); }
+
+private:
+    using ReadTask = std::packaged_task<std::shared_ptr<const CBlock>()>;
+    using InFlightMap = std::map<const CBlockIndex*, std::future<std::shared_ptr<const CBlock>>>;
+
+    void DropBuffered()
+    {
+        m_inflight.clear();
+        WITH_LOCK(m_mutex, m_queue.clear());
+    }
+
+    void ReaderThread()
+    {
+        for (;;) {
+            ReadTask task;
+            {
+                WAIT_LOCK(m_mutex, lock);
+                m_cv.wait(lock, [&]() EXCLUSIVE_LOCKS_REQUIRED(m_mutex) { return m_stop || !m_queue.empty(); });
+                if (m_stop) return;
+                task = std::move(m_queue[0]);
+                m_queue.pop_front();
+            }
+            task();
+        }
+    }
+
+    const BlockManager& m_blockman;
+    std::vector<std::thread> m_threads;
+    size_t m_depth{0};
+    InFlightMap m_inflight;
+
+    Mutex m_mutex;
+    std::condition_variable m_cv;
+    std::deque<ReadTask> m_queue GUARDED_BY(m_mutex);
+    bool m_stop GUARDED_BY(m_mutex){false};
+};
+
 /**
  * Try to make some progress towards making index_most_work the active block.
  * pblock is either nullptr or a pointer to a CBlock corresponding to index_most_work.
  *
  * @returns true unless a system error occurred
  */
-bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, node::BlockReadAhead& block_read_ahead, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
+bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, BlockPrefetcher& block_prefetcher, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
 {
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
@@ -3229,7 +3352,7 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
         fBlocksDisconnected = true;
     }
 
-    if (fBlocksDisconnected) block_read_ahead.Clear();
+    if (fBlocksDisconnected) block_prefetcher.Clear();
 
     // Build list of new blocks to connect (in descending height order).
     std::vector<CBlockIndex*> vpindexToConnect;
@@ -3249,13 +3372,13 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
         nHeight = nTargetHeight;
 
         if (vpindexToConnect.size() > 1) {
-            block_read_ahead.Prime(vpindexToConnect, pblock ? &index_most_work : nullptr);
+            block_prefetcher.Prime(vpindexToConnect, pblock ? &index_most_work : nullptr);
         }
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
             std::shared_ptr<const CBlock> block_to_connect{pindexConnect == &index_most_work ? pblock : nullptr};
-            if (!block_to_connect) block_to_connect = block_read_ahead.Take(pindexConnect);
+            if (!block_to_connect) block_to_connect = block_prefetcher.Take(pindexConnect);
             if (!ConnectTip(state, pindexConnect, std::move(block_to_connect), connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
@@ -3368,9 +3491,9 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
 
     const int32_t readahead_depth{m_chainman.m_options.block_readahead_depth};
     const int32_t readahead_threads{m_chainman.m_options.block_readahead_threads};
-    node::BlockReadAhead block_read_ahead{m_blockman};
-    block_read_ahead.Start(readahead_depth, readahead_threads);
-    if (block_read_ahead.Enabled()) {
+    BlockPrefetcher block_prefetcher{m_blockman};
+    block_prefetcher.Start(readahead_depth, readahead_threads);
+    if (block_prefetcher.Enabled()) {
         LogInfo("Block read-ahead buffering up to %d blocks on %d threads", readahead_depth, readahead_threads);
     }
 
@@ -3413,8 +3536,8 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
                 // BlockConnected signals must be sent for the original role;
                 // in case snapshot validation is completed during ActivateBestChainStep, the
                 // result of GetRole() changes from BACKGROUND to NORMAL.
-               const ChainstateRole chainstate_role{this->GetRole()};
-                if (!ActivateBestChainStep(state, *pindexMostWork, block_read_ahead, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connected_blocks)) {
+                const ChainstateRole chainstate_role{this->GetRole()};
+                if (!ActivateBestChainStep(state, *pindexMostWork, block_prefetcher, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connected_blocks)) {
                     // A system error occurred
                     return false;
                 }
