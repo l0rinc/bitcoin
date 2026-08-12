@@ -24,6 +24,7 @@ from test_framework.messages import (
     CTxOut,
     from_hex,
     HeaderAndShortIDs,
+    MAX_BIP125_RBF_SEQUENCE,
     MSG_BLOCK,
     MSG_CMPCT_BLOCK,
     MSG_WITNESS_FLAG,
@@ -56,6 +57,7 @@ from test_framework.script import (
     OP_TRUE,
     OP_RETURN,
 )
+from test_framework.script_util import script_to_p2wsh_script
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.test_node import TestNode
 from test_framework.util import (
@@ -559,6 +561,57 @@ class CompactBlocksTest(BitcoinTestFramework):
         with p2p_lock:
             # Shouldn't have gotten a request for any transaction
             assert "getblocktxn" not in test_node.last_message
+
+    def test_replaced_transaction_reconstruction(self, test_node):
+        node = self.nodes[0]
+        input_count = 42
+        stack_item_count = 100
+        witness_script = CScript([OP_DROP] * stack_item_count + [OP_TRUE])
+        funding = self.wallet.create_self_transfer_multi(num_outputs=input_count)["tx"]
+        for txout in funding.vout:
+            txout.scriptPubKey = script_to_p2wsh_script(witness_script)
+        test_node.send_and_ping(msg_tx(funding))
+        assert funding.txid_hex in node.getrawmempool()
+        self.generate(self.wallet, 1)
+
+        def create_spend(indices, fee):
+            tx = CTransaction()
+            tx.vin = [CTxIn(COutPoint(funding.txid_int, index), nSequence=MAX_BIP125_RBF_SEQUENCE) for index in indices]
+            tx.vout = [CTxOut(funding.vout[0].nValue * len(indices) - fee, self.wallet.get_output_script())]
+            tx.wit.vtxinwit = [CTxInWitness() for _ in indices]
+            for txin_witness in tx.wit.vtxinwit:
+                txin_witness.scriptWitness.stack = [b""] * stack_item_count + [witness_script]
+            return tx
+
+        original = create_spend(list(range(input_count)), fee=10_000)
+        test_node.send_and_ping(msg_tx(original))
+        assert original.txid_hex in node.getrawmempool()
+
+        replacement = create_spend([0], fee=20_000)
+        test_node.send_and_ping(msg_tx(replacement))
+        assert replacement.txid_hex in node.getrawmempool()
+
+        block = self.build_block_on_tip(node)
+        block.vtx.append(original)
+        block.hashMerkleRoot = block.calc_merkle_root()
+        add_witness_commitment(block)
+        block.solve()
+        compact_block = HeaderAndShortIDs()
+        compact_block.initialize_from_block(block, prefill_list=[0], use_witness=True)
+        test_node.clear_getblocktxn()
+        test_node.send_without_ping(msg_headers([block]))
+        test_node.wait_for_getdata([block.hash_int], timeout=30)
+        test_node.send_without_ping(msg_headers([block]))
+        test_node.send_and_ping(msg_cmpctblock(compact_block.to_p2p()))
+        with p2p_lock:
+            requested = "getblocktxn" in test_node.last_message
+        assert not requested  # TODO: Request replacements that exceed the reconstruction memory limit.
+        if requested:
+            self.getblocktxn_expected(test_node, block.hash_int, indices=[1])
+            response = msg_blocktxn()
+            response.block_transactions = BlockTransactions(block.hash_int, [original])
+            test_node.send_and_ping(response)
+        assert_equal(node.getbestblockhash(), block.hash_hex)
 
     # Incorrectly responding to a getblocktxn shouldn't cause the block to be
     # permanently failed.
@@ -1078,6 +1131,9 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         self.log.info("Testing getblocktxn requests (segwit node)...")
         self.test_getblocktxn_requests(self.segwit_node)
+
+        self.log.info("Testing compact block reconstruction with a replaced transaction...")
+        self.test_replaced_transaction_reconstruction(self.segwit_node)
 
         self.log.info("Testing getblocktxn handler (segwit node should return witnesses)...")
         self.test_getblocktxn_handler(self.segwit_node)
