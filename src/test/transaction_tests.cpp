@@ -689,6 +689,20 @@ BOOST_AUTO_TEST_CASE(test_big_witness_transaction)
     assert(controlCheck);
 }
 
+BOOST_AUTO_TEST_CASE(script_check_spent_output_ownership)
+{
+    CMutableTransaction mtx;
+    mtx.vin.emplace_back();
+    const CTransaction tx{mtx};
+    CTxOut spent_output{0, CScript{} << OP_TRUE};
+    PrecomputedTransactionData txdata;
+    SignatureCache signature_cache{DEFAULT_SIGNATURE_CACHE_BYTES};
+    CScriptCheck check{spent_output, tx, signature_cache, /*input_index=*/0, SCRIPT_VERIFY_NONE, /*cache_sig_store=*/false, &txdata};
+
+    spent_output.scriptPubKey = CScript{} << OP_FALSE;
+    BOOST_CHECK(!check().has_value()); // TODO: Let script checks borrow stable spent outputs.
+}
+
 SignatureData CombineSignatures(const CMutableTransaction& input1, const CMutableTransaction& input2, const CTransactionRef tx)
 {
     SignatureData sigdata;
