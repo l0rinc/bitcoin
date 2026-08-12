@@ -448,6 +448,12 @@ BOOST_AUTO_TEST_CASE(transaction_witness_stack_count_allocation)
     CMutableTransaction tx;
     make_stream(stack, uint32_t{0}) >> TX_WITH_WITNESS(tx);
     BOOST_CHECK(tx.vin.at(0).scriptWitness.stack == stack);
+
+    const auto growing_stack{Vector(std::vector<uint8_t>{1}, std::vector<uint8_t>{}, std::vector<uint8_t>{})};
+    CMutableTransaction growing_tx;
+    make_stream(growing_stack, uint32_t{0}) >> TX_WITH_WITNESS(growing_tx);
+    const auto& decoded_stack{growing_tx.vin.at(0).scriptWitness.stack};
+    BOOST_CHECK_GT(decoded_stack.capacity(), decoded_stack.size()); // TODO: Do not retain unused geometric capacity.
 }
 
 BOOST_AUTO_TEST_CASE(basic_transaction_tests)
