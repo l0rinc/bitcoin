@@ -276,6 +276,13 @@ BOOST_AUTO_TEST_CASE(limited_vector)
     check.operator()<13>();
     check.operator()<14>();
     check.operator()<100>();
+
+    constexpr size_t CHUNK{MAX_VECTOR_ALLOCATE / sizeof(uint64_t)};
+    DataStream truncated;
+    truncated << CompactSizeWriter{CHUNK + 1};
+    std::vector<uint64_t> decoded;
+    BOOST_CHECK_EXCEPTION(truncated >> LIMITED_VECTOR(decoded, CHUNK + 1), std::ios_base::failure, HasReason("end of data"));
+    BOOST_CHECK_EQUAL(decoded.capacity(), CHUNK + 1); // TODO: Retain the generic vector decoder's incremental allocation.
 }
 
 BOOST_AUTO_TEST_CASE(class_methods)
