@@ -24,8 +24,7 @@ class ValidationSignals;
 static constexpr auto DEFAULT_MAX_TIP_AGE{24h};
 static constexpr int32_t DEFAULT_PREVOUTFETCH_THREADS{8};
 static constexpr int32_t DEFAULT_BLOCK_READAHEAD{4};
-
-static constexpr int32_t DEFAULT_BLOCK_READAHEAD_THREADS{2};
+static constexpr int32_t DEFAULT_BLOCK_READAHEAD_THREADS{1};
 
 namespace kernel {
 
