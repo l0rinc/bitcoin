@@ -101,6 +101,7 @@ protected:
 
 public:
     static constexpr int SHORTTXIDS_LENGTH = 6;
+    static constexpr size_t MAX_BLOCK_TX_COUNT{std::numeric_limits<uint16_t>::max()};
 
     CBlockHeader header;
 
@@ -120,9 +121,11 @@ public:
 
     SERIALIZE_METHODS(CBlockHeaderAndShortTxIDs, obj)
     {
-        READWRITE(obj.header, obj.nonce, Using<VectorFormatter<CustomUintFormatter<SHORTTXIDS_LENGTH>>>(obj.shorttxids), obj.prefilledtxn);
+        READWRITE(obj.header, obj.nonce,
+                  Using<LimitedVectorFormatter<MAX_BLOCK_TX_COUNT, CustomUintFormatter<SHORTTXIDS_LENGTH>>>(obj.shorttxids),
+                  LIMITED_VECTOR(obj.prefilledtxn, MAX_BLOCK_TX_COUNT));
         if (ser_action.ForRead()) {
-            if (obj.BlockTxCount() > std::numeric_limits<uint16_t>::max()) {
+            if (obj.BlockTxCount() > MAX_BLOCK_TX_COUNT) {
                 throw std::ios_base::failure("indexes overflowed 16 bits");
             }
             obj.FillShortTxIDSelector();

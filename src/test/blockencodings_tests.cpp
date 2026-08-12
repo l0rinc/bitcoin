@@ -154,23 +154,23 @@ public:
 
 BOOST_AUTO_TEST_CASE(compact_block_count_allocation)
 {
-    constexpr size_t MAX_COUNT{std::numeric_limits<uint16_t>::max()};
+    constexpr size_t MAX_COUNT{CBlockHeaderAndShortTxIDs::MAX_BLOCK_TX_COUNT};
 
     {
         DataStream stream;
         stream << CBlockHeader{} << uint64_t{0} << CompactSizeWriter{MAX_COUNT + 1};
         InspectableHeaderAndShortIDs block;
-        BOOST_CHECK_EXCEPTION(stream >> block, std::ios_base::failure, HasReason("end of data")); // TODO: Reject an oversized short-ID count before entry parsing.
-        BOOST_CHECK_EQUAL(block.ShortIdCapacity(), MAX_COUNT + 1); // TODO: Reject before allocating short IDs.
+        BOOST_CHECK_EXCEPTION(stream >> block, std::ios_base::failure, HasReason("Vector length limit exceeded"));
+        BOOST_CHECK_EQUAL(block.ShortIdCapacity(), 0);
         BOOST_CHECK_EQUAL(block.PrefilledCapacity(), 0);
     }
     {
         DataStream stream;
         stream << CBlockHeader{} << uint64_t{0} << CompactSizeWriter{0} << CompactSizeWriter{MAX_COUNT + 1};
         InspectableHeaderAndShortIDs block;
-        BOOST_CHECK_EXCEPTION(stream >> block, std::ios_base::failure, HasReason("end of data")); // TODO: Reject an oversized prefilled count before entry parsing.
+        BOOST_CHECK_EXCEPTION(stream >> block, std::ios_base::failure, HasReason("Vector length limit exceeded"));
         BOOST_CHECK_EQUAL(block.ShortIdCapacity(), 0);
-        BOOST_CHECK_EQUAL(block.PrefilledCapacity(), MAX_COUNT + 1); // TODO: Reject before allocating prefilled transactions.
+        BOOST_CHECK_EQUAL(block.PrefilledCapacity(), 0);
     }
 
     DataStream stream;
