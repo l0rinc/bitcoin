@@ -51,7 +51,9 @@ struct ChainstateManagerOpts {
     int worker_threads_num{0};
     //! Number of worker threads used for prefetching block input prevouts. Zero means no parallel fetching.
     int32_t prevoutfetch_threads_num{DEFAULT_PREVOUTFETCH_THREADS};
+    //! Maximum number of blocks read ahead of the connect cursor. Zero disables block read-ahead.
     int32_t block_readahead_depth{DEFAULT_BLOCK_READAHEAD};
+    //! Maximum number of worker threads used for block read-ahead. Zero disables block read-ahead.
     int32_t block_readahead_threads{DEFAULT_BLOCK_READAHEAD_THREADS};
     size_t script_execution_cache_bytes{DEFAULT_SCRIPT_EXECUTION_CACHE_BYTES};
     size_t signature_cache_bytes{DEFAULT_SIGNATURE_CACHE_BYTES};
