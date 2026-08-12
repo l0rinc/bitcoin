@@ -202,6 +202,8 @@ using WitnessStackFormatter = VectorFormatter<LimitedByteVectorFormatter<MAX_BLO
 template<typename Stream, typename TxType>
 void UnserializeTransaction(TxType& tx, Stream& s, const TransactionSerParams& params)
 {
+    constexpr size_t MAX_INPUTS{MAX_BLOCK_WEIGHT / (WITNESS_SCALE_FACTOR * 41)};
+    constexpr size_t MAX_OUTPUTS{MAX_BLOCK_WEIGHT / (WITNESS_SCALE_FACTOR * 9)};
     const bool fAllowWitness = params.allow_witness;
 
     s >> tx.version;
@@ -209,17 +211,17 @@ void UnserializeTransaction(TxType& tx, Stream& s, const TransactionSerParams& p
     tx.vin.clear();
     tx.vout.clear();
     /* Try to read the vin. In case the dummy is there, this will be read as an empty vector. */
-    s >> tx.vin;
+    s >> LIMITED_VECTOR(tx.vin, MAX_INPUTS);
     if (tx.vin.size() == 0 && fAllowWitness) {
         /* We read a dummy or an empty vin. */
         s >> flags;
         if (flags != 0) {
-            s >> tx.vin;
-            s >> tx.vout;
+            s >> LIMITED_VECTOR(tx.vin, MAX_INPUTS);
+            s >> LIMITED_VECTOR(tx.vout, MAX_OUTPUTS);
         }
     } else {
         /* We read a non-empty vin. Assume a normal vout follows. */
-        s >> tx.vout;
+        s >> LIMITED_VECTOR(tx.vout, MAX_OUTPUTS);
     }
     if ((flags & 1) && fAllowWitness) {
         /* The witness flag is present, and we support witnesses. */
