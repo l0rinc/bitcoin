@@ -20,6 +20,8 @@ from test_framework.messages import (
     msg_inv,
     msg_ping,
     msg_version,
+    msg_generic,
+    ser_compact_size,
     ser_string,
 )
 from test_framework.p2p import (
@@ -71,6 +73,7 @@ class InvalidMessagesTest(BitcoinTestFramework):
         self.test_addrv2_no_addresses()
         self.test_addrv2_too_long_address()
         self.test_addrv2_unrecognized_network()
+        self.test_count_only_oversized_addr_messages()
         self.test_oversized_inv_msg()
         self.test_oversized_getdata_msg()
         self.test_oversized_headers_msg()
@@ -255,6 +258,18 @@ class InvalidMessagesTest(BitcoinTestFramework):
                 '04' +     # address length (COMPACTSIZE(4))
                 '09' * 4 + # address
                 '208d'))   # port
+
+    def test_count_only_oversized_addr_messages(self):
+        size = 1_000_000
+        for msg_type, conn in ((b'addr', P2PInterface()), (b'addrv2', SenderOfAddrV2())):
+            conn = self.nodes[0].add_p2p_connection(conn)
+            if msg_type == b'addrv2':
+                conn.wait_for_sendaddrv2()
+            self.log.info(f"Test count-only {msg_type.decode()} allocation")
+            with self.nodes[0].assert_debug_log([f'ProcessMessages({msg_type.decode()}, 5 bytes): Exception', 'end of data']):  # TODO: Reject an oversized address count as misbehavior before entry parsing.
+                conn.send_without_ping(msg_generic(msg_type, ser_compact_size(size)))
+                conn.sync_with_ping(timeout=1)  # TODO: Disconnect peers that send oversized address counts.
+            self.nodes[0].disconnect_p2ps()
 
     def test_oversized_msg(self, msg, size):
         msg_type = msg.msgtype.decode('ascii')
