@@ -3213,16 +3213,18 @@ class Chainstate::BlockPrefetcher
     size_t m_depth{0};
     int32_t m_num_threads{0};
     bool m_started{false};
+    bool m_disabled{false};
 
-    void Start()
+    bool Start()
     {
-        if (m_depth == 0 || m_started) return;
+        if (m_started) return true;
         try {
             m_thread_pool.Start(m_num_threads);
             m_started = true;
         } catch (const std::exception&) {
-            m_depth = 0;
+            m_disabled = true;
         }
+        return m_started;
     }
 
     std::shared_ptr<const CBlock> Wait(PendingRead& pending) noexcept
@@ -3253,7 +3255,6 @@ public:
         if (clamped_depth > 0 && clamped_threads > 0) {
             m_depth = static_cast<size_t>(clamped_depth);
             m_num_threads = std::min(clamped_depth, clamped_threads);
-            Start();
         }
     }
 
@@ -3268,12 +3269,10 @@ public:
 
     size_t Depth() const noexcept { return m_depth; }
 
-    bool Enabled() const { return m_started; }
-
     void Prime(std::vector<ReadRequest> desired) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
-        if (!Enabled()) return;
+        if (m_depth == 0 || m_disabled) return;
         if (desired.size() > m_depth) desired.resize(m_depth);
 
         bool pending_matches{m_pending.size() <= desired.size()};
@@ -3282,6 +3281,7 @@ public:
         }
         if (!pending_matches) Clear();
 
+        if (m_pending.size() == desired.size() || !Start()) return;
         for (size_t i{m_pending.size()}; i < desired.size(); ++i) {
             const ReadRequest request{desired[i]};
             const BlockManager* const blockman{&m_blockman};
@@ -3297,7 +3297,10 @@ public:
                     return std::shared_ptr<const CBlock>{};
                 }
             })};
-            if (!future) return;
+            if (!future) {
+                m_disabled = true;
+                return;
+            }
             m_pending.push_back({request.hash, std::move(*future)});
         }
     }
@@ -3513,9 +3516,6 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
     const int32_t readahead_depth{m_chainman.m_options.block_readahead_depth};
     const int32_t readahead_threads{m_chainman.m_options.block_readahead_threads};
     BlockPrefetcher block_prefetcher{m_blockman, readahead_depth, readahead_threads};
-    if (block_prefetcher.Enabled()) {
-        LogInfo("Block read-ahead buffering up to %d blocks on %d threads", readahead_depth, readahead_threads);
-    }
 
     CBlockIndex *pindexMostWork = nullptr;
     CBlockIndex *pindexNewTip = nullptr;
