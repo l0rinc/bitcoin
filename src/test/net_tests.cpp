@@ -18,6 +18,7 @@
 #include <span.h>
 #include <streams.h>
 #include <test/util/common.h>
+#include <test/util/mining.h>
 #include <test/util/net.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
@@ -1864,6 +1865,46 @@ BOOST_AUTO_TEST_CASE(getheaders_response_memory_limit)
         LOCK(peer.cs_vSend);
         const auto& [_bytes, _more, msg_type] = peer.m_transport->GetBytesToSend(false);
         BOOST_CHECK_NE(msg_type, NetMsgType::HEADERS);
+    }
+    m_node.peerman->FinalizeNode(peer);
+}
+
+BOOST_AUTO_TEST_CASE(getblocks_response_memory_limit)
+{
+    MineBlock(m_node, {.use_mempool = false});
+
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    CNode peer{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/CAddress{},
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/std::string{},
+               /*conn_type_in=*/ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+    connman.Handshake(peer,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/NODE_NETWORK,
+                      /*local_services=*/NODE_NETWORK,
+                      /*version=*/PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+    connman.FlushSendBuffer(peer);
+
+    CBlockLocator locator;
+    locator.vHave = {Params().GenesisBlock().GetHash()};
+    auto response_memory{connman.TryReserveResponseMemory(CConnman::MAX_RESPONSE_MEMORY)};
+    BOOST_REQUIRE(response_memory);
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, NetMsg::Make(NetMsgType::GETBLOCKS, locator, uint256::ZERO)));
+    peer.fPauseSend = false;
+    connman.ProcessMessagesOnce(peer);
+    m_node.peerman->SendMessages(peer);
+    {
+        LOCK(peer.cs_vSend);
+        const auto& [_bytes, _more, msg_type] = peer.m_transport->GetBytesToSend(false);
+        BOOST_CHECK_EQUAL(msg_type, NetMsgType::INV); // TODO: Do not retain block inventory when aggregate response memory is full.
     }
     m_node.peerman->FinalizeNode(peer);
 }
