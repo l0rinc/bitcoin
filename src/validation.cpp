@@ -3202,11 +3202,6 @@ void Chainstate::PruneBlockIndexCandidates() {
 
 class Chainstate::BlockPrefetcher
 {
-    struct ReadRequest {
-        uint256 hash;
-        FlatFilePos pos;
-    };
-
     struct PendingRead {
         uint256 hash;
         std::future<std::shared_ptr<const CBlock>> future;
@@ -3245,6 +3240,11 @@ class Chainstate::BlockPrefetcher
     }
 
 public:
+    struct ReadRequest {
+        uint256 hash;
+        FlatFilePos pos;
+    };
+
     BlockPrefetcher(const BlockManager& blockman, int32_t depth, int32_t threads)
         : m_blockman{blockman}
     {
@@ -3266,22 +3266,15 @@ public:
     BlockPrefetcher(const BlockPrefetcher&) = delete;
     BlockPrefetcher& operator=(const BlockPrefetcher&) = delete;
 
+    size_t Depth() const noexcept { return m_depth; }
+
     bool Enabled() const { return m_started; }
 
-    void Prime(const std::vector<CBlockIndex*>& to_connect, const CBlockIndex* skip) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    void Prime(std::vector<ReadRequest> desired) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
         if (!Enabled()) return;
-
-        std::vector<ReadRequest> desired;
-        desired.reserve(m_depth);
-        for (CBlockIndex* index : to_connect | std::views::reverse) {
-            if (desired.size() >= m_depth) break;
-            if (index == skip || !(index->nStatus & BLOCK_HAVE_DATA)) continue;
-            const FlatFilePos pos{index->GetBlockPos()};
-            if (pos.IsNull()) continue;
-            desired.push_back({index->GetBlockHash(), pos});
-        }
+        if (desired.size() > m_depth) desired.resize(m_depth);
 
         bool pending_matches{m_pending.size() <= desired.size()};
         for (size_t i{0}; pending_matches && i < m_pending.size(); ++i) {
@@ -3292,8 +3285,9 @@ public:
         for (size_t i{m_pending.size()}; i < desired.size(); ++i) {
             const ReadRequest request{desired[i]};
             const BlockManager* const blockman{&m_blockman};
-            // The worker receives only values copied under cs_main. It must not use
-            // ReadBlock(CBlockIndex), because validation can wait here while holding cs_main.
+            // Prime() runs under cs_main, so the worker receives only the copied
+            // position and hash. It must not use ReadBlock(CBlockIndex), because
+            // validation can wait for this future while holding cs_main.
             auto future{m_thread_pool.Submit([blockman, request] {
                 try {
                     auto block{std::make_shared<CBlock>()};
@@ -3385,15 +3379,27 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
         }
         nHeight = nTargetHeight;
 
-        if (vpindexToConnect.size() > 1) {
-            block_prefetcher.Prime(vpindexToConnect, pblock ? &index_most_work : nullptr);
-        }
-
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
             const uint256 connect_hash{pindexConnect->GetBlockHash()};
-            std::shared_ptr<const CBlock> block_to_connect{pindexConnect == &index_most_work ? pblock : nullptr};
+            std::shared_ptr<const CBlock> block_to_connect{pblock && pblock->GetHash() == connect_hash ? pblock : nullptr};
             if (!block_to_connect) block_to_connect = block_prefetcher.Take(connect_hash);
+            if (pindexConnect != &index_most_work) {
+                std::vector<BlockPrefetcher::ReadRequest> read_ahead;
+                read_ahead.reserve(block_prefetcher.Depth());
+                const CBlockIndex* previous{pindexConnect};
+                for (int height{pindexConnect->nHeight + 1}; height <= index_most_work.nHeight && read_ahead.size() < block_prefetcher.Depth(); ++height) {
+                    const CBlockIndex* next{index_most_work.GetAncestor(height)};
+                    if (!next || next->pprev != previous || !(next->nStatus & BLOCK_HAVE_DATA)) break;
+                    previous = next;
+                    const uint256 hash{next->GetBlockHash()};
+                    if (pblock && pblock->GetHash() == hash) continue;
+                    const FlatFilePos pos{next->GetBlockPos()};
+                    if (pos.IsNull()) break;
+                    read_ahead.push_back({hash, pos});
+                }
+                block_prefetcher.Prime(std::move(read_ahead));
+            }
             if (!ConnectTip(state, pindexConnect, std::move(block_to_connect), connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
