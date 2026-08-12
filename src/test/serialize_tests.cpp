@@ -282,7 +282,7 @@ BOOST_AUTO_TEST_CASE(limited_vector)
     truncated << CompactSizeWriter{CHUNK + 1};
     std::vector<uint64_t> decoded;
     BOOST_CHECK_EXCEPTION(truncated >> LIMITED_VECTOR(decoded, CHUNK + 1), std::ios_base::failure, HasReason("end of data"));
-    BOOST_CHECK_EQUAL(decoded.capacity(), CHUNK + 1); // TODO: Retain the generic vector decoder's incremental allocation.
+    BOOST_CHECK_EQUAL(decoded.capacity(), CHUNK);
 }
 
 BOOST_AUTO_TEST_CASE(class_methods)

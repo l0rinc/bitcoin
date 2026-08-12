@@ -847,17 +847,12 @@ struct LimitedVectorFormatter
     template<typename Stream, typename V>
     void Unser(Stream& s, V& v)
     {
-        Formatter formatter;
         v.clear();
         size_t size = ReadCompactSize(s);
         if (size > Limit) {
             throw std::ios_base::failure("Vector length limit exceeded");
         }
-        v.reserve(size);
-        for (size_t i = 0; i < size; ++i) {
-            v.emplace_back();
-            formatter.Unser(s, v.back());
-        }
+        VectorFormatter<Formatter>{}.UnserElements(s, v, size);
     }
 
     template<typename Stream, typename V>
