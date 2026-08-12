@@ -381,13 +381,18 @@ CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetching(const CBlock& block 
     Assert(m_input_tail == 0);
     if (const auto workers_count{m_thread_pool->WorkersCount()}; workers_count > 0) {
         // Loop through the block inputs and set their prevouts in the queue.
-        // Filter inputs that spend outputs created earlier in the same block. These outputs will be created
-        // directly in the cache from the tx that creates them, so they will not be requested from a base view.
+        // Filter inputs that spend outputs created earlier in the same block. These outputs will be created directly
+        // in the cache from the tx that creates them, so they will not be requested from a base view. Queue each
+        // remaining external outpoint only once.
         std::unordered_set<Txid, SaltedCoinsCacheHasher> earlier_txids;
+        std::unordered_set<COutPoint, SaltedCoinsCacheHasher> queued_outpoints;
         earlier_txids.reserve(block.vtx.size());
+        queued_outpoints.reserve(block.vtx.size());
         for (const auto& tx : block.vtx | std::views::drop(1)) {
             for (const auto& input : tx->vin) {
-                if (!earlier_txids.contains(input.prevout.hash)) m_inputs.emplace_back(input.prevout);
+                if (!earlier_txids.contains(input.prevout.hash) && queued_outpoints.emplace(input.prevout).second) {
+                    m_inputs.emplace_back(input.prevout);
+                }
             }
             earlier_txids.emplace(tx->GetHash());
         }

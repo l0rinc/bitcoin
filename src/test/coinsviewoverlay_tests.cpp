@@ -218,7 +218,7 @@ BOOST_AUTO_TEST_CASE(fetch_duplicate_input_once)
     BOOST_CHECK(!view.AllInputsConsumed());
     BOOST_CHECK(view.SpendCoin(outpoint_a));
     BOOST_CHECK_EQUAL(view.AccessCoin(outpoint_b).out.nValue, 2);
-    BOOST_CHECK(!view.AllInputsConsumed()); // TODO: Queue duplicate external inputs only once.
+    BOOST_CHECK(view.AllInputsConsumed());
     BOOST_CHECK(view.AccessCoin(outpoint_a).IsSpent());
 }
 
