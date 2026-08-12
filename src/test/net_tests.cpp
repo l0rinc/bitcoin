@@ -1904,7 +1904,7 @@ BOOST_AUTO_TEST_CASE(getblocks_response_memory_limit)
     {
         LOCK(peer.cs_vSend);
         const auto& [_bytes, _more, msg_type] = peer.m_transport->GetBytesToSend(false);
-        BOOST_CHECK_EQUAL(msg_type, NetMsgType::INV); // TODO: Do not retain block inventory when aggregate response memory is full.
+        BOOST_CHECK_NE(msg_type, NetMsgType::INV);
     }
     m_node.peerman->FinalizeNode(peer);
 }

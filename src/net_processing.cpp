@@ -206,6 +206,12 @@ static constexpr auto PRIVATE_BROADCAST_MAX_CONNECTION_LIFETIME{3min};
 /** Maximum dynamic memory usage for a transaction retained for compact block reconstruction. */
 static constexpr size_t MAX_BLOCK_RECONSTRUCTION_EXTRA_TXN_USAGE{100'000};
 
+static size_t GetInvVectorSerializedSize(size_t inv_count)
+{
+    static constexpr size_t CINV_SERIALIZED_SIZE{sizeof(uint32_t) + uint256::size()};
+    return GetSizeOfCompactSize(inv_count) + inv_count * CINV_SERIALIZED_SIZE;
+}
+
 // Internal stuff
 namespace {
 /** Blocks that are in flight, and that are in the queue to be downloaded. */
@@ -6359,6 +6365,16 @@ bool PeerManagerImpl::SendMessages(CNode& node)
         // Message: inventory
         //
         std::vector<CInv> vInv;
+        auto push_block_inv_response = [&]() {
+            if (vInv.empty()) return;
+            const size_t response_reservation{GetInvVectorSerializedSize(vInv.size())};
+            if (auto response_memory{m_connman.TryReserveResponseMemory(response_reservation)}) {
+                auto msg{NetMsg::Make(NetMsgType::INV, vInv)};
+                msg.m_response_memory_reservation = std::move(*response_memory);
+                PushMessage(node, std::move(msg));
+            }
+            vInv.clear();
+        };
         {
             LOCK(peer.m_block_inv_mutex);
             vInv.reserve(peer.m_blocks_for_inv_relay.size());
@@ -6367,12 +6383,12 @@ bool PeerManagerImpl::SendMessages(CNode& node)
             for (const uint256& hash : peer.m_blocks_for_inv_relay) {
                 vInv.emplace_back(MSG_BLOCK, hash);
                 if (vInv.size() == MAX_INV_SZ) {
-                    MakeAndPushMessage(node, NetMsgType::INV, vInv);
-                    vInv.clear();
+                    push_block_inv_response();
                 }
             }
             peer.m_blocks_for_inv_relay.clear();
         }
+        push_block_inv_response();
 
         if (auto tx_relay = peer.GetTxRelay(); tx_relay != nullptr) {
                 LOCK(tx_relay->m_tx_inventory_mutex);
