@@ -698,18 +698,18 @@ BOOST_AUTO_TEST_CASE(orphan_dynamic_memory_usage)
         /*reserved_peer_usage=*/(weight + dynamic_usage) / 2)};
 
     BOOST_CHECK(orphanage->AddTx(ptx, /*peer=*/0));
-    BOOST_CHECK(orphanage->HaveTx(ptx->GetWitnessHash())); // TODO: Account for recursive dynamic usage.
-    BOOST_CHECK_EQUAL(orphanage->TotalOrphanUsage(), weight); // TODO: Account for recursive dynamic usage.
+    BOOST_CHECK(!orphanage->HaveTx(ptx->GetWitnessHash()));
+    BOOST_CHECK_EQUAL(orphanage->TotalOrphanUsage(), 0);
 
     auto accounting_orphanage{node::MakeTxOrphanage(
         /*max_global_latency_score=*/10,
         /*reserved_peer_usage=*/dynamic_usage * 2)};
     BOOST_REQUIRE(accounting_orphanage->AddTx(ptx, /*peer=*/0));
-    BOOST_CHECK_EQUAL(accounting_orphanage->TotalOrphanUsage(), weight); // TODO: Account for recursive dynamic usage.
-    BOOST_CHECK_EQUAL(accounting_orphanage->UsageByPeer(/*peer=*/0), weight); // TODO: Account for recursive dynamic usage.
+    BOOST_CHECK_EQUAL(accounting_orphanage->TotalOrphanUsage(), dynamic_usage);
+    BOOST_CHECK_EQUAL(accounting_orphanage->UsageByPeer(/*peer=*/0), dynamic_usage);
     BOOST_REQUIRE(accounting_orphanage->AddAnnouncer(ptx->GetWitnessHash(), /*peer=*/1));
-    BOOST_CHECK_EQUAL(accounting_orphanage->TotalOrphanUsage(), weight); // TODO: Account for recursive dynamic usage.
-    BOOST_CHECK_EQUAL(accounting_orphanage->UsageByPeer(/*peer=*/1), weight); // TODO: Account for recursive dynamic usage.
+    BOOST_CHECK_EQUAL(accounting_orphanage->TotalOrphanUsage(), dynamic_usage);
+    BOOST_CHECK_EQUAL(accounting_orphanage->UsageByPeer(/*peer=*/1), dynamic_usage);
     accounting_orphanage->SanityCheck();
     accounting_orphanage->EraseForPeer(/*peer=*/0);
     BOOST_CHECK(accounting_orphanage->HaveTx(ptx->GetWitnessHash()));
