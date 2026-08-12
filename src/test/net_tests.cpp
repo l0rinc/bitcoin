@@ -1724,6 +1724,43 @@ BOOST_AUTO_TEST_CASE(getdata_response_memory_limit)
     BOOST_CHECK_EQUAL(connman.GetResponseMemoryUsage(), 0U);
 }
 
+BOOST_AUTO_TEST_CASE(getheaders_response_memory_limit)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    CNode peer{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/CAddress{},
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/std::string{},
+               /*conn_type_in=*/ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+    connman.Handshake(peer,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/NODE_NETWORK,
+                      /*local_services=*/NODE_NETWORK,
+                      /*version=*/PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+    connman.FlushSendBuffer(peer);
+
+    CBlockLocator locator;
+    locator.vHave = {WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip()->GetBlockHash())};
+    auto response_memory{connman.TryReserveResponseMemory(CConnman::MAX_RESPONSE_MEMORY)};
+    BOOST_REQUIRE(response_memory);
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, NetMsg::Make(NetMsgType::GETHEADERS, locator, uint256::ZERO)));
+    peer.fPauseSend = false;
+    connman.ProcessMessagesOnce(peer);
+    {
+        LOCK(peer.cs_vSend);
+        const auto& [_bytes, _more, msg_type] = peer.m_transport->GetBytesToSend(false);
+        BOOST_CHECK_EQUAL(msg_type, NetMsgType::HEADERS); // TODO: Do not retain a HEADERS response when aggregate response memory is full.
+    }
+    m_node.peerman->FinalizeNode(peer);
+}
+
 BOOST_AUTO_TEST_CASE(private_broadcast_version_does_not_update_addrman_services)
 {
     LOCK(NetEventsInterface::g_msgproc_mutex);
