@@ -225,7 +225,8 @@ void UnserializeTransaction(TxType& tx, Stream& s, const TransactionSerParams& p
         /* The witness flag is present, and we support witnesses. */
         flags ^= 1;
         for (size_t i = 0; i < tx.vin.size(); i++) {
-            s >> Using<NonPreallocatedLimitedVectorFormatter<MAX_BLOCK_WEIGHT, LimitedByteVectorFormatter<MAX_BLOCK_WEIGHT>>>(tx.vin[i].scriptWitness.stack);
+            // Every witness stack element has at least its CompactSize byte on the wire.
+            s >> Using<NonPreallocatedLimitedVectorFormatter<MAX_BLOCK_WEIGHT, 1, LimitedByteVectorFormatter<MAX_BLOCK_WEIGHT>>>(tx.vin[i].scriptWitness.stack);
         }
         if (!tx.HasWitness()) {
             /* It's illegal to encode witnesses when all witness stacks are empty. */

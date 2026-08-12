@@ -828,6 +828,9 @@ struct DefaultFormatter
     static void Unser(Stream& s, T& t) { Unserialize(s, t); }
 };
 
+template<typename T>
+concept ConstSizedStream = requires(const std::remove_reference_t<T>& stream) { stream.size(); };
+
 /**
  * Limited vector formatter. Throws an error if a vector is oversized.
  */
@@ -859,7 +862,7 @@ struct LimitedVectorFormatter
 };
 
 /** Limited vector formatter that only allocates elements as they are decoded. */
-template<size_t Limit, class Formatter = DefaultFormatter>
+template<size_t Limit, size_t MinElementSize = 0, class Formatter = DefaultFormatter>
 struct NonPreallocatedLimitedVectorFormatter
 {
     template<typename Stream, typename V>
@@ -871,10 +874,18 @@ struct NonPreallocatedLimitedVectorFormatter
         if (size > Limit) {
             throw std::ios_base::failure("Vector length limit exceeded");
         }
+        if constexpr (MinElementSize > 0 && ConstSizedStream<Stream>) {
+            if (size > s.size() / MinElementSize) {
+                throw std::ios_base::failure("Vector length exceeds remaining data");
+            }
+            v.reserve(size);
+        }
         for (size_t i{0}; i < size; ++i) {
-            if (v.size() == v.capacity()) {
-                const size_t growth{std::max<size_t>(v.size(), 1)};
-                v.reserve(v.size() + std::min(growth, size - v.size()));
+            if constexpr (MinElementSize == 0 || !ConstSizedStream<Stream>) {
+                if (v.size() == v.capacity()) {
+                    const size_t growth{std::max<size_t>(v.size(), 1)};
+                    v.reserve(v.size() + std::min(growth, size - v.size()));
+                }
             }
             v.emplace_back();
             formatter.Unser(s, v.back());
@@ -1241,7 +1252,7 @@ public:
     void read(std::span<std::byte> dst) { GetStream().read(dst); }
     void ignore(size_t num) { GetStream().ignore(num); }
     bool empty() const { return GetStream().empty(); }
-    size_t size() const { return GetStream().size(); }
+    size_t size() const requires ConstSizedStream<SubStream> { return GetStream().size(); }
 
     //! Get reference to stream parameters.
     template <typename P>
