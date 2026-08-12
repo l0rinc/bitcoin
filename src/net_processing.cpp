@@ -3619,8 +3619,20 @@ void PeerManagerImpl::ProcessGetCFilters(CNode& node, Peer& peer, DataStream& vR
         return;
     }
 
+    size_t response_reservation{0};
     for (const auto& filter : filters) {
-        MakeAndPushMessage(node, NetMsgType::CFILTER, filter);
+        const size_t encoded_size{filter.GetEncodedFilter().size()};
+        const size_t filter_msg_size{sizeof(uint8_t) + uint256::size() + GetSizeOfCompactSize(encoded_size) + encoded_size};
+        if (filter_msg_size > CConnman::MAX_RESPONSE_MEMORY - response_reservation) return;
+        response_reservation += filter_msg_size;
+    }
+
+    auto response_memory{m_connman.TryReserveResponseMemory(response_reservation)};
+    if (!response_memory) return;
+    for (auto it{filters.begin()}; it != filters.end(); ++it) {
+        auto msg{NetMsg::Make(NetMsgType::CFILTER, *it)};
+        if (std::next(it) == filters.end()) msg.m_response_memory_reservation = std::move(*response_memory);
+        PushMessage(node, std::move(msg));
     }
 }
 

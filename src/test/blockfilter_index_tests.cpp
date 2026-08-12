@@ -380,7 +380,7 @@ BOOST_FIXTURE_TEST_CASE(cfilter_response_memory_limit, BlockFilterPeerTestingSet
     {
         LOCK(peer.cs_vSend);
         const auto& [_bytes, _more, msg_type] = peer.m_transport->GetBytesToSend(false);
-        BOOST_CHECK_EQUAL(msg_type, NetMsgType::CFILTER); // TODO: Do not retain compact filters when aggregate response memory is full.
+        BOOST_CHECK_NE(msg_type, NetMsgType::CFILTER);
     }
     m_node.peerman->FinalizeNode(peer);
 }
