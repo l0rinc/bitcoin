@@ -3042,9 +3042,13 @@ bool Chainstate::ConnectTip(
     if (!block_to_connect) {
         std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
         if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
+            LogDebug(BCLog::BENCH, "  - Synchronous block load: %.2fms success=0\n",
+                     Ticks<MillisecondsDouble>(SteadyClock::now() - time_1));
             return FatalError(m_chainman.GetNotifications(), state, _("Failed to read block."));
         }
         block_to_connect = std::move(pblockNew);
+        LogDebug(BCLog::BENCH, "  - Synchronous block load: %.2fms success=1\n",
+                 Ticks<MillisecondsDouble>(SteadyClock::now() - time_1));
     } else {
         LogDebug(BCLog::BENCH, "  - Using cached block\n");
     }
