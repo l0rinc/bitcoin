@@ -461,6 +461,50 @@ BOOST_AUTO_TEST_CASE(transaction_witness_stack_count_allocation)
     BOOST_CHECK_EQUAL(decoded_stack.capacity(), decoded_stack.size());
 }
 
+BOOST_AUTO_TEST_CASE(transaction_input_output_count_allocation)
+{
+    constexpr size_t MAX_INPUTS{MAX_BLOCK_WEIGHT / (WITNESS_SCALE_FACTOR * 41)};
+    constexpr size_t MAX_OUTPUTS{MAX_BLOCK_WEIGHT / (WITNESS_SCALE_FACTOR * 9)};
+    constexpr size_t PREALLOCATED_OUTPUTS{MAX_VECTOR_ALLOCATE / sizeof(CTxOut)};
+
+    {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, CompactSizeWriter{MAX_INPUTS + 1});
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(stream >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data")); // TODO: Reject an oversized input count before parsing.
+        BOOST_CHECK_EQUAL(tx.vin.capacity(), MAX_INPUTS + 1); // TODO: Reject before allocating inputs.
+    }
+    {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, uint8_t{0}, uint8_t{1}, CompactSizeWriter{MAX_INPUTS + 1});
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(stream >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data")); // TODO: Reject an oversized witness-encoded input count before parsing.
+        BOOST_CHECK_EQUAL(tx.vin.capacity(), MAX_INPUTS + 1); // TODO: Reject before allocating witness-encoded inputs.
+    }
+    {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, Vector(CTxIn{}), CompactSizeWriter{MAX_OUTPUTS + 1});
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(stream >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data")); // TODO: Reject an oversized output count before parsing.
+        BOOST_CHECK_EQUAL(tx.vout.capacity(), PREALLOCATED_OUTPUTS); // TODO: Reject before allocating outputs.
+    }
+
+    {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, std::vector<CTxIn>(MAX_INPUTS), Vector(CTxOut{}), uint32_t{0});
+        CMutableTransaction tx;
+        stream >> TX_WITH_WITNESS(tx);
+        BOOST_CHECK_EQUAL(tx.vin.size(), MAX_INPUTS);
+    }
+    {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, Vector(CTxIn{}), std::vector<CTxOut>(MAX_OUTPUTS), uint32_t{0});
+        CMutableTransaction tx;
+        stream >> TX_WITH_WITNESS(tx);
+        BOOST_CHECK_EQUAL(tx.vout.size(), MAX_OUTPUTS);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(basic_transaction_tests)
 {
     // Random real transaction (e2769b09e784f32f62ef849763d4f45b98e07ba658647343b915ff832b110436)
