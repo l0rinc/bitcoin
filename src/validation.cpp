@@ -70,10 +70,12 @@
 #include <cassert>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <exception>
 #include <future>
 #include <iterator>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <ranges>
@@ -3202,9 +3204,14 @@ void Chainstate::PruneBlockIndexCandidates() {
 
 class Chainstate::BlockPrefetcher
 {
+    struct ReadResult {
+        std::shared_ptr<const CBlock> block;
+        SteadyClock::duration read_time{};
+    };
+
     struct PendingRead {
         uint256 hash;
-        std::future<std::shared_ptr<const CBlock>> future;
+        std::future<ReadResult> future;
     };
 
     const BlockManager& m_blockman;
@@ -3221,24 +3228,39 @@ class Chainstate::BlockPrefetcher
         try {
             m_thread_pool.Start(m_num_threads);
             m_started = true;
-        } catch (const std::exception&) {
+            LogDebug(BCLog::BENCH, "Block read-ahead started: depth=%d threads=%d\n", static_cast<int>(m_depth), m_num_threads);
+        } catch (const std::exception& e) {
             m_disabled = true;
+            LogDebug(BCLog::BENCH, "  - Failed to start block read-ahead workers: %s\n", e.what());
         }
         return m_started;
     }
 
-    std::shared_ptr<const CBlock> Wait(PendingRead& pending) noexcept
+    ReadResult Wait(PendingRead& pending, SteadyClock::duration& wait_time) noexcept
     {
+        const auto wait_start{SteadyClock::now()};
+        ReadResult result;
         try {
-            return pending.future.get();
+            result = pending.future.get();
+        } catch (const std::exception& e) {
+            LogDebug(BCLog::BENCH, "  - Block read-ahead task failed: %s\n", e.what());
         } catch (...) {
-            return nullptr;
+            LogDebug(BCLog::BENCH, "  - Block read-ahead task failed with an unknown exception\n");
         }
+        wait_time = SteadyClock::now() - wait_start;
+        return result;
     }
 
     void Discard(PendingRead& pending)
     {
-        Wait(pending);
+        SteadyClock::duration wait_time;
+        const ReadResult result{Wait(pending, wait_time)};
+        if (!result.block) {
+            LogDebug(BCLog::BENCH, "  - Failed speculative block read: read=%.2fms wait=%.2fms\n",
+                     Ticks<MillisecondsDouble>(result.read_time), Ticks<MillisecondsDouble>(wait_time));
+        }
+        LogDebug(BCLog::BENCH, "  - Discarded stale block read-ahead: read=%.2fms wait=%.2fms\n",
+                 Ticks<MillisecondsDouble>(result.read_time), Ticks<MillisecondsDouble>(wait_time));
     }
 
 public:
@@ -3289,16 +3311,21 @@ public:
             // position and hash. It must not use ReadBlock(CBlockIndex), because
             // validation can wait for this future while holding cs_main.
             auto future{m_thread_pool.Submit([blockman, request] {
+                const auto read_start{SteadyClock::now()};
                 try {
                     auto block{std::make_shared<CBlock>()};
                     if (!blockman->ReadBlock(*block, request.pos, request.hash)) block.reset();
-                    return std::shared_ptr<const CBlock>{std::move(block)};
+                    return ReadResult{std::move(block), SteadyClock::now() - read_start};
+                } catch (const std::exception& e) {
+                    LogDebug(BCLog::BENCH, "  - Block read-ahead read failed: %s\n", e.what());
                 } catch (...) {
-                    return std::shared_ptr<const CBlock>{};
+                    LogDebug(BCLog::BENCH, "  - Block read-ahead read failed with an unknown exception\n");
                 }
+                return ReadResult{nullptr, SteadyClock::now() - read_start};
             })};
             if (!future) {
                 m_disabled = true;
+                LogDebug(BCLog::BENCH, "  - Failed to submit block read-ahead: %s\n", SubmitErrorString(future.error()));
                 return;
             }
             m_pending.push_back({request.hash, std::move(*future)});
@@ -3319,7 +3346,16 @@ public:
 
         PendingRead pending{std::move(m_pending[0])};
         m_pending.pop_front();
-        return Wait(pending);
+        SteadyClock::duration wait_time;
+        const ReadResult result{Wait(pending, wait_time)};
+        if (!result.block) {
+            LogDebug(BCLog::BENCH, "  - Failed speculative block read: read=%.2fms wait=%.2fms\n",
+                     Ticks<MillisecondsDouble>(result.read_time), Ticks<MillisecondsDouble>(wait_time));
+            return nullptr;
+        }
+        LogDebug(BCLog::BENCH, "  - Block read-ahead hit: read=%.2fms wait=%.2fms\n",
+                 Ticks<MillisecondsDouble>(result.read_time), Ticks<MillisecondsDouble>(wait_time));
+        return result.block;
     }
 
     void Clear()
