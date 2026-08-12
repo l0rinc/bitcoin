@@ -423,6 +423,32 @@ BOOST_AUTO_TEST_CASE(transaction_byte_vector_limits)
     }
 }
 
+BOOST_AUTO_TEST_CASE(transaction_witness_stack_count_allocation)
+{
+    auto make_stream{[](const auto&... args) {
+        DataStream stream;
+        SerializeMany(stream, CTransaction::CURRENT_VERSION, uint8_t{0}, uint8_t{1}, Vector(CTxIn{}), Vector(CTxOut{}), args...);
+        return stream;
+    }};
+    constexpr size_t PREALLOCATED{MAX_VECTOR_ALLOCATE / sizeof(std::vector<uint8_t>)};
+
+    {
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(make_stream(CompactSizeWriter{MAX_BLOCK_WEIGHT + 1}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data")); // TODO: Reject an oversized witness stack before allocating.
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), PREALLOCATED); // TODO: Do not preallocate from the untrusted element count.
+    }
+    {
+        CMutableTransaction tx;
+        BOOST_CHECK_EXCEPTION(make_stream(CompactSizeWriter{MAX_BLOCK_WEIGHT}) >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason("end of data"));
+        BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), PREALLOCATED); // TODO: Grow only as witness elements are decoded.
+    }
+
+    const auto stack{Vector(std::vector<uint8_t>{1, 2}, std::vector<uint8_t>{})};
+    CMutableTransaction tx;
+    make_stream(stack, uint32_t{0}) >> TX_WITH_WITNESS(tx);
+    BOOST_CHECK(tx.vin.at(0).scriptWitness.stack == stack);
+}
+
 BOOST_AUTO_TEST_CASE(basic_transaction_tests)
 {
     // Random real transaction (e2769b09e784f32f62ef849763d4f45b98e07ba658647343b915ff832b110436)
