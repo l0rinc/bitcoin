@@ -63,6 +63,7 @@ namespace kernel {
 struct ChainstateRole;
 } // namespace kernel
 namespace node {
+class BlockReadAhead;
 class SnapshotMetadata;
 } // namespace node
 namespace Consensus {
@@ -91,6 +92,9 @@ static constexpr int MAX_SCRIPTCHECK_THREADS{15};
 
 /** Maximum number of dedicated threads allowed for prefetching block input prevouts */
 static constexpr int32_t MAX_PREVOUTFETCH_THREADS{16};
+
+static constexpr int32_t MAX_BLOCK_READAHEAD{64};
+static constexpr int32_t MAX_BLOCK_READAHEAD_THREADS{16};
 
 /** Current sync state passed to tip changed callbacks. */
 enum class SynchronizationState {
@@ -567,6 +571,8 @@ protected:
     //! Manages the UTXO set, which is a reflection of the contents of `m_chain`.
     std::unique_ptr<CoinsViews> m_coins_views;
 
+    std::unique_ptr<node::BlockReadAhead> m_block_readahead;
+
     //! Cached result of LookupBlockIndex(*m_from_snapshot_blockhash)
     mutable const CBlockIndex* m_cached_snapshot_base GUARDED_BY(::cs_main){nullptr};
 
@@ -590,6 +596,8 @@ public:
         node::BlockManager& blockman,
         ChainstateManager& chainman,
         std::optional<uint256> from_snapshot_blockhash = std::nullopt);
+
+    ~Chainstate();
 
     //! Return path to chainstate leveldb directory.
     fs::path StoragePath() const;

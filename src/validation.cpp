@@ -29,6 +29,7 @@
 #include <kernel/types.h>
 #include <kernel/warning.h>
 #include <logging/timer.h>
+#include <node/block_read_ahead.h>
 #include <node/blockstorage.h>
 #include <node/utxo_snapshot.h>
 #include <policy/ephemeral_policy.h>
@@ -1881,6 +1882,8 @@ Chainstate::Chainstate(
       m_assumeutxo(from_snapshot_blockhash ? Assumeutxo::UNVALIDATED : Assumeutxo::VALIDATED),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
 
+Chainstate::~Chainstate() = default;
+
 fs::path Chainstate::StoragePath() const
 {
     fs::path path{m_chainman.m_options.datadir / "chainstate"};
@@ -1944,6 +1947,14 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     assert(m_coins_views != nullptr);
     m_coinstip_cache_size_bytes = cache_size_bytes;
     m_coins_views->InitCache(m_chainman.m_options.prevoutfetch_threads_num);
+
+    const int32_t readahead_depth{m_chainman.m_options.block_readahead_depth};
+    const int32_t readahead_threads{m_chainman.m_options.block_readahead_threads};
+    m_block_readahead = std::make_unique<node::BlockReadAhead>(m_blockman);
+    m_block_readahead->Start(readahead_depth, readahead_threads);
+    if (m_block_readahead->Enabled()) {
+        LogInfo("Block read-ahead buffering up to %d blocks on %d threads", readahead_depth, readahead_threads);
+    }
 }
 
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
@@ -3033,6 +3044,10 @@ bool Chainstate::ConnectTip(
     assert(pindexNew->pprev == m_chain.Tip());
     // Read block from disk.
     const auto time_1{SteadyClock::now()};
+    if (m_block_readahead) {
+        auto pre_read{m_block_readahead->Take(pindexNew)};
+        if (!block_to_connect) block_to_connect = std::move(pre_read);
+    }
     if (!block_to_connect) {
         std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
         if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
@@ -3228,6 +3243,8 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
         fBlocksDisconnected = true;
     }
 
+    if (fBlocksDisconnected && m_block_readahead) m_block_readahead->Clear();
+
     // Build list of new blocks to connect (in descending height order).
     std::vector<CBlockIndex*> vpindexToConnect;
     bool fContinue = true;
@@ -3244,6 +3261,10 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
             pindexIter = pindexIter->pprev;
         }
         nHeight = nTargetHeight;
+
+        if (m_block_readahead && vpindexToConnect.size() > 1) {
+            m_block_readahead->Prime(vpindexToConnect);
+        }
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
