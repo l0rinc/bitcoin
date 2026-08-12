@@ -4728,8 +4728,12 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         // without the new block. By resetting the BestHeaderSent, we ensure we
         // will re-announce the new block via headers (or compact blocks again)
         // in the SendMessages logic.
+        auto msg{NetMsg::Make(NetMsgType::HEADERS, TX_WITH_WITNESS(vHeaders))};
+        auto response_memory{m_connman.TryReserveResponseMemory(msg.data.size())};
+        if (!response_memory) return;
         nodestate->pindexBestHeaderSent = pindex ? pindex : m_chainman.ActiveChain().Tip();
-        MakeAndPushMessage(pfrom, NetMsgType::HEADERS, TX_WITH_WITNESS(vHeaders));
+        msg.m_response_memory_reservation = std::move(*response_memory);
+        PushMessage(pfrom, std::move(msg));
         return;
     }
 

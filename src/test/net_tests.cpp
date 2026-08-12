@@ -1756,7 +1756,7 @@ BOOST_AUTO_TEST_CASE(getheaders_response_memory_limit)
     {
         LOCK(peer.cs_vSend);
         const auto& [_bytes, _more, msg_type] = peer.m_transport->GetBytesToSend(false);
-        BOOST_CHECK_EQUAL(msg_type, NetMsgType::HEADERS); // TODO: Do not retain a HEADERS response when aggregate response memory is full.
+        BOOST_CHECK_NE(msg_type, NetMsgType::HEADERS);
     }
     m_node.peerman->FinalizeNode(peer);
 }
