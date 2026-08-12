@@ -649,6 +649,10 @@ struct LimitedStringFormatter
     }
 };
 
+//! Check whether a stream reports its remaining size without mutating it - the const excludes AutoFile, whose size() seeks and reports the whole file.
+template <typename T>
+concept ConstSizedStream = requires(const std::remove_reference_t<T>& t) { t.size(); };
+
 /** Formatter to serialize/deserialize vector elements using another formatter
  *
  * Example:
@@ -662,7 +666,7 @@ struct LimitedStringFormatter
  * V is not required to be an std::vector type. It works for any class that
  * exposes a value_type, size, reserve, emplace_back, back, and const iterators.
  */
-template<class Formatter>
+template<class Formatter, uint64_t MinElementSize = 0>
 struct VectorFormatter
 {
     template<typename Stream, typename V>
@@ -678,9 +682,19 @@ struct VectorFormatter
     template<typename Stream, typename V>
     void Unser(Stream& s, V& v)
     {
-        Formatter formatter;
         v.clear();
         size_t size = ReadCompactSize(s);
+        if constexpr (MinElementSize > 0 && ConstSizedStream<Stream>) {
+            if (size > s.size() / MinElementSize) throw std::ios_base::failure("Vector length exceeds remaining data");
+            v.reserve(size);
+        }
+        UnserElements(s, v, size);
+    }
+
+    template<typename Stream, typename V>
+    void UnserElements(Stream& s, V& v, size_t size)
+    {
+        Formatter formatter;
         size_t allocated = 0;
         while (allocated < size) {
             // For DoS prevention, do not blindly allocate as much as the stream claims to contain.
@@ -694,7 +708,7 @@ struct VectorFormatter
                 formatter.Unser(s, v.back());
             }
         }
-    };
+    }
 };
 
 /**
@@ -1190,7 +1204,7 @@ public:
     void read(std::span<std::byte> dst) { GetStream().read(dst); }
     void ignore(size_t num) { GetStream().ignore(num); }
     bool empty() const { return GetStream().empty(); }
-    size_t size() const { return GetStream().size(); }
+    size_t size() const requires ConstSizedStream<SubStream> { return GetStream().size(); }
 
     //! Get reference to stream parameters.
     template <typename P>

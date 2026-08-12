@@ -276,6 +276,26 @@ BOOST_AUTO_TEST_CASE(limited_vector)
     check.operator()<100>();
 }
 
+BOOST_AUTO_TEST_CASE(sized_vector_allocation)
+{
+    using namespace util::hex_literals;
+    using Formatter = VectorFormatter<DefaultFormatter, 2>;
+
+    auto reject{[](std::span<const std::byte> raw) {
+        std::vector<uint16_t> v;
+        BOOST_CHECK_THROW(DataStream{raw} >> Using<Formatter>(v), std::ios_base::failure);
+        BOOST_CHECK_EQUAL(v.size(), 0);
+        BOOST_CHECK_EQUAL(v.capacity(), 0);
+    }};
+    reject("01"_hex);   // Count 1 has no uint16_t bytes
+    reject("0100"_hex); // Count 1 has only one uint16_t byte
+
+    std::vector<uint16_t> decoded;
+    DataStream{"010000"_hex} >> Using<Formatter>(decoded); // Count 1 has one complete uint16_t
+    BOOST_CHECK_EQUAL(decoded.size(), 1);
+    BOOST_CHECK_EQUAL(decoded.capacity(), 1);
+}
+
 BOOST_AUTO_TEST_CASE(class_methods)
 {
     int intval(100);
