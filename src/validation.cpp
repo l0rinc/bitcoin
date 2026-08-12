@@ -3217,7 +3217,19 @@ class Chainstate::BlockPrefetcher
     ThreadPool m_thread_pool{"blkload"};
     std::deque<PendingRead> m_pending;
     size_t m_depth{0};
+    int32_t m_num_threads{0};
     bool m_started{false};
+
+    void Start()
+    {
+        if (m_depth == 0 || m_started) return;
+        try {
+            m_thread_pool.Start(m_num_threads);
+            m_started = true;
+        } catch (const std::exception&) {
+            m_depth = 0;
+        }
+    }
 
     std::shared_ptr<const CBlock> Wait(PendingRead& pending) noexcept
     {
@@ -3234,7 +3246,17 @@ class Chainstate::BlockPrefetcher
     }
 
 public:
-    explicit BlockPrefetcher(const BlockManager& blockman) : m_blockman{blockman} {}
+    BlockPrefetcher(const BlockManager& blockman, int32_t depth, int32_t threads)
+        : m_blockman{blockman}
+    {
+        const int32_t clamped_depth{std::clamp(depth, int32_t{0}, MAX_BLOCK_READAHEAD)};
+        const int32_t clamped_threads{std::clamp(threads, int32_t{0}, MAX_BLOCK_READAHEAD_THREADS)};
+        if (clamped_depth > 0 && clamped_threads > 0) {
+            m_depth = static_cast<size_t>(clamped_depth);
+            m_num_threads = std::min(clamped_depth, clamped_threads);
+            Start();
+        }
+    }
 
     ~BlockPrefetcher() LOCKS_EXCLUDED(::cs_main)
     {
@@ -3244,18 +3266,6 @@ public:
 
     BlockPrefetcher(const BlockPrefetcher&) = delete;
     BlockPrefetcher& operator=(const BlockPrefetcher&) = delete;
-
-    void Start(int32_t depth, int32_t threads)
-    {
-        if (depth <= 0 || threads <= 0 || m_started) return;
-        m_depth = static_cast<size_t>(depth);
-        try {
-            m_thread_pool.Start(std::min(depth, threads));
-            m_started = true;
-        } catch (const std::exception&) {
-            m_depth = 0;
-        }
-    }
 
     bool Enabled() const { return m_started; }
 
@@ -3496,8 +3506,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
 
     const int32_t readahead_depth{m_chainman.m_options.block_readahead_depth};
     const int32_t readahead_threads{m_chainman.m_options.block_readahead_threads};
-    BlockPrefetcher block_prefetcher{m_blockman};
-    block_prefetcher.Start(readahead_depth, readahead_threads);
+    BlockPrefetcher block_prefetcher{m_blockman, readahead_depth, readahead_threads};
     if (block_prefetcher.Enabled()) {
         LogInfo("Block read-ahead buffering up to %d blocks on %d threads", readahead_depth, readahead_threads);
     }
