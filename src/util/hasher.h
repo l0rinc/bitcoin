@@ -55,29 +55,42 @@ public:
     }
 };
 
+/**
+ * SipHash-1-3-UJ based hashers for containers keyed by transaction IDs we computed ourselves.
+ *
+ * Every container using these hashers keys on the identifier of a transaction it holds -- the
+ * mempool's txid and wtxid indices, the disconnected block pool, the wallet's transaction map,
+ * and the package checks -- so the keys are always cryptographic hash outputs and may be
+ * compressed as a single jumbo block. Containers that can retain an identifier a peer chose,
+ * such as the prevouts of a transaction we have not validated, must use SaltedUntrustedHasher
+ * instead.
+ *
+ * Hash values are process-local and must not be persisted, serialized, or compared across
+ * processes.
+ */
 class SaltedTxidHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const SipHasher13UJ m_hasher;
 
 public:
     SaltedTxidHasher();
 
     size_t operator()(const Txid& txid) const
     {
-        return m_hasher(txid.ToUint256());
+        return m_hasher.HashJumbo(txid.ToUint256());
     }
 };
 
 class SaltedWtxidHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const SipHasher13UJ m_hasher;
 
 public:
     SaltedWtxidHasher();
 
     size_t operator()(const Wtxid& wtxid) const
     {
-        return m_hasher(wtxid.ToUint256());
+        return m_hasher.HashJumbo(wtxid.ToUint256());
     }
 };
 
