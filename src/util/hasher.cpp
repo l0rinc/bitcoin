@@ -7,6 +7,11 @@
 #include <crypto/siphash.h>
 #include <random.h>
 
+SaltedUntrustedHasher::SaltedUntrustedHasher()
+    : m_hasher{FastRandomContext().rand64(), FastRandomContext().rand64()}
+{
+}
+
 SaltedUint256Hasher::SaltedUint256Hasher() : m_hasher{
     FastRandomContext().rand64(),
     FastRandomContext().rand64()}

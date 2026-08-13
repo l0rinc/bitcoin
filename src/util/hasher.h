@@ -14,6 +14,34 @@
 #include <cstring>
 #include <span>
 
+/**
+ * Salted SipHash-1-3 based hasher for containers that may retain keys of unknown provenance.
+ *
+ * Compresses its input as normal blocks, so it makes no assumption about the key at the cost of
+ * 3 more rounds than the jumbo hashers. Use it whenever a container can retain a hash a peer sent
+ * us rather than one we computed ourselves.
+ *
+ * Hash values are process-local and must not be persisted, serialized, or compared across
+ * processes.
+ */
+class SaltedUntrustedHasher
+{
+    const SipHasher13UJ m_hasher;
+
+public:
+    SaltedUntrustedHasher();
+
+    size_t operator()(const uint256& hash) const noexcept
+    {
+        return m_hasher.HashNormal(hash);
+    }
+
+    size_t operator()(const Txid& txid) const noexcept
+    {
+        return m_hasher.HashNormal(txid.ToUint256());
+    }
+};
+
 class SaltedUint256Hasher
 {
     const PresaltedSipHasher m_hasher;

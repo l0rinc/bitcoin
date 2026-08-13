@@ -845,7 +845,7 @@ private:
     FastRandomContext m_rng GUARDED_BY(NetEventsInterface::g_msgproc_mutex);
 
     /** Copied into short-lived tx INV deduplication sets to avoid generating salts per message. */
-    const SaltedUint256Hasher m_txhash_hasher;
+    const SaltedUntrustedHasher m_txhash_hasher;
     FeeFilterRounder m_fee_filter_rounder GUARDED_BY(NetEventsInterface::g_msgproc_mutex);
 
     const CChainParams& m_chainparams;
@@ -4339,8 +4339,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         }
 
         const bool reject_tx_invs{RejectIncomingTxs(pfrom)};
-        std::unordered_set<uint256, SaltedUint256Hasher> seen_txids{0, m_txhash_hasher};
-        std::unordered_set<uint256, SaltedUint256Hasher> seen_wtxids{0, m_txhash_hasher};
+        std::unordered_set<uint256, SaltedUntrustedHasher> seen_txids{0, m_txhash_hasher};
+        std::unordered_set<uint256, SaltedUntrustedHasher> seen_wtxids{0, m_txhash_hasher};
 
         LOCK2(cs_main, m_tx_download_mutex);
 
