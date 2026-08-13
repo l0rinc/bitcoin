@@ -191,10 +191,10 @@ BOOST_AUTO_TEST_CASE(siphash_test_vectors)
             BOOST_CHECK_EQUAL(CalculateSipHash13UJ(input, k0, k1, /*normal_as_jumbo=*/true), expected13uj);
             const SipHasher13UJ fixed_hasher{k0, k1};
             if (hash_only) {
-                BOOST_CHECK_EQUAL(fixed_hasher.Hash(FromHex256(input[0])), expected13uj);
+                BOOST_CHECK_EQUAL(fixed_hasher.HashJumbo(FromHex256(input[0])), expected13uj);
             } else if (hash_extra && HasByteLength(input[1], sizeof(uint64_t))) {
                 const auto extra{ParseHex(input[1].get_str())};
-                BOOST_CHECK_EQUAL(fixed_hasher.Hash(FromHex256(input[0]), ReadLE64(extra.data())), expected13uj);
+                BOOST_CHECK_EQUAL(fixed_hasher.HashJumbo(FromHex256(input[0]), ReadLE64(extra.data())), expected13uj);
             }
         }
     }

@@ -225,7 +225,7 @@ static void SipHash13UJ_32b(benchmark::Bench& bench)
     auto val{rng.rand256()};
     auto i{0U};
     bench.run([&] {
-        ankerl::nanobench::doNotOptimizeAway(sip_hasher.Hash(val));
+        ankerl::nanobench::doNotOptimizeAway(sip_hasher.HashJumbo(val));
         ++i;
         val.data()[i % uint256::size()] ^= i & 0xFF;
     });
@@ -239,7 +239,7 @@ static void SipHash13UJ_36b(benchmark::Bench& bench)
     uint32_t extra{rng.rand32()};
     auto i{0U};
     bench.run([&] {
-        ankerl::nanobench::doNotOptimizeAway(sip_hasher.Hash(val, uint64_t{extra}));
+        ankerl::nanobench::doNotOptimizeAway(sip_hasher.HashJumbo(val, uint64_t{extra}));
         ++i;
         val.data()[i % uint256::size()] ^= i & 0xFF;
         extra += i;

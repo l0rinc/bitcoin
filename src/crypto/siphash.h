@@ -155,7 +155,8 @@ public:
  *
  * Other components are unchanged: initialization constants, SipRound, and 64-bit output.
  * This interface serves as an executable specification for fixed-width implementations.
- * The Hash overloads optimize fixed-width inputs without modifying the accumulated state.
+ * The Hash* overloads optimize fixed-width inputs without modifying the accumulated state; their
+ * names state which block structure they use, since only the jumbo ones constrain their inputs.
  */
 class SipHasher13UJ
 {
@@ -172,7 +173,7 @@ public:
     uint64_t Finalize() const noexcept;
 
     /** Hash a jumbo block after the data written so far and finalize without modifying the object. */
-    ALWAYS_INLINE uint64_t Hash(const uint256& hash) const noexcept
+    ALWAYS_INLINE uint64_t HashJumbo(const uint256& hash) const noexcept
     {
         return m_state.Copy()
                       .Compress1Jumbo(hash)
@@ -183,7 +184,7 @@ public:
      * Hash a jumbo block followed by a normal block after the data written so far,
      * and finalize without modifying the object.
      */
-    ALWAYS_INLINE uint64_t Hash(const uint256& hash, uint64_t extra) const noexcept
+    ALWAYS_INLINE uint64_t HashJumbo(const uint256& hash, uint64_t extra) const noexcept
     {
         return m_state.Copy()
                       .Compress1Jumbo(hash)

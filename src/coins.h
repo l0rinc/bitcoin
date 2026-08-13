@@ -246,13 +246,13 @@ public:
     /** Hash a transaction ID, itself a cryptographic hash, as one jumbo block. */
     size_t operator()(const Txid& id) const noexcept
     {
-        return m_hasher.Hash(id.ToUint256());
+        return m_hasher.HashJumbo(id.ToUint256());
     }
 
     /** Hash an outpoint as its txid jumbo block followed by the zero-extended index as one normal block. */
     size_t operator()(const COutPoint& id) const noexcept
     {
-        return m_hasher.Hash(id.hash.ToUint256(), uint64_t{id.n});
+        return m_hasher.HashJumbo(id.hash.ToUint256(), uint64_t{id.n});
     }
 };
 
