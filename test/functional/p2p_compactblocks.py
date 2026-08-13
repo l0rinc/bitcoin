@@ -1010,7 +1010,7 @@ class CompactBlocksTest(BitcoinTestFramework):
         init_log = f"Initializing PartiallyDownloadedBlock for block {block.hash_hex}"
         with node.assert_debug_log([init_log]):
             inbound_peer.send_and_ping(announcement)
-        with node.assert_debug_log([init_log]):  # TODO: Repeated announcements should not immediately rescan the mempool.
+        with node.assert_debug_log([f"Rate limiting optimistic compact block {block.hash_hex}"]):
             inbound_peer.send_and_ping(announcement)
 
         for tx in block.vtx[1:]:

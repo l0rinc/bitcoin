@@ -460,6 +460,8 @@ struct CNodeState {
     bool m_requested_hb_cmpctblocks{false};
     /** Whether this peer will send us cmpctblocks if we request them. */
     bool m_provides_cmpctblocks{false};
+    /** Rate limiter for out-of-slot compact block reconstruction. */
+    util::TokenBucket<NodeClock> m_optimistic_reconstruction_bucket{/*rate=*/1, /*value=*/1, /*cap=*/1};
 
     /** State used to enforce CHAIN_SYNC_TIMEOUT and EXTRA_PEER_CHECK_INTERVAL logic.
       *
@@ -4965,6 +4967,13 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                 // download from.
                 // Optimistically try to reconstruct anyway since we might be
                 // able to without any round trips.
+                auto& bucket{nodestate->m_optimistic_reconstruction_bucket};
+                bucket.increment(NodeClock::now());
+                if (bucket.value() < 1) {
+                    LogDebug(BCLog::CMPCTBLOCK, "Rate limiting optimistic compact block %s from peer=%d\n", blockhash.ToString(), pfrom.GetId());
+                    return;
+                }
+                bucket.decrement();
                 PartiallyDownloadedBlock tempBlock(&m_mempool);
                 ReadStatus status = tempBlock.InitData(cmpctblock, vExtraTxnForCompact);
                 if (status != READ_STATUS_OK) {
