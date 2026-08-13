@@ -160,6 +160,12 @@ FUZZ_TARGET(integer, .init = initialize_integer)
 
         reference.WriteJumbo(u256).Write(data0);
         assert(mixed.HashJumbo(u256, data0) == reference.Finalize());
+
+        SipHasher13UJ normal{u64, u64_2};
+        normal.Write(u256.GetUint64(0)).Write(u256.GetUint64(1)).Write(u256.GetUint64(2)).Write(u256.GetUint64(3));
+        assert(fixed_hasher.HashNormal(u256) == normal.Finalize());
+        normal.Write(data1);
+        assert(fixed_hasher.HashNormal(u256, data1) == normal.Finalize());
     }
     (void)ToLower(ch);
     (void)ToUpper(ch);

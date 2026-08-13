@@ -13,11 +13,27 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
+#include <set>
+#include <string>
+
 BOOST_FIXTURE_TEST_SUITE(hash_tests, BasicTestingSetup)
 
 static uint64_t FromHex64(const UniValue& value) { return ToIntegral<uint64_t>(value.get_str(), /*base=*/16).value(); }
 static uint256 FromHex256(const UniValue& value) { return uint256{ParseHex(value.get_str())}; }
 static bool HasByteLength(const UniValue& value, size_t length) { return value.get_str().size() == 2 * length; }
+static uint64_t FromHexLE64(const UniValue& value) { return ReadLE64(ParseHex(value.get_str()).data()); }
+
+/** Concatenate the first uint256::size() / sizeof(uint64_t) blocks of `input` into a uint256. */
+static uint256 FromHexBlocks256(const UniValue& input)
+{
+    std::vector<unsigned char> bytes;
+    for (size_t i{0}; i < uint256::size() / sizeof(uint64_t); ++i) {
+        const auto block{ParseHex(input[i].get_str())};
+        bytes.insert(bytes.end(), block.begin(), block.end());
+    }
+    return uint256{bytes};
+}
 
 static uint64_t CalculateSipHash24(const UniValue& input, uint64_t k0, uint64_t k1)
 {
@@ -171,17 +187,26 @@ BOOST_AUTO_TEST_CASE(siphash)
 
 BOOST_AUTO_TEST_CASE(siphash_test_vectors)
 {
+    // Every fixed-width path needs a matching input shape in the vectors to be exercised at all.
+    std::set<std::string> covered_fixed_paths;
     for (UniValue tests{read_json(json_tests::siphash)}; auto& test : tests.getValues()) {
         const uint64_t k0{FromHex64(test["key"][0])}, k1{FromHex64(test["key"][1])};
         auto& input{test["input"]};
         const bool starts_with_hash{!input.empty() && HasByteLength(input[0], uint256::size())};
         const bool hash_only{starts_with_hash && input.size() == 1};
         const bool hash_extra{starts_with_hash && input.size() == 2};
+        // A uint256 split into consecutive little-endian 64-bit blocks, optionally followed by one more.
+        constexpr size_t SPLIT_BLOCKS{uint256::size() / sizeof(uint64_t)};
+        const bool all_normal{input.size() >= SPLIT_BLOCKS && std::ranges::all_of(input.getValues(), [](auto& block) { return HasByteLength(block, sizeof(uint64_t)); })};
+        const bool split_only{all_normal && input.size() == SPLIT_BLOCKS};
+        const bool split_extra{all_normal && input.size() == SPLIT_BLOCKS + 1};
         const uint64_t expected24{FromHex64(test["expected"]["siphash24"])};
         BOOST_CHECK_EQUAL(CalculateSipHash24(input, k0, k1), expected24);
         if (hash_only) {
+            covered_fixed_paths.emplace("siphash24(uint256)");
             BOOST_CHECK_EQUAL(PresaltedSipHasher(k0, k1)(FromHex256(input[0])), expected24);
         } else if (hash_extra && HasByteLength(input[1], sizeof(uint32_t))) {
+            covered_fixed_paths.emplace("siphash24(uint256, uint32_t)");
             const auto extra{ParseHex(input[1].get_str())};
             BOOST_CHECK_EQUAL(PresaltedSipHasher(k0, k1)(FromHex256(input[0]), ReadLE32(extra.data())), expected24);
         }
@@ -191,13 +216,22 @@ BOOST_AUTO_TEST_CASE(siphash_test_vectors)
             BOOST_CHECK_EQUAL(CalculateSipHash13UJ(input, k0, k1, /*normal_as_jumbo=*/true), expected13uj);
             const SipHasher13UJ fixed_hasher{k0, k1};
             if (hash_only) {
+                covered_fixed_paths.emplace("HashJumbo(uint256)");
                 BOOST_CHECK_EQUAL(fixed_hasher.HashJumbo(FromHex256(input[0])), expected13uj);
             } else if (hash_extra && HasByteLength(input[1], sizeof(uint64_t))) {
-                const auto extra{ParseHex(input[1].get_str())};
-                BOOST_CHECK_EQUAL(fixed_hasher.HashJumbo(FromHex256(input[0]), ReadLE64(extra.data())), expected13uj);
+                covered_fixed_paths.emplace("HashJumbo(uint256, uint64_t)");
+                BOOST_CHECK_EQUAL(fixed_hasher.HashJumbo(FromHex256(input[0]), FromHexLE64(input[1])), expected13uj);
+            }
+            if (split_only) {
+                covered_fixed_paths.emplace("HashNormal(uint256)");
+                BOOST_CHECK_EQUAL(fixed_hasher.HashNormal(FromHexBlocks256(input)), expected13uj);
+            } else if (split_extra) {
+                covered_fixed_paths.emplace("HashNormal(uint256, uint64_t)");
+                BOOST_CHECK_EQUAL(fixed_hasher.HashNormal(FromHexBlocks256(input), FromHexLE64(input[SPLIT_BLOCKS])), expected13uj);
             }
         }
     }
+    BOOST_CHECK_EQUAL(covered_fixed_paths.size(), 6);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
