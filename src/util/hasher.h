@@ -14,15 +14,21 @@
 #include <cstring>
 #include <span>
 
+// The salted SipHash-1-3 hashers below differ in how they compress a 256-bit key: as four normal
+// blocks, which assumes nothing about the key, or as a single jumbo block, which saves 3 rounds
+// but requires the key to be the output of a cryptographic hash. Pick by the provenance of the key
+// rather than by its type: a hash a peer sent us is untrusted even though it has the same type
+// as one we computed ourselves.
+//
+// All of them are salted per process, so their outputs are process-local and must not be
+// persisted, serialized, or compared across processes.
+
 /**
- * Salted SipHash-1-3 based hasher for containers that may retain keys of unknown provenance.
+ * Hasher for containers that may retain keys of unknown provenance.
  *
  * Compresses its input as normal blocks, so it makes no assumption about the key at the cost of
  * 3 more rounds than the jumbo hashers. Use it whenever a container can retain a hash a peer sent
  * us rather than one we computed ourselves.
- *
- * Hash values are process-local and must not be persisted, serialized, or compared across
- * processes.
  */
 class SaltedUntrustedHasher
 {
@@ -42,31 +48,33 @@ public:
     }
 };
 
-class SaltedUint256Hasher
+/**
+ * Hasher for containers keyed by block hashes we computed ourselves.
+ *
+ * Every key is the double-SHA256 output of a block header, so it may be compressed as a single
+ * jumbo block even when the block has not passed full validation. Use SaltedUntrustedHasher for
+ * uint256 values received from a peer without hashing them first.
+ */
+class SaltedBlockHashHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const SipHasher13UJ m_hasher;
 
 public:
-    SaltedUint256Hasher();
+    SaltedBlockHashHasher();
 
     size_t operator()(const uint256& hash) const
     {
-        return m_hasher(hash);
+        return m_hasher.HashJumbo(hash);
     }
 };
 
 /**
- * SipHash-1-3-UJ based hashers for containers keyed by transaction IDs we computed ourselves.
+ * Hashers for containers keyed by transaction identifiers we computed ourselves.
  *
- * Every container using these hashers keys on the identifier of a transaction it holds -- the
- * mempool's txid and wtxid indices, the disconnected block pool, the wallet's transaction map,
- * and the package checks -- so the keys are always cryptographic hash outputs and may be
- * compressed as a single jumbo block. Containers that can retain an identifier a peer chose,
- * such as the prevouts of a transaction we have not validated, must use SaltedUntrustedHasher
- * instead.
- *
- * Hash values are process-local and must not be persisted, serialized, or compared across
- * processes.
+ * Every container using them keys on the identifier of a transaction it holds, so the keys are
+ * always cryptographic hash outputs and may be compressed as a single jumbo block. Containers
+ * that can retain an identifier a peer chose, such as the prevouts of a transaction we have not
+ * validated, must use SaltedUntrustedHasher instead.
  */
 class SaltedTxidHasher
 {
@@ -95,14 +103,11 @@ public:
 };
 
 /**
- * Plain SipHash-1-3 based hasher for outpoint keyed containers.
+ * Hasher for outpoint keyed containers.
  *
  * Outpoints reach these containers as claimed prevouts of transactions we have not validated yet,
  * so unlike SaltedCoinsCacheHasher this cannot assume the txid is the output of a cryptographic
  * hash, and compresses it as four normal blocks instead of one jumbo block.
- *
- * Hash values are process-local and must not be persisted, serialized, or compared across
- * processes.
  */
 class SaltedOutpointHasher
 {

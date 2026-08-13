@@ -228,8 +228,9 @@ private:
     /** Work that we've seen so far on the peer's chain */
     arith_uint256 m_current_chain_work;
 
-    /** m_hasher is a salted hasher for making our 1-bit commitments to headers we've seen. */
-    const SaltedUint256Hasher m_hasher;
+    /** m_hasher is a salted hasher for making our 1-bit commitments to headers we've seen.
+     *  Its inputs are header hashes whose proof of work the caller already checked. */
+    const SaltedBlockHashHasher m_hasher;
 
     /** A queue of commitment bits, created during the 1st phase, and verified during the 2nd. */
     bitdeque<> m_header_commitments;

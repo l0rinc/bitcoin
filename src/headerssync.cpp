@@ -47,7 +47,7 @@ HeadersSyncState::HeadersSyncState(NodeId id,
 
 /** Free any memory in use, and mark this object as no longer usable. This is
  * required to guarantee that we won't reuse this object with the same
- * SaltedUint256Hasher for another sync. */
+ * SaltedBlockHashHasher for another sync. */
 void HeadersSyncState::Finalize()
 {
     Assume(m_download_state != State::FINAL);
