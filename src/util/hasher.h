@@ -53,9 +53,19 @@ public:
     }
 };
 
+/**
+ * Plain SipHash-1-3 based hasher for outpoint keyed containers.
+ *
+ * Outpoints reach these containers as claimed prevouts of transactions we have not validated yet,
+ * so unlike SaltedCoinsCacheHasher this cannot assume the txid is the output of a cryptographic
+ * hash, and compresses it as four normal blocks instead of one jumbo block.
+ *
+ * Hash values are process-local and must not be persisted, serialized, or compared across
+ * processes.
+ */
 class SaltedOutpointHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const SipHasher13UJ m_hasher;
 
 public:
     SaltedOutpointHasher();
@@ -71,7 +81,7 @@ public:
      */
     size_t operator()(const COutPoint& id) const noexcept
     {
-        return m_hasher(id.hash.ToUint256(), id.n);
+        return m_hasher.HashNormal(id.hash.ToUint256(), uint64_t{id.n});
     }
 };
 
