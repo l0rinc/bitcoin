@@ -27,6 +27,11 @@ SaltedWtxidHasher::SaltedWtxidHasher() : m_hasher{
     FastRandomContext().rand64()}
 {}
 
+SaltedGenTxidHasher::SaltedGenTxidHasher()
+    : m_hasher{FastRandomContext().rand64(), FastRandomContext().rand64()}
+{
+}
+
 SaltedOutpointHasher::SaltedOutpointHasher() : m_hasher{
     FastRandomContext().rand64(),
     FastRandomContext().rand64()}
