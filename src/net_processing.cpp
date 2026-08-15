@@ -86,6 +86,7 @@
 #include <set>
 #include <span>
 #include <typeinfo>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -923,7 +924,7 @@ private:
      * Set mapBlockSource[hash].second to false if the node should not be
      * punished if the block is invalid.
      */
-    std::map<uint256, std::pair<NodeId, bool>> mapBlockSource GUARDED_BY(cs_main);
+    std::unordered_map<uint256, std::pair<NodeId, bool>, SaltedBlockHashHasher> mapBlockSource GUARDED_BY(cs_main);
 
     /** Number of peers with wtxid relay. */
     std::atomic<int> m_wtxid_relay_peers{0};
@@ -2326,7 +2327,7 @@ void PeerManagerImpl::BlockChecked(const std::shared_ptr<const CBlock>& block, c
     LOCK(cs_main);
 
     const uint256 hash(block->GetHash());
-    std::map<uint256, std::pair<NodeId, bool>>::iterator it = mapBlockSource.find(hash);
+    auto it = mapBlockSource.find(hash);
 
     // If the block failed validation, we know where it came from and we're still connected
     // to that peer, maybe punish.
