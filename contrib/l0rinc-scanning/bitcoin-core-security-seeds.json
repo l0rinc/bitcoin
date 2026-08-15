@@ -1,0 +1,481 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-08-15",
+  "catalog_source_sha256": "27676efe7ebde63942dda9972156075ff58300cf283908a86a5520687ba67cfe",
+  "knowledgebase_source_sha256": "5ddd768e1577dde408dd8ab97dd5f54fb2bdf172c90e46232f6d927246a88bc4",
+  "official_advisory_index": "https://bitcoincore.org/en/security-advisories/",
+  "advisory_seeds": [
+    {
+      "id": "BIP50",
+      "title": "March 2013 chain fork",
+      "severity": "critical",
+      "root_shape": "Environment/database limit changed consensus acceptance across versions.",
+      "source": "https://github.com/bitcoin/bips/blob/master/bip-0050.mediawiki",
+      "goals": [
+        85,
+        142,
+        156,
+        159
+      ]
+    },
+    {
+      "id": "CVE-2018-17144",
+      "title": "Duplicate-input crash and inflation",
+      "severity": "critical",
+      "root_shape": "Optimization removed full validation; assertion and UTXO mutation semantics allowed crash/inflation.",
+      "source": "https://bitcoincore.org/en/2018/09/20/notice/",
+      "goals": [
+        2,
+        85,
+        86,
+        142,
+        143
+      ]
+    },
+    {
+      "id": "CVE-2024-52911",
+      "title": "Script interpreter use-after-free",
+      "severity": "high",
+      "root_shape": "Early return destroyed borrowed precomputation before asynchronous checks completed.",
+      "source": "https://bitcoincore.org/en/2026/05/05/disclose-cve-2024-52911/",
+      "goals": [
+        8,
+        38,
+        142,
+        150,
+        159
+      ]
+    },
+    {
+      "id": "CVE-2024-35202",
+      "title": "blocktxn assertion crash",
+      "severity": "high",
+      "root_shape": "A one-shot reconstruction object remained reusable after partial failure.",
+      "source": "https://bitcoincore.org/en/2024/10/08/disclose-blocktxn-crash/",
+      "goals": [
+        2,
+        89,
+        128,
+        142,
+        145
+      ]
+    },
+    {
+      "id": "CVE-2024-52921",
+      "title": "Mutated block hinders propagation",
+      "severity": "medium",
+      "root_shape": "One peer cleared block-download state owned by other peers.",
+      "source": "https://bitcoincore.org/en/2024/10/08/disclose-mutated-blocks-hindering-propagation/",
+      "goals": [
+        89,
+        128,
+        142,
+        144,
+        145
+      ]
+    },
+    {
+      "id": "CVE-2024-52922",
+      "title": "Stalling peer hinders block propagation",
+      "severity": "medium",
+      "root_shape": "First announcer retained exclusive progress ownership while withholding data.",
+      "source": "https://bitcoincore.org/en/security-advisories/",
+      "goals": [
+        89,
+        142,
+        145,
+        151
+      ]
+    },
+    {
+      "id": "CVE-2024-52914",
+      "title": "Orphan handling significant DoS",
+      "severity": "high",
+      "root_shape": "Nested orphan scan and expensive invalid validation caused hours of stall.",
+      "source": "https://bitcoincore.org/en/2024/07/03/disclose-orphan-dos/",
+      "goals": [
+        7,
+        87,
+        142,
+        152
+      ]
+    },
+    {
+      "id": "CVE-2024-52913",
+      "title": "Transaction re-request censorship",
+      "severity": "medium",
+      "root_shape": "Bounded-map eviction reset request authority to an attacker.",
+      "source": "https://bitcoincore.org/en/2024/07/03/disclose_already_asked_for/",
+      "goals": [
+        87,
+        89,
+        142,
+        152
+      ]
+    },
+    {
+      "id": "CVE-2024-52912",
+      "title": "Adjusted-time netsplit",
+      "severity": "medium",
+      "root_shape": "Signed overflow and INT64_MIN absolute-value behavior bypassed a time bound.",
+      "source": "https://bitcoincore.org/en/2024/07/03/disclose-timestamp-overflow/",
+      "goals": [
+        5,
+        52,
+        89,
+        142,
+        151
+      ]
+    },
+    {
+      "id": "CVE-2019-25220/CVE-2024-52916",
+      "title": "Low-work headers memory exhaustion",
+      "severity": "high",
+      "root_shape": "Attacker-controlled low-work header state was retained without an adequate aggregate/phase bound.",
+      "source": "https://bitcoincore.org/en/security-advisories/",
+      "goals": [
+        7,
+        89,
+        142,
+        151
+      ]
+    },
+    {
+      "id": "CVE-2024-52919",
+      "title": "Addr insertion ID overflow",
+      "severity": "low",
+      "root_shape": "Long-horizon 32-bit identifier overflow; an earlier rate limit reduced feasibility without removing terminal wrap.",
+      "source": "https://bitcoincore.org/en/2025/04/28/disclose-cve-2024-52919/",
+      "goals": [
+        5,
+        52,
+        89,
+        120,
+        136,
+        142
+      ]
+    },
+    {
+      "id": "CVE-2020-14198",
+      "title": "Unbounded ban list and quadratic scan",
+      "severity": "high",
+      "root_shape": "Attacker-influenced global list plus nested per-response scans.",
+      "source": "https://bitcoincore.org/en/2024/07/03/disclose-unbounded-banlist/",
+      "goals": [
+        7,
+        23,
+        89,
+        100,
+        142
+      ]
+    },
+    {
+      "id": "CVE-2015-3641",
+      "title": "Incomplete-message receive-buffer OOM",
+      "severity": "medium",
+      "root_shape": "Per-connection maximum receive allocation escaped a process-wide bound.",
+      "source": "https://bitcoincore.org/en/2024/07/03/disclose_receive_buffer_oom/",
+      "goals": [
+        7,
+        73,
+        89,
+        142
+      ]
+    },
+    {
+      "id": "CVE-2024-52915",
+      "title": "Huge INV memory DoS",
+      "severity": "medium",
+      "root_shape": "Legal message cardinality caused large per-peer container allocation.",
+      "source": "https://bitcoincore.org/en/security-advisories/",
+      "goals": [
+        6,
+        7,
+        73,
+        89,
+        142
+      ]
+    },
+    {
+      "id": "CVE-2024-52920",
+      "title": "Huge GETDATA CPU loop",
+      "severity": "low",
+      "root_shape": "Malformed queue/input handling failed to guarantee progress or consumption.",
+      "source": "https://bitcoincore.org/en/security-advisories/",
+      "goals": [
+        6,
+        73,
+        89,
+        142
+      ]
+    },
+    {
+      "id": "CVE-2017-18350",
+      "title": "SOCKS signed-char buffer overflow",
+      "severity": "medium",
+      "root_shape": "Signed byte length crossed into a wider unsigned syscall size.",
+      "source": "https://bitcoincore.org/en/2019/11/08/CVE-2017-18350/",
+      "goals": [
+        5,
+        52,
+        68,
+        89,
+        92,
+        142
+      ]
+    },
+    {
+      "id": "CVE-2015-20111",
+      "title": "miniupnpc dependency RCE",
+      "severity": "medium",
+      "root_shape": "Optional dependency exposed local-network memory corruption and RCE.",
+      "source": "https://bitcoincore.org/en/2024/07/03/disclose_upnp_rce/",
+      "goals": [
+        33,
+        59,
+        94,
+        142
+      ]
+    },
+    {
+      "id": "CVE-2025-46597",
+      "title": "32-bit pathological-block crash",
+      "severity": "low",
+      "root_shape": "Word-size overflow in a disk-size check became conceivable through compact-block ingress.",
+      "source": "https://bitcoincore.org/en/2025/10/24/disclose-cve-2025-46597/",
+      "goals": [
+        5,
+        52,
+        68,
+        128,
+        142,
+        155,
+        159
+      ]
+    },
+    {
+      "id": "CVE-2025-46598",
+      "title": "Invalid unconfirmed transaction CPU DoS",
+      "severity": "low",
+      "root_shape": "Invalid script contexts performed seconds of repeated hashing before rejection.",
+      "source": "https://bitcoincore.org/en/2025/10/24/disclose-cve-2025-46598/",
+      "goals": [
+        7,
+        19,
+        23,
+        87,
+        142
+      ]
+    },
+    {
+      "id": "CVE-2025-54604/CVE-2025-54605",
+      "title": "Log/disk filling",
+      "severity": "low",
+      "root_shape": "Attacker-controlled repeated events produced unbounded logs until global rate limiting was added.",
+      "source": "https://bitcoincore.org/en/security-advisories/",
+      "goals": [
+        7,
+        24,
+        30,
+        89,
+        142
+      ]
+    }
+  ],
+  "knowledgebase_families": [
+    {
+      "id": "KB-VALIDATION-ORDERED-CONTAINERS",
+      "theme": "Block-index candidate/unlinked/comparator-key consistency",
+      "examples": [
+        "failed blocks in candidates",
+        "redownload sequence-id mutation",
+        "pruned unlinked children",
+        "preciousblock ordering"
+      ],
+      "goals": [
+        86,
+        128,
+        144,
+        146
+      ]
+    },
+    {
+      "id": "KB-DURABLE-RETRY",
+      "theme": "Dirty-set and durable commit transactionality",
+      "examples": [
+        "forgotten block-index dirty entries",
+        "metadata after flush failure",
+        "dirty undo files",
+        "prune locks ahead of durable locator"
+      ],
+      "goals": [
+        38,
+        72,
+        86,
+        147,
+        155
+      ]
+    },
+    {
+      "id": "KB-WALLET-DB",
+      "theme": "Wallet memory/disk transactionality",
+      "examples": [
+        "encryption write failures",
+        "passphrase divergence",
+        "descriptor/keypool partial updates",
+        "import/export persistence failures"
+      ],
+      "goals": [
+        38,
+        88,
+        154
+      ]
+    },
+    {
+      "id": "KB-COMPACT-LIFECYCLE",
+      "theme": "Compact block ownership, replay, and repeated work",
+      "examples": [
+        "one-shot FillBlock",
+        "cross-peer state clearing",
+        "optimistic mempool rescans",
+        "reconstructed-block replay"
+      ],
+      "goals": [
+        89,
+        128,
+        145
+      ]
+    },
+    {
+      "id": "KB-CACHE-PROVENANCE",
+      "theme": "Validation cache/context/object provenance",
+      "examples": [
+        "kernel Signet context reuse",
+        "mining block mutation after validation",
+        "script cache key completeness"
+      ],
+      "goals": [
+        85,
+        134,
+        149
+      ]
+    },
+    {
+      "id": "KB-ASSUMEUTXO",
+      "theme": "Snapshot lifecycle and background-validation convergence",
+      "examples": [
+        "duplicate records",
+        "later invalidation",
+        "undisconnectable fork",
+        "cleanup rename loop"
+      ],
+      "goals": [
+        72,
+        86,
+        148
+      ]
+    },
+    {
+      "id": "KB-P2P-CENSORSHIP",
+      "theme": "Headers, transaction request, orphan, and peer-local liveness",
+      "examples": [
+        "empty headers slot",
+        "tx request monopolization",
+        "relay-role mismatch",
+        "orphan/request cross product"
+      ],
+      "goals": [
+        87,
+        89,
+        151,
+        152
+      ]
+    },
+    {
+      "id": "KB-EXACT-ARITHMETIC",
+      "theme": "Fee, cluster, iterator, time, and file-width arithmetic",
+      "examples": [
+        "modified-fee overflow",
+        "TxGraph/MiniMiner exact ratios",
+        "RPC pagination",
+        "undo cursor wrap"
+      ],
+      "goals": [
+        5,
+        52,
+        87,
+        155,
+        158
+      ]
+    },
+    {
+      "id": "KB-SIGNING-AUTHORITY",
+      "theme": "PSBT, MuSig2, and external signer authorization",
+      "examples": [
+        "crafted metadata assertions",
+        "transaction substitution",
+        "falsely complete PSBT"
+      ],
+      "goals": [
+        88,
+        133,
+        153
+      ]
+    },
+    {
+      "id": "KB-RELEASE-TRUST",
+      "theme": "Backports, trusted-key quorum, Git ancestry, and artifact verification",
+      "examples": [
+        "missing release fix",
+        "inactive/untrusted signer quorum",
+        "divergent history accepted"
+      ],
+      "goals": [
+        59,
+        66,
+        76,
+        156,
+        157
+      ]
+    }
+  ],
+  "negative_controls": [
+    {
+      "id": "NEG-CMPCT-NULL-EXTRA",
+      "claim": "Null compact extra transaction slots are live on current master.",
+      "verdict": "SUPERSEDED",
+      "reason": "Merged #35670 changed resize-based empty slots to reserve/emplace populated entries."
+    },
+    {
+      "id": "NEG-PSBT-TRAILING",
+      "claim": "Inner PSBT deserialization accepts trailing bytes through production RPC/GUI/wallet paths.",
+      "verdict": "REFUTED",
+      "reason": "Production outer decoders reject extra data; direct inner construction is not the framing boundary."
+    },
+    {
+      "id": "NEG-RPC-SCIENTIFIC",
+      "claim": "Scientific-notation RPC amounts are an accidental parser weakness.",
+      "verdict": "REFUTED",
+      "reason": "ParseFixedPoint intentionally accepts tested exponent forms with range/precision checks."
+    },
+    {
+      "id": "NEG-ROTR-UNIVALUE",
+      "claim": "Prior rotr UB and UniValue assertion reports remain live.",
+      "verdict": "REFUTED",
+      "reason": "Knowledgebase records explicit retraction after audit; require a new reproducer."
+    },
+    {
+      "id": "NEG-ORACLE-DUPLICATES",
+      "claim": "Repeated local oracle commits are independent vulnerabilities.",
+      "verdict": "ASSURANCE_ONLY",
+      "reason": "Duplicated-subject/date batches and fuzzer-oracle changes are evidence infrastructure, not roots."
+    },
+    {
+      "id": "NEG-LATENT-CALLER",
+      "claim": "A direct component API hazard is automatically remote/consensus exploitable.",
+      "verdict": "REFUTED_AS_SEVERITY",
+      "reason": "Trace actual public/in-tree callers; label latent contract hardening accurately."
+    }
+  ],
+  "selection_rule": "Prioritize consensus, realistic remote crashes/memory safety, funds/signing authorization, durable recovery, and censorship/liveness. Resource-only variants may occupy at most one of five Core cycles unless they demonstrate a distinct root, practical default-node kill, or deeper integrity failure."
+}
