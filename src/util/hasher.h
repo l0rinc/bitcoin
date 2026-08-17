@@ -25,14 +25,6 @@ public:
     {
         return m_hasher(hash);
     }
-};
-
-class SaltedTxidHasher
-{
-    const PresaltedSipHasher m_hasher;
-
-public:
-    SaltedTxidHasher();
 
     size_t operator()(const Txid& txid) const
     {
@@ -40,16 +32,30 @@ public:
     }
 };
 
+/** Jumbo SipHash-1-3 hashers for locally computed cryptographic hashes. */
+class SaltedTxidHasher
+{
+    const SipHasher13UJ m_hasher;
+
+public:
+    SaltedTxidHasher();
+
+    size_t operator()(const Txid& txid) const
+    {
+        return m_hasher.Hash(txid.ToUint256());
+    }
+};
+
 class SaltedWtxidHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const SipHasher13UJ m_hasher;
 
 public:
     SaltedWtxidHasher();
 
     size_t operator()(const Wtxid& wtxid) const
     {
-        return m_hasher(wtxid.ToUint256());
+        return m_hasher.Hash(wtxid.ToUint256());
     }
 };
 

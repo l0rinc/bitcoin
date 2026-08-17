@@ -43,7 +43,8 @@ bool CheckEphemeralSpends(const Package& package, CFeeRate dust_relay_rate, cons
     }
 
     for (const auto& tx : package) {
-        std::unordered_set<Txid, SaltedTxidHasher> processed_parent_set;
+        // Claimed prevout txids are peer-controlled, so they are not eligible for jumbo hashing.
+        std::unordered_set<Txid, SaltedUint256Hasher> processed_parent_set;
         std::unordered_set<COutPoint, SaltedOutpointHasher> unspent_parent_dust;
 
         for (const auto& tx_input : tx->vin) {
