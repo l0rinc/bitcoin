@@ -11,6 +11,7 @@
 #include <sync.h>
 #include <uint256.h>
 #include <util/fs.h>
+#include <util/hasher.h>
 #include <validationinterface.h>
 
 #include <array>
@@ -19,6 +20,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 
@@ -288,7 +290,7 @@ private:
     };
 
     // map of txids to information about that transaction
-    std::map<Txid, TxStatsInfo> mapMemPoolTxs GUARDED_BY(m_cs_fee_estimator);
+    std::unordered_map<Txid, TxStatsInfo, SaltedTxidHasher> mapMemPoolTxs GUARDED_BY(m_cs_fee_estimator);
 
     /** Classes to track historical data on transaction confirmations */
     std::unique_ptr<TxConfirmStats> feeStats PT_GUARDED_BY(m_cs_fee_estimator);

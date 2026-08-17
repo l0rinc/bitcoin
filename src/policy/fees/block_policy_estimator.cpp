@@ -528,7 +528,7 @@ bool CBlockPolicyEstimator::removeTx(Txid hash)
 bool CBlockPolicyEstimator::_removeTx(const Txid& hash, bool inBlock)
 {
     AssertLockHeld(m_cs_fee_estimator);
-    std::map<Txid, TxStatsInfo>::iterator pos = mapMemPoolTxs.find(hash);
+    auto pos = mapMemPoolTxs.find(hash);
     if (pos != mapMemPoolTxs.end()) {
         feeStats->removeTx(pos->second.blockHeight, nBestSeenHeight, pos->second.bucketIndex, inBlock);
         shortStats->removeTx(pos->second.blockHeight, nBestSeenHeight, pos->second.bucketIndex, inBlock);
