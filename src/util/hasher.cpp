@@ -7,35 +7,24 @@
 #include <crypto/siphash.h>
 #include <random.h>
 
-SaltedUint256Hasher::SaltedUint256Hasher() : m_hasher{
-    FastRandomContext().rand64(),
-    FastRandomContext().rand64()}
-{}
-
-SaltedBlockHashHasher::SaltedBlockHashHasher()
-    : m_hasher{FastRandomContext().rand64(), FastRandomContext().rand64()}
+template <typename Hasher>
+static Hasher RandomlySalted()
 {
+    FastRandomContext rng;
+    return Hasher{rng.rand64(), rng.rand64()};
 }
 
-SaltedTxidHasher::SaltedTxidHasher() : m_hasher{
-    FastRandomContext().rand64(),
-    FastRandomContext().rand64()}
-{}
+SaltedUint256Hasher::SaltedUint256Hasher() : m_hasher{RandomlySalted<PresaltedSipHasher>()} {}
 
-SaltedWtxidHasher::SaltedWtxidHasher() : m_hasher{
-    FastRandomContext().rand64(),
-    FastRandomContext().rand64()}
-{}
+SaltedBlockHashHasher::SaltedBlockHashHasher() : m_hasher{RandomlySalted<SipHasher13UJ>()} {}
 
-SaltedGenTxidHasher::SaltedGenTxidHasher()
-    : m_hasher{FastRandomContext().rand64(), FastRandomContext().rand64()}
-{
-}
+SaltedTxidHasher::SaltedTxidHasher() : m_hasher{RandomlySalted<SipHasher13UJ>()} {}
 
-SaltedOutpointHasher::SaltedOutpointHasher() : m_hasher{
-    FastRandomContext().rand64(),
-    FastRandomContext().rand64()}
-{}
+SaltedWtxidHasher::SaltedWtxidHasher() : m_hasher{RandomlySalted<SipHasher13UJ>()} {}
+
+SaltedGenTxidHasher::SaltedGenTxidHasher() : m_hasher{RandomlySalted<SipHasher13UJ>()} {}
+
+SaltedOutpointHasher::SaltedOutpointHasher() : m_hasher{RandomlySalted<PresaltedSipHasher>()} {}
 
 SaltedSipHasher::SaltedSipHasher() :
     m_k0{FastRandomContext().rand64()},
