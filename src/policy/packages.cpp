@@ -116,6 +116,14 @@ bool IsWellFormedPackage(const Package& txns, PackageValidationState& state)
     return true;
 }
 
+static std::unordered_set<Txid, SaltedTxidHasher> ParentTxids(const Package& package)
+{
+    std::unordered_set<Txid, SaltedTxidHasher> parent_txids;
+    std::transform(package.cbegin(), package.cend() - 1, std::inserter(parent_txids, parent_txids.end()),
+                   [](const auto& ptx) { return ptx->GetHash(); });
+    return parent_txids;
+}
+
 bool IsChildWithParents(const Package& package)
 {
     assert(std::all_of(package.cbegin(), package.cend(), [](const auto& tx){return tx != nullptr;}));
@@ -136,9 +144,7 @@ bool IsChildWithParents(const Package& package)
 bool IsChildWithParentsTree(const Package& package)
 {
     if (!IsChildWithParents(package)) return false;
-    std::unordered_set<Txid, SaltedTxidHasher> parent_txids;
-    std::transform(package.cbegin(), package.cend() - 1, std::inserter(parent_txids, parent_txids.end()),
-                   [](const auto& ptx) { return ptx->GetHash(); });
+    const auto parent_txids{ParentTxids(package)};
     // Each parent must not have an input who is one of the other parents.
     return std::all_of(package.cbegin(), package.cend() - 1, [&](const auto& ptx) {
         for (const auto& input : ptx->vin) {
