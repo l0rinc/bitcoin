@@ -20,6 +20,7 @@
 #include <cassert>
 #include <cmath>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace node {
 /** Minimum NodeId for lower_bound lookups (in practice, NodeIds start at 0). */
@@ -121,7 +122,7 @@ class TxOrphanageImpl final : public TxOrphanage {
     std::unordered_map<COutPoint, std::set<Wtxid>, SaltedOutpointHasher> m_outpoint_to_orphan_wtxids;
 
     /** Set of Wtxids for which (exactly) one announcement with m_reconsider=true exists. */
-    std::set<Wtxid> m_reconsiderable_wtxids;
+    std::unordered_set<Wtxid, SaltedWtxidHasher> m_reconsiderable_wtxids;
 
     struct PeerDoSInfo {
         TxOrphanage::Usage m_total_usage{0};
@@ -704,7 +705,7 @@ void TxOrphanageImpl::SanityCheck() const
     std::unordered_map<NodeId, PeerDoSInfo> reconstructed_peer_info;
     std::map<Wtxid, std::pair<TxOrphanage::Usage, TxOrphanage::Count>> unique_wtxids_to_scores;
     std::set<COutPoint> all_outpoints;
-    std::set<Wtxid> reconstructed_reconsiderable_wtxids;
+    std::unordered_set<Wtxid, SaltedWtxidHasher> reconstructed_reconsiderable_wtxids;
 
     for (auto it = m_orphans.begin(); it != m_orphans.end(); ++it) {
         for (const auto& input : it->m_tx->vin) {
