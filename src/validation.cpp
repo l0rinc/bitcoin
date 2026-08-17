@@ -3201,42 +3201,46 @@ void Chainstate::PruneBlockIndexCandidates() {
 class Chainstate::BlockFetcher
 {
     const BlockManager& m_blockman;
+    const int32_t m_par;
     std::shared_ptr<const CBlock> m_provided;
     ThreadPool m_pool{"blockread"};
-    std::future<std::shared_ptr<const CBlock>> m_pending;
+    std::deque<std::future<std::shared_ptr<const CBlock>>> m_pending;
 
     bool IsProvided(const uint256& hash) const { return m_provided && m_provided->GetHash() == hash; }
 
     bool Enqueue(const CBlockIndex& index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         if (!(index.nStatus & BLOCK_HAVE_DATA) || IsProvided(index.GetBlockHash())) return false;
-        if (m_pool.WorkersCount() == 0) m_pool.Start(1);
+        if (m_pool.WorkersCount() == 0) m_pool.Start(m_par);
         auto pending{m_pool.Submit([&blockman = m_blockman, hash = index.GetBlockHash(), pos = index.GetBlockPos()]() -> std::shared_ptr<const CBlock> {
             if (auto block{std::make_shared<CBlock>()}; blockman.ReadBlock(*block, pos, hash)) return block;
             return nullptr; // Let ConnectTip() retry the read if this block is needed.
         })};
-        if (pending) m_pending = std::move(*pending);
+        if (pending) m_pending.emplace_back(std::move(*pending));
         return !!pending;
     }
 
 public:
-    explicit BlockFetcher(const BlockManager& blockman) : m_blockman{blockman} {}
+    BlockFetcher(const BlockManager& blockman, int32_t par) : m_blockman{blockman}, m_par{par} {}
 
     void Save(std::shared_ptr<const CBlock> block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) { m_provided = std::move(block); }
 
     std::shared_ptr<const CBlock> Load(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         if (IsProvided(hash)) return std::move(m_provided);
-        if (!m_pending.valid()) return nullptr;
-        auto block{m_pending.get()};
+        if (m_pending.empty()) return nullptr;
+        auto block{m_pending[0].get()};
+        m_pending.pop_front();
         return block && block->GetHash() == hash ? block : nullptr;
     }
 
     void Prefetch(const CBlockIndex& index_most_work, int next_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
-        if (m_pending.valid()) return;
-        if (auto* next{index_most_work.GetAncestor(next_height)}) Enqueue(*next);
+        if (!m_pending.empty()) return;
+        for (int32_t i{0}; i < m_par; ++i) {
+            if (auto* next{index_most_work.GetAncestor(next_height + i)}; !next || !Enqueue(*next)) break;
+        }
     }
 };
 
@@ -3404,7 +3408,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
     }
 
     // Persists across cs_main scopes for use by each activation step.
-    BlockFetcher fetcher{m_blockman};
+    BlockFetcher fetcher{m_blockman, DEFAULT_BLOCKFETCH_THREADS};
 
     CBlockIndex *pindexMostWork = nullptr;
     CBlockIndex *pindexNewTip = nullptr;
