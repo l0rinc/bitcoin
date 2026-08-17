@@ -12,6 +12,11 @@ SaltedUint256Hasher::SaltedUint256Hasher() : m_hasher{
     FastRandomContext().rand64()}
 {}
 
+SaltedBlockHashHasher::SaltedBlockHashHasher()
+    : m_hasher{FastRandomContext().rand64(), FastRandomContext().rand64()}
+{
+}
+
 SaltedTxidHasher::SaltedTxidHasher() : m_hasher{
     FastRandomContext().rand64(),
     FastRandomContext().rand64()}

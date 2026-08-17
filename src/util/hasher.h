@@ -33,6 +33,19 @@ public:
 };
 
 /** Jumbo SipHash-1-3 hashers for locally computed cryptographic hashes. */
+class SaltedBlockHashHasher
+{
+    const SipHasher13UJ m_hasher;
+
+public:
+    SaltedBlockHashHasher();
+
+    size_t operator()(const uint256& hash) const
+    {
+        return m_hasher.Hash(hash);
+    }
+};
+
 class SaltedTxidHasher
 {
     const SipHasher13UJ m_hasher;
