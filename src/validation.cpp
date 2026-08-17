@@ -3247,7 +3247,8 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
-            if (!ConnectTip(state, pindexConnect, pindexConnect == &index_most_work ? pblock : std::shared_ptr<const CBlock>(), connected_blocks, disconnectpool)) {
+            auto block_to_connect{pindexConnect == &index_most_work ? pblock : std::shared_ptr<const CBlock>()};
+            if (!ConnectTip(state, pindexConnect, std::move(block_to_connect), connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
                     if (state.GetResult() != BlockValidationResult::BLOCK_MUTATED) {
@@ -3393,11 +3394,12 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
 
                 bool fInvalidFound = false;
                 std::shared_ptr<const CBlock> nullBlockPtr;
+                auto block_to_connect{pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr};
                 // BlockConnected signals must be sent for the original role;
                 // in case snapshot validation is completed during ActivateBestChainStep, the
                 // result of GetRole() changes from BACKGROUND to NORMAL.
                const ChainstateRole chainstate_role{this->GetRole()};
-                if (!ActivateBestChainStep(state, *pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connected_blocks)) {
+                if (!ActivateBestChainStep(state, *pindexMostWork, block_to_connect, fInvalidFound, connected_blocks)) {
                     // A system error occurred
                     return false;
                 }
