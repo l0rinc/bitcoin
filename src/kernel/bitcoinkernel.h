@@ -519,6 +519,7 @@ typedef uint8_t btck_ScriptVerifyStatus;
 #define btck_ScriptVerifyStatus_OK ((btck_ScriptVerifyStatus)(0))
 #define btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION ((btck_ScriptVerifyStatus)(1)) //!< The flags were combined in an invalid way.
 #define btck_ScriptVerifyStatus_ERROR_SPENT_OUTPUTS_REQUIRED ((btck_ScriptVerifyStatus)(2))    //!< The taproot flag was set, so valid spent_outputs have to be provided.
+#define btck_ScriptVerifyStatus_ERROR_TX_INPUT_INDEX ((btck_ScriptVerifyStatus)(3))            //!< The input index is out of range for the transaction.
 
 /**
  * Script verification flags that may be composed with each other.
@@ -637,7 +638,7 @@ BITCOINKERNEL_API size_t btck_transaction_count_outputs(
  *
  * @param[in] transaction  Non-null.
  * @param[in] output_index The index of the transaction output to be retrieved.
- * @return                 The transaction output
+ * @return                 The transaction output, or null if output_index is out of range.
  */
 BITCOINKERNEL_API const btck_TransactionOutput* btck_transaction_get_output_at(
     const btck_Transaction* transaction, size_t output_index) BITCOINKERNEL_ARG_NONNULL(1);
@@ -649,7 +650,7 @@ BITCOINKERNEL_API const btck_TransactionOutput* btck_transaction_get_output_at(
  *
  * @param[in] transaction Non-null.
  * @param[in] input_index The index of the transaction input to be retrieved.
- * @return                 The transaction input
+ * @return                 The transaction input, or null if input_index is out of range.
  */
 BITCOINKERNEL_API const btck_TransactionInput* btck_transaction_get_input_at(
     const btck_Transaction* transaction, size_t input_index) BITCOINKERNEL_ARG_NONNULL(1);
@@ -718,8 +719,8 @@ BITCOINKERNEL_API void btck_transaction_destroy(btck_Transaction* transaction);
  * @brief Create precomputed transaction data for script verification.
  *
  * @param[in] tx_to             Non-null.
- * @param[in] spent_outputs     Nullable for non-taproot verification. Points to an array of
- *                              outputs spent by the transaction.
+ * @param[in] spent_outputs     Nullable only when spent_outputs_len is zero. Otherwise, points
+ *                              to an array containing one output per transaction input.
  * @param[in] spent_outputs_len Length of the spent_outputs array.
  * @return                      The precomputed data, or null on error.
  */
@@ -960,7 +961,7 @@ BITCOINKERNEL_API void btck_logging_connection_destroy(btck_LoggingConnection* l
  * passed in chain type.
  *
  * @param[in] chain_type Controls the chain parameters type created.
- * @return               An allocated chain parameters opaque struct.
+ * @return               An allocated chain parameters opaque struct, or null if chain_type is invalid.
  */
 BITCOINKERNEL_API btck_ChainParameters* BITCOINKERNEL_WARN_UNUSED_RESULT btck_chain_parameters_create(
     btck_ChainType chain_type);
@@ -1453,7 +1454,7 @@ BITCOINKERNEL_API size_t btck_block_count_transactions(
  *
  * @param[in] block             Non-null.
  * @param[in] transaction_index The index of the transaction to be retrieved.
- * @return                      The transaction.
+ * @return                      The transaction, or null if transaction_index is out of range.
  */
 BITCOINKERNEL_API const btck_Transaction* btck_block_get_transaction_at(
     const btck_Block* block, size_t transaction_index) BITCOINKERNEL_ARG_NONNULL(1);
@@ -1623,7 +1624,7 @@ BITCOINKERNEL_API size_t btck_block_spent_outputs_count(
  *
  * @param[in] block_spent_outputs             Non-null.
  * @param[in] transaction_spent_outputs_index The index of the transaction spent outputs within the block spent outputs.
- * @return                                    A transaction spent outputs pointer.
+ * @return                                    A transaction spent outputs pointer, or null if the index is out of range.
  */
 BITCOINKERNEL_API const btck_TransactionSpentOutputs* btck_block_spent_outputs_get_transaction_spent_outputs_at(
     const btck_BlockSpentOutputs* block_spent_outputs,
@@ -1668,7 +1669,7 @@ BITCOINKERNEL_API size_t btck_transaction_spent_outputs_count(
  * @param[in] transaction_spent_outputs Non-null.
  * @param[in] coin_index                The index of the to be retrieved coin within the
  *                                      transaction spent outputs.
- * @return                              A coin pointer.
+ * @return                              A coin pointer, or null if coin_index is out of range.
  */
 BITCOINKERNEL_API const btck_Coin* btck_transaction_spent_outputs_get_coin_at(
     const btck_TransactionSpentOutputs* transaction_spent_outputs,
