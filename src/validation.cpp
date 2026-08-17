@@ -3199,17 +3199,38 @@ void Chainstate::PruneBlockIndexCandidates() {
 /** Supplies blocks to validation. */
 class Chainstate::BlockFetcher
 {
+    const BlockManager& m_blockman;
     std::shared_ptr<const CBlock> m_provided;
+    std::shared_ptr<const CBlock> m_pending;
 
     bool IsProvided(const uint256& hash) const { return m_provided && m_provided->GetHash() == hash; }
 
+    bool Enqueue(const CBlockIndex& index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        if (!(index.nStatus & BLOCK_HAVE_DATA) || IsProvided(index.GetBlockHash())) return false;
+        auto block{std::make_shared<CBlock>()};
+        if (!m_blockman.ReadBlock(*block, index.GetBlockPos(), index.GetBlockHash())) return false;
+        m_pending = std::move(block);
+        return true;
+    }
+
 public:
+    explicit BlockFetcher(const BlockManager& blockman) : m_blockman{blockman} {}
+
     void Save(std::shared_ptr<const CBlock> block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) { m_provided = std::move(block); }
 
     std::shared_ptr<const CBlock> Load(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         if (IsProvided(hash)) return std::move(m_provided);
-        return nullptr;
+        auto block{std::move(m_pending)};
+        return block && block->GetHash() == hash ? block : nullptr;
+    }
+
+    void Prefetch(const CBlockIndex& index_most_work, int next_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        AssertLockHeld(::cs_main);
+        if (m_pending) return;
+        if (auto* next{index_most_work.GetAncestor(next_height)}) Enqueue(*next);
     }
 };
 
@@ -3264,7 +3285,8 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
-            auto block_to_connect{pindexConnect == &index_most_work ? fetcher.Load(pindexConnect->GetBlockHash()) : std::shared_ptr<const CBlock>()};
+            auto block_to_connect{fetcher.Load(pindexConnect->GetBlockHash())};
+            fetcher.Prefetch(index_most_work, pindexConnect->nHeight + 1);
             if (!ConnectTip(state, pindexConnect, std::move(block_to_connect), connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
@@ -3376,7 +3398,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
     }
 
     // Persists across cs_main scopes for use by each activation step.
-    BlockFetcher fetcher;
+    BlockFetcher fetcher{m_blockman};
 
     CBlockIndex *pindexMostWork = nullptr;
     CBlockIndex *pindexNewTip = nullptr;
