@@ -60,6 +60,13 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManage
     // Subtract 1 because the main thread counts towards the par threads.
     opts.worker_threads_num = script_threads - 1;
 
+    if (auto value{args.GetArg<int32_t>("-blockfetchpar")}) {
+        if (*value < 0) {
+            return util::Error{Untranslated(strprintf("-blockfetchpar must be non-negative (got %d). Use 0 to disable block read-ahead.", *value))};
+        }
+        opts.block_fetch_parallelism = std::min(*value, MAX_BLOCKFETCH_THREADS);
+    }
+
     if (auto value{args.GetArg<int32_t>("-prevoutfetchthreads")}) {
         if (*value < 0) {
             return util::Error{Untranslated(strprintf("-prevoutfetchthreads must be non-negative (got %d). Use 0 to disable parallel input fetching.", *value))};

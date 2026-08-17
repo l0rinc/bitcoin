@@ -48,6 +48,8 @@ struct ChainstateManagerOpts {
     ValidationSignals* signals{nullptr};
     //! Number of script check worker threads. Zero means no parallel verification.
     int worker_threads_num{0};
+    //! Number of workers and queued blocks used for block read-ahead. Zero disables read-ahead.
+    int32_t block_fetch_parallelism{DEFAULT_BLOCKFETCH_THREADS};
     //! Number of worker threads used for prefetching block input prevouts. Zero means no parallel fetching.
     int32_t prevoutfetch_threads_num{DEFAULT_PREVOUTFETCH_THREADS};
     size_t script_execution_cache_bytes{DEFAULT_SCRIPT_EXECUTION_CACHE_BYTES};

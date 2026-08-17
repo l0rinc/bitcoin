@@ -3408,7 +3408,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
     }
 
     // Persists across cs_main scopes for use by each activation step.
-    BlockFetcher fetcher{m_blockman, DEFAULT_BLOCKFETCH_THREADS};
+    BlockFetcher fetcher{m_blockman, m_chainman.m_options.block_fetch_parallelism};
 
     CBlockIndex *pindexMostWork = nullptr;
     CBlockIndex *pindexNewTip = nullptr;

@@ -1001,6 +1001,12 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
     BOOST_CHECK(!get_opts({"-minimumchainwork=xyz"}));                                                               // invalid hex characters
     BOOST_CHECK(!get_opts({"-minimumchainwork=01234567890123456789012345678901234567890123456789012345678901234"})); // > 64 hex chars
 
+    BOOST_CHECK_EQUAL(get_valid_opts({}).block_fetch_parallelism, DEFAULT_BLOCKFETCH_THREADS);
+    BOOST_CHECK_EQUAL(get_valid_opts({"-blockfetchpar=0"}).block_fetch_parallelism, 0);
+    BOOST_CHECK_EQUAL(get_valid_opts({"-blockfetchpar=3"}).block_fetch_parallelism, 3);
+    BOOST_CHECK_EQUAL(get_valid_opts({"-blockfetchpar=100"}).block_fetch_parallelism, MAX_BLOCKFETCH_THREADS);
+    BOOST_CHECK(!get_opts({"-blockfetchpar=-1"}));
+
     BOOST_CHECK_EQUAL(get_valid_opts({}).prevoutfetch_threads_num, DEFAULT_PREVOUTFETCH_THREADS);
     BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=0"}).prevoutfetch_threads_num, 0);
     BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=3"}).prevoutfetch_threads_num, 3);
