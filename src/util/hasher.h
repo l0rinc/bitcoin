@@ -72,6 +72,20 @@ public:
     }
 };
 
+class SaltedGenTxidHasher
+{
+    const SipHasher13UJ m_hasher;
+
+public:
+    SaltedGenTxidHasher();
+
+    size_t operator()(const GenTxid& gtxid) const
+    {
+        // The txid/wtxid discriminator is part of GenTxid equality, so include it as a normal block.
+        return m_hasher.Hash(gtxid.ToUint256(), uint64_t{gtxid.IsWtxid()});
+    }
+};
+
 class SaltedOutpointHasher
 {
     const PresaltedSipHasher m_hasher;

@@ -955,7 +955,7 @@ private:
     std::shared_ptr<const CBlock> m_most_recent_block GUARDED_BY(m_most_recent_block_mutex);
     std::shared_ptr<const CBlockHeaderAndShortTxIDs> m_most_recent_compact_block GUARDED_BY(m_most_recent_block_mutex);
     uint256 m_most_recent_block_hash GUARDED_BY(m_most_recent_block_mutex);
-    std::unique_ptr<const std::map<GenTxid, CTransactionRef>> m_most_recent_block_txs GUARDED_BY(m_most_recent_block_mutex);
+    std::unique_ptr<const std::unordered_map<GenTxid, CTransactionRef, SaltedGenTxidHasher>> m_most_recent_block_txs GUARDED_BY(m_most_recent_block_mutex);
 
     // Data about the low-work headers synchronization, aggregated from all peers' HeadersSyncStates.
     /** Mutex guarding the other m_headers_presync_* variables. */
@@ -2246,7 +2246,8 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         std::async(std::launch::deferred, [&] { return NetMsg::Make(NetMsgType::CMPCTBLOCK, *pcmpctblock); })};
 
     {
-        auto most_recent_block_txs = std::make_unique<std::map<GenTxid, CTransactionRef>>();
+        auto most_recent_block_txs = std::make_unique<std::unordered_map<GenTxid, CTransactionRef, SaltedGenTxidHasher>>();
+        most_recent_block_txs->reserve(2 * pblock->vtx.size());
         for (const auto& tx : pblock->vtx) {
             most_recent_block_txs->emplace(tx->GetHash(), tx);
             most_recent_block_txs->emplace(tx->GetWitnessHash(), tx);
