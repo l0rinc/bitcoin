@@ -3196,13 +3196,30 @@ void Chainstate::PruneBlockIndexCandidates() {
     assert(!setBlockIndexCandidates.empty());
 }
 
+/** Supplies blocks to validation. */
+class Chainstate::BlockFetcher
+{
+    std::shared_ptr<const CBlock> m_provided;
+
+    bool IsProvided(const uint256& hash) const { return m_provided && m_provided->GetHash() == hash; }
+
+public:
+    void Save(std::shared_ptr<const CBlock> block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) { m_provided = std::move(block); }
+
+    std::shared_ptr<const CBlock> Load(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        if (IsProvided(hash)) return std::move(m_provided);
+        return nullptr;
+    }
+};
+
 /**
  * Try to make some progress towards making index_most_work the active block.
- * pblock is either nullptr or a pointer to a CBlock corresponding to index_most_work.
+ * fetcher supplies blocks to connect.
  *
  * @returns true unless a system error occurred
  */
-bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
+bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, BlockFetcher& fetcher, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
 {
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
@@ -3247,7 +3264,7 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
-            auto block_to_connect{pindexConnect == &index_most_work ? pblock : std::shared_ptr<const CBlock>()};
+            auto block_to_connect{pindexConnect == &index_most_work ? fetcher.Load(pindexConnect->GetBlockHash()) : std::shared_ptr<const CBlock>()};
             if (!ConnectTip(state, pindexConnect, std::move(block_to_connect), connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
@@ -3358,6 +3375,9 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
         return Assume(false);
     }
 
+    // Persists across cs_main scopes for use by each activation step.
+    BlockFetcher fetcher;
+
     CBlockIndex *pindexMostWork = nullptr;
     CBlockIndex *pindexNewTip = nullptr;
     bool exited_ibd{false};
@@ -3395,11 +3415,12 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
                 bool fInvalidFound = false;
                 std::shared_ptr<const CBlock> nullBlockPtr;
                 auto block_to_connect{pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr};
+                fetcher.Save(std::move(block_to_connect));
                 // BlockConnected signals must be sent for the original role;
                 // in case snapshot validation is completed during ActivateBestChainStep, the
                 // result of GetRole() changes from BACKGROUND to NORMAL.
                const ChainstateRole chainstate_role{this->GetRole()};
-                if (!ActivateBestChainStep(state, *pindexMostWork, block_to_connect, fInvalidFound, connected_blocks)) {
+                if (!ActivateBestChainStep(state, *pindexMostWork, fetcher, fInvalidFound, connected_blocks)) {
                     // A system error occurred
                     return false;
                 }
