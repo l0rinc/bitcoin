@@ -533,7 +533,7 @@ bool CBlockPolicyEstimator::_removeTx(const Txid& hash, bool inBlock)
         feeStats->removeTx(pos->second.blockHeight, nBestSeenHeight, pos->second.bucketIndex, inBlock);
         shortStats->removeTx(pos->second.blockHeight, nBestSeenHeight, pos->second.bucketIndex, inBlock);
         longStats->removeTx(pos->second.blockHeight, nBestSeenHeight, pos->second.bucketIndex, inBlock);
-        mapMemPoolTxs.erase(hash);
+        mapMemPoolTxs.erase(pos);
         return true;
     } else {
         return false;
