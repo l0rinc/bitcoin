@@ -33,6 +33,7 @@
 #include <test/util/transaction_utils.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+#include <util/vector.h>
 #include <validation.h>
 
 #include <functional>
@@ -372,6 +373,15 @@ BOOST_AUTO_TEST_CASE(tx_oversized)
         BOOST_CHECK_MESSAGE(!CheckTransaction(createTransaction(maxPayloadSize), state), "Oversized transaction should be invalid");
         BOOST_CHECK(state.GetRejectReason() == "bad-txns-oversize");
     }
+}
+
+BOOST_AUTO_TEST_CASE(transaction_witness_stack_allocation)
+{
+    DataStream stream;
+    SerializeMany(stream, CTransaction::CURRENT_VERSION, uint8_t{0}, uint8_t{1}, Vector(CTxIn{}), Vector(CTxOut{}), CompactSizeWriter{1}); // Marker, flag, then a witness stack claiming one element with no bytes behind it
+    CMutableTransaction tx;
+    BOOST_CHECK_EXCEPTION(stream >> TX_WITH_WITNESS(tx), std::ios_base::failure, HasReason{"DataStream::read(): end of data"}); // TODO: Verify the witness element prefix before allocating from its count.
+    BOOST_CHECK_EQUAL(tx.vin.at(0).scriptWitness.stack.capacity(), 1); // TODO: Avoid allocating from the witness element count.
 }
 
 BOOST_AUTO_TEST_CASE(basic_transaction_tests)
