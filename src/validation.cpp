@@ -3203,8 +3203,11 @@ class Chainstate::BlockFetcher
         if (!(index.nStatus & BLOCK_HAVE_DATA) || IsProvided(index.GetBlockHash())) return false;
         if (m_pool.WorkersCount() == 0) m_pool.Start(m_threads);
         auto pending{m_pool.Submit([&blockman = m_blockman, hash = index.GetBlockHash(), pos = index.GetBlockPos()]() -> std::shared_ptr<const CBlock> {
-            if (auto block{std::make_shared<CBlock>()}; blockman.ReadBlock(*block, pos, hash)) return block;
-            return nullptr; // Let ConnectTip() retry the read if this block is needed.
+            auto block{std::make_shared<CBlock>()};
+            if (!blockman.ReadBlock(*block, pos, hash)) return nullptr;
+            // The block remains worker-owned until its future is consumed, so CheckBlock() may safely set its memoization flags.
+            if (BlockValidationState state; !CheckBlock(*block, state, blockman.GetConsensus())) return nullptr;
+            return block;
         })};
         if (pending) m_pending.emplace_back(std::move(*pending));
         return !!pending;
