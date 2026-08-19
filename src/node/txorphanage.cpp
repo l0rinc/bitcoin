@@ -362,7 +362,7 @@ bool TxOrphanageImpl::AddTx(const CTransactionRef& tx, NodeId peer)
     // Ignore transactions above max standard size to avoid a send-big-orphans memory exhaustion attack.
     const TxOrphanage::Usage weight{GetTransactionWeight(*tx)};
     if (weight > MAX_STANDARD_TX_WEIGHT) {
-        LogDebug(BCLog::TXPACKAGES, "ignoring large orphan tx (size: %d, txid: %s, wtxid: %s)\n", weight, txid.ToString(), wtxid.ToString());
+        LogDebug(BCLog::TXPACKAGES, "ignoring large orphan tx (weight: %d, txid: %s, wtxid: %s)\n", weight, txid.ToString(), wtxid.ToString());
         return false;
     }
 
