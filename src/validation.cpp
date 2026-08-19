@@ -3189,9 +3189,9 @@ void Chainstate::PruneBlockIndexCandidates() {
 /** Supplies blocks to validation. Destruction waits for any pending reads. */
 class Chainstate::BlockFetcher
 {
-    static constexpr int32_t QUEUE_SIZE{2};
-
     const BlockManager& m_blockman;
+    const int32_t m_threads;
+    const int32_t m_queue_size;
     std::shared_ptr<const CBlock> m_provided;
     ThreadPool m_pool{"blockread"};
     std::deque<std::future<std::shared_ptr<const CBlock>>> m_pending;
@@ -3201,7 +3201,7 @@ class Chainstate::BlockFetcher
     bool Enqueue(const CBlockIndex& index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         if (!(index.nStatus & BLOCK_HAVE_DATA) || IsProvided(index.GetBlockHash())) return false;
-        if (m_pool.WorkersCount() == 0) m_pool.Start(1); // Single threaded prefetcher
+        if (m_pool.WorkersCount() == 0) m_pool.Start(m_threads);
         auto pending{m_pool.Submit([&blockman = m_blockman, hash = index.GetBlockHash(), pos = index.GetBlockPos()]() -> std::shared_ptr<const CBlock> {
             if (auto block{std::make_shared<CBlock>()}; blockman.ReadBlock(*block, pos, hash)) return block;
             return nullptr; // Let ConnectTip() retry the read if this block is needed.
@@ -3211,7 +3211,8 @@ class Chainstate::BlockFetcher
     }
 
 public:
-    BlockFetcher(const BlockManager& blockman) : m_blockman{blockman} {}
+    BlockFetcher(const BlockManager& blockman, int32_t threads, int32_t queue_size)
+        : m_blockman{blockman}, m_threads{threads}, m_queue_size{queue_size} {}
 
     void Save(std::shared_ptr<const CBlock> block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) { m_provided = std::move(block); }
 
@@ -3227,8 +3228,8 @@ public:
     void Prefetch(const CBlockIndex& index_most_work, int next_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
-        if (!m_pending.empty()) return;
-        for (int32_t i{0}; i < QUEUE_SIZE; ++i) {
+        if (m_threads == 0 || !m_pending.empty()) return;
+        for (int32_t i{0}; i < m_queue_size; ++i) {
             if (auto* next{index_most_work.GetAncestor(next_height + i)}; !next || !Enqueue(*next)) break;
         }
     }
@@ -3239,7 +3240,9 @@ Chainstate::Chainstate(
     BlockManager& blockman,
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
-    : m_block_fetcher{std::make_unique<BlockFetcher>(blockman)},
+    : m_block_fetcher{std::make_unique<BlockFetcher>(blockman,
+                                                     chainman.m_options.blockfetch_threads_num,
+                                                     chainman.m_options.blockfetch_queue_size)},
       m_mempool(mempool),
       m_blockman(blockman),
       m_chainman(chainman),
