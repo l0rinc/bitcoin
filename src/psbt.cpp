@@ -13,6 +13,8 @@
 #include <util/result.h>
 #include <util/strencodings.h>
 
+#include <algorithm>
+
 using common::PSBTError;
 
 PartiallySignedTransaction::PartiallySignedTransaction(const CMutableTransaction& tx, uint32_t version) : m_version(version)
@@ -29,11 +31,6 @@ PartiallySignedTransaction::PartiallySignedTransaction(const CMutableTransaction
     for (const CTxOut& output : tx.vout) {
         outputs.emplace_back(GetVersion(), output.nValue, output.scriptPubKey);
     }
-}
-
-bool PartiallySignedTransaction::IsNull() const
-{
-    return inputs.empty() && outputs.empty() && unknown.empty();
 }
 
 bool PartiallySignedTransaction::Merge(const PartiallySignedTransaction& psbt)
@@ -58,13 +55,7 @@ bool PartiallySignedTransaction::Merge(const PartiallySignedTransaction& psbt)
             return false;
         }
     }
-    for (auto& xpub_pair : psbt.m_xpubs) {
-        if (!m_xpubs.contains(xpub_pair.first)) {
-            m_xpubs[xpub_pair.first] = xpub_pair.second;
-        } else {
-            m_xpubs[xpub_pair.first].insert(xpub_pair.second.begin(), xpub_pair.second.end());
-        }
-    }
+    MergeGlobalXPubs(psbt);
     if (fallback_locktime == std::nullopt && psbt.fallback_locktime != std::nullopt) fallback_locktime = psbt.fallback_locktime;
 
     // Set m_tx_modifiable only if either PSBT had it set
@@ -83,6 +74,16 @@ bool PartiallySignedTransaction::Merge(const PartiallySignedTransaction& psbt)
     unknown.insert(psbt.unknown.begin(), psbt.unknown.end());
 
     return true;
+}
+
+void PartiallySignedTransaction::MergeGlobalXPubs(const PartiallySignedTransaction& psbt)
+{
+    for (const auto& [origin, xpubs] : psbt.m_xpubs) {
+        for (const CExtPubKey& xpub : xpubs) {
+            const bool known{std::ranges::any_of(m_xpubs, [&](const auto& entry) { return entry.second.contains(xpub); })};
+            if (!known) m_xpubs[origin].insert(xpub);
+        }
+    }
 }
 
 std::optional<uint32_t> PartiallySignedTransaction::ComputeTimeLock() const
@@ -287,11 +288,6 @@ bool PSBTInput::GetUTXO(CTxOut& utxo) const
 COutPoint PSBTInput::GetOutPoint() const
 {
     return COutPoint(prev_txid, prev_out);
-}
-
-bool PSBTInput::IsNull() const
-{
-    return !non_witness_utxo && witness_utxo.IsNull() && partial_sigs.empty() && unknown.empty() && hd_keypaths.empty() && redeem_script.empty() && witness_script.empty();
 }
 
 void PSBTInput::FillSignatureData(SignatureData& sigdata) const
@@ -526,11 +522,6 @@ void PSBTOutput::FromSignatureData(const SignatureData& sigdata)
         m_tap_bip32_paths.emplace(pubkey, leaf_origin);
     }
     m_musig2_participants.insert(sigdata.musig2_pubkeys.begin(), sigdata.musig2_pubkeys.end());
-}
-
-bool PSBTOutput::IsNull() const
-{
-    return redeem_script.empty() && witness_script.empty() && hd_keypaths.empty() && unknown.empty();
 }
 
 bool PSBTOutput::Merge(const PSBTOutput& output)
