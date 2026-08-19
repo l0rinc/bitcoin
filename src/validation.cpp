@@ -3217,8 +3217,11 @@ class Chainstate::BlockFetcher
     {
         if (m_pool.WorkersCount() == 0) m_pool.Start(m_threads);
         auto followup{m_pool.Submit([&blockman = m_blockman, hash = index.GetBlockHash(), pos = index.GetBlockPos()]() -> std::shared_ptr<const CBlock> {
-            if (auto block{std::make_shared<CBlock>()}; blockman.ReadBlock(*block, pos, hash)) return block;
-            return nullptr;
+            auto block{std::make_shared<CBlock>()};
+            if (!blockman.ReadBlock(*block, pos, hash)) return nullptr;
+            // The block remains worker-owned until its future is consumed, so CheckBlock() may safely set its memoization flags.
+            if (BlockValidationState state; !CheckBlock(*block, state, blockman.GetConsensus())) return nullptr;
+            return block;
         })};
         if (followup) m_followups.emplace_back(std::move(*followup));
         return !!followup;
