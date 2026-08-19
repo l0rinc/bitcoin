@@ -3194,9 +3194,9 @@ void Chainstate::PruneBlockIndexCandidates() {
 /** Supplies blocks to validation. Destruction waits for any queued reads. */
 class Chainstate::BlockFetcher
 {
-    static constexpr uint32_t QUEUE_SIZE{2};
-
     const BlockManager& m_blockman;
+    const int32_t m_threads;
+    const uint32_t m_queue_size;
     ThreadPool m_pool{"blockread"};
     std::deque<std::future<std::shared_ptr<const CBlock>>> m_followups GUARDED_BY(::cs_main);
 
@@ -3215,7 +3215,7 @@ class Chainstate::BlockFetcher
 
     bool Enqueue(const CBlockIndex& index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
-        if (m_pool.WorkersCount() == 0) m_pool.Start(1);
+        if (m_pool.WorkersCount() == 0) m_pool.Start(m_threads);
         auto followup{m_pool.Submit([&blockman = m_blockman, hash = index.GetBlockHash(), pos = index.GetBlockPos()]() -> std::shared_ptr<const CBlock> {
             if (auto block{std::make_shared<CBlock>()}; blockman.ReadBlock(*block, pos, hash)) return block;
             return nullptr;
@@ -3225,7 +3225,8 @@ class Chainstate::BlockFetcher
     }
 
 public:
-    explicit BlockFetcher(const BlockManager& blockman) : m_blockman{blockman} {}
+    BlockFetcher(const BlockManager& blockman, int32_t threads, uint32_t queue_size)
+        : m_blockman{blockman}, m_threads{threads}, m_queue_size{queue_size} {}
 
     void Clear() EXCLUSIVE_LOCKS_REQUIRED(::cs_main) { m_followups.clear(); }
 
@@ -3238,7 +3239,8 @@ public:
     void FillQueue(const CBlockIndex& last_index, int next_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
-        for (size_t i{m_followups.size()}; i < QUEUE_SIZE; ++i) {
+        if (m_threads == 0) return;
+        for (size_t i{m_followups.size()}; i < m_queue_size; ++i) {
             const auto* next{last_index.GetAncestor(next_height + i)};
             if (!ShouldEnqueue(next) || !Enqueue(*next)) break;
         }
@@ -3250,7 +3252,9 @@ Chainstate::Chainstate(
     BlockManager& blockman,
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
-    : m_block_fetcher{std::make_unique<BlockFetcher>(blockman)},
+    : m_block_fetcher{std::make_unique<BlockFetcher>(blockman,
+                                                     chainman.m_options.blockfetch_threads_num,
+                                                     chainman.m_options.blockfetch_queue_size)},
       m_mempool(mempool),
       m_blockman(blockman),
       m_chainman(chainman),
