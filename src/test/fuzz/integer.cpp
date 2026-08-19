@@ -134,9 +134,9 @@ FUZZ_TARGET(integer, .init = initialize_integer)
         SipHasher13UJ hasher{u64, u64_2};
         const SipHasher13UJ fixed_hasher{u64, u64_2};
         hasher.WriteJumbo(u256);
-        assert(fixed_hasher.Hash(u256) == hasher.Finalize());
+        assert(fixed_hasher.HashJumbo(u256) == hasher.Finalize());
         hasher.Write(data0);
-        assert(fixed_hasher.Hash(u256, data0) == hasher.Finalize());
+        assert(fixed_hasher.HashJumbo(u256, data0) == hasher.Finalize());
 
         SipHasher13UJ reference{u64, u64_2};
         SipHasher13UJ mixed{u64, u64_2};
@@ -159,7 +159,13 @@ FUZZ_TARGET(integer, .init = initialize_integer)
         assert(mixed.Finalize() == reference.Finalize());
 
         reference.WriteJumbo(u256).Write(data0);
-        assert(mixed.Hash(u256, data0) == reference.Finalize());
+        assert(mixed.HashJumbo(u256, data0) == reference.Finalize());
+
+        SipHasher13UJ normal{u64, u64_2};
+        normal.Write(u256.GetUint64(0)).Write(u256.GetUint64(1)).Write(u256.GetUint64(2)).Write(u256.GetUint64(3));
+        assert(fixed_hasher.HashNormal(u256) == normal.Finalize());
+        normal.Write(data1);
+        assert(fixed_hasher.HashNormal(u256, data1) == normal.Finalize());
     }
     (void)ToLower(ch);
     (void)ToUpper(ch);

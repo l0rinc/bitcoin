@@ -116,29 +116,34 @@ bool IsWellFormedPackage(const Package& txns, PackageValidationState& state)
     return true;
 }
 
+/** The txids of every transaction except the last, which is treated as the child. */
+static std::unordered_set<Txid, SaltedTxidHasher> ParentTxids(const Package& package)
+{
+    std::unordered_set<Txid, SaltedTxidHasher> parent_txids;
+    std::transform(package.cbegin(), package.cend() - 1, std::inserter(parent_txids, parent_txids.end()),
+                   [](const auto& ptx) { return ptx->GetHash(); });
+    return parent_txids;
+}
+
 bool IsChildWithParents(const Package& package)
 {
     assert(std::all_of(package.cbegin(), package.cend(), [](const auto& tx){return tx != nullptr;}));
     if (package.size() < 2) return false;
 
-    // The package is expected to be sorted, so the last transaction is the child.
-    const auto& child = package.back();
-    std::unordered_set<Txid, SaltedTxidHasher> input_txids;
-    std::transform(child->vin.cbegin(), child->vin.cend(),
-                   std::inserter(input_txids, input_txids.end()),
-                   [](const auto& input) { return input.prevout.hash; });
+    // Match the parents against their own txids instead of the child's claimed prevouts, so that
+    // the set is bounded by the package size rather than by the child's input count.
+    auto parent_txids{ParentTxids(package)};
 
     // Every transaction must be a parent of the last transaction in the package.
-    return std::all_of(package.cbegin(), package.cend() - 1,
-                       [&input_txids](const auto& ptx) { return input_txids.contains(ptx->GetHash()); });
+    for (const auto& input : package.back()->vin)
+        parent_txids.erase(input.prevout.hash);
+    return parent_txids.empty();
 }
 
 bool IsChildWithParentsTree(const Package& package)
 {
     if (!IsChildWithParents(package)) return false;
-    std::unordered_set<Txid, SaltedTxidHasher> parent_txids;
-    std::transform(package.cbegin(), package.cend() - 1, std::inserter(parent_txids, parent_txids.end()),
-                   [](const auto& ptx) { return ptx->GetHash(); });
+    const auto parent_txids{ParentTxids(package)};
     // Each parent must not have an input who is one of the other parents.
     return std::all_of(package.cbegin(), package.cend() - 1, [&](const auto& ptx) {
         for (const auto& input : ptx->vin) {

@@ -7,10 +7,15 @@
 #include <crypto/siphash.h>
 #include <random.h>
 
-SaltedUint256Hasher::SaltedUint256Hasher() : m_hasher{
-    FastRandomContext().rand64(),
-    FastRandomContext().rand64()}
-{}
+SaltedUntrustedHasher::SaltedUntrustedHasher()
+    : m_hasher{FastRandomContext().rand64(), FastRandomContext().rand64()}
+{
+}
+
+SaltedBlockHashHasher::SaltedBlockHashHasher()
+    : m_hasher{FastRandomContext().rand64(), FastRandomContext().rand64()}
+{
+}
 
 SaltedTxidHasher::SaltedTxidHasher() : m_hasher{
     FastRandomContext().rand64(),
@@ -21,6 +26,11 @@ SaltedWtxidHasher::SaltedWtxidHasher() : m_hasher{
     FastRandomContext().rand64(),
     FastRandomContext().rand64()}
 {}
+
+SaltedGenTxidHasher::SaltedGenTxidHasher()
+    : m_hasher{FastRandomContext().rand64(), FastRandomContext().rand64()}
+{
+}
 
 SaltedOutpointHasher::SaltedOutpointHasher() : m_hasher{
     FastRandomContext().rand64(),

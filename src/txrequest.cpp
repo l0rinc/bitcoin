@@ -106,15 +106,15 @@ using Priority = uint64_t;
  * Higher priorities are selected first.
  */
 class PriorityComputer {
-    const uint64_t m_k0, m_k1;
+    const SipHasher13UJ m_hasher;
+
 public:
-    explicit PriorityComputer(bool deterministic) :
-        m_k0{deterministic ? 0 : FastRandomContext().rand64()},
-        m_k1{deterministic ? 0 : FastRandomContext().rand64()} {}
+    explicit PriorityComputer(bool deterministic) : m_hasher{deterministic ? 0 : FastRandomContext().rand64(),
+                                                             deterministic ? 0 : FastRandomContext().rand64()} {}
 
     Priority operator()(const uint256& txhash, NodeId peer, bool preferred) const
     {
-        uint64_t low_bits = CSipHasher(m_k0, m_k1).Write(txhash).Write(peer).Finalize() >> 1;
+        uint64_t low_bits = m_hasher.HashNormal(txhash, static_cast<uint64_t>(peer)) >> 1;
         return low_bits | uint64_t{preferred} << 63;
     }
 

@@ -152,10 +152,13 @@ public:
  *                 in the output of a cryptographic hash function. These jumbo blocks are acceptable
  *                 because even though they may give the attacker more control within a single
  *                 round, that control is limited by the cryptographic hash in between.
+ *                 An input made up of normal blocks only carries no such requirement: it is
+ *                 plain unpadded SipHash-1-3, which is a standard hash table choice.
  *
  * Other components are unchanged: initialization constants, SipRound, and 64-bit output.
  * This interface serves as an executable specification for fixed-width implementations.
- * The Hash overloads optimize fixed-width inputs without modifying the accumulated state.
+ * The Hash* overloads optimize fixed-width inputs without modifying the accumulated state; their
+ * names state which block structure they use, since only the jumbo ones constrain their inputs.
  */
 class SipHasher13UJ
 {
@@ -172,7 +175,7 @@ public:
     uint64_t Finalize() const noexcept;
 
     /** Hash a jumbo block after the data written so far and finalize without modifying the object. */
-    ALWAYS_INLINE uint64_t Hash(const uint256& hash) const noexcept
+    ALWAYS_INLINE uint64_t HashJumbo(const uint256& hash) const noexcept
     {
         return m_state.Copy()
                       .Compress1Jumbo(hash)
@@ -183,12 +186,45 @@ public:
      * Hash a jumbo block followed by a normal block after the data written so far,
      * and finalize without modifying the object.
      */
-    ALWAYS_INLINE uint64_t Hash(const uint256& hash, uint64_t extra) const noexcept
+    ALWAYS_INLINE uint64_t HashJumbo(const uint256& hash, uint64_t extra) const noexcept
     {
         return m_state.Copy()
                       .Compress1Jumbo(hash)
                       .Compress1(extra)
                       .Finalize3U();
+    }
+
+    /**
+     * Hash a 256-bit value as four normal blocks after the data written so far, and finalize
+     * without modifying the object.
+     *
+     * This is plain SipHash-1-3 without padding, so unlike the jumbo overloads it places no
+     * requirement on the input, at the cost of 3 extra rounds. Use it for keys whose provenance
+     * isn't known, as long as the resulting hash stays inside this process.
+     */
+    ALWAYS_INLINE uint64_t HashNormal(const uint256& val) const noexcept
+    {
+        return m_state.Copy()
+            .Compress1(val.GetUint64(0))
+            .Compress1(val.GetUint64(1))
+            .Compress1(val.GetUint64(2))
+            .Compress1(val.GetUint64(3))
+            .Finalize3U();
+    }
+
+    /**
+     * Hash a 256-bit value followed by an extra value as five normal blocks after the data
+     * written so far, and finalize without modifying the object.
+     */
+    ALWAYS_INLINE uint64_t HashNormal(const uint256& val, uint64_t extra) const noexcept
+    {
+        return m_state.Copy()
+            .Compress1(val.GetUint64(0))
+            .Compress1(val.GetUint64(1))
+            .Compress1(val.GetUint64(2))
+            .Compress1(val.GetUint64(3))
+            .Compress1(extra)
+            .Finalize3U();
     }
 };
 

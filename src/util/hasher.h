@@ -14,48 +14,119 @@
 #include <cstring>
 #include <span>
 
-class SaltedUint256Hasher
+// The salted SipHash-1-3 hashers below differ in how they compress a 256-bit key: as four normal
+// blocks, which assumes nothing about the key, or as a single jumbo block, which saves 3 rounds
+// but requires the key to be the output of a cryptographic hash. Pick by the provenance of the key
+// rather than by its type: a hash a peer sent us is untrusted even though it has the same type
+// as one we computed ourselves.
+//
+// All of them are salted per process, so their outputs are process-local and must not be
+// persisted, serialized, or compared across processes.
+
+/**
+ * Hasher for containers that may retain keys of unknown provenance.
+ *
+ * Compresses its input as normal blocks, so it makes no assumption about the key at the cost of
+ * 3 more rounds than the jumbo hashers. Use it whenever a container can retain a hash a peer sent
+ * us rather than one we computed ourselves.
+ */
+class SaltedUntrustedHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const SipHasher13UJ m_hasher;
 
 public:
-    SaltedUint256Hasher();
+    SaltedUntrustedHasher();
 
-    size_t operator()(const uint256& hash) const
+    size_t operator()(const uint256& hash) const noexcept
     {
-        return m_hasher(hash);
+        return m_hasher.HashNormal(hash);
+    }
+
+    size_t operator()(const Txid& txid) const noexcept
+    {
+        return m_hasher.HashNormal(txid.ToUint256());
     }
 };
 
+/**
+ * Hasher for containers keyed by block hashes we computed ourselves.
+ *
+ * Every key is the double-SHA256 output of a block header, so it may be compressed as a single
+ * jumbo block even when the block has not passed full validation. Use SaltedUntrustedHasher for
+ * uint256 values received from a peer without hashing them first.
+ */
+class SaltedBlockHashHasher
+{
+    const SipHasher13UJ m_hasher;
+
+public:
+    SaltedBlockHashHasher();
+
+    size_t operator()(const uint256& hash) const
+    {
+        return m_hasher.HashJumbo(hash);
+    }
+};
+
+/**
+ * Hashers for containers keyed by transaction identifiers we computed ourselves.
+ *
+ * Every container using them keys on the identifier of a transaction it holds, so the keys are
+ * always cryptographic hash outputs and may be compressed as a single jumbo block. Containers
+ * that can retain an identifier a peer chose, such as the prevouts of a transaction we have not
+ * validated, must use SaltedUntrustedHasher instead.
+ */
 class SaltedTxidHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const SipHasher13UJ m_hasher;
 
 public:
     SaltedTxidHasher();
 
     size_t operator()(const Txid& txid) const
     {
-        return m_hasher(txid.ToUint256());
+        return m_hasher.HashJumbo(txid.ToUint256());
     }
 };
 
 class SaltedWtxidHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const SipHasher13UJ m_hasher;
 
 public:
     SaltedWtxidHasher();
 
     size_t operator()(const Wtxid& wtxid) const
     {
-        return m_hasher(wtxid.ToUint256());
+        return m_hasher.HashJumbo(wtxid.ToUint256());
     }
 };
 
+/** Hasher for generic transaction identifiers we computed ourselves. */
+class SaltedGenTxidHasher
+{
+    const SipHasher13UJ m_hasher;
+
+public:
+    SaltedGenTxidHasher();
+
+    size_t operator()(const GenTxid& gtxid) const
+    {
+        // The txid/wtxid discriminator is part of GenTxid equality, so include it as a normal block.
+        return m_hasher.HashJumbo(gtxid.ToUint256(), uint64_t{gtxid.IsWtxid()});
+    }
+};
+
+/**
+ * Hasher for outpoint keyed containers.
+ *
+ * Outpoints reach these containers as claimed prevouts of transactions we have not validated yet,
+ * so unlike SaltedCoinsCacheHasher this cannot assume the txid is the output of a cryptographic
+ * hash, and compresses it as four normal blocks instead of one jumbo block.
+ */
 class SaltedOutpointHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const SipHasher13UJ m_hasher;
 
 public:
     SaltedOutpointHasher();
@@ -71,7 +142,7 @@ public:
      */
     size_t operator()(const COutPoint& id) const noexcept
     {
-        return m_hasher(id.hash.ToUint256(), id.n);
+        return m_hasher.HashNormal(id.hash.ToUint256(), uint64_t{id.n});
     }
 };
 

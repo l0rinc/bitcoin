@@ -86,6 +86,7 @@
 #include <set>
 #include <span>
 #include <typeinfo>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -845,7 +846,7 @@ private:
     FastRandomContext m_rng GUARDED_BY(NetEventsInterface::g_msgproc_mutex);
 
     /** Copied into short-lived tx INV deduplication sets to avoid generating salts per message. */
-    const SaltedUint256Hasher m_txhash_hasher;
+    const SaltedUntrustedHasher m_txhash_hasher;
     FeeFilterRounder m_fee_filter_rounder GUARDED_BY(NetEventsInterface::g_msgproc_mutex);
 
     const CChainParams& m_chainparams;
@@ -923,7 +924,7 @@ private:
      * Set mapBlockSource[hash].second to false if the node should not be
      * punished if the block is invalid.
      */
-    std::map<uint256, std::pair<NodeId, bool>> mapBlockSource GUARDED_BY(cs_main);
+    std::unordered_map<uint256, std::pair<NodeId, bool>, SaltedBlockHashHasher> mapBlockSource GUARDED_BY(cs_main);
 
     /** Number of peers with wtxid relay. */
     std::atomic<int> m_wtxid_relay_peers{0};
@@ -954,7 +955,7 @@ private:
     std::shared_ptr<const CBlock> m_most_recent_block GUARDED_BY(m_most_recent_block_mutex);
     std::shared_ptr<const CBlockHeaderAndShortTxIDs> m_most_recent_compact_block GUARDED_BY(m_most_recent_block_mutex);
     uint256 m_most_recent_block_hash GUARDED_BY(m_most_recent_block_mutex);
-    std::unique_ptr<const std::map<GenTxid, CTransactionRef>> m_most_recent_block_txs GUARDED_BY(m_most_recent_block_mutex);
+    std::unique_ptr<const std::unordered_map<GenTxid, CTransactionRef, SaltedGenTxidHasher>> m_most_recent_block_txs GUARDED_BY(m_most_recent_block_mutex);
 
     // Data about the low-work headers synchronization, aggregated from all peers' HeadersSyncStates.
     /** Mutex guarding the other m_headers_presync_* variables. */
@@ -2245,7 +2246,7 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         std::async(std::launch::deferred, [&] { return NetMsg::Make(NetMsgType::CMPCTBLOCK, *pcmpctblock); })};
 
     {
-        auto most_recent_block_txs = std::make_unique<std::map<GenTxid, CTransactionRef>>();
+        auto most_recent_block_txs = std::make_unique<std::unordered_map<GenTxid, CTransactionRef, SaltedGenTxidHasher>>();
         for (const auto& tx : pblock->vtx) {
             most_recent_block_txs->emplace(tx->GetHash(), tx);
             most_recent_block_txs->emplace(tx->GetWitnessHash(), tx);
@@ -2326,7 +2327,7 @@ void PeerManagerImpl::BlockChecked(const std::shared_ptr<const CBlock>& block, c
     LOCK(cs_main);
 
     const uint256 hash(block->GetHash());
-    std::map<uint256, std::pair<NodeId, bool>>::iterator it = mapBlockSource.find(hash);
+    auto it = mapBlockSource.find(hash);
 
     // If the block failed validation, we know where it came from and we're still connected
     // to that peer, maybe punish.
@@ -4339,8 +4340,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         }
 
         const bool reject_tx_invs{RejectIncomingTxs(pfrom)};
-        std::unordered_set<uint256, SaltedUint256Hasher> seen_txids{0, m_txhash_hasher};
-        std::unordered_set<uint256, SaltedUint256Hasher> seen_wtxids{0, m_txhash_hasher};
+        std::unordered_set<uint256, SaltedUntrustedHasher> seen_txids{0, m_txhash_hasher};
+        std::unordered_set<uint256, SaltedUntrustedHasher> seen_wtxids{0, m_txhash_hasher};
 
         LOCK2(cs_main, m_tx_download_mutex);
 
