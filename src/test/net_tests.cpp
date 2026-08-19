@@ -1656,8 +1656,23 @@ BOOST_AUTO_TEST_CASE(getdata_response_memory_limit)
         responses += msg_type == NetMsgType::BLOCK;
     }
     BOOST_CHECK_EQUAL(responses, CConnman::MAX_RESPONSE_MEMORY / CConnman::RESPONSE_MEMORY_RESERVATION);
+    BOOST_CHECK_EQUAL(connman.GetResponseMemoryUsage(), CConnman::MAX_RESPONSE_MEMORY);
+
+    // Releasing one response allows the blocked request to be retried.
+    connman.FlushSendBuffer(*peers.at(0));
+    auto& blocked_peer{*peers.at(CConnman::MAX_RESPONSE_MEMORY / CConnman::RESPONSE_MEMORY_RESERVATION)};
+    blocked_peer.fPauseSend = false;
+    connman.ProcessMessagesOnce(blocked_peer);
+    {
+        LOCK(blocked_peer.cs_vSend);
+        const auto& [_bytes, _more, msg_type] = blocked_peer.m_transport->GetBytesToSend(false);
+        BOOST_CHECK_EQUAL(msg_type, NetMsgType::BLOCK);
+    }
+    BOOST_CHECK_EQUAL(connman.GetResponseMemoryUsage(), CConnman::MAX_RESPONSE_MEMORY);
 
     for (const auto& peer : peers) m_node.peerman->FinalizeNode(*peer);
+    peers.clear();
+    BOOST_CHECK_EQUAL(connman.GetResponseMemoryUsage(), 0U);
 }
 
 BOOST_AUTO_TEST_CASE(private_broadcast_version_does_not_update_addrman_services)
