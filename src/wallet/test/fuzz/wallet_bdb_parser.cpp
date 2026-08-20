@@ -75,6 +75,7 @@ FUZZ_TARGET(wallet_bdb_parser, .init = initialize_wallet_bdb_parser)
             error.original == "LSNs are not reset, this database is not completely flushed. Please reopen then close the database with a version that has BDB support" ||
             error.original == "Records page has odd number of records" ||
             error.original == "Bad overflow record page type" ||
+            error.original == "Overflow record chain is cyclic or too long" ||
             error.original == "BTree page has an unexpected level" ||
             error.original == "BTree Leaf page is not at level 1" ||
             error.original == "Subdatabase last page is greater than database last page" ||
