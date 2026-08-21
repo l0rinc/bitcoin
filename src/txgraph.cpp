@@ -3550,11 +3550,12 @@ size_t TxGraphImpl::GetMainMemoryUsage() noexcept
     // Make sure splits/merges are applied, as memory usage may not be representative otherwise.
     SplitAll(/*up_to_level=*/0);
     ApplyDependencies(/*level=*/0);
+    if (m_main_clusterset.m_txcount == 0) return 0;
     // Compute memory usage
     size_t usage = /* From clusters */
                    m_main_clusterset.m_cluster_usage +
-                   /* From Entry objects. */
-                   sizeof(Entry) * m_main_clusterset.m_txcount +
+                   /* From Entry objects, including capacity retained after compaction. */
+                   memusage::DynamicUsage(m_entries) +
                    /* From the chunk index. */
                    memusage::DynamicUsage(m_main_chunkindex);
     return usage;
