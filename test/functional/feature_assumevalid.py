@@ -55,7 +55,10 @@ from test_framework.script import (
     OP_TRUE,
 )
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_equal
+from test_framework.util import (
+    assert_equal,
+    assert_raises_rpc_error,
+)
 from test_framework.wallet_util import generate_keypair
 
 
@@ -156,6 +159,12 @@ class AssumeValidTest(BitcoinTestFramework):
             assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
             assert_equal(next(filter(lambda x: x["hash"] == self.blocks[-1].hash_hex, self.nodes[0].getchaintips()))["status"], "invalid")
 
+        self.log.info("Revalidate node0's fully checked active chain.")
+        revalidation = self.nodes[0].revalidatechain()
+        assert_equal(revalidation["valid"], True)
+        assert_equal(revalidation["height"], COINBASE_MATURITY + 1)
+        assert_equal(revalidation["script_checks"], 0)
+
         # nodes[1]
         self.log.info("Send all blocks to node1. All blocks will be accepted.")
         p2p1 = self.nodes[1].add_p2p_connection(BaseNode())
@@ -173,6 +182,9 @@ class AssumeValidTest(BitcoinTestFramework):
             # Syncing 2200 blocks can take a while on slow systems. Give it plenty of time to sync.
             p2p1.sync_with_ping(timeout=960)
             assert_equal(self.nodes[1].getblockcount(), 2202)
+
+        self.log.info("Revalidate node1's assumed-valid active chain. The skipped bad signature will be rejected.")
+        assert_raises_rpc_error(-25, "block-script-verify-flag-failed", self.nodes[1].revalidatechain)
 
         # nodes[2]
         self.log.info("Send blocks to node2. Block 102 will be rejected.")
