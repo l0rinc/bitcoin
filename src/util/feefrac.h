@@ -129,6 +129,18 @@ struct FeeFrac
         return {a.fee - b.fee, a.size - b.size};
     }
 
+    /** Saturating sum fee and size. */
+    static constexpr FeeFrac SaturatingAdd(const FeeFrac& a, const FeeFrac& b) noexcept
+    {
+        return {::SaturatingAdd(a.fee, b.fee), ::SaturatingAdd(a.size, b.size)};
+    }
+
+    /** Saturating subtract both fee and size. */
+    static constexpr FeeFrac SaturatingSubtract(const FeeFrac& a, const FeeFrac& b) noexcept
+    {
+        return {::SaturatingSubtract(a.fee, b.fee), ::SaturatingSubtract(a.size, b.size)};
+    }
+
     /** Check if two FeeFrac objects are equal (both same fee and same size). */
     friend inline bool operator==(const FeeFrac& a, const FeeFrac& b) noexcept
     {

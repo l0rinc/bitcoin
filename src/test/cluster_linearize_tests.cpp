@@ -8,6 +8,7 @@
 #include <util/bitset.h>
 #include <util/strencodings.h>
 
+#include <limits>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -480,6 +481,21 @@ BOOST_AUTO_TEST_CASE(depgraph_optimal_tests)
     TestOptimalLinearization("855f8024008024816501807c81020284629b030383078631048044895c000002048078100100000000068315856a020000000004800784130300000000028167800c04000000000281758a14010000000885249a1a0100010004852ca63e020000010300"_hex_u8, {6, 1, 12, 5, 11, 3, 4, 10, 0, 8, 9, 7, 2});
     TestOptimalLinearization("855f97230080678a4f018210925d02856113038105892b04854e996105805a8a480000000000000283028b7a01000000000002846d9f080200000000000283189656030000000000018277862e0400000000000185508d200500000000000000"_hex_u8, {3, 0, 10, 7, 2, 1, 4, 8, 6, 5, 11, 9});
     TestOptimalLinearization("866faa23008646b71501851f96130282588f1103804d851c0000000003822097600100000003850a8f310200000003856e9201000000038656935f01000003855b8f5f020000018743923a0000000a812b810b010000098403a328020000068712970203000005833e98400400000200"_hex_u8, {11, 14, 1, 10, 4, 3, 5, 13, 9, 7, 6, 12, 8, 0, 2});
+}
+
+BOOST_AUTO_TEST_CASE(postlinearize_handles_saturated_reverse_fees)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto parent{depgraph.AddTransaction(FeeFrac{std::numeric_limits<int64_t>::min(), 1})};
+    const auto child{depgraph.AddTransaction(FeeFrac{std::numeric_limits<int64_t>::min(), 2})};
+    depgraph.AddDependencies(TestBitSet::Singleton(parent), child);
+
+    std::vector<DepGraphIndex> linearization{parent, child};
+    PostLinearize(depgraph, linearization);
+
+    BOOST_CHECK_EQUAL(linearization[0], parent);
+    BOOST_CHECK_EQUAL(linearization[1], child);
+    BOOST_CHECK_EQUAL(ChunkLinearizationInfo(depgraph, linearization).size(), 1U);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

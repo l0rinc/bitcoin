@@ -8,7 +8,10 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <array>
+#include <limits>
 #include <memory>
+#include <set>
 #include <vector>
 
 BOOST_AUTO_TEST_SUITE(txgraph_tests)
@@ -376,6 +379,55 @@ BOOST_AUTO_TEST_CASE(txgraph_chunk_chain)
     graph->RemoveTransaction(refs[3]);
     BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 1);
     block_builder_checker({{&refs[0]}});
+}
+
+BOOST_AUTO_TEST_CASE(txgraph_saturated_chunking_keeps_block_builder_connected)
+{
+    auto graph = MakeTxGraph(10, 100'000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    static constexpr int64_t MAX_FEE{std::numeric_limits<int64_t>::max()};
+    const std::array feerates{
+        FeePerWeight{MAX_FEE, 2056},
+        FeePerWeight{8934011356766855619, 1040},
+        FeePerWeight{MAX_FEE, 2056},
+        FeePerWeight{MAX_FEE, 2056},
+        FeePerWeight{8933836393842009569, 2352},
+        FeePerWeight{8934011356766855619, 7592},
+        FeePerWeight{8934011353014096838, 2056},
+        FeePerWeight{3253225981, 9920},
+    };
+
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(feerates.size());
+    for (const auto& feerate : feerates) {
+        graph->AddTransaction(refs.emplace_back(), feerate);
+    }
+
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[4]);
+    graph->AddDependency(/*parent=*/refs[2], /*child=*/refs[4]);
+    graph->AddDependency(/*parent=*/refs[3], /*child=*/refs[4]);
+    graph->AddDependency(/*parent=*/refs[2], /*child=*/refs[7]);
+    graph->AddDependency(/*parent=*/refs[5], /*child=*/refs[7]);
+    graph->AddDependency(/*parent=*/refs[6], /*child=*/refs[7]);
+
+    graph->SanityCheck();
+
+    auto builder{graph->GetBlockBuilder()};
+    auto chunk{builder->GetCurrentChunk()};
+    BOOST_REQUIRE(chunk);
+    BOOST_CHECK_EQUAL(chunk->first.size(), refs.size());
+    BOOST_CHECK((chunk->second == FeePerWeight{MAX_FEE, 29128}));
+
+    const std::set<TxGraph::Ref*> returned{chunk->first.begin(), chunk->first.end()};
+    for (auto& ref : refs) {
+        BOOST_CHECK(returned.contains(&ref));
+        BOOST_CHECK(graph->GetMainChunkFeerate(ref) == chunk->second);
+    }
+
+    builder->Include();
+    BOOST_CHECK(!builder->GetCurrentChunk());
+    graph->SanityCheck();
 }
 
 BOOST_AUTO_TEST_CASE(txgraph_staging)

@@ -41,7 +41,7 @@ template <std::unsigned_integral T, std::unsigned_integral U>
 }
 
 template <std::integral T>
-[[nodiscard]] T SaturatingAdd(const T i, const T j) noexcept
+[[nodiscard]] constexpr T SaturatingAdd(const T i, const T j) noexcept
 {
     if constexpr (std::numeric_limits<T>::is_signed) {
         if (i > 0 && j > std::numeric_limits<T>::max() - i) {
@@ -56,6 +56,25 @@ template <std::integral T>
         }
     }
     return i + j;
+}
+
+template <std::signed_integral T>
+[[nodiscard]] constexpr T SaturatingSubtract(const T i, const T j) noexcept
+{
+    // Not SaturatingAdd(i, SaturatingNegate(j)), which is off by one when j is the minimum value.
+    if (j > 0 && i < std::numeric_limits<T>::min() + j) {
+        return std::numeric_limits<T>::min();
+    }
+    if (j < 0 && i > std::numeric_limits<T>::max() + j) {
+        return std::numeric_limits<T>::max();
+    }
+    return i - j;
+}
+
+template <std::signed_integral T>
+[[nodiscard]] constexpr T SaturatingNegate(const T i) noexcept
+{
+    return i == std::numeric_limits<T>::min() ? std::numeric_limits<T>::max() : -i;
 }
 
 /**
