@@ -99,28 +99,23 @@ static bool g_generated_cookie = false;
 
 AuthCookieResult GenerateAuthCookie(const std::optional<fs::perms>& cookie_perms,
                                     std::string& user,
-                                    std::string& pass)
+                                    std::string& pass,
+                                    AuthCookieWriteFn write_cookie)
 {
     const size_t COOKIE_SIZE = 32;
     unsigned char rand_pwd[COOKIE_SIZE];
     GetRandBytes(rand_pwd);
     const std::string rand_pwd_hex{HexStr(rand_pwd)};
 
-    /** the umask determines what permissions are used to create this file -
-     * these are set to 0077 in common/system.cpp.
-     */
-    std::ofstream file;
     fs::path filepath_tmp = GetAuthCookieFile(true);
     if (filepath_tmp.empty()) {
         return AuthCookieResult::Disabled; // -norpccookiefile
     }
-    file.open(filepath_tmp.std_path());
-    if (!file.is_open()) {
-        LogWarning("Unable to open cookie authentication file %s for writing", fs::PathToString(filepath_tmp));
+    // The umask is set to 0077 in common/system.cpp.
+    if (!write_cookie(filepath_tmp, COOKIEAUTH_USER + ":" + rand_pwd_hex)) {
+        LogWarning("Unable to write cookie authentication file %s", fs::PathToString(filepath_tmp));
         return AuthCookieResult::Error;
     }
-    file << COOKIEAUTH_USER << ":" << rand_pwd_hex;
-    file.close();
 
     fs::path filepath = GetAuthCookieFile(false);
     if (!RenameOver(filepath_tmp, filepath)) {

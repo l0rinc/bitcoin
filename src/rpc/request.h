@@ -12,6 +12,7 @@
 
 #include <univalue.h>
 #include <util/fs.h>
+#include <util/readwritefile.h>
 
 enum class JSONRPCVersion {
     V1_LEGACY,
@@ -29,18 +30,22 @@ enum class AuthCookieResult : uint8_t {
     Ok,
 };
 
+using AuthCookieWriteFn = bool (*)(const fs::path&, const std::string&); //!< Full write succeeded
+
 /**
  * Generate a new RPC authentication cookie and write it to disk
  * @param[in] cookie_perms Filesystem permissions to use for the cookie file.
  * @param[out] user Generated username, only set if `OK` is returned.
  * @param[out] pass Generated password, only set if `OK` is returned.
+ * @param[in] write_cookie Writer for the temporary cookie file, overridden by tests to simulate a failing write.
  * @retval AuthCookieResult::Disabled Authentication via cookie is disabled.
  * @retval AuthCookieResult::Error Error occurred, auth data could not be saved to disk.
  * @retval AuthCookieResult::Ok Auth data was generated, saved to disk and in `user` and `pass`.
  */
 AuthCookieResult GenerateAuthCookie(const std::optional<fs::perms>& cookie_perms,
                                             std::string& user,
-                                            std::string& pass);
+                                            std::string& pass,
+                                            AuthCookieWriteFn write_cookie = WriteBinaryFile);
 
 /** Read the RPC authentication cookie from disk */
 AuthCookieResult GetAuthCookie(std::string& cookie_out);

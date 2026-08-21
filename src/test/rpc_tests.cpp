@@ -13,6 +13,7 @@
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <univalue.h>
+#include <util/readwritefile.h>
 #include <util/time.h>
 
 #include <any>
@@ -84,8 +85,29 @@ UniValue RPCTestingSetup::CallRPC(std::string args)
     }
 }
 
+static bool WriteIncompleteCookie(const fs::path& path, const std::string&)
+{
+    BOOST_REQUIRE(WriteBinaryFile(path, "")); // Let ignored write failures clobber the old cookie
+    return false;
+}
 
 BOOST_FIXTURE_TEST_SUITE(rpc_tests, RPCTestingSetup)
+
+BOOST_FIXTURE_TEST_CASE(rpc_cookie_write_failure_preserves_existing_file, BasicTestingSetup)
+{
+    const std::string previous_cookie{"__cookie__:previous"};
+    const fs::path cookie_path{m_path_root / ".cookie"};
+    BOOST_REQUIRE(WriteBinaryFile(cookie_path, previous_cookie));
+    gArgs.ForceSetArg("-rpccookiefile", fs::PathToString(cookie_path));
+
+    std::string user, pass;
+    const auto result{GenerateAuthCookie(std::nullopt, user, pass, WriteIncompleteCookie)};
+
+    BOOST_CHECK(result == AuthCookieResult::Error);
+    const auto [read_ok, saved_cookie]{ReadBinaryFile(cookie_path)};
+    BOOST_REQUIRE(read_ok);
+    BOOST_CHECK_EQUAL(saved_cookie, previous_cookie);
+}
 
 BOOST_AUTO_TEST_CASE(rpc_namedparams)
 {
