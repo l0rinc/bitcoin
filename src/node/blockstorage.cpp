@@ -797,15 +797,26 @@ BlockfileType BlockManager::BlockfileTypeForHeight(int height)
 bool BlockManager::FlushChainstateBlockFile(int tip_height)
 {
     AssertLockHeld(::cs_main);
-    auto& cursor = m_blockfile_cursors[BlockfileTypeForHeight(tip_height)];
+    bool success{true};
+
+    auto& cursor{m_blockfile_cursors[BlockfileTypeForHeight(tip_height)]};
     // If the cursor does not exist, it means an assumeutxo snapshot is loaded,
-    // but no blocks past the snapshot height have been written yet, so there
-    // is no data associated with the chainstate, and it is safe not to flush.
+    // but no blocks past the snapshot height have been written yet.
     if (cursor) {
-        return FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false);
+        success = FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false);
     }
-    // No need to log warnings in this case.
-    return true;
+
+    // Blocks are written in download order, while undo data is written in validation order. An older rev file can
+    // therefore receive new undo data after the block cursor has advanced. Flush every dirty undo file before its
+    // BLOCK_HAVE_UNDO entries are persisted by WriteBlockIndexDB().
+    for (const int file_num : m_dirty_fileinfo) {
+        if (cursor && file_num == cursor->file_num) continue;
+        if (file_num < 0 || static_cast<size_t>(file_num) >= m_blockfile_info.size()) continue;
+        if (m_blockfile_info[file_num].nUndoSize == 0) continue;
+        if (!FlushUndoFile(file_num)) success = false;
+    }
+
+    return success;
 }
 
 uint64_t BlockManager::CalculateCurrentUsage()
