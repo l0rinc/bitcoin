@@ -3,13 +3,21 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 //
 #include <chainparams.h>
+#include <consensus/consensus.h>
+#include <consensus/merkle.h>
+#include <consensus/tx_verify.h>
 #include <consensus/validation.h>
+#include <hash.h>
 #include <kernel/disconnected_transactions.h>
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
+#include <pow.h>
+#include <primitives/transaction.h>
 #include <random.h>
 #include <rpc/blockchain.h>
+#include <script/interpreter.h>
+#include <script/script_error.h>
 #include <sync.h>
 #include <test/util/chainstate.h>
 #include <test/util/common.h>
@@ -35,6 +43,329 @@ using node::KernelNotifications;
 using node::SnapshotMetadata;
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, TestingSetup)
+
+BOOST_AUTO_TEST_CASE(block_finality_bip113_height_ignores_activation_hash)
+{
+    const int csv_height{Params().GetConsensus().CSVHeight};
+    const int64_t median_time_past{LOCKTIME_THRESHOLD + 1000};
+    const uint256 block_hash{uint256::ONE};
+    CBlockIndex prev;
+    prev.nHeight = csv_height - 1;
+    prev.nTime = median_time_past;
+    prev.phashBlock = &block_hash;
+
+    BOOST_CHECK(DeploymentActiveAfter(&prev, *Assert(m_node.chainman), Consensus::DEPLOYMENT_CSV));
+
+    CMutableTransaction mutable_tx;
+    mutable_tx.nLockTime = prev.GetMedianTimePast() + 1;
+    mutable_tx.vin.resize(1);
+    mutable_tx.vin[0].nSequence = CTxIn::SEQUENCE_FINAL - 1;
+    const CTransaction tx{mutable_tx};
+
+    BOOST_CHECK(IsFinalTx(tx, csv_height, mutable_tx.nLockTime + 1));
+    BOOST_CHECK(!IsFinalTx(tx, csv_height, prev.GetMedianTimePast()));
+}
+
+BOOST_AUTO_TEST_CASE(block_sequence_locks_bip68_height_ignores_activation_hash)
+{
+    const int csv_height{Params().GetConsensus().CSVHeight};
+    CBlockIndex prev;
+    prev.nHeight = csv_height - 1;
+    CBlockIndex block;
+    block.nHeight = csv_height;
+    block.pprev = &prev;
+
+    BOOST_CHECK(DeploymentActiveAt(block, *Assert(m_node.chainman), Consensus::DEPLOYMENT_CSV));
+
+    CMutableTransaction mutable_tx;
+    mutable_tx.version = 2;
+    mutable_tx.vin.resize(1);
+    mutable_tx.vin[0].nSequence = 2;
+    const CTransaction tx{mutable_tx};
+
+    std::vector<int> prev_heights{csv_height - 1};
+    BOOST_CHECK(SequenceLocks(tx, 0, prev_heights, block));
+    prev_heights = {csv_height - 1};
+    BOOST_CHECK(!SequenceLocks(tx, LOCKTIME_VERIFY_SEQUENCE, prev_heights, block));
+}
+
+BOOST_AUTO_TEST_CASE(block_sequence_locks_time_uses_prevout_parent_mtp)
+{
+    constexpr int64_t low_time{1'600'000'000};
+    constexpr int64_t sequence_lock_time{1 << CTxIn::SEQUENCE_LOCKTIME_GRANULARITY};
+    constexpr int64_t high_time{low_time + sequence_lock_time};
+
+    std::vector<CBlockIndex> chain(12);
+    for (size_t i{0}; i < chain.size(); ++i) {
+        chain[i].nHeight = static_cast<int>(i);
+        chain[i].nTime = i <= 5 ? low_time : high_time;
+        if (i > 0) chain[i].pprev = &chain[i - 1];
+    }
+
+    CBlockIndex block;
+    block.nHeight = static_cast<int>(chain.size());
+    block.nTime = high_time + 1;
+    block.pprev = &chain.back();
+
+    BOOST_REQUIRE_EQUAL(chain[10].GetMedianTimePast(), low_time);
+    BOOST_REQUIRE_EQUAL(chain[11].GetMedianTimePast(), high_time);
+    BOOST_REQUIRE_EQUAL(block.pprev->GetMedianTimePast(), high_time);
+
+    CMutableTransaction mutable_tx;
+    mutable_tx.version = 2;
+    mutable_tx.vin.resize(1);
+    mutable_tx.vin[0].nSequence = CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG | 1;
+    const CTransaction tx{mutable_tx};
+
+    std::vector<int> prev_heights{chain.back().nHeight};
+    const auto lock_pair{CalculateSequenceLocks(tx, LOCKTIME_VERIFY_SEQUENCE, prev_heights, block)};
+    BOOST_CHECK_EQUAL(lock_pair.second, low_time + sequence_lock_time - 1);
+    BOOST_CHECK(EvaluateSequenceLocks(block, lock_pair));
+
+    prev_heights = {chain.back().nHeight};
+    BOOST_CHECK(SequenceLocks(tx, LOCKTIME_VERIFY_SEQUENCE, prev_heights, block));
+}
+
+BOOST_FIXTURE_TEST_CASE(block_header_time_uses_parent_mtp_once, TestChain100Setup)
+{
+    const CScript coinbase_script{CScript{} << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG};
+    const auto& consensus{m_node.chainman->GetConsensus()};
+    const int64_t base_time{
+        WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip()->GetMedianTimePast())};
+    SetMockTime(base_time + 10'000);
+
+    auto solve_block{[&](CBlock& block) {
+        block.nNonce = 0;
+        while (!CheckProofOfWork(block.GetHash(), block.nBits, consensus)) {
+            ++block.nNonce;
+        }
+    }};
+
+    auto process_block_at_time{[&](const int64_t block_time) {
+        CBlock block{CreateBlock({}, coinbase_script)};
+        block.nTime = block_time;
+        solve_block(block);
+
+        bool new_block{false};
+        BOOST_REQUIRE(m_node.chainman->ProcessNewBlock(std::make_shared<const CBlock>(block),
+            /*force_processing=*/true, /*min_pow_checked=*/true, &new_block));
+        BOOST_REQUIRE(new_block);
+    }};
+
+    for (int64_t offset{1}; offset <= 10; ++offset) {
+        process_block_at_time(base_time + offset);
+    }
+    process_block_at_time(base_time + 1000);
+
+    const int64_t parent_mtp{
+        WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip()->GetMedianTimePast())};
+    BOOST_REQUIRE_EQUAL(parent_mtp, base_time + 6);
+
+    // This child is valid when compared to the parent MTP window. It would be
+    // too old if the parent timestamp were inserted into that window twice.
+    process_block_at_time(parent_mtp + 1);
+}
+
+BOOST_AUTO_TEST_CASE(block_script_flags_csv_height_ignores_activation_hash)
+{
+    const int csv_height{Params().GetConsensus().CSVHeight};
+    const uint256 block_hash{uint256::ONE};
+    CBlockIndex pre_csv_block;
+    pre_csv_block.nHeight = csv_height - 1;
+    pre_csv_block.phashBlock = &block_hash;
+    CBlockIndex csv_block;
+    csv_block.nHeight = csv_height;
+    csv_block.phashBlock = &block_hash;
+
+    const script_verify_flags pre_csv_flags{GetBlockScriptFlags(pre_csv_block, *Assert(m_node.chainman))};
+    const script_verify_flags csv_flags{GetBlockScriptFlags(csv_block, *Assert(m_node.chainman))};
+    BOOST_CHECK(!(pre_csv_flags & SCRIPT_VERIFY_CHECKSEQUENCEVERIFY));
+    BOOST_CHECK(csv_flags & SCRIPT_VERIFY_CHECKSEQUENCEVERIFY);
+
+    const CScript script_pub_key{CScript{} << 1 << OP_CHECKSEQUENCEVERIFY << OP_DROP << OP_TRUE};
+    ScriptError err;
+    BOOST_CHECK(VerifyScript(CScript{}, script_pub_key, nullptr, pre_csv_flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_OK);
+    BOOST_CHECK(!VerifyScript(CScript{}, script_pub_key, nullptr, csv_flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_UNSATISFIED_LOCKTIME);
+}
+
+BOOST_AUTO_TEST_CASE(block_script_flags_nulldummy_height_ignores_activation_hash)
+{
+    const int segwit_height{Params().GetConsensus().SegwitHeight};
+    const uint256 block_hash{uint256::ONE};
+    CBlockIndex pre_segwit_block;
+    pre_segwit_block.nHeight = segwit_height - 1;
+    pre_segwit_block.phashBlock = &block_hash;
+    CBlockIndex segwit_block;
+    segwit_block.nHeight = segwit_height;
+    segwit_block.phashBlock = &block_hash;
+
+    const script_verify_flags pre_segwit_flags{GetBlockScriptFlags(pre_segwit_block, *Assert(m_node.chainman))};
+    const script_verify_flags segwit_flags{GetBlockScriptFlags(segwit_block, *Assert(m_node.chainman))};
+    BOOST_CHECK(!(pre_segwit_flags & SCRIPT_VERIFY_NULLDUMMY));
+    BOOST_CHECK(segwit_flags & SCRIPT_VERIFY_NULLDUMMY);
+
+    const CScript script_sig{CScript{} << 1};
+    const CScript script_pub_key{CScript{} << OP_0 << OP_0 << OP_CHECKMULTISIG};
+    ScriptError err;
+    BOOST_CHECK(VerifyScript(script_sig, script_pub_key, nullptr, pre_segwit_flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_OK);
+    BOOST_CHECK(!VerifyScript(script_sig, script_pub_key, nullptr, segwit_flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_SIG_NULLDUMMY);
+}
+
+BOOST_AUTO_TEST_CASE(block_witness_commitment_height_ignores_activation_hash)
+{
+    const int segwit_height{Params().GetConsensus().SegwitHeight};
+    const uint256 block_hash{uint256::ONE};
+    CBlockIndex prev;
+    prev.nHeight = segwit_height - 1;
+    prev.phashBlock = &block_hash;
+
+    BOOST_CHECK(DeploymentActiveAfter(&prev, *Assert(m_node.chainman), Consensus::DEPLOYMENT_SEGWIT));
+
+    std::vector<unsigned char> commitment(36);
+    commitment[0] = 0xaa;
+    commitment[1] = 0x21;
+    commitment[2] = 0xa9;
+    commitment[3] = 0xed;
+
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vin[0].scriptSig = CScript{} << segwit_height;
+    coinbase.vout.emplace_back(0, CScript{} << OP_RETURN << commitment);
+
+    CBlock block;
+    block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+
+    BOOST_CHECK_EQUAL(GetWitnessCommitmentIndex(block), 0);
+    BOOST_CHECK(!block.vtx[0]->HasWitness());
+    BOOST_CHECK(!IsBlockMutated(block, /*check_witness_root=*/false));
+    BOOST_CHECK(IsBlockMutated(block, /*check_witness_root=*/true));
+}
+
+BOOST_AUTO_TEST_CASE(block_witness_data_requires_expected_commitment)
+{
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vin[0].scriptSig = CScript{} << std::vector<unsigned char>{0x01};
+    coinbase.vin[0].scriptWitness.stack.emplace_back(32);
+    coinbase.vout.emplace_back(0, CScript{});
+
+    CBlock block;
+    block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
+
+    uint256 commitment_hash;
+    CHash256()
+        .Write(BlockWitnessMerkleRoot(block))
+        .Write(block.vtx[0]->vin[0].scriptWitness.stack[0])
+        .Finalize(commitment_hash);
+
+    std::vector<unsigned char> commitment{0xaa, 0x21, 0xa9, 0xed};
+    commitment.insert(commitment.end(), commitment_hash.begin(), commitment_hash.end());
+
+    CMutableTransaction committed_coinbase{*block.vtx[0]};
+    committed_coinbase.vout[0].scriptPubKey = CScript{} << OP_RETURN << commitment;
+    block.vtx[0] = MakeTransactionRef(std::move(committed_coinbase));
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+
+    BOOST_CHECK(block.vtx[0]->HasWitness());
+    BOOST_CHECK_EQUAL(GetWitnessCommitmentIndex(block), 0);
+    BOOST_CHECK(IsBlockMutated(block, /*check_witness_root=*/false));
+    BOOST_CHECK(!IsBlockMutated(block, /*check_witness_root=*/true));
+}
+
+BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_witness)
+{
+    CBlockIndex block_index;
+    const uint256 block_hash{uint256::ONE};
+    block_index.nHeight = 1;
+    block_index.phashBlock = &block_hash;
+
+    const script_verify_flags flags{GetBlockScriptFlags(block_index, *Assert(m_node.chainman))};
+    BOOST_CHECK(flags & SCRIPT_VERIFY_P2SH);
+    BOOST_CHECK(flags & SCRIPT_VERIFY_WITNESS);
+    BOOST_CHECK(flags & SCRIPT_VERIFY_TAPROOT);
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_DERSIG));
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY));
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_CHECKSEQUENCEVERIFY));
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_NULLDUMMY));
+
+    const CScript script_pub_key{CScript{} << OP_0 << std::vector<unsigned char>(32, 0x02)};
+    const CScriptWitness empty_witness;
+    ScriptError err;
+    BOOST_CHECK(!VerifyScript(CScript{}, script_pub_key, &empty_witness, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
+}
+
+BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_p2sh)
+{
+    CBlockIndex block_index;
+    const uint256 block_hash{uint256::ONE};
+    block_index.nHeight = 1;
+    block_index.phashBlock = &block_hash;
+
+    const script_verify_flags flags{GetBlockScriptFlags(block_index, *Assert(m_node.chainman))};
+    BOOST_CHECK(flags & SCRIPT_VERIFY_P2SH);
+
+    const CScript redeem_script{CScript{} << OP_FALSE};
+    const std::vector<unsigned char> redeem_script_bytes{redeem_script.begin(), redeem_script.end()};
+    const uint160 redeem_script_hash{Hash160(redeem_script_bytes)};
+    const CScript script_pub_key{CScript{} << OP_HASH160 << std::vector<unsigned char>{redeem_script_hash.begin(), redeem_script_hash.end()} << OP_EQUAL};
+    const CScript script_sig{CScript{} << redeem_script_bytes};
+
+    ScriptError err;
+    BOOST_CHECK(!VerifyScript(script_sig, script_pub_key, nullptr, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_EVAL_FALSE);
+}
+
+BOOST_AUTO_TEST_CASE(block_script_flags_p2sh_exception_hash)
+{
+    const uint256 exception_hash{
+        uint256{"00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22"}};
+    CBlockIndex block_index;
+    block_index.nHeight = 170060;
+    block_index.phashBlock = &exception_hash;
+
+    const script_verify_flags flags{GetBlockScriptFlags(block_index, *Assert(m_node.chainman))};
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_P2SH));
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_WITNESS));
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_TAPROOT));
+
+    const CScript redeem_script{CScript{} << OP_FALSE};
+    const std::vector<unsigned char> redeem_script_bytes{redeem_script.begin(), redeem_script.end()};
+    const uint160 redeem_script_hash{Hash160(redeem_script_bytes)};
+    const CScript script_pub_key{CScript{} << OP_HASH160 << std::vector<unsigned char>{redeem_script_hash.begin(), redeem_script_hash.end()} << OP_EQUAL};
+    const CScript script_sig{CScript{} << redeem_script_bytes};
+
+    ScriptError err;
+    BOOST_CHECK(VerifyScript(script_sig, script_pub_key, nullptr, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_OK);
+    BOOST_CHECK(!VerifyScript(script_sig, script_pub_key, nullptr, SCRIPT_VERIFY_P2SH, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_EVAL_FALSE);
+}
+
+BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_taproot)
+{
+    CBlockIndex block_index;
+    const uint256 block_hash{uint256::ONE};
+    block_index.nHeight = 1;
+    block_index.phashBlock = &block_hash;
+
+    const script_verify_flags flags{GetBlockScriptFlags(block_index, *Assert(m_node.chainman))};
+    BOOST_CHECK(flags & SCRIPT_VERIFY_WITNESS);
+    BOOST_CHECK(flags & SCRIPT_VERIFY_TAPROOT);
+
+    const CScript script_pub_key{CScript{} << OP_1 << std::vector<unsigned char>(32, 0x02)};
+    const CScriptWitness empty_witness;
+    ScriptError err;
+    BOOST_CHECK(!VerifyScript(CScript{}, script_pub_key, &empty_witness, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
+}
 
 //! Basic tests for ChainstateManager.
 //!

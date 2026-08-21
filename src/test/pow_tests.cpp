@@ -47,6 +47,35 @@ BOOST_AUTO_TEST_CASE(get_next_work_pow_limit)
     BOOST_CHECK(PermittedDifficultyTransition(chainParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, expected_nbits));
 }
 
+BOOST_AUTO_TEST_CASE(get_next_work_uses_current_pow_limit)
+{
+    auto params{CreateChainParams(*m_node.args, ChainType::MAIN)->GetConsensus()};
+    params.enforce_BIP94 = false;
+    params.fPowAllowMinDifficultyBlocks = false;
+    params.fPowNoRetargeting = false;
+    params.nPowTargetSpacing = 10 * 60;
+    params.nPowTargetTimespan = 14 * 24 * 60 * 60;
+
+    constexpr uint32_t low_pow_limit_bits{0x1d00ffffU};
+    constexpr uint32_t high_pow_limit_bits{0x207fffffU};
+    const auto pow_limit_from_bits = [](uint32_t bits) {
+        return ArithToUint256(arith_uint256{}.SetCompact(bits));
+    };
+
+    CBlockIndex pindexLast;
+    pindexLast.nHeight = params.DifficultyAdjustmentInterval() - 1;
+    pindexLast.nTime = params.nPowTargetTimespan * 4;
+    pindexLast.nBits = low_pow_limit_bits;
+
+    auto high_limit_params{params};
+    high_limit_params.powLimit = pow_limit_from_bits(high_pow_limit_bits);
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, 0, high_limit_params), 0x1d03fffcU);
+
+    auto low_limit_params{params};
+    low_limit_params.powLimit = pow_limit_from_bits(low_pow_limit_bits);
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, 0, low_limit_params), low_pow_limit_bits);
+}
+
 /* Test the constraint on the lower bound for actual time taken */
 BOOST_AUTO_TEST_CASE(get_next_work_lower_limit_actual)
 {
@@ -81,6 +110,64 @@ BOOST_AUTO_TEST_CASE(get_next_work_upper_limit_actual)
     BOOST_CHECK(!PermittedDifficultyTransition(chainParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, invalid_nbits));
 }
 
+BOOST_AUTO_TEST_CASE(get_next_work_bip94_uses_first_period_bits)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::TESTNET4);
+    const auto consensus = chainParams->GetConsensus();
+    BOOST_REQUIRE(consensus.enforce_BIP94);
+    BOOST_REQUIRE(consensus.fPowAllowMinDifficultyBlocks);
+
+    const int interval{static_cast<int>(consensus.DifficultyAdjustmentInterval())};
+    const unsigned int first_period_bits{0x1c0ffff0U};
+    const unsigned int pow_limit_bits{UintToArith256(consensus.powLimit).GetCompact()};
+    const int64_t first_time{1700000000};
+
+    std::vector<CBlockIndex> blocks(interval);
+    for (int i = 0; i < interval; ++i) {
+        blocks[i].nHeight = interval + i;
+        blocks[i].pprev = i > 0 ? &blocks[i - 1] : nullptr;
+        blocks[i].nTime = first_time + i * consensus.nPowTargetSpacing;
+        blocks[i].nBits = pow_limit_bits;
+    }
+    blocks.front().nBits = first_period_bits;
+    blocks.back().nTime = first_time + consensus.nPowTargetTimespan;
+
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&blocks.back(), blocks.front().GetBlockTime(), consensus), first_period_bits);
+
+    auto legacy_consensus{consensus};
+    legacy_consensus.enforce_BIP94 = false;
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&blocks.back(), blocks.front().GetBlockTime(), legacy_consensus), pow_limit_bits);
+}
+
+BOOST_AUTO_TEST_CASE(get_next_work_testnet_easy_boundary_uses_retarget_bits)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::TESTNET);
+    const auto consensus = chainParams->GetConsensus();
+    BOOST_REQUIRE(consensus.fPowAllowMinDifficultyBlocks);
+    BOOST_REQUIRE(!consensus.enforce_BIP94);
+
+    const int interval{static_cast<int>(consensus.DifficultyAdjustmentInterval())};
+    const unsigned int boundary_bits{0x1c0ffff0U};
+    const unsigned int pow_limit_bits{UintToArith256(consensus.powLimit).GetCompact()};
+    const int64_t boundary_time{1700000000};
+
+    CBlockIndex boundary;
+    boundary.nHeight = interval;
+    boundary.nTime = boundary_time;
+    boundary.nBits = boundary_bits;
+
+    CBlockIndex parent;
+    parent.nHeight = interval + 1;
+    parent.pprev = &boundary;
+    parent.nTime = boundary_time + consensus.nPowTargetSpacing * 3;
+    parent.nBits = pow_limit_bits;
+
+    CBlockHeader child;
+    child.nTime = parent.GetBlockTime() + consensus.nPowTargetSpacing;
+
+    BOOST_CHECK_EQUAL(GetNextWorkRequired(&parent, &child, consensus), boundary_bits);
+}
+
 BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_negative_target)
 {
     const auto consensus = CreateChainParams(*m_node.args, ChainType::MAIN)->GetConsensus();
@@ -110,6 +197,41 @@ BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_too_easy_target)
     nBits = nBits_arith.GetCompact();
     hash = uint256{1};
     BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
+}
+
+BOOST_AUTO_TEST_CASE(CheckProofOfWork_accepts_compact_exponent_34_target)
+{
+    auto consensus{CreateChainParams(*m_node.args, ChainType::REGTEST)->GetConsensus()};
+    constexpr uint32_t exponent_34_bits{0x22000001U};
+    bool is_negative{true};
+    bool is_overflow{true};
+    arith_uint256 target;
+    target.SetCompact(exponent_34_bits, &is_negative, &is_overflow);
+
+    BOOST_CHECK(!is_negative);
+    BOOST_CHECK(!is_overflow);
+    BOOST_CHECK(target != 0);
+    BOOST_CHECK(target <= UintToArith256(consensus.powLimit));
+    BOOST_CHECK(CheckProofOfWork(uint256::ZERO, exponent_34_bits, consensus));
+}
+
+BOOST_AUTO_TEST_CASE(CheckProofOfWork_uses_current_pow_limit)
+{
+    const auto consensus{CreateChainParams(*m_node.args, ChainType::MAIN)->GetConsensus()};
+    constexpr uint32_t low_pow_limit_bits{0x1d00ffffU};
+    constexpr uint32_t high_pow_limit_bits{0x207fffffU};
+    constexpr uint32_t between_limits_bits{0x1d03fffcU};
+    const auto pow_limit_from_bits = [](uint32_t bits) {
+        return ArithToUint256(arith_uint256{}.SetCompact(bits));
+    };
+
+    auto high_limit_consensus{consensus};
+    high_limit_consensus.powLimit = pow_limit_from_bits(high_pow_limit_bits);
+    BOOST_CHECK(CheckProofOfWork(uint256::ZERO, between_limits_bits, high_limit_consensus));
+
+    auto low_limit_consensus{consensus};
+    low_limit_consensus.powLimit = pow_limit_from_bits(low_pow_limit_bits);
+    BOOST_CHECK(!CheckProofOfWork(uint256::ZERO, between_limits_bits, low_limit_consensus));
 }
 
 BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_biger_hash_than_target)

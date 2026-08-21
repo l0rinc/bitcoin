@@ -374,6 +374,180 @@ BOOST_AUTO_TEST_CASE(tx_oversized)
     }
 }
 
+BOOST_AUTO_TEST_CASE(tx_negative_output_value)
+{
+    CMutableTransaction tx;
+    tx.vin.emplace_back(Txid::FromUint256(uint256::ONE), 0);
+    tx.vout.emplace_back(-1, CScript() << OP_TRUE);
+
+    TxValidationState state;
+    BOOST_CHECK(!CheckTransaction(CTransaction{tx}, state));
+    BOOST_CHECK(state.IsInvalid());
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-txns-vout-negative");
+}
+
+BOOST_AUTO_TEST_CASE(tx_output_money_range)
+{
+    auto check_money_range{[](std::vector<CAmount> output_values, const std::string& reject_reason) {
+        CMutableTransaction tx;
+        tx.vin.emplace_back(Txid::FromUint256(uint256::ONE), 0);
+        for (const auto value : output_values) {
+            tx.vout.emplace_back(value, CScript() << OP_TRUE);
+        }
+
+        TxValidationState state;
+        BOOST_CHECK(!CheckTransaction(CTransaction{tx}, state));
+        BOOST_CHECK(state.IsInvalid());
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), reject_reason);
+    }};
+
+    check_money_range({MAX_MONEY + 1}, "bad-txns-vout-toolarge");
+    check_money_range({MAX_MONEY, 1}, "bad-txns-txouttotal-toolarge");
+}
+
+BOOST_AUTO_TEST_CASE(tx_noncanonical_compactsize)
+{
+    const auto deserialize_tx{[](const std::string& hex) {
+        DataStream stream{ParseHex(hex)};
+        return CTransaction(deserialize, TX_WITH_WITNESS, stream);
+    }};
+
+    const std::string canonical{
+        "01000000"
+        "01"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "00000000"};
+    TxValidationState state;
+    BOOST_CHECK(CheckTransaction(deserialize_tx(canonical), state));
+    BOOST_CHECK(state.IsValid());
+
+    const std::string noncanonical_input_count{
+        "01000000"
+        "fd0100"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "00000000"};
+    BOOST_CHECK_THROW(deserialize_tx(noncanonical_input_count), std::ios_base::failure);
+}
+
+BOOST_AUTO_TEST_CASE(tx_noncanonical_witness_compactsize)
+{
+    const auto deserialize_tx{[](const std::string& hex) {
+        DataStream stream{ParseHex(hex)};
+        return CTransaction(deserialize, TX_WITH_WITNESS, stream);
+    }};
+
+    const std::string canonical{
+        "01000000"
+        "0001"
+        "01"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "01"
+        "01"
+        "00"
+        "00000000"};
+    const CTransaction tx{deserialize_tx(canonical)};
+    BOOST_CHECK(tx.HasWitness());
+    TxValidationState state;
+    BOOST_CHECK(CheckTransaction(tx, state));
+    BOOST_CHECK(state.IsValid());
+
+    const std::string noncanonical_witness_item_length{
+        "01000000"
+        "0001"
+        "01"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "01"
+        "fd0100"
+        "00"
+        "00000000"};
+    BOOST_CHECK_THROW(deserialize_tx(noncanonical_witness_item_length), std::ios_base::failure);
+
+    const std::string noncanonical_witness_stack_count{
+        "01000000"
+        "0001"
+        "01"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "fd0100"
+        "01"
+        "00"
+        "00000000"};
+    BOOST_CHECK_THROW(deserialize_tx(noncanonical_witness_stack_count), std::ios_base::failure);
+}
+
+BOOST_AUTO_TEST_CASE(tx_empty_witness_item_not_superfluous)
+{
+    const auto deserialize_tx{[](const std::string& hex) {
+        DataStream stream{ParseHex(hex)};
+        return CTransaction(deserialize, TX_WITH_WITNESS, stream);
+    }};
+
+    const std::string tx_with_empty_witness_item{
+        "01000000"
+        "0001"
+        "01"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "01"
+        "00"
+        "00000000"};
+    const CTransaction tx{deserialize_tx(tx_with_empty_witness_item)};
+    BOOST_CHECK(tx.HasWitness());
+    BOOST_REQUIRE_EQUAL(tx.vin.size(), 1);
+    BOOST_REQUIRE_EQUAL(tx.vin[0].scriptWitness.stack.size(), 1);
+    BOOST_CHECK(tx.vin[0].scriptWitness.stack[0].empty());
+
+    TxValidationState state;
+    BOOST_CHECK(CheckTransaction(tx, state));
+    BOOST_CHECK(state.IsValid());
+}
+
 BOOST_AUTO_TEST_CASE(basic_transaction_tests)
 {
     // Random real transaction (e2769b09e784f32f62ef849763d4f45b98e07ba658647343b915ff832b110436)
