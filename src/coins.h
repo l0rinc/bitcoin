@@ -8,6 +8,7 @@
 
 #include <attributes.h>
 #include <compressor.h>
+#include <consensus/consensus.h>
 #include <core_memusage.h>
 #include <crypto/siphash.h>
 #include <memusage.h>
@@ -780,6 +781,9 @@ public:
 // TODO: pass in a boolean to limit these possible overwrites to known
 // (pre-BIP34) cases.
 void AddCoins(CCoinsViewCache& cache, const CTransaction& tx, int nHeight, bool check = false);
+
+//! `AccessByTxid` lookup limit derived from the maximum block and minimum output weights
+inline const uint64_t MAX_OUTPUTS_PER_BLOCK{MAX_BLOCK_WEIGHT / (WITNESS_SCALE_FACTOR * ::GetSerializeSize(CTxOut()))};
 
 //! Utility function to find any unspent output with a given txid.
 //! This function can be quite expensive because in the event of a transaction

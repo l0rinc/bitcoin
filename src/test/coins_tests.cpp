@@ -18,6 +18,7 @@
 #include <util/strencodings.h>
 
 #include <map>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -99,6 +100,20 @@ public:
     CoinsCachePair& sentinel() const { return m_sentinel; }
     size_t& usage() const { return cachedCoinsUsage; }
     size_t& dirty() const { return m_dirty_count; }
+};
+
+struct CountingCoinsView : CoinsViewEmpty
+{
+    mutable uint64_t m_lookups{0};
+    COutPoint m_outpoint;
+    std::optional<Coin> m_coin;
+
+    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override
+    {
+        ++m_lookups;
+        if (m_coin && outpoint == m_outpoint) return m_coin;
+        return std::nullopt;
+    }
 };
 
 } // namespace
@@ -305,6 +320,22 @@ BOOST_FIXTURE_TEST_CASE(coins_cache_dbbase_simulation_test, CacheTest)
 BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(coins_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(access_by_txid_lookup_bound)
+{
+    auto txid{Txid::FromUint256(m_rng.rand256())};
+    CountingCoinsView found_view;
+    found_view.m_outpoint = {txid, 2};
+    found_view.m_coin = {CTxOut{1, CScript{}}, 1, false};
+    CCoinsViewCache found_cache{&found_view};
+    BOOST_CHECK(AccessByTxid(found_cache, txid) == *found_view.m_coin);
+    BOOST_CHECK_EQUAL(found_view.m_lookups, found_view.m_outpoint.n + 1);
+
+    CountingCoinsView missing_view;
+    CCoinsViewCache missing_cache{&missing_view};
+    BOOST_CHECK(AccessByTxid(missing_cache, txid).IsSpent());
+    BOOST_CHECK_EQUAL(missing_view.m_lookups, MAX_OUTPUTS_PER_BLOCK);
+}
 
 struct UpdateTest : BasicTestingSetup {
 // Store of all necessary tx and undo data for next test
