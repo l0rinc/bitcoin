@@ -169,6 +169,35 @@ BOOST_FIXTURE_TEST_CASE(tx_rejection_types, TestChain100Setup)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(unregistered_peer_tx_handling, TestingSetup)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    FastRandomContext det_rand{true};
+    node::TxDownloadOptions opts{pool, det_rand, /*m_deterministic_txrequest=*/true};
+    const NodeId peer{0};
+    const CTransactionRef tx{CreatePlaceholderTx(/*segwit=*/true)};
+
+    node::TxDownloadManagerImpl txdownload_impl{opts};
+    const auto check_tx{[&](bool expected_should_validate) {
+        const auto [should_validate, package_to_validate]{txdownload_impl.ReceivedTx(peer, tx)};
+        BOOST_CHECK_EQUAL(should_validate, expected_should_validate);
+        BOOST_CHECK(!package_to_validate);
+    }};
+
+    check_tx(/*expected_should_validate=*/false);
+    txdownload_impl.CheckIsEmpty();
+
+    txdownload_impl.ConnectedPeer(peer, node::TxDownloadConnectionInfo{/*m_preferred=*/false, /*m_relay_permissions=*/false, /*m_wtxid_relay=*/true});
+    check_tx(/*expected_should_validate=*/true);
+
+    BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer, tx->GetWitnessHash(), std::chrono::microseconds{0}));
+    txdownload_impl.DisconnectedPeer(peer);
+    txdownload_impl.CheckIsEmpty(peer);
+
+    check_tx(/*expected_should_validate=*/false);
+    txdownload_impl.CheckIsEmpty();
+}
+
 BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
