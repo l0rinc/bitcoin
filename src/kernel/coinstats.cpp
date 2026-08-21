@@ -11,6 +11,7 @@
 #include <node/blockstorage.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
+#include <serialize.h>
 #include <span.h>
 #include <streams.h>
 #include <sync.h>
@@ -22,26 +23,16 @@
 #include <validation.h>
 
 #include <cstddef>
-#include <map>
+#include <cstdint>
 #include <memory>
-#include <utility>
 
 namespace kernel {
+
+static constexpr uint64_t INTERRUPT_CHECK_INTERVAL{8192};
 
 CCoinsStats::CCoinsStats(int block_height, const uint256& block_hash)
     : nHeight(block_height),
       hashBlock(block_hash) {}
-
-// Database-independent metric indicating the UTXO set size
-uint64_t GetBogoSize(const CScript& script_pub_key)
-{
-    return 32 /* txid */ +
-           4 /* vout index */ +
-           4 /* height + coinbase */ +
-           8 /* amount */ +
-           2 /* scriptPubKey len */ +
-           script_pub_key.size() /* scriptPubKey */;
-}
 
 template <typename T>
 static void TxOutSer(T& ss, const COutPoint& outpoint, const Coin& coin)
@@ -51,26 +42,41 @@ static void TxOutSer(T& ss, const COutPoint& outpoint, const Coin& coin)
     ss << coin.out;
 }
 
-static void ApplyCoinHash(HashWriter& ss, const COutPoint& outpoint, const Coin& coin)
+static size_t TxOutSerSize(const Coin& coin)
+{
+    return Txid::size() + sizeof(uint32_t) +
+           sizeof(uint32_t) +
+           sizeof(coin.out.nValue) +
+           GetSizeOfCompactSize(coin.out.scriptPubKey.size()) +
+           coin.out.scriptPubKey.size();
+}
+
+static void ApplyCoinHash(HashWriter& ss, DataStream&, const COutPoint& outpoint, const Coin& coin)
 {
     TxOutSer(ss, outpoint, coin);
+}
+
+static void ApplyCoinHash(MuHash3072& muhash, DataStream& ss, const COutPoint& outpoint, const Coin& coin)
+{
+    ScopedDataStreamUsage scoped_stream{ss};
+    ss.reserve(TxOutSerSize(coin));
+    TxOutSer(ss, outpoint, coin);
+    muhash.Insert(MakeUCharSpan(ss));
 }
 
 void ApplyCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& coin)
 {
     DataStream ss{};
-    TxOutSer(ss, outpoint, coin);
-    muhash.Insert(MakeUCharSpan(ss));
+    ApplyCoinHash(muhash, ss, outpoint, coin);
 }
 
 void RemoveCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& coin)
 {
     DataStream ss{};
+    ss.reserve(TxOutSerSize(coin));
     TxOutSer(ss, outpoint, coin);
     muhash.Remove(MakeUCharSpan(ss));
 }
-
-static void ApplyCoinHash(std::nullptr_t, const COutPoint& outpoint, const Coin& coin) {}
 
 //! Warning: be very careful when changing this! assumeutxo and UTXO snapshot
 //! validation commitments are reliant on the hash constructed by this
@@ -84,29 +90,6 @@ static void ApplyCoinHash(std::nullptr_t, const COutPoint& outpoint, const Coin&
 //! It is also possible, though very unlikely, that a change in this
 //! construction could cause a previously invalid (and potentially malicious)
 //! UTXO snapshot to be considered valid.
-template <typename T>
-static void ApplyHash(T& hash_obj, const Txid& hash, const std::map<uint32_t, Coin>& outputs)
-{
-    for (auto it = outputs.begin(); it != outputs.end(); ++it) {
-        COutPoint outpoint = COutPoint(hash, it->first);
-        Coin coin = it->second;
-        ApplyCoinHash(hash_obj, outpoint, coin);
-    }
-}
-
-static void ApplyStats(CCoinsStats& stats, const std::map<uint32_t, Coin>& outputs)
-{
-    assert(!outputs.empty());
-    stats.nTransactions++;
-    for (auto it = outputs.begin(); it != outputs.end(); ++it) {
-        stats.nTransactionOutputs++;
-        if (stats.total_amount.has_value()) {
-            stats.total_amount = CheckedAdd(*stats.total_amount, it->second.out.nValue);
-        }
-        stats.nBogoSize += GetBogoSize(it->second.out.scriptPubKey);
-    }
-}
-
 //! Calculate statistics about the unspent transaction output set
 template <typename T>
 static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, const CCoinsViewDB& view, node::BlockManager& blockman, const std::function<void()>& interruption_point)
@@ -119,21 +102,25 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, const CCoinsViewD
         pindex = blockman.LookupBlockIndex(pcursor->GetBestBlock());
     }
     CCoinsStats stats{Assert(pindex)->nHeight, pindex->GetBlockHash()};
+    DataStream coin_hash_scratch{};
 
     Txid prevkey;
-    std::map<uint32_t, Coin> outputs;
+    bool have_prevkey{false};
     while (pcursor->Valid()) {
-        if (interruption_point) interruption_point();
-        COutPoint key;
+        if (interruption_point && stats.coins_count % INTERRUPT_CHECK_INTERVAL == 0) interruption_point();
         Coin coin;
-        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
-            if (!outputs.empty() && key.hash != prevkey) {
-                ApplyStats(stats, outputs);
-                ApplyHash(hash_obj, prevkey, outputs);
-                outputs.clear();
+        if (const auto* key{pcursor->GetKey()}; key && pcursor->GetValue(coin)) {
+            if (!have_prevkey || key->hash != prevkey) {
+                stats.nTransactions++;
+                prevkey = key->hash;
+                have_prevkey = true;
             }
-            prevkey = key.hash;
-            outputs[key.n] = std::move(coin);
+            stats.nTransactionOutputs++;
+            if (stats.total_amount.has_value()) {
+                stats.total_amount = CheckedAdd(*stats.total_amount, coin.out.nValue);
+            }
+            stats.nBogoSize += GetBogoSize(coin.out.scriptPubKey.size());
+            ApplyCoinHash(hash_obj, coin_hash_scratch, *key, coin);
             stats.coins_count++;
         } else {
             LogError("%s: unable to read value\n", __func__);
@@ -141,12 +128,46 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, const CCoinsViewD
         }
         pcursor->Next();
     }
-    if (!outputs.empty()) {
-        ApplyStats(stats, outputs);
-        ApplyHash(hash_obj, prevkey, outputs);
-    }
-
     FinalizeHash(hash_obj, stats);
+
+    stats.nDiskSize = view.EstimateSize();
+    return stats;
+}
+
+static std::optional<CCoinsStats> ComputeUTXOStats(std::nullptr_t, const CCoinsViewDB& view, node::BlockManager& blockman, const std::function<void()>& interruption_point)
+{
+    std::unique_ptr<CCoinsViewCursor> pcursor;
+    CBlockIndex* pindex;
+    {
+        LOCK(::cs_main);
+        pcursor = view.Cursor();
+        pindex = blockman.LookupBlockIndex(pcursor->GetBestBlock());
+    }
+    CCoinsStats stats{Assert(pindex)->nHeight, pindex->GetBlockHash()};
+
+    Txid prevkey;
+    bool have_prevkey{false};
+    while (pcursor->Valid()) {
+        if (interruption_point && stats.coins_count % INTERRUPT_CHECK_INTERVAL == 0) interruption_point();
+        CoinStatsValue coin;
+        if (const auto* key{pcursor->GetKey()}; key && pcursor->GetValue(coin)) {
+            if (!have_prevkey || key->hash != prevkey) {
+                stats.nTransactions++;
+                prevkey = key->hash;
+                have_prevkey = true;
+            }
+            stats.nTransactionOutputs++;
+            if (stats.total_amount.has_value()) {
+                stats.total_amount = CheckedAdd(*stats.total_amount, coin.nValue);
+            }
+            stats.nBogoSize += GetBogoSize(coin.scriptPubKeySize);
+            stats.coins_count++;
+        } else {
+            LogError("%s: unable to read value\n", __func__);
+            return std::nullopt;
+        }
+        pcursor->Next();
+    }
 
     stats.nDiskSize = view.EstimateSize();
     return stats;
@@ -182,6 +203,5 @@ static void FinalizeHash(MuHash3072& muhash, CCoinsStats& stats)
     muhash.Finalize(out);
     stats.hashSerialized = out;
 }
-static void FinalizeHash(std::nullptr_t, CCoinsStats& stats) {}
 
 } // namespace kernel
