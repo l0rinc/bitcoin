@@ -136,6 +136,15 @@ class AssumeutxoTest(BitcoinTestFramework):
                 f.write(valid_snapshot_contents[43 + 8:])
             expected_error(msg="Bad snapshot - coins left over after deserializing 298 coins." if off == -1 else "Bad snapshot format or truncated snapshot after deserializing 299 coins.")
 
+        self.log.info("  - snapshot file with duplicate coin records")
+        snapshot_coin_data = valid_snapshot_contents[43 + 8:]
+        with open(bad_snapshot_path, 'wb') as f:
+            f.write(valid_snapshot_contents[:43])
+            f.write((valid_num_coins * 2).to_bytes(8, "little"))
+            f.write(snapshot_coin_data)
+            f.write(snapshot_coin_data)
+        expected_error(msg=f"Bad snapshot coins count: expected {valid_num_coins * 2}, got {valid_num_coins}")
+
         self.log.info("  - snapshot file with alternated but parsable UTXO data results in different hash")
         cases = [
             # (content, offset, wrong_hash, custom_message)
