@@ -128,6 +128,9 @@ public:
     /** Return the amount of work in the chain received during the PRESYNC phase. */
     arith_uint256 GetPresyncWork() const { return m_current_chain_work; }
 
+    /** Return the number of compressed headers retained during REDOWNLOAD. */
+    size_t GetRedownloadBufferSize() const { return m_redownloaded_headers.size(); }
+
     /** Construct a HeadersSyncState object representing a headers sync via this
      *  download-twice mechanism).
      *
@@ -145,6 +148,7 @@ public:
         std::vector<CBlockHeader> pow_validated_headers;
         bool success{false};
         bool request_more{false};
+        bool entered_redownload{false};
     };
 
     /** Process a batch of headers, once a sync via this mechanism has started
@@ -166,6 +170,7 @@ public:
      *                       aborted; true otherwise.
      * ProcessingResult.request_more: if true, the caller is suggested to call
      *                       NextHeadersRequestLocator and send a getheaders message using it.
+     * ProcessingResult.entered_redownload: true if this call entered REDOWNLOAD.
      */
     ProcessingResult ProcessNextHeaders(std::span<const CBlockHeader>
             received_headers, bool full_headers_message);

@@ -11,11 +11,11 @@ from test_framework.p2p import (
 )
 
 from test_framework.messages import (
+    MAX_HEADERS_RESULTS,
     msg_headers,
 )
 
 from test_framework.blocktools import (
-    NORMAL_GBT_REQUEST_PARAMS,
     create_block,
 )
 
@@ -25,6 +25,7 @@ import time
 
 NODE1_BLOCKS_REQUIRED = 15
 NODE2_BLOCKS_REQUIRED = 2047
+MAX_UNRESERVED_HEADERS_REDOWNLOADS = 8  # MAX_OUTBOUND_FULL_RELAY_CONNECTIONS in src/net.h
 
 
 class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
@@ -53,6 +54,21 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
     def mocktime_all(self, time):
         for n in self.nodes:
             n.setmocktime(time)
+
+    def create_low_work_headers_message(self, node, *, start_height=1, hash_prev_block=None):
+        genesis = node.getblock(node.getblockhash(0))
+        headers = []
+        if hash_prev_block is None:
+            hash_prev_block = int(genesis['hash'], 16)
+        for height in range(start_height, start_height + MAX_HEADERS_RESULTS):
+            block = create_block(hashprev=hash_prev_block, height=height, ntime=genesis['time'] + height)
+            block.solve()
+            headers.append(block)
+            hash_prev_block = block.hash_int
+        return msg_headers(headers=headers)
+
+    def count_presynced(self, node, height):
+        return [peer['presynced_headers'] for peer in node.getpeerinfo()].count(height)
 
     def test_chains_sync_when_long_enough(self):
         self.log.info("Generate blocks on the node with no required chainwork, and verify nodes 1 and 2 have no new headers in their headers tree")
@@ -129,20 +145,90 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
         if (current_height < 3000):
             self.generate(node, 3000-current_height, sync_fun=self.no_op)
 
-        # Send a group of 2000 headers, forking from genesis.
-        new_blocks = []
-        hashPrevBlock = int(node.getblockhash(0), 16)
-        for i in range(2000):
-            block = create_block(hashprev = hashPrevBlock, tmpl=node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS))
-            block.solve()
-            new_blocks.append(block)
-            hashPrevBlock = block.hash_int
-
-        headers_message = msg_headers(headers=new_blocks)
-        p2p.send_and_ping(headers_message)
+        # Send a full headers message, forking from genesis.
+        p2p.send_and_ping(self.create_low_work_headers_message(node))
 
         # getpeerinfo should show a sync in progress
-        assert_equal(node.getpeerinfo()[0]['presynced_headers'], 2000)
+        assert_equal(node.getpeerinfo()[0]['presynced_headers'], MAX_HEADERS_RESULTS)
+
+    def test_ibd_headers_redownload_admission(self):
+        self.log.info("Test headers redownload admission during IBD")
+
+        self.disconnect_all()
+        node = self.nodes[2]
+        assert node.getblockchaininfo()['initialblockdownload']
+        inbound_peers = [node.add_p2p_connection(P2PInterface()) for _ in range(MAX_UNRESERVED_HEADERS_REDOWNLOADS)]
+        full_outbound_peer = node.add_outbound_p2p_connection(P2PInterface(), p2p_idx=0)
+        extra_peers = [
+            node.add_p2p_connection(P2PInterface()),
+            node.add_outbound_p2p_connection(P2PInterface(), p2p_idx=1, connection_type="block-relay-only"),
+        ]
+
+        headers_message = self.create_low_work_headers_message(node)
+        admitted_peers = inbound_peers + [full_outbound_peer]
+        all_peers = admitted_peers + extra_peers
+        for p in all_peers:
+            p.send_and_ping(headers_message)
+
+        # PRESYNC remains unrestricted.
+        assert_equal(self.count_presynced(node, MAX_HEADERS_RESULTS), len(all_peers))
+
+        continuation_message = self.create_low_work_headers_message(
+            node,
+            start_height=MAX_HEADERS_RESULTS + 1,
+            hash_prev_block=headers_message.headers[-1].hash_int,
+        )
+        for p in admitted_peers:
+            p.send_and_ping(continuation_message)
+        with node.assert_debug_log(expected_msgs=["too many headers redownloads in progress"]):
+            for p in extra_peers:
+                p.send_and_ping(continuation_message)
+
+        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), MAX_UNRESERVED_HEADERS_REDOWNLOADS + 1)
+        assert_equal(self.count_presynced(node, -1), len(extra_peers))
+
+        # Existing REDOWNLOAD states can continue after the limit is reached.
+        for p in admitted_peers:
+            p.send_and_ping(headers_message)
+        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), MAX_UNRESERVED_HEADERS_REDOWNLOADS + 1)
+
+        # Release two states so a new inbound peer can enter REDOWNLOAD.
+        inbound_peers[0].send_and_ping(msg_headers())
+        full_outbound_peer.send_and_ping(msg_headers())
+        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), MAX_UNRESERVED_HEADERS_REDOWNLOADS - 1)
+        replacement_peer = node.add_p2p_connection(P2PInterface())
+        replacement_peer.send_and_ping(headers_message)
+        replacement_peer.send_and_ping(continuation_message)
+
+        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), MAX_UNRESERVED_HEADERS_REDOWNLOADS)
+
+        node.disconnect_p2ps()
+        self.reconnect_all()
+        self.sync_all()
+
+    def test_post_ibd_headers_redownloads(self):
+        self.log.info("Test concurrent headers redownloads after IBD")
+
+        node = self.nodes[2]
+        assert not node.getblockchaininfo()['initialblockdownload']
+        self.disconnect_all()
+
+        peers = [node.add_p2p_connection(P2PInterface()) for _ in range(MAX_UNRESERVED_HEADERS_REDOWNLOADS + 2)]
+        headers_message = self.create_low_work_headers_message(node)
+        continuation_message = self.create_low_work_headers_message(
+            node,
+            start_height=MAX_HEADERS_RESULTS + 1,
+            hash_prev_block=headers_message.headers[-1].hash_int,
+        )
+        for p in peers:
+            p.send_and_ping(headers_message)
+            p.send_and_ping(continuation_message)
+
+        assert_equal(self.count_presynced(node, 2 * MAX_HEADERS_RESULTS), len(peers))
+
+        node.disconnect_p2ps()
+        self.reconnect_all()
+        self.sync_all()
 
     def test_large_reorgs_can_succeed(self):
         self.log.info("Test that a 2000+ block reorg, starting from a point that is more than 2000 blocks before a locator entry, can succeed")
@@ -168,7 +254,11 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
 
 
     def run_test(self):
+        self.test_ibd_headers_redownload_admission()
+
         self.test_chains_sync_when_long_enough()
+
+        self.test_post_ibd_headers_redownloads()
 
         self.test_large_reorgs_can_succeed()
 

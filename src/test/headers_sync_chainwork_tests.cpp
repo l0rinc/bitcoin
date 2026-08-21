@@ -12,10 +12,10 @@
 #include <test/util/setup_common.h>
 #include <validation.h>
 
+#include <boost/test/unit_test.hpp>
+
 #include <cstddef>
 #include <vector>
-
-#include <boost/test/unit_test.hpp>
 
 using State = HeadersSyncState::State;
 
@@ -50,6 +50,7 @@ constexpr arith_uint256 CHAIN_WORK{TARGET_BLOCKS * 2};
 // required to reach the CHAIN_WORK threshold, to behave similarly to mainnet.
 constexpr size_t REDOWNLOAD_BUFFER_SIZE{TARGET_BLOCKS - (MAX_HEADERS_RESULTS + 123)};
 constexpr size_t COMMITMENT_PERIOD{600}; // Somewhat close to mainnet.
+constexpr size_t CONCURRENT_SYNCS{10};
 
 struct HeadersGeneratorSetup : public RegTestingSetup {
     const CBlock& genesis{Params().GenesisBlock()};
@@ -221,6 +222,28 @@ BOOST_AUTO_TEST_CASE(happy_path)
             /*exp_headers_size=*/first_chain.size() - 1, /*exp_pow_validated_prev=*/first_chain.front().GetHash(),
             /*exp_locator_hash=*/std::nullopt);
     }
+}
+
+BOOST_AUTO_TEST_CASE(concurrent_redownload_buffers)
+{
+    auto& first_chain{FirstChain()};
+    std::vector<HeadersSyncState> syncs;
+    syncs.reserve(CONCURRENT_SYNCS);
+    size_t retained_bytes{0};
+
+    // Keep every REDOWNLOAD buffer alive at the same time.
+    for (size_t i{0}; i < CONCURRENT_SYNCS; ++i) {
+        auto& sync{syncs.emplace_back(CreateState())};
+        auto result{sync.ProcessNextHeaders(first_chain, true)};
+        BOOST_REQUIRE(result.success && result.request_more && result.entered_redownload);
+        BOOST_REQUIRE_EQUAL(sync.GetState(), State::REDOWNLOAD);
+        result = sync.ProcessNextHeaders({first_chain.begin(), REDOWNLOAD_BUFFER_SIZE}, true);
+        BOOST_REQUIRE(result.success && result.request_more && !result.entered_redownload);
+        BOOST_CHECK_EQUAL(sync.GetRedownloadBufferSize(), REDOWNLOAD_BUFFER_SIZE);
+        retained_bytes += sync.GetRedownloadBufferSize() * sizeof(CompressedHeader);
+    }
+
+    BOOST_CHECK_EQUAL(retained_bytes, 6'180'960);
 }
 
 BOOST_AUTO_TEST_CASE(too_little_work)
