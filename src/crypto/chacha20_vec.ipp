@@ -1,0 +1,334 @@
+// Copyright (c) 2025-present The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <crypto/chacha20_vec.h>
+
+#include <attributes.h>
+
+#include <array>
+#include <bit>
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <memory>
+
+#if defined(ENABLE_CHACHA20_VEC)
+
+static constexpr bool CHACHA20_VEC_ALL_MULTI_STATES_DISABLED{
+    CHACHA20_VEC_DISABLE_STATES_16 &&
+    CHACHA20_VEC_DISABLE_STATES_8 &&
+    CHACHA20_VEC_DISABLE_STATES_6 &&
+    CHACHA20_VEC_DISABLE_STATES_4 &&
+    CHACHA20_VEC_DISABLE_STATES_2};
+
+namespace {
+
+using vec256 = uint32_t __attribute__((__vector_size__(32)));
+
+static constexpr size_t CHACHA20_VEC_MEM_ALIGN{16};
+
+/** Endian-conversion for big-endian */
+ALWAYS_INLINE void vec_byteswap(vec256& vec)
+{
+    if constexpr (std::endian::native == std::endian::big)
+    {
+        vec256 ret;
+        ret[0] = __builtin_bswap32(vec[0]);
+        ret[1] = __builtin_bswap32(vec[1]);
+        ret[2] = __builtin_bswap32(vec[2]);
+        ret[3] = __builtin_bswap32(vec[3]);
+        ret[4] = __builtin_bswap32(vec[4]);
+        ret[5] = __builtin_bswap32(vec[5]);
+        ret[6] = __builtin_bswap32(vec[6]);
+        ret[7] = __builtin_bswap32(vec[7]);
+        vec = ret;
+    }
+}
+
+/** Left-rotate vector */
+template <size_t BITS>
+ALWAYS_INLINE void vec_rotl(vec256& vec)
+{
+    vec = (vec << BITS) | (vec >> (32 - BITS));
+}
+
+/** Store a vector in all array elements */
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_set_vec256(std::array<vec256, N>& arr, const vec256& vec)
+{
+    std::get<INDEX>(arr) = vec;
+    if constexpr (INDEX + 1 < N) arr_set_vec256<N, INDEX + 1>(arr, vec);
+}
+
+/** Add a vector to all array elements */
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_add_vec256(std::array<vec256, N>& arr, const vec256& vec)
+{
+    std::get<INDEX>(arr) += vec;
+    if constexpr (INDEX + 1 < N) arr_add_vec256<N, INDEX + 1>(arr, vec);
+}
+
+/** Add corresponding vectors in arr1 to arr0 */
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_add_arr(std::array<vec256, N>& arr0, const std::array<vec256, N>& arr1)
+{
+    std::get<INDEX>(arr0) += std::get<INDEX>(arr1);
+    if constexpr (INDEX + 1 < N) arr_add_arr<N, INDEX + 1>(arr0, arr1);
+}
+
+/** Perform add/xor/rotate for the round function */
+template <size_t BITS, size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_add_xor_rot(std::array<vec256, N>& arr0, const std::array<vec256, N>& arr1, std::array<vec256, N>& arr2)
+{
+    vec256& x = std::get<INDEX>(arr0);
+    const vec256& y = std::get<INDEX>(arr1);
+    vec256& z = std::get<INDEX>(arr2);
+
+    x += y;
+    z ^= x;
+    vec_rotl<BITS>(z);
+
+    if constexpr (INDEX + 1 < N) arr_add_xor_rot<BITS, N, INDEX + 1>(arr0, arr1, arr2);
+}
+
+/*
+The first round:
+            QUARTERROUND( x0, x4, x8,x12);
+            QUARTERROUND( x1, x5, x9,x13);
+            QUARTERROUND( x2, x6,x10,x14);
+            QUARTERROUND( x3, x7,x11,x15);
+
+The second round:
+            QUARTERROUND( x0, x5,x10,x15);
+            QUARTERROUND( x1, x6,x11,x12);
+            QUARTERROUND( x2, x7, x8,x13);
+            QUARTERROUND( x3, x4, x9,x14);
+
+After the first round, arr_shuf0, arr_shuf1, and arr_shuf2 are used to shuffle
+the layout to prepare for the second round.
+
+After the second round, they are used (in reverse) to restore the original
+layout.
+
+*/
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_shuf0(std::array<vec256, N>& arr)
+{
+    vec256& x = std::get<INDEX>(arr);
+    x = vec256{x[1], x[2], x[3], x[0], x[5], x[6], x[7], x[4]};
+
+    if constexpr (INDEX + 1 < N) arr_shuf0<N, INDEX + 1>(arr);
+}
+
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_shuf1(std::array<vec256, N>& arr)
+{
+    vec256& x = std::get<INDEX>(arr);
+    x = vec256{x[2], x[3], x[0], x[1], x[6], x[7], x[4], x[5]};
+
+    if constexpr (INDEX + 1 < N) arr_shuf1<N, INDEX + 1>(arr);
+}
+
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_shuf2(std::array<vec256, N>& arr)
+{
+    vec256& x = std::get<INDEX>(arr);
+    x = vec256{x[3], x[0], x[1], x[2], x[7], x[4], x[5], x[6]};
+
+    if constexpr (INDEX + 1 < N) arr_shuf2<N, INDEX + 1>(arr);
+}
+
+/* Main round function. */
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void doubleround(std::array<vec256, N>& arr0, std::array<vec256, N>& arr1, std::array<vec256, N>&arr2, std::array<vec256, N>&arr3)
+{
+    arr_add_xor_rot<16>(arr0, arr1, arr3);
+    arr_add_xor_rot<12>(arr2, arr3, arr1);
+    arr_add_xor_rot<8>(arr0, arr1, arr3);
+    arr_add_xor_rot<7>(arr2, arr3, arr1);
+    arr_shuf0(arr1);
+    arr_shuf1(arr2);
+    arr_shuf2(arr3);
+    arr_add_xor_rot<16>(arr0, arr1, arr3);
+    arr_add_xor_rot<12>(arr2, arr3, arr1);
+    arr_add_xor_rot<8>(arr0, arr1, arr3);
+    arr_add_xor_rot<7>(arr2, arr3, arr1);
+    arr_shuf2(arr1);
+    arr_shuf1(arr2);
+    arr_shuf0(arr3);
+    if constexpr (INDEX + 1 < 10) doubleround<N, INDEX + 1>(arr0, arr1, arr2, arr3);
+}
+
+/* Read 32 bytes of input, xor with calculated state, write to output. Assumes
+   that input and output are unaligned, and makes no assumptions about the
+   internal layout of vec256;
+*/
+template <bool AssumeAligned>
+ALWAYS_INLINE void vec_read_xor_write(const std::byte* in_bytes, std::byte* out_bytes, const vec256& vec)
+{
+    if constexpr (AssumeAligned) {
+        in_bytes = std::assume_aligned<CHACHA20_VEC_MEM_ALIGN>(in_bytes);
+        out_bytes = std::assume_aligned<CHACHA20_VEC_MEM_ALIGN>(out_bytes);
+    }
+
+    vec256 tempvec;
+    memcpy(&tempvec, in_bytes, sizeof(tempvec));
+    vec_byteswap(tempvec);
+    tempvec ^= vec;
+    vec_byteswap(tempvec);
+    memcpy(out_bytes, &tempvec, sizeof(tempvec));
+}
+
+/* Merge the 128-bit lanes from 2 states to the proper order, then pass each vec_read_xor_write */
+template <bool AssumeAligned, size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_read_xor_write_impl(const std::byte* in_bytes, std::byte* out_bytes, const std::array<vec256, N>& arr0, const std::array<vec256, N>& arr1, const std::array<vec256, N>& arr2, const std::array<vec256, N>& arr3)
+{
+    const vec256& w = std::get<INDEX>(arr0);
+    const vec256& x = std::get<INDEX>(arr1);
+    const vec256& y = std::get<INDEX>(arr2);
+    const vec256& z = std::get<INDEX>(arr3);
+    const std::byte* in_slice{in_bytes + INDEX * 128};
+    std::byte* out_slice{out_bytes + INDEX * 128};
+
+    vec_read_xor_write<AssumeAligned>(in_slice, out_slice, __builtin_shufflevector(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
+    vec_read_xor_write<AssumeAligned>(in_slice + 32, out_slice + 32, __builtin_shufflevector(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
+    vec_read_xor_write<AssumeAligned>(in_slice + 64, out_slice + 64, __builtin_shufflevector(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
+    vec_read_xor_write<AssumeAligned>(in_slice + 96, out_slice + 96, __builtin_shufflevector(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
+
+    if constexpr (INDEX + 1 < N) arr_read_xor_write_impl<AssumeAligned, N, INDEX + 1>(in_bytes, out_bytes, arr0, arr1, arr2, arr3);
+}
+
+template <size_t N>
+ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const std::array<vec256, N>& arr0, const std::array<vec256, N>& arr1, const std::array<vec256, N>& arr2, const std::array<vec256, N>& arr3)
+{
+    constexpr uintptr_t mask{CHACHA20_VEC_MEM_ALIGN - 1};
+    const bool aligned{((reinterpret_cast<uintptr_t>(in_bytes.data()) | reinterpret_cast<uintptr_t>(out_bytes.data())) & mask) == 0};
+
+    if (aligned) [[likely]] {
+        arr_read_xor_write_impl<true>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3);
+    } else {
+        arr_read_xor_write_impl<false>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3);
+    }
+}
+
+/* Compile-time helper to create addend vectors which used to increment the states
+
+    Generates vectors of the pattern:
+    1 0 0 0 0 0 0 0
+    3 0 0 0 2 0 0 0
+    5 0 0 0 4 0 0 0
+    ...
+*/
+template <size_t SIZE>
+consteval std::array<vec256, SIZE> generate_increments()
+{
+    std::array<vec256, SIZE> rows;
+    for (uint32_t i = 0; i < SIZE; i ++)
+    {
+        rows[i] = (i * (vec256){2, 0, 0, 0, 2, 0, 0, 0}) + (vec256){1, 0, 0, 0, 0, 0, 0, 0};
+    }
+    return rows;
+}
+
+/* Main crypt function. Calculates up to 16 states.
+
+    Each array contains one or more vectors, with each array representing a
+    quarter of a state. Initially, the high and low parts of each vector are
+    duplicated. They each contain a portion of the current and next state.
+
+    arr0[0]    arr1[0]    arr2[0]    arr3[0]   increment
+    ----------|---------|----------|----------|---------
+    0x61707865 input[0]   input[4]   input[8]   [1]
+    0x3320646e input[1]   input[5]   input[9]   [0]
+    0x79622d32 input[2]   input[6]   input[10]  [0]
+    0x6b206574 input[3]   input[7]   input[11]  [0]
+
+    0x61707865 input[0]   input[4]   input[8]   [0]
+    0x3320646e input[1]   input[5]   input[9]   [0]
+    0x79622d32 input[2]   input[6]   input[10]  [0]
+    0x6b206574 input[3]   input[7]   input[11]  [0]
+
+    After loading the states, arr3's vectors are incremented as-necessary to
+    contain the correct counter values.
+
+    This way, operations like "arr0[0] += arr1[0]" can perform all 8 operations
+    in parallel, taking advantage of 256bit registers where available.
+
+    arrX[0] represents states 0 and 1.
+    arrX[1] represents states 2 and 3 (if present)
+    etc.
+
+    After the doublerounds have been run and the initial state has been mixed
+    back in, the high and low portions of the vectors in each array are
+    shuffled in order to prepare them for mixing with the input bytes. Finally,
+    each state is xor'd with its corresponding input, byteswapped if necessary,
+    and written to its output.
+*/
+template <size_t STATES>
+ALWAYS_INLINE void multi_block_crypt(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const vec256& state0, const vec256& state1, const vec256& state2)
+{
+    static constexpr size_t HALF_STATES = STATES / 2;
+    static constexpr vec256 nums256 = (vec256){0x61707865, 0x3320646e, 0x79622d32, 0x6b206574, 0x61707865, 0x3320646e, 0x79622d32, 0x6b206574};
+    static constinit std::array<vec256, HALF_STATES> increments = generate_increments<HALF_STATES>();
+
+    std::array<vec256, HALF_STATES> arr0, arr1, arr2, arr3;
+
+    arr_set_vec256(arr0, nums256);
+    arr_set_vec256(arr1, state0);
+    arr_set_vec256(arr2, state1);
+    arr_set_vec256(arr3, state2);
+
+    arr_add_arr(arr3, increments);
+
+    doubleround(arr0, arr1, arr2, arr3);
+
+    arr_add_vec256(arr0, nums256);
+    arr_add_vec256(arr1, state0);
+    arr_add_vec256(arr2, state1);
+    arr_add_vec256(arr3, state2);
+
+    arr_add_arr(arr3, increments);
+
+    arr_read_xor_write(in_bytes, out_bytes, arr0, arr1, arr2, arr3);
+}
+
+template <size_t STATES>
+ALWAYS_INLINE void process_blocks(std::span<const std::byte>& in_bytes, std::span<std::byte>& out_bytes, const vec256& state0, const vec256& state1, vec256& state2)
+{
+    static constexpr vec256 increment = (vec256){STATES, 0, 0, 0, STATES, 0, 0, 0};
+    while (in_bytes.size() >= CHACHA20_VEC_BLOCKLEN * STATES) {
+        multi_block_crypt<STATES>(in_bytes, out_bytes, state0, state1, state2);
+        state2 += increment;
+        in_bytes = in_bytes.subspan(CHACHA20_VEC_BLOCKLEN * STATES);
+        out_bytes = out_bytes.subspan(CHACHA20_VEC_BLOCKLEN * STATES);
+    }
+}
+
+} // anonymous namespace
+
+#if defined(CHACHA20_NAMESPACE)
+namespace CHACHA20_NAMESPACE {
+#endif
+
+void chacha20_crypt_vectorized(std::span<const std::byte>& in_bytes, std::span<std::byte>& out_bytes, std::span<const uint32_t, 12> input) noexcept
+{
+    if constexpr (!CHACHA20_VEC_ALL_MULTI_STATES_DISABLED) {
+        assert(in_bytes.size() == out_bytes.size());
+        const vec256 state0 = (vec256){input[0], input[1], input[2], input[3], input[0], input[1], input[2], input[3]};
+        const vec256 state1 = (vec256){input[4], input[5], input[6], input[7], input[4], input[5], input[6], input[7]};
+        vec256 state2 = (vec256){input[8], input[9], input[10], input[11], input[8], input[9], input[10], input[11]};
+        if constexpr (!CHACHA20_VEC_DISABLE_STATES_16) process_blocks<16>(in_bytes, out_bytes, state0, state1, state2);
+        if constexpr (!CHACHA20_VEC_DISABLE_STATES_8) process_blocks<8>(in_bytes, out_bytes, state0, state1, state2);
+        if constexpr (!CHACHA20_VEC_DISABLE_STATES_6) process_blocks<6>(in_bytes, out_bytes, state0, state1, state2);
+        if constexpr (!CHACHA20_VEC_DISABLE_STATES_4) process_blocks<4>(in_bytes, out_bytes, state0, state1, state2);
+        if constexpr (!CHACHA20_VEC_DISABLE_STATES_2) process_blocks<2>(in_bytes, out_bytes, state0, state1, state2);
+    }
+}
+
+#if defined(CHACHA20_NAMESPACE)
+}
+#endif
+
+#endif // ENABLE_CHACHA20_VEC
