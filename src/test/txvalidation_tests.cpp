@@ -18,6 +18,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <limits>
+#include <string>
 
 BOOST_AUTO_TEST_SUITE(txvalidation_tests)
 
@@ -52,6 +54,60 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_reject_coinbase, TestChain100Setup)
     BOOST_CHECK(result.m_state.IsInvalid());
     BOOST_CHECK_EQUAL(result.m_state.GetRejectReason(), "coinbase");
     BOOST_CHECK(result.m_state.GetResult() == TxValidationResult::TX_CONSENSUS);
+}
+
+BOOST_FIXTURE_TEST_CASE(tx_mempool_rbf_conflicting_fees_saturate, TestChain100Setup)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    const CScript output_script{GetScriptForDestination(PKHash(coinbaseKey.GetPubKey()))};
+    CreateAndProcessBlock(/*txns=*/{}, output_script);
+    const CAmount fee{10'000};
+    std::vector<CTransactionRef> conflicts;
+
+    for (size_t i{0}; i < 2; ++i) {
+        auto conflict{MakeTransactionRef(CreateValidMempoolTransaction(m_coinbase_txns.at(i), /*input_vout=*/0,
+                                                                       /*input_height=*/0, coinbaseKey,
+                                                                       output_script,
+                                                                       /*output_amount=*/m_coinbase_txns.at(i)->vout.at(0).nValue - fee,
+                                                                       /*submit=*/false))};
+        {
+            LOCK(cs_main);
+            const MempoolAcceptResult result{m_node.chainman->ProcessTransaction(conflict)};
+            BOOST_REQUIRE_MESSAGE(result.m_result_type == MempoolAcceptResult::ResultType::VALID, result.m_state.ToString());
+        }
+        conflicts.push_back(conflict);
+    }
+
+    for (const auto& conflict : conflicts) {
+        pool.PrioritiseTransaction(conflict->GetHash(), std::numeric_limits<CAmount>::max());
+        LOCK(pool.cs);
+        const auto entry{pool.GetIter(conflict->GetHash())};
+        BOOST_REQUIRE(entry.has_value());
+        BOOST_CHECK_EQUAL((*entry)->GetModifiedFee(), std::numeric_limits<CAmount>::max());
+    }
+
+    std::vector<COutPoint> replacement_inputs{
+        {m_coinbase_txns.at(0)->GetHash(), 0},
+        {m_coinbase_txns.at(1)->GetHash(), 0},
+    };
+    auto replacement{MakeTransactionRef(CreateValidMempoolTransaction(
+        /*input_transactions=*/{m_coinbase_txns.at(0), m_coinbase_txns.at(1)},
+        /*inputs=*/replacement_inputs,
+        /*input_height=*/0,
+        /*input_signing_keys=*/{coinbaseKey},
+        /*outputs=*/{CTxOut{m_coinbase_txns.at(0)->vout.at(0).nValue + m_coinbase_txns.at(1)->vout.at(0).nValue - fee, output_script}},
+        /*submit=*/false))};
+
+    LOCK(cs_main);
+    const MempoolAcceptResult result{m_node.chainman->ProcessTransaction(replacement)};
+    BOOST_CHECK(result.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+    BOOST_CHECK_EQUAL(result.m_state.GetResult(), TxValidationResult::TX_RECONSIDERABLE);
+    BOOST_CHECK_EQUAL(result.m_state.GetRejectReason(), "insufficient fee");
+    BOOST_CHECK(result.m_state.GetDebugMessage().find("less fees than conflicting txs") != std::string::npos);
+    BOOST_CHECK(!pool.exists(replacement->GetHash()));
+    for (const auto& conflict : conflicts) {
+        BOOST_CHECK(pool.exists(conflict->GetHash()));
+    }
 }
 
 // Generate a number of random, nonexistent outpoints.
