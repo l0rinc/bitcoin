@@ -6,6 +6,7 @@
 import os
 
 from test_framework.descriptors import descsum_create
+from test_framework.extendedkey import ExtendedPrivateKey
 from test_framework.key import H_POINT
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -158,6 +159,21 @@ class WalletExportedWatchOnly(BitcoinTestFramework):
         offline_wallet.unloadwallet()
         online_wallet.unloadwallet()
 
+    def test_export_normalized_descriptor_id(self):
+        self.log.info("Test normalization of a descriptor before watchonly export")
+        self.offline.createwallet("normalized_id")
+        offline_wallet = self.offline.get_wallet_rpc("normalized_id")
+        xprv1 = ExtendedPrivateKey.from_seed(bytes(range(32))).to_string()
+        xprv2 = ExtendedPrivateKey.from_seed(bytes(range(1, 33))).to_string()
+        descriptor = descsum_create(f"tr({H_POINT},sortedmulti_a(1,{xprv1}/0h/*,{xprv2}/*h))")
+        assert_equal(offline_wallet.importdescriptors([{"desc": descriptor, "timestamp": "now"}])[0]["success"], True)
+
+        def export_and_check_watchonly():
+            online_wallet = self.export_and_restore(offline_wallet, "normalized_id_watchonly")
+            assert_equal(online_wallet.getwalletinfo()["private_keys_enabled"], False)
+
+        export_and_check_watchonly()
+
     def test_export_imported_descriptors(self):
         self.log.info("Test imported descriptors are exported to the watchonly wallet")
         self.offline.createwallet("imports")
@@ -298,6 +314,7 @@ class WalletExportedWatchOnly(BitcoinTestFramework):
         self.test_avoid_reuse()
         self.test_encrypted_wallet()
         self.test_export_blank_wallet()
+        self.test_export_normalized_descriptor_id()
 
 if __name__ == '__main__':
     WalletExportedWatchOnly(__file__).main()
