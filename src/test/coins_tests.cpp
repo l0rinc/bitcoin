@@ -1083,6 +1083,16 @@ BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
 
     BOOST_CHECK(*Assert(base.GetCoin(outpoint)) == coin);
     BOOST_CHECK_EQUAL(base.GetBestBlock(), block_hash);
+
+    auto cursor{base.Cursor()};
+    BOOST_REQUIRE(cursor->Valid());
+    cursor->Next();
+    BOOST_CHECK(!cursor->Valid());
+
+    COutPoint cursor_outpoint;
+    BOOST_CHECK(!cursor->GetKey(cursor_outpoint));
+    Coin cursor_coin;
+    BOOST_CHECK(!cursor->GetValue(cursor_coin));
 }
 
 BOOST_AUTO_TEST_CASE(coins_resource_is_used)

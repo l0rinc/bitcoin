@@ -253,6 +253,8 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
 
         it->Next();
         BOOST_CHECK_EQUAL(it->Valid(), false);
+        BOOST_CHECK(!it->GetKey(key_res));
+        BOOST_CHECK(!it->GetValue(val_res));
     }
 }
 
