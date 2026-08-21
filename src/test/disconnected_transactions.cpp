@@ -9,6 +9,20 @@
 
 BOOST_AUTO_TEST_SUITE(disconnected_transactions)
 
+BOOST_AUTO_TEST_CASE(disconnectpool_duplicate_txids_across_blocks)
+{
+    DisconnectedBlockTransactions disconnectpool{MAX_DISCONNECTED_TX_POOL_BYTES};
+    auto tx{MakeTransactionRef(CMutableTransaction{})};
+
+    BOOST_CHECK(disconnectpool.AddTransactionsFromBlock({tx}).empty());
+    BOOST_CHECK(disconnectpool.AddTransactionsFromBlock({tx}).empty());
+    BOOST_CHECK_EQUAL(disconnectpool.size(), 1);
+
+    disconnectpool.removeForBlock({tx});
+    BOOST_CHECK_EQUAL(disconnectpool.size(), 0);
+    BOOST_CHECK_EQUAL(disconnectpool.take().size(), 0);
+}
+
 //! Tests that DisconnectedBlockTransactions limits its own memory properly
 BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
 {
