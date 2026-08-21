@@ -1250,6 +1250,20 @@ static void AddKnownTx(Peer& peer, const uint256& hash)
     tx_relay->m_tx_inventory_known_filter.insert(hash);
 }
 
+/** Read a locator and stop hash, disconnecting if the locator is oversized. */
+bool ReadBlockLocator(DataStream& stream, CBlockLocator& locator, uint256& hash_stop, CNode& node, const std::string& msg_type)
+{
+    try {
+        locator.LimitedRead<MAX_LOCATOR_SZ>(stream);
+        stream >> hash_stop;
+        return true;
+    } catch (LimitedVectorExceededError& e) {
+        LogDebug(BCLog::NET, "%s locator size %u > %u, %s", msg_type, e.m_size, MAX_LOCATOR_SZ, node.DisconnectMsg());
+        node.fDisconnect = true;
+        return false;
+    }
+}
+
 /** Whether this peer can serve us blocks. */
 static bool CanServeBlocks(const Peer& peer)
 {
@@ -4479,13 +4493,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
     if (msg_type == NetMsgType::GETBLOCKS) {
         CBlockLocator locator;
         uint256 hashStop;
-        vRecv >> locator >> hashStop;
-
-        if (locator.vHave.size() > MAX_LOCATOR_SZ) {
-            LogDebug(BCLog::NET, "getblocks locator size %lld > %d, %s", locator.vHave.size(), MAX_LOCATOR_SZ, pfrom.DisconnectMsg());
-            pfrom.fDisconnect = true;
-            return;
-        }
+        if (!ReadBlockLocator(vRecv, locator, hashStop, pfrom, msg_type)) return;
 
         // We might have announced the currently-being-connected tip using a
         // compact block, which resulted in the peer sending a getblocks
@@ -4614,13 +4622,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
     if (msg_type == NetMsgType::GETHEADERS) {
         CBlockLocator locator;
         uint256 hashStop;
-        vRecv >> locator >> hashStop;
-
-        if (locator.vHave.size() > MAX_LOCATOR_SZ) {
-            LogDebug(BCLog::NET, "getheaders locator size %lld > %d, %s", locator.vHave.size(), MAX_LOCATOR_SZ, pfrom.DisconnectMsg());
-            pfrom.fDisconnect = true;
-            return;
-        }
+        if (!ReadBlockLocator(vRecv, locator, hashStop, pfrom, msg_type)) return;
 
         if (m_chainman.m_blockman.LoadingBlocks()) {
             LogDebug(BCLog::NET, "Ignoring getheaders from peer=%d while importing/reindexing\n", pfrom.GetId());
@@ -5236,7 +5238,12 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             return;
         }
         CBloomFilter filter;
-        vRecv >> filter;
+        try {
+            vRecv >> filter;
+        } catch (const LimitedVectorExceededError&) {
+            Misbehaving(peer, "too-large bloom filter");
+            return;
+        }
 
         if (!filter.IsWithinSizeConstraints())
         {
@@ -5262,7 +5269,12 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             return;
         }
         std::vector<unsigned char> vData;
-        vRecv >> vData;
+        try {
+            vRecv >> LIMITED_VECTOR(vData, MAX_SCRIPT_ELEMENT_SIZE);
+        } catch (const LimitedVectorExceededError&) {
+            Misbehaving(peer, "bad filteradd message");
+            return;
+        }
 
         // Nodes must NEVER send a data item > MAX_SCRIPT_ELEMENT_SIZE bytes (the max size for a script data object,
         // and thus, the maximum size any matched object can have) in a filteradd message
