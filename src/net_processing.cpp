@@ -206,6 +206,21 @@ static constexpr auto PRIVATE_BROADCAST_MAX_CONNECTION_LIFETIME{3min};
 
 // Internal stuff
 namespace {
+/** Deserialize an inventory vector after bounding its count. */
+bool ReadInvVector(DataStream& stream, std::vector<CInv>& invs, uint64_t& inv_size)
+{
+    invs.clear();
+    inv_size = ReadCompactSize(stream);
+    if (inv_size > MAX_INV_SZ) return false;
+
+    invs.reserve(inv_size);
+    for (uint64_t i{0}; i < inv_size; ++i) {
+        invs.emplace_back();
+        stream >> invs.back();
+    }
+    return true;
+}
+
 /** Blocks that are in flight, and that are in the queue to be downloaded. */
 struct QueuedBlock {
     /** BlockIndex. We must have this since we only request blocks when we've already validated the header. */
@@ -4331,10 +4346,9 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
     if (msg_type == NetMsgType::INV) {
         std::vector<CInv> vInv;
-        vRecv >> vInv;
-        if (vInv.size() > MAX_INV_SZ)
-        {
-            Misbehaving(peer, strprintf("inv message size = %u", vInv.size()));
+        uint64_t inv_size;
+        if (!ReadInvVector(vRecv, vInv, inv_size)) {
+            Misbehaving(peer, strprintf("inv message size = %u", inv_size));
             return;
         }
 
@@ -4427,10 +4441,9 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
     if (msg_type == NetMsgType::GETDATA) {
         std::vector<CInv> vInv;
-        vRecv >> vInv;
-        if (vInv.size() > MAX_INV_SZ)
-        {
-            Misbehaving(peer, strprintf("getdata message size = %u", vInv.size()));
+        uint64_t inv_size;
+        if (!ReadInvVector(vRecv, vInv, inv_size)) {
+            Misbehaving(peer, strprintf("getdata message size = %u", inv_size));
             return;
         }
 
@@ -5332,7 +5345,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
     if (msg_type == NetMsgType::NOTFOUND) {
         std::vector<CInv> vInv;
-        vRecv >> vInv;
+        uint64_t inv_size;
+        if (!ReadInvVector(vRecv, vInv, inv_size)) return;
         std::vector<GenTxid> tx_invs;
         if (vInv.size() <= node::MAX_PEER_TX_ANNOUNCEMENTS + MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             for (CInv &inv : vInv) {
