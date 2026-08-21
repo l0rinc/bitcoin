@@ -991,6 +991,39 @@ class CompactBlocksTest(BitcoinTestFramework):
             stalling_peer.send_and_ping(msg)
             self.utxos.append([block.vtx[-1].txid_int, 0, block.vtx[-1].vout[0].nValue])
 
+    def test_optimistic_reconstruction_retries(self, stalling_peer, delivery_peer, inbound_peer, outbound_peer):
+        node = self.nodes[0]
+        node.setmocktime(node.getblockheader(node.getbestblockhash())["time"] + 1)
+
+        for peer in [delivery_peer, inbound_peer, outbound_peer]:
+            peer.clear_getblocktxn()
+        block, cmpct_block = self.announce_cmpct_block(node, stalling_peer, 1, solicit=True)
+        announcement = msg_cmpctblock(cmpct_block.to_p2p())
+        delivery_peer.send_and_ping(announcement)
+        self.getblocktxn_expected(delivery_peer, block.hash_int)
+        inbound_peer.send_and_ping(announcement)
+        with p2p_lock:
+            assert "getblocktxn" not in inbound_peer.last_message
+        outbound_peer.send_and_ping(announcement)
+        self.getblocktxn_expected(outbound_peer, block.hash_int)
+
+        init_log = f"Initializing PartiallyDownloadedBlock for block {block.hash_hex}"
+        with node.assert_debug_log([init_log]):
+            inbound_peer.send_and_ping(announcement)
+        with node.assert_debug_log([f"Rate limiting optimistic compact block {block.hash_hex}"]):
+            inbound_peer.send_and_ping(announcement)
+
+        for tx in block.vtx[1:]:
+            inbound_peer.send_without_ping(msg_tx(tx))
+        inbound_peer.sync_with_ping()
+        assert block.vtx[1].txid_hex in node.getrawmempool()
+        node.setmocktime(node.mocktime + 1)
+        with node.assert_debug_log([init_log]):
+            inbound_peer.send_and_ping(announcement)
+        assert_equal(node.getbestblockhash(), block.hash_hex)
+        self.utxos.append([block.vtx[-1].txid_int, 0, block.vtx[-1].vout[0].nValue])
+        node.setmocktime(0)
+
     def test_compact_blocks_ignored(self):
         node = self.nodes[0]
 
@@ -1096,6 +1129,9 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         self.log.info("Testing reconstructing compact blocks from multiple peers...")
         self.test_compactblock_reconstruction_parallel_reconstruction(stalling_peer=self.segwit_node, inbound_peer=self.onemore_inbound_node, delivery_peer=self.additional_segwit_node, outbound_peer=self.outbound_node)
+
+        self.log.info("Testing optimistic compact block reconstruction retries...")
+        self.test_optimistic_reconstruction_retries(stalling_peer=self.segwit_node, inbound_peer=self.onemore_inbound_node, delivery_peer=self.additional_segwit_node, outbound_peer=self.outbound_node)
 
         # Test that if we submitblock to node1, we'll get a compact block
         # announcement to all peers.
