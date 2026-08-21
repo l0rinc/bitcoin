@@ -187,6 +187,26 @@ BOOST_AUTO_TEST_CASE(fetch_no_inputs)
     BOOST_CHECK_EQUAL(view.GetCacheSize(), 0);
 }
 
+BOOST_AUTO_TEST_CASE(fetch_inputs_for_disconnect)
+{
+    const auto block{CreateBlock()};
+    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewCache main_cache{&db};
+    CoinsViewOverlay view{&main_cache, MakeStartedThreadPool()};
+
+    for (int i{0}; i < 2; ++i) {
+        const auto reset_guard{view.StartFetchingForDisconnect(block)};
+        for (const auto& tx : block.vtx | std::views::drop(1) | std::views::reverse) {
+            // DisconnectBlock accesses transaction outputs before restoring inputs.
+            BOOST_CHECK(view.AccessCoin(COutPoint{tx->GetHash(), 0}).IsSpent());
+            for (const auto& input : tx->vin | std::views::reverse) {
+                BOOST_CHECK(view.AccessCoin(input.prevout).IsSpent());
+            }
+        }
+        BOOST_CHECK(view.AllInputsConsumed());
+    }
+}
+
 // Access coins that are not block inputs
 BOOST_AUTO_TEST_CASE(access_non_input_coins)
 {

@@ -54,6 +54,7 @@
 class Chainstate;
 class CTxMemPool;
 class ChainstateManager;
+class ThreadPool;
 struct ChainTxData;
 class DisconnectedBlockTransactions;
 struct PrecomputedTransactionData;
@@ -712,6 +713,13 @@ public:
     {
         AssertLockHeld(::cs_main);
         return Assert(m_coins_views)->m_catcherview;
+    }
+
+    //! @returns The shared thread pool used to fetch block input prevouts in parallel.
+    std::shared_ptr<ThreadPool> PrevoutFetchPool() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        AssertLockHeld(::cs_main);
+        return Assert(Assert(m_coins_views)->m_connect_block_view)->GetThreadPool();
     }
 
     //! Destructs all objects related to accessing the UTXO set.
