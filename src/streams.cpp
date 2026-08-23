@@ -21,7 +21,7 @@ AutoFile::AutoFile(std::FILE* file, const Obfuscation& obfuscation) : m_file{fil
 std::size_t AutoFile::detail_fread(std::span<std::byte> dst)
 {
     if (!m_file) throw std::ios_base::failure("AutoFile::read: file handle is nullptr");
-    const size_t ret = std::fread(dst.data(), 1, dst.size(), m_file);
+    const size_t ret{dst.empty() ? 0 : std::fread(dst.data(), 1, dst.size(), m_file)};
     if (m_obfuscation) {
         if (!m_position) throw std::ios_base::failure("AutoFile::read: position unknown");
         m_obfuscation(dst.subspan(0, ret), *m_position);
@@ -96,7 +96,7 @@ void AutoFile::write(std::span<const std::byte> src)
 {
     if (!m_file) throw std::ios_base::failure("AutoFile::write: file handle is nullptr");
     if (!m_obfuscation) {
-        if (std::fwrite(src.data(), 1, src.size(), m_file) != src.size()) {
+        if (!src.empty() && std::fwrite(src.data(), 1, src.size(), m_file) != src.size()) {
             throw std::ios_base::failure("AutoFile::write: write failed");
         }
         m_was_written = true;
@@ -119,7 +119,7 @@ void AutoFile::write_buffer(std::span<std::byte> src)
         if (!m_position) throw std::ios_base::failure("AutoFile::write_buffer: obfuscation position unknown");
         m_obfuscation(src, *m_position); // obfuscate in-place
     }
-    if (std::fwrite(src.data(), 1, src.size(), m_file) != src.size()) {
+    if (!src.empty() && std::fwrite(src.data(), 1, src.size(), m_file) != src.size()) {
         throw std::ios_base::failure("AutoFile::write_buffer: write failed");
     }
     m_was_written = true;
