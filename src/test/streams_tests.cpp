@@ -168,6 +168,16 @@ BOOST_AUTO_TEST_CASE(xor_file)
     }
 }
 
+BOOST_AUTO_TEST_CASE(autofile_empty_span_io)
+{
+    AutoFile file{fsbridge::fopen(m_args.GetDataDirBase() / "empty_span", "w+b")};
+    file.read({});
+    file.write({});
+    file.write_buffer({});
+    BOOST_CHECK_EQUAL(file.tell(), 0);
+    BOOST_CHECK_EQUAL(file.fclose(), 0);
+}
+
 BOOST_AUTO_TEST_CASE(streams_vector_writer)
 {
     unsigned char a(1);
