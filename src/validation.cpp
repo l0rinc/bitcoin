@@ -2348,8 +2348,6 @@ bool Chainstate::ConnectBlockChecks(const CBlock& block, BlockValidationState& s
     // Special case for the genesis block, skipping connection of its transactions
     // (its coinbase is unspendable)
     if (block_hash == params.GetConsensus().hashGenesisBlock) {
-        if (!fJustCheck)
-            view.SetBestBlock(pindex->GetBlockHash());
         return true;
     }
 
@@ -2686,7 +2684,19 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     CBlockUndo blockundo;
     int nInputs = 0;
     int64_t nSigOpsCost = 0;
-    return ConnectBlockChecks(block, state, pindex, view, /*fJustCheck=*/false, blockundo, nInputs, nSigOpsCost);
+    if (!ConnectBlockChecks(block, state, pindex, view, /*fJustCheck=*/false, blockundo, nInputs, nSigOpsCost)) {
+        return false;
+    }
+
+    // Special case for the genesis block: its coinbase is unspendable, so
+    // ConnectBlockChecks() skipped connecting its transactions and there is
+    // no undo data or block index validity to update.
+    if (pindex->pprev == nullptr) {
+        // add this block to the view's block chain
+        view.SetBestBlock(pindex->GetBlockHash());
+        return true;
+    }
+    return true;
 }
 
 bool Chainstate::TestConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
