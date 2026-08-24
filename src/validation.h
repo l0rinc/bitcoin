@@ -860,7 +860,8 @@ public:
 
 protected:
     bool ConnectBlockChecks(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-        CCoinsViewCache& view, bool fJustCheck) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+        CCoinsViewCache& view, bool fJustCheck, CBlockUndo& blockundo,
+        int& nInputs, int64_t& nSigOpsCost) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     bool ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
     bool ConnectTip(

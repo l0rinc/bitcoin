@@ -2303,7 +2303,8 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
 bool Chainstate::ConnectBlockChecks(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-                                     CCoinsViewCache& view, bool fJustCheck)
+    CCoinsViewCache& view, bool fJustCheck, CBlockUndo& blockundo,
+    int& nInputs, int64_t& nSigOpsCost)
 {
     AssertLockHeld(cs_main);
     assert(pindex);
@@ -2514,8 +2515,6 @@ bool Chainstate::ConnectBlockChecks(const CBlock& block, BlockValidationState& s
         m_last_script_check_reason_logged = script_check_reason;
     }
 
-    CBlockUndo blockundo;
-
     // Precomputed transaction data pointers must not be invalidated
     // until after `control` has run the script checks (potentially
     // in multiple threads). Preallocate the vector size so a new allocation
@@ -2527,8 +2526,6 @@ bool Chainstate::ConnectBlockChecks(const CBlock& block, BlockValidationState& s
 
     std::vector<int> prevheights;
     CAmount nFees = 0;
-    int nInputs = 0;
-    int64_t nSigOpsCost = 0;
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
@@ -2683,14 +2680,24 @@ bool Chainstate::ConnectBlockChecks(const CBlock& block, BlockValidationState& s
 
 bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view)
 {
-    return ConnectBlockChecks(block, state, pindex, view, /*fJustCheck=*/false);
+    AssertLockHeld(cs_main);
+    assert(pindex);
+
+    CBlockUndo blockundo;
+    int nInputs = 0;
+    int64_t nSigOpsCost = 0;
+    return ConnectBlockChecks(block, state, pindex, view, /*fJustCheck=*/false, blockundo, nInputs, nSigOpsCost);
 }
 
 bool Chainstate::TestConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
                                   CCoinsViewCache& view)
 {
     AssertLockHeld(cs_main);
-    return ConnectBlockChecks(block, state, pindex, view, /*fJustCheck=*/true);
+
+    CBlockUndo blockundo;
+    int nInputs = 0;
+    int64_t nSigOpsCost = 0;
+    return ConnectBlockChecks(block, state, pindex, view, /*fJustCheck=*/true, blockundo, nInputs, nSigOpsCost);
 }
 
 CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState()
