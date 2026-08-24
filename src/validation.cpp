@@ -2302,7 +2302,7 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
-bool Chainstate::ConnectBlockChecks(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
+bool Chainstate::ConnectBlockChecks(const CBlock& block, BlockValidationState& state, const CBlockIndex* pindex,
     CCoinsViewCache& view, bool fJustCheck, CBlockUndo& blockundo,
     int& nInputs, int64_t& nSigOpsCost)
 {
@@ -2700,15 +2700,15 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     return true;
 }
 
-bool Chainstate::TestConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-                                  CCoinsViewCache& view)
+bool Chainstate::TestConnectBlock(const CBlock& block, BlockValidationState& state, const CBlockIndex& index,
+                                   CCoinsViewCache& view)
 {
     AssertLockHeld(cs_main);
 
     CBlockUndo blockundo;
     int nInputs = 0;
     int64_t nSigOpsCost = 0;
-    return ConnectBlockChecks(block, state, pindex, view, /*fJustCheck=*/true, blockundo, nInputs, nSigOpsCost);
+    return ConnectBlockChecks(block, state, &index, view, /*fJustCheck=*/true, blockundo, nInputs, nSigOpsCost);
 }
 
 CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState()
@@ -4578,7 +4578,7 @@ BlockValidationState TestBlockValidity(
     CCoinsViewCache view_dummy(&chainstate.CoinsTip());
 
     // Call TestConnectBlock(), it updates, and does not clear, validation caches.
-    if (!chainstate.TestConnectBlock(block, state, &index_dummy, view_dummy)) {
+    if (!chainstate.TestConnectBlock(block, state, index_dummy, view_dummy)) {
         if (state.IsValid()) NONFATAL_UNREACHABLE();
         return state;
     }

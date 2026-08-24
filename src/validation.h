@@ -784,8 +784,8 @@ public:
     //! Connect a block to the chain, updating pindex and the block undo/index files on disk.
     bool ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
         CCoinsViewCache& view) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-    //! Run the same validity checks as ConnectBlock() without mutating pindex or writing anything to disk.
-    bool TestConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
+    //! Run the same validity checks as ConnectBlock() without mutating the block index or writing anything to disk.
+    bool TestConnectBlock(const CBlock& block, BlockValidationState& state, const CBlockIndex& index,
         CCoinsViewCache& view) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     // Apply the effects of a block disconnection on the UTXO set.
@@ -866,7 +866,7 @@ protected:
      * nSigOpsCost so that ConnectBlock() can use them to update the chainstate
      * without recomputing them.
      */
-    bool ConnectBlockChecks(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
+    bool ConnectBlockChecks(const CBlock& block, BlockValidationState& state, const CBlockIndex* pindex,
         CCoinsViewCache& view, bool fJustCheck, CBlockUndo& blockundo,
         int& nInputs, int64_t& nSigOpsCost) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
