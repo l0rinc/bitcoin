@@ -2302,8 +2302,8 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
-bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-                               CCoinsViewCache& view, bool fJustCheck)
+bool Chainstate::ConnectBlockChecks(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
+                                     CCoinsViewCache& view, bool fJustCheck)
 {
     AssertLockHeld(cs_main);
     assert(pindex);
@@ -2679,6 +2679,18 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     );
 
     return true;
+}
+
+bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view)
+{
+    return ConnectBlockChecks(block, state, pindex, view, /*fJustCheck=*/false);
+}
+
+bool Chainstate::TestConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
+                                  CCoinsViewCache& view)
+{
+    AssertLockHeld(cs_main);
+    return ConnectBlockChecks(block, state, pindex, view, /*fJustCheck=*/true);
 }
 
 CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState()
@@ -4538,7 +4550,7 @@ BlockValidationState TestBlockValidity(
         return state;
     }
 
-    // We don't want ConnectBlock to update the actual chainstate, so create
+    // We don't want TestConnectBlock to update the actual chainstate, so create
     // a cache on top of it, along with a dummy block index.
     CBlockIndex index_dummy{block};
     uint256 block_hash(block.GetHash());
@@ -4547,8 +4559,8 @@ BlockValidationState TestBlockValidity(
     index_dummy.phashBlock = &block_hash;
     CCoinsViewCache view_dummy(&chainstate.CoinsTip());
 
-    // Set fJustCheck to true in order to update, and not clear, validation caches.
-    if(!chainstate.ConnectBlock(block, state, &index_dummy, view_dummy, /*fJustCheck=*/true)) {
+    // Call TestConnectBlock(), it updates, and does not clear, validation caches.
+    if (!chainstate.TestConnectBlock(block, state, &index_dummy, view_dummy)) {
         if (state.IsValid()) NONFATAL_UNREACHABLE();
         return state;
     }
