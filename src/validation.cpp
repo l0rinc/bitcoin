@@ -70,6 +70,7 @@
 #include <cassert>
 #include <chrono>
 #include <deque>
+#include <future>
 #include <numeric>
 #include <optional>
 #include <ranges>
@@ -3190,11 +3191,12 @@ void Chainstate::PruneBlockIndexCandidates() {
     assert(!setBlockIndexCandidates.empty());
 }
 
-/** Supplies blocks to validation. */
+/** Supplies blocks to validation. Destruction waits for any queued reads. */
 class Chainstate::BlockFetcher
 {
     const BlockManager& m_blockman;
-    std::shared_ptr<const CBlock> m_followup GUARDED_BY(::cs_main);
+    ThreadPool m_pool{"blockread"};
+    std::future<std::shared_ptr<const CBlock>> m_followup GUARDED_BY(::cs_main);
 
     static bool ShouldEnqueue(const CBlockIndex* index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
@@ -3203,11 +3205,13 @@ class Chainstate::BlockFetcher
 
     bool Enqueue(const CBlockIndex& index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
-        if (auto block{std::make_shared<CBlock>()}; m_blockman.ReadBlock(*block, index.GetBlockPos(), index.GetBlockHash())) {
-            m_followup = std::move(block);
-            return true;
-        }
-        return false;
+        if (m_pool.WorkersCount() == 0) m_pool.Start(1);
+        auto followup{m_pool.Submit([&blockman = m_blockman, hash = index.GetBlockHash(), pos = index.GetBlockPos()]() -> std::shared_ptr<const CBlock> {
+            if (auto block{std::make_shared<CBlock>()}; blockman.ReadBlock(*block, pos, hash)) return block;
+            return nullptr;
+        })};
+        if (followup) m_followup = std::move(*followup);
+        return !!followup;
     }
 
 public:
@@ -3215,14 +3219,15 @@ public:
 
     std::shared_ptr<const CBlock> Load(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
-        auto block{std::move(m_followup)};
+        if (!m_followup.valid()) return nullptr;
+        auto block{m_followup.get()};
         return block && block->GetHash() == hash ? block : nullptr;
     }
 
     void FillQueue(const CBlockIndex& last_index, int next_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
-        if (m_followup) return;
+        if (m_followup.valid()) return;
         if (auto* next{last_index.GetAncestor(next_height)}; ShouldEnqueue(next)) Enqueue(*next);
     }
 };
