@@ -3227,6 +3227,8 @@ class Chainstate::BlockFetcher
 public:
     explicit BlockFetcher(const BlockManager& blockman) : m_blockman{blockman} {}
 
+    void Clear() EXCLUSIVE_LOCKS_REQUIRED(::cs_main) { m_followups.clear(); }
+
     std::shared_ptr<const CBlock> Load(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         if (auto block{PopFollowup()}; block && block->GetHash() == hash) return block;
@@ -3271,6 +3273,10 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
     const CBlockIndex* pindexOldTip = m_chain.Tip();
     const CBlockIndex* pindexFork = m_chain.FindFork(index_most_work);
     const CBlockIndex* read_ahead_tip{provided_block ? index_most_work.pprev : &index_most_work}; // Avoid rereading the provided block
+    if (pindexFork && pindexFork != pindexOldTip) {
+        m_block_fetcher->Clear();
+        if (read_ahead_tip) m_block_fetcher->FillQueue(*read_ahead_tip, pindexFork->nHeight + 1);
+    }
 
     // Disconnect active blocks which are no longer in the best chain.
     bool fBlocksDisconnected = false;
