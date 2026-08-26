@@ -29,6 +29,7 @@
 #include <kernel/types.h>
 #include <kernel/warning.h>
 #include <logging/timer.h>
+#include <node/blockfetcher.h>
 #include <node/blockstorage.h>
 #include <node/utxo_snapshot.h>
 #include <policy/ephemeral_policy.h>
@@ -1858,11 +1859,16 @@ Chainstate::Chainstate(
     BlockManager& blockman,
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
-    : m_mempool(mempool),
+    : m_block_fetcher{std::make_unique<node::BlockFetcher>([blockman = &blockman](CBlock& block, const FlatFilePos& pos, const uint256& hash) {
+          return blockman->ReadBlock(block, pos, hash);
+      })},
+      m_mempool(mempool),
       m_blockman(blockman),
       m_chainman(chainman),
       m_assumeutxo(from_snapshot_blockhash ? Assumeutxo::UNVALIDATED : Assumeutxo::VALIDATED),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
+
+Chainstate::~Chainstate() = default;
 
 fs::path Chainstate::StoragePath() const
 {
@@ -3095,6 +3101,7 @@ bool Chainstate::ConnectTip(
     BlockValidationState& state,
     CBlockIndex* pindexNew,
     std::shared_ptr<const CBlock> block_to_connect,
+    const CBlockIndex* read_ahead_tip,
     std::vector<ConnectedBlock>& connected_blocks,
     DisconnectedBlockTransactions& disconnectpool)
 {
@@ -3104,6 +3111,8 @@ bool Chainstate::ConnectTip(
     assert(pindexNew->pprev == m_chain.Tip());
     // Read block from disk.
     const auto time_1{SteadyClock::now()};
+    if (!block_to_connect) block_to_connect = m_block_fetcher->Load(pindexNew->GetBlockHash());
+    m_block_fetcher->FillQueue(read_ahead_tip, pindexNew->nHeight + 1);
     if (!block_to_connect) {
         std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
         if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
@@ -3274,17 +3283,19 @@ void Chainstate::PruneBlockIndexCandidates() {
 
 /**
  * Try to make some progress towards making index_most_work the active block.
- * pblock is either nullptr or a pointer to a CBlock corresponding to index_most_work.
+ * provided_block is either nullptr or points to the CBlock corresponding to index_most_work.
  *
  * @returns true unless a system error occurred
  */
-bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
+bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& provided_block, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
 {
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
 
     const CBlockIndex* pindexOldTip = m_chain.Tip();
     const CBlockIndex* pindexFork = m_chain.FindFork(index_most_work);
+    // Stop before a block supplied by the caller, which does not need to be read from disk
+    const CBlockIndex* read_ahead_tip{provided_block ? index_most_work.pprev : &index_most_work};
 
     // Disconnect active blocks which are no longer in the best chain.
     bool fBlocksDisconnected = false;
@@ -3323,8 +3334,10 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
-            if (!ConnectTip(state, pindexConnect, pindexConnect == &index_most_work ? pblock : std::shared_ptr<const CBlock>(), connected_blocks, disconnectpool)) {
+            const auto block_to_connect{pindexConnect == &index_most_work ? provided_block : nullptr};
+            if (!ConnectTip(state, pindexConnect, block_to_connect, read_ahead_tip, connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
+                    m_block_fetcher->Clear();
                     // The block violates a consensus rule.
                     if (state.GetResult() != BlockValidationResult::BLOCK_MUTATED) {
                         InvalidChainFound(vpindexToConnect.front());
