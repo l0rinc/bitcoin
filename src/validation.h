@@ -859,6 +859,13 @@ public:
     std::pair<int, int> GetPruneRange(int last_height_can_prune) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
 protected:
+    /**
+     * Shared implementation behind ConnectBlock() and TestConnectBlock().
+     * Performs all UTXO-set-dependent validity checks, without mutating pindex
+     * or writing anything to disk. On success, fills blockundo, nInputs and
+     * nSigOpsCost so that ConnectBlock() can use them to update the chainstate
+     * without recomputing them.
+     */
     bool ConnectBlockChecks(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
         CCoinsViewCache& view, bool fJustCheck, CBlockUndo& blockundo,
         int& nInputs, int64_t& nSigOpsCost) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
