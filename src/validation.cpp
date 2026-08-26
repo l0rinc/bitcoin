@@ -3190,30 +3190,71 @@ void Chainstate::PruneBlockIndexCandidates() {
     assert(!setBlockIndexCandidates.empty());
 }
 
+/** Supplies blocks to validation. */
+class Chainstate::BlockFetcher
+{
+    const BlockManager& m_blockman;
+    std::shared_ptr<const CBlock> m_followup GUARDED_BY(::cs_main);
+
+    static bool ShouldEnqueue(const CBlockIndex* index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        return index && (index->nStatus & BLOCK_HAVE_DATA);
+    }
+
+    bool Enqueue(const CBlockIndex& index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        if (auto block{std::make_shared<CBlock>()}; m_blockman.ReadBlock(*block, index.GetBlockPos(), index.GetBlockHash())) {
+            m_followup = std::move(block);
+            return true;
+        }
+        return false;
+    }
+
+public:
+    explicit BlockFetcher(const BlockManager& blockman) : m_blockman{blockman} {}
+
+    std::shared_ptr<const CBlock> Load(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        auto block{std::move(m_followup)};
+        return block && block->GetHash() == hash ? block : nullptr;
+    }
+
+    void FillQueue(const CBlockIndex& last_index, int next_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        AssertLockHeld(::cs_main);
+        if (m_followup) return;
+        if (auto* next{last_index.GetAncestor(next_height)}; ShouldEnqueue(next)) Enqueue(*next);
+    }
+};
+
 Chainstate::Chainstate(
     CTxMemPool* mempool,
     BlockManager& blockman,
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
-    : m_mempool(mempool),
+    : m_block_fetcher{std::make_unique<BlockFetcher>(blockman)},
+      m_mempool(mempool),
       m_blockman(blockman),
       m_chainman(chainman),
       m_assumeutxo(from_snapshot_blockhash ? Assumeutxo::UNVALIDATED : Assumeutxo::VALIDATED),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
 
+Chainstate::~Chainstate() = default;
+
 /**
  * Try to make some progress towards making index_most_work the active block.
- * pblock is either nullptr or a pointer to a CBlock corresponding to index_most_work.
+ * provided_block is either nullptr or points to the CBlock corresponding to index_most_work.
  *
  * @returns true unless a system error occurred
  */
-bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
+bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& provided_block, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
 {
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
 
     const CBlockIndex* pindexOldTip = m_chain.Tip();
     const CBlockIndex* pindexFork = m_chain.FindFork(index_most_work);
+    const CBlockIndex* read_ahead_tip{provided_block ? index_most_work.pprev : &index_most_work}; // Avoid rereading the provided block
 
     // Disconnect active blocks which are no longer in the best chain.
     bool fBlocksDisconnected = false;
@@ -3252,7 +3293,8 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
-            auto block_to_connect{pindexConnect == &index_most_work ? pblock : std::shared_ptr<const CBlock>()};
+            auto block_to_connect{provided_block && pindexConnect == &index_most_work ? provided_block : m_block_fetcher->Load(pindexConnect->GetBlockHash())};
+            if (read_ahead_tip) m_block_fetcher->FillQueue(*read_ahead_tip, pindexConnect->nHeight + 1);
             if (!ConnectTip(state, pindexConnect, std::move(block_to_connect), connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.

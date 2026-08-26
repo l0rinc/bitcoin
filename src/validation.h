@@ -553,12 +553,17 @@ enum class Assumeutxo {
 class Chainstate
 {
 protected:
+    class BlockFetcher;
+
     /**
      * The ChainState Mutex
      * A lock that must be held when modifying this ChainState - held in ActivateBestChain() and
      * InvalidateBlock()
      */
     Mutex m_chainstate_mutex;
+
+    //! Reads blocks ahead during chain activation.
+    std::unique_ptr<BlockFetcher> m_block_fetcher;
 
     //! Optional mempool that is kept in sync with the chain.
     //! Only the active chainstate has a mempool.
@@ -590,6 +595,7 @@ public:
         node::BlockManager& blockman,
         ChainstateManager& chainman,
         std::optional<uint256> from_snapshot_blockhash = std::nullopt);
+    ~Chainstate();
 
     //! Return path to chainstate leveldb directory.
     fs::path StoragePath() const;
@@ -855,7 +861,7 @@ public:
     std::pair<int, int> GetPruneRange(int last_height_can_prune) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
 protected:
-    bool ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
+    bool ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& provided_block, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
     bool ConnectTip(
         BlockValidationState& state,
         CBlockIndex* pindexNew,
