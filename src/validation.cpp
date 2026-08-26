@@ -3194,13 +3194,23 @@ void Chainstate::PruneBlockIndexCandidates() {
 /** Supplies blocks to validation. Destruction waits for any queued reads. */
 class Chainstate::BlockFetcher
 {
+    static constexpr uint32_t QUEUE_SIZE{2};
+
     const BlockManager& m_blockman;
     ThreadPool m_pool{"blockread"};
-    std::future<std::shared_ptr<const CBlock>> m_followup GUARDED_BY(::cs_main);
+    std::deque<std::future<std::shared_ptr<const CBlock>>> m_followups GUARDED_BY(::cs_main);
 
     static bool ShouldEnqueue(const CBlockIndex* index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         return index && (index->nStatus & BLOCK_HAVE_DATA);
+    }
+
+    std::shared_ptr<const CBlock> PopFollowup() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        if (m_followups.empty()) return nullptr;
+        auto followup{std::move(m_followups[0])};
+        m_followups.pop_front();
+        return followup.get();
     }
 
     bool Enqueue(const CBlockIndex& index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
@@ -3210,7 +3220,7 @@ class Chainstate::BlockFetcher
             if (auto block{std::make_shared<CBlock>()}; blockman.ReadBlock(*block, pos, hash)) return block;
             return nullptr;
         })};
-        if (followup) m_followup = std::move(*followup);
+        if (followup) m_followups.emplace_back(std::move(*followup));
         return !!followup;
     }
 
@@ -3219,16 +3229,17 @@ public:
 
     std::shared_ptr<const CBlock> Load(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
-        if (!m_followup.valid()) return nullptr;
-        auto block{m_followup.get()};
-        return block && block->GetHash() == hash ? block : nullptr;
+        if (auto block{PopFollowup()}; block && block->GetHash() == hash) return block;
+        return nullptr;
     }
 
     void FillQueue(const CBlockIndex& last_index, int next_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
-        if (m_followup.valid()) return;
-        if (auto* next{last_index.GetAncestor(next_height)}; ShouldEnqueue(next)) Enqueue(*next);
+        for (size_t i{m_followups.size()}; i < QUEUE_SIZE; ++i) {
+            const auto* next{last_index.GetAncestor(next_height + i)};
+            if (!ShouldEnqueue(next) || !Enqueue(*next)) break;
+        }
     }
 };
 
