@@ -20,6 +20,7 @@ from test_framework.messages import (
     msg_getdata,
     msg_mempool,
     msg_version,
+    ser_compact_size,
 )
 from test_framework.p2p import (
     P2PInterface,
@@ -34,6 +35,16 @@ from test_framework.wallet import (
     MiniWallet,
     getnewdestination,
 )
+
+
+class msg_oversized_vector:
+    """Declare a large vector without sending its elements."""
+
+    def __init__(self, msgtype):
+        self.msgtype = msgtype
+
+    def serialize(self):
+        return ser_compact_size(4_000_000)
 
 
 class P2PBloomFilter(P2PInterface):
@@ -105,6 +116,12 @@ class FilterTest(BitcoinTestFramework):
         return self.generatetodescriptor(self.nodes[0], 1, f'raw({scriptpubkey.hex()})')[0]
 
     def test_size_limits(self, filter_peer):
+        self.log.info('Check that oversized filter vectors are rejected before element parsing')
+        with self.nodes[0].assert_debug_log(['Misbehaving']):
+            filter_peer.send_and_ping(msg_oversized_vector(b'filterload'))
+        with self.nodes[0].assert_debug_log(['Misbehaving']):
+            filter_peer.send_and_ping(msg_oversized_vector(b'filteradd'))
+
         self.log.info('Check that too large filter is rejected')
         with self.nodes[0].assert_debug_log(['Misbehaving']):
             filter_peer.send_and_ping(msg_filterload(data=b'\xbb'*(MAX_BLOOM_FILTER_SIZE+1)))
