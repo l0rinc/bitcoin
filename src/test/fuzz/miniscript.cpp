@@ -2,19 +2,29 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
+#include <consensus/amount.h>
 #include <core_io.h>
 #include <hash.h>
 #include <key.h>
+#include <primitives/transaction.h>
+#include <script/descriptor.h>
+#include <script/interpreter.h>
 #include <script/miniscript.h>
 #include <script/script.h>
+#include <script/sign.h>
 #include <script/signingprovider.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/fuzz/util/descriptor.h>
+#include <tinyformat.h>
 #include <util/strencodings.h>
 
 #include <algorithm>
+#include <array>
+#include <cassert>
+#include <limits>
 #include <optional>
 
 namespace {
@@ -28,8 +38,10 @@ using miniscript::operator""_mst;
 //! Some pre-computed data for more efficient string roundtrips and to simulate challenges.
 struct TestData {
     typedef CPubKey Key;
+    using KeyData = std::array<unsigned char, 32>;
 
     // Precomputed public keys, and a dummy signature for each of them.
+    std::vector<KeyData> dummy_keydata;
     std::vector<Key> dummy_keys;
     std::map<Key, int> dummy_key_idx_map;
     std::map<CKeyID, Key> dummy_keys_map;
@@ -46,9 +58,18 @@ struct TestData {
     std::map<std::vector<unsigned char>, std::vector<unsigned char>> hash256_preimages;
     std::map<std::vector<unsigned char>, std::vector<unsigned char>> hash160_preimages;
 
+    CKey GetPrivKey(uint8_t index) const {
+        const auto& keydata{dummy_keydata.at(index)};
+        CKey key;
+        key.Set(keydata.begin(), keydata.end(), true);
+        assert(key.IsValid());
+        return key;
+    }
+
     //! Set the precomputed data.
     void Init() {
-        unsigned char keydata[32] = {1};
+        KeyData keydata{};
+        keydata[0] = 1;
         // All our signatures sign (and are required to sign) this constant message.
         constexpr uint256 MESSAGE_HASH{"0000000000000000f5cd94e18b6fe77dd7aca9e35c2b0c9cbd86356c80a71065"};
         // We don't pass additional randomness when creating a schnorr signature.
@@ -57,9 +78,10 @@ struct TestData {
         for (size_t i = 0; i < 256; i++) {
             keydata[31] = i;
             CKey privkey;
-            privkey.Set(keydata, keydata + 32, true);
+            privkey.Set(keydata.begin(), keydata.end(), true);
             const Key pubkey = privkey.GetPubKey();
 
+            dummy_keydata.push_back(keydata);
             dummy_keys.push_back(pubkey);
             dummy_key_idx_map.emplace(pubkey, i);
             dummy_keys_map.insert({pubkey.GetID(), pubkey});
@@ -78,20 +100,20 @@ struct TestData {
 
             std::vector<unsigned char> hash;
             hash.resize(32);
-            CSHA256().Write(keydata, 32).Finalize(hash.data());
+            CSHA256().Write(keydata.data(), keydata.size()).Finalize(hash.data());
             sha256.push_back(hash);
-            if (i & 1) sha256_preimages[hash] = std::vector<unsigned char>(keydata, keydata + 32);
+            if (i & 1) sha256_preimages[hash] = std::vector<unsigned char>(keydata.begin(), keydata.end());
             CHash256().Write(keydata).Finalize(hash);
             hash256.push_back(hash);
-            if (i & 1) hash256_preimages[hash] = std::vector<unsigned char>(keydata, keydata + 32);
+            if (i & 1) hash256_preimages[hash] = std::vector<unsigned char>(keydata.begin(), keydata.end());
             hash.resize(20);
-            CRIPEMD160().Write(keydata, 32).Finalize(hash.data());
+            CRIPEMD160().Write(keydata.data(), keydata.size()).Finalize(hash.data());
             assert(hash.size() == 20);
             ripemd160.push_back(hash);
-            if (i & 1) ripemd160_preimages[hash] = std::vector<unsigned char>(keydata, keydata + 32);
+            if (i & 1) ripemd160_preimages[hash] = std::vector<unsigned char>(keydata.begin(), keydata.end());
             CHash160().Write(keydata).Finalize(hash);
             hash160.push_back(hash);
-            if (i & 1) hash160_preimages[hash] = std::vector<unsigned char>(keydata, keydata + 32);
+            if (i & 1) hash160_preimages[hash] = std::vector<unsigned char>(keydata.begin(), keydata.end());
         }
     }
 
@@ -1215,6 +1237,196 @@ FUZZ_TARGET(miniscript_stable, .init = FuzzInit)
         TestNode(script_ctx, GenNode(script_ctx, [&](Type needed_type) {
             return ConsumeNodeStable(script_ctx, provider, needed_type);
         }, ""_mst), provider);
+    }
+}
+
+FUZZ_TARGET(miniscript_mint_005_satisfaction, .init = FuzzInit)
+{
+    enum KeyRole : uint8_t { Aw1,
+                             Aw2,
+                             Aw3,
+                             RecoveryPartner,
+                             Customer1,
+                             Customer2,
+                             Customer3,
+                             Recovery1,
+                             Recovery2,
+                             Recovery3,
+                             KeyRoleCount };
+    enum class SigningMode : uint8_t { Normal,
+                                       PartialLoss,
+                                       PartnerRecovery,
+                                       Sovereign,
+                                       DuplicateKeys,
+                                       NoKeys,
+                                       Random };
+    enum class KeyPattern : uint8_t { Independent,
+                                      DuplicatePair,
+                                      AllSame };
+
+    FuzzedDataProvider provider(buffer.data(), buffer.size());
+    const SigningMode signing_mode{static_cast<SigningMode>(provider.ConsumeIntegralInRange<uint8_t>(0, static_cast<uint8_t>(SigningMode::Random)))};
+    const bool exact_spend{signing_mode == SigningMode::Normal || signing_mode == SigningMode::PartialLoss || signing_mode == SigningMode::PartnerRecovery || signing_mode == SigningMode::Sovereign};
+
+    std::array<uint8_t, KeyRoleCount> key_indices{};
+    if (exact_spend) {
+        const uint8_t max_first{uint8_t(std::numeric_limits<uint8_t>::max() - KeyRoleCount + 1)};
+        std::array<uint8_t, 3> first_candidates{0, max_first, provider.ConsumeIntegralInRange<uint8_t>(0, max_first)};
+        const uint8_t first{PickValue(provider, first_candidates)};
+        for (size_t role{0}; role < key_indices.size(); ++role) key_indices[role] = uint8_t(first + role);
+    } else {
+        for (size_t role{0}; role < key_indices.size(); ++role) {
+            std::array<uint8_t, 3> candidates{uint8_t(role), uint8_t(std::numeric_limits<uint8_t>::max() - role), provider.ConsumeIntegral<uint8_t>()};
+            key_indices[role] = PickValue(provider, candidates);
+        }
+        if (signing_mode == SigningMode::DuplicateKeys) {
+            const uint8_t index{PickValue(provider, key_indices)};
+            key_indices.fill(index);
+        } else {
+            switch (static_cast<KeyPattern>(provider.ConsumeIntegralInRange<uint8_t>(0, static_cast<uint8_t>(KeyPattern::AllSame)))) {
+            case KeyPattern::Independent:
+                break;
+            case KeyPattern::DuplicatePair: {
+                const size_t source{provider.ConsumeIntegralInRange<size_t>(0, key_indices.size() - 1)};
+                const size_t offset{provider.ConsumeIntegralInRange<size_t>(1, key_indices.size() - 1)};
+                key_indices[(source + offset) % key_indices.size()] = key_indices[source];
+                break;
+            }
+            case KeyPattern::AllSame: {
+                const uint8_t index{PickValue(provider, key_indices)};
+                key_indices.fill(index);
+                break;
+            }
+            }
+        }
+    }
+
+    const auto consume_locktime = [&] {
+        std::array<uint32_t, 5> candidates{
+            1,
+            LOCKTIME_THRESHOLD - 1,
+            LOCKTIME_THRESHOLD,
+            std::numeric_limits<int32_t>::max(),
+            provider.ConsumeIntegralInRange<uint32_t>(1, std::numeric_limits<int32_t>::max()),
+        };
+        return PickValue(provider, candidates);
+    };
+    std::array<uint32_t, 3> locktimes{consume_locktime(), consume_locktime(), consume_locktime()};
+    if (provider.ConsumeBool()) {
+        const size_t source{provider.ConsumeIntegralInRange<size_t>(0, locktimes.size() - 1)};
+        const size_t offset{provider.ConsumeIntegralInRange<size_t>(1, locktimes.size() - 1)};
+        locktimes[(source + offset) % locktimes.size()] = locktimes[source];
+    }
+
+    const auto policy = [&](auto key_string) {
+        return strprintf(
+            "andor(multi(2,%s,%s,%s),or_i(and_v(v:pkh(%s),after(%u)),thresh(2,pk(%s),s:pk(%s),s:pk(%s),snl:after(%u))),and_v(v:thresh(2,pkh(%s),a:pkh(%s),a:pkh(%s)),after(%u)))",
+            key_string(Aw1), key_string(Aw2), key_string(Aw3), key_string(RecoveryPartner), locktimes[1],
+            key_string(Customer1), key_string(Customer2), key_string(Customer3), locktimes[0],
+            key_string(Recovery1), key_string(Recovery2), key_string(Recovery3), locktimes[2]);
+    };
+    const auto compact_key_string{[&](KeyRole role) {
+        const uint8_t index{key_indices[role]};
+        return HexStr(std::span{&index, 1});
+    }};
+    const auto full_key_string{[&](KeyRole role) {
+        return HexStr(TEST_DATA.dummy_keys[key_indices[role]]);
+    }};
+    const ParserContext parser_ctx{MsCtx::P2WSH};
+    const auto node{miniscript::FromString(policy(compact_key_string), parser_ctx)};
+    assert(node && node->IsValidTopLevel());
+    TestNode(MsCtx::P2WSH, node, provider);
+    const CScript witness_script{node->ToScript(parser_ctx)};
+    const CScript script_pubkey{CScript{} << OP_0 << WitnessV0ScriptHash(witness_script)};
+
+    FlatSigningProvider descriptor_provider{};
+    std::string error{};
+    const auto descriptors{Parse(strprintf("wsh(%s)", policy(full_key_string)), descriptor_provider, error)};
+    if (node->IsSane()) {
+        assert(error.empty());
+        assert(descriptors.size() == 1);
+        FlatSigningProvider expanded_provider{};
+        std::vector<CScript> output_scripts{};
+        const bool expanded{descriptors[0]->Expand(0, descriptor_provider, output_scripts, expanded_provider)};
+        assert(expanded);
+        assert(output_scripts == std::vector<CScript>{script_pubkey});
+    } else {
+        assert(descriptors.empty());
+        assert(error.find("is not sane") != std::string::npos);
+    }
+
+    std::array<bool, KeyRoleCount> have_private_key{};
+    uint32_t transaction_locktime{0};
+    uint32_t sequence{CTxIn::SEQUENCE_FINAL};
+    const std::array anchor_keys{Aw1, Aw2, Aw3};
+    const std::array customer_keys{Customer1, Customer2, Customer3};
+    const std::array recovery_keys{Recovery1, Recovery2, Recovery3};
+    const auto provide_quorum = [&](const std::array<KeyRole, 3>& roles) {
+        const size_t omitted{provider.ConsumeIntegralInRange<size_t>(0, roles.size() - 1)};
+        for (size_t member{0}; member < roles.size(); ++member) {
+            if (member != omitted) have_private_key[roles[member]] = true;
+        }
+    };
+    switch (signing_mode) {
+    case SigningMode::Normal:
+        provide_quorum(anchor_keys);
+        provide_quorum(customer_keys);
+        break;
+    case SigningMode::PartialLoss:
+        provide_quorum(anchor_keys);
+        have_private_key[PickValue(provider, customer_keys)] = true;
+        transaction_locktime = locktimes[0];
+        sequence = CTxIn::MAX_SEQUENCE_NONFINAL;
+        break;
+    case SigningMode::PartnerRecovery:
+        provide_quorum(anchor_keys);
+        have_private_key[RecoveryPartner] = true;
+        transaction_locktime = locktimes[1];
+        sequence = CTxIn::MAX_SEQUENCE_NONFINAL;
+        break;
+    case SigningMode::Sovereign:
+        provide_quorum(recovery_keys);
+        transaction_locktime = locktimes[2];
+        sequence = CTxIn::MAX_SEQUENCE_NONFINAL;
+        break;
+    case SigningMode::DuplicateKeys:
+        have_private_key.fill(true);
+        break;
+    case SigningMode::NoKeys:
+        break;
+    case SigningMode::Random: {
+        for (auto&& available : have_private_key) available = provider.ConsumeBool();
+        const uint32_t selected_locktime{PickValue(provider, locktimes)};
+        std::array<uint32_t, 6> locktime_candidates{0, locktimes[0], locktimes[1], locktimes[2], selected_locktime - 1, selected_locktime + 1};
+        transaction_locktime = PickValue(provider, locktime_candidates);
+        std::array<uint32_t, 4> sequence_candidates{0, CTxIn::MAX_SEQUENCE_NONFINAL, CTxIn::SEQUENCE_FINAL, provider.ConsumeIntegral<uint32_t>()};
+        sequence = PickValue(provider, sequence_candidates);
+        break;
+    }
+    }
+
+    FlatSigningProvider signing_provider{};
+    signing_provider.scripts.emplace(CScriptID{witness_script}, witness_script);
+    for (size_t role{0}; role < KeyRoleCount; ++role) {
+        const CPubKey& pubkey{TEST_DATA.dummy_keys[key_indices[role]]};
+        const CKeyID key_id{pubkey.GetID()};
+        signing_provider.pubkeys.emplace(key_id, pubkey);
+        if (have_private_key[role]) signing_provider.keys.emplace(key_id, TEST_DATA.GetPrivKey(key_indices[role]));
+    }
+
+    std::array<CAmount, 4> amounts{0, 1, MAX_MONEY, ConsumeMoney(provider)};
+    const CAmount amount{PickValue(provider, amounts)};
+    CMutableTransaction transaction{};
+    transaction.nLockTime = transaction_locktime;
+    transaction.vin.emplace_back(COutPoint{Txid::FromUint256(ConsumeUInt256(provider)), provider.ConsumeIntegral<uint32_t>()}, CScript{}, sequence);
+    transaction.vout.emplace_back(amount, CScript{} << OP_TRUE);
+
+    SignatureData signature_data{};
+    const bool complete{ProduceSignature(signing_provider, MutableTransactionSignatureCreator{transaction, 0, amount, {.sighash_type = SIGHASH_ALL}}, script_pubkey, signature_data)};
+    if (signing_mode == SigningMode::NoKeys) {
+        assert(!complete);
+    } else if (signing_mode != SigningMode::Random) {
+        assert(complete);
     }
 }
 
