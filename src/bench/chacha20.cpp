@@ -48,9 +48,40 @@ static void CHACHA20_64BYTES(benchmark::Bench& bench)
     CHACHA20(bench, BUFFER_SIZE_TINY);
 }
 
+static void CHACHA20_128BYTES(benchmark::Bench& bench)
+{
+    CHACHA20(bench, ChaCha20Aligned::BLOCKLEN * 2);
+}
+
+static void CHACHA20_192BYTES(benchmark::Bench& bench)
+{
+    CHACHA20(bench, ChaCha20Aligned::BLOCKLEN * 3);
+}
+
 static void CHACHA20_256BYTES(benchmark::Bench& bench)
 {
     CHACHA20(bench, BUFFER_SIZE_SMALL);
+}
+
+// 12-15 blocks probe the AArch64 exact-group boundary (see the chacha20_vec dispatch)
+static void CHACHA20_768BYTES(benchmark::Bench& bench)
+{
+    CHACHA20(bench, ChaCha20Aligned::BLOCKLEN * 12);
+}
+
+static void CHACHA20_832BYTES(benchmark::Bench& bench)
+{
+    CHACHA20(bench, ChaCha20Aligned::BLOCKLEN * 13);
+}
+
+static void CHACHA20_896BYTES(benchmark::Bench& bench)
+{
+    CHACHA20(bench, ChaCha20Aligned::BLOCKLEN * 14);
+}
+
+static void CHACHA20_960BYTES(benchmark::Bench& bench)
+{
+    CHACHA20(bench, ChaCha20Aligned::BLOCKLEN * 15);
 }
 
 static void CHACHA20_1MB(benchmark::Bench& bench)
@@ -68,14 +99,38 @@ static void FSCHACHA20POLY1305_256BYTES(benchmark::Bench& bench)
     FSCHACHA20POLY1305(bench, BUFFER_SIZE_SMALL);
 }
 
+static void FSCHACHA20POLY1305_BIP324_318BYTES(benchmark::Bench& bench)
+{
+    FSCHACHA20POLY1305(bench, 318);
+}
+
+static void FSCHACHA20POLY1305_BIP324_319BYTES(benchmark::Bench& bench)
+{
+    FSCHACHA20POLY1305(bench, 319);
+}
+
+static void FSCHACHA20POLY1305_BIP324_320BYTES(benchmark::Bench& bench)
+{
+    FSCHACHA20POLY1305(bench, 320);
+}
+
 static void FSCHACHA20POLY1305_1MB(benchmark::Bench& bench)
 {
     FSCHACHA20POLY1305(bench, BUFFER_SIZE_LARGE);
 }
 
 BENCHMARK(CHACHA20_64BYTES);
+BENCHMARK(CHACHA20_128BYTES);
+BENCHMARK(CHACHA20_192BYTES);
 BENCHMARK(CHACHA20_256BYTES);
+BENCHMARK(CHACHA20_768BYTES);
+BENCHMARK(CHACHA20_832BYTES);
+BENCHMARK(CHACHA20_896BYTES);
+BENCHMARK(CHACHA20_960BYTES);
 BENCHMARK(CHACHA20_1MB);
 BENCHMARK(FSCHACHA20POLY1305_64BYTES);
 BENCHMARK(FSCHACHA20POLY1305_256BYTES);
+BENCHMARK(FSCHACHA20POLY1305_BIP324_318BYTES);
+BENCHMARK(FSCHACHA20POLY1305_BIP324_319BYTES);
+BENCHMARK(FSCHACHA20POLY1305_BIP324_320BYTES);
 BENCHMARK(FSCHACHA20POLY1305_1MB);
