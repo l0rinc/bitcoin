@@ -40,13 +40,14 @@ addnode connect to a CJDNS address
 - Test passing unknown -onlynet
 """
 
+import json
 import os
 import socket
 import tempfile
 
 from test_framework.socks5 import Socks5Configuration, Socks5Command, Socks5Server, AddressType
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_equal
+from test_framework.util import append_config, assert_equal
 from test_framework.netutil import test_ipv6_local, test_unix_socket
 
 # Networks returned by RPC getpeerinfo.
@@ -469,6 +470,56 @@ class ProxyTest(BitcoinTestFramework):
         assert_equal(nets["ipv4"]["proxy"], "127.4.4.4:4444")
         assert_equal(nets["ipv6"]["proxy"], "127.6.6.6:6666")
         self.stop_node(1)
+
+        self.log.info("Test command-line proxy overrides configuration file")
+        config_path = self.nodes[1].bitcoinconf
+        original_config = config_path.read_bytes()
+        command_line_proxy = f"{self.conf1.addr[0]}:{self.conf1.addr[1]}"
+        append_config(self.nodes[1].datadir_path, ["proxy=0", "onion=0"])
+        self.start_node(1, extra_args=[f"-proxy={command_line_proxy}"])
+        nets = networks_dict(self.nodes[1].getnetworkinfo())
+        assert_equal(nets["ipv4"]["proxy"], "")  # TODO: Command-line proxy settings should take precedence over configuration-file settings
+        assert_equal(nets["onion"]["proxy"], "")  # TODO: Command-line proxy settings should take precedence over configuration-file settings
+        self.stop_node(1)
+
+        self.log.info("Test command-line onion proxy overrides configuration file")
+        self.start_node(1, extra_args=[f"-proxy={command_line_proxy}=onion"])
+        nets = networks_dict(self.nodes[1].getnetworkinfo())
+        assert_equal(nets["onion"]["proxy"], "")  # TODO: Command-line proxy settings should take precedence over configuration-file settings
+        self.stop_node(1)
+
+        self.log.info("Test settings.json proxy overrides configuration file")
+        settings_path = self.nodes[1].chain_path / "settings.json"
+        original_settings = settings_path.read_bytes()
+        with settings_path.open("w") as settings_file:
+            json.dump({"proxy": command_line_proxy}, settings_file)
+        self.start_node(1, extra_args=[])
+        nets = networks_dict(self.nodes[1].getnetworkinfo())
+        assert_equal(nets["ipv4"]["proxy"], "")  # TODO: settings.json proxy settings should take precedence over configuration-file settings
+        assert_equal(nets["onion"]["proxy"], "")  # TODO: settings.json proxy settings should take precedence over configuration-file settings
+        self.stop_node(1)
+        settings_path.write_bytes(original_settings)
+
+        self.log.info("Test disabling command-line proxy preserves configuration-file onion proxy")
+        shadowed_proxy = "127.0.0.1:notaport"
+        shadowed_onion_proxy = "invalid.invalid:9050"
+        config_onion_proxy = f"{self.conf2.addr[0]}:{self.conf2.addr[1]}"
+        config_path.write_bytes(original_config)
+        append_config(self.nodes[1].datadir_path, [f"proxy={shadowed_proxy}", f"onion={config_onion_proxy}", f"onion={shadowed_onion_proxy}"])
+        self.start_node(1, extra_args=["-noproxy"])
+        nets = networks_dict(self.nodes[1].getnetworkinfo())
+        assert_equal(nets["ipv4"]["proxy"], "")
+        assert_equal(nets["onion"]["proxy"], config_onion_proxy)
+        self.stop_node(1)
+
+        self.log.info("Test command-line onion proxy ignores shadowed configuration-file value")
+        config_path.write_bytes(original_config)
+        append_config(self.nodes[1].datadir_path, [f"onion={shadowed_onion_proxy}"])
+        self.start_node(1, extra_args=[f"-onion={command_line_proxy}"])
+        nets = networks_dict(self.nodes[1].getnetworkinfo())
+        assert_equal(nets["onion"]["proxy"], command_line_proxy)
+        self.stop_node(1)
+        config_path.write_bytes(original_config)
 
         self.log.info("Test overriding the Onion proxy")
         self.start_node(1, extra_args=["-proxy=127.1.1.1:1111", "-proxy=127.2.2.2:2222=onion"])
