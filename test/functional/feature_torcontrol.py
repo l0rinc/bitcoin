@@ -4,8 +4,11 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test torcontrol functionality with a mock Tor control server."""
 from contextlib import contextmanager
+import re
 import socket
 import threading
+from test_framework.messages import MSG_TX, msg_mempool
+from test_framework.p2p import P2PInterface
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
@@ -13,6 +16,7 @@ from test_framework.util import (
     p2p_port,
     tor_port,
 )
+from test_framework.wallet import MiniWallet
 
 
 class MockTorControlServer:
@@ -113,13 +117,14 @@ class TorControlTest(BitcoinTestFramework):
         self._port_counter = getattr(self, '_port_counter', 0) + 1
         return p2p_port(self.num_nodes + self._port_counter)
 
-    def restart_with_mock(self, mock_tor):
+    def restart_with_mock(self, mock_tor, *, extra_args=None, shared_bind=False):
         mock_tor.start()
         self.restart_node(0, extra_args=[
             f"-torcontrol=127.0.0.1:{mock_tor.port}",
             "-listenonion=1",
             "-debug=tor",
-            f"-bind=127.0.0.1:{tor_port(0)}=onion",
+            *([] if shared_bind else [f"-bind=127.0.0.1:{tor_port(0)}=onion"]),
+            *(extra_args or []),
         ])
 
         # Wait for connection and PROTOCOLINFO command
@@ -159,6 +164,27 @@ class TorControlTest(BitcoinTestFramework):
 
         # Clean up
         mock_tor.stop()
+
+    def test_shared_bind_permissions(self):
+        self.log.info("Test a Tor connection through a shared bind")
+
+        mock_tor = MockTorControlServer(self.next_port())
+        self.restart_with_mock(mock_tor, extra_args=["-whitelist=127.0.0.1"], shared_bind=True)
+        self.wait_until(lambda: any(command.startswith("ADD_ONION ") for command in mock_tor.received_commands))
+        txid = MiniWallet(self.nodes[0]).send_self_transfer(from_node=self.nodes[0])["txid"]
+        # Tor forwards from localhost to the configured normal bind.
+        peer = self.nodes[0].add_p2p_connection(P2PInterface(wtxidrelay=False))
+        peer_info = self.nodes[0].getpeerinfo()[0]
+        assert_equal(peer_info["network"], "not_publicly_routable")  # TODO: Treat ambiguous shared-bind connections as Tor
+        assert_equal(peer_info["permissions"], ["noban", "relay", "mempool", "download"])  # TODO: Do not apply address-based permissions to ambiguous shared-bind connections
+        peer.send_without_ping(msg_mempool())
+        peer.wait_until(lambda: not peer.is_connected or "inv" in peer.last_message, check_connected=False)
+        received_tx = "inv" in peer.last_message and any(inv.type == MSG_TX and inv.hash == int(txid, 16) for inv in peer.last_message["inv"].inv)
+        assert_equal(peer.is_connected, True)  # TODO: Disconnect peers without the Mempool permission
+        assert_equal(received_tx, True)  # TODO: Do not return the full mempool inventory
+        peer.peer_disconnect()
+        mock_tor.stop()
+        self.stop_node(0, expected_stderr=re.compile("dedicated onion socket"))
 
     def test_partial_data(self):
         self.log.info("Test that partial Tor control responses are buffered until complete")
@@ -260,6 +286,7 @@ class TorControlTest(BitcoinTestFramework):
 
     def run_test(self):
         self.test_basic()
+        self.test_shared_bind_permissions()
         self.test_partial_data()
         self.test_pow_fallback()
         self.test_oversized_line()
