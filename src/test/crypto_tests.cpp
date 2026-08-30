@@ -8,13 +8,13 @@
 #include <crypto/hkdf_sha256_32.h>
 #include <crypto/hmac_sha256.h>
 #include <crypto/hmac_sha512.h>
+#include <crypto/muhash.h>
 #include <crypto/poly1305.h>
 #include <crypto/ripemd160.h>
 #include <crypto/sha1.h>
 #include <crypto/sha256.h>
 #include <crypto/sha3.h>
 #include <crypto/sha512.h>
-#include <crypto/muhash.h>
 #include <random.h>
 #include <streams.h>
 #include <test/util/common.h>
@@ -22,10 +22,11 @@
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 
-#include <algorithm>
-#include <vector>
-
 #include <boost/test/unit_test.hpp>
+
+#include <algorithm>
+#include <array>
+#include <vector>
 
 using namespace util::hex_literals;
 
@@ -847,6 +848,49 @@ BOOST_AUTO_TEST_CASE(chacha20_midblock)
     BOOST_CHECK(std::ranges::equal(std::span{block}.first(5), b1));
     BOOST_CHECK(std::ranges::equal(std::span{block}.subspan(5, 7), b2));
     BOOST_CHECK(std::ranges::equal(std::span{block}.last(52), b3));
+}
+
+BOOST_AUTO_TEST_CASE(chacha20_crypt_matches_keystream)
+{
+    // Compare Crypt against scalar Keystream output across vector dispatch sizes, block-edge tails, and in-place operation
+    const auto test_crypt{[this](size_t size) {
+        constexpr auto key{"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"_hex};
+        constexpr ChaCha20::Nonce96 nonce{0x10203040, 0xdeadbeef12345678};
+        const auto input{m_rng.randbytes<std::byte>(size)};
+
+        std::vector<std::byte> expected(size); // Expected ciphertext
+        std::array<std::byte, 1> expected_next{}; // Detect an incorrect stream position after Crypt
+        {
+            ChaCha20 stream{key};
+            stream.Seek(nonce, /*block_counter=*/7);
+            stream.Keystream(expected);
+            for (size_t i{0}; i < size; ++i) {
+                expected[i] ^= input[i];
+            }
+            stream.Keystream(expected_next);
+        }
+
+        for (const bool in_place : {false, true}) { // Exercise separate and aliased input/output spans
+            ChaCha20 cipher{key};
+            cipher.Seek(nonce, /*block_counter=*/7);
+
+            std::vector<std::byte> output{in_place ? input : std::vector<std::byte>(size)};
+            cipher.Crypt(in_place ? output : input, output);
+            BOOST_CHECK_EQUAL(HexStr(output), HexStr(expected));
+
+            std::array<std::byte, 1> next{};
+            cipher.Keystream(next);
+            BOOST_CHECK_EQUAL(HexStr(next), HexStr(expected_next));
+        }
+    }};
+
+    constexpr uint16_t MAX_BLOCKS{100}; // Leaves room for future 256- and 512-bit vector dispatches
+    for (uint16_t blocks{1}; blocks <= MAX_BLOCKS; ++blocks) {
+        const size_t size{blocks * ChaCha20Aligned::BLOCKLEN};
+        test_crypt(size - 1);
+        test_crypt(size);
+        test_crypt(size + 1);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(poly1305_testvector)
