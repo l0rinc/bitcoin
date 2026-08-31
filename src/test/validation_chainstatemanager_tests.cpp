@@ -667,7 +667,7 @@ BOOST_FIXTURE_TEST_CASE(reload_pruned_child, RegTestingSetup)
 
     blockman.m_blocks_unlinked.clear(); // Check reconstruction from the block index
     BOOST_REQUIRE(chainman.LoadBlockIndex());
-    BOOST_CHECK(!blockman.m_blocks_unlinked.contains(parent)); // TODO: Reload pruned children still awaiting ancestor transaction counts
+    BOOST_CHECK(blockman.m_blocks_unlinked.contains(parent));
 }
 
 BOOST_FIXTURE_TEST_CASE(redownload_pruned_candidate, RegTestingSetup)

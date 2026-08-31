@@ -5444,8 +5444,8 @@ void ChainstateManager::CheckBlockIndex() const
             }
         }
         assert(!foundInUnlinked || pindex->nTx > 0); // Only blocks whose transactions were received belong in m_blocks_unlinked
-        // If this block has block data available, some parent was never received, and has no invalid parents, it must be in m_blocks_unlinked.
-        assert(!pindex->pprev || (~pindex->nStatus & BLOCK_HAVE_DATA) || pindexFirstNeverProcessed == nullptr || pindexFirstInvalid != nullptr || foundInUnlinked);
+        // Received blocks with an unprocessed ancestor and no invalid ancestors must stay unlinked even after pruning
+        assert(pindex->nTx == 0 || pindexFirstNeverProcessed == nullptr || pindexFirstInvalid != nullptr || foundInUnlinked);
         // Can't be in m_blocks_unlinked if we don't HAVE_DATA, unless it still lacks m_chain_tx_count.
         assert(!foundInUnlinked || (pindex->nStatus & BLOCK_HAVE_DATA) || !pindex->HaveNumChainTxs());
         assert(pindexFirstMissing != nullptr || !foundInUnlinked); // We aren't missing data for any parent -- cannot be in m_blocks_unlinked.
