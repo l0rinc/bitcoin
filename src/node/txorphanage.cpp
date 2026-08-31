@@ -385,14 +385,15 @@ bool TxOrphanageImpl::AddTx(const CTransactionRef& tx, NodeId peer)
     }
 
     // We will return false if the tx already exists under a different peer.
-    const bool brand_new{!HaveTx(wtxid)};
+    auto& index_by_wtxid = m_orphans.get<ByWtxid>();
+    const auto it_existing{index_by_wtxid.lower_bound(ByWtxidView{wtxid, MIN_PEER})};
+    const bool brand_new{it_existing == index_by_wtxid.end() || it_existing->m_tx_data->m_wtxid != wtxid};
 
     // Share the OrphanTxData with the existing announcements of the same wtxid. This also deduplicates the
     // underlying transaction data if the same transaction was downloaded from more than one peer.
-    const auto tx_data{brand_new ? std::make_shared<const OrphanTxData>(tx)
-                                 : m_orphans.get<ByWtxid>().lower_bound(ByWtxidView{wtxid, MIN_PEER})->m_tx_data};
+    const auto tx_data{brand_new ? std::make_shared<const OrphanTxData>(tx) : it_existing->m_tx_data};
 
-    auto [iter, inserted] = m_orphans.get<ByWtxid>().emplace(tx_data, peer, m_current_sequence);
+    auto [iter, inserted] = index_by_wtxid.emplace(tx_data, peer, m_current_sequence);
     // If the announcement (same wtxid, same peer) already exists, emplacement fails. Return false.
     if (!inserted) return false;
 
