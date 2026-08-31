@@ -276,6 +276,8 @@ void BlockManager::PruneBlock(CBlockIndex& block)
     block.nUndoPos = 0;
     m_dirty_blockindex.insert(&block);
 
+    // Keep unlinked pruned blocks so a missing ancestor can still supply their chain transaction counts
+    if (!block.HaveNumChainTxs()) return;
     // Prune from m_blocks_unlinked -- any block we prune would have
     // to be downloaded again in order to consider its chain, at which
     // point it would be considered as a candidate for

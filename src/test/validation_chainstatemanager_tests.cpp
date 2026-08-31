@@ -645,12 +645,13 @@ BOOST_FIXTURE_TEST_CASE(link_pruned_child, RegTestingSetup)
     chainman.ReceivedBlockTransactions(*blocks[1], child, /*pos=*/{});
     blockman.m_have_pruned = true;
     blockman.PruneBlock(*child);
-    BOOST_CHECK(!blockman.m_blocks_unlinked.contains(parent)); // TODO: Keep pruned children while their chain transaction count is unknown
+    BOOST_REQUIRE(blockman.m_blocks_unlinked.contains(parent));
     chainman.CheckBlockIndex();
 
     chainman.ReceivedBlockTransactions(*blocks[0], parent, /*pos=*/{});
-    BOOST_CHECK(!child->HaveNumChainTxs()); // TODO: Receiving the parent must link its pruned descendants
+    BOOST_REQUIRE(child->HaveNumChainTxs());
     BOOST_CHECK(!chainman.ActiveChainstate().setBlockIndexCandidates.contains(child)); // Linking a pruned child must not admit it as a candidate
+    chainman.CheckBlockIndex();
 }
 
 BOOST_FIXTURE_TEST_CASE(reload_pruned_child, RegTestingSetup)

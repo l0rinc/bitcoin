@@ -3888,8 +3888,11 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             }
             pindex->m_chain_tx_count = prev_tx_sum(*pindex);
             pindex->nSequenceId = nBlockSequenceId++;
-            for (const auto& c : m_chainstates) {
-                c->TryAddBlockIndexCandidate(pindex);
+            // Pruned descendants need their block data again before they can be connected
+            if (pindex->nStatus & BLOCK_HAVE_DATA) {
+                for (const auto& c : m_chainstates) {
+                    c->TryAddBlockIndexCandidate(pindex);
+                }
             }
             std::pair<std::multimap<CBlockIndex*, CBlockIndex*>::iterator, std::multimap<CBlockIndex*, CBlockIndex*>::iterator> range = m_blockman.m_blocks_unlinked.equal_range(pindex);
             while (range.first != range.second) {
@@ -5440,9 +5443,11 @@ void ChainstateManager::CheckBlockIndex() const
                 foundInUnlinked = true;
             }
         }
+        assert(!foundInUnlinked || pindex->nTx > 0); // Only blocks whose transactions were received belong in m_blocks_unlinked
         // If this block has block data available, some parent was never received, and has no invalid parents, it must be in m_blocks_unlinked.
         assert(!pindex->pprev || (~pindex->nStatus & BLOCK_HAVE_DATA) || pindexFirstNeverProcessed == nullptr || pindexFirstInvalid != nullptr || foundInUnlinked);
-        assert(!foundInUnlinked || (pindex->nStatus & BLOCK_HAVE_DATA)); // Can't be in m_blocks_unlinked if we don't HAVE_DATA
+        // Can't be in m_blocks_unlinked if we don't HAVE_DATA, unless it still lacks m_chain_tx_count.
+        assert(!foundInUnlinked || (pindex->nStatus & BLOCK_HAVE_DATA) || !pindex->HaveNumChainTxs());
         assert(pindexFirstMissing != nullptr || !foundInUnlinked); // We aren't missing data for any parent -- cannot be in m_blocks_unlinked.
         if (pindex->pprev && (pindex->nStatus & BLOCK_HAVE_DATA) && pindexFirstNeverProcessed == nullptr && pindexFirstMissing != nullptr) {
             // We HAVE_DATA for this block, have received data for all parents at some point, but we're currently missing data for some parent.
