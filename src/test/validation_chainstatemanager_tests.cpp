@@ -687,7 +687,8 @@ BOOST_FIXTURE_TEST_CASE(redownload_pruned_candidate, RegTestingSetup)
     BOOST_REQUIRE(candidates.contains(first));
 
     chainman.ReceivedBlockTransactions(*blocks[0], first, /*pos=*/{});
-    BOOST_CHECK(!std::ranges::is_sorted(candidates, candidates.value_comp())); // TODO: Redownloading must preserve candidate ordering
+    BOOST_REQUIRE(std::ranges::is_sorted(candidates, candidates.value_comp())); // Redownloading must preserve candidate ordering
+    chainman.CheckBlockIndex();
 }
 
 //! Verify that ReconsiderBlock clears failure flags for the target block, its ancestors, and descendants,

@@ -3233,10 +3233,6 @@ CBlockIndex* Chainstate::FindMostWorkChain()
                     // then add back to m_blocks_unlinked, so that if the block arrives in the future
                     // we can try adding to setBlockIndexCandidates again.
                     if (fMissingData && !fFailedChain) {
-                        // Avoid duplicate entries in m_blocks_unlinked. If the same entry is
-                        // processed twice in ReceivedBlockTransactions(), it may be re-added to
-                        // setBlockIndexCandidates with a modified nSequenceId, breaking ordering
-                        // guarantees and leading to undefined behavior.
                         m_blockman.AddUnlinkedBlock(pindexFailed);
                     }
                     setBlockIndexCandidates.erase(pindexFailed);
@@ -3887,6 +3883,10 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
                    pindex->nHeight, pindex->m_chain_tx_count, prev_tx_sum(*pindex), CLIENT_NAME, FormatFullVersion(), CLIENT_BUGREPORT);
             }
             pindex->m_chain_tx_count = prev_tx_sum(*pindex);
+            // Redownloaded blocks may still be candidates, whose ordering depends on nSequenceId
+            for (const auto& c : m_chainstates) {
+                c->setBlockIndexCandidates.erase(pindex);
+            }
             pindex->nSequenceId = nBlockSequenceId++;
             // Pruned descendants need their block data again before they can be connected
             if (pindex->nStatus & BLOCK_HAVE_DATA) {
