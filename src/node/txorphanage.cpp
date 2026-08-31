@@ -34,8 +34,8 @@ static constexpr NodeId MAX_PEER{std::numeric_limits<NodeId>::max()};
  * heap-allocated vector, so a transaction of standard weight can use many times more memory than its weight suggests
  * (~28x for a witness stack of 1-byte elements). Serialized, an orphan's memory usage is bounded by its weight (see
  * GetMemUsage), so the existing weight-based accounting bounds the actual memory. The transaction is deserialized
- * again on the paths that hand it back out (orphan resolution, RPC), all of which feed into full (re)validation whose
- * cost dwarfs a deserialization. */
+ * again on the paths that hand it back out for orphan resolution, which feed into full (re)validation whose cost
+ * dwarfs a deserialization. */
 struct OrphanTxData {
     /** The serialized transaction, including witness. */
     std::vector<unsigned char> m_encoded;
@@ -752,17 +752,23 @@ std::vector<TxOrphanage::OrphanInfo> TxOrphanageImpl::GetOrphanTransactions() co
     result.reserve(m_unique_orphans);
 
     auto& index_by_wtxid = m_orphans.get<ByWtxid>();
-    auto it = index_by_wtxid.begin();
     std::set<NodeId> this_orphan_announcers;
-    while (it != index_by_wtxid.end()) {
-        this_orphan_announcers.insert(it->m_announcer);
+    for (auto it = index_by_wtxid.begin(); it != index_by_wtxid.end();) {
+        const auto& tx_data{it->m_tx_data};
+        // The index is sorted by (wtxid, announcer), so announcers arrive in ascending order
+        this_orphan_announcers.insert(this_orphan_announcers.end(), it->m_announcer);
+        const auto it_next{std::next(it)};
         // If this is the last entry, or the next entry has a different wtxid, build a OrphanInfo.
-        if (std::next(it) == index_by_wtxid.end() || std::next(it)->m_tx_data->m_wtxid != it->m_tx_data->m_wtxid) {
-            result.emplace_back(it->m_tx_data->MakeTxRef(), std::move(this_orphan_announcers));
+        if (it_next == index_by_wtxid.end() || it_next->m_tx_data->m_wtxid != tx_data->m_wtxid) {
+            result.push_back({.serialized_tx = {tx_data, &tx_data->m_encoded},
+                              .txid = tx_data->m_txid,
+                              .wtxid = tx_data->m_wtxid,
+                              .weight = tx_data->m_usage,
+                              .announcers = std::move(this_orphan_announcers)});
+            // A moved-from std::set is valid but unspecified, so clear it before reusing it
             this_orphan_announcers.clear();
         }
-
-        ++it;
+        it = it_next;
     }
     Assume(m_unique_orphans == result.size());
 

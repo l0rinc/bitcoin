@@ -755,9 +755,13 @@ FUZZ_TARGET(txorphanage_sim)
             total_latency_score += txn[tx]->vin.size() / 10;
         }
         unique_orphans += sim_have_tx;
-        auto orphans_it = std::find_if(all_orphans.begin(), all_orphans.end(), [&](auto& orph) { return orph.tx->GetWitnessHash() == txn[tx]->GetWitnessHash(); });
+        auto orphans_it = std::find_if(all_orphans.begin(), all_orphans.end(), [&](auto& orph) { return orph.wtxid == txn[tx]->GetWitnessHash(); });
         // GetOrphanTransactions (OrphanBase existence)
         assert((orphans_it != all_orphans.end()) == sim_have_tx);
+        if (sim_have_tx) {
+            assert(orphans_it->txid == txn[tx]->GetHash());
+            assert(orphans_it->weight == GetTransactionWeight(*txn[tx]));
+        }
         // HaveTx
         bool have_tx = real->HaveTx(txn[tx]->GetWitnessHash());
         assert(have_tx == sim_have_tx);

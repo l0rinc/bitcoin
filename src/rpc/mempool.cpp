@@ -1257,13 +1257,15 @@ static std::vector<RPCResult> OrphanDescription()
 
 static UniValue OrphanToJSON(const node::TxOrphanage::OrphanInfo& orphan)
 {
+    const int64_t vsize{GetVirtualTransactionSize(orphan.weight, /*nSigOpCost=*/0, /*bytes_per_sigop=*/0)};
+
     UniValue o(UniValue::VOBJ);
-    o.pushKV("txid", orphan.tx->GetHash().ToString());
-    o.pushKV("wtxid", orphan.tx->GetWitnessHash().ToString());
-    o.pushKV("bytes", orphan.tx->ComputeTotalSize());
-    o.pushKV("vsize", GetVirtualTransactionSize(*orphan.tx));
-    o.pushKV("vsize_bip141", GetVirtualTransactionSize(*orphan.tx));
-    o.pushKV("weight", GetTransactionWeight(*orphan.tx));
+    o.pushKV("txid", orphan.txid.ToString());
+    o.pushKV("wtxid", orphan.wtxid.ToString());
+    o.pushKV("bytes", orphan.serialized_tx->size());
+    o.pushKV("vsize", vsize);
+    o.pushKV("vsize_bip141", vsize);
+    o.pushKV("weight", orphan.weight);
     UniValue from(UniValue::VARR);
     for (const auto fromPeer: orphan.announcers) {
         from.push_back(fromPeer);
@@ -1312,15 +1314,14 @@ static RPCMethod getorphantxs()
         {
             const NodeContext& node = EnsureAnyNodeContext(request.context);
             PeerManager& peerman = EnsurePeerman(node);
-            std::vector<node::TxOrphanage::OrphanInfo> orphanage = peerman.GetOrphanTransactions();
-
             int verbosity{ParseVerbosity(request.params[0], /*default_verbosity=*/0, /*allow_bool=*/false)};
+            std::vector<node::TxOrphanage::OrphanInfo> orphanage = peerman.GetOrphanTransactions();
 
             UniValue ret(UniValue::VARR);
 
             if (verbosity == 0) {
                 for (auto const& orphan : orphanage) {
-                    ret.push_back(orphan.tx->GetHash().ToString());
+                    ret.push_back(orphan.txid.ToString());
                 }
             } else if (verbosity == 1) {
                 for (auto const& orphan : orphanage) {
@@ -1329,7 +1330,7 @@ static RPCMethod getorphantxs()
             } else if (verbosity == 2) {
                 for (auto const& orphan : orphanage) {
                     UniValue o{OrphanToJSON(orphan)};
-                    o.pushKV("hex", EncodeHexTx(*orphan.tx));
+                    o.pushKV("hex", HexStr(*orphan.serialized_tx));
                     ret.push_back(o);
                 }
             } else {

@@ -43,17 +43,17 @@ public:
     using Usage = int64_t;
     using Count = unsigned int;
 
-    /** Allows providing orphan information externally */
+    /** Allows providing cached orphan information externally without deserializing the transaction */
     struct OrphanInfo {
-        CTransactionRef tx;
+        /** The transaction as serialized by TX_WITH_WITNESS, sized exactly and kept alive after the
+         * orphanage lock is released. Its size is the transaction's total serialized size. */
+        std::shared_ptr<const std::vector<unsigned char>> serialized_tx;
+        Txid txid;
+        Wtxid wtxid;
+        /** The transaction's weight, which is what the orphanage accounts for it */
+        Usage weight;
         /** Peers added with AddTx or AddAnnouncer. */
         std::set<NodeId> announcers;
-
-        // Constructor with moved announcers
-        OrphanInfo(CTransactionRef tx, std::set<NodeId>&& announcers) :
-            tx(std::move(tx)),
-            announcers(std::move(announcers))
-        {}
     };
 
     virtual ~TxOrphanage() = default;
@@ -105,7 +105,7 @@ public:
      * reconsiderable before non-reconsiderable, then from most recent to least recent. */
     virtual std::vector<CTransactionRef> GetChildrenFromSamePeer(const CTransactionRef& parent, NodeId nodeid) const = 0;
 
-    /** Get all orphan transactions */
+    /** Get cached metadata and serialized bytes for all orphan transactions */
     virtual std::vector<OrphanInfo> GetOrphanTransactions() const = 0;
 
     /** Get the total usage (weight) of all orphans. If an orphan has multiple announcers, its usage is

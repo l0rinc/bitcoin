@@ -4,11 +4,11 @@
 
 #include <arith_uint256.h>
 #include <consensus/validation.h>
+#include <core_io.h>
 #include <node/txorphanage.h>
 #include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <pubkey.h>
-#include <serialize.h>
 #include <script/sign.h>
 #include <script/signingprovider.h>
 #include <test/util/common.h>
@@ -17,12 +17,13 @@
 #include <test/util/time.h>
 #include <test/util/transaction_utils.h>
 #include <util/check.h>
+#include <util/strencodings.h>
+
+#include <boost/test/unit_test.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
-
-#include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(orphanage_tests, BasicTestingSetup)
 
@@ -702,7 +703,7 @@ BOOST_AUTO_TEST_CASE(witness_heavy_orphan_tx)
     const auto weight{GetTransactionWeight(*ptx)};
     BOOST_CHECK_LE(weight, MAX_STANDARD_TX_WEIGHT);
     // The serialized transaction, which is what the orphanage keeps, is smaller than the accounted weight.
-    BOOST_CHECK_LT(static_cast<int64_t>(GetSerializeSize(TX_WITH_WITNESS(*ptx))), weight);
+    BOOST_CHECK_LT(static_cast<int64_t>(ptx->ComputeTotalSize()), weight);
 
     auto orphanage{node::MakeTxOrphanage()};
 
@@ -711,6 +712,15 @@ BOOST_AUTO_TEST_CASE(witness_heavy_orphan_tx)
     BOOST_CHECK(orphanage->HaveTx(ptx->GetWitnessHash()));
     BOOST_CHECK_EQUAL(ptx.use_count(), 1); // The orphanage keeps no reference to the deserialized transaction
     BOOST_CHECK_EQUAL(orphanage->UsageByPeer(0), weight);
+
+    // Enumerating the orphanage returns the cached transaction data without reconstructing the witness vectors
+    const auto all_orphans{orphanage->GetOrphanTransactions()};
+    BOOST_REQUIRE_EQUAL(all_orphans.size(), 1);
+    const auto& orphan{all_orphans.at(0)};
+    BOOST_CHECK(orphan.txid == ptx->GetHash());
+    BOOST_CHECK(orphan.wtxid == ptx->GetWitnessHash());
+    BOOST_CHECK_EQUAL(orphan.weight, weight);
+    BOOST_CHECK_EQUAL(HexStr(*orphan.serialized_tx), EncodeHexTx(*ptx));
 
     // It fits within the peer's reservation alongside normal orphans, which are left in place.
     std::vector<CTransactionRef> normal_txns;
