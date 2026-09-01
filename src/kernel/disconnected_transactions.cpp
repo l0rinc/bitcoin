@@ -11,6 +11,7 @@
 #include <util/hasher.h>
 
 #include <memory>
+#include <ranges>
 #include <utility>
 
 // It's almost certainly a logic bug if we don't clear out queuedTx before
@@ -49,11 +50,11 @@ size_t DisconnectedBlockTransactions::DynamicMemoryUsage() const
 [[nodiscard]] std::vector<CTransactionRef> DisconnectedBlockTransactions::AddTransactionsFromBlock(const std::vector<CTransactionRef>& vtx)
 {
     iters_by_txid.reserve(iters_by_txid.size() + vtx.size());
-    for (auto block_it = vtx.rbegin(); block_it != vtx.rend(); ++block_it) {
-        auto it = queuedTx.insert(queuedTx.end(), *block_it);
-        auto [_, inserted] = iters_by_txid.emplace((*block_it)->GetHash(), it);
-        assert(inserted); // callers may never pass multiple transactions with the same txid
-        cachedInnerUsage += RecursiveDynamicUsage(*block_it);
+    for (auto& tx : vtx | std::views::reverse) {
+        if (auto [it, inserted]{iters_by_txid.try_emplace(tx->GetHash())}; inserted) {
+            it->second = queuedTx.insert(queuedTx.end(), tx);
+            cachedInnerUsage += RecursiveDynamicUsage(tx);
+        }
     }
     return LimitMemoryUsage();
 }
