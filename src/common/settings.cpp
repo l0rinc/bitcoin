@@ -207,6 +207,19 @@ SettingsValue GetSetting(const Settings& settings,
     return result;
 }
 
+static size_t AppendValues(std::vector<SettingsValue>& values, SettingsSpan span)
+{
+    const auto previous_size{values.size()};
+    for (const auto& value : span) {
+        if (value.isArray()) {
+            values.insert(values.end(), value.getValues().begin(), value.getValues().end());
+        } else {
+            values.push_back(value);
+        }
+    }
+    return values.size() - previous_size;
+}
+
 std::vector<SettingsValue> GetSettingsList(const Settings& settings,
     const std::string& section,
     const std::string& name,
@@ -232,15 +245,7 @@ std::vector<SettingsValue> GetSettingsList(const Settings& settings,
 
         // Add new settings to the result if isn't already complete, or if the
         // values are zombies.
-        if (!done || add_zombie_config_values) {
-            for (const auto& value : span) {
-                if (value.isArray()) {
-                    result.insert(result.end(), value.getValues().begin(), value.getValues().end());
-                } else {
-                    result.push_back(value);
-                }
-            }
-        }
+        if (!done || add_zombie_config_values) AppendValues(result, span);
 
         // If a setting was negated, or if a setting was forced, set
         // done to true to ignore any later lower priority settings.
