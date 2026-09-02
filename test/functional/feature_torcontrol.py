@@ -186,6 +186,20 @@ class TorControlTest(BitcoinTestFramework):
         mock_tor.stop()
         self.stop_node(0, expected_stderr=re.compile("dedicated onion socket"))
 
+    def test_wildcard_shared_bind_permissions(self):
+        self.log.info("Test a Tor connection through a wildcard shared bind")
+
+        mock_tor = MockTorControlServer(self.next_port())
+        self.restart_with_mock(mock_tor, extra_args=[f"-bind=0.0.0.0:{p2p_port(0)}", "-whitelist=127.0.0.1"], shared_bind=True)
+        self.wait_until(lambda: any(command.startswith("ADD_ONION ") for command in mock_tor.received_commands))
+        peer = self.nodes[0].add_p2p_connection(P2PInterface())
+        peer_info = self.nodes[0].getpeerinfo()[0]
+        assert_equal(peer_info["network"], "not_publicly_routable")  # TODO: Treat ambiguous wildcard-bind connections as Tor
+        assert_equal(peer_info["permissions"], ["noban", "relay", "mempool", "download"])  # TODO: Do not apply address-based permissions to ambiguous wildcard-bind connections
+        peer.peer_disconnect()
+        mock_tor.stop()
+        self.stop_node(0, expected_stderr=re.compile("dedicated onion socket"))
+
     def test_partial_data(self):
         self.log.info("Test that partial Tor control responses are buffered until complete")
 
@@ -287,6 +301,7 @@ class TorControlTest(BitcoinTestFramework):
     def run_test(self):
         self.test_basic()
         self.test_shared_bind_permissions()
+        self.test_wildcard_shared_bind_permissions()
         self.test_partial_data()
         self.test_pow_fallback()
         self.test_oversized_line()
