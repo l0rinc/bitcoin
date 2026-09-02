@@ -1788,8 +1788,13 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
 
     int nInbound = 0;
 
+    // An accepted socket reports the concrete destination when its listener uses a wildcard address
+    const bool shared_onion_bind = m_shared_onion_bind == addr_bind ||
+                                   (m_shared_onion_bind && m_shared_onion_bind->IsBindAny() &&
+                                    m_shared_onion_bind->GetNetwork() == addr_bind.GetNetwork() &&
+                                    m_shared_onion_bind->GetPort() == addr_bind.GetPort());
     const bool inbound_onion = std::find(m_onion_binds.begin(), m_onion_binds.end(), addr_bind) != m_onion_binds.end() ||
-                               (m_shared_onion_bind == addr_bind && (!addr_bind.IsBindAny() || addr.IsLocal()));
+                               (shared_onion_bind && (!m_shared_onion_bind->IsBindAny() || addr.IsLocal()));
 
     // Tor inbound connections do not reveal the peer's actual network address.
     // Therefore do not apply address-based whitelist permissions to them.

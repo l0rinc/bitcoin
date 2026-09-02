@@ -194,8 +194,8 @@ class TorControlTest(BitcoinTestFramework):
         self.wait_until(lambda: any(command.startswith("ADD_ONION ") for command in mock_tor.received_commands))
         peer = self.nodes[0].add_p2p_connection(P2PInterface())
         peer_info = self.nodes[0].getpeerinfo()[0]
-        assert_equal(peer_info["network"], "not_publicly_routable")  # TODO: Treat ambiguous wildcard-bind connections as Tor
-        assert_equal(peer_info["permissions"], ["noban", "relay", "mempool", "download"])  # TODO: Do not apply address-based permissions to ambiguous wildcard-bind connections
+        assert_equal(peer_info["network"], "onion")
+        assert_equal(peer_info["permissions"], [])
         peer.peer_disconnect()
         mock_tor.stop()
         self.stop_node(0, expected_stderr=re.compile("dedicated onion socket"))
