@@ -171,6 +171,48 @@ BOOST_FIXTURE_TEST_CASE(util_CheckValue, CheckValueTest)
     CheckValue(M::ALLOW_ANY, "-value=abc", Expect{"abc"}.String("abc").Int(0).Bool(false).List({"abc"}));
 }
 
+BOOST_AUTO_TEST_CASE(util_GetArgsWithSource)
+{
+    using Source = common::SettingsSource;
+    using Expected = std::vector<std::pair<std::string, Source>>;
+    const auto matches{[](const Expected& expected, bool network_only, auto&& populate) {
+        TestArgsManager args;
+        args.SetupArgs({{"-value", ArgsManager::ALLOW_ANY | (network_only ? ArgsManager::NETWORK_ONLY : 0)}});
+        args.SelectConfigNetwork(network_only ? "regtest" : "main");
+        args.LockSettings(populate);
+        return args.GetArgsWithSource("-value") == expected;
+    }};
+    BOOST_CHECK(matches(Expected{{"default1", Source::CONFIG_FILE_DEFAULT_SECTION}, {"default2", Source::CONFIG_FILE_DEFAULT_SECTION}, {"network1", Source::CONFIG_FILE_NETWORK_SECTION}, {"network2", Source::CONFIG_FILE_NETWORK_SECTION}, {"settings", Source::RW_SETTINGS}, {"command1", Source::COMMAND_LINE}, {"command2", Source::COMMAND_LINE}}, /*network_only=*/false, [](auto& settings) {
+        settings.ro_config[""]["value"] = {"default1", "default2"};
+        settings.ro_config["main"]["value"] = {"network1", "network2"};
+        settings.rw_settings["value"] = "settings";
+        settings.command_line_options["value"] = {"command1", "command2"};
+    }));
+    BOOST_CHECK(matches(Expected{{"config", Source::CONFIG_FILE_DEFAULT_SECTION}, {"settings1", Source::RW_SETTINGS}, {"settings2", Source::RW_SETTINGS}}, /*network_only=*/false, [](auto& settings) {
+        settings.ro_config[""]["value"] = {"config"};
+        UniValue values{UniValue::VARR};
+        values.push_back("settings1");
+        values.push_back("settings2");
+        settings.rw_settings["value"] = std::move(values);
+    }));
+    BOOST_CHECK(matches(Expected{{"config", Source::CONFIG_FILE_DEFAULT_SECTION}, {"forced", Source::FORCED}}, /*network_only=*/false, [](auto& settings) {
+        settings.ro_config[""]["value"] = {"config"};
+        settings.forced_settings["value"] = "forced";
+    }));
+    BOOST_CHECK(matches(Expected{{"0", Source::COMMAND_LINE}}, /*network_only=*/false, [](auto& settings) {
+        settings.ro_config[""]["value"] = {"ignored"};
+        settings.command_line_options["value"] = {"command", false};
+    }));
+    BOOST_CHECK(matches(Expected{{"config", Source::CONFIG_FILE_DEFAULT_SECTION}, {"command", Source::COMMAND_LINE}}, /*network_only=*/false, [](auto& settings) {
+        settings.ro_config[""]["value"] = {"config"};
+        settings.command_line_options["value"] = {"ignored", false, "command"};
+    }));
+    BOOST_CHECK(matches(Expected{{"network", Source::CONFIG_FILE_NETWORK_SECTION}}, /*network_only=*/true, [](auto& settings) {
+        settings.ro_config[""]["value"] = {"ignored"};
+        settings.ro_config["regtest"]["value"] = {"network"};
+    }));
+}
+
 struct NoIncludeConfTest {
     std::string Parse(const char* arg)
     {
