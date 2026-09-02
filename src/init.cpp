@@ -1770,7 +1770,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         return std::nullopt;
     }};
 
-    const auto apply_proxy_arg{[&](const std::string& proxy_arg) {
+    const auto apply_proxy_arg{[&](const std::string& proxy_arg, common::SettingsSource) {
         const auto eq_pos{proxy_arg.rfind('=')};
         const auto proxy_str{proxy_arg.substr(0, eq_pos)}; // e.g. 127.0.0.1:9050=ipv4 -> 127.0.0.1:9050
         std::string net_str;
@@ -1806,9 +1806,9 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         return true;
     }};
 
-    const auto proxy_args{args.GetArgs("-proxy")};
-    for (size_t i{0}; i < proxy_args.size(); ++i) {
-        if (!apply_proxy_arg(proxy_args[i])) return false;
+    // Apply sources in increasing precedence so higher-priority values override lower-priority ones
+    for (const auto& [proxy_arg, source] : args.GetArgsWithSource("-proxy")) {
+        if (!apply_proxy_arg(proxy_arg, source)) return false;
     }
     if (ipv4_proxy.IsValid()) {
         SetProxy(NET_IPV4, ipv4_proxy);

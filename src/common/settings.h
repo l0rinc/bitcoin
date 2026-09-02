@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Users of this header need to explicitly #include <univalue.h>
@@ -28,6 +29,16 @@ namespace common {
 //!       from UniValue. (An implementation with boost::variant was posted at
 //!       https://github.com/bitcoin/bitcoin/pull/15934/files#r337691812)
 using SettingsValue = UniValue;
+
+//! Settings sources in increasing precedence
+enum class SettingsSource {
+    NONE, //!< No applicable setting
+    CONFIG_FILE_DEFAULT_SECTION,
+    CONFIG_FILE_NETWORK_SECTION,
+    RW_SETTINGS,
+    COMMAND_LINE,
+    FORCED,
+};
 
 //! Stored settings. This struct combines settings from the command line, a
 //! read-only configuration file, and a read-write runtime settings file.
@@ -75,6 +86,14 @@ SettingsValue GetSetting(const Settings& settings,
 //! Get combined setting value similar to GetSetting(), except if setting was
 //! specified multiple times, return a list of all the values specified.
 std::vector<SettingsValue> GetSettingsList(const Settings& settings,
+    const std::string& section,
+    const std::string& name,
+    bool ignore_default_section_config);
+
+//! Return merged list values paired with their source, from lowest to highest priority
+//! Preserve order within each source and retain its trailing negation as false
+std::vector<std::pair<SettingsValue, SettingsSource>> GetSettingsListWithSource(
+    const Settings& settings,
     const std::string& section,
     const std::string& name,
     bool ignore_default_section_config);

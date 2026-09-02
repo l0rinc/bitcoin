@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,13 +21,7 @@
 namespace common {
 namespace {
 
-enum class Source {
-   FORCED,
-   COMMAND_LINE,
-   RW_SETTINGS,
-   CONFIG_FILE_NETWORK_SECTION,
-   CONFIG_FILE_DEFAULT_SECTION
-};
+using Source = SettingsSource;
 
 constexpr bool IsConfigFileSource(Source source)
 {
@@ -256,6 +251,29 @@ std::vector<SettingsValue> GetSettingsList(const Settings& settings,
     MergeSettingsList(settings, section, name, ignore_default_section_config, [&](SettingsSpan span, Source) {
         return AppendValues(result, span);
     });
+    return result;
+}
+
+std::vector<std::pair<SettingsValue, SettingsSource>> GetSettingsListWithSource(
+    const Settings& settings,
+    const std::string& section,
+    const std::string& name,
+    bool ignore_default_section_config)
+{
+    std::vector<std::pair<std::vector<SettingsValue>, Source>> sources; // Merged from highest to lowest priority
+    MergeSettingsList(settings, section, name, ignore_default_section_config, [&](SettingsSpan span, Source source) {
+        std::vector<SettingsValue> values;
+        const auto count{AppendValues(values, span)};
+        if (span.last_negated()) values.emplace_back(false);
+        sources.emplace_back(std::move(values), source);
+        return count;
+    });
+    std::vector<std::pair<SettingsValue, SettingsSource>> result;
+    for (auto& [values, source] : sources | std::views::reverse) {
+        for (auto& value : values) {
+            result.emplace_back(std::move(value), source);
+        }
+    }
     return result;
 }
 

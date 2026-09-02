@@ -19,6 +19,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -267,6 +268,10 @@ public:
      * @return command-line arguments
      */
     std::vector<std::string> GetArgs(const std::string& strArg) const EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
+
+    //! Return arguments paired with their source, from lowest to highest priority
+    //! Preserve order within each source, skip nulls, and retain trailing negations as "0"
+    std::vector<std::pair<std::string, common::SettingsSource>> GetArgsWithSource(const std::string& strArg) const EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
 
     /**
      * Return true if the given argument has been manually set

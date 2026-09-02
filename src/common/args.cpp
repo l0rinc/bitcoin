@@ -428,6 +428,16 @@ std::vector<std::string> ArgsManager::GetArgs(const std::string& strArg) const
     return result;
 }
 
+std::vector<std::pair<std::string, common::SettingsSource>> ArgsManager::GetArgsWithSource(const std::string& strArg) const
+{
+    LOCK(cs_args);
+    std::vector<std::pair<std::string, common::SettingsSource>> result;
+    for (const auto& [value, source] : common::GetSettingsListWithSource(m_settings, m_network, SettingName(strArg), !UseDefaultSection(strArg))) {
+        if (auto str{SettingToString(value)}) result.emplace_back(std::move(*str), source);
+    }
+    return result;
+}
+
 bool ArgsManager::IsArgSet(const std::string& strArg) const
 {
     return !GetSetting(strArg).isNull();

@@ -478,7 +478,7 @@ class ProxyTest(BitcoinTestFramework):
         append_config(self.nodes[1].datadir_path, ["proxy=0", "onion=0"])
         self.start_node(1, extra_args=[f"-proxy={command_line_proxy}"])
         nets = networks_dict(self.nodes[1].getnetworkinfo())
-        assert_equal(nets["ipv4"]["proxy"], "")  # TODO: Command-line proxy settings should take precedence over configuration-file settings
+        assert_equal(nets["ipv4"]["proxy"], command_line_proxy)
         assert_equal(nets["onion"]["proxy"], "")  # TODO: Command-line proxy settings should take precedence over configuration-file settings
         self.stop_node(1)
 
@@ -495,7 +495,7 @@ class ProxyTest(BitcoinTestFramework):
             json.dump({"proxy": command_line_proxy}, settings_file)
         self.start_node(1, extra_args=[])
         nets = networks_dict(self.nodes[1].getnetworkinfo())
-        assert_equal(nets["ipv4"]["proxy"], "")  # TODO: settings.json proxy settings should take precedence over configuration-file settings
+        assert_equal(nets["ipv4"]["proxy"], command_line_proxy)
         assert_equal(nets["onion"]["proxy"], "")  # TODO: settings.json proxy settings should take precedence over configuration-file settings
         self.stop_node(1)
         settings_path.write_bytes(original_settings)
