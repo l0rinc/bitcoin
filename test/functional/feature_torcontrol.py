@@ -175,13 +175,13 @@ class TorControlTest(BitcoinTestFramework):
         # Tor forwards from localhost to the configured normal bind.
         peer = self.nodes[0].add_p2p_connection(P2PInterface(wtxidrelay=False))
         peer_info = self.nodes[0].getpeerinfo()[0]
-        assert_equal(peer_info["network"], "not_publicly_routable")  # TODO: Treat ambiguous shared-bind connections as Tor
-        assert_equal(peer_info["permissions"], ["noban", "relay", "mempool", "download"])  # TODO: Do not apply address-based permissions to ambiguous shared-bind connections
+        assert_equal(peer_info["network"], "onion")
+        assert_equal(peer_info["permissions"], [])
         peer.send_without_ping(msg_mempool())
         peer.wait_until(lambda: not peer.is_connected or "inv" in peer.last_message, check_connected=False)
         received_tx = "inv" in peer.last_message and any(inv.type == MSG_TX and inv.hash == int(txid, 16) for inv in peer.last_message["inv"].inv)
-        assert_equal(peer.is_connected, True)  # TODO: Disconnect peers without the Mempool permission
-        assert_equal(received_tx, True)  # TODO: Do not return the full mempool inventory
+        assert_equal(peer.is_connected, False)
+        assert_equal(received_tx, False)
         peer.peer_disconnect()
         mock_tor.stop()
         self.stop_node(0, expected_stderr=re.compile("dedicated onion socket"))

@@ -2277,6 +2277,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     if (listenonion) {
         if (connOptions.onion_binds.empty()) {
+            connOptions.m_shared_onion_bind = onion_service_target;
             InitWarning(_("The Tor onion service is being directed to a -bind address without a "
                           "dedicated onion socket (-bind=<addr>=onion). Incoming Tor connections "
                           "cannot be distinguished from regular connections."));
