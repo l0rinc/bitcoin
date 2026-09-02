@@ -151,12 +151,14 @@ bool WriteSettings(const fs::path& path,
 }
 
 SettingsValue GetSetting(const Settings& settings,
-    const std::string& section,
-    const std::string& name,
-    bool ignore_default_section_config,
-    bool ignore_nonpersistent,
-    bool get_chain_type)
+                         const std::string& section,
+                         const std::string& name,
+                         bool ignore_default_section_config,
+                         bool ignore_nonpersistent,
+                         bool get_chain_type,
+                         SettingsSource* selected_source)
 {
+    if (selected_source) *selected_source = Source::NONE;
     SettingsValue result;
     bool done = false; // Done merging any more settings sources.
     MergeSettings(settings, section, name, [&](SettingsSpan span, Source source) {
@@ -171,9 +173,7 @@ SettingsValue GetSetting(const Settings& settings,
         // precedence over early settings, but for backwards compatibility in
         // the config file the precedence is reversed for all settings except
         // chain type settings.
-        const bool reverse_precedence =
-            (source == Source::CONFIG_FILE_NETWORK_SECTION || source == Source::CONFIG_FILE_DEFAULT_SECTION) &&
-            !get_chain_type;
+        const bool reverse_precedence{IsConfigFileSource(source) && !get_chain_type};
 
         // Weird behavior preserved for backwards compatibility: Negated
         // -regtest and -testnet arguments which you would expect to override
@@ -198,11 +198,13 @@ SettingsValue GetSetting(const Settings& settings,
 
         if (!span.empty()) {
             result = reverse_precedence ? span.begin()[0] : span.end()[-1];
-            done = true;
         } else if (span.last_negated()) {
             result = false;
-            done = true;
+        } else {
+            return;
         }
+        if (selected_source) *selected_source = source;
+        done = true;
     });
     return result;
 }

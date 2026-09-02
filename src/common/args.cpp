@@ -969,18 +969,18 @@ bool ArgsManager::UseDefaultSection(const std::string& arg) const
     return m_network == ChainTypeToString(ChainType::MAIN) || !m_network_only_args.contains(arg);
 }
 
-common::SettingsValue ArgsManager::GetSetting_(const std::string& arg) const
+common::SettingsValue ArgsManager::GetSetting_(const std::string& arg, common::SettingsSource* source) const
 {
     AssertLockHeld(cs_args);
     return common::GetSetting(
         m_settings, m_network, SettingName(arg), !UseDefaultSection(arg),
-        /*ignore_nonpersistent=*/false, /*get_chain_type=*/false);
+        /*ignore_nonpersistent=*/false, /*get_chain_type=*/false, source);
 }
 
-common::SettingsValue ArgsManager::GetSetting(const std::string& arg) const
+common::SettingsValue ArgsManager::GetSetting(const std::string& arg, common::SettingsSource* source) const
 {
     LOCK(cs_args);
-    return GetSetting_(arg);
+    return GetSetting_(arg, source);
 }
 
 std::vector<common::SettingsValue> ArgsManager::GetSettingsList(const std::string& arg) const

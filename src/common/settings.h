@@ -76,12 +76,14 @@ bool WriteSettings(const fs::path& path,
 //!                               files.
 //! @param get_chain_type - enable special backwards compatible behavior
 //!                         for GetChainType
+//! @param source - optionally report the returned value's source, or NONE if no setting applies
 SettingsValue GetSetting(const Settings& settings,
-    const std::string& section,
-    const std::string& name,
-    bool ignore_default_section_config,
-    bool ignore_nonpersistent,
-    bool get_chain_type);
+                         const std::string& section,
+                         const std::string& name,
+                         bool ignore_default_section_config,
+                         bool ignore_nonpersistent,
+                         bool get_chain_type,
+                         SettingsSource* source = nullptr);
 
 //! Get combined setting value similar to GetSetting(), except if setting was
 //! specified multiple times, return a list of all the values specified.

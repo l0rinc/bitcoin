@@ -173,8 +173,9 @@ public:
      * Result will be null if setting was unset, true if "-setting" argument was passed
      * false if "-nosetting" argument was passed, and a string if a "-setting=value"
      * argument was passed.
+     * If requested, source identifies the returned value's source, or NONE if no setting applies.
      */
-    common::SettingsValue GetSetting(const std::string& arg) const EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
+    common::SettingsValue GetSetting(const std::string& arg, common::SettingsSource* source = nullptr) const EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
 
     /**
      * Get list of setting values.
@@ -458,7 +459,7 @@ public:
 
 private:
     // Internal helpers, for use by callers that already hold `cs_args`.
-    common::SettingsValue GetSetting_(const std::string& arg) const EXCLUSIVE_LOCKS_REQUIRED(cs_args);
+    common::SettingsValue GetSetting_(const std::string& arg, common::SettingsSource* source = nullptr) const EXCLUSIVE_LOCKS_REQUIRED(cs_args);
     std::optional<unsigned int> GetArgFlags_(const std::string& name) const EXCLUSIVE_LOCKS_REQUIRED(cs_args);
     fs::path GetPathArg_(std::string arg, const fs::path& default_value = {}) const EXCLUSIVE_LOCKS_REQUIRED(cs_args);
 
