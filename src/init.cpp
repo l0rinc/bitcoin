@@ -1770,15 +1770,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         return std::nullopt;
     }};
 
-    for (const std::string& param_value : args.GetArgs("-proxy")) {
-        const auto eq_pos{param_value.rfind('=')};
-        const std::string proxy_str{param_value.substr(0, eq_pos)}; // e.g. 127.0.0.1:9050=ipv4 -> 127.0.0.1:9050
+    const auto apply_proxy_arg{[&](const std::string& proxy_arg) {
+        const auto eq_pos{proxy_arg.rfind('=')};
+        const auto proxy_str{proxy_arg.substr(0, eq_pos)}; // e.g. 127.0.0.1:9050=ipv4 -> 127.0.0.1:9050
         std::string net_str;
         if (eq_pos != std::string::npos) {
-            if (eq_pos + 1 == param_value.length()) {
-                return InitError(strprintf(_("Invalid -proxy address or hostname, ends with '=': '%s'"), param_value));
+            if (eq_pos + 1 == proxy_arg.length()) {
+                return InitError(strprintf(_("Invalid -proxy address or hostname, ends with '=': '%s'"), proxy_arg));
             }
-            net_str = ToLower(param_value.substr(eq_pos + 1)); // e.g. 127.0.0.1:9050=ipv4 -> ipv4
+            net_str = ToLower(proxy_arg.substr(eq_pos + 1)); // e.g. 127.0.0.1:9050=ipv4 -> ipv4
         }
 
         Proxy proxy;
@@ -1801,8 +1801,14 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         } else if (net_str == "cjdns") {
             cjdns_proxy = proxy;
         } else {
-            return InitError(strprintf(_("Unrecognized network in -proxy='%s': '%s'"), param_value, net_str));
+            return InitError(strprintf(_("Unrecognized network in -proxy='%s': '%s'"), proxy_arg, net_str));
         }
+        return true;
+    }};
+
+    const auto proxy_args{args.GetArgs("-proxy")};
+    for (size_t i{0}; i < proxy_args.size(); ++i) {
+        if (!apply_proxy_arg(proxy_args[i])) return false;
     }
     if (ipv4_proxy.IsValid()) {
         SetProxy(NET_IPV4, ipv4_proxy);
