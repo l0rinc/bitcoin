@@ -1763,6 +1763,13 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     Proxy onion_proxy;
     Proxy name_proxy;
     Proxy cjdns_proxy;
+
+    const auto parse_proxy{[&](const std::string& proxy_str) -> std::optional<Proxy> {
+        if (IsUnixSocketPath(proxy_str)) return Proxy{proxy_str, proxyRandomize};
+        if (auto addr{Lookup(proxy_str, DEFAULT_TOR_SOCKS_PORT, fNameLookup)}; addr && addr->IsValid()) return Proxy{*addr, proxyRandomize};
+        return std::nullopt;
+    }};
+
     for (const std::string& param_value : args.GetArgs("-proxy")) {
         const auto eq_pos{param_value.rfind('=')};
         const std::string proxy_str{param_value.substr(0, eq_pos)}; // e.g. 127.0.0.1:9050=ipv4 -> 127.0.0.1:9050
@@ -1776,17 +1783,10 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
         Proxy proxy;
         if (!proxy_str.empty() && proxy_str != "0") {
-            if (IsUnixSocketPath(proxy_str)) {
-                proxy = Proxy{proxy_str, /*tor_stream_isolation=*/proxyRandomize};
-            } else {
-                const std::optional<CService> addr{Lookup(proxy_str, DEFAULT_TOR_SOCKS_PORT, fNameLookup)};
-                if (!addr.has_value()) {
-                    return InitError(strprintf(_("Invalid -proxy address or hostname: '%s'"), proxy_str));
-                }
-                proxy = Proxy{addr.value(), /*tor_stream_isolation=*/proxyRandomize};
-            }
-            if (!proxy.IsValid()) {
+            if (auto parsed{parse_proxy(proxy_str)}; !parsed) {
                 return InitError(strprintf(_("Invalid -proxy address or hostname: '%s'"), proxy_str));
+            } else {
+                proxy = *parsed;
             }
         }
 
