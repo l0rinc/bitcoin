@@ -749,9 +749,14 @@ bool BlockManager::ReadBlockUndo(CBlockUndo& blockundo, const CBlockIndex& index
 
 bool BlockManager::FlushUndoFile(int block_file, bool finalize)
 {
-    FlatFilePos undo_pos_old(block_file, m_blockfile_info[block_file].nUndoSize);
-    if (!m_undo_file_seq.Flush(undo_pos_old, finalize)) {
-        m_opts.notifications.flushError(_("Flushing undo file to disk failed. This is likely the result of an I/O error."));
+    const FlatFilePos undo_pos_old(block_file, m_blockfile_info[block_file].nUndoSize);
+    return FlushFile(m_undo_file_seq, undo_pos_old, finalize, _("Flushing undo file to disk failed. This is likely the result of an I/O error."));
+}
+
+bool BlockManager::FlushFile(const FlatFileSeq& seq, const FlatFilePos& pos, bool finalize, util::TranslatedLiteral error)
+{
+    if (!seq.Flush(pos, finalize)) {
+        m_opts.notifications.flushError(error);
         return false;
     }
     return true;
@@ -771,9 +776,8 @@ bool BlockManager::FlushBlockFile(int blockfile_num, bool fFinalize, bool finali
     }
     assert(static_cast<int>(m_blockfile_info.size()) > blockfile_num);
 
-    FlatFilePos block_pos_old(blockfile_num, m_blockfile_info[blockfile_num].nSize);
-    if (!m_block_file_seq.Flush(block_pos_old, fFinalize)) {
-        m_opts.notifications.flushError(_("Flushing block file to disk failed. This is likely the result of an I/O error."));
+    const FlatFilePos block_pos_old(blockfile_num, m_blockfile_info[blockfile_num].nSize);
+    if (!FlushFile(m_block_file_seq, block_pos_old, fFinalize, _("Flushing block file to disk failed. This is likely the result of an I/O error."))) {
         success = false;
     }
     // we do not always flush the undo file, as the chain tip may be lagging behind the incoming blocks,
