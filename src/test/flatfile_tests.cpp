@@ -122,12 +122,16 @@ BOOST_AUTO_TEST_CASE(flatfile_flush)
     seq.Allocate(FlatFilePos(0, 0), 1, out_of_space);
 
     // Flush without finalize should not truncate file.
-    seq.Flush(FlatFilePos(0, 1));
+    BOOST_CHECK(seq.Flush(FlatFilePos(0, 1)));
     BOOST_CHECK_EQUAL(fs::file_size(seq.FileName(FlatFilePos(0, 1))), 100U);
 
     // Flush with finalize should truncate file.
-    seq.Flush(FlatFilePos(0, 1), true);
+    BOOST_CHECK(seq.Flush(FlatFilePos(0, 1), true));
     BOOST_CHECK_EQUAL(fs::file_size(seq.FileName(FlatFilePos(0, 1))), 1U);
+
+    // Finalizing creates a missing file, since an undo file can be finalized before any undo data is written
+    BOOST_CHECK(seq.Flush(FlatFilePos(1, 0), true));
+    BOOST_CHECK_EQUAL(fs::file_size(seq.FileName(FlatFilePos(1, 0))), 0U);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
