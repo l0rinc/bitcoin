@@ -322,6 +322,7 @@ private:
     const FlatFileSeq m_undo_file_seq;
     //! Retain asynchronous flush results until the next chainstate flush
     std::vector<std::future<bool>> m_pending_flushes GUARDED_BY(::cs_main);
+    /// \anchor blkflush
     //! Runs the fsync of finalized block and undo files, started on first use.
     //! Declared after m_opts and the file sequences, which the queued flushes use,
     //! so its destructor drains them before those members are destroyed.
