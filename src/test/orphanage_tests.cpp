@@ -16,7 +16,9 @@
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <test/util/transaction_utils.h>
+#include <util/check.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 
@@ -66,31 +68,15 @@ static CTransactionRef MakeMutation(const CTransactionRef& ptx)
     return mutated_tx;
 }
 
-// The following helpers compare transactions by wtxid: the orphanage hands out freshly deserialized transactions,
-// not the refs that were passed in, so pointer identity cannot be used.
-static bool SameTx(const CTransactionRef& lhs, const CTransactionRef& rhs)
-{
-    return lhs && rhs && lhs->GetWitnessHash() == rhs->GetWitnessHash();
-}
-
+// The orphanage hands out freshly deserialized transactions rather than the refs passed in, so compare them by wtxid
 static bool SameTxns(const std::vector<CTransactionRef>& expected, const std::vector<CTransactionRef>& actual)
 {
-    if (expected.size() != actual.size()) return false;
-    for (size_t i{0}; i < expected.size(); ++i) {
-        if (!SameTx(expected.at(i), actual.at(i))) return false;
-    }
-    return true;
+    return std::ranges::equal(expected, actual, {}, &CTransaction::GetWitnessHash, &CTransaction::GetWitnessHash);
 }
 
 static bool EqualTxns(const std::set<CTransactionRef>& set_txns, const std::vector<CTransactionRef>& vec_txns)
 {
-    if (vec_txns.size() != set_txns.size()) return false;
-    std::set<Wtxid> expected_wtxids;
-    for (const auto& tx : set_txns) expected_wtxids.insert(tx->GetWitnessHash());
-    for (const auto& tx : vec_txns) {
-        if (!expected_wtxids.contains(tx->GetWitnessHash())) return false;
-    }
-    return true;
+    return std::ranges::is_permutation(set_txns, vec_txns, {}, &CTransaction::GetWitnessHash, &CTransaction::GetWitnessHash);
 }
 
 BOOST_AUTO_TEST_CASE(peer_dos_limits)
@@ -217,7 +203,7 @@ BOOST_AUTO_TEST_CASE(peer_dos_limits)
         BOOST_CHECK(!orphanage->HaveTx(children.at(5)->GetWitnessHash()));
 
         // Transactions are marked non-reconsiderable again when returned through GetTxToReconsider
-        BOOST_CHECK(SameTx(orphanage->GetTxToReconsider(peer), children.at(0)));
+        BOOST_CHECK(*Assert(orphanage->GetTxToReconsider(peer)) == *children.at(0));
         orphanage->AddTx(children.at(6), peer);
         BOOST_CHECK(!orphanage->HaveTx(children.at(0)->GetWitnessHash()));
         BOOST_CHECK(orphanage->HaveTx(children.at(3)->GetWitnessHash()));
@@ -226,8 +212,8 @@ BOOST_AUTO_TEST_CASE(peer_dos_limits)
 
         // The first transaction returned from GetTxToReconsider is the older one, not the one that was marked for
         // reconsideration earlier.
-        BOOST_CHECK(SameTx(orphanage->GetTxToReconsider(peer), children.at(3)));
-        BOOST_CHECK(SameTx(orphanage->GetTxToReconsider(peer), children.at(4)));
+        BOOST_CHECK(*Assert(orphanage->GetTxToReconsider(peer)) == *children.at(3));
+        BOOST_CHECK(*Assert(orphanage->GetTxToReconsider(peer)) == *children.at(4));
 
         orphanage->SanityCheck();
     }
@@ -554,7 +540,7 @@ BOOST_AUTO_TEST_CASE(same_txid_diff_witness)
     // EraseTx fails as transaction by this wtxid doesn't exist.
     BOOST_CHECK_EQUAL(orphanage->EraseTx(mutated_wtxid), 0);
     BOOST_CHECK(orphanage->HaveTx(normal_wtxid));
-    BOOST_CHECK(SameTx(orphanage->GetTx(normal_wtxid), child_normal));
+    BOOST_CHECK(*Assert(orphanage->GetTx(normal_wtxid)) == *child_normal);
     BOOST_CHECK(!orphanage->HaveTx(mutated_wtxid));
     BOOST_CHECK(orphanage->GetTx(mutated_wtxid) == nullptr);
 
