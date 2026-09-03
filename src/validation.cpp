@@ -87,6 +87,9 @@ using kernel::ComputeUTXOStats;
 using kernel::Notifications;
 
 using fsbridge::FopenFn;
+/** BENCHMARKING ONLY: skip all block validation and UTXO set building. */
+static constexpr bool NEUTERED_NO_VALIDATION{true};
+
 using node::BlockManager;
 using node::BlockMap;
 using node::CBlockIndexHeightOnlyComparator;
@@ -2188,6 +2191,11 @@ int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out)
 DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIndex* pindex, CCoinsViewCache& view)
 {
     AssertLockHeld(::cs_main);
+    if (NEUTERED_NO_VALIDATION) {
+        // No undo data exists; just move the best block back.
+        view.SetBestBlock(pindex->pprev->GetBlockHash());
+        return DISCONNECT_OK;
+    }
     bool fClean = true;
 
     CBlockUndo blockUndo;
@@ -2309,6 +2317,24 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     uint256 block_hash{block.GetHash()};
     assert(*pindex->phashBlock == block_hash);
+
+    if (NEUTERED_NO_VALIDATION) {
+        // Skip every block check, script verification, UTXO update and undo
+        // write. The chain tip still advances so that block download,
+        // -stopatheight and shutdown behave as usual.
+        static std::atomic<bool> warned{false};
+        if (!warned.exchange(true)) LogWarning("NEUTERED BUILD: blocks are NOT validated and the UTXO set is NOT built");
+        assert(view.GetBestBlock() == (pindex->pprev == nullptr ? uint256() : pindex->pprev->GetBlockHash()));
+        m_chainman.num_blocks_total++;
+        if (!fJustCheck) {
+            if (!pindex->IsValid(BLOCK_VALID_SCRIPTS)) {
+                pindex->RaiseValidity(BLOCK_VALID_SCRIPTS);
+                m_blockman.m_dirty_blockindex.insert(pindex);
+            }
+            view.SetBestBlock(pindex->GetBlockHash());
+        }
+        return true;
+    }
 
     const auto time_start{SteadyClock::now()};
     const CChainParams& params{m_chainman.GetParams()};
