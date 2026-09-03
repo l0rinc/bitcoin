@@ -755,11 +755,18 @@ bool BlockManager::FlushUndoFile(int block_file, bool finalize)
 
 bool BlockManager::FlushFile(const FlatFileSeq& seq, const FlatFilePos& pos, bool finalize, util::TranslatedLiteral error)
 {
-    if (!seq.Flush(pos, finalize)) {
+    auto flush{[this, &seq, pos, error] {
+        const bool success{seq.Flush(pos)};
+        if (!success) m_opts.notifications.flushError(error);
+        return success;
+    }};
+    if (!finalize) return flush();
+    // Truncate synchronously because an older undo file can receive later appends
+    if (!seq.Truncate(pos)) {
         m_opts.notifications.flushError(error);
         return false;
     }
-    return true;
+    return flush();
 }
 
 bool BlockManager::FlushBlockFile(int blockfile_num, bool fFinalize, bool finalize_undo)
