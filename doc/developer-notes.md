@@ -731,6 +731,9 @@ and its `cs_KeyStore` lock for example).
 - [CCheckQueue::Loop (`b-scriptch.xx`)](https://doxygen.bitcoincore.org/class_c_check_queue.html#checkqueue)
   : Parallel script validation threads for transactions in blocks.
 
+- [Block file flush (`b-blkflush.xx`)](https://doxygen.bitcoincore.org/classnode_1_1_block_manager.html)
+  : Commits block and undo files to disk after rollover while later blocks are written and connected.
+
 - [ThreadHTTP (`b-http`)](https://doxygen.bitcoincore.org/httpserver_8cpp.html#http)
   : Thread to listen for RPC and REST connections.
 
