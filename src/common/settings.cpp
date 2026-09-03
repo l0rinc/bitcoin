@@ -28,6 +28,11 @@ enum class Source {
    CONFIG_FILE_DEFAULT_SECTION
 };
 
+constexpr bool IsConfigFileSource(Source source)
+{
+    return source == Source::CONFIG_FILE_DEFAULT_SECTION || source == Source::CONFIG_FILE_NETWORK_SECTION;
+}
+
 // Json object key for the auto-generated warning comment
 const std::string SETTINGS_WARN_MSG_KEY{"_warning_"};
 
@@ -220,39 +225,36 @@ static size_t AppendValues(std::vector<SettingsValue>& values, SettingsSpan span
     return values.size() - previous_size;
 }
 
-std::vector<SettingsValue> GetSettingsList(const Settings& settings,
+template <typename Fn>
+static void MergeSettingsList(
+    const Settings& settings,
     const std::string& section,
     const std::string& name,
-    bool ignore_default_section_config)
+    bool ignore_default_section_config,
+    Fn&& fn)
+{
+    bool done{false};
+    size_t value_count{0};
+    bool prev_negated_empty{false};
+    MergeSettings(settings, section, name, [&](SettingsSpan span, Source source) {
+        // Backward compatibility restores config values after an interior command-line negation, but not a trailing one
+        const bool add_zombie_config_values{IsConfigFileSource(source) && !prev_negated_empty};
+
+        if (ignore_default_section_config && source == Source::CONFIG_FILE_DEFAULT_SECTION) return;
+        if (!done || add_zombie_config_values) value_count += fn(span, source);
+        done |= span.negated() > 0 || source == Source::FORCED;
+        prev_negated_empty |= span.last_negated() && value_count == 0;
+    });
+}
+
+std::vector<SettingsValue> GetSettingsList(const Settings& settings,
+                                           const std::string& section,
+                                           const std::string& name,
+                                           bool ignore_default_section_config)
 {
     std::vector<SettingsValue> result;
-    bool done = false; // Done merging any more settings sources.
-    bool prev_negated_empty = false;
-    MergeSettings(settings, section, name, [&](SettingsSpan span, Source source) {
-        // Weird behavior preserved for backwards compatibility: Apply config
-        // file settings even if negated on command line. Negating a setting on
-        // command line will ignore earlier settings on the command line and
-        // ignore settings in the config file, unless the negated command line
-        // value is followed by non-negated value, in which case config file
-        // settings will be brought back from the dead (but earlier command
-        // line settings will still be ignored).
-        const bool add_zombie_config_values =
-            (source == Source::CONFIG_FILE_NETWORK_SECTION || source == Source::CONFIG_FILE_DEFAULT_SECTION) &&
-            !prev_negated_empty;
-
-        // Ignore settings in default config section if requested.
-        if (ignore_default_section_config && source == Source::CONFIG_FILE_DEFAULT_SECTION) return;
-
-        // Add new settings to the result if isn't already complete, or if the
-        // values are zombies.
-        if (!done || add_zombie_config_values) AppendValues(result, span);
-
-        // If a setting was negated, or if a setting was forced, set
-        // done to true to ignore any later lower priority settings.
-        done |= span.negated() > 0 || source == Source::FORCED;
-
-        // Update the negated and empty state used for the zombie values check.
-        prev_negated_empty |= span.last_negated() && result.empty();
+    MergeSettingsList(settings, section, name, ignore_default_section_config, [&](SettingsSpan span, Source) {
+        return AppendValues(result, span);
     });
     return result;
 }
