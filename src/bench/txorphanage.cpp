@@ -25,6 +25,15 @@
 static constexpr node::TxOrphanage::Usage TINY_TX_WEIGHT{240};
 static constexpr int64_t APPROX_WEIGHT_PER_INPUT{200};
 
+static CTransactionRef MakeWitnessHeavyTransaction(const Txid& parent_txid)
+{
+    CMutableTransaction tx;
+    tx.vin.emplace_back(parent_txid, 0);
+    tx.vout.resize(1);
+    tx.vin[0].scriptWitness.stack.assign(199'000, std::vector<unsigned char>{1});
+    return MakeTransactionRef(std::move(tx));
+}
+
 // Creates a transaction with num_inputs inputs and 1 output, padded to target_weight. Use this function to maximize m_outpoint_to_orphan_it operations.
 // If num_inputs is 0, we maximize the number of inputs.
 static CTransactionRef MakeTransactionBulkedTo(unsigned int num_inputs, int64_t target_weight, FastRandomContext& det_rand)
@@ -267,7 +276,34 @@ static void OrphanageEraseForPeer(benchmark::Bench& bench)
     OrphanageEraseAll(bench, /*block_or_disconnect=*/false);
 }
 
+static void OrphanageAddWitnessHeavyTx(benchmark::Bench& bench)
+{
+    const auto tx{MakeWitnessHeavyTransaction(Txid{})};
+    std::unique_ptr<node::TxOrphanage> orphanage;
+    bench.setup([&] { orphanage = node::MakeTxOrphanage(); }).run([&] {
+        assert(orphanage->AddTx(tx, 0));
+    });
+}
+
+static void OrphanageReconsiderWitnessHeavyTx(benchmark::Bench& bench)
+{
+    FastRandomContext det_rand{true};
+    const auto parent{MakeTransactionBulkedTo(1, TINY_TX_WEIGHT, det_rand)};
+    const auto child{MakeWitnessHeavyTransaction(parent->GetHash())};
+    std::unique_ptr<node::TxOrphanage> orphanage;
+    bench.setup([&] {
+        orphanage = node::MakeTxOrphanage();
+        assert(orphanage->AddTx(child, 0));
+        orphanage->AddChildrenToWorkSet(*parent, det_rand);
+        assert(orphanage->HaveTxToReconsider(0));
+    }).run([&] {
+        assert(*Assert(orphanage->GetTxToReconsider(0)) == *child);
+    });
+}
+
 BENCHMARK(OrphanageSinglePeerEviction);
 BENCHMARK(OrphanageMultiPeerEviction);
 BENCHMARK(OrphanageEraseForBlock);
 BENCHMARK(OrphanageEraseForPeer);
+BENCHMARK(OrphanageAddWitnessHeavyTx);
+BENCHMARK(OrphanageReconsiderWitnessHeavyTx);
