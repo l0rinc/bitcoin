@@ -757,23 +757,18 @@ std::vector<TxOrphanage::OrphanInfo> TxOrphanageImpl::GetOrphanTransactions() co
     result.reserve(m_unique_orphans);
 
     auto& index_by_wtxid = m_orphans.get<ByWtxid>();
-    std::set<NodeId> this_orphan_announcers;
     for (auto it = index_by_wtxid.begin(); it != index_by_wtxid.end();) {
         const auto& tx_data{it->m_tx_data};
+        std::set<NodeId> announcers;
         // The index is sorted by (wtxid, announcer), so announcers arrive in ascending order
-        this_orphan_announcers.insert(this_orphan_announcers.end(), it->m_announcer);
-        const auto it_next{std::next(it)};
-        // If this is the last entry, or the next entry has a different wtxid, build a OrphanInfo.
-        if (it_next == index_by_wtxid.end() || it_next->m_tx_data->m_wtxid != tx_data->m_wtxid) {
-            result.push_back({.serialized_tx = {tx_data, &tx_data->m_encoded},
-                              .txid = tx_data->m_txid,
-                              .wtxid = tx_data->m_wtxid,
-                              .weight = tx_data->m_usage,
-                              .announcers = std::move(this_orphan_announcers)});
-            // A moved-from std::set is valid but unspecified, so clear it before reusing it
-            this_orphan_announcers.clear();
+        for (; it != index_by_wtxid.end() && it->m_tx_data->m_wtxid == tx_data->m_wtxid; ++it) {
+            announcers.insert(announcers.end(), it->m_announcer);
         }
-        it = it_next;
+        result.push_back({.serialized_tx = {tx_data, &tx_data->m_encoded},
+                          .txid = tx_data->m_txid,
+                          .wtxid = tx_data->m_wtxid,
+                          .weight = tx_data->m_usage,
+                          .announcers = std::move(announcers)});
     }
     Assume(m_unique_orphans == result.size());
 
