@@ -213,6 +213,40 @@ BOOST_AUTO_TEST_CASE(util_GetArgsWithSource)
     }));
 }
 
+BOOST_AUTO_TEST_CASE(util_GetSettingSource)
+{
+    using Source = common::SettingsSource;
+    const auto matches{[](const std::string& expected, Source expected_source, bool network_only, auto&& populate) {
+        TestArgsManager args;
+        args.SetupArgs({{"-value", ArgsManager::ALLOW_ANY | (network_only ? ArgsManager::NETWORK_ONLY : 0)}});
+        args.SelectConfigNetwork(network_only ? "regtest" : "main");
+        args.LockSettings(populate);
+        Source source;
+        return SettingToString(args.GetSetting("-value", &source), "") == expected && source == expected_source;
+    }};
+    BOOST_CHECK(matches("forced", Source::FORCED, /*network_only=*/false, [](auto& settings) {
+        settings.ro_config[""]["value"] = {"default1", "default2"};
+        settings.ro_config["main"]["value"] = {"network1", "network2"};
+        settings.rw_settings["value"] = "settings";
+        settings.command_line_options["value"] = {"command1", "command2"};
+        settings.forced_settings["value"] = "forced";
+    }));
+    BOOST_CHECK(matches("network1", Source::CONFIG_FILE_NETWORK_SECTION, /*network_only=*/true, [](auto& settings) {
+        settings.ro_config[""]["value"] = {"ignored"};
+        settings.ro_config["regtest"]["value"] = {"network1", "network2"};
+    }));
+    BOOST_CHECK(matches("0", Source::COMMAND_LINE, /*network_only=*/false, [](auto& settings) {
+        settings.ro_config[""]["value"] = {"config"};
+        settings.rw_settings["value"] = {};
+        settings.command_line_options["value"] = {"command", false};
+    }));
+    BOOST_CHECK(matches("", Source::RW_SETTINGS, /*network_only=*/false, [](auto& settings) {
+        settings.ro_config[""]["value"] = {"config"};
+        settings.rw_settings["value"] = {};
+    }));
+    BOOST_CHECK(matches("", Source::NONE, /*network_only=*/false, [](auto&) {}));
+}
+
 struct NoIncludeConfTest {
     std::string Parse(const char* arg)
     {

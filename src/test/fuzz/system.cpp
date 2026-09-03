@@ -132,6 +132,8 @@ FUZZ_TARGET(system, .init = initialize_system)
     (void)args_manager.GetArg(s1, s2);
     (void)args_manager.GetArgFlags(s1);
     (void)args_manager.GetArgs(s1);
+    common::SettingsSource source;
+    (void)args_manager.GetSetting(s1, &source);
     (void)args_manager.GetArgsWithSource(s1);
     (void)args_manager.GetBoolArg(s1, b);
     try {
