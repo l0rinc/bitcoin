@@ -766,7 +766,22 @@ bool BlockManager::FlushFile(const FlatFileSeq& seq, const FlatFilePos& pos, boo
         m_opts.notifications.flushError(error);
         return false;
     }
-    return flush();
+    // Started on first use, so block managers that never write stay single-threaded.
+    // One worker serializes the fsyncs; correctness does not depend on the count.
+    if (m_flush_pool.WorkersCount() == 0) m_flush_pool.Start(/*num_workers=*/1);
+    // The pool is private and only stopped on destruction, so queueing cannot fail here
+    m_pending_flushes.emplace_back(*Assert(m_flush_pool.Submit(flush)));
+    return true;
+}
+
+bool BlockManager::WaitForPendingFlushes()
+{
+    bool success{true};
+    for (auto& flush : m_pending_flushes) {
+        if (!flush.get()) success = false;
+    }
+    m_pending_flushes.clear();
+    return success;
 }
 
 bool BlockManager::FlushBlockFile(int blockfile_num, bool fFinalize, bool finalize_undo)
@@ -812,11 +827,11 @@ bool BlockManager::FlushChainstateBlockFile(int tip_height)
     // If the cursor does not exist, it means an assumeutxo snapshot is loaded,
     // but no blocks past the snapshot height have been written yet, so there
     // is no data associated with the chainstate, and it is safe not to flush.
-    if (cursor) {
-        return FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false);
-    }
     // No need to log warnings in this case.
-    return true;
+    const bool flushed{!cursor || FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false)};
+    // Waiting after the flush above lets it overlap with the queued fsyncs
+    const bool synced{WaitForPendingFlushes()};
+    return flushed && synced;
 }
 
 uint64_t BlockManager::CalculateCurrentUsage()
