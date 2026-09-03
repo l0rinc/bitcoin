@@ -148,12 +148,9 @@ bool IsChildWithParentsTree(const Package& package)
     });
 }
 
-uint256 GetPackageHash(const std::vector<CTransactionRef>& transactions)
+uint256 GetPackageHash(const std::vector<Wtxid>& wtxids)
 {
-    // Create a vector of the wtxids.
-    std::vector<Wtxid> wtxids_copy;
-    std::transform(transactions.cbegin(), transactions.cend(), std::back_inserter(wtxids_copy),
-        [](const auto& tx){ return tx->GetWitnessHash(); });
+    auto wtxids_copy{wtxids};
 
     // Sort in ascending order
     std::sort(wtxids_copy.begin(), wtxids_copy.end(), [](const auto& lhs, const auto& rhs) {
@@ -167,4 +164,11 @@ uint256 GetPackageHash(const std::vector<CTransactionRef>& transactions)
         hashwriter << wtxid;
     }
     return hashwriter.GetSHA256();
+}
+
+uint256 GetPackageHash(const std::vector<CTransactionRef>& transactions)
+{
+    std::vector<Wtxid> wtxids;
+    std::ranges::transform(transactions, std::back_inserter(wtxids), &CTransaction::GetWitnessHash);
+    return GetPackageHash(wtxids);
 }

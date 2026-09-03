@@ -313,10 +313,11 @@ std::optional<PackageToValidate> TxDownloadManagerImpl::Find1P1CPackage(const CT
     // These children should be sorted from newest to oldest. In the (probably uncommon) case
     // of children that replace each other, this helps us accept the highest feerate (probably the
     // most recent) one efficiently.
-    for (const auto& child : cpfp_candidates_same_peer) {
-        Package maybe_cpfp_package{ptx, child};
-        if (!RecentRejectsReconsiderableFilter().contains(GetPackageHash(maybe_cpfp_package)) &&
-            !RecentRejectsFilter().contains(child->GetHash().ToUint256())) {
+    for (const auto& [child_txid, child_wtxid] : cpfp_candidates_same_peer) {
+        if (!RecentRejectsReconsiderableFilter().contains(GetPackageHash(std::vector<Wtxid>{parent_wtxid, child_wtxid})) &&
+            !RecentRejectsFilter().contains(child_txid.ToUint256())) {
+            const auto child{m_orphanage->GetTx(child_wtxid)};
+            if (!Assume(child)) continue;
             return PackageToValidate{ptx, child, nodeid, nodeid};
         }
     }

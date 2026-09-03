@@ -280,7 +280,7 @@ public:
     void EraseForBlock(const CBlock& block) override;
     std::vector<std::pair<Wtxid, NodeId>> AddChildrenToWorkSet(const CTransaction& tx, FastRandomContext& rng) override;
     bool HaveTxToReconsider(NodeId peer) override;
-    std::vector<CTransactionRef> GetChildrenFromSamePeer(const CTransactionRef& parent, NodeId nodeid) const override;
+    std::vector<std::pair<Txid, Wtxid>> GetChildrenFromSamePeer(const CTransactionRef& parent, NodeId nodeid) const override;
     std::vector<OrphanInfo> GetOrphanTransactions() const override;
     TxOrphanage::Usage TotalOrphanUsage() const override;
     void SanityCheck() const override;
@@ -724,9 +724,9 @@ void TxOrphanageImpl::EraseForBlock(const CBlock& block)
     LimitOrphans();
 }
 
-std::vector<CTransactionRef> TxOrphanageImpl::GetChildrenFromSamePeer(const CTransactionRef& parent, NodeId peer) const
+std::vector<std::pair<Txid, Wtxid>> TxOrphanageImpl::GetChildrenFromSamePeer(const CTransactionRef& parent, NodeId peer) const
 {
-    std::vector<CTransactionRef> children_found;
+    std::vector<std::pair<Txid, Wtxid>> children_found;
     const auto& parent_txid{parent->GetHash()};
 
     // Iterate through all orphans from this peer, in reverse order, so that more recent
@@ -743,7 +743,7 @@ std::vector<CTransactionRef> TxOrphanageImpl::GetChildrenFromSamePeer(const CTra
         // Check if this tx spends from parent.
         for (const auto& prevout : it_upper->m_tx_data->m_prevouts) {
             if (prevout.hash == parent_txid) {
-                children_found.emplace_back(it_upper->m_tx_data->MakeTxRef());
+                children_found.emplace_back(it_upper->m_tx_data->m_txid, it_upper->m_tx_data->m_wtxid);
                 break;
             }
         }

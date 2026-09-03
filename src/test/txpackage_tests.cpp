@@ -129,6 +129,7 @@ BOOST_AUTO_TEST_CASE(package_hash_tests)
     BOOST_CHECK_EQUAL(calculated_hash_123, GetPackageHash(package_213));
     BOOST_CHECK_EQUAL(calculated_hash_123, GetPackageHash(package_312));
     BOOST_CHECK_EQUAL(calculated_hash_123, GetPackageHash(package_321));
+    BOOST_CHECK_EQUAL(calculated_hash_123, GetPackageHash(std::vector<Wtxid>{wtxid_3, wtxid_1, wtxid_2}));
 }
 
 BOOST_AUTO_TEST_CASE(package_sanitization_tests)

@@ -69,15 +69,15 @@ static CTransactionRef MakeMutation(const CTransactionRef& ptx)
     return mutated_tx;
 }
 
-// The orphanage hands out freshly deserialized transactions rather than the refs passed in, so compare them by wtxid
-static bool SameTxns(const std::vector<CTransactionRef>& expected, const std::vector<CTransactionRef>& actual)
+// The orphanage hands out cached transaction ids, so compare them by wtxid
+static bool SameTxns(const std::vector<CTransactionRef>& expected, const std::vector<std::pair<Txid, Wtxid>>& actual)
 {
-    return std::ranges::equal(expected, actual, {}, &CTransaction::GetWitnessHash, &CTransaction::GetWitnessHash);
+    return std::ranges::equal(expected, actual, {}, &CTransaction::GetWitnessHash, &std::pair<Txid, Wtxid>::second);
 }
 
-static bool EqualTxns(const std::set<CTransactionRef>& set_txns, const std::vector<CTransactionRef>& vec_txns)
+static bool EqualTxns(const std::set<CTransactionRef>& set_txns, const std::vector<std::pair<Txid, Wtxid>>& vec_txns)
 {
-    return std::ranges::is_permutation(set_txns, vec_txns, {}, &CTransaction::GetWitnessHash, &CTransaction::GetWitnessHash);
+    return std::ranges::is_permutation(set_txns, vec_txns, {}, &CTransaction::GetWitnessHash, &std::pair<Txid, Wtxid>::second);
 }
 
 BOOST_AUTO_TEST_CASE(peer_dos_limits)

@@ -95,8 +95,11 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
 
             // Check that all txns returned from GetChildrenFrom* are indeed a direct child of this tx.
             NodeId peer_id = fuzzed_data_provider.ConsumeIntegral<NodeId>();
-            for (const auto& child : orphanage->GetChildrenFromSamePeer(ptx_potential_parent, peer_id)) {
-                assert(std::any_of(child->vin.cbegin(), child->vin.cend(), [&](const auto& input) {
+            for (const auto& [child_txid, child_wtxid] : orphanage->GetChildrenFromSamePeer(ptx_potential_parent, peer_id)) {
+                const auto child{std::ranges::find(tx_history, child_wtxid, &CTransaction::GetWitnessHash)};
+                assert(child != tx_history.end());
+                assert((*child)->GetHash() == child_txid);
+                assert(std::any_of((*child)->vin.cbegin(), (*child)->vin.cend(), [&](const auto& input) {
                     return input.prevout.hash == ptx_potential_parent->GetHash();
                 }));
             }
@@ -796,7 +799,7 @@ FUZZ_TARGET(txorphanage_sim)
                     if (!matching_parent) continue;
                     // Found an announcement from peer which is a child of txn[tx].
                     assert(it != children_from_peer.rend());
-                    assert((*it)->GetWitnessHash() == txn[ann.tx]->GetWitnessHash());
+                    assert(it->second == txn[ann.tx]->GetWitnessHash());
                     ++it;
                 }
             }
