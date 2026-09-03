@@ -1866,8 +1866,11 @@ Chainstate::Chainstate(
     BlockManager& blockman,
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
-    : m_block_fetcher{std::make_unique<node::BlockFetcher>([blockman = &blockman](CBlock& block, const FlatFilePos& pos, const uint256& hash) {
-          return blockman->ReadBlock(block, pos, hash);
+    : m_block_fetcher{std::make_unique<node::BlockFetcher>([blockman = &blockman, &params = chainman.GetConsensus()](CBlock& block, const FlatFilePos& pos, const uint256& hash) {
+          if (!blockman->ReadBlock(block, pos, hash)) return false;
+          // The block stays worker-owned until its future is consumed, so memoizing the checks here is safe.
+          PrecheckBlock(block, params);
+          return true;
       })},
       m_mempool(mempool),
       m_blockman(blockman),
