@@ -38,49 +38,31 @@ static constexpr NodeId MAX_PEER{std::numeric_limits<NodeId>::max()};
  * cost dwarfs a deserialization. */
 struct OrphanTxData {
     /** The serialized transaction, including witness. */
-    const std::vector<unsigned char> m_encoded;
-    const Wtxid m_wtxid;
-    const Txid m_txid;
+    std::vector<unsigned char> m_encoded;
+    Wtxid m_wtxid;
+    Txid m_txid;
     /** The transaction's prevouts, cached so that maintaining m_outpoint_to_orphan_wtxids, EraseForBlock and latency
      * scores do not require deserializing. */
-    const std::vector<COutPoint> m_prevouts;
+    std::vector<COutPoint> m_prevouts;
     /** Memory accounted for this orphan (see GetMemUsage), cached at construction. Caching guarantees that the
      * same value is added and subtracted from the per-peer and global totals, and avoids recomputing it on every
      * operation. */
-    const TxOrphanage::Usage m_usage;
+    TxOrphanage::Usage m_usage;
 
     explicit OrphanTxData(const CTransactionRef& tx)
-        : m_encoded{EncodeTx(*tx)},
-          m_wtxid{tx->GetWitnessHash()},
-          m_txid{tx->GetHash()},
-          m_prevouts{CachePrevouts(*tx)},
-          m_usage{GetTransactionWeight(*tx)}
-    {}
-
-    static std::vector<unsigned char> EncodeTx(const CTransaction& tx)
+        : m_wtxid{tx->GetWitnessHash()}, m_txid{tx->GetHash()}, m_usage{GetTransactionWeight(*tx)}
     {
-        std::vector<unsigned char> encoded;
-        encoded.reserve(GetSerializeSize(TX_WITH_WITNESS(tx)));
-        VectorWriter writer{encoded, 0};
-        writer << TX_WITH_WITNESS(tx);
-        return encoded;
-    }
-
-    static std::vector<COutPoint> CachePrevouts(const CTransaction& tx)
-    {
-        std::vector<COutPoint> prevouts;
-        prevouts.reserve(tx.vin.size());
-        for (const auto& input : tx.vin) prevouts.push_back(input.prevout);
-        return prevouts;
+        m_encoded.reserve(tx->ComputeTotalSize()); // Avoid excess capacity from geometric vector growth
+        VectorWriter{m_encoded, 0, TX_WITH_WITNESS(*tx)};
+        m_prevouts.reserve(tx->vin.size());
+        for (const auto& input : tx->vin) m_prevouts.push_back(input.prevout);
     }
 
     /** Deserialize the transaction, for the paths that hand the orphan back out. */
     CTransactionRef MakeTxRef() const
     {
         SpanReader reader{m_encoded};
-        CMutableTransaction mtx;
-        reader >> TX_WITH_WITNESS(mtx);
-        auto ptx{MakeTransactionRef(std::move(mtx))};
+        auto ptx{std::make_shared<const CTransaction>(deserialize, TX_WITH_WITNESS, reader)};
         Assume(ptx->GetWitnessHash() == m_wtxid);
         return ptx;
     }
