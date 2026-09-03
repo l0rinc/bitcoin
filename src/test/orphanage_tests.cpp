@@ -723,6 +723,7 @@ BOOST_AUTO_TEST_CASE(witness_heavy_orphan_tx)
     // It is stored and accounted its weight.
     BOOST_CHECK(orphanage->AddTx(ptx, 0));
     BOOST_CHECK(orphanage->HaveTx(ptx->GetWitnessHash()));
+    BOOST_CHECK_EQUAL(ptx.use_count(), 1); // The orphanage keeps no reference to the deserialized transaction
     BOOST_CHECK_EQUAL(orphanage->UsageByPeer(0), weight);
 
     // It fits within the peer's reservation alongside normal orphans, which are left in place.
