@@ -8,6 +8,7 @@
 #include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <serialize.h>
+#include <span.h>
 #include <streams.h>
 #include <util/feefrac.h>
 #include <util/hasher.h>
@@ -52,8 +53,8 @@ struct OrphanTxData {
     OrphanTxData(const CTransactionRef& tx, TxOrphanage::Usage weight)
         : m_wtxid{tx->GetWitnessHash()}, m_txid{tx->GetHash()}, m_usage{weight}
     {
-        m_encoded.reserve(tx->ComputeTotalSize()); // Avoid excess capacity from geometric vector growth
-        VectorWriter{m_encoded, 0, TX_WITH_WITNESS(*tx)};
+        m_encoded.resize(tx->ComputeTotalSize());
+        SpanWriter{MakeWritableByteSpan(m_encoded), TX_WITH_WITNESS(*tx)};
         m_prevouts.reserve(tx->vin.size());
         for (const auto& input : tx->vin) m_prevouts.push_back(input.prevout);
     }
