@@ -105,5 +105,9 @@ class GetBlockFilterTest(BitcoinTestFramework):
         assert_equal(node.getbestblockhash(), old_parent)
         check_child_header(parent_header)
 
+        self.stop_node(0)
+        (node.chain_path / "indexes" / "blockfilter" / "basic" / "fltr00000.dat").unlink()
+        self.start_node(0)  # TODO: reject the missing tip filter on startup
+
 if __name__ == '__main__':
     GetBlockFilterTest(__file__).main()
