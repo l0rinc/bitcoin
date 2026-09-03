@@ -25,6 +25,7 @@
 #include <util/fs.h>
 #include <util/hasher.h>
 #include <util/obfuscation.h>
+#include <util/translation.h>
 
 #include <algorithm>
 #include <array>
@@ -212,7 +213,9 @@ private:
     [[nodiscard]] bool FlushBlockFile(int blockfile_num, bool fFinalize, bool finalize_undo) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /** Return false if undo file flushing fails. */
-    [[nodiscard]] bool FlushUndoFile(int block_file, bool finalize = false);
+    [[nodiscard]] bool FlushUndoFile(int block_file, bool finalize) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    /** Commit a block or undo file to disk, truncating it first when finalize is true. */
+    [[nodiscard]] bool FlushFile(const FlatFileSeq& seq, const FlatFilePos& pos, bool finalize, util::TranslatedLiteral error) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /**
      * Helper function performing various preparations before a block can be saved to disk:
