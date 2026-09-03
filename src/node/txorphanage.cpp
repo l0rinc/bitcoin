@@ -33,7 +33,7 @@ static constexpr NodeId MAX_PEER{std::numeric_limits<NodeId>::max()};
  * replaces). The transaction is kept in serialized form: deserialized, every witness stack element is an individually
  * heap-allocated vector, so a transaction of standard weight can use many times more memory than its weight suggests
  * (~28x for a witness stack of 1-byte elements). Serialized, an orphan's memory usage is bounded by its weight (see
- * GetOrphanUsage), so the existing weight-based accounting bounds the actual memory. The transaction is deserialized
+ * GetMemUsage), so the existing weight-based accounting bounds the actual memory. The transaction is deserialized
  * again on the paths that hand it back out (orphan resolution, RPC), all of which feed into full (re)validation whose
  * cost dwarfs a deserialization. */
 struct OrphanTxData {
@@ -44,7 +44,7 @@ struct OrphanTxData {
     /** The transaction's prevouts, cached so that maintaining m_outpoint_to_orphan_wtxids, EraseForBlock and latency
      * scores do not require deserializing. */
     const std::vector<COutPoint> m_prevouts;
-    /** Memory accounted for this orphan (see GetOrphanUsage), cached at construction. Caching guarantees that the
+    /** Memory accounted for this orphan (see GetMemUsage), cached at construction. Caching guarantees that the
      * same value is added and subtracted from the per-peer and global totals, and avoids recomputing it on every
      * operation. */
     const TxOrphanage::Usage m_usage;
@@ -54,7 +54,7 @@ struct OrphanTxData {
           m_wtxid{tx->GetWitnessHash()},
           m_txid{tx->GetHash()},
           m_prevouts{CachePrevouts(*tx)},
-          m_usage{GetOrphanUsage(tx)}
+          m_usage{GetTransactionWeight(*tx)}
     {}
 
     static std::vector<unsigned char> EncodeTx(const CTransaction& tx)
@@ -86,21 +86,6 @@ struct OrphanTxData {
     }
 };
 
-TxOrphanage::Usage GetOrphanUsage(const CTransactionRef& tx)
-{
-    // The total memory is a function of the memory used to store the transaction itself, each entry in m_orphans, and
-    // each entry in m_outpoint_to_orphan_wtxids. We use weight because, with the transaction kept in serialized form,
-    // it is an upper bound on the memory used to store the transaction: its serialized size never exceeds its weight.
-    // This metric conveniently encompasses m_outpoint_to_orphan_wtxids usage since input data does not get the witness
-    // discount, and makes it easier to reason about each peer's limits using well-understood transaction attributes.
-    //
-    // The remaining per-orphan overhead not covered by this (the entry in m_orphans, the entries in
-    // m_outpoint_to_orphan_wtxids, and OrphanTxData's cached prevouts and hashes) is bounded by the latency score
-    // limits, which permit DEFAULT_MAX_ORPHANAGE_LATENCY_SCORE announcements and 10 times as many inputs, i.e. a few
-    // MB in total, regardless of how high the usage limits are.
-    return GetTransactionWeight(*tx);
-}
-
 class TxOrphanageImpl final : public TxOrphanage {
     // Type alias for sequence numbers
     using SequenceNumber = uint64_t;
@@ -125,7 +110,17 @@ class TxOrphanageImpl final : public TxOrphanage {
             m_tx_data{tx_data}, m_announcer{peer}, m_entry_sequence{seq}
         { }
 
-        /** Get an approximation for "memory usage" (see GetOrphanUsage). */
+        /** Get an approximation for "memory usage". The total memory is a function of the memory used to store the
+         * transaction itself, each entry in m_orphans, and each entry in m_outpoint_to_orphan_wtxids. We use weight
+         * because, with the transaction kept in serialized form, it is an upper bound on the memory used to store the
+         * transaction: its serialized size never exceeds its weight. This metric conveniently encompasses
+         * m_outpoint_to_orphan_wtxids usage since input data does not get the witness discount, and makes it easier to
+         * reason about each peer's limits using well-understood transaction attributes.
+         *
+         * The remaining per-orphan overhead not covered by this (the entry in m_orphans, the entries in
+         * m_outpoint_to_orphan_wtxids, and OrphanTxData's cached prevouts and hashes) is bounded by the latency score
+         * limits, which permit DEFAULT_MAX_ORPHANAGE_LATENCY_SCORE announcements and 10 times as many inputs, i.e. a few
+         * MB in total, regardless of how high the usage limits are. */
         TxOrphanage::Usage GetMemUsage() const {
             return m_tx_data->m_usage;
         }
