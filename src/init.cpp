@@ -1805,8 +1805,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         } else {
             return InitError(strprintf(_("Unrecognized network in -proxy='%s': '%s'"), proxy_arg, net_str));
         }
-        // A higher-priority -proxy setting for onion overrides -onion
-        if (source > onion_source && net_str == "onion") onion_arg.clear();
+        // A higher-priority -proxy for onion overrides -onion, except when disabling the general proxy
+        if (source > onion_source && ((net_str.empty() && proxy.IsValid()) || net_str == "onion")) onion_arg.clear();
         return true;
     }};
 
