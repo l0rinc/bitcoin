@@ -4,6 +4,8 @@
 
 #include <node/blockstorage.h>
 
+#include <node/ibd_stats.h>
+
 #include <arith_uint256.h>
 #include <chain.h>
 #include <consensus/params.h>
@@ -1148,6 +1150,7 @@ BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& p
 FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
 {
     AssertLockHeld(::cs_main);
+    const ScopedNs write_timer{GetIbdStats().block_write_ns};
     const unsigned int block_size{static_cast<unsigned int>(GetSerializeSize(TX_WITH_WITNESS(block)))};
     FlatFilePos pos{FindNextBlockPos(block_size + STORAGE_HEADER_BYTES, nHeight, block.GetBlockTime())};
     if (pos.IsNull()) {

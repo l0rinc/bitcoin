@@ -31,6 +31,7 @@
 #include <logging/timer.h>
 #include <node/blockfetcher.h>
 #include <node/blockstorage.h>
+#include <node/ibd_stats.h>
 #include <node/utxo_snapshot.h>
 #include <policy/ephemeral_policy.h>
 #include <policy/policy.h>
@@ -2644,6 +2645,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     const auto time_5{SteadyClock::now()};
     m_chainman.time_undo += time_5 - time_4;
+    node::AddNs(node::GetIbdStats().connect_undo_ns, time_5 - time_4);
     LogDebug(BCLog::BENCH, "    - Write undo data: %.2fms [%.2fs (%.2fms/blk)]\n",
              Ticks<MillisecondsDouble>(time_5 - time_4),
              Ticks<SecondsDouble>(m_chainman.time_undo),
@@ -3100,6 +3102,12 @@ bool Chainstate::ConnectTip(
     const auto time_6{SteadyClock::now()};
     m_chainman.time_post_connect += time_6 - time_5;
     m_chainman.time_total += time_6 - time_1;
+    {
+        auto& ibd_stats{node::GetIbdStats()};
+        node::AddNs(ibd_stats.connect_load_ns, time_2 - time_1);
+        node::AddNs(ibd_stats.connect_block_ns, time_3 - time_2);
+        node::AddNs(ibd_stats.connect_tip_ns, time_6 - time_1);
+    }
     LogDebug(BCLog::BENCH, "  - Connect postprocess: %.2fms [%.2fs (%.2fms/blk)]\n",
              Ticks<MillisecondsDouble>(time_6 - time_5),
              Ticks<SecondsDouble>(m_chainman.time_post_connect),
@@ -3252,7 +3260,9 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
-            auto block_to_connect{provided_block && pindexConnect == &index_most_work ? provided_block : m_block_fetcher->Load(pindexConnect->GetBlockHash())};
+            const bool use_provided{provided_block && pindexConnect == &index_most_work};
+            (use_provided ? node::GetIbdStats().blocks_direct : node::GetIbdStats().blocks_from_disk).fetch_add(1, std::memory_order_relaxed);
+            auto block_to_connect{use_provided ? provided_block : m_block_fetcher->Load(pindexConnect->GetBlockHash())};
             if (read_ahead_tip) m_block_fetcher->FillQueue(*read_ahead_tip, pindexConnect->nHeight + 1);
             if (!ConnectTip(state, pindexConnect, std::move(block_to_connect), connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
@@ -4429,6 +4439,7 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
     AssertLockNotHeld(cs_main);
 
     {
+        const node::ScopedNs accept_timer{node::GetIbdStats().block_accept_ns};
         CBlockIndex *pindex = nullptr;
         if (new_block) *new_block = false;
         BlockValidationState state;
@@ -4459,7 +4470,10 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
     NotifyHeaderTip();
 
     BlockValidationState state; // Only used to report errors, not invalidity - ignore it
-    if (!ActiveChainstate().ActivateBestChain(state, block)) {
+    const auto activate_start{std::chrono::steady_clock::now()};
+    const bool activated{ActiveChainstate().ActivateBestChain(state, block)};
+    node::AddNs(node::GetIbdStats().block_activate_ns, std::chrono::steady_clock::now() - activate_start);
+    if (!activated) {
         LogError("%s: ActivateBestChain failed (%s)\n", __func__, state.ToString());
         return false;
     }

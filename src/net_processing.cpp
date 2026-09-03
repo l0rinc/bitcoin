@@ -5,6 +5,8 @@
 
 #include <net_processing.h>
 
+#include <node/ibd_stats.h>
+
 #include <addrman.h>
 #include <arith_uint256.h>
 #include <banman.h>
@@ -5110,16 +5112,23 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             return;
         }
 
+        auto& ibd_stats{node::GetIbdStats()};
+        ibd_stats.block_msgs.fetch_add(1, std::memory_order_relaxed);
+        const auto deser_start{std::chrono::steady_clock::now()};
         std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
         vRecv >> TX_WITH_WITNESS(*pblock);
+        node::AddNs(ibd_stats.block_deser_ns, std::chrono::steady_clock::now() - deser_start);
 
         LogDebug(BCLog::NET, "received block %s peer=%d\n", pblock->GetHash().ToString(), pfrom.GetId());
 
         const CBlockIndex* prev_block{WITH_LOCK(m_chainman.GetMutex(), return m_chainman.m_blockman.LookupBlockIndex(pblock->hashPrevBlock))};
 
         // Check for possible mutation if it connects to something we know so we can check for DEPLOYMENT_SEGWIT being active
-        if (prev_block && IsBlockMutated(/*block=*/*pblock,
-                           /*check_witness_root=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT))) {
+        const auto mutated_start{std::chrono::steady_clock::now()};
+        const bool mutated{prev_block && IsBlockMutated(/*block=*/*pblock,
+                           /*check_witness_root=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT))};
+        node::AddNs(ibd_stats.block_mutated_ns, std::chrono::steady_clock::now() - mutated_start);
+        if (mutated) {
             LogDebug(BCLog::NET, "Received mutated block from peer=%d\n", peer.m_id);
             Misbehaving(peer, "mutated block");
             WITH_LOCK(cs_main, RemoveBlockRequest(pblock->GetHash(), peer.m_id));
