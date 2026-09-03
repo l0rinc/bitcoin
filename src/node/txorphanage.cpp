@@ -49,8 +49,8 @@ struct OrphanTxData {
      * operation. */
     TxOrphanage::Usage m_usage;
 
-    explicit OrphanTxData(const CTransactionRef& tx)
-        : m_wtxid{tx->GetWitnessHash()}, m_txid{tx->GetHash()}, m_usage{GetTransactionWeight(*tx)}
+    OrphanTxData(const CTransactionRef& tx, TxOrphanage::Usage weight)
+        : m_wtxid{tx->GetWitnessHash()}, m_txid{tx->GetHash()}, m_usage{weight}
     {
         m_encoded.reserve(tx->ComputeTotalSize()); // Avoid excess capacity from geometric vector growth
         VectorWriter{m_encoded, 0, TX_WITH_WITNESS(*tx)};
@@ -359,13 +359,6 @@ bool TxOrphanageImpl::AddTx(const CTransactionRef& tx, NodeId peer)
     const auto& wtxid{tx->GetWitnessHash()};
     const auto& txid{tx->GetHash()};
 
-    // Ignore transactions above max standard size to avoid a send-big-orphans memory exhaustion attack.
-    const TxOrphanage::Usage weight{GetTransactionWeight(*tx)};
-    if (weight > MAX_STANDARD_TX_WEIGHT) {
-        LogDebug(BCLog::TXPACKAGES, "ignoring large orphan tx (weight: %d, txid: %s, wtxid: %s)\n", weight, txid.ToString(), wtxid.ToString());
-        return false;
-    }
-
     // We will return false if the tx already exists under a different peer.
     auto& index_by_wtxid = m_orphans.get<ByWtxid>();
     const auto it_existing{index_by_wtxid.lower_bound(ByWtxidView{wtxid, MIN_PEER})};
@@ -373,7 +366,18 @@ bool TxOrphanageImpl::AddTx(const CTransactionRef& tx, NodeId peer)
 
     // Share the OrphanTxData with the existing announcements of the same wtxid. This also deduplicates the
     // underlying transaction data if the same transaction was downloaded from more than one peer.
-    const auto tx_data{brand_new ? std::make_shared<const OrphanTxData>(tx) : it_existing->m_tx_data};
+    std::shared_ptr<const OrphanTxData> tx_data;
+    if (brand_new) {
+        // Ignore transactions above max standard size to avoid a send-big-orphans memory exhaustion attack.
+        const TxOrphanage::Usage weight{GetTransactionWeight(*tx)};
+        if (weight > MAX_STANDARD_TX_WEIGHT) {
+            LogDebug(BCLog::TXPACKAGES, "ignoring large orphan tx (weight: %d, txid: %s, wtxid: %s)\n", weight, txid.ToString(), wtxid.ToString());
+            return false;
+        }
+        tx_data = std::make_shared<const OrphanTxData>(tx, weight);
+    } else {
+        tx_data = it_existing->m_tx_data;
+    }
 
     auto [iter, inserted] = index_by_wtxid.emplace(tx_data, peer, m_current_sequence);
     // If the announcement (same wtxid, same peer) already exists, emplacement fails. Return false.
@@ -395,7 +399,7 @@ bool TxOrphanageImpl::AddTx(const CTransactionRef& tx, NodeId peer)
         m_unique_rounded_input_scores += iter->GetLatencyScore() - 1;
 
         LogDebug(BCLog::TXPACKAGES, "stored orphan tx %s (wtxid=%s), weight: %d (mapsz %u outsz %u)\n",
-                    txid.ToString(), wtxid.ToString(), weight, m_orphans.size(), m_outpoint_to_orphan_wtxids.size());
+                    txid.ToString(), wtxid.ToString(), tx_data->m_usage, m_orphans.size(), m_outpoint_to_orphan_wtxids.size());
         Assume(IsUnique(iter));
     } else {
         LogDebug(BCLog::TXPACKAGES, "added peer=%d as announcer of orphan tx %s (wtxid=%s)\n",
