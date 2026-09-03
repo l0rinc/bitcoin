@@ -63,6 +63,7 @@ namespace kernel {
 struct ChainstateRole;
 } // namespace kernel
 namespace node {
+class BlockFetcher;
 class SnapshotMetadata;
 } // namespace node
 namespace Consensus {
@@ -419,6 +420,14 @@ bool HasValidProofOfWork(std::span<const CBlockHeader> headers, const Consensus:
 /** Check if a block has been mutated (with respect to its merkle root and witness commitments). */
 bool IsBlockMutated(const CBlock& block, bool check_witness_root);
 
+/**
+ * Run the context-free block checks (CheckBlock and the witness commitment
+ * check) so that their results are memoized on the block. Failures are
+ * ignored here; the regular validation path rediscovers and handles them.
+ * Intended for worker threads that own the block exclusively.
+ */
+void PrecheckBlock(const CBlock& block, const Consensus::Params& params);
+
 /** Return the sum of the claimed work on a given set of headers. No verification of PoW is done. */
 arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers);
 
@@ -556,6 +565,9 @@ protected:
      */
     Mutex m_chainstate_mutex;
 
+    //! Reads blocks ahead during chain activation.
+    std::unique_ptr<node::BlockFetcher> m_block_fetcher;
+
     //! Optional mempool that is kept in sync with the chain.
     //! Only the active chainstate has a mempool.
     CTxMemPool* m_mempool;
@@ -586,6 +598,7 @@ public:
         node::BlockManager& blockman,
         ChainstateManager& chainman,
         std::optional<uint256> from_snapshot_blockhash = std::nullopt);
+    ~Chainstate();
 
     //! Return path to chainstate leveldb directory.
     fs::path StoragePath() const;
@@ -851,7 +864,7 @@ public:
     std::pair<int, int> GetPruneRange(int last_height_can_prune) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
 protected:
-    bool ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
+    bool ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& provided_block, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
     bool ConnectTip(
         BlockValidationState& state,
         CBlockIndex* pindexNew,

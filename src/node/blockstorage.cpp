@@ -4,6 +4,8 @@
 
 #include <node/blockstorage.h>
 
+#include <node/ibd_stats.h>
+
 #include <arith_uint256.h>
 #include <chain.h>
 #include <consensus/params.h>
@@ -41,6 +43,7 @@
 #include <util/translation.h>
 #include <validation.h>
 
+#include <chrono>
 #include <cerrno>
 #include <compare>
 #include <cstddef>
@@ -794,9 +797,72 @@ BlockfileType BlockManager::BlockfileTypeForHeight(int height)
     return (height >= *m_snapshot_height) ? BlockfileType::ASSUMED : BlockfileType::NORMAL;
 }
 
+void BlockManager::PruneCompletedFlushes()
+{
+    AssertLockHeld(::cs_main);
+    while (!m_pending_flushes.empty() && m_pending_flushes.front().wait_for(std::chrono::seconds{0}) == std::future_status::ready) {
+        m_pending_flushes.pop_front();
+    }
+}
+
+void BlockManager::FlushBlockFileAsync(int blockfile_num, bool finalize_undo)
+{
+    AssertLockHeld(::cs_main);
+    PruneCompletedFlushes();
+    const FlatFilePos block_pos{blockfile_num, m_blockfile_info[blockfile_num].nSize};
+    const FlatFilePos undo_pos{blockfile_num, m_blockfile_info[blockfile_num].nUndoSize};
+    auto task{m_flush_pool.Submit([this, block_pos, undo_pos, finalize_undo]() -> bool {
+        bool success{true};
+        if (!m_block_file_seq.Flush(block_pos, /*finalize=*/true)) {
+            m_opts.notifications.flushError(_("Flushing block file to disk failed. This is likely the result of an I/O error."));
+            success = false;
+        }
+        if (finalize_undo && !m_undo_file_seq.Flush(undo_pos, /*finalize=*/true)) {
+            m_opts.notifications.flushError(_("Flushing undo file to disk failed. This is likely the result of an I/O error."));
+            success = false;
+        }
+        if (!success) LogWarning("Failed to flush block file %05i (finalize_undo=%i)\n", block_pos.nFile, finalize_undo);
+        return success;
+    })};
+    if (task) {
+        m_pending_flushes.emplace_back(std::move(*task));
+    } else if (!FlushBlockFile(blockfile_num, /*fFinalize=*/true, finalize_undo)) {
+        LogWarning("Failed to flush block file %05i (finalize=1, finalize_undo=%i)\n", blockfile_num, finalize_undo);
+    }
+}
+
+void BlockManager::FlushUndoFileAsync(int block_file)
+{
+    AssertLockHeld(::cs_main);
+    PruneCompletedFlushes();
+    const FlatFilePos undo_pos{block_file, m_blockfile_info[block_file].nUndoSize};
+    auto task{m_flush_pool.Submit([this, undo_pos]() -> bool {
+        if (!m_undo_file_seq.Flush(undo_pos, /*finalize=*/true)) {
+            m_opts.notifications.flushError(_("Flushing undo file to disk failed. This is likely the result of an I/O error."));
+            LogWarning("Failed to flush undo file %05i\n", undo_pos.nFile);
+            return false;
+        }
+        return true;
+    })};
+    if (task) {
+        m_pending_flushes.emplace_back(std::move(*task));
+    } else if (!FlushUndoFile(block_file, true)) {
+        LogWarning("Failed to flush undo file %05i\n", block_file);
+    }
+}
+
+void BlockManager::WaitForPendingFlushes()
+{
+    AssertLockHeld(::cs_main);
+    for (auto& flush : m_pending_flushes) flush.wait();
+    m_pending_flushes.clear();
+}
+
 bool BlockManager::FlushChainstateBlockFile(int tip_height)
 {
     AssertLockHeld(::cs_main);
+    // Older files must be durable before the block index that references them is written.
+    WaitForPendingFlushes();
     auto& cursor = m_blockfile_cursors[BlockfileTypeForHeight(tip_height)];
     // If the cursor does not exist, it means an assumeutxo snapshot is loaded,
     // but no blocks past the snapshot height have been written yet, so there
@@ -910,11 +976,7 @@ FlatFilePos BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int n
         // data may be inconsistent after a crash if the flush is called during
         // a reindex. A flush error might also leave some of the data files
         // untrimmed.
-        if (!FlushBlockFile(last_blockfile, /*fFinalize=*/true, finalize_undo)) {
-            LogWarning(
-                          "Failed to flush previous block file %05i (finalize=1, finalize_undo=%i) before opening new block file %05i\n",
-                          last_blockfile, finalize_undo, nFile);
-        }
+        FlushBlockFileAsync(last_blockfile, finalize_undo);
         // No undo data yet in the new file, so reset our undo-height tracking.
         m_blockfile_cursors[chain_type] = BlockfileCursor{nFile};
     }
@@ -1032,9 +1094,7 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
             // the caller would assume the undo data not to be written, when in
             // fact it is. Note though, that a failed flush might leave the data
             // file untrimmed.
-            if (!FlushUndoFile(pos.nFile, true)) {
-                LogWarning("Failed to flush undo file %05i\n", pos.nFile);
-            }
+            FlushUndoFileAsync(pos.nFile);
         } else if (pos.nFile == cursor.file_num && block.nHeight > cursor.undo_height) {
             cursor.undo_height = block.nHeight;
         }
@@ -1148,6 +1208,7 @@ BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& p
 FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
 {
     AssertLockHeld(::cs_main);
+    const ScopedNs write_timer{GetIbdStats().block_write_ns};
     const unsigned int block_size{static_cast<unsigned int>(GetSerializeSize(TX_WITH_WITNESS(block)))};
     FlatFilePos pos{FindNextBlockPos(block_size + STORAGE_HEADER_BYTES, nHeight, block.GetBlockTime())};
     if (pos.IsNull()) {
@@ -1244,6 +1305,7 @@ BlockManager::BlockManager(const util::SignalInterrupt& interrupt, Options opts)
       m_undo_file_seq{FlatFileSeq{m_opts.blocks_dir, "rev", UNDOFILE_CHUNK_SIZE}},
       m_interrupt{interrupt}
 {
+    m_flush_pool.Start(/*num_workers=*/1);
     m_block_tree_db = std::make_unique<BlockTreeDB>(m_opts.block_tree_db_params);
 
     if (m_opts.block_tree_db_params.wipe_data) {

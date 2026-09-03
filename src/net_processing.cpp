@@ -5,6 +5,8 @@
 
 #include <net_processing.h>
 
+#include <node/ibd_stats.h>
+
 #include <addrman.h>
 #include <arith_uint256.h>
 #include <banman.h>
@@ -146,7 +148,7 @@ static_assert(MAX_BLOCKTXN_DEPTH <= MIN_BLOCKS_TO_KEEP, "MAX_BLOCKTXN_DEPTH too 
  *  Larger windows tolerate larger download speed differences between peer, but increase the potential
  *  degree of disordering of blocks on disk (which make reindexing and pruning harder). We'll probably
  *  want to make this a per-peer adaptive value at some point. */
-static const unsigned int BLOCK_DOWNLOAD_WINDOW = 1024;
+static const unsigned int BLOCK_DOWNLOAD_WINDOW = 4096;
 /** Block download timeout base, expressed in multiples of the block interval (i.e. 10 min) */
 static constexpr double BLOCK_DOWNLOAD_TIMEOUT_BASE = 1;
 /** Additional block download timeout per parallel downloading peer (i.e. 5 min) */
@@ -618,7 +620,7 @@ public:
 
 private:
     void ProcessMessage(Peer& peer, CNode& pfrom, const std::string& msg_type, DataStream& vRecv, NodeClock::time_point time_received,
-                        const std::atomic<bool>& interruptMsgProc)
+                        const std::atomic<bool>& interruptMsgProc, CNetMessage* net_msg = nullptr)
         EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, !m_headers_presync_mutex, g_msgproc_mutex, !m_tx_download_mutex, !m_inv_to_send_mutex);
 
     /** Consider evicting an outbound peer based on the amount of time they've been behind our tip */
@@ -3823,7 +3825,7 @@ void PeerManagerImpl::PushPrivateBroadcastTx(CNode& node)
 
 void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string& msg_type, DataStream& vRecv,
                                      const NodeClock::time_point time_received,
-                                     const std::atomic<bool>& interruptMsgProc)
+                                     const std::atomic<bool>& interruptMsgProc, CNetMessage* net_msg)
 {
     AssertLockHeld(g_msgproc_mutex);
 
@@ -5110,16 +5112,28 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             return;
         }
 
-        std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
-        vRecv >> TX_WITH_WITNESS(*pblock);
+        auto& ibd_stats{node::GetIbdStats()};
+        ibd_stats.block_msgs.fetch_add(1, std::memory_order_relaxed);
+        const auto deser_start{std::chrono::steady_clock::now()};
+        std::shared_ptr<CBlock> pblock;
+        if (net_msg && net_msg->m_block.valid()) {
+            pblock = net_msg->m_block.get(); // Rethrows deserialization errors like the inline path would
+        } else {
+            pblock = std::make_shared<CBlock>();
+            vRecv >> TX_WITH_WITNESS(*pblock);
+        }
+        node::AddNs(ibd_stats.block_deser_ns, std::chrono::steady_clock::now() - deser_start);
 
         LogDebug(BCLog::NET, "received block %s peer=%d\n", pblock->GetHash().ToString(), pfrom.GetId());
 
         const CBlockIndex* prev_block{WITH_LOCK(m_chainman.GetMutex(), return m_chainman.m_blockman.LookupBlockIndex(pblock->hashPrevBlock))};
 
         // Check for possible mutation if it connects to something we know so we can check for DEPLOYMENT_SEGWIT being active
-        if (prev_block && IsBlockMutated(/*block=*/*pblock,
-                           /*check_witness_root=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT))) {
+        const auto mutated_start{std::chrono::steady_clock::now()};
+        const bool mutated{prev_block && IsBlockMutated(/*block=*/*pblock,
+                           /*check_witness_root=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT))};
+        node::AddNs(ibd_stats.block_mutated_ns, std::chrono::steady_clock::now() - mutated_start);
+        if (mutated) {
             LogDebug(BCLog::NET, "Received mutated block from peer=%d\n", peer.m_id);
             Misbehaving(peer, "mutated block");
             WITH_LOCK(cs_main, RemoveBlockRequest(pblock->GetHash(), peer.m_id));
@@ -5471,7 +5485,7 @@ bool PeerManagerImpl::ProcessMessages(CNode& node, std::atomic<bool>& interruptM
     }
 
     try {
-        ProcessMessage(peer, node, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc);
+        ProcessMessage(peer, node, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc, &msg);
         if (interruptMsgProc) return false;
         {
             LOCK(peer.m_getdata_requests_mutex);

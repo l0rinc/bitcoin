@@ -29,7 +29,9 @@
 #include <kernel/types.h>
 #include <kernel/warning.h>
 #include <logging/timer.h>
+#include <node/blockfetcher.h>
 #include <node/blockstorage.h>
+#include <node/ibd_stats.h>
 #include <node/utxo_snapshot.h>
 #include <policy/ephemeral_policy.h>
 #include <policy/policy.h>
@@ -85,6 +87,9 @@ using kernel::ComputeUTXOStats;
 using kernel::Notifications;
 
 using fsbridge::FopenFn;
+/** BENCHMARKING ONLY: skip all block validation and UTXO set building. */
+static constexpr bool NEUTERED_NO_VALIDATION{true};
+
 using node::BlockManager;
 using node::BlockMap;
 using node::CBlockIndexHeightOnlyComparator;
@@ -1864,11 +1869,19 @@ Chainstate::Chainstate(
     BlockManager& blockman,
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
-    : m_mempool(mempool),
+    : m_block_fetcher{std::make_unique<node::BlockFetcher>([blockman = &blockman, &params = chainman.GetConsensus()](CBlock& block, const FlatFilePos& pos, const uint256& hash) {
+          if (!blockman->ReadBlock(block, pos, hash)) return false;
+          // The block stays worker-owned until its future is consumed, so memoizing the checks here is safe.
+          PrecheckBlock(block, params);
+          return true;
+      })},
+      m_mempool(mempool),
       m_blockman(blockman),
       m_chainman(chainman),
       m_assumeutxo(from_snapshot_blockhash ? Assumeutxo::UNVALIDATED : Assumeutxo::VALIDATED),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
+
+Chainstate::~Chainstate() = default;
 
 fs::path Chainstate::StoragePath() const
 {
@@ -2178,6 +2191,11 @@ int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out)
 DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIndex* pindex, CCoinsViewCache& view)
 {
     AssertLockHeld(::cs_main);
+    if (NEUTERED_NO_VALIDATION) {
+        // No undo data exists; just move the best block back.
+        view.SetBestBlock(pindex->pprev->GetBlockHash());
+        return DISCONNECT_OK;
+    }
     bool fClean = true;
 
     CBlockUndo blockUndo;
@@ -2299,6 +2317,24 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     uint256 block_hash{block.GetHash()};
     assert(*pindex->phashBlock == block_hash);
+
+    if (NEUTERED_NO_VALIDATION) {
+        // Skip every block check, script verification, UTXO update and undo
+        // write. The chain tip still advances so that block download,
+        // -stopatheight and shutdown behave as usual.
+        static std::atomic<bool> warned{false};
+        if (!warned.exchange(true)) LogWarning("NEUTERED BUILD: blocks are NOT validated and the UTXO set is NOT built");
+        assert(view.GetBestBlock() == (pindex->pprev == nullptr ? uint256() : pindex->pprev->GetBlockHash()));
+        m_chainman.num_blocks_total++;
+        if (!fJustCheck) {
+            if (!pindex->IsValid(BLOCK_VALID_SCRIPTS)) {
+                pindex->RaiseValidity(BLOCK_VALID_SCRIPTS);
+                m_blockman.m_dirty_blockindex.insert(pindex);
+            }
+            view.SetBestBlock(pindex->GetBlockHash());
+        }
+        return true;
+    }
 
     const auto time_start{SteadyClock::now()};
     const CChainParams& params{m_chainman.GetParams()};
@@ -2638,6 +2674,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     const auto time_5{SteadyClock::now()};
     m_chainman.time_undo += time_5 - time_4;
+    node::AddNs(node::GetIbdStats().connect_undo_ns, time_5 - time_4);
     LogDebug(BCLog::BENCH, "    - Write undo data: %.2fms [%.2fs (%.2fms/blk)]\n",
              Ticks<MillisecondsDouble>(time_5 - time_4),
              Ticks<SecondsDouble>(m_chainman.time_undo),
@@ -3094,6 +3131,12 @@ bool Chainstate::ConnectTip(
     const auto time_6{SteadyClock::now()};
     m_chainman.time_post_connect += time_6 - time_5;
     m_chainman.time_total += time_6 - time_1;
+    {
+        auto& ibd_stats{node::GetIbdStats()};
+        node::AddNs(ibd_stats.connect_load_ns, time_2 - time_1);
+        node::AddNs(ibd_stats.connect_block_ns, time_3 - time_2);
+        node::AddNs(ibd_stats.connect_tip_ns, time_6 - time_1);
+    }
     LogDebug(BCLog::BENCH, "  - Connect postprocess: %.2fms [%.2fs (%.2fms/blk)]\n",
              Ticks<MillisecondsDouble>(time_6 - time_5),
              Ticks<SecondsDouble>(m_chainman.time_post_connect),
@@ -3192,17 +3235,22 @@ void Chainstate::PruneBlockIndexCandidates() {
 
 /**
  * Try to make some progress towards making index_most_work the active block.
- * pblock is either nullptr or a pointer to a CBlock corresponding to index_most_work.
+ * provided_block is either nullptr or points to the CBlock corresponding to index_most_work.
  *
  * @returns true unless a system error occurred
  */
-bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
+bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& provided_block, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
 {
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
 
     const CBlockIndex* pindexOldTip = m_chain.Tip();
     const CBlockIndex* pindexFork = m_chain.FindFork(index_most_work);
+    const CBlockIndex* read_ahead_tip{provided_block ? index_most_work.pprev : &index_most_work}; // Avoid rereading the provided block
+    if (pindexFork && pindexFork != pindexOldTip) {
+        m_block_fetcher->Clear();
+        if (read_ahead_tip) m_block_fetcher->FillQueue(*read_ahead_tip, pindexFork->nHeight + 1);
+    }
 
     // Disconnect active blocks which are no longer in the best chain.
     bool fBlocksDisconnected = false;
@@ -3241,7 +3289,11 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
-            if (!ConnectTip(state, pindexConnect, pindexConnect == &index_most_work ? pblock : std::shared_ptr<const CBlock>(), connected_blocks, disconnectpool)) {
+            const bool use_provided{provided_block && pindexConnect == &index_most_work};
+            (use_provided ? node::GetIbdStats().blocks_direct : node::GetIbdStats().blocks_from_disk).fetch_add(1, std::memory_order_relaxed);
+            auto block_to_connect{use_provided ? provided_block : m_block_fetcher->Load(pindexConnect->GetBlockHash())};
+            if (read_ahead_tip) m_block_fetcher->FillQueue(*read_ahead_tip, pindexConnect->nHeight + 1);
+            if (!ConnectTip(state, pindexConnect, std::move(block_to_connect), connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
                     if (state.GetResult() != BlockValidationResult::BLOCK_MUTATED) {
@@ -3387,11 +3439,12 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
 
                 bool fInvalidFound = false;
                 std::shared_ptr<const CBlock> nullBlockPtr;
+                auto block_to_connect{pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr};
                 // BlockConnected signals must be sent for the original role;
                 // in case snapshot validation is completed during ActivateBestChainStep, the
                 // result of GetRole() changes from BACKGROUND to NORMAL.
                const ChainstateRole chainstate_role{this->GetRole()};
-                if (!ActivateBestChainStep(state, *pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connected_blocks)) {
+                if (!ActivateBestChainStep(state, *pindexMostWork, block_to_connect, fInvalidFound, connected_blocks)) {
                     // A system error occurred
                     return false;
                 }
@@ -4063,6 +4116,16 @@ bool IsBlockMutated(const CBlock& block, bool check_witness_root)
     return false;
 }
 
+void PrecheckBlock(const CBlock& block, const Consensus::Params& params)
+{
+    BlockValidationState state;
+    if (!CheckBlock(block, state, params)) return;
+    // Memoizes only when a valid witness commitment is present; blocks without
+    // one are re-checked cheaply by the caller with the right expectation.
+    BlockValidationState witness_state;
+    (void)CheckWitnessMalleation(block, /*expect_witness_commitment=*/true, witness_state);
+}
+
 arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers)
 {
     arith_uint256 total_work{0};
@@ -4415,6 +4478,7 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
     AssertLockNotHeld(cs_main);
 
     {
+        const node::ScopedNs accept_timer{node::GetIbdStats().block_accept_ns};
         CBlockIndex *pindex = nullptr;
         if (new_block) *new_block = false;
         BlockValidationState state;
@@ -4445,7 +4509,10 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
     NotifyHeaderTip();
 
     BlockValidationState state; // Only used to report errors, not invalidity - ignore it
-    if (!ActiveChainstate().ActivateBestChain(state, block)) {
+    const auto activate_start{std::chrono::steady_clock::now()};
+    const bool activated{ActiveChainstate().ActivateBestChain(state, block)};
+    node::AddNs(node::GetIbdStats().block_activate_ns, std::chrono::steady_clock::now() - activate_start);
+    if (!activated) {
         LogError("%s: ActivateBestChain failed (%s)\n", __func__, state.ToString());
         return false;
     }

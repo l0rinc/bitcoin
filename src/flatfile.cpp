@@ -5,6 +5,8 @@
 
 #include <flatfile.h>
 
+#include <node/ibd_stats.h>
+
 #include <tinyformat.h>
 #include <util/fs_helpers.h>
 #include <util/log.h>
@@ -87,6 +89,8 @@ size_t FlatFileSeq::Allocate(const FlatFilePos& pos, size_t add_size, bool& out_
 
 bool FlatFileSeq::Flush(const FlatFilePos& pos, bool finalize) const
 {
+    node::GetIbdStats().file_flushes.fetch_add(1, std::memory_order_relaxed);
+    const node::ScopedNs flush_timer{node::GetIbdStats().file_flush_ns};
     FILE* file = Open(FlatFilePos(pos.nFile, 0)); // Avoid fseek to nPos
     if (!file) {
         LogError("%s: failed to open file %d\n", __func__, pos.nFile);

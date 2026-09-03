@@ -7,6 +7,10 @@
 
 #include <net.h>
 
+#include <node/ibd_stats.h>
+#include <primitives/block.h>
+#include <validation.h>
+
 #include <addrdb.h>
 #include <addrman.h>
 #include <banman.h>
@@ -127,7 +131,7 @@ size_t CSerializedNetMsg::GetMemoryUsage() const noexcept
 
 size_t CNetMessage::GetMemoryUsage() const noexcept
 {
-    return sizeof(*this) + memusage::DynamicUsage(m_type) + m_recv.GetMemoryUsage();
+    return sizeof(*this) + memusage::DynamicUsage(m_type) + m_recv.GetMemoryUsage() + m_deser_payload_size;
 }
 
 void CConnman::AddAddrFetch(const std::string& strDest)
@@ -547,6 +551,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect,
                                     .i2p_sam_session = std::move(i2p_transient_session),
                                     .recv_flood_size = nReceiveFloodSize,
                                     .use_v2transport = use_v2transport,
+                                    .block_deser_pool = &m_block_deser_pool,
                                 });
         pnode->AddRef();
 
@@ -667,6 +672,9 @@ void CNode::CopyStats(CNodeStats& stats)
 
 bool CNode::ReceiveMsgBytes(std::span<const uint8_t> msg_bytes, bool& complete)
 {
+    auto& ibd_stats{node::GetIbdStats()};
+    ibd_stats.net_recv_bytes.fetch_add(msg_bytes.size(), std::memory_order_relaxed);
+    const node::ScopedNs recv_timer{ibd_stats.net_recv_ns};
     complete = false;
     const auto time{NodeClock::now()};
     LOCK(cs_vRecv);
@@ -698,6 +706,24 @@ bool CNode::ReceiveMsgBytes(std::span<const uint8_t> msg_bytes, bool& complete)
             }
             assert(i != mapRecvBytesPerMsgType.end());
             i->second += msg.m_raw_message_size;
+
+            if (m_block_deser_pool && msg.m_type == NetMsgType::BLOCK) {
+                // Deserialize and pre-check the block on a worker thread so that the
+                // message handler thread only has to pick up the result.
+                auto payload{std::make_shared<DataStream>(std::move(msg.m_recv))};
+                auto task{m_block_deser_pool->Submit([payload]() -> std::shared_ptr<CBlock> {
+                    auto block{std::make_shared<CBlock>()};
+                    *payload >> TX_WITH_WITNESS(*block);
+                    PrecheckBlock(*block, Params().GetConsensus());
+                    return block;
+                })};
+                if (task) {
+                    msg.m_block = std::move(*task);
+                    msg.m_deser_payload_size = msg.m_message_size;
+                } else {
+                    msg.m_recv = std::move(*payload);
+                }
+            }
 
             // push the message to the process queue,
             vRecvMsg.push_back(std::move(msg));
@@ -1871,6 +1897,7 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
                                  .prefer_evict = discouraged,
                                  .recv_flood_size = nReceiveFloodSize,
                                  .use_v2transport = use_v2transport,
+                                 .block_deser_pool = &m_block_deser_pool,
                              });
     pnode->AddRef();
     m_msgproc->InitializeNode(*pnode, local_services);
@@ -3219,9 +3246,12 @@ void CConnman::ThreadMessageHandler()
 
     LOCK(NetEventsInterface::g_msgproc_mutex);
 
+    auto& ibd_stats{node::GetIbdStats()};
+    auto last_stats_log{std::chrono::steady_clock::now()};
     while (!flagInterruptMsgProc)
     {
         bool fMoreWork = false;
+        const auto loop_start{std::chrono::steady_clock::now()};
 
         {
             // Randomize the order in which we process messages from/to our peers.
@@ -3246,11 +3276,19 @@ void CConnman::ThreadMessageHandler()
             }
         }
 
+        const auto loop_end{std::chrono::steady_clock::now()};
+        node::AddNs(ibd_stats.msghand_busy_ns, loop_end - loop_start);
+        if (loop_end - last_stats_log >= std::chrono::seconds{60}) {
+            last_stats_log = loop_end;
+            LogInfo("%s", ibd_stats.ToString());
+        }
+
         WAIT_LOCK(mutexMsgProc, lock);
         if (!fMoreWork) {
             condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(100), [this]() EXCLUSIVE_LOCKS_REQUIRED(mutexMsgProc) { return fMsgProcWake; });
         }
         fMsgProcWake = false;
+        node::AddNs(ibd_stats.msghand_wait_ns, std::chrono::steady_clock::now() - loop_end);
     }
 }
 
@@ -3617,6 +3655,10 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
         fMsgProcWake = false;
     }
 
+    if (const auto deser_threads{gArgs.GetIntArg("-blockdeserthreads", DEFAULT_BLOCKDESER_THREADS)}; deser_threads > 0) {
+        m_block_deser_pool.Start(/*num_workers=*/static_cast<int>(deser_threads));
+    }
+
     // Send and receive from sockets, accept connections
     threadSocketHandler = std::thread(&util::TraceThread, "net", [this] { ThreadSocketHandler(); });
 
@@ -3717,8 +3759,10 @@ void CConnman::StopThreads()
     if (threadI2PAcceptIncoming.joinable()) {
         threadI2PAcceptIncoming.join();
     }
-    if (threadMessageHandler.joinable())
+    if (threadMessageHandler.joinable()) {
         threadMessageHandler.join();
+        LogInfo("%s", node::GetIbdStats().ToString());
+    }
     if (threadOpenConnections.joinable())
         threadOpenConnections.join();
     if (threadOpenAddedConnections.joinable())
@@ -3727,6 +3771,7 @@ void CConnman::StopThreads()
         threadDNSAddressSeed.join();
     if (threadSocketHandler.joinable())
         threadSocketHandler.join();
+    m_block_deser_pool.Stop();
 }
 
 void CConnman::StopNodes()
@@ -4097,6 +4142,7 @@ CNode::CNode(NodeId idIn,
       id{idIn},
       nLocalHostNonce{nLocalHostNonceIn},
       m_recv_flood_size{node_opts.recv_flood_size},
+      m_block_deser_pool{node_opts.block_deser_pool},
       m_i2p_sam_session{std::move(node_opts.i2p_sam_session)}
 {
     if (inbound_onion) assert(conn_type_in == ConnectionType::INBOUND);
@@ -4127,7 +4173,9 @@ void CNode::MarkReceivedMsgsForProcessing()
     LOCK(m_msg_process_queue_mutex);
     m_msg_process_queue.splice(m_msg_process_queue.end(), vRecvMsg);
     m_msg_process_queue_size += nSizeAdded;
+    const bool was_paused{fPauseRecv.load()};
     fPauseRecv = m_msg_process_queue_size > m_recv_flood_size;
+    if (fPauseRecv && !was_paused) node::GetIbdStats().net_recv_pauses.fetch_add(1, std::memory_order_relaxed);
 }
 
 std::optional<std::pair<CNetMessage, bool>> CNode::PollMessage()
