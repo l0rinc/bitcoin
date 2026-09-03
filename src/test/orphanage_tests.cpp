@@ -699,7 +699,7 @@ BOOST_AUTO_TEST_CASE(witness_heavy_orphan_tx)
     mtx.vin.emplace_back(Txid::FromUint256(det_rand.rand256()), 0);
     mtx.vout.resize(1);
     mtx.vin[0].scriptWitness.stack.assign(199'000, std::vector<unsigned char>{1});
-    const auto ptx{MakeTransactionRef(mtx)};
+    const auto ptx{MakeTransactionRef(std::move(mtx))};
     const auto weight{GetTransactionWeight(*ptx)};
     BOOST_CHECK_LE(weight, MAX_STANDARD_TX_WEIGHT);
     // The serialized transaction, which is what the orphanage keeps, is smaller than the accounted weight.
