@@ -420,6 +420,14 @@ bool HasValidProofOfWork(std::span<const CBlockHeader> headers, const Consensus:
 /** Check if a block has been mutated (with respect to its merkle root and witness commitments). */
 bool IsBlockMutated(const CBlock& block, bool check_witness_root);
 
+/**
+ * Run the context-free block checks (CheckBlock and the witness commitment
+ * check) so that their results are memoized on the block. Failures are
+ * ignored here; the regular validation path rediscovers and handles them.
+ * Intended for worker threads that own the block exclusively.
+ */
+void PrecheckBlock(const CBlock& block, const Consensus::Params& params);
+
 /** Return the sum of the claimed work on a given set of headers. No verification of PoW is done. */
 arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers);
 

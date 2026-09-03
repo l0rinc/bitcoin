@@ -8,6 +8,8 @@
 #include <net.h>
 
 #include <node/ibd_stats.h>
+#include <primitives/block.h>
+#include <validation.h>
 
 #include <addrdb.h>
 #include <addrman.h>
@@ -129,7 +131,7 @@ size_t CSerializedNetMsg::GetMemoryUsage() const noexcept
 
 size_t CNetMessage::GetMemoryUsage() const noexcept
 {
-    return sizeof(*this) + memusage::DynamicUsage(m_type) + m_recv.GetMemoryUsage();
+    return sizeof(*this) + memusage::DynamicUsage(m_type) + m_recv.GetMemoryUsage() + m_deser_payload_size;
 }
 
 void CConnman::AddAddrFetch(const std::string& strDest)
@@ -549,6 +551,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect,
                                     .i2p_sam_session = std::move(i2p_transient_session),
                                     .recv_flood_size = nReceiveFloodSize,
                                     .use_v2transport = use_v2transport,
+                                    .block_deser_pool = &m_block_deser_pool,
                                 });
         pnode->AddRef();
 
@@ -703,6 +706,24 @@ bool CNode::ReceiveMsgBytes(std::span<const uint8_t> msg_bytes, bool& complete)
             }
             assert(i != mapRecvBytesPerMsgType.end());
             i->second += msg.m_raw_message_size;
+
+            if (m_block_deser_pool && msg.m_type == NetMsgType::BLOCK) {
+                // Deserialize and pre-check the block on a worker thread so that the
+                // message handler thread only has to pick up the result.
+                auto payload{std::make_shared<DataStream>(std::move(msg.m_recv))};
+                auto task{m_block_deser_pool->Submit([payload]() -> std::shared_ptr<CBlock> {
+                    auto block{std::make_shared<CBlock>()};
+                    *payload >> TX_WITH_WITNESS(*block);
+                    PrecheckBlock(*block, Params().GetConsensus());
+                    return block;
+                })};
+                if (task) {
+                    msg.m_block = std::move(*task);
+                    msg.m_deser_payload_size = msg.m_message_size;
+                } else {
+                    msg.m_recv = std::move(*payload);
+                }
+            }
 
             // push the message to the process queue,
             vRecvMsg.push_back(std::move(msg));
@@ -1876,6 +1897,7 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
                                  .prefer_evict = discouraged,
                                  .recv_flood_size = nReceiveFloodSize,
                                  .use_v2transport = use_v2transport,
+                                 .block_deser_pool = &m_block_deser_pool,
                              });
     pnode->AddRef();
     m_msgproc->InitializeNode(*pnode, local_services);
@@ -3633,6 +3655,10 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
         fMsgProcWake = false;
     }
 
+    if (const auto deser_threads{gArgs.GetIntArg("-blockdeserthreads", DEFAULT_BLOCKDESER_THREADS)}; deser_threads > 0) {
+        m_block_deser_pool.Start(/*num_workers=*/static_cast<int>(deser_threads));
+    }
+
     // Send and receive from sockets, accept connections
     threadSocketHandler = std::thread(&util::TraceThread, "net", [this] { ThreadSocketHandler(); });
 
@@ -3745,6 +3771,7 @@ void CConnman::StopThreads()
         threadDNSAddressSeed.join();
     if (threadSocketHandler.joinable())
         threadSocketHandler.join();
+    m_block_deser_pool.Stop();
 }
 
 void CConnman::StopNodes()
@@ -4115,6 +4142,7 @@ CNode::CNode(NodeId idIn,
       id{idIn},
       nLocalHostNonce{nLocalHostNonceIn},
       m_recv_flood_size{node_opts.recv_flood_size},
+      m_block_deser_pool{node_opts.block_deser_pool},
       m_i2p_sam_session{std::move(node_opts.i2p_sam_session)}
 {
     if (inbound_onion) assert(conn_type_in == ConnectionType::INBOUND);

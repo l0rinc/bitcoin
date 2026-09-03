@@ -4087,6 +4087,16 @@ bool IsBlockMutated(const CBlock& block, bool check_witness_root)
     return false;
 }
 
+void PrecheckBlock(const CBlock& block, const Consensus::Params& params)
+{
+    BlockValidationState state;
+    if (!CheckBlock(block, state, params)) return;
+    // Memoizes only when a valid witness commitment is present; blocks without
+    // one are re-checked cheaply by the caller with the right expectation.
+    BlockValidationState witness_state;
+    (void)CheckWitnessMalleation(block, /*expect_witness_commitment=*/true, witness_state);
+}
+
 arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers)
 {
     arith_uint256 total_work{0};

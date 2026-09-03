@@ -620,7 +620,7 @@ public:
 
 private:
     void ProcessMessage(Peer& peer, CNode& pfrom, const std::string& msg_type, DataStream& vRecv, NodeClock::time_point time_received,
-                        const std::atomic<bool>& interruptMsgProc)
+                        const std::atomic<bool>& interruptMsgProc, CNetMessage* net_msg = nullptr)
         EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, !m_headers_presync_mutex, g_msgproc_mutex, !m_tx_download_mutex, !m_inv_to_send_mutex);
 
     /** Consider evicting an outbound peer based on the amount of time they've been behind our tip */
@@ -3825,7 +3825,7 @@ void PeerManagerImpl::PushPrivateBroadcastTx(CNode& node)
 
 void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string& msg_type, DataStream& vRecv,
                                      const NodeClock::time_point time_received,
-                                     const std::atomic<bool>& interruptMsgProc)
+                                     const std::atomic<bool>& interruptMsgProc, CNetMessage* net_msg)
 {
     AssertLockHeld(g_msgproc_mutex);
 
@@ -5115,8 +5115,13 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         auto& ibd_stats{node::GetIbdStats()};
         ibd_stats.block_msgs.fetch_add(1, std::memory_order_relaxed);
         const auto deser_start{std::chrono::steady_clock::now()};
-        std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
-        vRecv >> TX_WITH_WITNESS(*pblock);
+        std::shared_ptr<CBlock> pblock;
+        if (net_msg && net_msg->m_block.valid()) {
+            pblock = net_msg->m_block.get(); // Rethrows deserialization errors like the inline path would
+        } else {
+            pblock = std::make_shared<CBlock>();
+            vRecv >> TX_WITH_WITNESS(*pblock);
+        }
         node::AddNs(ibd_stats.block_deser_ns, std::chrono::steady_clock::now() - deser_start);
 
         LogDebug(BCLog::NET, "received block %s peer=%d\n", pblock->GetHash().ToString(), pfrom.GetId());
@@ -5480,7 +5485,7 @@ bool PeerManagerImpl::ProcessMessages(CNode& node, std::atomic<bool>& interruptM
     }
 
     try {
-        ProcessMessage(peer, node, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc);
+        ProcessMessage(peer, node, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc, &msg);
         if (interruptMsgProc) return false;
         {
             LOCK(peer.m_getdata_requests_mutex);
