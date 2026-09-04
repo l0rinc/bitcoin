@@ -89,22 +89,21 @@ static void AddDuplicateCoins(std::vector<OutputGroup>& utxo_pool, int count, in
 }
 
 /** Check if SelectionResult a is equivalent to SelectionResult b.
- * Two results are equivalent if they are composed of the same input values, even if they have different inputs (i.e., same value, different prevout) */
-static bool HaveEquivalentValues(const SelectionResult& a, const SelectionResult& b)
+ * Two results are equivalent if they are composed of inputs with the same amounts and sizes, even if they have different inputs (i.e., different prevouts). */
+static bool HaveEquivalentInputs(const SelectionResult& a, const SelectionResult& b)
 {
-    std::vector<CAmount> a_amts;
-    std::vector<CAmount> b_amts;
+    std::vector<std::pair<CAmount, int>> a_inputs;
+    std::vector<std::pair<CAmount, int>> b_inputs;
     for (const auto& coin : a.GetInputSet()) {
-        a_amts.push_back(coin->txout.nValue);
+        a_inputs.emplace_back(coin->txout.nValue, coin->input_bytes);
     }
     for (const auto& coin : b.GetInputSet()) {
-        b_amts.push_back(coin->txout.nValue);
+        b_inputs.emplace_back(coin->txout.nValue, coin->input_bytes);
     }
-    std::sort(a_amts.begin(), a_amts.end());
-    std::sort(b_amts.begin(), b_amts.end());
+    std::sort(a_inputs.begin(), a_inputs.end());
+    std::sort(b_inputs.begin(), b_inputs.end());
 
-    auto ret = std::mismatch(a_amts.begin(), a_amts.end(), b_amts.begin());
-    return ret.first == a_amts.end() && ret.second == b_amts.end();
+    return a_inputs == b_inputs;
 }
 
 static std::string InputAmountsToString(const SelectionResult& selection)
@@ -124,7 +123,7 @@ static void TestBnBSuccess(std::string test_title, std::vector<OutputGroup>& utx
 
     const auto result = SelectCoinsBnB(utxo_pool, selection_target, /*cost_of_change=*/cs_params.m_cost_of_change, max_selection_weight);
     BOOST_CHECK_MESSAGE(result, "Falsy result in BnB-Success: " + test_title);
-    BOOST_CHECK_MESSAGE(HaveEquivalentValues(expected_result, *result), strprintf("Result mismatch in BnB-Success: %s. Expected %s, but got %s", test_title, InputAmountsToString(expected_result), InputAmountsToString(*result)));
+    BOOST_CHECK_MESSAGE(HaveEquivalentInputs(expected_result, *result), strprintf("Result mismatch in BnB-Success: %s. Expected %s, but got %s", test_title, InputAmountsToString(expected_result), InputAmountsToString(*result)));
     BOOST_CHECK_MESSAGE(result->GetSelectedValue() == expected_amount, strprintf("Selected amount mismatch in BnB-Success: %s. Expected %d, but got %d", test_title, expected_amount, result->GetSelectedValue()));
     BOOST_CHECK_MESSAGE(result->GetWeight() <= max_selection_weight, strprintf("Selected weight is higher than permitted in BnB-Success: %s. Expected %d, but got %d", test_title, max_selection_weight, result->GetWeight()));
     BOOST_CHECK_MESSAGE(result->GetSelectionsEvaluated() == expected_attempts, strprintf("Unexpected number of attempts in BnB-Success: %s. Expected %i attempts, but got %i", test_title, expected_attempts, result->GetSelectionsEvaluated()));
