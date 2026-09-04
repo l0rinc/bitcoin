@@ -64,6 +64,9 @@ earlier ones and command line overrides the config file. UNIX domain sockets may
 be used for proxy connections. Set `-onion` or `-proxy` to the local socket path
 with the prefix `unix:` (e.g. `-onion=unix:/home/me/torsocket`).
 
+When these options are set in different settings sources, a higher-priority general or onion-specific proxy address is used for onion connections.
+Disabling the general proxy does not disable a lower-priority `-onion` proxy. Use `-noonion` or `-onion=0` to disable onion connections.
+
     -listen
         When using -proxy, listening is disabled by default. If you want to
         manually configure an onion service (see section 3), you'll need to
