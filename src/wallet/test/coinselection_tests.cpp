@@ -60,7 +60,7 @@ static CoinSelectionParams init_cs_params(int eff_feerate = 5000)
 static const CoinSelectionParams default_cs_params = init_cs_params();
 
 /** Make one OutputGroup with a single UTXO that either has a given effective value (default) or a given amount (`is_eff_value = false`). */
-static OutputGroup MakeCoin(const CAmount& amount, bool is_eff_value = true, CoinSelectionParams cs_params = default_cs_params, int custom_spending_vsize = P2WPKH_INPUT_VSIZE)
+static OutputGroup MakeCoin(const CAmount& amount, CoinSelectionParams cs_params = default_cs_params, int custom_spending_vsize = P2WPKH_INPUT_VSIZE, bool is_eff_value = true)
 {
     // Always assume that we only have one input
     CMutableTransaction tx;
@@ -77,14 +77,14 @@ static OutputGroup MakeCoin(const CAmount& amount, bool is_eff_value = true, Coi
 static void AddCoins(std::vector<OutputGroup>& utxo_pool, std::vector<CAmount> coins, CoinSelectionParams cs_params = default_cs_params)
 {
     for (CAmount c : coins) {
-        utxo_pool.push_back(MakeCoin(c, true, cs_params));
+        utxo_pool.push_back(MakeCoin(c, cs_params));
     }
 }
 
 /** Make multiple coins that share the same effective value */
 static void AddDuplicateCoins(std::vector<OutputGroup>& utxo_pool, int count, int amount, CoinSelectionParams cs_params = default_cs_params) {
     for (int i = 0 ; i < count; ++i) {
-        utxo_pool.push_back(MakeCoin(amount, true, cs_params));
+        utxo_pool.push_back(MakeCoin(amount, cs_params));
     }
 }
 
@@ -117,7 +117,7 @@ static void TestBnBSuccess(std::string test_title, std::vector<OutputGroup>& utx
     SelectionResult expected_result(CAmount(0), SelectionAlgorithm::BNB);
     CAmount expected_amount = 0;
     for (CAmount input_amount : expected_input_amounts) {
-        OutputGroup group = MakeCoin(input_amount, true, cs_params, custom_spending_vsize);
+        OutputGroup group = MakeCoin(input_amount, cs_params, custom_spending_vsize);
         expected_amount += group.m_value;
         expected_result.AddInput(group);
     }
@@ -229,7 +229,7 @@ BOOST_AUTO_TEST_CASE(bnb_exhaustion_with_solution_test)
     // A hard case with no exact-match solution: BnB must still report that the algorithm did not complete once the
     // search is pushed into the attempt limit, even though it finds a solution within cost_of_change of the target.
     for (size_t i = 0; i < 19; ++i) {
-        utxo_pool.push_back(MakeCoin(100'000 + i, /*is_eff_value=*/true, default_cs_params));
+        utxo_pool.push_back(MakeCoin(100'000 + i, default_cs_params));
     }
 
     const auto result{SelectCoinsBnB(utxo_pool, selection_target, /*cost_of_change=*/default_cs_params.m_cost_of_change, MAX_STANDARD_TX_WEIGHT)};
@@ -253,12 +253,12 @@ BOOST_AUTO_TEST_CASE(bnb_feerate_sensitivity_test)
     TestBnBSuccess("Select one input at high feerates", high_feerate_pool, /*selection_target=*/10 * CENT, /*expected_input_amounts=*/{10 * CENT}, /*expected_attempts=*/5, high_feerate_params);
 
     // Add heavy inputs {6, 7} to existing {2, 3, 5, 10}
-    low_feerate_pool.push_back(MakeCoin(6 * CENT, true, default_cs_params, /*custom_spending_vsize=*/500));
-    low_feerate_pool.push_back(MakeCoin(7 * CENT, true, default_cs_params, /*custom_spending_vsize=*/500));
+    low_feerate_pool.push_back(MakeCoin(6 * CENT, default_cs_params, /*custom_spending_vsize=*/500));
+    low_feerate_pool.push_back(MakeCoin(7 * CENT, default_cs_params, /*custom_spending_vsize=*/500));
     TestBnBSuccess("Prefer two heavy inputs over two light inputs at low feerates", low_feerate_pool, /*selection_target=*/13 * CENT, /*expected_input_amounts=*/{6 * CENT, 7 * CENT}, /*expected_attempts=*/18, default_cs_params, /*custom_spending_vsize=*/500);
 
-    high_feerate_pool.push_back(MakeCoin(6 * CENT, true, high_feerate_params, /*custom_spending_vsize=*/500));
-    high_feerate_pool.push_back(MakeCoin(7 * CENT, true, high_feerate_params, /*custom_spending_vsize=*/500));
+    high_feerate_pool.push_back(MakeCoin(6 * CENT, high_feerate_params, /*custom_spending_vsize=*/500));
+    high_feerate_pool.push_back(MakeCoin(7 * CENT, high_feerate_params, /*custom_spending_vsize=*/500));
     TestBnBSuccess("Prefer two light inputs over two heavy inputs at high feerates", high_feerate_pool, /*selection_target=*/13 * CENT, /*expected_input_amounts=*/{3 * CENT, 10 * CENT}, /*expected_attempts=*/9, high_feerate_params);
 }
 
@@ -312,7 +312,7 @@ BOOST_AUTO_TEST_CASE(srd_test)
         // Create UTXO pool with UTXOs of same effective value but different weights
         std::vector<OutputGroup> mixed_weight_pool;
         AddDuplicateCoins(mixed_weight_pool, /*count=*/100, /*amount=*/5 * CENT, cs_params);
-        mixed_weight_pool.push_back(MakeCoin(5 * CENT, true, cs_params, /*custom_spending_vsize=*/P2WPKH_INPUT_VSIZE - 1));
+        mixed_weight_pool.push_back(MakeCoin(5 * CENT, cs_params, /*custom_spending_vsize=*/P2WPKH_INPUT_VSIZE - 1));
         TestSRDSuccess("Tie-break same effective value with lower weight", utxo_pool, /*selection_target=*/9 * CENT, cs_params,
         /*max_selection_weight=*/4 * 3 * (P2WPKH_INPUT_VSIZE - 1));
     }
