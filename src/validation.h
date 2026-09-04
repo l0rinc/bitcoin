@@ -858,6 +858,7 @@ protected:
         std::shared_ptr<const CBlock> block_to_connect,
         std::vector<ConnectedBlock>& connected_blocks,
         DisconnectedBlockTransactions& disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
+    bool DisconnectTipRange(CBlockIndex& pindex, CBlockIndex*& last_disconnected) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
 
     void InvalidBlockFound(CBlockIndex* pindex, const BlockValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     CBlockIndex* FindMostWorkChain() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
