@@ -89,6 +89,12 @@ inline constexpr uint64_t MIN_DISK_SPACE_FOR_BLOCK_FILES{550_MiB};
 /** Maximum number of dedicated script-checking threads allowed */
 inline constexpr int MAX_SCRIPTCHECK_THREADS{15};
 
+/** Maximum number of worker threads allowed for block read-ahead */
+inline constexpr int32_t MAX_BLOCKFETCH_THREADS{16};
+
+/** Maximum number of queued blocks allowed for block read-ahead */
+inline constexpr int32_t MAX_BLOCKFETCH_QUEUE_SIZE{16};
+
 /** Maximum number of dedicated threads allowed for prefetching block input prevouts */
 inline constexpr int32_t MAX_PREVOUTFETCH_THREADS{16};
 
@@ -549,12 +555,17 @@ enum class Assumeutxo {
 class Chainstate
 {
 protected:
+    class BlockFetcher;
+
     /**
      * The ChainState Mutex
      * A lock that must be held when modifying this ChainState - held in ActivateBestChain() and
      * InvalidateBlock()
      */
     Mutex m_chainstate_mutex;
+
+    //! Reads blocks ahead during chain activation.
+    std::unique_ptr<BlockFetcher> m_block_fetcher;
 
     //! Optional mempool that is kept in sync with the chain.
     //! Only the active chainstate has a mempool.
@@ -586,6 +597,7 @@ public:
         node::BlockManager& blockman,
         ChainstateManager& chainman,
         std::optional<uint256> from_snapshot_blockhash = std::nullopt);
+    ~Chainstate();
 
     //! Return path to chainstate leveldb directory.
     fs::path StoragePath() const;
@@ -851,7 +863,7 @@ public:
     std::pair<int, int> GetPruneRange(int last_height_can_prune) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
 protected:
-    bool ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
+    bool ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& provided_block, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
     bool ConnectTip(
         BlockValidationState& state,
         CBlockIndex* pindexNew,
