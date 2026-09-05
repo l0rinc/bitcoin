@@ -73,13 +73,20 @@ public:
     size_t Allocate(const FlatFilePos& pos, size_t add_size, bool& out_of_space) const;
 
     /**
-     * Commit a file to disk, and optionally truncate off extra pre-allocated bytes if final.
+     * Truncate the file at the first unwritten position.
      *
-     * @param[in] pos The first unwritten position in the file to be flushed.
-     * @param[in] finalize True if no more data will be written to this file.
+     * @param[in] pos The first unwritten position in the file.
      * @return true on success, false on failure.
      */
-    bool Flush(const FlatFilePos& pos, bool finalize = false) const;
+    bool Truncate(const FlatFilePos& pos) const;
+
+    /**
+     * Commit a file to disk.
+     *
+     * @param[in] pos The position identifying the file to be flushed.
+     * @return true on success, false on failure.
+     */
+    bool Flush(const FlatFilePos& pos) const;
 };
 
 #endif // BITCOIN_FLATFILE_H

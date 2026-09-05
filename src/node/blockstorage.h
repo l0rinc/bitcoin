@@ -25,6 +25,8 @@
 #include <util/fs.h>
 #include <util/hasher.h>
 #include <util/obfuscation.h>
+#include <util/threadpool.h>
+#include <util/translation.h>
 
 #include <algorithm>
 #include <array>
@@ -32,6 +34,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <future>
 #include <iosfwd>
 #include <limits>
 #include <map>
@@ -212,7 +215,14 @@ private:
     [[nodiscard]] bool FlushBlockFile(int blockfile_num, bool fFinalize, bool finalize_undo) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /** Return false if undo file flushing fails. */
-    [[nodiscard]] bool FlushUndoFile(int block_file, bool finalize = false);
+    [[nodiscard]] bool FlushUndoFile(int block_file, bool finalize) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    /**
+     * Commit a block or undo file to disk. When finalize is true, truncate synchronously,
+     * then run the fsync on the flush worker.
+     */
+    [[nodiscard]] bool FlushFile(const FlatFileSeq& seq, const FlatFilePos& pos, bool finalize, util::TranslatedLiteral error) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Block until every queued fsync completes and return whether they all succeeded
+    [[nodiscard]] bool WaitForPendingFlushes() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /**
      * Helper function performing various preparations before a block can be saved to disk:
@@ -224,6 +234,11 @@ private:
      * separator fields (STORAGE_HEADER_BYTES).
      */
     [[nodiscard]] FlatFilePos FindNextBlockPos(unsigned int nAddSize, unsigned int nHeight, uint64_t nTime) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    /**
+     * Commit the current block and undo files, and wait for the queued fsyncs of finalized ones.
+     * Must precede WriteBlockIndexDB(), which references the files, and UnlinkPrunedFiles(),
+     * since a queued fsync would recreate a removed file.
+     */
     [[nodiscard]] bool FlushChainstateBlockFile(int tip_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     [[nodiscard]] bool FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, unsigned int nAddSize) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
@@ -305,6 +320,10 @@ private:
 
     const FlatFileSeq m_block_file_seq;
     const FlatFileSeq m_undo_file_seq;
+    //! Retain asynchronous flush results until the next chainstate flush
+    std::vector<std::future<bool>> m_pending_flushes GUARDED_BY(::cs_main);
+    //! Runs the fsync of finalized block and undo files, started on first use
+    ThreadPool m_flush_pool{"blkflush"};
 
 protected:
     std::vector<CBlockFileInfo> m_blockfile_info;
@@ -320,6 +339,7 @@ public:
     using ReadRawBlockResult = util::Expected<std::vector<std::byte>, ReadRawError>;
 
     explicit BlockManager(const util::SignalInterrupt& interrupt, Options opts);
+    ~BlockManager();
 
     const util::SignalInterrupt& m_interrupt;
     std::atomic<bool> m_importing{false};
