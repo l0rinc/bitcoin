@@ -64,6 +64,35 @@ class WalletStartupTest(BitcoinTestFramework):
         # Reset directory permissions for cleanup
         dir_path.chmod(original_dir_perms)
 
+    def test_disabled_settings(self, node):
+        self.log.info("Test wallet startup preferences with dynamic settings disabled")
+        load_message = "Attempt to write settings file when dynamic settings are disabled."
+
+        settings_path = node.chain_path / "settings.json"
+        settings_before = settings_path.read_bytes()
+        self.restart_node(0, extra_args=["-nosettings"])
+        assert_equal(node.listwallets(), [''])
+
+        assert_raises_rpc_error(-1, load_message, node.createwallet, wallet_name="no_settings", load_on_startup=True)  # TODO: Report a warning after creating the wallet
+        assert_equal(set(node.listwallets()), {'', 'no_settings'})
+
+        # Leaving the startup preference unchanged does not warn, and the wallet remains usable.
+        assert_equal(node.unloadwallet(wallet_name="no_settings"), {})
+        assert_equal(node.loadwallet(filename="no_settings"), {"name": "no_settings"})
+        assert_equal(node.get_wallet_rpc("no_settings").getwalletinfo()["walletname"], "no_settings")
+
+        assert_raises_rpc_error(-1, load_message, node.loadwallet, filename="w2", load_on_startup=True)  # TODO: Report a warning after loading the wallet
+        assert_equal(set(node.listwallets()), {'', 'no_settings', 'w2'})
+
+        assert_raises_rpc_error(-1, "Attempt to write settings file when dynamic settings are disabled.", node.unloadwallet, wallet_name="no_settings", load_on_startup=False)  # TODO: Report a warning after unloading the wallet
+        assert_equal(set(node.listwallets()), {'', 'w2'})
+        self.stop_node(0)
+        assert_equal(settings_path.read_bytes(), settings_before)
+
+        # Re-enabling settings restores the original startup preferences.
+        self.start_node(0)
+        assert_equal(set(node.listwallets()), {'w2', 'w3'})
+
     def run_test(self):
         self.log.info('Should start without any wallets')
         assert_equal(self.nodes[0].listwallets(), [])
@@ -94,6 +123,7 @@ class WalletStartupTest(BitcoinTestFramework):
         assert_equal(set(self.nodes[0].listwallets()), set(('w2', 'w3')))
 
         self.test_load_unwritable_wallet(self.nodes[0])
+        self.test_disabled_settings(self.nodes[0])
 
 if __name__ == '__main__':
     WalletStartupTest(__file__).main()
