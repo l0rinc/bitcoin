@@ -66,14 +66,14 @@ class WalletStartupTest(BitcoinTestFramework):
 
     def test_disabled_settings(self, node):
         self.log.info("Test wallet startup preferences with dynamic settings disabled")
-        load_message = "Attempt to write settings file when dynamic settings are disabled."
+        load_message = "Wallet load on startup setting could not be updated, so wallet may not be loaded next node startup."
 
         settings_path = node.chain_path / "settings.json"
         settings_before = settings_path.read_bytes()
         self.restart_node(0, extra_args=["-nosettings"])
         assert_equal(node.listwallets(), [''])
 
-        assert_raises_rpc_error(-1, load_message, node.createwallet, wallet_name="no_settings", load_on_startup=True)  # TODO: Report a warning after creating the wallet
+        assert_equal(node.createwallet(wallet_name="no_settings", load_on_startup=True), {"name": "no_settings", "warnings": [load_message]})
         assert_equal(set(node.listwallets()), {'', 'no_settings'})
 
         # Leaving the startup preference unchanged does not warn, and the wallet remains usable.
@@ -81,10 +81,10 @@ class WalletStartupTest(BitcoinTestFramework):
         assert_equal(node.loadwallet(filename="no_settings"), {"name": "no_settings"})
         assert_equal(node.get_wallet_rpc("no_settings").getwalletinfo()["walletname"], "no_settings")
 
-        assert_raises_rpc_error(-1, load_message, node.loadwallet, filename="w2", load_on_startup=True)  # TODO: Report a warning after loading the wallet
+        assert_equal(node.loadwallet(filename="w2", load_on_startup=True), {"name": "w2", "warnings": [load_message]})
         assert_equal(set(node.listwallets()), {'', 'no_settings', 'w2'})
 
-        assert_raises_rpc_error(-1, "Attempt to write settings file when dynamic settings are disabled.", node.unloadwallet, wallet_name="no_settings", load_on_startup=False)  # TODO: Report a warning after unloading the wallet
+        assert_equal(node.unloadwallet(wallet_name="no_settings", load_on_startup=False), {"warnings": ["Wallet load on startup setting could not be updated, so wallet may still be loaded next node startup."]})
         assert_equal(set(node.listwallets()), {'', 'w2'})
         self.stop_node(0)
         assert_equal(settings_path.read_bytes(), settings_before)
