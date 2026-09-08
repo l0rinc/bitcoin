@@ -29,14 +29,20 @@ static CBlock CreateTestBlock()
 
 static void WriteBlockBench(benchmark::Bench& bench)
 {
-    const auto testing_setup{MakeNoLogFileContext<const TestingSetup>(ChainType::MAIN)};
-    auto& blockman{testing_setup->m_node.chainman->m_blockman};
+    std::unique_ptr<const TestingSetup> testing_setup;
     const CBlock block{CreateTestBlock()};
-    bench.run([&] {
-        LOCK(::cs_main);
-        const auto pos{blockman.WriteBlock(block, 413'567)};
-        assert(!pos.IsNull());
-    });
+    bench.setup([&] {
+             // WriteBlock advances the block-file cursor and preallocates storage. Recreate the
+             // setup outside the timed region so each measured write starts from the same state.
+             testing_setup.reset();
+             testing_setup = MakeNoLogFileContext<const TestingSetup>(ChainType::MAIN);
+         })
+        .run([&] {
+            auto& blockman{testing_setup->m_node.chainman->m_blockman};
+            LOCK(::cs_main);
+            const auto pos{blockman.WriteBlock(block, 413'567)};
+            assert(!pos.IsNull());
+        });
 }
 
 static void ReadBlockBench(benchmark::Bench& bench)
