@@ -65,7 +65,10 @@ public:
     CBloomFilter(unsigned int nElements, double nFPRate, unsigned int nTweak, unsigned char nFlagsIn);
     CBloomFilter() : nHashFuncs(0), nTweak(0), nFlags(0) {}
 
-    SERIALIZE_METHODS(CBloomFilter, obj) { READWRITE(obj.vData, obj.nHashFuncs, obj.nTweak, obj.nFlags); }
+    SERIALIZE_METHODS(CBloomFilter, obj)
+    {
+        READWRITE(LIMITED_VECTOR(obj.vData, MAX_BLOOM_FILTER_SIZE), obj.nHashFuncs, obj.nTweak, obj.nFlags);
+    }
 
     void insert(std::span<const unsigned char> vKey);
     void insert(const COutPoint& outpoint);
