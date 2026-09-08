@@ -593,9 +593,9 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
     argsman.AddArg("-maxsendbuffer=<n>", strprintf("Maximum per-connection memory usage for the send buffer, <n>*1000 bytes (default: %u)", DEFAULT_MAXSENDBUFFER), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-maxuploadtarget=<n>", strprintf("Tries to keep outbound traffic under the given target per 24h. Limit does not apply to peers with 'download' permission or blocks created within past week. 0 = no limit (default: %s). Optional suffix units [k|K|m|M|g|G|t|T] (default: M). Lowercase is 1000 base while uppercase is 1024 base", DEFAULT_MAX_UPLOAD_TARGET), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
 #ifdef HAVE_SOCKADDR_UN
-    argsman.AddArg("-onion=<ip:port|path>", "Use separate SOCKS5 proxy to reach peers via Tor onion services, set -noonion to disable (default: -proxy). May be a local file path prefixed with 'unix:'.", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
+    argsman.AddArg("-onion=<ip:port|path>", "Use separate SOCKS5 proxy to reach peers via Tor onion services, set -noonion to disable (default: -proxy). A higher-priority general or onion-specific proxy address overrides lower-priority -onion values. May be a local file path prefixed with 'unix:'.", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
 #else
-    argsman.AddArg("-onion=<ip:port>", "Use separate SOCKS5 proxy to reach peers via Tor onion services, set -noonion to disable (default: -proxy)", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
+    argsman.AddArg("-onion=<ip:port>", "Use separate SOCKS5 proxy to reach peers via Tor onion services, set -noonion to disable (default: -proxy). A higher-priority general or onion-specific proxy address overrides lower-priority -onion values", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
 #endif
     argsman.AddArg("-i2psam=<ip:port>", "I2P SAM proxy to reach I2P peers and accept I2P connections", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-i2pacceptincoming", strprintf("Whether to accept inbound I2P connections (default: %i). Ignored if -i2psam is not set. Listening for inbound I2P connections is done through the SAM proxy, not by binding to a local address and port.", DEFAULT_I2P_ACCEPT_INCOMING), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
@@ -1763,30 +1763,32 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     Proxy onion_proxy;
     Proxy name_proxy;
     Proxy cjdns_proxy;
-    for (const std::string& param_value : args.GetArgs("-proxy")) {
-        const auto eq_pos{param_value.rfind('=')};
-        const std::string proxy_str{param_value.substr(0, eq_pos)}; // e.g. 127.0.0.1:9050=ipv4 -> 127.0.0.1:9050
+    common::SettingsSource onion_source;
+    auto onion_arg{SettingToString(args.GetSetting("-onion", &onion_source), "")}; // "" uses -proxy, "0" disables onion connections
+
+    const auto parse_proxy{[&](const std::string& proxy_str) -> std::optional<Proxy> {
+        if (IsUnixSocketPath(proxy_str)) return Proxy{proxy_str, proxyRandomize};
+        if (auto addr{Lookup(proxy_str, DEFAULT_TOR_SOCKS_PORT, fNameLookup)}; addr && addr->IsValid()) return Proxy{*addr, proxyRandomize};
+        return std::nullopt;
+    }};
+
+    const auto apply_proxy_arg{[&](const std::string& proxy_arg, common::SettingsSource source) {
+        const auto eq_pos{proxy_arg.rfind('=')};
+        const auto proxy_str{proxy_arg.substr(0, eq_pos)}; // e.g. 127.0.0.1:9050=ipv4 -> 127.0.0.1:9050
         std::string net_str;
         if (eq_pos != std::string::npos) {
-            if (eq_pos + 1 == param_value.length()) {
-                return InitError(strprintf(_("Invalid -proxy address or hostname, ends with '=': '%s'"), param_value));
+            if (eq_pos + 1 == proxy_arg.length()) {
+                return InitError(strprintf(_("Invalid -proxy address or hostname, ends with '=': '%s'"), proxy_arg));
             }
-            net_str = ToLower(param_value.substr(eq_pos + 1)); // e.g. 127.0.0.1:9050=ipv4 -> ipv4
+            net_str = ToLower(proxy_arg.substr(eq_pos + 1)); // e.g. 127.0.0.1:9050=ipv4 -> ipv4
         }
 
         Proxy proxy;
         if (!proxy_str.empty() && proxy_str != "0") {
-            if (IsUnixSocketPath(proxy_str)) {
-                proxy = Proxy{proxy_str, /*tor_stream_isolation=*/proxyRandomize};
-            } else {
-                const std::optional<CService> addr{Lookup(proxy_str, DEFAULT_TOR_SOCKS_PORT, fNameLookup)};
-                if (!addr.has_value()) {
-                    return InitError(strprintf(_("Invalid -proxy address or hostname: '%s'"), proxy_str));
-                }
-                proxy = Proxy{addr.value(), /*tor_stream_isolation=*/proxyRandomize};
-            }
-            if (!proxy.IsValid()) {
+            if (auto parsed{parse_proxy(proxy_str)}; !parsed) {
                 return InitError(strprintf(_("Invalid -proxy address or hostname: '%s'"), proxy_str));
+            } else {
+                proxy = *parsed;
             }
         }
 
@@ -1801,7 +1803,32 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         } else if (net_str == "cjdns") {
             cjdns_proxy = proxy;
         } else {
-            return InitError(strprintf(_("Unrecognized network in -proxy='%s': '%s'"), param_value, net_str));
+            return InitError(strprintf(_("Unrecognized network in -proxy='%s': '%s'"), proxy_arg, net_str));
+        }
+        // A higher-priority -proxy for onion overrides -onion, except when disabling the general proxy
+        if (source > onion_source && ((net_str.empty() && proxy.IsValid()) || net_str == "onion")) onion_arg.clear();
+        return true;
+    }};
+
+    // Apply sources in increasing precedence so higher-priority values override lower-priority ones
+    for (const auto& [proxy_arg, source] : args.GetArgsWithSource("-proxy")) {
+        if (!apply_proxy_arg(proxy_arg, source)) return false;
+    }
+
+    const bool onlynet_used_with_onion{onlynets.size() && g_reachable_nets.Contains(NET_ONION)};
+
+    if (onion_arg.size()) {
+        if (onion_arg == "0") { // Handle -noonion/-onion=0
+            onion_proxy = Proxy{};
+            if (onlynet_used_with_onion) {
+                return InitError(
+                    _("Outbound connections restricted to Tor (-onlynet=onion) but the proxy for "
+                      "reaching the Tor network is explicitly forbidden: -onion=0"));
+            }
+        } else if (auto parsed{parse_proxy(onion_arg)}; !parsed) {
+            return InitError(strprintf(_("Invalid -onion address or hostname: '%s'"), onion_arg));
+        } else {
+            onion_proxy = *parsed;
         }
     }
     if (ipv4_proxy.IsValid()) {
@@ -1815,34 +1842,6 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     }
     if (cjdns_proxy.IsValid()) {
         SetProxy(NET_CJDNS, cjdns_proxy);
-    }
-
-    const bool onlynet_used_with_onion{!onlynets.empty() && g_reachable_nets.Contains(NET_ONION)};
-
-    // -onion can be used to set only a proxy for .onion, or override normal proxy for .onion addresses
-    // -noonion (or -onion=0) disables connecting to .onion entirely
-    // An empty string is used to not override the onion proxy (in which case it defaults to -proxy set above, or none)
-    std::string onionArg = args.GetArg("-onion", "");
-    if (onionArg != "") {
-        if (onionArg == "0") { // Handle -noonion/-onion=0
-            onion_proxy = Proxy{};
-            if (onlynet_used_with_onion) {
-                return InitError(
-                    _("Outbound connections restricted to Tor (-onlynet=onion) but the proxy for "
-                      "reaching the Tor network is explicitly forbidden: -onion=0"));
-            }
-        } else {
-            if (IsUnixSocketPath(onionArg)) {
-                onion_proxy = Proxy(onionArg, /*tor_stream_isolation=*/proxyRandomize);
-            } else {
-                const std::optional<CService> addr{Lookup(onionArg, DEFAULT_TOR_SOCKS_PORT, fNameLookup)};
-                if (!addr.has_value() || !addr->IsValid()) {
-                    return InitError(strprintf(_("Invalid -onion address or hostname: '%s'"), onionArg));
-                }
-
-                onion_proxy = Proxy(addr.value(), /*tor_stream_isolation=*/proxyRandomize);
-            }
-        }
     }
 
     const bool listenonion{args.GetBoolArg("-listenonion", DEFAULT_LISTEN_ONION)};
