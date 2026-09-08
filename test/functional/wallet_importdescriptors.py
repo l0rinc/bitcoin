@@ -79,6 +79,31 @@ class ImportDescriptorsTest(BitcoinTestFramework):
             assert_equal(result[0]['error']['code'], error_code)
             assert_equal(result[0]['error']['message'], error_message)
 
+    def test_multipath_miniscript_duplicate_keys(self):
+        self.log.info("Test multipath Miniscript duplicate keys on import and wallet reload")
+        node = self.nodes[1]
+        node.createwallet(wallet_name="miniscript_duplicates", disable_private_keys=True, blank=True)
+        wallet = node.get_wallet_rpc("miniscript_duplicates")
+        xpub = ExtendedPrivateKey.generate().pubkey().to_string()
+
+        prefixes = ["wsh(", f"tr({xpub},"]
+        for prefix in prefixes:
+            valid = f"{prefix}or_i(pk({xpub}/<0;1>),pk({xpub}/<2;3>)))"
+            self.test_importdesc({"desc": descsum_create(valid), "timestamp": "now"}, success=True, wallet=wallet)
+        stored = wallet.listdescriptors()["descriptors"]
+
+        for prefix in prefixes:
+            descriptor = f"{prefix}or_i(pk({xpub}/<0;1>),pk({xpub}/<2;1>)))"
+            error = f"or_i(pk({xpub}/1),pk({xpub}/1)) is not sane: contains duplicate public keys"
+            self.test_importdesc({"desc": descsum_create(descriptor), "timestamp": "now"},
+                                 success=True, error_code=None, error_message=error, wallet=wallet)  # TODO: Duplicate branches leave imported wallets unloadable
+        assert_equal(wallet.listdescriptors()["descriptors"] == stored, False)  # TODO: Imports must preserve a reloadable descriptor set
+
+        # Reloading re-parses every stored branch, so the stored set must survive the round trip
+        wallet.unloadwallet()
+        assert_raises_rpc_error(-4, "Unrecognized descriptor found", node.loadwallet, "miniscript_duplicates")  # TODO: Importing these descriptors makes the wallet unloadable
+        assert_raises_rpc_error(-18, "Requested wallet does not exist or is not loaded", wallet.listdescriptors)  # TODO: Imported wallets must remain accessible after reload
+
     def test_import_unused_key(self):
         self.log.info("Test import of unused(KEY)")
         self.nodes[0].createwallet(wallet_name="import_unused", blank=True)
@@ -1105,6 +1130,7 @@ class ImportDescriptorsTest(BitcoinTestFramework):
             )
 
 
+        self.test_multipath_miniscript_duplicate_keys()
         self.test_import_unused_key()
         self.test_import_unused_key_existing()
         self.test_import_unused_noprivs()

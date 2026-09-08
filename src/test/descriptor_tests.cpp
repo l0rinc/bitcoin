@@ -1317,6 +1317,12 @@ BOOST_AUTO_TEST_CASE(multipath_miniscript_duplicate_keys)
         {"or_i(pk(%xpub%/<0;1>),pk(%xpub%/<0;2>))", 0, "or_i(pk(%xpub%/0),pk(%xpub%/0))"}, // Branch 0 duplicates are still rejected
         {"or_i(pk(%xprv%/<0;1h>),pk(%xprv%/<2;3h>))", 2, ""}, // Distinct hardened paths work with private keys
         {"or_i(pk(%xpub%/<0;1h>),pk(%xpub%/<2;3h>))", 2, ""}, // Distinct hardened paths work without private keys
+        {"or_i(pk(%xpub%/<0;1;2>),pk(%xpub%/<3;4;2>))", 3, ""}, // The third branch must be checked too (TODO: Duplicate branches leave imported wallets unloadable)
+        {"or_i(pk(%xpub%/<0;1>),pk(%xpub%/1))", 2, ""}, // Duplicate checks include cloned single-path keys (TODO: Duplicate branches leave imported wallets unloadable)
+        {"or_i(pk(%xpub%/<0;1>/*),pk(%xpub%/<2;1>/*))", 2, ""}, // Wildcards do not hide later-branch duplicates (TODO: Duplicate branches leave imported wallets unloadable)
+        {"and_v(v:pk(%xpub%/5),or_i(pk(%xpub%/<0;1>),pk(%xpub%/<2;1>)))", 2, ""}, // Errors identify the nested duplicate subexpression (TODO: Duplicate branches leave imported wallets unloadable)
+        {"or_i(pk(%xprv%/<0;1h>),pk([deadbeef]%xprv%/<2;1h>))", 2, ""}, // Private derivation detects equal keys despite different origins (TODO: Duplicate branches leave imported wallets unloadable)
+        {"or_i(pk(%xpub%/<0;1h>),pk(%xpub%/<2;1h>))", 2, ""}, // Identical hardened paths are duplicates without private keys (TODO: Duplicate branches leave imported wallets unloadable)
     };
     for (auto [script, expected_size, duplicate] : test_cases) {
         for (auto* str : {&script, &duplicate}) util::ReplaceAll(*str, "%xpub%", xpub);
