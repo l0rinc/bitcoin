@@ -96,13 +96,13 @@ class ImportDescriptorsTest(BitcoinTestFramework):
             descriptor = f"{prefix}or_i(pk({xpub}/<0;1>),pk({xpub}/<2;1>)))"
             error = f"or_i(pk({xpub}/1),pk({xpub}/1)) is not sane: contains duplicate public keys"
             self.test_importdesc({"desc": descsum_create(descriptor), "timestamp": "now"},
-                                 success=True, error_code=None, error_message=error, wallet=wallet)  # TODO: Duplicate branches leave imported wallets unloadable
-        assert_equal(wallet.listdescriptors()["descriptors"] == stored, False)  # TODO: Imports must preserve a reloadable descriptor set
+                                 success=False, error_code=-5, error_message=error, wallet=wallet)
+        assert_equal(wallet.listdescriptors()["descriptors"], stored)
 
         # Reloading re-parses every stored branch, so the stored set must survive the round trip
         wallet.unloadwallet()
-        assert_raises_rpc_error(-4, "Unrecognized descriptor found", node.loadwallet, "miniscript_duplicates")  # TODO: Importing these descriptors makes the wallet unloadable
-        assert_raises_rpc_error(-18, "Requested wallet does not exist or is not loaded", wallet.listdescriptors)  # TODO: Imported wallets must remain accessible after reload
+        node.loadwallet("miniscript_duplicates")
+        assert_equal(wallet.listdescriptors()["descriptors"], stored)
 
     def test_import_unused_key(self):
         self.log.info("Test import of unused(KEY)")
