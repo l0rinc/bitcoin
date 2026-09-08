@@ -6,6 +6,7 @@
 #include <script/descriptor.h>
 #include <script/sign.h>
 #include <test/util/setup_common.h>
+#include <tinyformat.h>
 #include <util/check.h>
 #include <util/strencodings.h>
 #include <util/string.h>
@@ -1300,6 +1301,40 @@ BOOST_AUTO_TEST_CASE(descriptor_test)
     // Fuzzer crash test cases
     CheckUnparsable("pk(musig(dd}uue/00/)k(", "pk(musig(dd}uue/00/)k(", "'pk(musig(dd}uue/00/)k(' is not a valid descriptor function");
     CheckUnparsable("tr(musig(tuus(oldepk(gg)ggggfgg)<,z(((((((((((((((((((((st)", "tr(musig(tuus(oldepk(gg)ggggfgg)<,z(((((((((((((((((((((st)","tr(): Too many ')' in musig() expression");
+}
+
+BOOST_AUTO_TEST_CASE(multipath_miniscript_duplicate_keys)
+{
+    const std::string xprv{"xprv9s21ZrQH143K31xYSDQpPDxsXRTUcvj2iNHm5NUtrGiGG5e2DtALGdso3pGz6ssrdK4PFmM8NSpSBHNqPqm55Qn3LqFtT2emdEXVYsCzC2U"};
+    const std::string xpub{"xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB"};
+    const struct TestCase {
+        std::string script;
+        size_t expected_size;
+        std::string duplicate;
+    } test_cases[]{
+        {"or_i(pk(%xpub%/<0;1>),pk(%xpub%/<1;0>))", 2, ""}, // Sharing keys across branches is valid
+        {"or_i(pk(%xpub%/<0;1>),pk(%xpub%/2))", 2, ""}, // A single-path key is cloned into every branch
+        {"or_i(pk(%xpub%/<0;1>),pk(%xpub%/<0;2>))", 0, "or_i(pk(%xpub%/0),pk(%xpub%/0))"}, // Branch 0 duplicates are still rejected
+        {"or_i(pk(%xprv%/<0;1h>),pk(%xprv%/<2;3h>))", 2, ""}, // Distinct hardened paths work with private keys
+        {"or_i(pk(%xpub%/<0;1h>),pk(%xpub%/<2;3h>))", 2, ""}, // Distinct hardened paths work without private keys
+        {"or_i(pk(%xpub%/<0;1;2>),pk(%xpub%/<3;4;2>))", 0, "or_i(pk(%xpub%/2),pk(%xpub%/2))"}, // The third branch must be checked too
+        {"or_i(pk(%xpub%/<0;1>),pk(%xpub%/1))", 0, "or_i(pk(%xpub%/1),pk(%xpub%/1))"}, // Duplicate checks include cloned single-path keys
+        {"or_i(pk(%xpub%/<0;1>/*),pk(%xpub%/<2;1>/*))", 0, "or_i(pk(%xpub%/1/*),pk(%xpub%/1/*))"}, // Wildcards do not hide later-branch duplicates
+        {"and_v(v:pk(%xpub%/5),or_i(pk(%xpub%/<0;1>),pk(%xpub%/<2;1>)))", 0, "or_i(pk(%xpub%/1),pk(%xpub%/1))"}, // Errors identify the nested duplicate subexpression
+        {"or_i(pk(%xprv%/<0;1h>),pk([deadbeef]%xprv%/<2;1h>))", 0, "or_i(pk(%xpub%/1h),pk([deadbeef]%xpub%/1h))"}, // Private derivation detects equal keys despite different origins
+        {"or_i(pk(%xpub%/<0;1h>),pk(%xpub%/<2;1h>))", 0, "or_i(pk(%xpub%/1h),pk(%xpub%/1h))"}, // Identical hardened paths are duplicates without private keys
+    };
+    for (auto [script, expected_size, duplicate] : test_cases) {
+        for (auto* str : {&script, &duplicate}) util::ReplaceAll(*str, "%xpub%", xpub);
+        util::ReplaceAll(script, "%xprv%", xprv);
+        // Duplicate checking is local to each Miniscript, so Taproot leaves may share keys
+        for (auto& descriptor : {strprintf("wsh(%s)", script), strprintf("tr(%s,{%s,%s})", xpub, script, script)}) {
+            FlatSigningProvider provider;
+            std::string error;
+            BOOST_CHECK_MESSAGE(Parse(descriptor, provider, error).size() == expected_size, descriptor + ": " + error);
+            BOOST_CHECK_EQUAL(error, duplicate.empty() ? "" : strprintf("%s is not sane: contains duplicate public keys", duplicate));
+        }
+    }
 }
 
 BOOST_AUTO_TEST_CASE(descriptor_literal_null_byte)
