@@ -749,12 +749,39 @@ bool BlockManager::ReadBlockUndo(CBlockUndo& blockundo, const CBlockIndex& index
 
 bool BlockManager::FlushUndoFile(int block_file, bool finalize)
 {
-    FlatFilePos undo_pos_old(block_file, m_blockfile_info[block_file].nUndoSize);
-    if (!m_undo_file_seq.Flush(undo_pos_old, finalize)) {
-        m_opts.notifications.flushError(_("Flushing undo file to disk failed. This is likely the result of an I/O error."));
+    const FlatFilePos undo_pos_old(block_file, m_blockfile_info[block_file].nUndoSize);
+    return FlushFile(m_undo_file_seq, undo_pos_old, finalize, _("Flushing undo file to disk failed. This is likely the result of an I/O error."));
+}
+
+bool BlockManager::FlushFile(const FlatFileSeq& seq, const FlatFilePos& pos, bool finalize, util::TranslatedLiteral error)
+{
+    auto flush{[this, &seq, pos, error] {
+        const bool success{seq.Flush(pos)};
+        if (!success) m_opts.notifications.flushError(error);
+        return success;
+    }};
+    if (!finalize) return flush();
+    // Truncate synchronously because an older undo file can receive later appends
+    if (!seq.Truncate(pos)) {
+        m_opts.notifications.flushError(error);
         return false;
     }
+    // Started on first use, so block managers that never write stay single-threaded.
+    // One worker serializes the fsyncs; correctness does not depend on the count.
+    if (m_flush_pool.WorkersCount() == 0) m_flush_pool.Start(/*num_workers=*/1);
+    // The pool is private and only stopped on destruction, so queueing cannot fail here
+    m_pending_flushes.emplace_back(*Assert(m_flush_pool.Submit(flush)));
     return true;
+}
+
+bool BlockManager::WaitForPendingFlushes()
+{
+    bool success{true};
+    for (auto& flush : m_pending_flushes) {
+        if (!flush.get()) success = false;
+    }
+    m_pending_flushes.clear();
+    return success;
 }
 
 bool BlockManager::FlushBlockFile(int blockfile_num, bool fFinalize, bool finalize_undo)
@@ -771,9 +798,8 @@ bool BlockManager::FlushBlockFile(int blockfile_num, bool fFinalize, bool finali
     }
     assert(static_cast<int>(m_blockfile_info.size()) > blockfile_num);
 
-    FlatFilePos block_pos_old(blockfile_num, m_blockfile_info[blockfile_num].nSize);
-    if (!m_block_file_seq.Flush(block_pos_old, fFinalize)) {
-        m_opts.notifications.flushError(_("Flushing block file to disk failed. This is likely the result of an I/O error."));
+    const FlatFilePos block_pos_old(blockfile_num, m_blockfile_info[blockfile_num].nSize);
+    if (!FlushFile(m_block_file_seq, block_pos_old, fFinalize, _("Flushing block file to disk failed. This is likely the result of an I/O error."))) {
         success = false;
     }
     // we do not always flush the undo file, as the chain tip may be lagging behind the incoming blocks,
@@ -801,11 +827,11 @@ bool BlockManager::FlushChainstateBlockFile(int tip_height)
     // If the cursor does not exist, it means an assumeutxo snapshot is loaded,
     // but no blocks past the snapshot height have been written yet, so there
     // is no data associated with the chainstate, and it is safe not to flush.
-    if (cursor) {
-        return FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false);
-    }
     // No need to log warnings in this case.
-    return true;
+    const bool flushed{!cursor || FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false)};
+    // Waiting after the flush above lets it overlap with the queued fsyncs
+    const bool synced{WaitForPendingFlushes()};
+    return flushed && synced;
 }
 
 uint64_t BlockManager::CalculateCurrentUsage()
