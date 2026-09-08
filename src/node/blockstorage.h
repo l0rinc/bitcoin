@@ -25,13 +25,16 @@
 #include <util/fs.h>
 #include <util/hasher.h>
 #include <util/obfuscation.h>
+#include <util/threadpool.h>
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
+#include <future>
 #include <iosfwd>
 #include <limits>
 #include <map>
@@ -480,6 +483,20 @@ public:
     bool ReadBlockUndo(CBlockUndo& blockundo, const CBlockIndex& index) const;
 
     void CleanupBlockRevFiles() const;
+
+private:
+    //! Flush (fsync) a completed block file, and its undo file if that is complete too, on the flush worker.
+    void FlushBlockFileAsync(int blockfile_num, bool finalize_undo) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Flush (fsync) a completed undo file on the flush worker.
+    void FlushUndoFileAsync(int block_file) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Block until every queued asynchronous flush has completed.
+    void WaitForPendingFlushes() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Drop the futures of flushes that have already completed.
+    void PruneCompletedFlushes() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    std::deque<std::future<bool>> m_pending_flushes GUARDED_BY(::cs_main);
+    //! Declared last so it is stopped (draining queued flushes) before the file sequences go away.
+    ThreadPool m_flush_pool{"blkflush"};
 };
 
 // Calls ActivateBestChain() even if no blocks are imported.
