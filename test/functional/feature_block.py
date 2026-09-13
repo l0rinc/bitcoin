@@ -14,6 +14,7 @@ from test_framework.blocktools import (
     get_legacy_sigopcount_block,
     MAX_BLOCK_SIGOPS,
     REGTEST_N_BITS,
+    script_BIP34_coinbase_height,
 )
 from test_framework.messages import (
     CBlock,
@@ -83,7 +84,8 @@ class CBrokenBlock(CBlock):
         return super().serialize()
 
 
-DUPLICATE_COINBASE_SCRIPT_SIG = b'\x01\x78'  # Valid for block at height 120
+DUPLICATE_COINBASE_HEIGHT = 120
+DUPLICATE_COINBASE_SCRIPT_SIG = script_BIP34_coinbase_height(DUPLICATE_COINBASE_HEIGHT)
 
 
 class FullBlockTest(BitcoinTestFramework):
@@ -885,6 +887,14 @@ class FullBlockTest(BitcoinTestFramework):
         self.send_blocks([b_spend_dup_cb, b_dup_2], success=True)
         # The duplicate has less confirmations
         assert_equal(self.nodes[0].gettxout(txid=duplicate_tx.txid_hex, n=0)['confirmations'], 1)
+
+        self.log.info("Submit a genesis fork")
+        self.tip = None
+        fork_blocks = [self.next_block("fork" + str(h)) for h in range(1, DUPLICATE_COINBASE_HEIGHT + 2)]
+        self.send_blocks(fork_blocks, success=True)
+        # Invalidate the base so no equal-work fork block remains
+        node.invalidateblock(fork_blocks[0].hash_hex)
+        assert_equal(node.getbestblockhash(), b_dup_2.hash_hex)
 
         # Test tx.isFinal is properly rejected (not an exhaustive tx.isFinal test, that should be in data-driven transaction tests)
         #
