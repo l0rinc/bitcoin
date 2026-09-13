@@ -127,6 +127,11 @@ public:
         m_modified_fee = SaturatingAdd(m_modified_fee, fee_diff);
     }
 
+    void SetModifiedFee(CAmount modified_fee) const
+    {
+        m_modified_fee = modified_fee;
+    }
+
     // Update the LockPoints after a reorg
     void UpdateLockPoints(const LockPoints& lp) const
     {
