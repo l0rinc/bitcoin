@@ -39,7 +39,7 @@ static const int kL0_StopWritesTrigger = 12;
 // expensive manifest file operations.  We do not push all the way to
 // the largest level since that can generate a lot of wasted disk
 // space if the same key space is being repeatedly overwritten.
-static const int kMaxMemCompactLevel = 2;
+static const int kMaxMemCompactLevel = 5;
 
 // Approximate gap in bytes between samples of data read during iteration.
 static const int kReadBytesPeriod = 1048576;
