@@ -12,6 +12,7 @@
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <limits>
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
@@ -48,6 +49,29 @@ BOOST_AUTO_TEST_CASE(MempoolLookupTest)
 
     // Lookup by Wtxid
     BOOST_CHECK(pool.get(CTransaction(tx).GetWitnessHash()));
+}
+
+BOOST_AUTO_TEST_CASE(MempoolInfoSaturatesFeeDelta)
+{
+    auto& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry{};
+    CMutableTransaction tx{};
+    tx.vin.resize(1);
+    tx.vin[0].scriptSig = CScript{} << OP_1;
+    tx.vout.emplace_back(10 * COIN, CScript{} << OP_1 << OP_EQUAL);
+
+    constexpr CAmount base_fee{10'000};
+    constexpr auto minimum{std::numeric_limits<CAmount>::min()};
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(base_fee).FromTx(tx));
+    }
+
+    pool.PrioritiseTransaction(tx.GetHash(), minimum);
+    pool.PrioritiseTransaction(tx.GetHash(), -base_fee);
+    auto info{pool.info(tx.GetHash())}; // Without the fix, this signed subtraction traps.
+    BOOST_REQUIRE(info.tx);
+    BOOST_CHECK_EQUAL(info.nFeeDelta, minimum);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
