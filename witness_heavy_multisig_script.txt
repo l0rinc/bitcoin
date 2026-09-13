@@ -1,0 +1,170 @@
+Mempool-standard P2WSH multisig script dump
+
+Generated from contrib/devtools/witness-heavy-multisig-infographic.py.
+The functional test is test_witness_heavy_multisig_blocks() in test/functional/mining_basic.py.
+
+P2WSH CHECKMULTISIG full-block curve from the passing test run:
+  columns: multisig, witnessScript bytes, spends that fit, serialized bytes, stripped bytes, ratio, weight
+  01-of-01: script   37 B, 8,161 spends, serialized 1,697,751 B, stripped  767,361 B,  2.21x, weight 3,999,834
+  02-of-02: script   71 B, 6,698 spends, serialized 2,110,133 B, stripped  629,839 B,  3.35x, weight 3,999,650
+  03-of-03: script  105 B, 5,696 spends, serialized 2,392,583 B, stripped  535,651 B,  4.47x, weight 3,999,536
+  04-of-04: script  139 B, 4,931 spends, serialized 2,608,762 B, stripped  463,741 B,  5.63x, weight 3,999,985
+  05-of-05: script  173 B, 4,365 spends, serialized 2,767,673 B, stripped  410,537 B,  6.74x, weight 3,999,284
+  06-of-06: script  207 B, 3,909 spends, serialized 2,896,832 B, stripped  367,673 B,  7.88x, weight 3,999,851
+  07-of-07: script  241 B, 3,548 spends, serialized 2,998,323 B, stripped  333,739 B,  8.98x, weight 3,999,540
+  08-of-08: script  275 B, 3,232 spends, serialized 3,086,823 B, stripped  304,035 B, 10.15x, weight 3,998,928
+  09-of-09: script  309 B, 2,975 spends, serialized 3,159,713 B, stripped  279,877 B, 11.29x, weight 3,999,344
+  10-of-10: script  343 B, 2,752 spends, serialized 3,222,855 B, stripped  258,915 B, 12.45x, weight 3,999,600
+  11-of-11: script  377 B, 2,565 spends, serialized 3,275,768 B, stripped  241,337 B, 13.57x, weight 3,999,779
+  12-of-12: script  411 B, 2,403 spends, serialized 3,321,209 B, stripped  226,109 B, 14.69x, weight 3,999,536
+  13-of-13: script  445 B, 2,260 spends, serialized 3,360,883 B, stripped  212,667 B, 15.80x, weight 3,998,884
+  14-of-14: script  479 B, 2,127 spends, serialized 3,399,209 B, stripped  200,165 B, 16.98x, weight 3,999,704
+  15-of-15: script  513 B, 2,014 spends, serialized 3,430,105 B, stripped  189,543 B, 18.10x, weight 3,998,734
+  16-of-16: script  547 B, 1,910 spends, serialized 3,459,273 B, stripped  179,767 B, 19.24x, weight 3,998,574
+  17-of-17: script  583 B, 1,822 spends, serialized 3,483,927 B, stripped  171,495 B, 20.32x, weight 3,998,412
+  18-of-18: script  617 B, 1,734 spends, serialized 3,508,145 B, stripped  163,223 B, 21.49x, weight 3,997,814
+  19-of-19: script  651 B, 1,655 spends, serialized 3,530,378 B, stripped  155,797 B, 22.66x, weight 3,997,769
+  20-of-20: script  685 B, 1,587 spends, serialized 3,550,382 B, stripped  149,405 B, 23.76x, weight 3,998,597
+
+P2WSH OP_CHECKMULTISIG is capped at 20 public keys by MAX_PUBKEYS_PER_MULTISIG.
+This file is intentionally SegWit v0/P2WSH-only.
+
+Every measured spend has this shape:
+  stripped/base tx data: one input spending a previous P2WSH deposit, one standard recipient output
+  witness data: empty CHECKMULTISIG dummy item, k ECDSA signatures, witnessScript
+  previous deposit scriptPubKey: OP_0 HASH256(witnessScript), serialized as 34 bytes
+
+Case: small 2-of-2
+  script: 2-of-2 P2WSH multisig
+  witnessScript size: 71 bytes
+  P2WSH scriptPubKey hex: 00209b984c7bae3efddc3a3f0a20ff81bfe89ed1fe07ff13e562149ee654bed845db
+  mempool block spends: 6,698
+  accepted serialized size: 2,110,106 bytes
+  stripped/base size: 629,839 bytes
+  block weight: 3,999,623 / 4,000,000
+  serialized/stripped ratio: 3.35x
+  boundary check: adding one more standard spend failed block validation with bad-blk-weight
+
+  compressed public keys:
+    pubkey_01: 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+    pubkey_02: 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+
+  witnessScript ASM:
+    2
+    PUSHDATA33 pubkey_01 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+    PUSHDATA33 pubkey_02 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+    2
+    OP_CHECKMULTISIG
+
+  witnessScript hex:
+    52210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f817982102c6047f9441ed7d6d304540
+    6e95c07cd85c778e4b8cef3ca7abac09b95c709ee552ae
+
+Case: small 3-of-5
+  script: 3-of-5 P2WSH multisig
+  witnessScript size: 173 bytes
+  P2WSH scriptPubKey hex: 00207f8c0406297b7641a90683c41a58b7a3a46a1025db0889a88e471c89cfd102cd
+  mempool block spends: 5,183
+  accepted serialized size: 2,537,320 bytes
+  stripped/base size: 487,429 bytes
+  block weight: 3,999,607 / 4,000,000
+  serialized/stripped ratio: 5.21x
+  boundary check: adding one more standard spend failed block validation with bad-blk-weight
+
+  compressed public keys:
+    pubkey_01: 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+    pubkey_02: 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+    pubkey_03: 02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9
+    pubkey_04: 02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13
+    pubkey_05: 022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4
+
+  witnessScript ASM:
+    3
+    PUSHDATA33 pubkey_01 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+    PUSHDATA33 pubkey_02 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+    PUSHDATA33 pubkey_03 02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9
+    PUSHDATA33 pubkey_04 02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13
+    PUSHDATA33 pubkey_05 022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4
+    5
+    OP_CHECKMULTISIG
+
+  witnessScript hex:
+    53210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f817982102c6047f9441ed7d6d304540
+    6e95c07cd85c778e4b8cef3ca7abac09b95c709ee52102f9308a019258c31049344f85f89d5229b531c845836f99b086
+    01f113bce036f92102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1321022f8bde4d1a
+    07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe455ae
+
+Case: custody 20-of-20
+  script: 20-of-20 P2WSH multisig
+  witnessScript size: 685 bytes
+  P2WSH scriptPubKey hex: 00205e396e66e050f50cb1434ab5bfcdb0194eb586e159e6c8bf3226c046407e76b0
+  mempool block spends: 1,588
+  accepted serialized size: 3,550,994 bytes
+  stripped/base size: 149,499 bytes
+  block weight: 3,999,491 / 4,000,000
+  serialized/stripped ratio: 23.75x
+  boundary check: adding one more standard spend failed block validation with bad-blk-weight
+
+  compressed public keys:
+    pubkey_01: 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+    pubkey_02: 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+    pubkey_03: 02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9
+    pubkey_04: 02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13
+    pubkey_05: 022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4
+    pubkey_06: 03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556
+    pubkey_07: 025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc
+    pubkey_08: 022f01e5e15cca351daff3843fb70f3c2f0a1bdd05e5af888a67784ef3e10a2a01
+    pubkey_09: 03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe
+    pubkey_10: 03a0434d9e47f3c86235477c7b1ae6ae5d3442d49b1943c2b752a68e2a47e247c7
+    pubkey_11: 03774ae7f858a9411e5ef4246b70c65aac5649980be5c17891bbec17895da008cb
+    pubkey_12: 03d01115d548e7561b15c38f004d734633687cf4419620095bc5b0f47070afe85a
+    pubkey_13: 03f28773c2d975288bc7d1d205c3748651b075fbc6610e58cddeeddf8f19405aa8
+    pubkey_14: 03499fdf9e895e719cfd64e67f07d38e3226aa7b63678949e6e49b241a60e823e4
+    pubkey_15: 02d7924d4f7d43ea965a465ae3095ff41131e5946f3c85f79e44adbcf8e27e080e
+    pubkey_16: 03e60fce93b59e9ec53011aabc21c23e97b2a31369b87a5ae9c44ee89e2a6dec0a
+    pubkey_17: 03defdea4cdb677750a420fee807eacf21eb9898ae79b9768766e4faa04a2d4a34
+    pubkey_18: 025601570cb47f238d2b0286db4a990fa0f3ba28d1a319f5e7cf55c2a2444da7cc
+    pubkey_19: 022b4ea0a797a443d293ef5cff444f4979f06acfebd7e86d277475656138385b6c
+    pubkey_20: 024ce119c96e2fa357200b559b2f7dd5a5f02d5290aff74b03f3e471b273211c97
+
+  witnessScript ASM:
+    20
+    PUSHDATA33 pubkey_01 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+    PUSHDATA33 pubkey_02 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+    PUSHDATA33 pubkey_03 02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9
+    PUSHDATA33 pubkey_04 02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13
+    PUSHDATA33 pubkey_05 022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4
+    PUSHDATA33 pubkey_06 03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556
+    PUSHDATA33 pubkey_07 025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc
+    PUSHDATA33 pubkey_08 022f01e5e15cca351daff3843fb70f3c2f0a1bdd05e5af888a67784ef3e10a2a01
+    PUSHDATA33 pubkey_09 03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe
+    PUSHDATA33 pubkey_10 03a0434d9e47f3c86235477c7b1ae6ae5d3442d49b1943c2b752a68e2a47e247c7
+    PUSHDATA33 pubkey_11 03774ae7f858a9411e5ef4246b70c65aac5649980be5c17891bbec17895da008cb
+    PUSHDATA33 pubkey_12 03d01115d548e7561b15c38f004d734633687cf4419620095bc5b0f47070afe85a
+    PUSHDATA33 pubkey_13 03f28773c2d975288bc7d1d205c3748651b075fbc6610e58cddeeddf8f19405aa8
+    PUSHDATA33 pubkey_14 03499fdf9e895e719cfd64e67f07d38e3226aa7b63678949e6e49b241a60e823e4
+    PUSHDATA33 pubkey_15 02d7924d4f7d43ea965a465ae3095ff41131e5946f3c85f79e44adbcf8e27e080e
+    PUSHDATA33 pubkey_16 03e60fce93b59e9ec53011aabc21c23e97b2a31369b87a5ae9c44ee89e2a6dec0a
+    PUSHDATA33 pubkey_17 03defdea4cdb677750a420fee807eacf21eb9898ae79b9768766e4faa04a2d4a34
+    PUSHDATA33 pubkey_18 025601570cb47f238d2b0286db4a990fa0f3ba28d1a319f5e7cf55c2a2444da7cc
+    PUSHDATA33 pubkey_19 022b4ea0a797a443d293ef5cff444f4979f06acfebd7e86d277475656138385b6c
+    PUSHDATA33 pubkey_20 024ce119c96e2fa357200b559b2f7dd5a5f02d5290aff74b03f3e471b273211c97
+    20
+    OP_CHECKMULTISIG
+
+  witnessScript hex:
+    0114210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f817982102c6047f9441ed7d6d3045
+    406e95c07cd85c778e4b8cef3ca7abac09b95c709ee52102f9308a019258c31049344f85f89d5229b531c845836f99b0
+    8601f113bce036f92102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1321022f8bde4d
+    1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe42103fff97bd5755eeea420453a14355235d382f6
+    472f8568a18b2f057a146029755621025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc
+    21022f01e5e15cca351daff3843fb70f3c2f0a1bdd05e5af888a67784ef3e10a2a012103acd484e2f0c7f65309ad178a
+    9f559abde09796974c57e714c35f110dfc27ccbe2103a0434d9e47f3c86235477c7b1ae6ae5d3442d49b1943c2b752a6
+    8e2a47e247c72103774ae7f858a9411e5ef4246b70c65aac5649980be5c17891bbec17895da008cb2103d01115d548e7
+    561b15c38f004d734633687cf4419620095bc5b0f47070afe85a2103f28773c2d975288bc7d1d205c3748651b075fbc6
+    610e58cddeeddf8f19405aa82103499fdf9e895e719cfd64e67f07d38e3226aa7b63678949e6e49b241a60e823e42102
+    d7924d4f7d43ea965a465ae3095ff41131e5946f3c85f79e44adbcf8e27e080e2103e60fce93b59e9ec53011aabc21c2
+    3e97b2a31369b87a5ae9c44ee89e2a6dec0a2103defdea4cdb677750a420fee807eacf21eb9898ae79b9768766e4faa0
+    4a2d4a3421025601570cb47f238d2b0286db4a990fa0f3ba28d1a319f5e7cf55c2a2444da7cc21022b4ea0a797a443d2
+    93ef5cff444f4979f06acfebd7e86d277475656138385b6c21024ce119c96e2fa357200b559b2f7dd5a5f02d5290aff7
+    4b03f3e471b273211c970114ae
