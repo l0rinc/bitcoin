@@ -592,10 +592,8 @@ class EstimateFeeTest(BitcoinTestFramework):
         self.connect_nodes(0, 1)
         self.sync_blocks([node0, miner], wait=0.1)
         assert node0.getblockchaininfo()["initialblockdownload"]
-        mempool_info = node0.getmempoolinfo()
-        assert_equal(mempool_info["size"], 0)
-        floor = max(mempool_info["minrelaytxfee"], mempool_info["mempoolminfee"])
-        verify_estimate_response(node0.estimatesmartfee(1, "economical", {"fee_rate_estimator": "mempool_policy"}), floor, [])  # TODO: blocks connected during IBD never reach the mempool estimator, so its restored window cannot vouch for this drained mempool
+        assert_equal(node0.getmempoolinfo()["size"], 0)
+        verify_estimate_response(node0.estimatesmartfee(1, "economical", {"fee_rate_estimator": "mempool_policy"}), None, ["mempool_policy: Not enough recent block data for fee rate estimation"])
         self.restart_node(0)
 
     def test_stale_mempool_block_stats_are_rejected_on_load(self):
