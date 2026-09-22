@@ -45,7 +45,11 @@ class WalletFallbackFeeTest(BitcoinTestFramework):
         # By default, the test framework sets a fallback fee for nodes,
         # in order to test default behavior, comment this line out.
         node.replace_in_config([("fallbackfee=", "#fallbackfee=")])
-        self.restart_node(0)
+
+        # Drop saved mempool stats so neither estimator can answer.
+        self.stop_node(0)
+        (node.chain_path / "fees/mempool_policy_estimator.dat").unlink()
+        self.start_node(0)
 
         # Sending a transaction with no -fallbackfee setting fails, since the
         # default value is 0.

@@ -536,10 +536,8 @@ def test_dust_to_fee(self, rbf_node, dest_address):
 
 def test_maxtxfee_fails(self, rbf_node, dest_address):
     self.log.info('Test that bumpfee fails when it hits -maxtxfee')
-    # size of bumped transaction (p2wpkh, 1 input, 2 outputs): 141 vbytes
-    # expected bump fee of 141 vbytes * 0.00200000 BTC / 1000 vbytes = 0.00002820 BTC
-    # which exceeds maxtxfee and is expected to raise
-    self.restart_node(1, ['-maxtxfee=0.000025'] + self.extra_args[1])
+    # The bumped fee exceeds this limit with either automatic estimate.
+    self.restart_node(1, ['-maxtxfee=0.000015'] + self.extra_args[1])
     rbf_node.walletpassphrase(WALLET_PASSPHRASE, WALLET_PASSPHRASE_TIMEOUT)
     rbfid = spend_one_input(rbf_node, dest_address)
     assert_raises_rpc_error(-4, "Unable to create transaction. Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)", rbf_node.bumpfee, rbfid)
@@ -724,7 +722,7 @@ def test_bumpfee_metadata(self, rbf_node, dest_address):
     self.log.info('Test that bumped txn metadata persists to new txn record')
     assert rbf_node.getbalance() < 49
     self.generatetoaddress(rbf_node, 101, rbf_node.getnewaddress())
-    rbfid = rbf_node.sendtoaddress(dest_address, 49, "comment value", "to value")
+    rbfid = rbf_node.sendtoaddress(dest_address, 49, "comment value", "to value", fee_rate=NORMAL)
     bumped_tx = rbf_node.bumpfee(rbfid)
     bumped_wtx = rbf_node.gettransaction(bumped_tx["txid"])
     assert_equal(bumped_wtx["comment"], "comment value")
@@ -778,7 +776,7 @@ def test_no_more_inputs_fails(self, rbf_node, dest_address):
     self.generatetoaddress(rbf_node, 1, dest_address)
     # spend all funds, no change output
     rbfid = rbf_node.sendall(recipients=[rbf_node.getnewaddress()])['txid']
-    assert_raises_rpc_error(-4, "Unable to create transaction. The total exceeds your balance when the 0.00001051 transaction fee is included.", rbf_node.bumpfee, rbfid)
+    assert_raises_rpc_error(-4, "Unable to create transaction. The total exceeds your balance when", rbf_node.bumpfee, rbfid)
     self.clear_mempool()
 
 
