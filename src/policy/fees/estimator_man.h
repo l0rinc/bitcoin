@@ -47,6 +47,8 @@ public:
 
     /**
      * @brief Get a fee rate estimate from the available fee rate estimators.
+     * Returns the lower estimate when both succeed, or the mempool estimate when block policy
+     * has no result. If mempool estimation fails, returns an error even if block policy succeeds.
      * @param[in] target The target within which the transaction should be confirmed.
      * @param[in] conservative Whether to select a more conservative, potentially higher, fee rate estimate.
      * @return fee rate estimation, or an error on failure.

@@ -27,16 +27,16 @@ util::Expected<FeeRateEstimation, FeeRateEstimationError> FeeRateEstimatorManage
     auto block_policy_estimate = m_block_policy_estimator->EstimateFeeRate(target, conservative);
     if (!block_policy_estimate) {
         LogDebug(BCLog::ESTIMATEFEE, "%s", block_policy_estimate.error().reason);
-        return block_policy_estimate;
     }
     auto mempool_estimate = m_mempool_estimator->EstimateFeeRate(conservative);
     if (!mempool_estimate) {
         // A failed mempool estimate is surfaced as a warning rather than silently returning the
         // block policy estimate, which callers can still request explicitly.
         LogDebug(BCLog::ESTIMATEFEE, "%s", mempool_estimate.error().reason);
+        if (!block_policy_estimate) return block_policy_estimate;
         return mempool_estimate;
     }
-    auto selected_estimate = std::min(*block_policy_estimate, *mempool_estimate);
+    auto selected_estimate{block_policy_estimate ? std::min(*block_policy_estimate, *mempool_estimate) : *mempool_estimate};
     LogDebug(BCLog::ESTIMATEFEE, "Fee rate estimated using %s: target=%s feerate=%s %s/kvB.",
              FeeRateEstimatorTypeToString(selected_estimate.feerate_estimator),
              selected_estimate.returned_target, CFeeRate(selected_estimate.feerate).GetFeePerK(), CURRENCY_ATOM);
