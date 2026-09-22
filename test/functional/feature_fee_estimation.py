@@ -512,10 +512,15 @@ class EstimateFeeTest(BitcoinTestFramework):
         node0 = self.nodes[0]
         miner = self.nodes[1]
         self.log.info("Ensure node0's mempool is empty at the start")
-        assert_equal(node0.getmempoolinfo()['size'], 0)
+        mempool_info = node0.getmempoolinfo()
+        assert_equal(mempool_info['size'], 0)
         self.log.info("Test estimatesmartfee with empty mempool and no block policy estimator data")
+        # The healthy empty mempool estimator supplies the relay floor.
+        floor = max(mempool_info["minrelaytxfee"], mempool_info["mempoolminfee"])
+        verify_estimate_response(node0.estimatesmartfee(1, "economical", {"fee_rate_estimator": "mempool_policy"}), floor, [])
         estimate_after_restart = node0.estimatesmartfee(1, "economical", {"fee_rate_estimator": "none"})
-        verify_estimate_response(estimate_after_restart, None, [BLOCK_POLICY_ESTIMATOR_ERROR])
+        verify_estimate_response(estimate_after_restart, None, [BLOCK_POLICY_ESTIMATOR_ERROR])  # TODO: use the available mempool estimate
+        assert_equal(estimate_after_restart.get("estimator"), None)
         self.log.info("Populate block policy estimator with high-feerate history")
         # Generate high-feerate transactions and mine them over 6 blocks to give block policy data.
         high_feerate = Decimal("0.004")
