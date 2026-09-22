@@ -5,9 +5,11 @@
 #include <wallet/scan.h>
 #include <wallet/wallet.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <future>
 #include <limits>
 #include <memory>
@@ -30,11 +32,13 @@
 #include <rpc/server.h>
 #include <script/descriptor.h>
 #include <script/solver.h>
+#include <streams.h>
 #include <test/util/common.h>
 #include <test/util/logging.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <util/byte_units.h>
+#include <util/fs.h>
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
@@ -43,8 +47,10 @@
 #include <wallet/imports.h>
 #include <wallet/receive.h>
 #include <wallet/spend.h>
+#include <wallet/sqlite.h>
 #include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
+#include <wallet/walletdb.h>
 
 #include <boost/test/unit_test.hpp>
 #include <univalue.h>
@@ -1055,7 +1061,7 @@ BOOST_FIXTURE_TEST_CASE(wallet_descriptor_test, BasicTestingSetup)
 //! the mempool or a new block.
 //!
 //! It isn't possible to verify there aren't race condition in every case, so
-//! this test just checks two specific cases and ensures that timing of
+//! this test just checks three specific cases and ensures that timing of
 //! notifications in these cases doesn't prevent the wallet from detecting
 //! transactions.
 //!
@@ -1068,6 +1074,9 @@ BOOST_FIXTURE_TEST_CASE(wallet_descriptor_test, BasicTestingSetup)
 //! wallet rescan and notifications are immediately synced, to verify the wallet
 //! must already have a handler in place for them, and there's no gap after
 //! rescanning where new transactions in new blocks could be lost.
+//!
+//! In the third case, the wallet's saved tip is reconnected after loading transaction records and before registering chain notifications.
+//! The transaction must remain confirmed even though the wallet receives no notification for that block.
 BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
 {
     m_args.ForceSetArg("-unsafesqlitesync", "1");
@@ -1165,6 +1174,50 @@ BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
     }
 
 
+    const auto wallet_file{fs::PathFromString(wallet->GetDatabase().Filename())};
+    TestUnloadWallet(std::move(wallet));
+    handler.reset();
+
+    // Reconnect the saved tip after loading transaction records, before registering chain notifications
+    struct ReconnectBatch : SQLiteBatch {
+        std::function<void()>& reconnect;
+        ReconnectBatch(SQLiteDatabase& database, std::function<void()>& callback) : SQLiteBatch(database), reconnect(callback) {}
+
+        bool ReadKey(DataStream&& key, DataStream& value) override
+        {
+            if (reconnect && std::ranges::equal(key, DataStream{} << DBKeys::BESTBLOCK)) std::exchange(reconnect, {})();
+            return SQLiteBatch::ReadKey(std::move(key), value);
+        }
+    };
+
+    struct ReconnectDatabase : SQLiteDatabase {
+        std::function<void()> reconnect;
+        ReconnectDatabase(const fs::path& path, std::function<void()> callback)
+            : SQLiteDatabase(path.parent_path(), path, DatabaseOptions{.require_format = {}, .create_passphrase = {}, .use_unsafe_sync = true}), reconnect(std::move(callback)) {}
+
+        std::unique_ptr<DatabaseBatch> MakeBatch() override { return std::make_unique<ReconnectBatch>(*this, reconnect); }
+    };
+
+    auto& chainstate{m_node.chainman->ActiveChainstate()};
+    auto* tip{WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip())};
+    BlockValidationState state;
+    BOOST_REQUIRE(chainstate.InvalidateBlock(state, tip));
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    BOOST_REQUIRE_EQUAL(*Assert(m_node.chain->getHeight()), tip->nHeight - 1);
+
+    wallet = TestLoadWallet(std::make_unique<ReconnectDatabase>(wallet_file, [&] {
+        WITH_LOCK(cs_main, chainstate.ResetBlockFailureFlags(tip); m_node.chainman->RecalculateBestHeader());
+        BOOST_REQUIRE(chainstate.ActivateBestChain(state));
+        m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    }), context);
+    BOOST_REQUIRE_EQUAL(*Assert(m_node.chain->getHeight()), tip->nHeight);
+    BOOST_REQUIRE_EQUAL(m_node.chain->getBlockHash(tip->nHeight), tip->GetBlockHash());
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_CHECK_EQUAL(wallet->GetLastBlockHash(), tip->GetBlockHash());
+        BOOST_CHECK_EQUAL(wallet->GetTxDepthInMainChain(wallet->mapWallet.at(block_tx.GetHash())), 1);
+        BOOST_CHECK_EQUAL(wallet->TransactionCanBeAbandoned(block_tx.GetHash()), false);
+    }
     TestUnloadWallet(std::move(wallet));
 }
 
