@@ -26,6 +26,7 @@ namespace node {
 class BlockFetcher
 {
     using ReadBlockFn = std::function<bool(CBlock&, const FlatFilePos&, const uint256&)>;
+    using ReadTask = std::function<std::shared_ptr<const CBlock>()>;
 
     const ReadBlockFn m_read_block;
     const int32_t m_thread_count;
@@ -34,6 +35,8 @@ class BlockFetcher
 
 public:
     BlockFetcher(ReadBlockFn read_block, int32_t thread_count);
+
+    int32_t WindowSize() const;
 
     //! Discard retained results without cancelling submitted reads
     void Clear() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
