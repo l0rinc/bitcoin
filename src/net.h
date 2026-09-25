@@ -32,12 +32,14 @@
 #include <util/check.h>
 #include <util/sock.h>
 #include <util/threadinterrupt.h>
+#include <util/threadpool.h>
 
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <future>
 #include <list>
 #include <map>
 #include <memory>
@@ -52,6 +54,7 @@ class AddrMan;
 class BanMan;
 class CChainParams;
 class CNode;
+class CBlock;
 class CScheduler;
 struct bilingual_str;
 
@@ -98,6 +101,8 @@ inline constexpr bool DEFAULT_FORCEDNSSEED{false};
 inline constexpr bool DEFAULT_DNSSEED{true};
 inline constexpr bool DEFAULT_FIXEDSEEDS{true};
 inline constexpr size_t DEFAULT_MAXRECEIVEBUFFER = 5 * 1000;
+/** Default number of worker threads that deserialize received blocks (0 = inline on the message handler thread) */
+inline constexpr int DEFAULT_BLOCKDESER_THREADS{2};
 inline constexpr size_t DEFAULT_MAXSENDBUFFER    = 1 * 1000;
 
 inline constexpr bool DEFAULT_V2_TRANSPORT{true};
@@ -244,6 +249,11 @@ public:
     uint32_t m_message_size{0};          //!< size of the payload
     uint32_t m_raw_message_size{0};      //!< used wire size of the message (including header/checksum)
     std::string m_type;
+    //! For "block" messages handed to a worker thread: the deserialized and
+    //! pre-checked block. m_recv is empty in that case.
+    std::future<std::shared_ptr<CBlock>> m_block;
+    //! Payload bytes handed to the worker, still counted towards the receive flood limit.
+    size_t m_deser_payload_size{0};
 
     explicit CNetMessage(DataStream&& recv_in) : m_recv(std::move(recv_in)) {}
     // Only one CNetMessage object will exist for the same message on either
@@ -676,6 +686,8 @@ struct CNodeOptions
     bool prefer_evict = false;
     size_t recv_flood_size{DEFAULT_MAXRECEIVEBUFFER * 1000};
     bool use_v2transport = false;
+    //! Worker pool that deserializes "block" messages as they arrive (nullptr: deserialize inline).
+    ThreadPool* block_deser_pool{nullptr};
 };
 
 /** Information about a peer */
@@ -1008,6 +1020,7 @@ private:
     std::atomic<int> m_greatest_common_version{INIT_PROTO_VERSION};
 
     const size_t m_recv_flood_size;
+    ThreadPool* const m_block_deser_pool;
     std::list<CNetMessage> vRecvMsg; // Used only by SocketHandler thread
 
     Mutex m_msg_process_queue_mutex;
@@ -1778,6 +1791,8 @@ private:
     std::thread threadMessageHandler;
     std::thread threadI2PAcceptIncoming;
     std::thread threadPrivateBroadcast;
+    //! Deserializes and pre-checks received blocks off the message handler thread.
+    ThreadPool m_block_deser_pool{"blockdeser"};
 
     /** flag for deciding to connect to an extra outbound peer,
      *  in excess of m_max_outbound_full_relay
