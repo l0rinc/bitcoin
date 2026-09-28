@@ -17,6 +17,7 @@
 #include <boost/test/unit_test.hpp>
 #include <test/util/common.h>
 #include <test/util/logging.h>
+#include <test/util/mining.h>
 #include <test/util/setup_common.h>
 
 #include <stdexcept>
@@ -61,6 +62,58 @@ BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
     // add another 8 bytes for the second block's serialization header and we get 293 + 8 = 301
     FlatFilePos actual{blockman.WriteBlock(params->GenesisBlock(), 1)};
     BOOST_CHECK_EQUAL(actual.nPos, STORAGE_HEADER_BYTES + ::GetSerializeSize(TX_WITH_WITNESS(params->GenesisBlock())) + STORAGE_HEADER_BYTES);
+}
+
+BOOST_AUTO_TEST_CASE(blockmanager_load_missing_block_data)
+{
+    // A node can stop after saving metadata for a block whose body exists only in memory.
+    // Reload must preserve connected history and allow lost, unconnected bodies to be downloaded again.
+    const auto params{CreateChainParams(ArgsManager{}, ChainType::REGTEST)};
+    KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
+    const BlockManager::Options opts{
+        .chainparams = *params,
+        .prune_target = BlockManager::PRUNE_TARGET_MANUAL,
+        .blocks_dir = m_args.GetBlocksDirPath(),
+        .notifications = notifications,
+        .block_tree_db_params = {.path = m_args.GetDataDirNet() / "blocks" / "index", .cache_bytes = 0, .memory_only = true},
+    };
+    BlockManager blockman{*Assert(m_node.shutdown_signal), opts};
+    const auto blocks{CreateBlockChain(/*total_height=*/3, *params)};
+    LOCK(cs_main);
+    CBlockIndex* best_header{nullptr};
+    CBlockIndex* genesis{blockman.AddToBlockIndex(params->GenesisBlock(), best_header)};
+    genesis->nStatus = BLOCK_VALID_TRANSACTIONS; // Genesis keeps its transaction metadata even without a stored body
+    genesis->nTx = 1;
+
+    CBlockIndex* connected{blockman.AddToBlockIndex(*blocks[0], best_header)};
+    connected->nStatus = BLOCK_VALID_SCRIPTS | BLOCK_OPT_WITNESS; // Connected history survives without its block body
+    connected->nTx = 1;
+
+    CBlockIndex* invalidated{blockman.AddToBlockIndex(*blocks[1], best_header)};
+    invalidated->nStatus = BLOCK_VALID_SCRIPTS | BLOCK_FAILED_VALID; // Invalidation does not erase completed connection metadata
+    invalidated->nTx = 1;
+
+    CBlockIndex* unconnected{blockman.AddToBlockIndex(*blocks[2], best_header)};
+    unconnected->nStatus = BLOCK_VALID_TRANSACTIONS; // Lost before connection, so it needs a new download
+    unconnected->nTx = 1;
+
+    // Record pruned history when flushing the block index
+    blockman.m_have_pruned = true;
+    // AddToBlockIndex() marked every entry dirty, so this writes the same batch the node would
+    blockman.WriteBlockIndexDB();
+    bool pruned{false};
+    BOOST_CHECK(!blockman.m_block_tree_db->ReadFlag("prunedblockfiles", pruned)); // TODO: Flushing the index must persist that block history is missing
+    BOOST_CHECK(!pruned); // TODO: The persisted flag must record the pruned state
+    BOOST_REQUIRE(blockman.LoadBlockIndexDB(std::nullopt));
+
+    BOOST_CHECK_EQUAL(genesis->nStatus, BLOCK_VALID_TRANSACTIONS);
+    BOOST_CHECK_EQUAL(genesis->nTx, 1);
+    BOOST_CHECK_EQUAL(connected->nStatus, BLOCK_VALID_SCRIPTS | BLOCK_OPT_WITNESS);
+    BOOST_CHECK_EQUAL(connected->nTx, 1);
+    BOOST_CHECK_EQUAL(invalidated->nStatus, BLOCK_VALID_SCRIPTS | BLOCK_FAILED_VALID);
+    BOOST_CHECK_EQUAL(invalidated->nTx, 1);
+    BOOST_CHECK_EQUAL(unconnected->nStatus, BLOCK_VALID_TRANSACTIONS | BLOCK_FAILED_VALID); // TODO: A lost unconnected body must return to header validity before redownload
+    BOOST_CHECK_EQUAL(unconnected->nTx, 1); // TODO: A lost unconnected body must not retain a received transaction count
 }
 
 BOOST_FIXTURE_TEST_CASE(blockmanager_scan_unlink_already_pruned_files, TestChain100Setup)
