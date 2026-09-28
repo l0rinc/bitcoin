@@ -17,6 +17,7 @@
 #include <serialize.h>
 #include <streams.h>
 #include <util/chaintype.h>
+#include <util/expected.h>
 #include <util/strencodings.h>
 #include <validation.h>
 
@@ -266,11 +267,14 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_without_witness, RegTestingSetup)
             CBlock block;
             BOOST_CHECK(!blockman.ReadBlock(block, pos, hash));
         }
+        ASSERT_DEBUG_LOG(error);
+        BOOST_CHECK(!blockman.ReadBlockWithoutWitness(pos, hash));
     }};
     for (const auto* index : {m_node.chainman->ActiveChain()[0], m_node.chainman->ActiveTip()}) {
         CBlock block;
         BOOST_REQUIRE(blockman.ReadBlock(block, *index));
         BOOST_CHECK_EQUAL(block.vtx[0]->HasWitness(), index->nHeight != 0);
+        BOOST_CHECK(*Assert(blockman.ReadBlockWithoutWitness(index->GetBlockPos(), index->GetBlockHash())) == SerializeBlock(block, false));
         check_read_fails(index->GetBlockPos(), uint256::ONE, "GetHash() doesn't match index");
     }
     check_read_fails(FlatFilePos{}, uint256::ZERO, "while reading raw block storage header");

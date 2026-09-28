@@ -474,6 +474,10 @@ public:
     bool ReadBlock(CBlock& block, const FlatFilePos& pos, const std::optional<uint256>& expected_hash) const;
     bool ReadBlock(CBlock& block, const CBlockIndex& index) const;
     ReadRawBlockResult ReadRawBlock(const FlatFilePos& pos, std::optional<std::pair<size_t, size_t>> block_part = std::nullopt) const;
+    //! Like ReadBlock, but return the non-witness serialization without decoding transactions.
+    //! Omits ReadBlock's Signet solution check, so Signet callers must use ReadBlock.
+    //! Temporary serving payload. Must not be stored as block data.
+    ReadRawBlockResult ReadBlockWithoutWitness(const FlatFilePos& pos, const uint256& expected_hash) const;
 
     bool ReadBlockUndo(CBlockUndo& blockundo, const CBlockIndex& index) const;
 
