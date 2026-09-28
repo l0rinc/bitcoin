@@ -632,6 +632,14 @@ void BlockManager::ScanAndUnlinkAlreadyPrunedFiles()
     UnlinkPrunedFiles(block_files_to_prune);
 }
 
+void BlockManager::SetHavePruned()
+{
+    AssertLockHeld(::cs_main);
+    if (m_have_pruned) return;
+    m_block_tree_db->WriteFlag("prunedblockfiles", true);
+    m_have_pruned = true;
+}
+
 bool BlockManager::IsBlockPruned(const CBlockIndex& block) const
 {
     AssertLockHeld(::cs_main);
