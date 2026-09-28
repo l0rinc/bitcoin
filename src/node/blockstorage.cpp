@@ -549,6 +549,8 @@ void BlockManager::WriteBlockIndexDB()
         m_dirty_blockindex.erase(it++);
     }
     int max_blockfile{this->MaxBlockfileNum()};
+    // Synced by the batch before files are unlinked or coins refer to omitted blocks
+    if (m_have_pruned) m_block_tree_db->WriteFlag("prunedblockfiles", true);
     m_block_tree_db->WriteBatchSync(vFiles, max_blockfile, vBlocks);
 }
 
