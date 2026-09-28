@@ -47,9 +47,7 @@ static std::vector<std::byte> WithoutWitness(const CBlock& block)
 
 static BlockManager::ReadRawBlockResult ReadWithoutWitness(const BlockManager& blockman, const FlatFilePos& pos, const uint256& hash)
 {
-    CBlock block;
-    if (!blockman.ReadBlock(block, pos, hash)) return util::Unexpected{node::ReadRawError::IO};
-    return WithoutWitness(block);
+    return blockman.ReadBlockWithoutWitness(pos, hash);
 }
 
 BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
