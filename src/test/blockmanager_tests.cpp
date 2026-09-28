@@ -98,8 +98,8 @@ BOOST_AUTO_TEST_CASE(blockmanager_load_missing_block_data)
     BOOST_CHECK_EQUAL(genesis->nTx, 1);
     BOOST_CHECK_EQUAL(connected->nStatus, BLOCK_VALID_SCRIPTS | BLOCK_OPT_WITNESS);
     BOOST_CHECK_EQUAL(connected->nTx, 1);
-    BOOST_CHECK_EQUAL(unconnected->nStatus, BLOCK_VALID_TRANSACTIONS); // TODO: A lost unconnected body must return to header validity before redownload
-    BOOST_CHECK_EQUAL(unconnected->nTx, 1); // TODO: A lost unconnected body must not retain a received transaction count
+    BOOST_CHECK_EQUAL(unconnected->nStatus, BLOCK_VALID_TREE);
+    BOOST_CHECK_EQUAL(unconnected->nTx, 0);
 }
 
 BOOST_FIXTURE_TEST_CASE(blockmanager_scan_unlink_already_pruned_files, TestChain100Setup)
