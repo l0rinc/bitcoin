@@ -480,6 +480,11 @@ public:
     void CleanupBlockRevFiles() const;
 };
 
+/** Return the non-witness serialization of a serialized block, excluding trailing bytes.
+ * Throws std::ios_base::failure on invalid encoding.
+ */
+[[nodiscard]] std::vector<std::byte> StripBlockWitness(std::span<const std::byte> data);
+
 // Calls ActivateBestChain() even if no blocks are imported.
 void ImportBlocks(ChainstateManager& chainman, std::span<const fs::path> import_paths);
 } // namespace node

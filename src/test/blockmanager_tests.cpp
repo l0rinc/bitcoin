@@ -389,6 +389,8 @@ static void CheckStripped(const CBlock& block)
     CBlock decoded;
     SpanReader{data} >> TX_WITH_WITNESS(decoded);
     BOOST_CHECK(SerializeBlock(decoded, false) == expected);
+    BOOST_CHECK(node::StripBlockWitness(data) == expected);
+    BOOST_CHECK(node::StripBlockWitness(expected) == expected); // Legacy encodings pass through unchanged
 }
 
 BOOST_AUTO_TEST_CASE(strip_mixed_transactions)
@@ -458,6 +460,7 @@ BOOST_AUTO_TEST_CASE(strip_invalid_encodings)
     const auto check_rejected{[](std::span<const std::byte> data, const char* reason) {
         CBlock decoded;
         BOOST_CHECK_EXCEPTION(SpanReader{data} >> TX_WITH_WITNESS(decoded), std::ios_base::failure, HasReason(reason));
+        BOOST_CHECK_EXCEPTION((void)node::StripBlockWitness(data), std::ios_base::failure, HasReason(reason));
     }};
     const auto full{SerializeBlock(block, true)};
     for (size_t size{0}; size < full.size(); ++size) check_rejected({full.begin(), full.begin() + size}, "end of data");
