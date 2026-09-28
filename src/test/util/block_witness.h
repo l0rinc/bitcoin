@@ -7,15 +7,12 @@
 
 #include <primitives/block.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <span>
 
 inline size_t StripWitness(std::span<std::byte> data)
 {
-    const auto output{StripBlockWitness(data)};
-    std::ranges::copy(output, data.begin());
-    return output.size();
+    return StripBlockWitness(data);
 }
 
 #endif // BITCOIN_TEST_UTIL_BLOCK_WITNESS_H

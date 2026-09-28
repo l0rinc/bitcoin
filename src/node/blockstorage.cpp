@@ -1110,7 +1110,8 @@ BlockManager::ReadRawBlockResult BlockManager::ReadBlockWithoutWitness(const Fla
             LogError("GetHash() doesn't match index at %s while reading block (%s != %s)", pos.ToString(), hash.ToString(), expected_hash.ToString());
             return util::Unexpected{ReadRawError::IO};
         }
-        return StripBlockWitness(*data);
+        data->resize(StripBlockWitness(*data));
+        return data;
     } catch (const std::exception& e) {
         LogError("Deserialize or I/O error - %s at %s while reading block", e.what(), pos.ToString());
         return util::Unexpected{ReadRawError::IO};

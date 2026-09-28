@@ -13,23 +13,22 @@
 #include <cstring>
 #include <memory>
 #include <sstream>
-#include <vector>
 
 uint256 CBlockHeader::GetHash() const
 {
     return (HashWriter{} << *this).GetHash();
 }
 
-std::vector<std::byte> StripBlockWitness(std::span<const std::byte> data)
+size_t StripBlockWitness(std::span<std::byte> data)
 {
     SpanReader reader{data};
     const auto pos{[&] { return data.size() - reader.size(); }};
     const auto read_size{[&] { return ReadCompactSize(reader); }};
-    std::vector<std::byte> output(data.size());
     size_t written{0}, copy_begin{0};
     // Keep [copy_begin, gap_begin), then drop the already-read gap [gap_begin, pos()).
     const auto drop_from{[&](size_t gap_begin) {
-        std::memcpy(output.data() + written, data.data() + copy_begin, gap_begin - copy_begin);
+        // The output ends at or before gap_begin, so moves cannot overwrite unread input.
+        if (written != copy_begin) std::memmove(data.data() + written, data.data() + copy_begin, gap_begin - copy_begin);
         written += gap_begin - copy_begin;
         copy_begin = pos();
     }};
@@ -77,8 +76,7 @@ std::vector<std::byte> StripBlockWitness(std::span<const std::byte> data)
         reader.ignore(sizeof(CTransaction::nLockTime));
     }
     drop_from(pos());
-    output.resize(written);
-    return output;
+    return written;
 }
 
 std::string CBlock::ToString() const
