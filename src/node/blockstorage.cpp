@@ -484,7 +484,7 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
         pindex->nTimeMax = (pindex->pprev ? std::max(pindex->pprev->nTimeMax, pindex->nTime) : pindex->nTime);
 
-        if (pindex->nHeight > 0 && !(pindex->nStatus & BLOCK_HAVE_DATA) && !pindex->IsValid(BLOCK_VALID_SCRIPTS) && pindex->nTx > 0) {
+        if (pindex->nHeight > 0 && !pindex->HaveStoredBlockData() && !pindex->IsValid(BLOCK_VALID_SCRIPTS) && pindex->nTx > 0) {
             // An unconnected transient block was lost and must be downloaded again
             pindex->nTx = 0;
             pindex->nStatus = (pindex->nStatus & ~BLOCK_VALID_MASK) | BLOCK_VALID_TREE;

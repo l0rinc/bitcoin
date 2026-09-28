@@ -68,7 +68,7 @@ BOOST_FIXTURE_TEST_CASE(verifydb_pruned_block_without_undo, PrunedVerifyDBSetup)
     Chainstate& chainstate{chainman.ActiveChainstate()};
     BOOST_REQUIRE(chainman.m_blockman.IsPruneMode());
     CBlockIndex* refetched{chainstate.m_chain.Tip()->pprev};
-    BOOST_REQUIRE(refetched->nStatus & BLOCK_HAVE_DATA);
+    BOOST_REQUIRE(refetched->HaveStoredBlockData());
     BOOST_REQUIRE(refetched->nStatus & BLOCK_HAVE_UNDO);
 
     auto verify{[&](int level) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
