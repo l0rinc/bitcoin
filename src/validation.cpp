@@ -3789,6 +3789,11 @@ void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
 /** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). */
 void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos)
 {
+    ReceivedBlockTransactionsCommon(block, pindexNew, &pos);
+}
+
+void ChainstateManager::ReceivedBlockTransactionsCommon(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos* pos)
+{
     AssertLockHeld(cs_main);
     pindexNew->nTx = block.vtx.size();
     // Typically m_chain_tx_count will be 0 at this point, but it can be nonzero if this
@@ -3803,10 +3808,12 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             pindexNew->nHeight, pindexNew->m_chain_tx_count, prev_tx_sum(*pindexNew), CLIENT_NAME, FormatFullVersion(), CLIENT_BUGREPORT);
         pindexNew->m_chain_tx_count = 0;
     }
-    pindexNew->nFile = pos.nFile;
-    pindexNew->nDataPos = pos.nPos;
-    pindexNew->nUndoPos = 0;
-    pindexNew->nStatus |= BLOCK_HAVE_DATA;
+    if (pos) {
+        pindexNew->nFile = pos->nFile;
+        pindexNew->nDataPos = pos->nPos;
+        pindexNew->nUndoPos = 0;
+        pindexNew->nStatus |= BLOCK_HAVE_DATA;
+    }
     if (DeploymentActiveAt(*pindexNew, *this, Consensus::DEPLOYMENT_SEGWIT)) {
         pindexNew->nStatus |= BLOCK_OPT_WITNESS;
     }
@@ -3844,7 +3851,7 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             }
         }
     } else {
-        if (pindexNew->pprev && pindexNew->pprev->IsValid(BLOCK_VALID_TREE)) {
+        if (pos && pindexNew->pprev && pindexNew->pprev->IsValid(BLOCK_VALID_TREE)) {
             m_blockman.AddUnlinkedBlock(pindexNew);
         }
     }
