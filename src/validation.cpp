@@ -4648,7 +4648,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
     int nGoodTransactions = 0;
     BlockValidationState state;
     int reportDone = 0;
-    bool skipped_no_block_data{false};
+    bool skipped_missing_data{false};
     bool skipped_l3_checks{false};
     LogInfo("Verification progress: 0%%");
 
@@ -4669,7 +4669,13 @@ VerifyDBResult CVerifyDB::VerifyDB(
             // If pruning or running under an assumeutxo snapshot, only go
             // back as far as we have data.
             LogInfo("Block verification stopping at height %d (no data). This could be due to pruning or use of an assumeutxo snapshot.", pindex->nHeight);
-            skipped_no_block_data = true;
+            skipped_missing_data = true;
+            break;
+        }
+        if (nCheckLevel >= 3 && chainstate.m_blockman.IsPruneMode() && !(pindex->nStatus & BLOCK_HAVE_UNDO)) {
+            // Refetching a pruned block does not restore its undo data
+            LogInfo("Block verification stopping at height %d (no undo data).", pindex->nHeight);
+            skipped_missing_data = true;
             break;
         }
         CBlock block;
@@ -4760,7 +4766,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
     if (skipped_l3_checks) {
         return VerifyDBResult::SKIPPED_L3_CHECKS;
     }
-    if (skipped_no_block_data) {
+    if (skipped_missing_data) {
         return VerifyDBResult::SKIPPED_MISSING_BLOCKS;
     }
     return VerifyDBResult::SUCCESS;

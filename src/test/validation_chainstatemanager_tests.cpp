@@ -80,7 +80,7 @@ BOOST_FIXTURE_TEST_CASE(verifydb_pruned_block_without_undo, PrunedVerifyDBSetup)
     refetched->nStatus &= ~BLOCK_HAVE_UNDO;
     refetched->nUndoPos = 0;
     for (int level{0}; level <= 2; ++level) BOOST_CHECK(verify(level) == VerifyDBResult::SUCCESS);
-    for (int level : {3, 4}) BOOST_CHECK(verify(level) == VerifyDBResult::CORRUPTED_BLOCK_DB); // TODO: Missing pruned undo should stop verification, not report database corruption
+    for (int level : {3, 4}) BOOST_CHECK(verify(level) == VerifyDBResult::SKIPPED_MISSING_BLOCKS);
     refetched->nStatus &= ~BLOCK_HAVE_DATA;
     for (int level : {3, 4}) BOOST_CHECK(verify(level) == VerifyDBResult::SKIPPED_MISSING_BLOCKS);
 }
