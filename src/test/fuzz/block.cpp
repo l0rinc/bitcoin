@@ -8,18 +8,33 @@
 #include <core_io.h>
 #include <core_memusage.h>
 #include <primitives/block.h>
+#include <primitives/transaction.h>
 #include <pubkey.h>
+#include <serialize.h>
 #include <streams.h>
+#include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
+#include <test/fuzz/util.h>
 #include <util/chaintype.h>
 #include <validation.h>
 
+#include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <ios>
+#include <optional>
+#include <span>
 #include <string>
+#include <utility>
 
 void initialize_block()
 {
     SelectParams(ChainType::REGTEST);
+}
+
+static void CheckStrippedBlock(const CBlock& block, std::span<const std::byte> stripped)
+{
+    assert(std::ranges::equal(stripped, DataStream{} << TX_NO_WITNESS(block)));
 }
 
 FUZZ_TARGET(block, .init = initialize_block)
@@ -64,4 +79,21 @@ FUZZ_TARGET(block, .init = initialize_block)
     block_copy.SetNull();
     const bool is_null = block_copy.IsNull();
     assert(is_null);
+}
+
+FUZZ_TARGET(block_witness_roundtrip)
+{
+    FuzzedDataProvider provider{buffer.data(), buffer.size()};
+    CBlock block;
+    LIMITED_WHILE (provider.ConsumeBool(), 16) {
+        auto tx{ConsumeTransaction(provider, std::nullopt)};
+        if (tx.vin.empty()) tx.vout.clear(); // Empty vin with nonempty vout is ambiguous in witness serialization
+        block.vtx.push_back(MakeTransactionRef(std::move(tx)));
+    }
+    DataStream data;
+    data << TX_WITH_WITNESS(block);
+    data.write(ConsumeRandomLengthByteVector<std::byte>(provider)); // Trailing bytes
+    CBlock decoded;
+    SpanReader{data} >> TX_WITH_WITNESS(decoded);
+    CheckStrippedBlock(block, DataStream{} << TX_NO_WITNESS(decoded));
 }
