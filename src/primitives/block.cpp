@@ -23,7 +23,18 @@ size_t StripBlockWitness(std::span<std::byte> data)
 {
     SpanReader reader{data};
     const auto pos{[&] { return data.size() - reader.size(); }};
-    const auto read_size{[&] { return ReadCompactSize(reader); }};
+    // Read single-byte CompactSize values inline, since the throw sites keep `ReadCompactSize` out of line here.
+    // Decode wider encodings on a copy, so the out-of-line call does not pin `reader` to the stack.
+    const auto read_size{[&]() -> uint64_t {
+        auto peek{reader};
+        uint64_t size{ser_readdata8(peek)};
+        if (size >= 253) {
+            peek = reader;
+            size = ReadCompactSize(peek);
+        }
+        reader = peek;
+        return size;
+    }};
     size_t written{0}, copy_begin{0};
     // Keep [copy_begin, gap_begin), then drop the already-read gap [gap_begin, pos()).
     const auto drop_from{[&](size_t gap_begin) {
