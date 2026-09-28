@@ -6,6 +6,7 @@
 
 #include <chain.h>
 #include <crypto/common.h>
+#include <kernel/cs_main.h>
 #include <netaddress.h>
 #include <netbase.h>
 #include <primitives/transaction.h>
@@ -231,10 +232,15 @@ bool CZMQPublishHashTransactionNotifier::NotifyTransaction(const CTransaction &t
 
 bool CZMQPublishRawBlockNotifier::NotifyBlock(const CBlockIndex *pindex)
 {
+    if (WITH_LOCK(cs_main, return !pindex->HaveStoredBlockData())) {
+        LogDebug(BCLog::ZMQ, "Skip rawblock notification for unavailable block %s\n", pindex->GetBlockHash().GetHex());
+        return true;
+    }
     LogDebug(BCLog::ZMQ, "Publish rawblock %s to %s\n", pindex->GetBlockHash().GetHex(), this->address);
 
     std::vector<std::byte> block{};
     if (!m_get_block_by_index(block, *pindex)) {
+        if (WITH_LOCK(cs_main, return !pindex->HaveStoredBlockData())) return true;
         zmqError("Can't read block from disk");
         return false;
     }

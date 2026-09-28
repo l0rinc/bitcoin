@@ -47,7 +47,9 @@
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -74,6 +76,8 @@ class SignalInterrupt;
 
 /** Block files containing a block-height within MIN_BLOCKS_TO_KEEP of ActiveChain().Tip() will not be pruned. */
 inline constexpr unsigned int MIN_BLOCKS_TO_KEEP = 288;
+/** Default number of cached and requested stripped blocks, including a slot for the next missing parent. */
+inline constexpr uint32_t DEFAULT_PRUNE_ASSUMEVALID_CACHE_BLOCKS{10};
 inline constexpr signed int DEFAULT_CHECKBLOCKS = 6;
 inline constexpr int DEFAULT_CHECKLEVEL{3};
 // Require that user allocate at least 550 MiB for block & undo files (blk???.dat and rev???.dat)
@@ -787,7 +791,7 @@ public:
     DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* pindex, CCoinsViewCache& view)
         EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-                      CCoinsViewCache& view, bool fJustCheck = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+                      CCoinsViewCache& view, bool fJustCheck = false, bool prune_assumevalid = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     // Apply the effects of a block disconnection on the UTXO set.
     bool DisconnectTip(BlockValidationState& state, DisconnectedBlockTransactions* disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
@@ -987,6 +991,11 @@ private:
     //! A queue for script verifications that have to be performed by worker threads.
     CCheckQueue<CScriptCheck> m_script_check_queue;
 
+    //! Accepted stripped bodies awaiting connection. Each entry is released after its block connects.
+    std::unordered_map<const CBlockIndex*, std::shared_ptr<const CBlock>> m_prune_assumevalid_blocks GUARDED_BY(::cs_main);
+    //! Controls new omissions. Cleared on fallback while accepted cached blocks remain connectable.
+    bool m_prune_assumevalid_enabled GUARDED_BY(::cs_main);
+
     //! Timers and counters used for benchmarking validation in both background
     //! and active chainstates.
     SteadyClock::duration GUARDED_BY(::cs_main) time_check{};
@@ -1021,6 +1030,10 @@ public:
     const uint256& AssumedValidBlock() const { return *Assert(m_options.assumed_valid_block); }
     //! Whether block data is available to connect.
     bool HaveBlockData(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Whether a new stripped request or response can use the omission path
+    bool CanUsePruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    void DisablePruneAssumeValid(std::string_view reason) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    size_t PruneAssumeValidCacheSize() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     kernel::Notifications& GetNotifications() const { return m_options.notifications; };
 
     /**
@@ -1270,10 +1283,13 @@ public:
      *                               (note: only affects headers acceptance; if
      *                               block header is already present in block
      *                               index then this parameter has no effect)
+     * @param[in]   received_stripped Whether this block was requested and
+     *                               received without witness data for
+     *                               -pruneassumevalid.
      * @param[out]  new_block A boolean which is set to indicate if the block was first received via this call
      * @returns     If the block was processed, independently of block validity
      */
-    bool ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block) LOCKS_EXCLUDED(cs_main);
+    bool ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, bool received_stripped = false) LOCKS_EXCLUDED(cs_main);
 
     /**
      * Process incoming block headers.
@@ -1290,7 +1306,7 @@ public:
     bool ProcessNewBlockHeaders(std::span<const CBlockHeader> headers, bool min_pow_checked, BlockValidationState& state, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
 
     /**
-     * Sufficiently validate a block for disk storage (and store on disk).
+     * Sufficiently validate a block for connection and retain its data.
      *
      * @param[in]   pblock          The block we want to process.
      * @param[in]   fRequested      Whether we requested this block from a
@@ -1299,6 +1315,8 @@ public:
      *                              this block from prior storage.
      * @param[in]   min_pow_checked True if proof-of-work anti-DoS checks have
      *                              been done by caller for headers chain
+     * @param[in]   received_stripped Whether the block was requested and
+     *                              received without witness data.
      *
      * @param[out]  state       The state of the block validation.
      * @param[out]  ppindex     Optional return parameter to get the
@@ -1306,9 +1324,9 @@ public:
      * @param[out]  fNewBlock   Optional return parameter to indicate if the
      *                          block is new to our storage.
      *
-     * @returns   False if the block or header is invalid, or if saving to disk fails (likely a fatal error); true otherwise.
+     * @returns   False if the block or header is invalid, or if saving to disk fails (likely a fatal error). True otherwise.
      */
-    bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked, bool received_stripped = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     void ReceivedBlockTransactionsCommon(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos* pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);

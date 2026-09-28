@@ -2305,6 +2305,8 @@ void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlock
     std::vector<uint256> vHashes;
     const CBlockIndex *pindexToAnnounce = pindexNew;
     while (pindexToAnnounce != pindexFork) {
+        // Omitted -pruneassumevalid blocks cannot be served, so do not announce them.
+        if (m_chainman.m_options.prune_assumevalid && WITH_LOCK(cs_main, return !pindexToAnnounce->HaveStoredBlockData())) break;
         vHashes.push_back(pindexToAnnounce->GetBlockHash());
         pindexToAnnounce = pindexToAnnounce->pprev;
         if (vHashes.size() == MAX_BLOCKS_TO_ANNOUNCE) {

@@ -1424,6 +1424,10 @@ static ChainstateLoadResult InitAndLoadChainstate(
         return {ChainstateLoadStatus::FAILURE_FATAL, Untranslated(strprintf("Failed to initialize ChainstateManager: %s", e.what()))};
     }
     ChainstateManager& chainman = *node.chainman;
+    if (!g_enabled_filter_types.empty() || args.GetBoolArg("-coinstatsindex", DEFAULT_COINSTATSINDEX)) {
+        LOCK(cs_main);
+        chainman.DisablePruneAssumeValid("block filter or coin statistics indexing requires stored undo data");
+    }
     if (chainman.m_interrupt) return {ChainstateLoadStatus::INTERRUPTED, {}};
 
     // This is defined and set here instead of inline in validation.h to avoid a hard

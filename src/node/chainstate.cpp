@@ -45,6 +45,19 @@ static ChainstateLoadResult CompleteChainstateInitialization(
         return {ChainstateLoadStatus::FAILURE, _("Error loading block database")};
     }
 
+    // Select the mode from loaded block metadata, independently of whether the datadir already existed
+    if (chainman.m_options.prune_assumevalid) {
+        if (!chainman.m_blockman.IsPruneMode()) {
+            chainman.DisablePruneAssumeValid("pruning is disabled");
+        } else if (chainman.AssumedValidBlock().IsNull()) {
+            chainman.DisablePruneAssumeValid("assumevalid is disabled");
+        } else if (std::ranges::any_of(chainman.BlockIndex(), [](const auto& entry) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+                       return entry.second.nHeight > 0 && entry.second.HaveStoredBlockData();
+                   })) {
+            chainman.DisablePruneAssumeValid("existing full block history is available");
+        }
+    }
+
     if (!chainman.BlockIndex().empty() &&
             !chainman.m_blockman.LookupBlockIndex(chainman.GetConsensus().hashGenesisBlock)) {
         // If the loaded chain has a wrong genesis, bail out immediately
@@ -108,6 +121,12 @@ static ChainstateLoadResult CompleteChainstateInitialization(
                                                                      "rebuild the chainstate database.")};
         }
 
+        if (options.prune && chainman.m_options.prune_assumevalid && !chainstate->CoinsDB().GetHeadBlocks().empty()) {
+            // Head markers mean the UTXO flush stopped between write batches.
+            // Its saved best-block hash is not a complete checkpoint, and omitted history cannot supply replay data.
+            return {ChainstateLoadStatus::FAILURE, _("The chainstate flush was interrupted. A full -reindex is required to redownload omitted blocks")};
+        }
+
         // ReplayBlocks is a no-op if we cleared the coinsviewdb with -reindex or -reindex-chainstate
         if (!chainstate->ReplayBlocks()) {
             return {ChainstateLoadStatus::FAILURE, _("Unable to replay blocks. You will need to rebuild the database using -reindex-chainstate.")};
@@ -156,6 +175,9 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
     } else {
         LogInfo("Validating signatures for all blocks.");
     }
+    if (chainman.m_options.prune_assumevalid) {
+        LogInfo("-pruneassumevalid requested: eligible bootstrap blocks will skip witness download and witness-related validation, and will not be written to block or undo files.");
+    }
     LogInfo("Setting nMinimumChainWork=%s", chainman.MinimumChainWork().GetHex());
     if (chainman.MinimumChainWork() < UintToArith256(chainman.GetConsensus().nMinimumChainWork)) {
         LogWarning("nMinimumChainWork set below default value of %s", chainman.GetConsensus().nMinimumChainWork.GetHex());
@@ -177,6 +199,7 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
 
     // Load a chain created from a UTXO snapshot, if any exist.
     Chainstate* assumeutxo_cs{chainman.LoadAssumeutxoChainstate()};
+    if (assumeutxo_cs) chainman.DisablePruneAssumeValid("a UTXO snapshot is present");
 
     if (assumeutxo_cs && options.wipe_chainstate_db) {
         // Reset chainstate target to network tip instead of snapshot block.
