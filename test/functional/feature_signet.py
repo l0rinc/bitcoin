@@ -7,6 +7,8 @@
 from decimal import Decimal
 from os import path
 
+from test_framework.messages import CBlock, CInv, MSG_BLOCK, MSG_WITNESS_FLAG, from_binary, msg_getdata
+from test_framework.p2p import P2PInterface, p2p_lock
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.signet import SIGNET_DEFAULT_CHALLENGE, message_start
 from test_framework.util import assert_equal, assert_raises_process_error
@@ -101,6 +103,16 @@ class SignetBasicTest(BitcoinTestFramework):
             assert_equal(self.nodes[2].submitblock(block), None)
             height += 1
             assert_equal(self.nodes[2].getblockcount(), height)
+
+        self.log.info("Check disk-backed Signet block serving with and without witnesses")
+        peer = self.nodes[2].add_p2p_connection(P2PInterface())
+        block = from_binary(CBlock, bytes.fromhex(signet_blocks[0]))  # Below the tip, so not the most-recent-block cache entry
+        for inv_type, witness in [(MSG_BLOCK, False), (MSG_BLOCK | MSG_WITNESS_FLAG, True)]:
+            with p2p_lock:
+                peer.last_message.pop("block", None)
+            peer.send_and_ping(msg_getdata([CInv(inv_type, block.hash_int)]))
+            with p2p_lock:
+                assert_equal(peer.last_message["block"].block.serialize(), block.serialize(with_witness=witness))
 
         self.log.info("pregenerated signet blocks check (incompatible solution)")
 
