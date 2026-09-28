@@ -15,6 +15,7 @@
 #include <test/util/chainstate.h>
 #include <test/util/common.h>
 #include <test/util/logging.h>
+#include <test/util/mining.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
@@ -36,6 +37,53 @@ using node::KernelNotifications;
 using node::SnapshotMetadata;
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, TestingSetup)
+
+struct PrunedVerifyDBSetup : ChainTestingSetup {
+    PrunedVerifyDBSetup() : ChainTestingSetup{ChainType::REGTEST, {.setup_net = false, .setup_validation_interface = false}}
+    {
+        auto chainman_opts{m_node.chainman->m_options};
+        m_node.block_template_manager.reset();
+        m_node.chainman.reset();
+        const BlockManager::Options blockman_opts{
+            .chainparams = Params(),
+            .prune_target = BlockManager::PRUNE_TARGET_MANUAL,
+            .blocks_dir = m_args.GetBlocksDirPath(),
+            .notifications = chainman_opts.notifications,
+            .block_tree_db_params = DBParams{.path = m_args.GetDataDirNet() / "blocks" / "index", .cache_bytes = 0, .memory_only = true},
+        };
+        m_node.chainman = std::make_unique<ChainstateManager>(*Assert(m_node.shutdown_signal), chainman_opts, blockman_opts);
+        CreateBlockTemplateManager();
+        LoadVerifyActivateChainstate();
+        for (const auto& block : CreateBlockChain(/*total_height=*/2, Params())) {
+            BOOST_REQUIRE(m_node.chainman->ProcessNewBlock(block, /*force_processing=*/true, /*min_pow_checked=*/true, /*new_block=*/nullptr));
+        }
+    }
+};
+
+BOOST_FIXTURE_TEST_CASE(verifydb_pruned_block_without_undo, PrunedVerifyDBSetup)
+{
+    // getblockfrompeer restores a pruned block without reconnecting it, so deep verification must stop at its missing undo data
+    ChainstateManager& chainman{*m_node.chainman};
+    LOCK(chainman.GetMutex());
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    BOOST_REQUIRE(chainman.m_blockman.IsPruneMode());
+    CBlockIndex* refetched{chainstate.m_chain.Tip()->pprev};
+    BOOST_REQUIRE(refetched->nStatus & BLOCK_HAVE_DATA);
+    BOOST_REQUIRE(refetched->nStatus & BLOCK_HAVE_UNDO);
+
+    auto verify{[&](int level) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+        return CVerifyDB{chainman.GetNotifications()}.VerifyDB(chainstate, chainman.GetConsensus(), chainstate.CoinsTip(), level, /*nCheckDepth=*/2);
+    }};
+    for (int level{0}; level <= 4; ++level) BOOST_CHECK(verify(level) == VerifyDBResult::SUCCESS);
+
+    // A refetched pruned block has its body but no undo record
+    refetched->nStatus &= ~BLOCK_HAVE_UNDO;
+    refetched->nUndoPos = 0;
+    for (int level{0}; level <= 2; ++level) BOOST_CHECK(verify(level) == VerifyDBResult::SUCCESS);
+    for (int level : {3, 4}) BOOST_CHECK(verify(level) == VerifyDBResult::CORRUPTED_BLOCK_DB); // TODO: Missing pruned undo should stop verification, not report database corruption
+    refetched->nStatus &= ~BLOCK_HAVE_DATA;
+    for (int level : {3, 4}) BOOST_CHECK(verify(level) == VerifyDBResult::SKIPPED_MISSING_BLOCKS);
+}
 
 //! Basic tests for ChainstateManager.
 //!
