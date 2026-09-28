@@ -3191,7 +3191,7 @@ CBlockIndex* Chainstate::FindMostWorkChain()
                     // If we're missing data and not a descendant of an invalid block,
                     // then add back to m_blocks_unlinked, so that if the block arrives in the future
                     // we can try adding to setBlockIndexCandidates again.
-                    if (fMissingData && !fFailedChain) {
+                    if (fMissingData && !fFailedChain && pindexFailed->HaveStoredBlockData()) {
                         // Avoid duplicate entries in m_blocks_unlinked. If the same entry is
                         // processed twice in ReceivedBlockTransactions(), it may be re-added to
                         // setBlockIndexCandidates with a modified nSequenceId, breaking ordering
@@ -3810,7 +3810,7 @@ void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
     }
 }
 
-/** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). */
+/** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). A null position means it is not stored. */
 void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos)
 {
     AssertLockHeld(cs_main);
@@ -3827,10 +3827,12 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             pindexNew->nHeight, pindexNew->m_chain_tx_count, prev_tx_sum(*pindexNew), CLIENT_NAME, FormatFullVersion(), CLIENT_BUGREPORT);
         pindexNew->m_chain_tx_count = 0;
     }
-    pindexNew->nFile = pos.nFile;
-    pindexNew->nDataPos = pos.nPos;
-    pindexNew->nUndoPos = 0;
-    pindexNew->nStatus |= BLOCK_HAVE_DATA;
+    if (!pos.IsNull()) {
+        pindexNew->nFile = pos.nFile;
+        pindexNew->nDataPos = pos.nPos;
+        pindexNew->nUndoPos = 0;
+        pindexNew->nStatus |= BLOCK_HAVE_DATA;
+    }
     if (DeploymentActiveAt(*pindexNew, *this, Consensus::DEPLOYMENT_SEGWIT)) {
         pindexNew->nStatus |= BLOCK_OPT_WITNESS;
     }
@@ -3868,7 +3870,7 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             }
         }
     } else {
-        if (pindexNew->pprev && pindexNew->pprev->IsValid(BLOCK_VALID_TREE)) {
+        if (!pos.IsNull() && pindexNew->pprev && pindexNew->pprev->IsValid(BLOCK_VALID_TREE)) {
             m_blockman.AddUnlinkedBlock(pindexNew);
         }
     }
