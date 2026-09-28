@@ -160,11 +160,18 @@ public:
     {
     }
 
+    //! Whether the block index records block data stored in a block file.
+    bool HaveStoredBlockData() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        AssertLockHeld(::cs_main);
+        return nStatus & BLOCK_HAVE_DATA;
+    }
+
     FlatFilePos GetBlockPos() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
         FlatFilePos ret;
-        if (nStatus & BLOCK_HAVE_DATA) {
+        if (HaveStoredBlockData()) {
             ret.nFile = nFile;
             ret.nPos = nDataPos;
         }
