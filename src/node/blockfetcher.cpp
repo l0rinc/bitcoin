@@ -62,7 +62,7 @@ void BlockFetcher::FillQueue(const CBlockIndex* last_index, int next_height)
     std::vector<ReadTask> tasks;
     for (size_t i{m_followups.size()}; std::cmp_less(i, WindowSize()); ++i) {
         const auto* next{last_index->GetAncestor(next_height + i)};
-        if (!next || !(next->nStatus & BLOCK_HAVE_DATA)) break;
+        if (!next || !next->HaveStoredBlockData()) break;
         tasks.emplace_back([this, hash = next->GetBlockHash(), pos = next->GetBlockPos()] {
             try {
                 if (auto block{std::make_shared<CBlock>()}; m_read_block(*block, pos, hash)) return block;

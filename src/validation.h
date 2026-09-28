@@ -1025,6 +1025,8 @@ public:
     bool ShouldCheckBlockIndex() const;
     const arith_uint256& MinimumChainWork() const { return *Assert(m_options.minimum_chain_work); }
     const uint256& AssumedValidBlock() const { return *Assert(m_options.assumed_valid_block); }
+    //! Whether block data is available to connect.
+    bool HaveBlockData(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     kernel::Notifications& GetNotifications() const { return m_options.notifications; };
 
     /**
