@@ -102,8 +102,8 @@ BOOST_AUTO_TEST_CASE(blockmanager_load_missing_block_data)
     // AddToBlockIndex() marked every entry dirty, so this writes the same batch the node would
     blockman.WriteBlockIndexDB();
     bool pruned{false};
-    BOOST_CHECK(!blockman.m_block_tree_db->ReadFlag("prunedblockfiles", pruned)); // TODO: Flushing the index must persist that block history is missing
-    BOOST_CHECK(!pruned); // TODO: The persisted flag must record the pruned state
+    BOOST_CHECK(blockman.m_block_tree_db->ReadFlag("prunedblockfiles", pruned));
+    BOOST_CHECK(pruned);
     BOOST_REQUIRE(blockman.LoadBlockIndexDB(std::nullopt));
 
     BOOST_CHECK_EQUAL(genesis->nStatus, BLOCK_VALID_TRANSACTIONS);

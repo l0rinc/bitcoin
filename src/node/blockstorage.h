@@ -447,7 +447,7 @@ public:
         const CBlockIndex* lower_block LIFETIMEBOUND = nullptr
     ) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
-    /** True if any block files have ever been pruned. */
+    /** Whether block data was pruned or omitted. Persisted by WriteBlockIndexDB(). */
     bool m_have_pruned = false;
 
     //! Check whether the block associated with this index entry is pruned or not.
