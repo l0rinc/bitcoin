@@ -981,6 +981,8 @@ private:
 
     /** Have we requested this block from a peer */
     bool IsBlockRequested(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    /** Whether this peer can supply the block data needed for validation */
+    bool CanDownloadBlockFrom(const Peer& peer, const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Have we requested this block from an outbound peer */
     bool IsBlockRequestedFromOutbound(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_peer_mutex);
@@ -1287,6 +1289,12 @@ std::chrono::microseconds PeerManagerImpl::NextInvToInbounds(std::chrono::micros
 bool PeerManagerImpl::IsBlockRequested(const uint256& hash)
 {
     return mapBlocksInFlight.contains(hash);
+}
+
+bool PeerManagerImpl::CanDownloadBlockFrom(const Peer& peer, const CBlockIndex& block) const
+{
+    AssertLockHeld(cs_main);
+    return CanServeWitnesses(peer) || !DeploymentActiveAt(block, m_chainman, Consensus::DEPLOYMENT_SEGWIT);
 }
 
 bool PeerManagerImpl::IsBlockRequestedFromOutbound(const uint256& hash)
@@ -1602,7 +1610,7 @@ void PeerManagerImpl::FindNextBlocks(std::vector<const CBlockIndex*>& vBlocks, c
                 return;
             }
 
-            if (!CanServeWitnesses(peer) && DeploymentActiveAt(*pindex, m_chainman, Consensus::DEPLOYMENT_SEGWIT)) {
+            if (!CanDownloadBlockFrom(peer, *pindex)) {
                 // We wouldn't download this block or its descendants from this peer.
                 return;
             }
@@ -3107,7 +3115,7 @@ void PeerManagerImpl::HeadersDirectFetchBlocks(CNode& pfrom, const Peer& peer, c
         while (pindexWalk && !m_chainman.ActiveChain().Contains(*pindexWalk) && vToFetch.size() <= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             if (!m_chainman.HaveBlockData(*pindexWalk) &&
                     !IsBlockRequested(pindexWalk->GetBlockHash()) &&
-                    (!DeploymentActiveAt(*pindexWalk, m_chainman, Consensus::DEPLOYMENT_SEGWIT) || CanServeWitnesses(peer))) {
+                    CanDownloadBlockFrom(peer, *pindexWalk)) {
                 // We don't have this block, and it's not yet in flight.
                 vToFetch.push_back(pindexWalk);
             }
