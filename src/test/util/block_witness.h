@@ -6,9 +6,6 @@
 #define BITCOIN_TEST_UTIL_BLOCK_WITNESS_H
 
 #include <primitives/block.h>
-#include <primitives/transaction.h>
-#include <serialize.h>
-#include <streams.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -16,12 +13,9 @@
 
 inline size_t StripWitness(std::span<std::byte> data)
 {
-    CBlock block;
-    SpanReader{data} >> TX_WITH_WITNESS(block);
-    DataStream stream;
-    stream << TX_NO_WITNESS(block);
-    std::ranges::copy(stream, data.begin());
-    return stream.size();
+    const auto output{StripBlockWitness(data)};
+    std::ranges::copy(output, data.begin());
+    return output.size();
 }
 
 #endif // BITCOIN_TEST_UTIL_BLOCK_WITNESS_H
