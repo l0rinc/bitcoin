@@ -236,7 +236,7 @@ BasicTestingSetup::BasicTestingSetup(const ChainType chainType, TestOpts opts)
         struct SnapshotParams : CChainParams {
             SnapshotParams(const CChainParams& params, const AssumeutxoData& snapshot) : CChainParams{params}
             {
-                m_assumeutxo_data = {snapshot};
+                m_assumeutxo_data = snapshot;
             }
         };
         m_chainparams = std::make_unique<const CChainParams>(SnapshotParams{Params(), *opts.snapshot_commitment});

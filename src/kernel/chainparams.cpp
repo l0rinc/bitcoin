@@ -187,13 +187,11 @@ public:
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
 
-        m_assumeutxo_data = {
-            {
-                .height = 965'000,
-                .hash_serialized = AssumeutxoHash{uint256{"4a8d794337118c0c615b574f817c7306c687584a537184b8d233df42bf477ec2"}},
-                .m_chain_tx_count = 1429611231,
-                .blockhash = uint256{"00000000000000000001595977e6000ce56129f5c9b4073e31ccc30b90b97da9"},
-            }
+        m_assumeutxo_data = AssumeutxoData{
+            .height = 965'000,
+            .hash_serialized = AssumeutxoHash{uint256{"4a8d794337118c0c615b574f817c7306c687584a537184b8d233df42bf477ec2"}},
+            .m_chain_tx_count = 1429611231,
+            .blockhash = uint256{"00000000000000000001595977e6000ce56129f5c9b4073e31ccc30b90b97da9"},
         };
 
         chainTxData = ChainTxData{
@@ -284,13 +282,11 @@ public:
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
 
-        m_assumeutxo_data = {
-            {
-                .height = 5'125'000,
-                .hash_serialized = AssumeutxoHash{uint256{"d05430f34c9b7dd7eb98c0718cdf03782bcce8273847557d68ac2efc1365d4b8"}},
-                .m_chain_tx_count = 536708663,
-                .blockhash = uint256{"00000000000009ad1946e21cb4f1a6323ee99c89017b59d5166472672b868133"},
-            }
+        m_assumeutxo_data = AssumeutxoData{
+            .height = 5'125'000,
+            .hash_serialized = AssumeutxoHash{uint256{"d05430f34c9b7dd7eb98c0718cdf03782bcce8273847557d68ac2efc1365d4b8"}},
+            .m_chain_tx_count = 536708663,
+            .blockhash = uint256{"00000000000009ad1946e21cb4f1a6323ee99c89017b59d5166472672b868133"},
         };
 
         chainTxData = ChainTxData{
@@ -386,13 +382,11 @@ public:
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
 
-        m_assumeutxo_data = {
-            {
-                .height = 150'000,
-                .hash_serialized = AssumeutxoHash{uint256{"ca068cae50679d7c947454bbe4f0e6aeec1fbe2c6c2735a08bb988623649f950"}},
-                .m_chain_tx_count = 14810011,
-                .blockhash = uint256{"0000000000d9877342754dea8ec1eb24631517d38e3443c370465ee53a8b7434"},
-            }
+        m_assumeutxo_data = AssumeutxoData{
+            .height = 150'000,
+            .hash_serialized = AssumeutxoHash{uint256{"ca068cae50679d7c947454bbe4f0e6aeec1fbe2c6c2735a08bb988623649f950"}},
+            .m_chain_tx_count = 14810011,
+            .blockhash = uint256{"0000000000d9877342754dea8ec1eb24631517d38e3443c370465ee53a8b7434"},
         };
 
         chainTxData = ChainTxData{
@@ -491,13 +485,11 @@ public:
         assert(consensus.hashGenesisBlock == uint256{"00000008819873e925422c1ff0f99f7cc9bbb232af63a077a480a3633bee1ef6"});
         assert(genesis.hashMerkleRoot == uint256{"4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"});
 
-        m_assumeutxo_data = {
-            {
-                .height = 320'000,
-                .hash_serialized = AssumeutxoHash{uint256{"1aaf72ecb376cc16957fbb8d5d406bfd6e3165510e2fc83879b6d14cd20b4462"}},
-                .m_chain_tx_count = 32079110,
-                .blockhash = uint256{"0000000740ae66b284da84387dcfa14d7b1385b0bad482005ba4e770ea6c4b95"},
-            }
+        m_assumeutxo_data = AssumeutxoData{
+            .height = 320'000,
+            .hash_serialized = AssumeutxoHash{uint256{"1aaf72ecb376cc16957fbb8d5d406bfd6e3165510e2fc83879b6d14cd20b4462"}},
+            .m_chain_tx_count = 32079110,
+            .blockhash = uint256{"0000000740ae66b284da84387dcfa14d7b1385b0bad482005ba4e770ea6c4b95"},
         };
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,111);
@@ -580,14 +572,12 @@ public:
         fDefaultConsistencyChecks = true;
         m_is_mockable_chain = true;
 
-        m_assumeutxo_data = {
-            {
-                // For use by test/functional/feature_assumeutxo.py and test/functional/tool_bitcoin_chainstate.py
-                .height = 299,
-                .hash_serialized = AssumeutxoHash{uint256{"106b2c56233e378a824cf0d5ff2be42ed32c72f1605c9be288d00942908a40ac"}},
-                .m_chain_tx_count = 334,
-                .blockhash = uint256{"0c552ced4721c249a389eb9b08cb8da261cd46f0e7b5f9d064d48f3113406853"},
-            },
+        m_assumeutxo_data = AssumeutxoData{
+            // For use by test/functional/feature_assumeutxo.py and test/functional/tool_bitcoin_chainstate.py
+            .height = 299,
+            .hash_serialized = AssumeutxoHash{uint256{"106b2c56233e378a824cf0d5ff2be42ed32c72f1605c9be288d00942908a40ac"}},
+            .m_chain_tx_count = 334,
+            .blockhash = uint256{"0c552ced4721c249a389eb9b08cb8da261cd46f0e7b5f9d064d48f3113406853"},
         };
 
         chainTxData = ChainTxData{
@@ -636,17 +626,6 @@ std::unique_ptr<const CChainParams> CChainParams::TestNet(const TestNetOptions& 
 std::unique_ptr<const CChainParams> CChainParams::TestNet4(const TestNetOptions& options)
 {
     return std::make_unique<const CTestNet4Params>(options);
-}
-
-std::vector<int> CChainParams::GetAvailableSnapshotHeights() const
-{
-    std::vector<int> heights;
-    heights.reserve(m_assumeutxo_data.size());
-
-    for (const auto& data : m_assumeutxo_data) {
-        heights.emplace_back(data.height);
-    }
-    return heights;
 }
 
 std::optional<ChainType> GetNetworkForMagic(const MessageStartChars& message)

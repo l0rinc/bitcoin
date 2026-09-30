@@ -15,7 +15,7 @@
 
 #include <array>
 #include <string>
-#include <tuple>
+#include <utility>
 
 #include <test/util/setup_common.h>
 
@@ -25,19 +25,16 @@ BOOST_FIXTURE_TEST_SUITE(validation_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(snapshot_commitments)
 {
-    for (const auto& [network, previous_height, latest_height, expected_count, previous_supported] : std::array{
-             std::tuple{ChainType::MAIN, 935'000, 965'000, 1U, false},
-             std::tuple{ChainType::TESTNET, 4'840'000, 5'125'000, 1U, false},
-             std::tuple{ChainType::TESTNET4, 120'000, 150'000, 1U, false},
-             std::tuple{ChainType::SIGNET, 290'000, 320'000, 1U, false},
-             std::tuple{ChainType::REGTEST, 110, 299, 1U, false}}) {
+    for (const auto& [network, height] : std::array{
+             std::pair{ChainType::MAIN, 965'000},
+             std::pair{ChainType::TESTNET, 5'125'000},
+             std::pair{ChainType::TESTNET4, 150'000},
+             std::pair{ChainType::SIGNET, 320'000},
+             std::pair{ChainType::REGTEST, 299}}) {
         const auto params{CreateChainParams(*m_node.args, network)};
-        BOOST_CHECK_EQUAL(params->GetAvailableSnapshotHeights().size(), expected_count);
-        BOOST_CHECK_EQUAL(params->AssumeutxoForHeight(previous_height).has_value(), previous_supported);
-        const auto latest{params->AssumeutxoForHeight(latest_height)};
-        BOOST_REQUIRE(latest);
-        BOOST_CHECK_EQUAL(latest->height, latest_height);
-        BOOST_CHECK(params->AssumeutxoForBlockhash(latest->blockhash)->hash_serialized == latest->hash_serialized);
+        const auto& snapshot{params->Assumeutxo()};
+        BOOST_REQUIRE(snapshot);
+        BOOST_CHECK_EQUAL(snapshot->height, height);
     }
 }
 
@@ -152,25 +149,12 @@ BOOST_AUTO_TEST_CASE(test_assumeutxo)
 {
     const auto params = CreateChainParams(*m_node.args, ChainType::REGTEST);
 
-    // These heights don't have assumeutxo configurations associated, per the contents
-    // of kernel/chainparams.cpp.
-    std::vector<int> bad_heights{0, 100, 111, 115, 209, 211};
-
-    for (auto empty : bad_heights) {
-        const auto out = params->AssumeutxoForHeight(empty);
-        BOOST_CHECK(!out);
-    }
-
-    const auto out299 = params->AssumeutxoForHeight(299);
-    BOOST_REQUIRE(out299);
-    BOOST_CHECK_EQUAL(out299->height, 299);
-    BOOST_CHECK_EQUAL(out299->hash_serialized.ToString(), "106b2c56233e378a824cf0d5ff2be42ed32c72f1605c9be288d00942908a40ac");
-    BOOST_CHECK_EQUAL(out299->m_chain_tx_count, 334U);
-    BOOST_CHECK_EQUAL(out299->blockhash.ToString(), "0c552ced4721c249a389eb9b08cb8da261cd46f0e7b5f9d064d48f3113406853");
-
-    const auto out299_2 = *params->AssumeutxoForBlockhash(uint256{"0c552ced4721c249a389eb9b08cb8da261cd46f0e7b5f9d064d48f3113406853"});
-    BOOST_CHECK_EQUAL(out299_2.hash_serialized.ToString(), "106b2c56233e378a824cf0d5ff2be42ed32c72f1605c9be288d00942908a40ac");
-    BOOST_CHECK_EQUAL(out299_2.m_chain_tx_count, 334U);
+    const auto& snapshot{params->Assumeutxo()};
+    BOOST_REQUIRE(snapshot);
+    BOOST_CHECK_EQUAL(snapshot->height, 299);
+    BOOST_CHECK_EQUAL(snapshot->hash_serialized.ToString(), "106b2c56233e378a824cf0d5ff2be42ed32c72f1605c9be288d00942908a40ac");
+    BOOST_CHECK_EQUAL(snapshot->m_chain_tx_count, 334U);
+    BOOST_CHECK_EQUAL(snapshot->blockhash.ToString(), "0c552ced4721c249a389eb9b08cb8da261cd46f0e7b5f9d064d48f3113406853");
 }
 
 BOOST_AUTO_TEST_CASE(block_malleation)
