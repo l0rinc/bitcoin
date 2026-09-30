@@ -44,7 +44,7 @@ protected:
     std::unique_ptr<CDBWrapper> m_db;
     std::shared_future<void> m_compaction GUARDED_BY(::cs_main); //!< Destructor has exclusive access
 
-    uint256 ReadBestBlock() const;
+    uint256 ReadBestBlock() const SHARED_LOCKS_REQUIRED(m_db_mutex);
 public:
     explicit CCoinsViewDB(DBParams db_params, CoinsViewOptions options);
     ~CCoinsViewDB() override;
@@ -55,7 +55,8 @@ public:
     uint256 GetBestBlock() const override;
     std::vector<uint256> GetHeadBlocks() const override;
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override;
-    //! A cursor must not outlive its DB or leave its creating thread. That thread cannot lock cs_main or open another cursor for this DB.
+    //! A cursor must not outlive its DB or leave its creating thread.
+    //! The creating thread must release it before locking cs_main or calling another method on this DB.
     std::unique_ptr<CCoinsViewCursor> Cursor() const EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex);
 
     //! Whether an unsupported database format is used.
