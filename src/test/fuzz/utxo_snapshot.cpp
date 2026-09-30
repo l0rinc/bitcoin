@@ -194,6 +194,7 @@ void utxo_snapshot_fuzz(FuzzBufferType buffer)
             if (index->nHeight == chainman.ActiveChainstate().SnapshotBase()->nHeight) {
                 auto params{chainman.GetParams().AssumeutxoForHeight(index->nHeight)};
                 Assert(params.has_value());
+                Assert(params->height == index->nHeight);
                 Assert(params.value().m_chain_tx_count == index->m_chain_tx_count);
             } else {
                 Assert(index->m_chain_tx_count == 0);

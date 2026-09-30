@@ -13,13 +13,33 @@
 #include <util/chaintype.h>
 #include <validation.h>
 
+#include <array>
 #include <string>
+#include <tuple>
 
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(validation_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(snapshot_commitments)
+{
+    for (const auto& [network, previous_height, latest_height, expected_count, previous_supported] : std::array{
+             std::tuple{ChainType::MAIN, 935'000, 965'000, 5U, true},
+             std::tuple{ChainType::TESTNET, 4'840'000, 5'125'000, 3U, true},
+             std::tuple{ChainType::TESTNET4, 120'000, 150'000, 3U, true},
+             std::tuple{ChainType::SIGNET, 290'000, 320'000, 3U, true},
+             std::tuple{ChainType::REGTEST, 110, 299, 3U, true}}) {
+        const auto params{CreateChainParams(*m_node.args, network)};
+        BOOST_CHECK_EQUAL(params->GetAvailableSnapshotHeights().size(), expected_count);
+        BOOST_CHECK_EQUAL(params->AssumeutxoForHeight(previous_height).has_value(), previous_supported);
+        const auto& snapshot{params->AssumeutxoForHeight(latest_height)};
+        BOOST_REQUIRE(snapshot);
+        BOOST_CHECK_EQUAL(snapshot->height, latest_height);
+        BOOST_CHECK(params->AssumeutxoForBlockhash(snapshot->blockhash)->hash_serialized == snapshot->hash_serialized);
+    }
+}
 
 static void TestBlockSubsidyHalvings(const Consensus::Params& consensusParams)
 {
@@ -141,13 +161,16 @@ BOOST_AUTO_TEST_CASE(test_assumeutxo)
         BOOST_CHECK(!out);
     }
 
-    const auto out110 = *params->AssumeutxoForHeight(110);
-    BOOST_CHECK_EQUAL(out110.hash_serialized.ToString(), "86e9a1205b418b16dde3a18a78c730e30137e28466bda5dbf6b33ab8fc05447c");
-    BOOST_CHECK_EQUAL(out110.m_chain_tx_count, 111U);
+    const auto& snapshot{params->AssumeutxoForHeight(299)};
+    BOOST_REQUIRE(snapshot);
+    BOOST_CHECK_EQUAL(snapshot->height, 299);
+    BOOST_CHECK_EQUAL(snapshot->hash_serialized.ToString(), "106b2c56233e378a824cf0d5ff2be42ed32c72f1605c9be288d00942908a40ac");
+    BOOST_CHECK_EQUAL(snapshot->m_chain_tx_count, 334U);
+    BOOST_CHECK_EQUAL(snapshot->blockhash.ToString(), "0c552ced4721c249a389eb9b08cb8da261cd46f0e7b5f9d064d48f3113406853");
 
-    const auto out110_2 = *params->AssumeutxoForBlockhash(uint256{"135eec25a6fb277884e5824e7aa7d052c4868161c99a5122170b5266f86c273d"});
-    BOOST_CHECK_EQUAL(out110_2.hash_serialized.ToString(), "86e9a1205b418b16dde3a18a78c730e30137e28466bda5dbf6b33ab8fc05447c");
-    BOOST_CHECK_EQUAL(out110_2.m_chain_tx_count, 111U);
+    const auto out299_2 = *params->AssumeutxoForBlockhash(uint256{"0c552ced4721c249a389eb9b08cb8da261cd46f0e7b5f9d064d48f3113406853"});
+    BOOST_CHECK_EQUAL(out299_2.hash_serialized.ToString(), "106b2c56233e378a824cf0d5ff2be42ed32c72f1605c9be288d00942908a40ac");
+    BOOST_CHECK_EQUAL(out299_2.m_chain_tx_count, 334U);
 }
 
 BOOST_AUTO_TEST_CASE(block_malleation)

@@ -339,6 +339,8 @@ struct SnapshotTestSetup : TestChain100Setup {
         const auto& au_data = ::Params().AssumeutxoForHeight(snapshot_height);
         const CBlockIndex* tip = WITH_LOCK(chainman.GetMutex(), return chainman.ActiveTip());
 
+        BOOST_REQUIRE(au_data);
+        BOOST_CHECK_EQUAL(au_data->height, snapshot_height);
         BOOST_CHECK_EQUAL(tip->m_chain_tx_count, au_data->m_chain_tx_count);
 
         // To be checked against later when we try loading a subsequent snapshot.
