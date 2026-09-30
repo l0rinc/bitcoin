@@ -115,6 +115,7 @@ BASE_SCRIPTS = [
     'p2p_segwit.py',
     'feature_maxuploadtarget.py',
     'feature_assumeutxo.py',
+    'feature_utxo_snapshots.py',
     'mempool_updatefromblock.py',
     'mempool_persist.py',
     # vv Tests less than 60s vv
