@@ -119,6 +119,11 @@ bool CCoinsViewDB::HaveCoin(const COutPoint& outpoint) const
 }
 
 uint256 CCoinsViewDB::GetBestBlock() const {
+    return ReadBestBlock();
+}
+
+uint256 CCoinsViewDB::ReadBestBlock() const
+{
     uint256 hashBestChain;
     if (!m_db->Read(DB_BEST_BLOCK, hashBestChain))
         return uint256();
@@ -255,7 +260,7 @@ std::unique_ptr<CCoinsViewCursor> CCoinsViewDB::Cursor() const
 {
     SharedLock db_lock{LOCK_ARGS(m_db_mutex)};
     auto i = std::make_unique<CCoinsViewDBCursor>(
-        const_cast<CDBWrapper&>(*m_db).NewIterator(), GetBestBlock(), std::move(db_lock));
+        const_cast<CDBWrapper&>(*m_db).NewIterator(), ReadBestBlock(), std::move(db_lock));
     /* It seems that there are no "const iterators" for LevelDB.  Since we
        only need read operations on it, use a const-cast to get around
        that restriction.  */

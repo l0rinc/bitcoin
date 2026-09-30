@@ -43,6 +43,8 @@ protected:
     mutable SharedMutex m_db_mutex; //!< Shared by cursors and compaction, exclusive for resize
     std::unique_ptr<CDBWrapper> m_db;
     std::shared_future<void> m_compaction GUARDED_BY(::cs_main); //!< Destructor has exclusive access
+
+    uint256 ReadBestBlock() const;
 public:
     explicit CCoinsViewDB(DBParams db_params, CoinsViewOptions options);
     ~CCoinsViewDB() override;
