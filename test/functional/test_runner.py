@@ -116,6 +116,8 @@ BASE_SCRIPTS = [
     'feature_maxuploadtarget.py',
     'feature_assumeutxo.py',
     'feature_utxo_snapshots.py',
+    'feature_utxo_snapshots.py --check-commitment=1',
+    'feature_utxo_snapshots.py --check-commitment=0',
     'mempool_updatefromblock.py',
     'mempool_persist.py',
     # vv Tests less than 60s vv

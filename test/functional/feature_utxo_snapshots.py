@@ -16,11 +16,15 @@ UTXO_HASH = "106b2c56233e378a824cf0d5ff2be42ed32c72f1605c9be288d00942908a40ac"
 
 
 class UTXOSnapshotsTest(BitcoinTestFramework):
+    def add_options(self, parser):
+        parser.add_argument("--check-commitment", choices=("0", "1"))
+
     def set_test_params(self):
         self.num_nodes = 4
+        self.extra_args = [[f"-checkassumeutxo={self.options.check_commitment}"] if self.options.check_commitment else [] for _ in range(self.num_nodes)]
 
     def setup_network(self):
-        self.add_nodes(self.num_nodes)
+        self.add_nodes(self.num_nodes, self.extra_args)
         self.start_nodes()
 
     def utxo_stats(self, node):
@@ -35,10 +39,14 @@ class UTXOSnapshotsTest(BitcoinTestFramework):
         wallet = MiniWallet(source)
         source.setmocktime(source.getblockheader(source.getbestblockhash())["time"])
         self.log.info("Generate the chain committed to by regtest chainparams")
-        for i in range(SNAPSHOT_HEIGHT - source.getblockcount()):
-            if i % 3 == 0:
-                wallet.send_self_transfer(from_node=source)
-            self.generate(source, 1, sync_fun=self.no_op)
+        check_commitment = self.options.check_commitment != "0"
+        expected = [f"verified UTXO commitment at height {SNAPSHOT_HEIGHT}: {UTXO_HASH}"] if check_commitment else []
+        unexpected = [] if check_commitment else ["checking UTXO commitment", "commitment metadata mismatch"]
+        with source.assert_debug_log(expected, unexpected_msgs=unexpected):
+            for i in range(SNAPSHOT_HEIGHT - source.getblockcount()):
+                if i % 3 == 0:
+                    wallet.send_self_transfer(from_node=source)
+                self.generate(source, 1, sync_fun=self.no_op)
         assert_equal(source.getbestblockhash(), SNAPSHOT_HASH)
         snapshot = source.dumptxoutset("snapshot.dat", "latest")
         assert_equal(snapshot["txoutset_hash"], UTXO_HASH)
@@ -109,7 +117,7 @@ class UTXOSnapshotsTest(BitcoinTestFramework):
         self.assert_utxo_sets_equal()
 
         self.log.info("Rebuild from blocks when reindexing a restored UTXO set")
-        self.restart_node(restored.index, extra_args=["-reindex"])
+        self.restart_node(restored.index, extra_args=["-reindex", *self.extra_args[restored.index]])
         self.connect_nodes(source.index, restored.index)
         self.sync_blocks(self.nodes[:2])
         self.assert_utxo_sets_equal()
