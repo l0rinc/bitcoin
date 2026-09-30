@@ -26,10 +26,10 @@ BOOST_FIXTURE_TEST_SUITE(validation_tests, BasicTestingSetup)
 BOOST_AUTO_TEST_CASE(snapshot_commitments)
 {
     for (const auto& [network, previous_height, latest_height, expected_count, previous_supported] : std::array{
-             std::tuple{ChainType::MAIN, 935'000, 965'000, 5U, true},
-             std::tuple{ChainType::TESTNET, 4'840'000, 5'125'000, 3U, true},
-             std::tuple{ChainType::TESTNET4, 120'000, 150'000, 3U, true},
-             std::tuple{ChainType::SIGNET, 290'000, 320'000, 3U, true},
+             std::tuple{ChainType::MAIN, 935'000, 965'000, 1U, false},
+             std::tuple{ChainType::TESTNET, 4'840'000, 5'125'000, 1U, false},
+             std::tuple{ChainType::TESTNET4, 120'000, 150'000, 1U, false},
+             std::tuple{ChainType::SIGNET, 290'000, 320'000, 1U, false},
              std::tuple{ChainType::REGTEST, 110, 299, 3U, true}}) {
         const auto params{CreateChainParams(*m_node.args, network)};
         BOOST_CHECK_EQUAL(params->GetAvailableSnapshotHeights().size(), expected_count);
