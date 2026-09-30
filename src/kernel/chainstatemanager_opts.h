@@ -23,6 +23,7 @@ class ValidationSignals;
 
 inline constexpr auto DEFAULT_MAX_TIP_AGE{24h};
 inline constexpr int32_t DEFAULT_PREVOUTFETCH_THREADS{8};
+inline constexpr bool DEFAULT_CHECK_ASSUMEUTXO{true};
 
 namespace kernel {
 
@@ -39,6 +40,8 @@ struct ChainstateManagerOpts {
     std::optional<arith_uint256> minimum_chain_work{};
     //! If set, it will override the block hash whose ancestors we will assume to have valid scripts without checking them.
     std::optional<uint256> assumed_valid_block{};
+    //! Cross-check the supported snapshot commitment during block validation without rejecting mismatches
+    bool check_assumeutxo{DEFAULT_CHECK_ASSUMEUTXO};
     //! If the tip is older than this, the node is considered to be in initial block download.
     std::chrono::seconds max_tip_age{DEFAULT_MAX_TIP_AGE};
     DBOptions coins_db{};

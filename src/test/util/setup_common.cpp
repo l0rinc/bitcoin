@@ -18,6 +18,7 @@
 #include <init.h>
 #include <interfaces/chain.h>
 #include <kernel/caches.h>
+#include <kernel/chainstatemanager_opts.h>
 #include <kernel/context.h>
 #include <key.h>
 #include <logging.h>
@@ -319,6 +320,7 @@ ChainTestingSetup::ChainTestingSetup(const ChainType chainType, TestOpts opts)
             .chainparams = chainparams,
             .datadir = m_args.GetDataDirNet(),
             .check_block_index = 1,
+            .check_assumeutxo = m_node.args->GetBoolArg("-checkassumeutxo", DEFAULT_CHECK_ASSUMEUTXO),
             .notifications = *m_node.notifications,
             .signals = m_node.validation_signals.get(),
             // Use no worker threads while fuzzing to avoid racy non-determinism

@@ -1070,6 +1070,13 @@ void btck_chainstate_manager_options_set_worker_threads_num(btck_ChainstateManag
     btck_ChainstateManagerOptions::get(opts).m_chainman_options.worker_threads_num = worker_threads;
 }
 
+void btck_chainstate_manager_options_set_check_assumeutxo(btck_ChainstateManagerOptions* chainman_opts, int check_assumeutxo)
+{
+    auto& opts{btck_ChainstateManagerOptions::get(chainman_opts)};
+    LOCK(opts.m_mutex);
+    opts.m_chainman_options.check_assumeutxo = check_assumeutxo == 1;
+}
+
 int btck_chainstate_manager_options_set_database_cache_bytes(btck_ChainstateManagerOptions* chainman_opts, uint64_t database_cache_bytes)
 {
     if (database_cache_bytes < MIN_DBCACHE_BYTES || database_cache_bytes > MAX_DBCACHE_BYTES) {

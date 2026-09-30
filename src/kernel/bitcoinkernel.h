@@ -1231,6 +1231,20 @@ BITCOINKERNEL_API void btck_chainstate_manager_options_set_worker_threads_num(
     int worker_threads) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
+ * @brief Enable or disable the diagnostic UTXO commitment check during block validation.
+ *
+ * Enabled by default. Connecting the supported snapshot block flushes and scans
+ * the UTXO set, which can take several minutes. Mismatches are logged without
+ * changing block validity. Snapshot import verification remains mandatory.
+ *
+ * @param[in] chainstate_manager_options Non-null, options to be set.
+ * @param[in] check_assumeutxo           Set to 1 to enable the check, or 0 to disable it.
+ */
+BITCOINKERNEL_API void btck_chainstate_manager_options_set_check_assumeutxo(
+    btck_ChainstateManagerOptions* chainstate_manager_options,
+    int check_assumeutxo) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
  * @brief Set the total database cache used by the chainstate manager.
  *
  * The total cache is split internally between the block tree database,

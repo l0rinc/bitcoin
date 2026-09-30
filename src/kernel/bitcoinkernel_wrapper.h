@@ -1266,6 +1266,11 @@ public:
         btck_chainstate_manager_options_set_worker_threads_num(get(), worker_threads);
     }
 
+    void SetCheckAssumeutxo(bool check_assumeutxo)
+    {
+        btck_chainstate_manager_options_set_check_assumeutxo(get(), check_assumeutxo);
+    }
+
     bool SetDatabaseCacheBytes(uint64_t database_cache_bytes)
     {
         return btck_chainstate_manager_options_set_database_cache_bytes(get(), database_cache_bytes) == 0;

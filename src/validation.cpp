@@ -3103,6 +3103,10 @@ bool Chainstate::ConnectTip(
              Ticks<SecondsDouble>(m_chainman.time_total),
              Ticks<MillisecondsDouble>(m_chainman.time_total) / m_chainman.num_blocks_total);
 
+    if (!m_chainman.VerifyAssumeutxoData(*this, *pindexNew, state)) {
+        return false;
+    }
+
     // See if this chainstate has reached a target block and can be used to
     // validate an assumeutxo snapshot. If it can, hashing the UTXO database
     // will be slow, and cs_main could remain locked here for several minutes.
@@ -6093,6 +6097,45 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     this->MaybeRebalanceCaches();
 
     return SnapshotCompletionResult::SUCCESS;
+}
+
+bool ChainstateManager::VerifyAssumeutxoData(Chainstate& chainstate, const CBlockIndex& tip, BlockValidationState& state)
+{
+    AssertLockHeld(cs_main);
+    if (!m_options.check_assumeutxo || chainstate.m_from_snapshot_blockhash) return true;
+    // The target commitment is already checked when validating an imported snapshot
+    if (chainstate.TargetBlock() == &tip) return true;
+    const auto& data{GetParams().Assumeutxo()};
+    if (!data || data->height != tip.nHeight) return true;
+
+    if (tip.GetBlockHash() != data->blockhash || tip.m_chain_tx_count != data->m_chain_tx_count) {
+        LogError("[snapshot] commitment metadata mismatch at height %d: expected [%s, %u], got [%s, %u]",
+                 tip.nHeight, data->blockhash.ToString(), data->m_chain_tx_count, tip.GetBlockHash().ToString(), tip.m_chain_tx_count);
+        return true;
+    }
+
+    LogInfo("[snapshot] checking UTXO commitment at height %d", tip.nHeight);
+    const auto start{SteadyClock::now()};
+    // Use the normal persistence ordering before opening a database cursor
+    if (!chainstate.FlushStateToDisk(state, FlushStateMode::FORCE_SYNC)) {
+        LogError("[snapshot] unable to flush UTXO set for commitment check at height %d: %s", tip.nHeight, state.ToString());
+        return false;
+    }
+    try {
+        auto stats{ComputeSnapshotStats(chainstate.CoinsDB(), m_blockman, m_interrupt)};
+        if (!stats) {
+            LogError("[snapshot] unable to compute UTXO commitment at height %d", tip.nHeight);
+        } else if (AssumeutxoHash{stats->hashSerialized} != data->hash_serialized) {
+            LogError("[snapshot] UTXO commitment mismatch at height %d: expected %s, got %s",
+                     tip.nHeight, data->hash_serialized.ToString(), stats->hashSerialized.ToString());
+        } else {
+            LogInfo("[snapshot] verified UTXO commitment at height %d: %s in %.3fs",
+                    tip.nHeight, stats->hashSerialized.ToString(), Ticks<SecondsDouble>(SteadyClock::now() - start));
+        }
+    } catch (StopHashingException const&) {
+        LogInfo("[snapshot] UTXO commitment check interrupted at height %d", tip.nHeight);
+    }
+    return true;
 }
 
 Chainstate& ChainstateManager::ActiveChainstate() const
