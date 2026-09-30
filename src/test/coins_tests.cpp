@@ -18,6 +18,11 @@
 #include <util/check.h>
 #include <util/strencodings.h>
 
+#include <array>
+#include <chrono>
+#include <functional>
+#include <future>
+#include <latch>
 #include <map>
 #include <string>
 #include <variant>
@@ -25,10 +30,36 @@
 
 #include <boost/test/unit_test.hpp>
 
+using namespace std::chrono_literals;
 using namespace util::hex_literals;
 
 int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out);
 void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txundo, int nHeight);
+
+//! Test access for cursor lifetime checks
+struct CoinsViewDBTestAccess {
+    static std::unique_ptr<CDBWrapper> RetainOldDB(CCoinsViewDB& db, const fs::path& new_path)
+    {
+        db.m_db_params.path = new_path;
+        return std::move(db.m_db);
+    }
+
+    static auto WithExclusiveLock(CCoinsViewDB& db, auto&& action)
+    {
+        LOCK(db.m_db_mutex);
+        return action();
+    }
+
+    static bool TryExclusiveLock(CCoinsViewDB& db)
+    {
+        // Same-thread try_lock is UB once cursors hold a shared lock
+        const auto try_lock{[&] {
+            TRY_LOCK(db.m_db_mutex, db_lock);
+            return !!db_lock;
+        }};
+        return std::async(std::launch::async, try_lock).get();
+    }
+};
 
 namespace
 {
@@ -1044,6 +1075,50 @@ BOOST_FIXTURE_TEST_CASE(ccoins_flush_behavior, FlushTest)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(coins_db_readers, BasicTestingSetup)
+{
+    CCoinsViewDB db{{.path = m_args.GetDataDirBase() / "coins_db_readers", .cache_bytes = 1_MiB, .wipe_data = true}, {}};
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), 0};
+    for (const auto& read : std::array<std::function<void()>, 8>{
+             [&] { db.GetCoin(outpoint); },
+             [&] { db.PeekCoin(outpoint); },
+             [&] { db.HaveCoin(outpoint); },
+             [&] { db.GetBestBlock(); },
+             [&] { db.GetHeadBlocks(); },
+             [&] { db.EstimateSize(); },
+             [&] { db.NeedsUpgrade(); },
+             [&] { db.GetDBProperty("leveldb.num-files-at-level0"); }}) {
+        std::latch started{1};
+        std::future<void> reader;
+        const auto status{CoinsViewDBTestAccess::WithExclusiveLock(db, [&] {
+            reader = std::async(std::launch::async, [&] { started.count_down(); read(); });
+            started.wait();
+            return reader.wait_for(100ms);
+        })};
+        reader.get();
+        BOOST_CHECK_EQUAL(status, std::future_status::ready); // TODO: Readers must wait for DB replacement
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(coins_db_cursor_resize, BasicTestingSetup)
+{
+    CCoinsViewDB db{{.path = m_args.GetDataDirBase() / "coins_db_cursor_resize", .cache_bytes = 1_MiB, .wipe_data = true}, {}};
+    auto cursor{WITH_LOCK(::cs_main, return db.Cursor())};
+    BOOST_CHECK( CoinsViewDBTestAccess::TryExclusiveLock(db)); // TODO: Cursor does not hold the DB mutex
+    // Keep the cursor's DB alive to observe the resize without a LevelDB abort
+    auto old_db{CoinsViewDBTestAccess::RetainOldDB(db, m_args.GetDataDirBase() / "coins_db_cursor_resize_new")};
+
+    // Wait until the resize holds `cs_main` before checking whether it blocks
+    std::latch resize_started{1};
+    auto resize{std::async(std::launch::async, [&] { WITH_LOCK(::cs_main, resize_started.count_down(); db.ResizeCache(2_MiB)); })};
+    resize_started.wait();
+
+    auto status{resize.wait_for(100ms)};
+    cursor.reset(); // Let ResizeCache() finish
+    resize.get();
+    BOOST_CHECK_EQUAL(status, std::future_status::ready); // TODO: ResizeCache() replaces m_db while a cursor is live
+}
+
 BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
 {
     auto level2_files{[](CCoinsViewDB& base) {
@@ -1061,7 +1136,14 @@ BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
     cache.Sync();
 
     BOOST_CHECK_EQUAL(level2_files(base), 0);
-    WITH_LOCK(::cs_main, return base.CompactFullAsync()).wait();
+    auto cursor{WITH_LOCK(::cs_main, return base.Cursor())};
+    auto compaction{std::async(std::launch::async, [&] {
+        return WITH_LOCK(::cs_main, return base.CompactFullAsync()); // Cursor thread cannot reacquire cs_main while holding m_db_mutex
+    }).get()};
+    auto status{compaction.wait_for(5s)};
+    cursor.reset();
+    compaction.wait();
+    BOOST_CHECK_EQUAL(status, std::future_status::ready);
     BOOST_CHECK_EQUAL(level2_files(base), 1);
 
     BOOST_CHECK_EQUAL(*Assert(base.GetCoin(outpoint)), coin);
