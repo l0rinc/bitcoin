@@ -36,6 +36,7 @@ static constexpr size_t WARN_FLUSH_COINS_COUNT{10'000'000};
 
 bool CCoinsViewDB::NeedsUpgrade()
 {
+    READ_LOCK(m_db_mutex);
     std::unique_ptr<CDBIterator> cursor{m_db->NewIterator()};
     // DB_COINS was deprecated in v0.15.0, commit
     // 1088b02f0ccd7358d2b7076bb9e122d59d502d02
@@ -88,6 +89,7 @@ void CCoinsViewDB::ResizeCache(size_t new_cache_size)
 
 std::optional<Coin> CCoinsViewDB::GetCoin(const COutPoint& outpoint) const
 {
+    READ_LOCK(m_db_mutex);
     Coin coin;
     const CDBWrapper::ReadStatus res = m_db->TryRead(CoinEntry(&outpoint), coin);
     if (!res) {
@@ -115,10 +117,12 @@ std::optional<Coin> CCoinsViewDB::PeekCoin(const COutPoint& outpoint) const
 
 bool CCoinsViewDB::HaveCoin(const COutPoint& outpoint) const
 {
+    READ_LOCK(m_db_mutex);
     return m_db->Exists(CoinEntry(&outpoint));
 }
 
 uint256 CCoinsViewDB::GetBestBlock() const {
+    READ_LOCK(m_db_mutex);
     return ReadBestBlock();
 }
 
@@ -130,6 +134,7 @@ uint256 CCoinsViewDB::ReadBestBlock() const {
 }
 
 std::vector<uint256> CCoinsViewDB::GetHeadBlocks() const {
+    READ_LOCK(m_db_mutex);
     std::vector<uint256> vhashHeadBlocks;
     if (!m_db->Read(DB_HEAD_BLOCKS, vhashHeadBlocks)) {
         return std::vector<uint256>();
@@ -205,11 +210,13 @@ void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block
 
 size_t CCoinsViewDB::EstimateSize() const
 {
+    READ_LOCK(m_db_mutex);
     return m_db->EstimateSize(DB_COIN, uint8_t(DB_COIN + 1));
 }
 
 std::optional<std::string> CCoinsViewDB::GetDBProperty(const std::string& property)
 {
+    READ_LOCK(m_db_mutex);
     return m_db->GetProperty(property);
 }
 

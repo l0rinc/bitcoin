@@ -1096,7 +1096,7 @@ BOOST_FIXTURE_TEST_CASE(coins_db_readers, BasicTestingSetup)
             return reader.wait_for(100ms);
         })};
         reader.get();
-        BOOST_CHECK_EQUAL(status, std::future_status::ready); // TODO: Readers must wait for DB replacement
+        BOOST_CHECK_EQUAL(status, std::future_status::timeout);
     }
 }
 
