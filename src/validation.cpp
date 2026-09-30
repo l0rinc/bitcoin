@@ -5769,6 +5769,12 @@ static void SnapshotUTXOHashBreakpoint(const util::SignalInterrupt& interrupt)
     if (interrupt) throw StopHashingException();
 }
 
+static std::optional<CCoinsStats> ComputeSnapshotStats(
+    const CCoinsViewDB& coins_db, node::BlockManager& blockman, const util::SignalInterrupt& interrupt)
+{
+    return ComputeUTXOStats(CoinStatsHashType::HASH_SERIALIZED, coins_db, blockman, [&interrupt] { SnapshotUTXOHashBreakpoint(interrupt); });
+}
+
 util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
     Chainstate& snapshot_chainstate,
     AutoFile& coins_file,
@@ -5917,8 +5923,7 @@ util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
     std::optional<CCoinsStats> maybe_stats;
 
     try {
-        maybe_stats = ComputeUTXOStats(
-            CoinStatsHashType::HASH_SERIALIZED, snapshot_coinsdb, m_blockman, [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); });
+        maybe_stats = ComputeSnapshotStats(snapshot_coinsdb, m_blockman, m_interrupt);
     } catch (StopHashingException const&) {
         return util::Error{Untranslated("Aborting after an interrupt was requested")};
     }
@@ -6051,11 +6056,7 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     LogInfo("[snapshot] computing UTXO stats for background chainstate to validate "
         "snapshot - this could take a few minutes");
     try {
-        validated_cs_stats = ComputeUTXOStats(
-            CoinStatsHashType::HASH_SERIALIZED,
-            validated_coins_db,
-            m_blockman,
-            [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); });
+        validated_cs_stats = ComputeSnapshotStats(validated_coins_db, m_blockman, m_interrupt);
     } catch (StopHashingException const&) {
         return SnapshotCompletionResult::STATS_FAILED;
     }
