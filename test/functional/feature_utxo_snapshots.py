@@ -58,7 +58,7 @@ class UTXOSnapshotsTest(BitcoinTestFramework):
         duplicate = contents[:header_size - 8] + (snapshot["coins_written"] * 2).to_bytes(8, "little") + contents[header_size:] * 2
         for node, name, data, rejected, expected_error in (
             (empty_group_node, "empty-group.dat", empty_group, False, "Bad snapshot data - txid has no coins"),  # TODO: Empty groups should be rejected
-            (duplicate_node, "duplicate.dat", duplicate, False, f"Bad snapshot coins count: expected {snapshot['coins_written'] * 2}, got {snapshot['coins_written']}"),  # TODO: Announced count must match unique UTXOs
+            (duplicate_node, "duplicate.dat", duplicate, True, f"Bad snapshot coins count: expected {snapshot['coins_written'] * 2}, got {snapshot['coins_written']}"),
         ):
             path = source.chain_path / name
             path.write_bytes(data)
