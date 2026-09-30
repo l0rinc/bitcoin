@@ -8,8 +8,9 @@ For notes on the design of Assumeutxo, please refer to [the design doc](/doc/des
 ## Loading a snapshot
 
 There is currently no canonical source for snapshots, but any downloaded snapshot
-will be checked against a hash that's been hardcoded in source code. If there is
-no source for the snapshot you need, you can generate it yourself using
+will be checked against the supported commitment for the selected network. Each
+release supports only its newest snapshot commitment. If there is no source for
+the snapshot you need, you can generate it yourself using
 `dumptxoutset` on another node that is already synced (see
 [Generating a snapshot](#generating-a-snapshot)).
 
@@ -52,15 +53,35 @@ block will need to be downloaded, and these blocks can't be pruned until they
 are indexed, so they could consume a lot of disk space until indexing catches up
 to the snapshot block.
 
+## Checking the supported commitment during full IBD
+
+When full block validation reaches the supported snapshot height, Bitcoin Core
+flushes the block and coin state, scans the UTXO set, and compares its hash with
+the compiled commitment. The check is enabled by default. A successful check logs
+the hash and elapsed time. Problems are logged as errors. Flushing and scanning
+can take several minutes.
+Use `-checkassumeutxo=0` or `-nocheckassumeutxo` to skip this check.
+
+Independent full-IBD nodes can reproduce the commitment, and a single honest
+participant can report a mismatch for investigation. Mismatches are diagnostic
+and do not change block acceptance. Results are logged locally and are not
+announced automatically to peers.
+
+The check runs when the committed block is connected. It does not retroactively
+scan a node whose tip has already passed that height. Reindexing or a reorg that
+connects the block again can repeat the check. Snapshot imports always verify
+their content hash, regardless of this option. Background validation of imported
+snapshots continues in this change.
+
 ## Generating a snapshot
 
 The RPC command `dumptxoutset` can be used to generate a snapshot for the current
 tip (using type "latest") or a recent height (using type "rollback"). A generated
-snapshot from one node can then be loaded
-on any other node. However, keep in mind that the snapshot hash needs to be
-listed in the chainparams to make it usable. If there is no snapshot hash for
-the height you have chosen already, you will need to change the code there and
-re-compile.
+snapshot can be loaded on another node if its base block and content hash match
+the supported commitment in chainparams. Snapshots from older
+heights require a compatible release that still supports them. An unfinished
+snapshot chainstate based on a retired commitment also requires such a release
+or rebuilding with `-reindex`.
 
 Using the type parameter "rollback", `dumptxoutset` can also be used to verify the
 hardcoded snapshot hash in the source code by regenerating the snapshot and
@@ -72,13 +93,9 @@ Example usage:
 $ bitcoin-cli -rpcclienttimeout=0 dumptxoutset /path/to/output rollback
 ```
 
-For most of the duration of `dumptxoutset` running the node is in a temporary
-state that does not actually reflect reality, i.e. blocks are marked invalid
-although we know they are not invalid. Because of this it is discouraged to
-interact with the node in any other way during this time to avoid inconsistent
-results and race conditions, particularly RPCs that interact with blockstorage.
-This inconsistent state is also why network activity is temporarily disabled,
-causing us to disconnect from all peers.
+Rollback snapshots are generated using a temporary UTXO database. The active
+chain remains intact and network activity continues. Historical block and undo
+data must be available for the requested rollback.
 
 `dumptxoutset` takes some time to complete, independent of hardware and
 what parameter is chosen. Because of that it is recommended to increase the RPC

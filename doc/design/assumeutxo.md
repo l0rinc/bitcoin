@@ -21,6 +21,26 @@ For notes on the usage of Assumeutxo, please refer to [the usage doc](/doc/assum
   preferring to work in terms of more general states like assumed-valid.
 
 
+## Supported commitment and independent checks
+
+`CChainParams::Assumeutxo()` provides one supported snapshot commitment per
+network. It includes the base height, base block hash, serialized UTXO hash and
+cumulative transaction count. Older commitments are retired when the supported
+snapshot changes. Test-specific commitments belong to their fixtures.
+
+Full block validation checks this commitment when it connects the base block,
+unless `-checkassumeutxo=0` is set. The scan uses the normal persistence ordering
+before reading the coins database. Metadata or hash mismatches are logged without
+changing consensus validity. An imported chainstate is checked during loading.
+Historical validation of that imported chainstate continues to use its existing
+mandatory check.
+
+Independent checks make the published commitment reproducible by full-IBD
+participants. They provide the verification foundation for a separate proposal
+to replace background replay with an opt-in snapshot starting state and community
+accountability. The chainstate phases below still describe the implemented
+background-validation behavior.
+
 ## Chainstate phases
 
 Chainstate within the system goes through a number of phases when UTXO snapshots are
