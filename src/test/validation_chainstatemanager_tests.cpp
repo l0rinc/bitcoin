@@ -481,7 +481,12 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_activate_snapshot, SnapshotTestSetup)
 //!   chainstate only contains fully validated blocks and the other chainstate contains all blocks,
 //!   except those marked assume-valid, because those entries don't HAVE_DATA.
 //!
-BOOST_FIXTURE_TEST_CASE(chainstatemanager_loadblockindex, TestChain100Setup)
+struct BlockIndexTestSetup : TestChain100Setup {
+    // This test edits block indexes in memory before reloading their database
+    BlockIndexTestSetup() : TestChain100Setup{ChainType::REGTEST, {.extra_args = {"-checkassumeutxo=0"}}} {}
+};
+
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_loadblockindex, BlockIndexTestSetup)
 {
     ChainstateManager& chainman = *Assert(m_node.chainman);
     Chainstate& cs1 = chainman.ActiveChainstate();
@@ -980,6 +985,11 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
         BOOST_REQUIRE_MESSAGE(result, util::ErrorString(result).original);
         return *result;
     };
+
+    BOOST_CHECK(get_valid_opts({}).check_assumeutxo);
+    BOOST_CHECK(get_valid_opts({"-checkassumeutxo=1"}).check_assumeutxo);
+    BOOST_CHECK(!get_valid_opts({"-checkassumeutxo=0"}).check_assumeutxo);
+    BOOST_CHECK(!get_valid_opts({"-nocheckassumeutxo"}).check_assumeutxo);
 
     // test -assumevalid
     BOOST_CHECK(!get_valid_opts({}).assumed_valid_block);

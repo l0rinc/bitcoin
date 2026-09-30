@@ -955,6 +955,10 @@ private:
 
     bool NotifyHeaderTip() LOCKS_EXCLUDED(GetMutex());
 
+    //! Audit the supported snapshot commitment without changing block validity
+    //! Return false if persisting the chainstate fails
+    [[nodiscard]] bool VerifyAssumeutxoData(Chainstate& chainstate, const CBlockIndex& tip, BlockValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
     //! Internal helper for ActivateSnapshot().
     //!
     //! De-serialization of a snapshot that is created with
