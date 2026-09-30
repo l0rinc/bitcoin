@@ -336,7 +336,7 @@ struct SnapshotTestSetup : TestChain100Setup {
                 *Assert(chainman.CurrentChainstate().m_from_snapshot_blockhash));
         }
 
-        const auto& au_data = ::Params().AssumeutxoForHeight(snapshot_height);
+        const auto& au_data = chainman.GetParams().AssumeutxoForHeight(snapshot_height);
         const CBlockIndex* tip = WITH_LOCK(chainman.GetMutex(), return chainman.ActiveTip());
 
         BOOST_CHECK_EQUAL(tip->m_chain_tx_count, au_data->m_chain_tx_count);
@@ -438,7 +438,7 @@ struct SnapshotTestSetup : TestChain100Setup {
             BOOST_CHECK_EQUAL(chainman.m_chainstates.size(), 0);
             m_node.notifications = std::make_unique<KernelNotifications>(Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings));
             const ChainstateManager::Options chainman_opts{
-                .chainparams = ::Params(),
+                .chainparams = GetChainParams(),
                 .datadir = chainman.m_options.datadir,
                 .notifications = *m_node.notifications,
                 .signals = m_node.validation_signals.get(),

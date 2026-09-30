@@ -8,6 +8,7 @@
 #include <common/args.h> // IWYU pragma: export
 #include <consensus/amount.h>
 #include <kernel/caches.h>
+#include <kernel/chainparams.h>
 #include <key.h>
 #include <node/caches.h>
 #include <node/context.h> // IWYU pragma: export
@@ -45,6 +46,7 @@ void SetupCommonTestArgs(ArgsManager& argsman);
 
 struct TestOpts {
     std::vector<const char*> extra_args{};
+    std::optional<AssumeutxoData> snapshot_commitment{};
     bool coins_db_in_memory{true};
     bool block_tree_db_in_memory{true};
     bool setup_net{true};
@@ -70,6 +72,8 @@ struct BasicTestingSetup {
     explicit BasicTestingSetup(ChainType chainType = ChainType::MAIN, TestOpts = {});
     ~BasicTestingSetup();
 
+    const CChainParams& GetChainParams() const;
+
     fs::path m_path_root;
     fs::path m_path_lock;
     bool m_has_custom_datadir{false};
@@ -91,6 +95,9 @@ struct BasicTestingSetup {
      * @see https://github.com/bitcoin/bitcoin/issues/25055 for additional context.
      */
     ArgsManager m_args;
+
+private:
+    std::unique_ptr<const CChainParams> m_chainparams;
 };
 
 /** Testing setup that performs all steps up until right before
