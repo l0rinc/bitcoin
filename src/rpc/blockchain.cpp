@@ -3150,10 +3150,9 @@ static RPCMethod dumptxoutset()
         }
         target_index = ParseHashOrHeight(options["rollback"], *node.chainman);
     } else if (snapshot_type == "rollback") {
-        auto snapshot_heights = node.chainman->GetParams().GetAvailableSnapshotHeights();
-        CHECK_NONFATAL(snapshot_heights.size() > 0);
-        auto max_height = std::max_element(snapshot_heights.begin(), snapshot_heights.end());
-        target_index = ParseHashOrHeight(*max_height, *node.chainman);
+        const auto& snapshot{node.chainman->GetParams().Assumeutxo()};
+        CHECK_NONFATAL(snapshot);
+        target_index = ParseHashOrHeight(snapshot->height, *node.chainman);
     } else if (snapshot_type == "latest") {
         target_index = tip;
     } else {
