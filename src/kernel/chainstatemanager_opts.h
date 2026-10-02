@@ -42,6 +42,8 @@ struct ChainstateManagerOpts {
     std::optional<arith_uint256> minimum_chain_work{};
     //! If set, it will override the block hash whose ancestors we will assume to have valid scripts without checking them.
     std::optional<uint256> assumed_valid_block{};
+    //! Whether to skip witness downloads and block/undo writes during pruned assumevalid IBD.
+    bool prune_assumevalid{false};
     //! If the tip is older than this, the node is considered to be in initial block download.
     std::chrono::seconds max_tip_age{DEFAULT_MAX_TIP_AGE};
     DBOptions coins_db{};

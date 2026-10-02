@@ -1060,6 +1060,8 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
         return *result;
     };
 
+    BOOST_CHECK(!get_valid_opts({}).prune_assumevalid);
+
     // test -assumevalid
     BOOST_CHECK(!get_valid_opts({}).assumed_valid_block);
     BOOST_CHECK_EQUAL(get_valid_opts({"-assumevalid="}).assumed_valid_block, uint256::ZERO);
