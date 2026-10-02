@@ -1094,6 +1094,30 @@ bool BlockManager::ReadBlock(CBlock& block, const CBlockIndex& index) const
     return ReadBlock(block, block_pos, index.GetBlockHash());
 }
 
+BlockManager::ReadRawBlockResult BlockManager::ReadBlockWithoutWitness(const FlatFilePos& pos, const uint256& expected_hash) const
+{
+    auto data{ReadRawBlock(pos)};
+    if (!data) return data;
+    try {
+        CBlockHeader header;
+        SpanReader{*data} >> header;
+        const auto hash{header.GetHash()};
+        if (!CheckProofOfWork(hash, header.nBits, GetConsensus())) {
+            LogError("Errors in block header at %s while reading block", pos.ToString());
+            return util::Unexpected{ReadRawError::IO};
+        }
+        if (hash != expected_hash) {
+            LogError("GetHash() doesn't match index at %s while reading block (%s != %s)", pos.ToString(), hash.ToString(), expected_hash.ToString());
+            return util::Unexpected{ReadRawError::IO};
+        }
+        data->resize(StripBlockWitness(*data));
+        return data;
+    } catch (const std::exception& e) {
+        LogError("Deserialize or I/O error - %s at %s while reading block", e.what(), pos.ToString());
+        return util::Unexpected{ReadRawError::IO};
+    }
+}
+
 BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& pos, std::optional<std::pair<size_t, size_t>> block_part) const
 {
     if (pos.nPos < STORAGE_HEADER_BYTES) {

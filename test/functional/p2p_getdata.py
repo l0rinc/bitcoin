@@ -6,20 +6,35 @@
 from collections import defaultdict
 
 from test_framework.messages import (
+    CBlock,
     CInv,
+    MSG_BLOCK,
+    MSG_WITNESS_FLAG,
+    from_binary,
+    msg_block,
     msg_getdata,
 )
-from test_framework.p2p import P2PInterface
+from test_framework.p2p import MESSAGEMAP, P2PInterface, p2p_lock
 from test_framework.test_framework import BitcoinTestFramework
+from test_framework.util import assert_equal
+from test_framework.wallet import MiniWallet
+
+
+class RawBlockMessage(msg_block):
+    def deserialize(self, stream):
+        self.raw = stream.getvalue()
+        super().deserialize(stream)
 
 
 class P2PStoreBlock(P2PInterface):
     def __init__(self):
         super().__init__()
         self.blocks = defaultdict(int)
+        self.block_data = {}
 
     def on_block(self, message):
         self.blocks[message.block.hash_int] += 1
+        self.block_data[message.block.hash_int] = message.raw
 
 
 class GetdataTest(BitcoinTestFramework):
@@ -43,9 +58,38 @@ class GetdataTest(BitcoinTestFramework):
         p2p_block_store.send_and_ping(good_getdata)
         p2p_block_store.wait_until(lambda: p2p_block_store.blocks[best_block] == 1)
 
+    def test_block_serialization(self):
+        self.log.info("Check exact witness and non-witness block payloads from cache and disk")
+        node = self.nodes[0]
+        wallet = MiniWallet(node)
+        wallet.send_self_transfer(from_node=node)
+        blockhash = self.generate(wallet, 1)[0]
+        full = bytes.fromhex(node.getblock(blockhash, 0))
+        stripped = from_binary(CBlock, full).serialize(with_witness=False)
+        assert len(stripped) < len(full)
+        peer = node.add_p2p_connection(P2PStoreBlock())
+
+        def check_payloads(blockhash, stripped, full):
+            hash_int = int(blockhash, 16)
+            for inv_type, expected in ((MSG_BLOCK, stripped), (MSG_BLOCK | MSG_WITNESS_FLAG, full)):
+                with p2p_lock:
+                    peer.block_data.pop(hash_int, None)
+                peer.send_and_ping(msg_getdata([CInv(inv_type, hash_int)]))
+                with p2p_lock:
+                    assert_equal(peer.block_data[hash_int], expected)
+
+        check_payloads(blockhash, stripped, full)
+        self.generate(wallet, 1)  # Evict the requested block from the most-recent-block cache
+        check_payloads(blockhash, stripped, full)
+
+        genesis = node.getblockhash(0)
+        genesis_block = bytes.fromhex(node.getblock(genesis, 0))
+        check_payloads(genesis, genesis_block, genesis_block)
 
     def run_test(self):
+        MESSAGEMAP[b"block"] = RawBlockMessage
         self.test_invalid_getdata()
+        self.test_block_serialization()
 
 
 if __name__ == '__main__':

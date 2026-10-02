@@ -8,24 +8,47 @@
 #include <node/blockstorage.h>
 #include <node/context.h>
 #include <node/kernel_notifications.h>
+#include <node/mining_types.h>
 #include <script/solver.h>
 #include <primitives/block.h>
+#include <primitives/transaction.h>
+#include <serialize.h>
+#include <streams.h>
 #include <util/chaintype.h>
+#include <util/strencodings.h>
+#include <util/expected.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
 #include <test/util/common.h>
 #include <test/util/logging.h>
+#include <test/util/mining.h>
 #include <test/util/setup_common.h>
+
+#include <cstddef>
+#include <vector>
 
 using kernel::CBlockFileInfo;
 using node::STORAGE_HEADER_BYTES;
 using node::BlockManager;
 using node::KernelNotifications;
 using node::MAX_BLOCKFILE_SIZE;
+using namespace util::hex_literals;
 
 // use BasicTestingSetup here for the data directory configuration, setup, and cleanup
 BOOST_FIXTURE_TEST_SUITE(blockmanager_tests, BasicTestingSetup)
+
+static std::vector<std::byte> WithoutWitness(const CBlock& block)
+{
+    DataStream stream;
+    stream << TX_NO_WITNESS(block);
+    return {stream.begin(), stream.end()};
+}
+
+static BlockManager::ReadRawBlockResult ReadWithoutWitness(const BlockManager& blockman, const FlatFilePos& pos, const uint256& hash)
+{
+    return blockman.ReadBlockWithoutWitness(pos, hash);
+}
 
 BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
 {
@@ -232,6 +255,48 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_hash_mismatch, TestingSetup)
     BOOST_CHECK(!m_node.chainman->m_blockman.ReadBlock(block, index));
 }
 
+BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_without_witness, RegTestingSetup)
+{
+    MineBlock(m_node, {}); // Adds a block with a coinbase witness on top of genesis
+    LOCK(cs_main);
+    auto& blockman{m_node.chainman->m_blockman};
+    for (const auto* index : {m_node.chainman->ActiveChain()[0], m_node.chainman->ActiveTip()}) {
+        CBlock block;
+        BOOST_REQUIRE(blockman.ReadBlock(block, *index));
+        BOOST_CHECK_EQUAL(block.vtx[0]->HasWitness(), index->nHeight != 0);
+        const auto expected{WithoutWitness(block)};
+        const auto raw{blockman.ReadRawBlock(index->GetBlockPos())};
+        BOOST_REQUIRE(raw);
+        CBlock decoded;
+        SpanReader{*raw} >> TX_WITH_WITNESS(decoded);
+        BOOST_CHECK(WithoutWitness(decoded) == expected);
+        const auto data{ReadWithoutWitness(blockman, index->GetBlockPos(), index->GetBlockHash())};
+        BOOST_REQUIRE(data);
+        BOOST_CHECK(*data == expected);
+        BOOST_CHECK(!blockman.ReadBlock(block, index->GetBlockPos(), uint256::ONE));
+        BOOST_CHECK(!ReadWithoutWitness(blockman, index->GetBlockPos(), uint256::ONE));
+    }
+    CBlock block;
+    BOOST_CHECK(!blockman.ReadBlock(block, FlatFilePos{}, uint256::ZERO));
+    BOOST_CHECK(!ReadWithoutWitness(blockman, FlatFilePos{}, uint256::ZERO));
+
+    const auto& genesis{Params().GenesisBlock()};
+    CBlock corrupt{genesis};
+    corrupt.nBits = 0;
+    const auto pos{blockman.WriteBlock(corrupt, 0)};
+    BOOST_CHECK(!blockman.ReadBlock(block, pos, corrupt.GetHash()));
+    BOOST_CHECK(!ReadWithoutWitness(blockman, pos, corrupt.GetHash()));
+
+    const auto genesis_pos{blockman.WriteBlock(genesis, 0)};
+    auto file{blockman.OpenBlockFile({genesis_pos.nFile, genesis_pos.nPos - STORAGE_HEADER_BYTES}, false)};
+    BOOST_REQUIRE(!file.IsNull());
+    // Retain the header and transaction count, truncating the transaction
+    file << Params().MessageStart() << static_cast<unsigned int>(GetSerializeSize(CBlockHeader{}) + GetSizeOfCompactSize(genesis.vtx.size()));
+    BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    BOOST_CHECK(!blockman.ReadBlock(block, genesis_pos, genesis.GetHash()));
+    BOOST_CHECK(!ReadWithoutWitness(blockman, genesis_pos, genesis.GetHash()));
+}
+
 BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
 {
     KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
@@ -322,6 +387,40 @@ BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)
 
     // Deleting a non-existent lock returns false
     BOOST_CHECK(!blockman.DeletePruneLock("nonexistent"));
+}
+
+BOOST_AUTO_TEST_CASE(blockmanager_signet_without_witness)
+{
+    const auto params{CreateChainParams(ArgsManager{}, ChainType::SIGNET)};
+    KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
+    const BlockManager::Options opts{
+        .chainparams = *params,
+        .blocks_dir = m_args.GetBlocksDirPath(),
+        .notifications = notifications,
+        .block_tree_db_params = DBParams{
+            .path = m_args.GetDataDirNet() / "blocks" / "index",
+            .cache_bytes = 0,
+        },
+    };
+    BlockManager blockman{*Assert(m_node.shutdown_signal), opts};
+    CBlock block;
+    // Reuse the first signed block from feature_signet.py
+    SpanReader{"00000020f61eee3b63a380a477a063af32b2bbc97c9ff9f01f2c4225e973988108000000f575c83235984e7dc4afc1f30944c170462e84437ab6f2d52e16878a79e4678bd1914d5fae77031eccf4070001010000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff025151feffffff0200f2052a010000001600149243f727dd5343293eb83174324019ec16c2630f0000000000000000776a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf94c4fecc7daa2490047304402205e423a8754336ca99dbe16509b877ef1bf98d008836c725005b3c787c41ebe46022047246e4467ad7cc7f1ad98662afcaf14c115e0095a227c7b05c5182591c23e7e01000120000000000000000000000000000000000000000000000000000000000000000000000000"_hex} >> TX_WITH_WITNESS(block);
+    LOCK(cs_main);
+    const auto pos{blockman.WriteBlock(block, 1)};
+    const auto expected{WithoutWitness(block)};
+    CBlock decoded;
+    BOOST_REQUIRE(blockman.ReadBlock(decoded, pos, block.GetHash()));
+    BOOST_CHECK(WithoutWitness(decoded) == expected);
+
+    CMutableTransaction coinbase{*block.vtx[0]};
+    coinbase.vout[1].scriptPubKey.back() ^= 1;
+    block.vtx[0] = MakeTransactionRef(coinbase);
+    const auto corrupt_pos{blockman.WriteBlock(block, 1)};
+    {
+        ASSERT_DEBUG_LOG("Errors in block solution");
+        BOOST_CHECK(!blockman.ReadBlock(decoded, corrupt_pos, block.GetHash()));
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

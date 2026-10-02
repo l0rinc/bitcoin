@@ -11,7 +11,9 @@
 #include <uint256.h>
 #include <util/time.h>
 
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -108,6 +110,12 @@ public:
 
     std::string ToString() const;
 };
+
+/** Compact a serialized block in place, returning the size of its non-witness serialization.
+ * Throws std::ios_base::failure on invalid encoding. The buffer may be modified on failure.
+ * Trailing bytes after the block are excluded from the returned prefix.
+ */
+[[nodiscard]] size_t StripBlockWitness(std::span<std::byte> data);
 
 /** Describes a place in the block chain to another node such that if the
  * other node doesn't have the same branch, it can find a recent common trunk.
