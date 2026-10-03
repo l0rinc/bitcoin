@@ -5,6 +5,7 @@
 
 #include <flatfile.h>
 
+#include <streams.h>
 #include <tinyformat.h>
 #include <util/fs_helpers.h>
 #include <util/log.h>
@@ -85,31 +86,45 @@ size_t FlatFileSeq::Allocate(const FlatFilePos& pos, size_t add_size, bool& out_
     return 0;
 }
 
-bool FlatFileSeq::Flush(const FlatFilePos& pos, bool finalize) const
+bool FlatFileSeq::Flush(const FlatFilePos& pos) const
 {
-    FILE* file = Open(FlatFilePos(pos.nFile, 0)); // Avoid fseek to nPos
-    if (!file) {
+    AutoFile file{Open(FlatFilePos(pos.nFile, 0))}; // Avoid fseek to nPos
+    if (file.IsNull()) {
         LogError("%s: failed to open file %d\n", __func__, pos.nFile);
         return false;
     }
-    if (finalize && !TruncateFile(file, pos.nPos)) {
-        LogError("%s: failed to truncate file %d\n", __func__, pos.nFile);
-        if (fclose(file) != 0) {
-            LogError("Failed to close file %d", pos.nFile);
-        }
-        return false;
-    }
-    if (!FileCommit(file)) {
+    if (!file.Commit()) {
         LogError("%s: failed to commit file %d\n", __func__, pos.nFile);
-        if (fclose(file) != 0) {
+        if (file.fclose() != 0) {
             LogError("Failed to close file %d", pos.nFile);
         }
         return false;
     }
     DirectoryCommit(m_dir);
 
-    if (fclose(file) != 0) {
+    if (file.fclose() != 0) {
         LogError("Failed to close file %d after flush", pos.nFile);
+        return false;
+    }
+    return true;
+}
+
+bool FlatFileSeq::Truncate(const FlatFilePos& pos) const
+{
+    AutoFile file{Open(FlatFilePos(pos.nFile, 0))}; // Avoid fseek to nPos
+    if (file.IsNull()) {
+        LogError("%s: failed to open file %d\n", __func__, pos.nFile);
+        return false;
+    }
+    if (!file.Truncate(pos.nPos)) {
+        LogError("%s: failed to truncate file %d\n", __func__, pos.nFile);
+        if (file.fclose() != 0) {
+            LogError("Failed to close file %d", pos.nFile);
+        }
+        return false;
+    }
+    if (file.fclose() != 0) {
+        LogError("Failed to close file %d after truncate", pos.nFile);
         return false;
     }
     return true;
