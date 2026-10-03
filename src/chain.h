@@ -79,7 +79,7 @@ enum BlockStatus : uint32_t {
     BLOCK_FAILED_VALID       =   32, //!< stage after last reached validness failed
     BLOCK_FAILED_CHILD       =   64, //!< Unused flag that was previously set when descending from failed block
 
-    BLOCK_OPT_WITNESS        =   128, //!< block data in blk*.dat was received with a witness-enforcing client
+    BLOCK_OPT_WITNESS        =   128, //!< witness rules were checked or assumed valid by a witness-aware client
 
     BLOCK_STATUS_RESERVED    =   256, //!< Unused flag that was previously set on assumeutxo snapshot blocks and their
                                       //!< ancestors before they were validated, and unset when they were validated.
@@ -160,11 +160,18 @@ public:
     {
     }
 
+    //! Whether the block index records block data stored in a block file.
+    bool HaveStoredBlockData() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        AssertLockHeld(::cs_main);
+        return nStatus & BLOCK_HAVE_DATA;
+    }
+
     FlatFilePos GetBlockPos() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
         AssertLockHeld(::cs_main);
         FlatFilePos ret;
-        if (nStatus & BLOCK_HAVE_DATA) {
+        if (HaveStoredBlockData()) {
             ret.nFile = nFile;
             ret.nPos = nDataPos;
         }

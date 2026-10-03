@@ -9,12 +9,14 @@
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
+#include <pow.h>
 #include <random.h>
 #include <rpc/blockchain.h>
 #include <sync.h>
 #include <test/util/chainstate.h>
 #include <test/util/common.h>
 #include <test/util/logging.h>
+#include <test/util/mining.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
@@ -27,6 +29,9 @@
 
 #include <tinyformat.h>
 
+#include <array>
+#include <cstdint>
+#include <tuple>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -36,6 +41,53 @@ using node::KernelNotifications;
 using node::SnapshotMetadata;
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, TestingSetup)
+
+struct PrunedVerifyDBSetup : ChainTestingSetup {
+    PrunedVerifyDBSetup() : ChainTestingSetup{ChainType::REGTEST, {.setup_net = false, .setup_validation_interface = false}}
+    {
+        auto chainman_opts{m_node.chainman->m_options};
+        m_node.block_template_manager.reset();
+        m_node.chainman.reset();
+        const BlockManager::Options blockman_opts{
+            .chainparams = Params(),
+            .prune_target = BlockManager::PRUNE_TARGET_MANUAL,
+            .blocks_dir = m_args.GetBlocksDirPath(),
+            .notifications = chainman_opts.notifications,
+            .block_tree_db_params = DBParams{.path = m_args.GetDataDirNet() / "blocks" / "index", .cache_bytes = 0, .memory_only = true},
+        };
+        m_node.chainman = std::make_unique<ChainstateManager>(*Assert(m_node.shutdown_signal), chainman_opts, blockman_opts);
+        CreateBlockTemplateManager();
+        LoadVerifyActivateChainstate();
+        for (const auto& block : CreateBlockChain(/*total_height=*/2, Params())) {
+            BOOST_REQUIRE(m_node.chainman->ProcessNewBlock(block, /*force_processing=*/true, /*min_pow_checked=*/true, /*new_block=*/nullptr));
+        }
+    }
+};
+
+BOOST_FIXTURE_TEST_CASE(verifydb_pruned_block_without_undo, PrunedVerifyDBSetup)
+{
+    // getblockfrompeer restores a pruned block without reconnecting it, so deep verification must stop at its missing undo data
+    ChainstateManager& chainman{*m_node.chainman};
+    LOCK(chainman.GetMutex());
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    BOOST_REQUIRE(chainman.m_blockman.IsPruneMode());
+    CBlockIndex* refetched{chainstate.m_chain.Tip()->pprev};
+    BOOST_REQUIRE(refetched->HaveStoredBlockData());
+    BOOST_REQUIRE(refetched->nStatus & BLOCK_HAVE_UNDO);
+
+    auto verify{[&](int level) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+        return CVerifyDB{chainman.GetNotifications()}.VerifyDB(chainstate, chainman.GetConsensus(), chainstate.CoinsTip(), level, /*nCheckDepth=*/2);
+    }};
+    for (int level{0}; level <= 4; ++level) BOOST_CHECK(verify(level) == VerifyDBResult::SUCCESS);
+
+    // A refetched pruned block has its body but no undo record
+    refetched->nStatus &= ~BLOCK_HAVE_UNDO;
+    refetched->nUndoPos = 0;
+    for (int level{0}; level <= 2; ++level) BOOST_CHECK(verify(level) == VerifyDBResult::SUCCESS);
+    for (int level : {3, 4}) BOOST_CHECK(verify(level) == VerifyDBResult::SKIPPED_MISSING_BLOCKS);
+    refetched->nStatus &= ~BLOCK_HAVE_DATA;
+    for (int level : {3, 4}) BOOST_CHECK(verify(level) == VerifyDBResult::SKIPPED_MISSING_BLOCKS);
+}
 
 //! Basic tests for ChainstateManager.
 //!
@@ -946,6 +998,187 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion_hash_mismatch, Sna
     }
 }
 
+struct PruneAssumeValidPredicateSetup : ChainTestingSetup {
+    PruneAssumeValidPredicateSetup() : ChainTestingSetup{ChainType::REGTEST, {
+        .setup_net = false,
+        .setup_validation_interface = false,
+    }} {}
+};
+
+BOOST_FIXTURE_TEST_CASE(prune_assumevalid_predicates, PruneAssumeValidPredicateSetup)
+{
+    const auto blocks{CreateBlockChain(/*total_height=*/103, Params())};
+    const uint256 assumed_valid{blocks[101]->GetHash()}; // height 102
+
+    auto reset_chainman{[&](bool prune_assumevalid, uint64_t prune_target, const uint256& assumevalid_hash) -> ChainstateManager& {
+        m_node.block_template_manager.reset();
+        m_node.chainman.reset();
+        ChainstateManager::Options chainman_opts{
+            .chainparams = Params(),
+            .datadir = m_args.GetDataDirNet(),
+            .check_block_index = 0,
+            .minimum_chain_work = arith_uint256{},
+            .assumed_valid_block = assumevalid_hash,
+            .prune_assumevalid = prune_assumevalid,
+            .notifications = *m_node.notifications,
+            .signals = m_node.validation_signals.get(),
+            .worker_threads_num = 0,
+        };
+        const BlockManager::Options blockman_opts{
+            .chainparams = chainman_opts.chainparams,
+            .prune_target = prune_target,
+            .blocks_dir = m_args.GetBlocksDirPath(),
+            .notifications = chainman_opts.notifications,
+            .block_tree_db_params = DBParams{.path = m_args.GetDataDirNet() / "blocks" / "index", .cache_bytes = m_kernel_cache_sizes.block_tree_db, .memory_only = true},
+        };
+        m_node.chainman = std::make_unique<ChainstateManager>(*Assert(m_node.shutdown_signal), chainman_opts, blockman_opts);
+        CreateBlockTemplateManager();
+        LoadVerifyActivateChainstate();
+
+        std::vector<CBlockHeader> headers;
+        headers.reserve(blocks.size() + 1);
+        headers.emplace_back(Params().GenesisBlock());
+        for (const auto& block : blocks) headers.emplace_back(*block);
+        BlockValidationState state;
+        BOOST_REQUIRE_MESSAGE(m_node.chainman->ProcessNewBlockHeaders(headers, /*min_pow_checked=*/true, state), state.ToString());
+        {
+            LOCK(m_node.chainman->GetMutex());
+            CBlockIndex* tip{Assert(m_node.chainman->m_blockman.LookupBlockIndex(blocks.back()->GetHash()))};
+            tip->nChainWork += GetBlockProof(*tip) * 2017;
+        }
+        return *m_node.chainman;
+    }};
+
+    auto lookup{[](ChainstateManager& chainman, const uint256& hash) {
+        return Assert(WITH_LOCK(chainman.GetMutex(), return chainman.m_blockman.LookupBlockIndex(hash)));
+    }};
+
+    for (const auto& [name, prune_assumevalid, prune_target, assumevalid_hash] : std::array{
+             std::tuple{"no pruning", true, uint64_t{0}, assumed_valid},
+             std::tuple{"option disabled", false, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid},
+             std::tuple{"unknown assumevalid block", true, BlockManager::PRUNE_TARGET_MANUAL, uint256{1}},
+         }) {
+        BOOST_TEST_INFO_SCOPE(name);
+        ChainstateManager& chainman{reset_chainman(prune_assumevalid, prune_target, assumevalid_hash)};
+        LOCK(chainman.GetMutex());
+        CBlockIndex* block{lookup(chainman, blocks[0]->GetHash())};
+        BOOST_CHECK(!chainman.CanUsePruneAssumeValid(*block));
+    }
+
+    ChainstateManager& enabled{reset_chainman(/*prune_assumevalid=*/true, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid)};
+    CBlock alt_block{*blocks[0]};
+    ++alt_block.nTime;
+    alt_block.nNonce = 0;
+    while (!CheckProofOfWork(alt_block.GetHash(), alt_block.nBits, Params().GetConsensus())) ++alt_block.nNonce;
+    BlockValidationState state;
+    BOOST_REQUIRE(enabled.ProcessNewBlockHeaders({{alt_block}}, /*min_pow_checked=*/true, state));
+    {
+        LOCK(enabled.GetMutex());
+        CBlockIndex* ancestor{lookup(enabled, blocks[0]->GetHash())};
+        CBlockIndex* assumed{lookup(enabled, assumed_valid)};
+        CBlockIndex* above_assumed{lookup(enabled, blocks[102]->GetHash())};
+        CBlockIndex* competing{lookup(enabled, alt_block.GetHash())};
+        CBlockIndex* best_header{enabled.m_best_header};
+
+        BOOST_CHECK(enabled.CanUsePruneAssumeValid(*ancestor));
+        BOOST_CHECK(enabled.CanUsePruneAssumeValid(*assumed));
+
+        BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*above_assumed));
+        BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*competing));
+
+        enabled.m_best_header = nullptr;
+        BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*assumed));
+        enabled.m_best_header = best_header;
+
+        ancestor->nStatus |= BLOCK_HAVE_DATA;
+        BOOST_CHECK(enabled.CanUsePruneAssumeValid(*ancestor));
+        BOOST_CHECK(enabled.HaveBlockData(*ancestor));
+
+        ancestor->nStatus &= ~BLOCK_HAVE_DATA;
+        const auto& held_block{blocks[1]};
+        bool new_block{false};
+        BOOST_REQUIRE(enabled.AcceptBlock(held_block, state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr,
+                                           &new_block, /*min_pow_checked=*/true, /*received_stripped=*/true));
+        BOOST_CHECK(new_block);
+        BOOST_CHECK_EQUAL(enabled.PruneAssumeValidCacheSize(), 1);
+        CBlockIndex* held_index{lookup(enabled, held_block->GetHash())};
+        BOOST_CHECK(enabled.HaveBlockData(*held_index));
+        BOOST_CHECK(!held_index->HaveStoredBlockData());
+        BOOST_CHECK(held_index->nStatus & BLOCK_OPT_WITNESS);
+        BOOST_REQUIRE(enabled.AcceptBlock(held_block, state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr,
+                                           &new_block, /*min_pow_checked=*/true));
+        BOOST_CHECK(!new_block);
+        BOOST_CHECK_EQUAL(enabled.PruneAssumeValidCacheSize(), 1);
+        BOOST_REQUIRE(enabled.AcceptBlock(blocks[0], state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr,
+                                           &new_block, /*min_pow_checked=*/true, /*received_stripped=*/true));
+
+        // Only leaving IBD changed since the block was usable above.
+        static_cast<TestChainstateManager&>(enabled).JumpOutOfIbd();
+        BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*assumed));
+    }
+    BOOST_REQUIRE(enabled.ActiveChainstate().ActivateBestChain(state));
+    {
+        LOCK(enabled.GetMutex());
+        BOOST_CHECK_EQUAL(enabled.ActiveHeight(), 2);
+        BOOST_CHECK_EQUAL(enabled.PruneAssumeValidCacheSize(), 0);
+        static_cast<TestChainstateManager&>(enabled).ResetIbd();
+        bool new_block{true};
+        // Fill the child slots, reject one more child, and leave room for the missing parent.
+        for (size_t i{3}; i < DEFAULT_PRUNE_ASSUMEVALID_CACHE_BLOCKS + 2; ++i) {
+            BOOST_REQUIRE(enabled.AcceptBlock(blocks[i], state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr,
+                                               &new_block, /*min_pow_checked=*/true, /*received_stripped=*/true));
+            BOOST_CHECK(new_block);
+        }
+        BOOST_CHECK_EQUAL(enabled.PruneAssumeValidCacheSize(), DEFAULT_PRUNE_ASSUMEVALID_CACHE_BLOCKS - 1);
+        BOOST_REQUIRE(enabled.AcceptBlock(blocks[DEFAULT_PRUNE_ASSUMEVALID_CACHE_BLOCKS + 2], state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr,
+                                           &new_block, /*min_pow_checked=*/true, /*received_stripped=*/true));
+        BOOST_CHECK(!new_block);
+        BOOST_CHECK(!enabled.HaveBlockData(*lookup(enabled, blocks[DEFAULT_PRUNE_ASSUMEVALID_CACHE_BLOCKS + 2]->GetHash())));
+        BOOST_REQUIRE(enabled.AcceptBlock(blocks[2], state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr,
+                                           &new_block, /*min_pow_checked=*/true, /*received_stripped=*/true));
+        BOOST_CHECK(new_block);
+        BOOST_CHECK_EQUAL(enabled.PruneAssumeValidCacheSize(), DEFAULT_PRUNE_ASSUMEVALID_CACHE_BLOCKS);
+    }
+    BOOST_REQUIRE(enabled.ActiveChainstate().ActivateBestChain(state));
+    {
+        LOCK(enabled.GetMutex());
+        BOOST_CHECK_EQUAL(enabled.ActiveHeight(), DEFAULT_PRUNE_ASSUMEVALID_CACHE_BLOCKS + 2);
+        BOOST_CHECK_EQUAL(enabled.PruneAssumeValidCacheSize(), 0);
+        bool new_block{false};
+        BOOST_REQUIRE(enabled.AcceptBlock(blocks[DEFAULT_PRUNE_ASSUMEVALID_CACHE_BLOCKS + 2], state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr,
+                                           &new_block, /*min_pow_checked=*/true));
+        BOOST_CHECK(new_block);
+        BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*lookup(enabled, blocks[DEFAULT_PRUNE_ASSUMEVALID_CACHE_BLOCKS + 3]->GetHash())));
+    }
+
+    // A failed cached-parent connection aborts activation and releases every cached body.
+    ChainstateManager& failing{reset_chainman(/*prune_assumevalid=*/true, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid)};
+    m_node.notifications->m_shutdown_on_fatal_error = false;
+    BlockValidationState failure_state;
+    {
+        LOCK(failing.GetMutex());
+        for (const auto& block : {blocks[1], blocks[0]}) {
+            BOOST_REQUIRE(failing.AcceptBlock(block, failure_state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr,
+                                             /*fNewBlock=*/nullptr, /*min_pow_checked=*/true, /*received_stripped=*/true));
+        }
+        BOOST_CHECK_EQUAL(failing.PruneAssumeValidCacheSize(), 2);
+        // Simulate inconsistent coins so the parent fails the duplicate-coinbase check during connection.
+        const CTransaction& coinbase{*blocks[0]->vtx[0]};
+        failing.ActiveChainstate().CoinsTip().AddCoin(COutPoint{coinbase.GetHash(), 0}, Coin{coinbase.vout[0], /*nHeightIn=*/0, /*fCoinBaseIn=*/true}, /*possible_overwrite=*/false);
+    }
+    {
+        ASSERT_DEBUG_LOG("Failed to connect a block during -pruneassumevalid: bad-txns-BIP30");
+        BOOST_CHECK(!failing.ActiveChainstate().ActivateBestChain(failure_state));
+    }
+    BOOST_CHECK(failure_state.IsError());
+    {
+        LOCK(failing.GetMutex());
+        BOOST_CHECK_EQUAL(failing.ActiveHeight(), 0);
+        BOOST_CHECK_EQUAL(failing.PruneAssumeValidCacheSize(), 0);
+        for (const auto& block : {blocks[0], blocks[1]}) BOOST_CHECK(!failing.HaveBlockData(*lookup(failing, block->GetHash())));
+    }
+}
+
 /** Helper function to parse args into args_man and return the result of applying them to opts */
 template <typename Options>
 util::Result<Options> SetOptsFromArgs(ArgsManager& args_man, Options opts,
@@ -979,6 +1212,8 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
         return *result;
     };
 
+    BOOST_CHECK(!get_valid_opts({}).prune_assumevalid);
+
     // test -assumevalid
     BOOST_CHECK(!get_valid_opts({}).assumed_valid_block);
     BOOST_CHECK_EQUAL(get_valid_opts({"-assumevalid="}).assumed_valid_block, uint256::ZERO);
@@ -991,6 +1226,10 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
 
     BOOST_CHECK(!get_opts({"-assumevalid=xyz"}));                                                               // invalid hex characters
     BOOST_CHECK(!get_opts({"-assumevalid=01234567890123456789012345678901234567890123456789012345678901234"})); // > 64 hex chars
+
+    // test -pruneassumevalid
+    BOOST_CHECK(get_valid_opts({"-pruneassumevalid"}).prune_assumevalid);
+    BOOST_CHECK(!get_valid_opts({"-nopruneassumevalid"}).prune_assumevalid);
 
     // test -minimumchainwork
     BOOST_CHECK(!get_valid_opts({}).minimum_chain_work);

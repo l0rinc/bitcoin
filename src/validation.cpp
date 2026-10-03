@@ -2288,11 +2288,89 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
 }
 
 
+// Return why scripts must be checked, or nullptr when assumevalid allows skipping them
+static const char* GetAssumeValidScriptCheckReason(const CBlockIndex& block, const ChainstateManager& chainman)
+    EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+{
+    AssertLockHeld(cs_main);
+
+    const char* script_check_reason;
+    if (chainman.AssumedValidBlock().IsNull()) {
+        script_check_reason = "assumevalid=0 (always verify)";
+    } else {
+        constexpr int64_t TWO_WEEKS_IN_SECONDS{60 * 60 * 24 * 7 * 2};
+        // We've been configured with the hash of a block which has been externally verified to have a valid history.
+        // A suitable default value is included with the software and updated from time to time.  Because validity
+        //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
+        // This setting doesn't force the selection of any particular chain but makes validating some faster by
+        //  effectively caching the result of part of the verification.
+        BlockMap::const_iterator it{chainman.m_blockman.m_block_index.find(chainman.AssumedValidBlock())};
+        if (it == chainman.m_blockman.m_block_index.end()) {
+            script_check_reason = "assumevalid hash not in headers";
+        } else if (it->second.GetAncestor(block.nHeight) != &block) {
+            script_check_reason = (block.nHeight > it->second.nHeight) ? "block height above assumevalid height" : "block not in assumevalid chain";
+        } else if (!chainman.m_best_header) {
+            script_check_reason = "best header unknown";
+        } else if (chainman.m_best_header->GetAncestor(block.nHeight) != &block) {
+            script_check_reason = "block not in best header chain";
+        } else if (chainman.m_best_header->nChainWork < chainman.MinimumChainWork()) {
+            script_check_reason = "best header chainwork below minimumchainwork";
+        } else if (GetBlockProofEquivalentTime(*chainman.m_best_header, block, *chainman.m_best_header, chainman.GetConsensus()) <= TWO_WEEKS_IN_SECONDS) {
+            script_check_reason = "block too recent relative to best header";
+        } else {
+            // This block is a member of the assumed verified chain and an ancestor of the best header.
+            // Script verification is skipped when connecting blocks under the
+            //  assumevalid block. Assuming the assumevalid block is valid this
+            //  is safe because block merkle hashes are still computed and checked,
+            // Of course, if an assumed valid block is invalid due to false scriptSigs
+            //  this optimization would allow an invalid chain to be accepted.
+            // The equivalent time check discourages hash power from extorting the network via DOS attack
+            //  into accepting an invalid block through telling users they must manually set assumevalid.
+            //  Requiring a software change or burying the invalid block, regardless of the setting, makes
+            //  it hard to hide the implication of the demand. This also avoids having release candidates
+            //  that are hardly doing any signature verification at all in testing without having to
+            //  artificially set the default assumed verified block further back.
+            // The test against the minimum chain work prevents the skipping when denied access to any chain at
+            //  least as good as the expected chain.
+            script_check_reason = nullptr;
+        }
+    }
+
+    return script_check_reason;
+}
+
+bool ChainstateManager::HaveBlockData(const CBlockIndex& block) const
+{
+    AssertLockHeld(cs_main);
+    return block.HaveStoredBlockData() || m_prune_assumevalid_blocks.contains(&block);
+}
+
+bool ChainstateManager::CanUsePruneAssumeValid(const CBlockIndex& block) const
+{
+    AssertLockHeld(cs_main);
+    // Loading without pruning disables the mode, so only the assumevalid conditions remain per block.
+    return m_prune_assumevalid_enabled && IsInitialBlockDownload() &&
+           GetAssumeValidScriptCheckReason(block, *this) == nullptr;
+}
+
+void ChainstateManager::DisablePruneAssumeValid(std::string_view reason)
+{
+    AssertLockHeld(cs_main);
+    if (!std::exchange(m_prune_assumevalid_enabled, false)) return;
+    LogWarning("-pruneassumevalid inactive: %s. Continuing with ordinary block validation and storage using the configured pruning settings.", reason);
+}
+
+size_t ChainstateManager::PruneAssumeValidCacheSize() const
+{
+    AssertLockHeld(cs_main);
+    return m_prune_assumevalid_blocks.size();
+}
+
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
 bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-                               CCoinsViewCache& view, bool fJustCheck)
+                               CCoinsViewCache& view, bool fJustCheck, bool prune_assumevalid)
 {
     AssertLockHeld(cs_main);
     assert(pindex);
@@ -2341,45 +2419,9 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         return true;
     }
 
-    const char* script_check_reason;
-    if (m_chainman.AssumedValidBlock().IsNull()) {
-        script_check_reason = "assumevalid=0 (always verify)";
-    } else {
-        constexpr int64_t TWO_WEEKS_IN_SECONDS{60 * 60 * 24 * 7 * 2};
-        // We've been configured with the hash of a block which has been externally verified to have a valid history.
-        // A suitable default value is included with the software and updated from time to time.  Because validity
-        //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
-        // This setting doesn't force the selection of any particular chain but makes validating some faster by
-        //  effectively caching the result of part of the verification.
-        BlockMap::const_iterator it{m_blockman.m_block_index.find(m_chainman.AssumedValidBlock())};
-        if (it == m_blockman.m_block_index.end()) {
-            script_check_reason = "assumevalid hash not in headers";
-        } else if (it->second.GetAncestor(pindex->nHeight) != pindex) {
-            script_check_reason = (pindex->nHeight > it->second.nHeight) ? "block height above assumevalid height" : "block not in assumevalid chain";
-        } else if (m_chainman.m_best_header->GetAncestor(pindex->nHeight) != pindex) {
-            script_check_reason = "block not in best header chain";
-        } else if (m_chainman.m_best_header->nChainWork < m_chainman.MinimumChainWork()) {
-            script_check_reason = "best header chainwork below minimumchainwork";
-        } else if (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= TWO_WEEKS_IN_SECONDS) {
-            script_check_reason = "block too recent relative to best header";
-        } else {
-            // This block is a member of the assumed verified chain and an ancestor of the best header.
-            // Script verification is skipped when connecting blocks under the
-            //  assumevalid block. Assuming the assumevalid block is valid this
-            //  is safe because block merkle hashes are still computed and checked,
-            // Of course, if an assumed valid block is invalid due to false scriptSigs
-            //  this optimization would allow an invalid chain to be accepted.
-            // The equivalent time check discourages hash power from extorting the network via DOS attack
-            //  into accepting an invalid block through telling users they must manually set assumevalid.
-            //  Requiring a software change or burying the invalid block, regardless of the setting, makes
-            //  it hard to hide the implication of the demand. This also avoids having release candidates
-            //  that are hardly doing any signature verification at all in testing without having to
-            //  artificially set the default assumed verified block further back.
-            // The test against the minimum chain work prevents the skipping when denied access to any chain at
-            //  least as good as the expected chain.
-            script_check_reason = nullptr;
-        }
-    }
+    // AcceptBlock() already chose to skip scripts for cached stripped blocks.
+    // Keep that decision if the best header changes before connection, since witnesses are unavailable.
+    const char* script_check_reason{prune_assumevalid ? nullptr : GetAssumeValidScriptCheckReason(*pindex, m_chainman)};
 
     const auto time_1{SteadyClock::now()};
     m_chainman.time_check += time_1 - time_start;
@@ -2482,6 +2524,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     // Get the script flags for this block
     script_verify_flags flags{GetBlockScriptFlags(*pindex, m_chainman)};
+    if (prune_assumevalid) flags &= ~SCRIPT_VERIFY_WITNESS;
 
     const auto time_2{SteadyClock::now()};
     m_chainman.time_forks += time_2 - time_1;
@@ -2632,16 +2675,16 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         return true;
     }
 
-    if (!m_blockman.WriteBlockUndo(blockundo, state, *pindex)) {
-        return false;
+    auto time_5{time_4};
+    if (!prune_assumevalid) {
+        if (!m_blockman.WriteBlockUndo(blockundo, state, *pindex)) return false;
+        time_5 = SteadyClock::now();
+        m_chainman.time_undo += time_5 - time_4;
+        LogDebug(BCLog::BENCH, "    - Write undo data: %.2fms [%.2fs (%.2fms/blk)]\n",
+                 Ticks<MillisecondsDouble>(time_5 - time_4),
+                 Ticks<SecondsDouble>(m_chainman.time_undo),
+                 Ticks<MillisecondsDouble>(m_chainman.time_undo) / m_chainman.num_blocks_total);
     }
-
-    const auto time_5{SteadyClock::now()};
-    m_chainman.time_undo += time_5 - time_4;
-    LogDebug(BCLog::BENCH, "    - Write undo data: %.2fms [%.2fs (%.2fms/blk)]\n",
-             Ticks<MillisecondsDouble>(time_5 - time_4),
-             Ticks<SecondsDouble>(m_chainman.time_undo),
-             Ticks<MillisecondsDouble>(m_chainman.time_undo) / m_chainman.num_blocks_total);
 
     if (!pindex->IsValid(BLOCK_VALID_SCRIPTS)) {
         pindex->RaiseValidity(BLOCK_VALID_SCRIPTS);
@@ -2750,10 +2793,7 @@ bool Chainstate::FlushStateToDisk(
             }
             if (!setFilesToPrune.empty()) {
                 fFlushForPrune = true;
-                if (!m_blockman.m_have_pruned) {
-                    m_blockman.m_block_tree_db->WriteFlag("prunedblockfiles", true);
-                    m_blockman.m_have_pruned = true;
-                }
+                m_blockman.SetHavePruned();
             }
         }
         const auto nNow{NodeClock::now()};
@@ -3020,14 +3060,23 @@ bool Chainstate::ConnectTip(
     if (m_mempool) AssertLockHeld(m_mempool->cs);
 
     assert(pindexNew->pprev == m_chain.Tip());
-    // Read block from disk.
+    // A block accepted without a disk copy stays connectable from the transient cache even if IBD or the best header changed after acceptance
+    const auto cached_block{m_chainman.m_prune_assumevalid_blocks.find(pindexNew)};
+    const bool prune_assumevalid{!pindexNew->HaveStoredBlockData() && cached_block != m_chainman.m_prune_assumevalid_blocks.end()};
+    // Load the block from the transient cache or disk if the caller did not supply it.
+    const bool from_disk{!block_to_connect && !prune_assumevalid};
     const auto time_1{SteadyClock::now()};
     if (!block_to_connect) {
-        std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
-        if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
-            return FatalError(m_chainman.GetNotifications(), state, _("Failed to read block."));
+        if (prune_assumevalid) {
+            block_to_connect = cached_block->second;
+            LogDebug(BCLog::BENCH, "  - Using cached stripped prune-assumevalid block\n");
+        } else {
+            std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
+            if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
+                return FatalError(m_chainman.GetNotifications(), state, _("Failed to read block."));
+            }
+            block_to_connect = std::move(pblockNew);
         }
-        block_to_connect = std::move(pblockNew);
     } else {
         LogDebug(BCLog::BENCH, "  - Using cached block\n");
     }
@@ -3036,16 +3085,21 @@ bool Chainstate::ConnectTip(
     SteadyClock::time_point time_3;
     // When adding aggregate statistics in the future, keep in mind that
     // num_blocks_total may be zero until the ConnectBlock() call below.
-    LogDebug(BCLog::BENCH, "  - Load block from disk: %.2fms\n",
-             Ticks<MillisecondsDouble>(time_2 - time_1));
+    LogDebug(BCLog::BENCH, "  - Load block from %s: %.2fms\n",
+             from_disk ? "disk" : "memory", Ticks<MillisecondsDouble>(time_2 - time_1));
     {
         CoinsViewOverlay& view{*m_coins_views->m_connect_block_view};
         const auto reset_guard{view.StartFetching(*block_to_connect)};
-        bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view);
+        bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view, /*fJustCheck=*/false, prune_assumevalid);
         if (m_chainman.m_options.signals) {
             m_chainman.m_options.signals->BlockChecked(block_to_connect, state);
         }
         if (!rv) {
+            if (prune_assumevalid) {
+                m_chainman.m_prune_assumevalid_blocks.clear();
+                return FatalError(m_chainman.GetNotifications(), state,
+                                  strprintf(_("Failed to connect a block during -pruneassumevalid: %s"), state.ToString()));
+            }
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
             LogError("%s: ConnectBlock %s failed, %s\n", __func__, pindexNew->GetBlockHash().ToString(), state.ToString());
@@ -3084,6 +3138,8 @@ bool Chainstate::ConnectTip(
     }
     // Update m_chain & related variables.
     m_chain.SetTip(*pindexNew);
+    // Release the connected body to free a slot for another download
+    m_chainman.m_prune_assumevalid_blocks.erase(pindexNew);
     m_chainman.UpdateIBDStatus();
     // Not fired while IBD is active. removeForBlock() above still runs.
     if (m_mempool && m_chainman.m_options.signals && !m_chainman.IsInitialBlockDownload()) {
@@ -3148,7 +3204,7 @@ CBlockIndex* Chainstate::FindMostWorkChain()
             // for the most work chain if we come across them; we can't switch
             // to a chain unless we have all the non-active-chain parent blocks.
             bool fFailedChain = pindexTest->nStatus & BLOCK_FAILED_VALID;
-            bool fMissingData = !(pindexTest->nStatus & BLOCK_HAVE_DATA);
+            bool fMissingData = !m_chainman.HaveBlockData(*pindexTest);
             if (fFailedChain || fMissingData) {
                 // Candidate chain is not usable (either invalid or missing data)
                 if (fFailedChain && (m_chainman.m_best_invalid == nullptr || pindexNew->nChainWork > m_chainman.m_best_invalid->nChainWork)) {
@@ -3159,7 +3215,7 @@ CBlockIndex* Chainstate::FindMostWorkChain()
                     // If we're missing data and not a descendant of an invalid block,
                     // then add back to m_blocks_unlinked, so that if the block arrives in the future
                     // we can try adding to setBlockIndexCandidates again.
-                    if (fMissingData && !fFailedChain) {
+                    if (fMissingData && !fFailedChain && pindexFailed->HaveStoredBlockData()) {
                         // Avoid duplicate entries in m_blocks_unlinked. If the same entry is
                         // processed twice in ReceivedBlockTransactions(), it may be re-added to
                         // setBlockIndexCandidates with a modified nSequenceId, breaking ordering
@@ -3296,6 +3352,7 @@ void ChainstateManager::UpdateIBDStatus()
     if (!CurrentChainstate().m_chain.IsTipRecent(MinimumChainWork(), m_options.max_tip_age)) return;
     LogInfo("Leaving InitialBlockDownload (latching to false)");
     m_cached_is_ibd.store(false, std::memory_order_relaxed);
+    DisablePruneAssumeValid("initial block download has ended");
 }
 
 bool ChainstateManager::NotifyHeaderTip()
@@ -3772,6 +3829,11 @@ void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
 /** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). */
 void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos)
 {
+    ReceivedBlockTransactionsCommon(block, pindexNew, &pos);
+}
+
+void ChainstateManager::ReceivedBlockTransactionsCommon(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos* pos)
+{
     AssertLockHeld(cs_main);
     pindexNew->nTx = block.vtx.size();
     // Typically m_chain_tx_count will be 0 at this point, but it can be nonzero if this
@@ -3786,10 +3848,12 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             pindexNew->nHeight, pindexNew->m_chain_tx_count, prev_tx_sum(*pindexNew), CLIENT_NAME, FormatFullVersion(), CLIENT_BUGREPORT);
         pindexNew->m_chain_tx_count = 0;
     }
-    pindexNew->nFile = pos.nFile;
-    pindexNew->nDataPos = pos.nPos;
-    pindexNew->nUndoPos = 0;
-    pindexNew->nStatus |= BLOCK_HAVE_DATA;
+    if (pos) {
+        pindexNew->nFile = pos->nFile;
+        pindexNew->nDataPos = pos->nPos;
+        pindexNew->nUndoPos = 0;
+        pindexNew->nStatus |= BLOCK_HAVE_DATA;
+    }
     if (DeploymentActiveAt(*pindexNew, *this, Consensus::DEPLOYMENT_SEGWIT)) {
         pindexNew->nStatus |= BLOCK_OPT_WITNESS;
     }
@@ -3825,9 +3889,15 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
                 range.first++;
                 m_blockman.m_blocks_unlinked.erase(it);
             }
+            // Cached blocks have no data on disk, so they are linked here instead of through m_blocks_unlinked.
+            for (const auto& [child, _] : m_prune_assumevalid_blocks) {
+                if (child->pprev == pindex && !child->HaveNumChainTxs()) {
+                    queue.push_back(m_blockman.LookupBlockIndex(child->GetBlockHash()));
+                }
+            }
         }
     } else {
-        if (pindexNew->pprev && pindexNew->pprev->IsValid(BLOCK_VALID_TREE)) {
+        if (pos && pindexNew->pprev && pindexNew->pprev->IsValid(BLOCK_VALID_TREE)) {
             m_blockman.AddUnlinkedBlock(pindexNew);
         }
     }
@@ -4134,7 +4204,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
  *  in ConnectBlock().
  *  Note that -reindex-chainstate skips the validation that happens here!
  */
-static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, const ChainstateManager& chainman, const CBlockIndex* pindexPrev)
+static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, const ChainstateManager& chainman, const CBlockIndex* pindexPrev, bool check_witness = true)
 {
     const int nHeight = pindexPrev == nullptr ? 0 : pindexPrev->nHeight + 1;
 
@@ -4174,7 +4244,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     // * There must be at least one output whose scriptPubKey is a single 36-byte push, the first 4 bytes of which are
     //   {0xaa, 0x21, 0xa9, 0xed}, and the following 32 bytes are SHA256^2(witness root, witness reserved value). In case there are
     //   multiple, the last one is used.
-    if (!CheckWitnessMalleation(block, DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_SEGWIT), state)) {
+    if (check_witness && !CheckWitnessMalleation(block, DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_SEGWIT), state)) {
         return false;
     }
 
@@ -4184,6 +4254,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     // large by filling up the coinbase witness, which doesn't change
     // the block hash, so we couldn't mark the block as permanently
     // failed).
+    // For stripped prune-assumevalid blocks, this checks only the received representation's weight
     if (GetBlockWeight(block) > MAX_BLOCK_WEIGHT) {
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-weight", strprintf("%s : weight limit failed", __func__));
     }
@@ -4302,8 +4373,8 @@ void ChainstateManager::ReportHeadersPresync(int64_t height, int64_t timestamp)
     }
 }
 
-/** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
-bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked)
+/** Accept a block into the transient cache or store it on disk. If dbp is non-nullptr, it is already on disk. */
+bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked, bool received_stripped)
 {
     const CBlock& block = *pblock;
 
@@ -4320,10 +4391,10 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
         return false;
 
     // Check all requested blocks that we do not already have for validity and
-    // save them to disk. Skip processing of unrequested blocks as an anti-DoS
+    // retain them for connection. Skip processing of unrequested blocks as an anti-DoS
     // measure, unless the blocks have more work than the active chain tip, and
     // aren't too far ahead of it, so are likely to be attached soon.
-    bool fAlreadyHave = pindex->nStatus & BLOCK_HAVE_DATA;
+    bool fAlreadyHave = HaveBlockData(*pindex);
     bool fHasMoreOrSameWork = (ActiveTip() ? pindex->nChainWork >= ActiveTip()->nChainWork : true);
     // Blocks that are too out-of-order needlessly limit the effectiveness of
     // pruning, because pruning will not delete block files that contain any
@@ -4341,6 +4412,11 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     // TODO: deal better with return value and error conditions for duplicate
     // and unrequested blocks.
     if (fAlreadyHave) return true;
+    const bool prune_assumevalid{received_stripped && CanUsePruneAssumeValid(*pindex)};
+    if (received_stripped && !prune_assumevalid) {
+        LogDebug(BCLog::NET, "Ignoring stripped block %s because it is no longer eligible for -pruneassumevalid\n", block.GetHash().ToString());
+        return true;
+    }
     if (!fRequested) {  // If we didn't ask for it:
         if (pindex->nTx != 0) return true;    // This is a previously-processed block that was pruned
         if (!fHasMoreOrSameWork) return true; // Don't process less-work chains
@@ -4356,7 +4432,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     const CChainParams& params{GetParams()};
 
     if (!CheckBlock(block, state, params.GetConsensus()) ||
-        !ContextualCheckBlock(block, state, *this, pindex->pprev)) {
+        !ContextualCheckBlock(block, state, *this, pindex->pprev, /*check_witness=*/!prune_assumevalid)) {
         if (Assume(state.IsInvalid())) {
             ActiveChainstate().InvalidBlockFound(pindex, state);
         }
@@ -4364,27 +4440,46 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
         return false;
     }
 
-    // Header is valid/has work, merkle tree and segwit merkle tree are good...RELAY NOW
+    if (prune_assumevalid) {
+        // Keep a slot for the next connecting block even if out-of-order children fill the cache.
+        const size_t parent_reserve{pindex->pprev == ActiveTip() ? 0U : 1U};
+        if (PruneAssumeValidCacheSize() + 1 + parent_reserve > DEFAULT_PRUNE_ASSUMEVALID_CACHE_BLOCKS) {
+            LogDebug(BCLog::VALIDATION, "Ignoring stripped block %s because the transient cache is full\n", block.GetHash().ToString());
+            return true;
+        }
+        const bool inserted{m_prune_assumevalid_blocks.emplace(pindex, pblock).second};
+        assert(inserted);
+    }
+
+    // Header and transaction merkle tree are valid. Witness checks passed or were assumed valid. RELAY NOW
     // (but if it does not build on our best tip, let the SendMessages loop relay it)
     if (!IsInitialBlockDownload() && ActiveTip() == pindex->pprev && m_options.signals) {
         m_options.signals->NewPoWValidBlock(pindex, pblock);
     }
 
-    // Write block to history file
+    // Cache eligible stripped blocks and store ordinary blocks in the history file.
     if (fNewBlock) *fNewBlock = true;
     try {
-        FlatFilePos blockPos{};
-        if (dbp) {
-            blockPos = *dbp;
-            m_blockman.UpdateBlockInfo(block, pindex->nHeight, blockPos);
+        if (prune_assumevalid) {
+            m_blockman.SetHavePruned();
+            ReceivedBlockTransactionsCommon(block, pindex, /*pos=*/nullptr);
+            LogDebug(BCLog::VALIDATION, "Accepted stripped prune-assumevalid block %s (%d) without writing block data to disk\n",
+                     block.GetHash().ToString(), pindex->nHeight);
         } else {
-            blockPos = m_blockman.WriteBlock(block, pindex->nHeight);
-            if (blockPos.IsNull()) {
-                state.Error(strprintf("%s: Failed to find position to write new block to disk", __func__));
-                return false;
+            if (pindex->nHeight > 0) DisablePruneAssumeValid("ordinary block storage has begun");
+            FlatFilePos blockPos{};
+            if (dbp) {
+                blockPos = *dbp;
+                m_blockman.UpdateBlockInfo(block, pindex->nHeight, blockPos);
+            } else {
+                blockPos = m_blockman.WriteBlock(block, pindex->nHeight);
+                if (blockPos.IsNull()) {
+                    state.Error(strprintf("%s: Failed to find position to write new block to disk", __func__));
+                    return false;
+                }
             }
+            ReceivedBlockTransactions(block, pindex, blockPos);
         }
-        ReceivedBlockTransactions(block, pindex, blockPos);
     } catch (const std::runtime_error& e) {
         return FatalError(GetNotifications(), state, strprintf(_("System error while saving block to disk: %s"), e.what()));
     }
@@ -4410,7 +4505,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     return true;
 }
 
-bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block)
+bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, bool received_stripped)
 {
     AssertLockNotHeld(cs_main);
 
@@ -4430,8 +4525,8 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         // not very expensive, the anti-DoS benefits of caching failure (of a definitely-invalid block) are not substantial.
         bool ret = CheckBlock(*block, state, GetConsensus());
         if (ret) {
-            // Store to disk
-            ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, new_block, min_pow_checked);
+            // Accept the block for connection
+            ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, new_block, min_pow_checked, received_stripped);
         }
         if (!ret) {
             if (m_options.signals) {
@@ -4648,7 +4743,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
     int nGoodTransactions = 0;
     BlockValidationState state;
     int reportDone = 0;
-    bool skipped_no_block_data{false};
+    bool skipped_missing_data{false};
     bool skipped_l3_checks{false};
     LogInfo("Verification progress: 0%%");
 
@@ -4669,7 +4764,13 @@ VerifyDBResult CVerifyDB::VerifyDB(
             // If pruning or running under an assumeutxo snapshot, only go
             // back as far as we have data.
             LogInfo("Block verification stopping at height %d (no data). This could be due to pruning or use of an assumeutxo snapshot.", pindex->nHeight);
-            skipped_no_block_data = true;
+            skipped_missing_data = true;
+            break;
+        }
+        if (nCheckLevel >= 3 && chainstate.m_blockman.IsPruneMode() && !(pindex->nStatus & BLOCK_HAVE_UNDO)) {
+            // Refetching a pruned block does not restore its undo data
+            LogInfo("Block verification stopping at height %d (no undo data).", pindex->nHeight);
+            skipped_missing_data = true;
             break;
         }
         CBlock block;
@@ -4760,7 +4861,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
     if (skipped_l3_checks) {
         return VerifyDBResult::SKIPPED_L3_CHECKS;
     }
-    if (skipped_no_block_data) {
+    if (skipped_missing_data) {
         return VerifyDBResult::SKIPPED_MISSING_BLOCKS;
     }
     return VerifyDBResult::SUCCESS;
@@ -5645,6 +5746,7 @@ util::Result<CBlockIndex*> ChainstateManager::ActivateSnapshot(
         if (mempool && mempool->size() > 0) {
             return util::Error{Untranslated("Can't activate a snapshot when mempool not empty")};
         }
+        DisablePruneAssumeValid("a UTXO snapshot is being loaded");
     }
 
     int64_t current_coinsdb_cache_size{0};
@@ -6152,6 +6254,7 @@ static ChainstateManager::Options&& Flatten(ChainstateManager::Options&& opts)
 
 ChainstateManager::ChainstateManager(const util::SignalInterrupt& interrupt, Options options, node::BlockManager::Options blockman_options)
     : m_script_check_queue{/*batch_size=*/128, std::clamp(options.worker_threads_num, 0, MAX_SCRIPTCHECK_THREADS)},
+      m_prune_assumevalid_enabled{options.prune_assumevalid},
       m_interrupt{interrupt},
       m_options{Flatten(std::move(options))},
       m_blockman{interrupt, std::move(blockman_options)},

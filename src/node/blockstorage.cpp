@@ -484,6 +484,13 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
         pindex->nTimeMax = (pindex->pprev ? std::max(pindex->pprev->nTimeMax, pindex->nTime) : pindex->nTime);
 
+        if (pindex->nHeight > 0 && !pindex->HaveStoredBlockData() && !pindex->IsValid(BLOCK_VALID_SCRIPTS) && pindex->nTx > 0) {
+            // An unconnected transient block was lost and must be downloaded again
+            pindex->nTx = 0;
+            pindex->nStatus = (pindex->nStatus & ~BLOCK_VALID_MASK) | BLOCK_VALID_TREE;
+            m_dirty_blockindex.insert(pindex);
+        }
+
         // We can link the chain of blocks for which we've received transactions at some point, or
         // blocks that are assumed-valid on the basis of snapshot load (see
         // PopulateAndValidateSnapshot()).
@@ -623,6 +630,14 @@ void BlockManager::ScanAndUnlinkAlreadyPrunedFiles()
     }
 
     UnlinkPrunedFiles(block_files_to_prune);
+}
+
+void BlockManager::SetHavePruned()
+{
+    AssertLockHeld(::cs_main);
+    if (m_have_pruned) return;
+    m_block_tree_db->WriteFlag("prunedblockfiles", true);
+    m_have_pruned = true;
 }
 
 bool BlockManager::IsBlockPruned(const CBlockIndex& block) const

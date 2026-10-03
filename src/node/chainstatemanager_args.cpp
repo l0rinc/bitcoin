@@ -46,6 +46,8 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManage
         }
     }
 
+    if (auto value{args.GetBoolArg("-pruneassumevalid")}) opts.prune_assumevalid = *value;
+
     if (auto value{args.GetIntArg("-maxtipage")}) opts.max_tip_age = std::chrono::seconds{*value};
 
     ReadDatabaseArgs(args, opts.coins_db);
