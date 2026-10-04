@@ -407,6 +407,10 @@ public:
     /** Attempt to stay below this number of bytes of block files. */
     [[nodiscard]] uint64_t GetPruneTarget() const { return m_opts.prune_target; }
     static constexpr auto PRUNE_TARGET_MANUAL{std::numeric_limits<uint64_t>::max()};
+    [[nodiscard]] static constexpr bool IsAutomaticPruneTarget(uint64_t target)
+    {
+        return target != 0 && target != PRUNE_TARGET_MANUAL;
+    }
 
     [[nodiscard]] bool LoadingBlocks() const { return m_importing || !m_blockfiles_indexed; }
 

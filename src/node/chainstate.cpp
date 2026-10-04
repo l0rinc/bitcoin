@@ -177,6 +177,7 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
 
     // Load a chain created from a UTXO snapshot, if any exist.
     Chainstate* assumeutxo_cs{chainman.LoadAssumeutxoChainstate()};
+    if (assumeutxo_cs) chainman.LogPruneAssumeValidStatus(false);
 
     if (assumeutxo_cs && options.wipe_chainstate_db) {
         // Reset chainstate target to network tip instead of snapshot block.
