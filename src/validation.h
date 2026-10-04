@@ -598,6 +598,8 @@ public:
         std::optional<uint256> from_snapshot_blockhash = std::nullopt);
     ~Chainstate();
 
+    node::BlockFetcher& GetBlockFetcher() { return *m_block_fetcher; }
+
     //! Return path to chainstate leveldb directory.
     fs::path StoragePath() const;
 

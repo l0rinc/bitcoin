@@ -20,7 +20,10 @@
 #include <test/util/mining.h>
 #include <test/util/setup_common.h>
 
+#include <chrono>
+#include <future>
 #include <stdexcept>
+#include <thread>
 
 using kernel::CBlockFileInfo;
 using node::STORAGE_HEADER_BYTES;
@@ -297,16 +300,12 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_hash_mismatch, TestingSetup)
 BOOST_FIXTURE_TEST_CASE(block_read_ahead_checks, TestChain100Setup)
 {
     // Disk prefetch publishes checked blocks and leaves invalid bodies for the normal failure path
-    struct PrefetchChainstate : Chainstate {
-        using Chainstate::Chainstate;
-        using Chainstate::m_block_fetcher;
-    };
     auto& chainman{*Assert(m_node.chainman)};
     auto& blockman{chainman.m_blockman};
-    PrefetchChainstate chainstate{nullptr, blockman, chainman, std::nullopt};
+    Chainstate chainstate{nullptr, blockman, chainman};
     LOCK(cs_main);
     const CBlockIndex& tip{*chainman.ActiveTip()};
-    auto& fetcher{*chainstate.m_block_fetcher};
+    auto& fetcher{chainstate.GetBlockFetcher()};
     fetcher.FillQueue(&tip, tip.nHeight);
     const auto block{fetcher.Load(tip.GetBlockHash())};
     BOOST_REQUIRE(block);
@@ -323,6 +322,27 @@ BOOST_FIXTURE_TEST_CASE(block_read_ahead_checks, TestChain100Setup)
     index.nDataPos = pos.nPos;
     fetcher.FillQueue(&index, index.nHeight);
     BOOST_CHECK(!fetcher.Load(index.GetBlockHash()));
+}
+
+BOOST_AUTO_TEST_CASE(block_read_ahead_downloaded_body)
+{
+    // Preparing a downloaded body uses the read workers without a disk read, or defers when disabled
+    const auto caller{std::this_thread::get_id()};
+    for (int threads : {0, 2}) {
+        node::BlockFetcher fetcher{[](CBlock&, FlatFilePos, uint256) -> bool {
+            throw std::runtime_error("unexpected disk read");
+        }, threads};
+        std::thread::id worker;
+        auto prepared{fetcher.Submit([&] {
+            worker = std::this_thread::get_id();
+            return std::make_shared<CBlock>();
+        })};
+        BOOST_CHECK(prepared.wait_for(std::chrono::seconds{10}) == (threads ? std::future_status::ready : std::future_status::deferred));
+        BOOST_REQUIRE(prepared.get());
+        BOOST_CHECK((worker == caller) == (threads == 0));
+        auto failed{fetcher.Submit([]() -> std::shared_ptr<const CBlock> { throw std::runtime_error("invalid serialized body"); })};
+        BOOST_CHECK_THROW(static_cast<void>(failed.get()), std::runtime_error);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(block_read_ahead_retry)

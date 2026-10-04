@@ -6,6 +6,7 @@
 
 #include <common/args.h>
 #include <net_processing.h>
+#include <util/byte_units.h>
 
 #include <algorithm>
 #include <limits>
@@ -14,6 +15,12 @@ namespace node {
 
 void ApplyArgsManOptions(const ArgsManager& argsman, PeerManager::Options& options)
 {
+    if (auto value{argsman.GetIntArg("-blockdownloadwindow")}) {
+        options.block_download_window = std::clamp<int64_t>(*value, 1, MAX_BLOCK_DOWNLOAD_WINDOW);
+    }
+    if (auto value{argsman.GetIntArg("-blockdownloadmemory")}) {
+        options.block_download_memory = std::clamp<int64_t>(*value, 0, MAX_BLOCK_DOWNLOAD_MEMORY) * 1_MiB;
+    }
     if (auto value{argsman.GetBoolArg("-txreconciliation")}) options.reconcile_txs = *value;
 
     if (auto value{argsman.GetIntArg("-blockreconstructionextratxn")}) {

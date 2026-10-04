@@ -13,6 +13,7 @@
 #include <private_broadcast.h>
 #include <protocol.h>
 #include <uint256.h>
+#include <util/byte_units.h>
 #include <util/expected.h>
 #include <validationinterface.h>
 
@@ -47,6 +48,10 @@ inline constexpr bool DEFAULT_TXRECONCILIATION_ENABLE{false};
 inline constexpr uint32_t DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN{100};
 /** Default maximum per-second rate for sending transaction inventory to peers. */
 inline constexpr unsigned int DEFAULT_TX_SEND_RATE{14};
+inline constexpr int32_t DEFAULT_BLOCK_DOWNLOAD_WINDOW{1024};
+inline constexpr int32_t MAX_BLOCK_DOWNLOAD_WINDOW{16384};
+inline constexpr int32_t DEFAULT_BLOCK_DOWNLOAD_MEMORY{64};
+inline constexpr int32_t MAX_BLOCK_DOWNLOAD_MEMORY{4096};
 inline constexpr bool DEFAULT_PEERBLOOMFILTERS = false;
 inline constexpr bool DEFAULT_PEERBLOCKFILTERS = false;
 /** Maximum number of outstanding CMPCTBLOCK requests for the same block. */
@@ -94,6 +99,10 @@ class PeerManager : public CValidationInterface, public NetEventsInterface
 {
 public:
     struct Options {
+        //! Maximum distance ahead of the last common block to request
+        int32_t block_download_window{DEFAULT_BLOCK_DOWNLOAD_WINDOW};
+        //! Serialized bytes retained for pending blocks awaiting connection
+        uint64_t block_download_memory{DEFAULT_BLOCK_DOWNLOAD_MEMORY * 1_MiB};
         //! Whether this node is running in -blocksonly mode
         bool ignore_incoming_txs{DEFAULT_BLOCKSONLY};
         //! Whether transaction reconciliation protocol is enabled

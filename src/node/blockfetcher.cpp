@@ -34,6 +34,12 @@ int32_t BlockFetcher::WindowSize() const
     return m_thread_count * BLOCKS_PER_READ_AHEAD_THREAD;
 }
 
+std::future<std::shared_ptr<const CBlock>> BlockFetcher::Submit(ReadTask task)
+{
+    if (m_thread_count == 0) return std::async(std::launch::deferred, std::move(task));
+    return m_pool.Submit(std::move(task)).value();
+}
+
 void BlockFetcher::Clear()
 {
     AssertLockHeld(::cs_main);
