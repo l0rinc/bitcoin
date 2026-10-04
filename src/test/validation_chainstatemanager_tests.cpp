@@ -1230,6 +1230,10 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
     BOOST_CHECK(!get_opts({"-assumevalid=xyz"}));                                                               // invalid hex characters
     BOOST_CHECK(!get_opts({"-assumevalid=01234567890123456789012345678901234567890123456789012345678901234"})); // > 64 hex chars
 
+    // test -pruneassumevalid
+    BOOST_CHECK(get_valid_opts({"-pruneassumevalid"}).prune_assumevalid);
+    BOOST_CHECK(!get_valid_opts({"-nopruneassumevalid"}).prune_assumevalid);
+
     // test -minimumchainwork
     BOOST_CHECK(!get_valid_opts({}).minimum_chain_work);
     BOOST_CHECK_EQUAL(get_valid_opts({"-minimumchainwork=0"}).minimum_chain_work, arith_uint256());
