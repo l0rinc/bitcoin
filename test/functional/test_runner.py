@@ -108,6 +108,7 @@ BASE_SCRIPTS = [
     'mempool_ephemeral_dust.py',
     'p2p_opportunistic_1p1c.py',
     # vv Tests less than 2m vv
+    'feature_pruneassumevalid.py',
     'mining_getblocktemplate_longpoll.py',
     'p2p_segwit.py',
     'feature_assumeutxo.py',
