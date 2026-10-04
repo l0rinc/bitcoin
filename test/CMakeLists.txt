@@ -32,10 +32,10 @@ function(create_test_config)
   set_configure_variable(BUILD_GUI BUILD_GUI)
 
   # Keep window-dependent fixtures aligned when only the production constant changes.
-  set(window_source "${PROJECT_SOURCE_DIR}/src/net_processing.cpp")
+  set(window_source "${PROJECT_SOURCE_DIR}/src/net_processing.h")
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${window_source}")
-  file(STRINGS "${window_source}" window_definition REGEX "^static const unsigned int BLOCK_DOWNLOAD_WINDOW = ")
-  if("${window_definition}" MATCHES "BLOCK_DOWNLOAD_WINDOW = ([0-9]+)")
+  file(STRINGS "${window_source}" window_definition REGEX "^inline constexpr int32_t DEFAULT_BLOCK_DOWNLOAD_WINDOW")
+  if("${window_definition}" MATCHES "DEFAULT_BLOCK_DOWNLOAD_WINDOW[{]([0-9]+)[}]")
     set(BLOCK_DOWNLOAD_WINDOW "${CMAKE_MATCH_1}")
   else()
     message(FATAL_ERROR "Cannot read BLOCK_DOWNLOAD_WINDOW from ${window_source}")

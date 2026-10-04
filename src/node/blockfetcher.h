@@ -37,6 +37,8 @@ public:
     BlockFetcher(ReadBlockFn read_block, int32_t thread_count);
 
     int32_t WindowSize() const;
+    //! Use the same workers for bodies already downloaded, deferring to the caller when disabled
+    std::future<std::shared_ptr<const CBlock>> Submit(ReadTask task);
 
     //! Discard retained results without cancelling submitted reads
     void Clear() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
