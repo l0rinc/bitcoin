@@ -9,6 +9,7 @@
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
+#include <pow.h>
 #include <random.h>
 #include <rpc/blockchain.h>
 #include <sync.h>
@@ -28,7 +29,9 @@
 
 #include <tinyformat.h>
 
+#include <array>
 #include <cstdint>
+#include <tuple>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -995,6 +998,158 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion_hash_mismatch, Sna
     {
         LOCK(::cs_main);
         BOOST_CHECK_EQUAL(chainman_restarted.ActiveHeight(), 220);
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(prune_assumevalid_predicates, PrunedChainTestingSetup)
+{
+    const auto blocks{CreateBlockChain(/*total_height=*/3, Params())};
+    const uint256 assumed_valid{blocks[1]->GetHash()};
+
+    auto reset_chainman{[&](bool prune_assumevalid, uint64_t prune_target, const uint256& assumevalid_hash) -> ChainstateManager& {
+        ResetChainman({
+            .chainparams = Params(),
+            .datadir = m_args.GetDataDirNet(),
+            .check_block_index = 0,
+            .minimum_chain_work = arith_uint256{},
+            .assumed_valid_block = assumevalid_hash,
+            .prune_assumevalid = prune_assumevalid,
+            .notifications = *m_node.notifications,
+            .signals = m_node.validation_signals.get(),
+            .worker_threads_num = 0,
+        }, prune_target);
+
+        std::vector<CBlockHeader> headers;
+        headers.reserve(blocks.size() + 1);
+        headers.emplace_back(Params().GenesisBlock());
+        for (const auto& block : blocks) headers.emplace_back(*block);
+        BlockValidationState state;
+        BOOST_REQUIRE_MESSAGE(m_node.chainman->ProcessNewBlockHeaders(headers, /*min_pow_checked=*/true, state), state.ToString());
+        {
+            LOCK(m_node.chainman->GetMutex());
+            CBlockIndex* tip{Assert(m_node.chainman->m_blockman.LookupBlockIndex(blocks.back()->GetHash()))};
+            tip->nChainWork += GetBlockProof(*tip) * 2017;
+        }
+        return *m_node.chainman;
+    }};
+
+    auto lookup{[](ChainstateManager& chainman, const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+        return Assert(chainman.m_blockman.LookupBlockIndex(hash));
+    }};
+    BlockValidationState state;
+    auto accept{[&](ChainstateManager& chainman, const std::shared_ptr<const CBlock>& block, bool* new_block, bool allow_stripped_retry = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+        return chainman.AcceptBlock(block, state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr, new_block, /*min_pow_checked=*/true, allow_stripped_retry);
+    }};
+
+    for (const auto& [name, prune_assumevalid, prune_target, assumevalid_hash] : std::array{
+             std::tuple{"no pruning", true, uint64_t{0}, assumed_valid},
+             std::tuple{"option disabled", false, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid},
+             std::tuple{"unknown assumevalid block", true, BlockManager::PRUNE_TARGET_MANUAL, uint256{1}},
+         }) {
+        BOOST_TEST_INFO_SCOPE(name);
+        ChainstateManager& chainman{reset_chainman(prune_assumevalid, prune_target, assumevalid_hash)};
+        LOCK(chainman.GetMutex());
+        CBlockIndex* block{lookup(chainman, blocks[0]->GetHash())};
+        BOOST_CHECK(!chainman.CanUsePruneAssumeValid(*block));
+    }
+
+    ChainstateManager& enabled{reset_chainman(/*prune_assumevalid=*/true, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid)};
+    std::vector<std::shared_ptr<CBlock>> competing_chain;
+    BOOST_REQUIRE(BuildChain(m_node, WITH_LOCK(enabled.GetMutex(), return enabled.ActiveTip()), /*coinbase_script_pub_key=*/CScript{}, /*length=*/1, competing_chain));
+    {
+        LOCK(enabled.GetMutex());
+        CBlockIndex* ancestor{lookup(enabled, blocks[0]->GetHash())};
+        CBlockIndex* assumed{lookup(enabled, assumed_valid)};
+        CBlockIndex* above_assumed{lookup(enabled, blocks[2]->GetHash())};
+        CBlockIndex* competing{lookup(enabled, competing_chain[0]->GetHash())};
+        CBlockIndex* best_header{enabled.m_best_header};
+
+        BOOST_CHECK(enabled.CanUsePruneAssumeValid(*ancestor));
+        BOOST_CHECK(enabled.CanUsePruneAssumeValid(*assumed));
+
+        BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*above_assumed));
+        BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*competing));
+
+        enabled.m_best_header = nullptr;
+        BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*assumed));
+        enabled.m_best_header = best_header;
+
+        // A response to a stripped request can lose readiness or eligibility before acceptance
+        bool ignored_new_block{true};
+        BOOST_REQUIRE(accept(enabled, blocks[1], &ignored_new_block, /*allow_stripped_retry=*/true));
+        BOOST_CHECK(!ignored_new_block);
+        BOOST_CHECK(!enabled.HaveBlockData(*assumed));
+        static_cast<TestChainstateManager&>(enabled).JumpOutOfIbd();
+        BOOST_REQUIRE(accept(enabled, blocks[0], &ignored_new_block, /*allow_stripped_retry=*/true));
+        BOOST_CHECK(!ignored_new_block);
+        BOOST_CHECK(state.IsValid());
+        BOOST_CHECK_EQUAL(ancestor->nTx, 0);
+        static_cast<TestChainstateManager&>(enabled).ResetIbd();
+
+        // A block that does not extend the active tip is stored as usual.
+        bool new_block{false};
+        BOOST_REQUIRE(accept(enabled, blocks[1], &new_block));
+        BOOST_CHECK(new_block);
+        BOOST_CHECK(assumed->HaveStoredBlockData());
+
+        // A block extending the active tip is kept in memory instead.
+        BOOST_REQUIRE(accept(enabled, blocks[0], &new_block));
+        BOOST_CHECK(new_block);
+        BOOST_CHECK(enabled.HaveBlockData(*ancestor));
+        BOOST_CHECK(!ancestor->HaveStoredBlockData());
+        BOOST_CHECK(ancestor->nStatus & BLOCK_OPT_WITNESS);
+        BOOST_REQUIRE(accept(enabled, blocks[0], &new_block));
+        BOOST_CHECK(!new_block);
+        // Only leaving IBD changed since the block was usable above.
+        static_cast<TestChainstateManager&>(enabled).JumpOutOfIbd();
+        BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*ancestor));
+    }
+    // The block in memory connects before its stored child, which is the most-work candidate.
+    BOOST_REQUIRE(enabled.ActiveChainstate().ActivateBestChain(state));
+    {
+        LOCK(enabled.GetMutex());
+        BOOST_CHECK_EQUAL(enabled.ActiveHeight(), 2);
+        CBlockIndex* omitted{lookup(enabled, blocks[0]->GetHash())};
+        BOOST_CHECK(!enabled.HaveBlockData(*omitted));
+        BOOST_CHECK(!(omitted->nStatus & BLOCK_HAVE_UNDO));
+        BOOST_CHECK(lookup(enabled, assumed_valid)->nStatus & BLOCK_HAVE_UNDO);
+    }
+
+    // A completed background chain must not enable omission on its snapshot-origin current chain
+    ChainstateManager& snapshot_manager{reset_chainman(/*prune_assumevalid=*/true, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid)};
+    {
+        LOCK(snapshot_manager.GetMutex());
+        BOOST_REQUIRE(snapshot_manager.CanUsePruneAssumeValid(*lookup(snapshot_manager, blocks[0]->GetHash())));
+        Chainstate& background{snapshot_manager.CurrentChainstate()};
+        Chainstate& snapshot{snapshot_manager.AddChainstate(std::make_unique<Chainstate>(nullptr, snapshot_manager.m_blockman, snapshot_manager, assumed_valid))};
+        background.m_target_utxohash = AssumeutxoHash{uint256{1}};
+        snapshot.m_assumeutxo = Assumeutxo::VALIDATED;
+        BOOST_REQUIRE(!snapshot_manager.HistoricalChainstate());
+        BOOST_REQUIRE(snapshot_manager.CurrentChainstate().m_from_snapshot_blockhash);
+        BOOST_CHECK(!snapshot_manager.CanUsePruneAssumeValid(*lookup(snapshot_manager, blocks[0]->GetHash())));
+    }
+
+    // A failed omitted-block connection aborts instead of continuing with incomplete history
+    ChainstateManager& failing{reset_chainman(/*prune_assumevalid=*/true, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid)};
+    m_node.notifications->m_shutdown_on_fatal_error = false;
+    {
+        LOCK(failing.GetMutex());
+        BOOST_REQUIRE(accept(failing, blocks[0], /*new_block=*/nullptr));
+        // Simulate inconsistent coins so the block fails the duplicate-coinbase check during connection.
+        const CTransaction& coinbase{*blocks[0]->vtx[0]};
+        failing.ActiveChainstate().CoinsTip().AddCoin(COutPoint{coinbase.GetHash(), 0}, Coin{coinbase.vout[0], /*nHeightIn=*/0, /*fCoinBaseIn=*/true}, /*possible_overwrite=*/false);
+    }
+    {
+        ASSERT_DEBUG_LOG("Failed to connect a block during -pruneassumevalid: bad-txns-BIP30");
+        BOOST_CHECK(!failing.ActiveChainstate().ActivateBestChain(state));
+    }
+    BOOST_CHECK(state.IsError());
+    {
+        LOCK(failing.GetMutex());
+        BOOST_CHECK_EQUAL(failing.ActiveHeight(), 0);
+        CBlockIndex* failed{lookup(failing, blocks[0]->GetHash())};
+        BOOST_CHECK(!(failed->nStatus & BLOCK_FAILED_VALID));
+        BOOST_CHECK(!failing.HaveBlockData(*failed));
     }
 }
 

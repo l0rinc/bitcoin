@@ -993,6 +993,12 @@ private:
     //! A queue for script verifications that have to be performed by worker threads.
     CCheckQueue<CScriptCheck> m_script_check_queue;
 
+    //! Block accepted without storing it, retained between acceptance and chain activation. Released by connection.
+    std::pair<const CBlockIndex*, std::shared_ptr<const CBlock>> m_prune_assumevalid_block GUARDED_BY(::cs_main);
+
+    //! Diagnostic state only. Eligibility is recomputed independently for every block
+    std::optional<bool> m_last_prune_assumevalid_logged GUARDED_BY(::cs_main);
+
     //! Timers and counters used for benchmarking validation in both background
     //! and active chainstates.
     SteadyClock::duration GUARDED_BY(::cs_main) time_check{};
@@ -1027,6 +1033,9 @@ public:
     const uint256& AssumedValidBlock() const { return *Assert(m_options.assumed_valid_block); }
     //! Whether block data is available to connect.
     bool HaveBlockData(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Whether the block can be requested without witnesses and connected without being stored
+    bool CanUsePruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    void LogPruneAssumeValidStatus(bool active) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     kernel::Notifications& GetNotifications() const { return m_options.notifications; };
 
     /**
@@ -1276,10 +1285,11 @@ public:
      *                               (note: only affects headers acceptance; if
      *                               block header is already present in block
      *                               index then this parameter has no effect)
+     * @param[in]   allow_stripped_retry Allow a stripped response to be retried if it cannot be omitted at acceptance
      * @param[out]  new_block A boolean which is set to indicate if the block was first received via this call
      * @returns     If the block was processed, independently of block validity
      */
-    bool ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block) LOCKS_EXCLUDED(cs_main);
+    bool ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, bool allow_stripped_retry = false) LOCKS_EXCLUDED(cs_main);
 
     /**
      * Process incoming block headers.
@@ -1297,6 +1307,7 @@ public:
 
     /**
      * Sufficiently validate a block for disk storage (and store on disk).
+     * A -pruneassumevalid block extending the active tip is kept in memory for connection instead.
      *
      * @param[in]   pblock          The block we want to process.
      * @param[in]   fRequested      Whether we requested this block from a
@@ -1306,6 +1317,7 @@ public:
      * @param[in]   min_pow_checked True if proof-of-work anti-DoS checks have
      *                              been done by caller for headers chain
      *
+     * @param[in]   allow_stripped_retry Allow a stripped response to be retried if it cannot be omitted at acceptance
      * @param[out]  state       The state of the block validation.
      * @param[out]  ppindex     Optional return parameter to get the
      *                          CBlockIndex pointer for this block.
@@ -1314,7 +1326,7 @@ public:
      *
      * @returns   False if the block or header is invalid, or if saving to disk fails (likely a fatal error); true otherwise.
      */
-    bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked, bool allow_stripped_retry = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
