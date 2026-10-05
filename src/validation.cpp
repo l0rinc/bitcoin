@@ -1866,7 +1866,10 @@ Chainstate::Chainstate(
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
     : m_block_fetcher{std::make_unique<node::BlockFetcher>([blockman = &blockman](CBlock& block, const FlatFilePos& pos, const uint256& hash) {
-          return blockman->ReadBlock(block, pos, hash);
+          if (!blockman->ReadBlock(block, pos, hash)) return false;
+          // Only this worker owns the block until its future is consumed
+          BlockValidationState state;
+          return CheckBlock(block, state, blockman->GetConsensus());
       }, chainman.m_options.block_read_ahead_threads_num)},
       m_mempool(mempool),
       m_blockman(blockman),
@@ -4440,8 +4443,8 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         if (new_block) *new_block = false;
         BlockValidationState state;
 
-        // CheckBlock() does not support multi-threaded block validation because CBlock::fChecked can cause data race.
-        // Therefore, the following critical section must include the CheckBlock() call as well.
+        // Callers may share this block, so serialize writes to its memoization flags.
+        // Prefetch workers finish their checks before handing the block to this path.
         LOCK(cs_main);
 
         // Skipping AcceptBlock() for CheckBlock() failures means that we will never mark a block as invalid if

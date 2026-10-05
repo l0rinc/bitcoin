@@ -235,6 +235,37 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_hash_mismatch, TestingSetup)
     BOOST_CHECK(!m_node.chainman->m_blockman.ReadBlock(block, index));
 }
 
+BOOST_FIXTURE_TEST_CASE(block_read_ahead_checks, TestChain100Setup)
+{
+    // Disk prefetch publishes checked blocks and leaves invalid bodies for the normal failure path
+    struct PrefetchChainstate : Chainstate {
+        using Chainstate::Chainstate;
+        using Chainstate::m_block_fetcher;
+    };
+    auto& chainman{*Assert(m_node.chainman)};
+    auto& blockman{chainman.m_blockman};
+    PrefetchChainstate chainstate{nullptr, blockman, chainman, std::nullopt};
+    LOCK(cs_main);
+    const CBlockIndex& tip{*chainman.ActiveTip()};
+    auto& fetcher{*chainstate.m_block_fetcher};
+    fetcher.FillQueue(&tip, tip.nHeight);
+    const auto block{fetcher.Load(tip.GetBlockHash())};
+    BOOST_REQUIRE(block);
+    BOOST_CHECK(block->fChecked);
+
+    CBlock invalid{*block};
+    invalid.vtx.clear();
+    CBlockIndex index{invalid};
+    index.phashBlock = tip.phashBlock;
+    index.nStatus = BLOCK_HAVE_DATA;
+    index.nHeight = tip.nHeight;
+    const auto pos{blockman.WriteBlock(invalid, index.nHeight)};
+    index.nFile = pos.nFile;
+    index.nDataPos = pos.nPos;
+    fetcher.FillQueue(&index, index.nHeight);
+    BOOST_CHECK(!fetcher.Load(index.GetBlockHash()));
+}
+
 BOOST_AUTO_TEST_CASE(block_read_ahead_retry)
 {
     CBlock block;
