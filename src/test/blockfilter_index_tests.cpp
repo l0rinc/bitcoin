@@ -75,6 +75,11 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_initial_sync, TestChain100Setup)
     BlockFilterIndex filter_index(interfaces::MakeChain(m_node), BlockFilterType::BASIC, 1_MiB, true);
     BOOST_REQUIRE(filter_index.Init());
 
+    // Check registration before Sync can create a prune lock, then reinitialize it
+    BOOST_CHECK(WITH_LOCK(cs_main, return m_node.chainman->m_blockman.DeletePruneLock(filter_index.GetName())));
+    filter_index.Stop();
+    BOOST_REQUIRE(filter_index.Init());
+
     uint256 last_header;
 
     // Filter should not be found in the index before it is started.
