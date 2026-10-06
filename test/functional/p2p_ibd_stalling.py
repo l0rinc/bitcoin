@@ -12,6 +12,7 @@ from test_framework.blocktools import (
         create_block,
 )
 from test_framework.messages import (
+        MAX_HEADERS_RESULTS,
         MSG_BLOCK,
         MSG_TYPE_MASK,
 )
@@ -42,18 +43,23 @@ class P2PStaller(P2PDataStore):
     def on_getheaders(self, message):
         pass
 
+    def send_headers(self, headers):
+        for start in range(0, len(headers), MAX_HEADERS_RESULTS):
+            self.send_without_ping(msg_headers(headers[start:start + MAX_HEADERS_RESULTS]))
+
 
 class P2PIBDStallingTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
+        self.block_download_window = self.config.getint("net", "BLOCK_DOWNLOAD_WINDOW")
 
     def run_test(self):
         self.test_stalling()
         self.test_manual_peer_stalling()
 
     def test_stalling(self):
-        NUM_BLOCKS = 1025
+        NUM_BLOCKS = self.block_download_window + 1
         NUM_PEERS = 5
         node = self.nodes[0]
         tip = int(node.getbestblockhash(), 16)
@@ -73,17 +79,17 @@ class P2PIBDStallingTest(BitcoinTestFramework):
         second_stall_index = 500
         stall_blocks = [blocks[stall_index].hash_int, blocks[second_stall_index].hash_int]
 
-        headers_message = msg_headers()
-        headers_message.headers = [CBlockHeader(b) for b in blocks[:NUM_BLOCKS-1]]
+        headers = [CBlockHeader(b) for b in blocks[:NUM_BLOCKS-1]]
         peers = []
 
-        self.log.info("Check that a staller does not get disconnected if the 1024 block lookahead buffer is filled")
+        self.log.info("Check that a staller does not get disconnected if the block download window is filled")
         self.mocktime = int(time.time()) + 1
         node.setmocktime(self.mocktime)
         for id in range(NUM_PEERS):
             peers.append(node.add_outbound_p2p_connection(P2PStaller(stall_blocks), p2p_idx=id, connection_type="outbound-full-relay"))
             peers[-1].block_store = block_dict
-            peers[-1].send_and_ping(headers_message)
+            peers[-1].send_headers(headers)
+            peers[-1].sync_with_ping()
 
         # Wait until all blocks are received (except for the stall blocks), so that no other blocks are in flight.
         self.wait_until(lambda: sum(len(peer['inflight']) for peer in node.getpeerinfo()) == len(stall_blocks))
@@ -95,11 +101,11 @@ class P2PIBDStallingTest(BitcoinTestFramework):
         self.all_sync_send_with_ping(peers)
         assert_equal(node.num_test_p2p_connections(), NUM_PEERS)
 
-        self.log.info("Check that increasing the window beyond 1024 blocks triggers stalling logic")
-        headers_message.headers = [CBlockHeader(b) for b in blocks]
+        self.log.info("Check that announcing a block beyond the download window triggers stalling logic")
+        headers = [CBlockHeader(b) for b in blocks]
         with node.assert_debug_log(expected_msgs=['Stall started']):
             for p in peers:
-                p.send_without_ping(headers_message)
+                p.send_headers(headers)
             self.all_sync_send_with_ping(peers)
 
         self.log.info("Check that the stalling peer is disconnected after 2 seconds")
@@ -151,7 +157,7 @@ class P2PIBDStallingTest(BitcoinTestFramework):
     def test_manual_peer_stalling(self):
         self.log.info("Test that a manual peer is paused but not disconnected for stalling block download")
         BLOCK_DOWNLOAD_COOLDOWN = 2 * 60
-        NUM_BLOCKS = 1025
+        NUM_BLOCKS = self.block_download_window + 1
         node = self.nodes[0]
         self.restart_node(0)
         tip = int(node.getbestblockhash(), 16)
@@ -169,8 +175,7 @@ class P2PIBDStallingTest(BitcoinTestFramework):
             block_dict[blocks[-1].hash_int] = blocks[-1]
         stall_block = blocks[0].hash_int
 
-        headers_message = msg_headers()
-        headers_message.headers = [CBlockHeader(b) for b in blocks]
+        headers = [CBlockHeader(b) for b in blocks]
 
         self.mocktime = int(time.time()) + 1
         node.setmocktime(self.mocktime)
@@ -182,7 +187,8 @@ class P2PIBDStallingTest(BitcoinTestFramework):
         assert_equal(node.getpeerinfo()[0]['connection_type'], 'manual')
 
         # Send headers to manual peer first so it gets block 0 assigned.
-        manual_peer.send_and_ping(headers_message)
+        manual_peer.send_headers(headers)
+        manual_peer.sync_with_ping()
 
         self.log.info("Add outbound peers that serve all blocks")
         outbound_peers = []
@@ -190,7 +196,8 @@ class P2PIBDStallingTest(BitcoinTestFramework):
             p = node.add_outbound_p2p_connection(
                 P2PStaller([]), p2p_idx=i + 1, connection_type="outbound-full-relay")
             p.block_store = block_dict
-            p.send_and_ping(headers_message)
+            p.send_headers(headers)
+            p.sync_with_ping()
             outbound_peers.append(p)
 
         all_peers = [manual_peer] + outbound_peers
