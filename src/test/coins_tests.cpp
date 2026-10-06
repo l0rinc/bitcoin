@@ -28,7 +28,7 @@
 using namespace util::hex_literals;
 
 int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out);
-void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txundo, int nHeight);
+void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo* txundo, int nHeight);
 
 namespace
 {
@@ -424,7 +424,14 @@ BOOST_FIXTURE_TEST_CASE(updatecoins_simulation_test, UpdateTest)
 
             // Call UpdateCoins on the top cache
             CTxUndo undo;
-            UpdateCoins(CTransaction{tx}, *(stack.back()), undo, height);
+            // Omitting undo must produce the same UTXO changes, including duplicate coinbases and reconnects
+            const CTransaction transaction{tx};
+            CCoinsViewCacheTest without_undo{stack.back().get()};
+            UpdateCoins(transaction, without_undo, /*txundo=*/nullptr, height);
+            UpdateCoins(transaction, *(stack.back()), &undo, height);
+            BOOST_CHECK(without_undo.AccessCoin(outpoint) == stack.back()->AccessCoin(outpoint));
+            if (!transaction.IsCoinBase()) BOOST_CHECK(without_undo.AccessCoin(tx.vin[0].prevout) == stack.back()->AccessCoin(tx.vin[0].prevout));
+            without_undo.SelfTest();
 
             // Update the utxo set for future spends
             utxoset.insert(outpoint);
