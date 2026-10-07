@@ -652,14 +652,14 @@ const CBlockIndex& BlockManager::GetFirstBlock(const CBlockIndex& upper_block, u
 
 bool BlockManager::CheckBlockDataAvailability(const CBlockIndex& upper_block, const CBlockIndex& lower_block, BlockStatus block_status)
 {
-    if (!(upper_block.nStatus & block_status)) return false;
+    if ((upper_block.nStatus & block_status) != block_status) return false;
     const auto& first_block = GetFirstBlock(upper_block, block_status, &lower_block);
     // Special case: the genesis block has no undo data
     if (block_status & BLOCK_HAVE_UNDO && lower_block.nHeight == 0 && first_block.nHeight == 1) {
         // This might indicate missing data, or it could simply reflect the expected absence of undo data for the genesis block.
         // To distinguish between the two, check if all required block data *except* undo is available up to the genesis block.
         BlockStatus flags{block_status & ~BLOCK_HAVE_UNDO};
-        return first_block.pprev && first_block.pprev->nStatus & flags;
+        return first_block.pprev && (first_block.pprev->nStatus & flags) == flags;
     }
     return &first_block == &lower_block;
 }
