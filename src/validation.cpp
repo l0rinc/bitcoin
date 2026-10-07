@@ -4455,9 +4455,9 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
 {
     AssertLockNotHeld(cs_main);
 
+    bool accepted{false};
     {
         CBlockIndex *pindex = nullptr;
-        if (new_block) *new_block = false;
         BlockValidationState state;
 
         // Callers may share this block, so serialize writes to its memoization flags.
@@ -4472,8 +4472,9 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         bool ret = CheckBlock(*block, state, GetConsensus());
         if (ret) {
             // Store to disk
-            ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, new_block, min_pow_checked);
+            ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, &accepted, min_pow_checked);
         }
+        if (new_block) *new_block = accepted;
         if (!ret) {
             if (m_options.signals) {
                 m_options.signals->BlockChecked(block, state);
@@ -4486,14 +4487,17 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
     NotifyHeaderTip();
 
     BlockValidationState state; // Only used to report errors, not invalidity - ignore it
-    if (!ActiveChainstate().ActivateBestChain(state, block)) {
+    // A body not accepted by this call may not have passed its contextual checks.
+    // Use the accepted body from memory or disk instead of forwarding that reply to connection.
+    const auto block_to_connect{accepted ? block : nullptr};
+    if (!ActiveChainstate().ActivateBestChain(state, block_to_connect)) {
         LogError("%s: ActivateBestChain failed (%s)\n", __func__, state.ToString());
         return false;
     }
 
     Chainstate* bg_chain{WITH_LOCK(cs_main, return HistoricalChainstate())};
     BlockValidationState bg_state;
-    if (bg_chain && !bg_chain->ActivateBestChain(bg_state, block)) {
+    if (bg_chain && !bg_chain->ActivateBestChain(bg_state, block_to_connect)) {
         LogError("%s: [background] ActivateBestChain failed (%s)\n", __func__, bg_state.ToString());
         return false;
      }

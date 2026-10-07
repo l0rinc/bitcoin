@@ -1022,8 +1022,8 @@ BOOST_FIXTURE_TEST_CASE(duplicate_body_does_not_replace_stored_block, TestChain1
     BOOST_REQUIRE(chainman.ProcessNewBlock(duplicate, /*force_processing=*/true, /*min_pow_checked=*/true, &new_block));
     BOOST_CHECK(!new_block);
     BOOST_REQUIRE(subscriber->block);
-    BOOST_CHECK(subscriber->block == duplicate); // TODO: A duplicate must not replace the previously accepted body
-    BOOST_CHECK(subscriber->block->vtx[0]->HasWitness() != block->vtx[0]->HasWitness()); // TODO: Connection must retain the accepted witness data
+    BOOST_CHECK(subscriber->block != duplicate);
+    BOOST_CHECK(subscriber->block->vtx[0]->HasWitness() == block->vtx[0]->HasWitness());
     m_node.validation_signals->UnregisterSharedValidationInterface(subscriber);
 }
 
