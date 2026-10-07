@@ -998,6 +998,35 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion_hash_mismatch, Sna
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(duplicate_body_does_not_replace_stored_block, TestChain100Setup)
+{
+    // A duplicate can have different witness data, so connection must use the body already accepted.
+    auto& chainman{*m_node.chainman};
+    auto block{std::make_shared<CBlock>(CreateBlock({}, CScript{}))};
+    BlockValidationState state;
+    {
+        LOCK(cs_main);
+        BOOST_REQUIRE(chainman.AcceptBlock(block, state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true));
+    }
+    struct CheckedBlock final : CValidationInterface {
+        std::shared_ptr<const CBlock> block;
+        void BlockChecked(const std::shared_ptr<const CBlock>& checked, const BlockValidationState&) override { block = checked; }
+    };
+    auto subscriber{std::make_shared<CheckedBlock>()};
+    m_node.validation_signals->RegisterSharedValidationInterface(subscriber);
+    auto duplicate{std::make_shared<CBlock>(*block)};
+    CMutableTransaction coinbase{*duplicate->vtx[0]};
+    coinbase.vin[0].scriptWitness.SetNull();
+    duplicate->vtx[0] = MakeTransactionRef(coinbase);
+    bool new_block{true};
+    BOOST_REQUIRE(chainman.ProcessNewBlock(duplicate, /*force_processing=*/true, /*min_pow_checked=*/true, &new_block));
+    BOOST_CHECK(!new_block);
+    BOOST_REQUIRE(subscriber->block);
+    BOOST_CHECK(subscriber->block == duplicate); // TODO: A duplicate must not replace the previously accepted body
+    BOOST_CHECK(subscriber->block->vtx[0]->HasWitness() != block->vtx[0]->HasWitness()); // TODO: Connection must retain the accepted witness data
+    m_node.validation_signals->UnregisterSharedValidationInterface(subscriber);
+}
+
 /** Helper function to parse args into args_man and return the result of applying them to opts */
 template <typename Options>
 util::Result<Options> SetOptsFromArgs(ArgsManager& args_man, Options opts,
