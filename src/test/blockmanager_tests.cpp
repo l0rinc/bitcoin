@@ -132,6 +132,7 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_availability, TestChain100Setup)
     CBlockIndex* upper_block = chainman->ActiveChain()[2];
     CBlockIndex* genesis = chainman->ActiveChain()[0];
     BOOST_CHECK(blockman.CheckBlockDataAvailability(*upper_block, *genesis, BlockStatus{BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO}));
+    BOOST_CHECK(!blockman.CheckBlockDataAvailability(*upper_block, *genesis, BLOCK_HAVE_UNDO)); // TODO: Genesis has no undo record to require.
     // Ensure we detect absence of undo data in the first block
     chainman->ActiveChain()[1]->nStatus &= ~BLOCK_HAVE_UNDO;
     BOOST_CHECK(!blockman.CheckBlockDataAvailability(tip, *genesis, BlockStatus{BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO}));
