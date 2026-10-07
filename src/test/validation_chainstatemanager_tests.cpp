@@ -1115,6 +1115,26 @@ BOOST_FIXTURE_TEST_CASE(prune_assumevalid_predicates, PrunedChainTestingSetup)
         BOOST_CHECK(lookup(enabled, assumed_valid)->nStatus & BLOCK_HAVE_UNDO);
     }
 
+    // Wallet fallback finishes an accepted omission before any wallet can depend on later blocks
+    ChainstateManager& wallet_fallback{reset_chainman(/*prune_assumevalid=*/true, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid)};
+    {
+        LOCK(cs_main);
+        BOOST_REQUIRE(accept(wallet_fallback, blocks[0], /*new_block=*/nullptr));
+        BOOST_CHECK_EQUAL(wallet_fallback.ActiveHeight(), 0);
+    }
+    BOOST_REQUIRE(wallet_fallback.DisablePruneAssumeValid());
+    {
+        LOCK(cs_main);
+        BOOST_CHECK_EQUAL(wallet_fallback.ActiveHeight(), 1);
+        BOOST_CHECK(!wallet_fallback.HaveBlockData(*lookup(wallet_fallback, blocks[0]->GetHash())));
+        BOOST_CHECK(!wallet_fallback.CanUsePruneAssumeValid(*lookup(wallet_fallback, assumed_valid)));
+    }
+    BOOST_REQUIRE(wallet_fallback.ProcessNewBlock(blocks[1], /*force_processing=*/true, /*min_pow_checked=*/true, /*new_block=*/nullptr));
+    {
+        LOCK(cs_main);
+        BOOST_CHECK_EQUAL(lookup(wallet_fallback, assumed_valid)->nStatus & BLOCK_HAVE_MASK, BLOCK_HAVE_MASK);
+    }
+
     // A completed background chain must not enable omission on its snapshot-origin current chain
     ChainstateManager& snapshot_manager{reset_chainman(/*prune_assumevalid=*/true, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid)};
     {

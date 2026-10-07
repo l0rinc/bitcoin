@@ -787,6 +787,60 @@ class FeaturePruneAssumeValidTest(BitcoinTestFramework):
         self.assert_omitted(node, budget_blocks[target_height - 1].hash_hex)
         self.stop_node(3)
 
+    def test_wallet_fallback(self, blocks, assumevalid_hash, spend_txid, final_chainwork):
+        if not self.is_wallet_compiled():
+            return
+
+        self.log.info("Use ordinary pruning when a wallet is created or loaded")
+        full_wtxid = self.nodes[0].getrawtransaction(spend_txid, True, assumevalid_hash)["hash"]
+        descriptor = MiniWallet(self.nodes[0]).get_descriptor()
+        args = pav_args(assumevalid_hash, final_chainwork, "-disablewallet=0")
+        self.start_node(7, extra_args=args)
+        node = self.nodes[7]
+        fallback_notice = "-pruneassumevalid disabled: wallets require stored block data for crash recovery."
+        with node.assert_debug_log(expected_msgs=[fallback_notice]):
+            node.createwallet("watch", disable_private_keys=True, blank=True, load_on_startup=True)
+        wallet = node.get_wallet_rpc("watch")
+        assert_equal(wallet.importdescriptors([{"desc": descriptor, "timestamp": 0}])[0]["success"], True)
+        self.submit_headers(node, blocks)
+        peer = self.sync_from_store(node, blocks, 2)
+        for height in (1, 2):
+            assert_equal(self.requested_types(peer, height), [MSG_BLOCK | MSG_WITNESS_FLAG])
+            assert_equal(node.getblock(blocks[height - 1].hash_hex)["height"], height)
+
+        wallet.unloadwallet(load_on_startup=False)
+        self.restart_node(7, extra_args=args)
+        assert_equal(node.listwallets(), [])
+        self.submit_headers(node, blocks)
+        peer = node.add_p2p_connection(AssumeValidBlockStore(blocks, max_height_to_serve=2))
+        peer.send_headers_for_blocks(blocks[-1:])
+        self.assert_requested(peer, 3, MSG_BLOCK)
+        # Loading the wallet must also discard queued stripped replies and retry with witnesses.
+        peer.serve_pending_heights([4])
+        with node.assert_debug_log(expected_msgs=[fallback_notice]):
+            node.loadwallet("watch", load_on_startup=True)
+        peer.serve_until_height(self.assumevalid_height - 1)
+        self.wait_until(lambda: node.getblockcount() == self.assumevalid_height - 1)
+        assert_equal(set(self.requested_types(peer, 3)), {MSG_BLOCK, MSG_BLOCK | MSG_WITNESS_FLAG})
+        wallet = node.get_wallet_rpc("watch")
+        wallet.getbalances()
+
+        self.log.info("Recover a wallet behind a completed chainstate flush after an unclean stop")
+        assert_equal(node.gettxoutsetinfo()["bestblock"], blocks[self.assumevalid_height - 2].hash_hex)
+        node.kill_process()
+        self.start_node(7, extra_args=args)
+        assert_equal(node.listwallets(), ["watch"])
+        self.submit_headers(node, blocks)
+        peer = self.sync_from_store(node, blocks, self.assumevalid_height)
+        self.assert_requested(peer, self.assumevalid_height, MSG_BLOCK | MSG_WITNESS_FLAG)
+        wallet = node.get_wallet_rpc("watch")
+        transaction = wallet.gettransaction(spend_txid, False, True)
+        assert full_wtxid != spend_txid
+        assert_equal(transaction["wtxid"], full_wtxid)
+        assert "txinwitness" in transaction["decoded"]["vin"][0]
+        assert_equal(wallet.rescanblockchain(0, 2)["stop_height"], 2)
+        self.stop_node(7)
+
     def test_reorg_into_omitted_history(self, blocks, assumevalid_hash, final_chainwork):
         self.log.info("Use the ordinary fatal disconnect path when a reorg requires omitted history")
         self.reset_datadir(3)
@@ -1034,6 +1088,7 @@ class FeaturePruneAssumeValidTest(BitcoinTestFramework):
         for threads in [0, 2]:
             self.test_window_concurrency(blocks, assumevalid_hash, final_chainwork, window_muhash, threads)
         self.test_window_limit(blocks, final_chainwork)
+        self.test_wallet_fallback(blocks, assumevalid_hash, spend_txid, final_chainwork)
         self.test_reorg_into_omitted_history(blocks, assumevalid_hash, final_chainwork)
 
 

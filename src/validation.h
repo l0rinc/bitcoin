@@ -998,6 +998,8 @@ private:
     //! Block accepted without storing it, retained between acceptance and chain activation. Released by connection.
     std::pair<const CBlockIndex*, std::shared_ptr<const CBlock>> m_prune_assumevalid_block GUARDED_BY(::cs_main);
 
+    bool m_prune_assumevalid_disabled GUARDED_BY(::cs_main){false};
+
     //! Diagnostic state only. Eligibility is recomputed independently for every block
     std::optional<bool> m_last_prune_assumevalid_logged GUARDED_BY(::cs_main);
 
@@ -1037,6 +1039,8 @@ public:
     bool HaveBlockData(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     //! Whether the block can be requested without witnesses and connected without being stored
     bool CanUsePruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Stop omitting blocks and finish any pending omission before a wallet attaches
+    util::Result<void> DisablePruneAssumeValid() LOCKS_EXCLUDED(::cs_main);
     void LogPruneAssumeValidStatus(bool active) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     kernel::Notifications& GetNotifications() const { return m_options.notifications; };
 

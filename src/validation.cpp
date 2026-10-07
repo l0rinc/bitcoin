@@ -2355,8 +2355,23 @@ bool ChainstateManager::CanUsePruneAssumeValid(const CBlockIndex& block) const
 {
     AssertLockHeld(cs_main);
     // Indexes needing undo data disable the option at startup, and a UTXO snapshot has its own history download
-    return m_options.prune_assumevalid && m_blockman.IsPruneMode() && IsInitialBlockDownload() && !CurrentChainstate().m_from_snapshot_blockhash &&
+    return m_options.prune_assumevalid && !m_prune_assumevalid_disabled && m_blockman.IsPruneMode() && IsInitialBlockDownload() && !CurrentChainstate().m_from_snapshot_blockhash &&
            m_best_header && block.GetAncestor(ActiveHeight()) == ActiveTip() && GetAssumeValidScriptCheckReason(&block, *this) == nullptr;
+}
+
+util::Result<void> ChainstateManager::DisablePruneAssumeValid()
+{
+    if (!m_options.prune_assumevalid) return {};
+    {
+        LOCK(cs_main);
+        if (!m_prune_assumevalid_disabled) LogInfo("-pruneassumevalid disabled: wallets require stored block data for crash recovery.");
+        m_prune_assumevalid_disabled = true;
+    }
+    // An accepted block may still be waiting for connection. Finish it before the wallet registers for notifications.
+    // Each caller must wait, including wallets loaded concurrently.
+    auto result{ActivateBestChains()};
+    WITH_LOCK(cs_main, LogPruneAssumeValidStatus(false));
+    return result;
 }
 
 void ChainstateManager::LogPruneAssumeValidStatus(bool active)

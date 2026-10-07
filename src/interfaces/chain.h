@@ -302,6 +302,9 @@ public:
     //! Send progress indicator.
     virtual void showProgress(const std::string& title, int progress, bool resume_possible) = 0;
 
+    //! Fall back to ordinary pruning before attaching a wallet that may need crash recovery blocks
+    virtual util::Result<void> disablePruneAssumeValid() = 0;
+
     //! Chain notifications.
     class Notifications
     {
