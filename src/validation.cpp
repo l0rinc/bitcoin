@@ -4656,7 +4656,8 @@ VerifyDBResult CVerifyDB::VerifyDB(
     LogInfo("Verification progress: 0%%");
 
     const bool is_snapshot_cs{chainstate.m_from_snapshot_blockhash};
-    const uint32_t required_status{BLOCK_HAVE_DATA};
+    // Level 3 disconnects blocks, which also needs their undo data
+    const uint32_t required_status{nCheckLevel >= 3 ? BLOCK_HAVE_MASK : BLOCK_HAVE_DATA};
 
     for (pindex = chainstate.m_chain.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
         const int percentageDone = std::max(1, std::min(99, (int)(((double)(chainstate.m_chain.Height() - pindex->nHeight)) / (double)nCheckDepth * (nCheckLevel >= 4 ? 50 : 100))));
@@ -4671,8 +4672,9 @@ VerifyDBResult CVerifyDB::VerifyDB(
         }
         if ((chainstate.m_blockman.IsPruneMode() || is_snapshot_cs) && (~pindex->nStatus & required_status)) {
             // If pruning or running under an assumeutxo snapshot, only go
-            // back as far as we have data.
-            LogInfo("Block verification stopping at height %d (no data). This could be due to pruning or use of an assumeutxo snapshot.", pindex->nHeight);
+            // back as far as we have data. A block refetched after pruning
+            // has its body but not its undo data.
+            LogInfo("Block verification stopping at height %d (%s). This could be due to pruning or use of an assumeutxo snapshot.", pindex->nHeight, (pindex->nStatus & BLOCK_HAVE_DATA) ? "no undo data" : "no data");
             skipped_missing_data = true;
             break;
         }

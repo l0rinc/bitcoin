@@ -160,10 +160,8 @@ class GetBlockFromPeerTest(BitcoinTestFramework):
         pruned_node.getblockfrompeer(refetched_block, pruned_node_peer_0_id)
         self.wait_until(lambda: self.check_for_block(node=2, hash=refetched_block))
         self.log.info("Restart with deep verification after fetching a pruned block")
-        with pruned_node.assert_debug_log(expected_msgs=[f"Verification error: irrecoverable inconsistency in block data at {pruneheight},"]):  # TODO: Missing pruned undo should stop verification without reporting corruption
-            self.stop_node(2)
-            pruned_node.assert_start_raises_init_error(extra_args=self.extra_args[2] + ["-checkblocks=0", "-checklevel=4"], expected_msg="Corrupted block database detected.\nPlease restart with -reindex to recover.")  # TODO: Deep verification should allow restart after a pruned refetch
-            self.start_node(2)
+        with pruned_node.assert_debug_log(expected_msgs=[f"Block verification stopping at height {pruneheight} (no undo data)."]):
+            self.restart_node(2, extra_args=self.extra_args[2] + ["-checkblocks=0", "-checklevel=4"])
         assert_equal(pruned_node.getbestblockhash(), self.nodes[0].getbestblockhash())
         assert_equal(pruned_node.getblock(refetched_block)["hash"], refetched_block)
 
