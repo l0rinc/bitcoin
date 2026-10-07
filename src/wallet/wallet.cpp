@@ -2964,6 +2964,10 @@ std::shared_ptr<CWallet> CWallet::LoadExisting(WalletContext& context, const std
 
 bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interfaces::Chain& chain, const bool rescan_required, bilingual_str& error, std::vector<bilingual_str>& warnings)
 {
+    if (auto result{chain.disablePruneAssumeValid()}; !result) {
+        error = util::ErrorString(result);
+        return false;
+    }
     LOCK(walletInstance->cs_wallet);
     // allow setting the chain if it hasn't been set already but prevent changing it
     assert(!walletInstance->m_chain || walletInstance->m_chain == &chain);
@@ -3022,8 +3026,9 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
             if (!found.found) {
                 // We were unable to find a block that had a time more recent than our earliest timestamp
                 // or a height higher than the wallet was synced to, indicating that the wallet is newer than the
-                // current chain tip. Skip rescanning in this case.
-                rescan_height = *tip_height;
+                // current chain tip. Save the sync point without reading the tip block.
+                walletInstance->WriteBestBlock();
+                return true;
             }
         }
 
@@ -3032,11 +3037,12 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
         // if necessary.
         if (chain.havePruned() || chain.hasAssumedValidChain()) {
             int block_height = *tip_height;
-            while (block_height > 0 && chain.haveBlockOnDisk(block_height - 1) && rescan_height != block_height) {
+            const bool tip_on_disk{chain.haveBlockOnDisk(block_height)};
+            while (tip_on_disk && block_height > 0 && chain.haveBlockOnDisk(block_height - 1) && rescan_height != block_height) {
                 --block_height;
             }
 
-            if (rescan_height != block_height) {
+            if (!tip_on_disk || rescan_height != block_height) {
                 // We can't rescan beyond blocks we don't have data for, stop and throw an error.
                 // This might happen if a user uses an old wallet within a pruned node
                 // or if they ran -disablewallet for a longer time, then decided to re-enable

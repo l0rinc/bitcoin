@@ -2437,8 +2437,27 @@ bool ChainstateManager::CanUsePruneAssumeValid(const CBlockIndex& block) const
 {
     AssertLockHeld(cs_main);
     // Indexes needing undo data disable omission at startup
-    return m_options.prune_assumevalid && node::BlockManager::IsAutomaticPruneTarget(m_blockman.GetPruneTarget()) &&
+    return m_options.prune_assumevalid && !m_prune_assumevalid_disabled && node::BlockManager::IsAutomaticPruneTarget(m_blockman.GetPruneTarget()) &&
            IsOnInitialSyncPath(block) && m_best_header && GetAssumeValidScriptCheckReason(&block, *this) == nullptr;
+}
+
+util::Result<void> ChainstateManager::DisablePruneAssumeValid()
+{
+    if (!m_options.prune_assumevalid) return {};
+    {
+        LOCK(cs_main);
+        if (!m_prune_assumevalid_disabled) LogInfo("Pruned assumevalid disabled: wallets require stored block data for crash recovery.");
+        m_prune_assumevalid_disabled = true;
+        if (!m_prune_assumevalid_block.first) {
+            LogPruneAssumeValidStatus(false);
+            return {};
+        }
+    }
+    // An accepted block may still be waiting for connection. Finish it before the wallet registers for notifications.
+    // Each caller must wait, including wallets loaded concurrently.
+    auto result{ActivateBestChains()};
+    WITH_LOCK(cs_main, LogPruneAssumeValidStatus(false));
+    return result;
 }
 
 void ChainstateManager::LogPruneAssumeValidStatus(bool active)
