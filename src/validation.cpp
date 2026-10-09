@@ -1942,6 +1942,7 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     assert(m_coins_views != nullptr);
     m_coinstip_cache_size_bytes = cache_size_bytes;
     m_coins_views->InitCache(m_chainman.m_options.prevoutfetch_threads_num);
+    CoinsTip().Reserve(cache_size_bytes);
 }
 
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
@@ -2867,6 +2868,7 @@ bool Chainstate::FlushStateToDisk(
                 }
                 // Flush the chainstate (which may refer to block index entries).
                 empty_cache ? CoinsTip().Flush() : CoinsTip().Sync();
+                if (empty_cache && !m_chainman.m_interrupt) CoinsTip().Reserve(m_coinstip_cache_size_bytes);
                 m_last_flushed_block = m_blockman.LookupBlockIndex(CoinsTip().GetBestBlock());
                 full_flush_completed = true;
                 TRACEPOINT(utxocache, flush,
@@ -5598,6 +5600,7 @@ bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
         // Otherwise, flush state to disk and deallocate the in-memory coins map.
         ret = FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH);
     }
+    if (ret && !m_chainman.m_interrupt) CoinsTip().Reserve(coinstip_size);
     return ret;
 }
 

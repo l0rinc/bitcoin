@@ -51,6 +51,12 @@ size_t CCoinsViewCache::DynamicMemoryUsage() const {
     return memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage;
 }
 
+void CCoinsViewCache::Reserve(uint64_t cache_size_bytes)
+{
+    // Ignoring node overhead and script allocations overestimates how many entries fit in the budget
+    cacheCoins.reserve(cache_size_bytes / (sizeof(CoinsCachePair) + sizeof(void*)));
+}
+
 std::optional<Coin> CCoinsViewCache::FetchCoinFromBase(const COutPoint& outpoint) const
 {
     return base->GetCoin(outpoint);

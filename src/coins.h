@@ -565,6 +565,9 @@ public:
     //! Calculate the size of the cache (in bytes)
     size_t DynamicMemoryUsage() const;
 
+    //! Reserve buckets for the cache budget without preallocating coins or scripts
+    void Reserve(uint64_t cache_size_bytes);
+
     //! Check whether all prevouts of the transaction are present in the UTXO set represented by this view
     bool HaveInputs(const CTransaction& tx) const;
 

@@ -1134,6 +1134,37 @@ BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
     BOOST_CHECK_EQUAL(cache.AccessCoin(outpoint), coin1);
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_reserve)
+{
+    CCoinsViewTest base{m_rng};
+    CCoinsViewCacheTest cache{&base};
+    const auto empty_usage{cache.DynamicMemoryUsage()};
+    cache.Reserve(1_MiB);
+    BOOST_CHECK_GT(cache.DynamicMemoryUsage(), empty_usage);
+    const auto buckets{cache.map().bucket_count()};
+    const auto txid{Txid::FromUint256(m_rng.rand256())};
+    const Coin coin{CTxOut{1, CScript{} << OP_TRUE}, 1, false};
+    for (uint32_t i{0}; i < 1000; ++i) {
+        cache.AddCoin(COutPoint{txid, i}, Coin{coin}, false);
+        BOOST_CHECK_EQUAL(cache.map().bucket_count(), buckets);
+    }
+    cache.SelfTest();
+
+    cache.Reserve(2_MiB);
+    BOOST_CHECK_GT(cache.map().bucket_count(), buckets);
+    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 1000U);
+    BOOST_CHECK_EQUAL(cache.AccessCoin(COutPoint(txid, 0)), coin);
+    cache.SelfTest();
+
+    cache.Flush();
+    BOOST_CHECK_EQUAL(cache.GetCacheSize(), 0U);
+    BOOST_CHECK_EQUAL(base.GetCoin(COutPoint(txid, 0)).value(), coin);
+    cache.Reserve(64 * 1024);
+    BOOST_CHECK_LT(cache.map().bucket_count(), buckets);
+    BOOST_CHECK_LT(cache.DynamicMemoryUsage(), empty_usage + 64 * 1024);
+    cache.SelfTest();
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
 {
     CCoinsViewTest root{m_rng};
