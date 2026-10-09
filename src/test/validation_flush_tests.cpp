@@ -27,8 +27,8 @@ BOOST_AUTO_TEST_CASE(getcoinscachesizestate)
     BOOST_REQUIRE(chainstate.ResizeCoinsCaches(MAX_COINS_BYTES, /*coinsdb_size=*/1_MiB));
     CCoinsViewCache& view{chainstate.CoinsTip()};
 
-    // Sanity: an empty cache should be ≲ 1 chunk (~ 256 KiB).
-    BOOST_CHECK_LT(view.DynamicMemoryUsage() / (256 * 1024.0), 1.1);
+    BOOST_CHECK_EQUAL(view.GetCacheSize(), 0U);
+    BOOST_CHECK_EQUAL(chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, /*max_mempool_size_bytes=*/0), CoinsCacheSizeState::OK);
 
     // Run the same growth-path twice: first with 0 head-room, then with extra head-room
     for (uint64_t max_mempool_size_bytes : {uint64_t{0}, MAX_MEMPOOL_BYTES}) {
