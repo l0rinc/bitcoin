@@ -2608,15 +2608,17 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             // Check that transaction is BIP68 final
             // BIP68 lock checks (as opposed to nLockTime checks) must
             // be in ConnectBlock because they require the UTXO set
-            prevheights.resize(tx.vin.size());
-            for (size_t j = 0; j < tx.vin.size(); j++) {
-                prevheights[j] = view.AccessCoin(tx.vin[j].prevout).nHeight;
-            }
+            if (tx.version >= 2 && (nLockTimeFlags & LOCKTIME_VERIFY_SEQUENCE)) {
+                prevheights.resize(tx.vin.size());
+                for (uint32_t j = 0; j < tx.vin.size(); j++) {
+                    prevheights[j] = (tx.vin[j].nSequence & CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG) ? 0 : view.AccessCoin(tx.vin[j].prevout).nHeight;
+                }
 
-            if (!SequenceLocks(tx, nLockTimeFlags, prevheights, *pindex)) {
-                state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-nonfinal",
-                              "contains a non-BIP68-final transaction " + tx.GetHash().ToString());
-                break;
+                if (!SequenceLocks(tx, nLockTimeFlags, prevheights, *pindex)) {
+                    state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-nonfinal",
+                                  "contains a non-BIP68-final transaction " + tx.GetHash().ToString());
+                    break;
+                }
             }
         }
 
