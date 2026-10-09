@@ -1094,6 +1094,89 @@ bool BlockManager::ReadBlock(CBlock& block, const CBlockIndex& index) const
     return ReadBlock(block, block_pos, index.GetBlockHash());
 }
 
+std::vector<std::byte> StripBlockWitness(std::span<const std::byte> data)
+{
+    SpanReader reader{data};
+    const auto pos{[&]() -> uint64_t { return data.size() - reader.size(); }};
+    std::vector<std::byte> stripped;
+    stripped.reserve(data.size());
+    uint64_t copy_begin{0};
+    // Keep [copy_begin, gap_begin), then drop the already-read gap [gap_begin, pos()).
+    const auto drop_from{[&](uint64_t gap_begin) {
+        stripped.insert(stripped.end(), data.begin() + copy_begin, data.begin() + gap_begin);
+        copy_begin = pos();
+    }};
+
+    reader.ignore(GetSerializeSize(CBlockHeader{}));
+    const auto tx_count{ReadCompactSize(reader)};
+    for (uint64_t tx{0}; tx < tx_count; ++tx) {
+        reader.ignore(sizeof(CTransaction::version));
+        const auto marker{pos()};
+        auto input_count{ReadCompactSize(reader)};
+        uint8_t flags{0};
+        if (input_count == 0) {
+            reader >> flags;
+            if (flags == 0) {
+                // With an empty vin, a zero flags byte already encoded an empty vout
+                reader.ignore(sizeof(CTransaction::nLockTime));
+                continue;
+            }
+            drop_from(marker);
+            input_count = ReadCompactSize(reader);
+        }
+        for (uint64_t input{0}; input < input_count; ++input) {
+            reader.ignore(GetSerializeSize(COutPoint{}));
+            reader.ignore(ReadCompactSize(reader)); // scriptSig
+            reader.ignore(sizeof(CTxIn::nSequence));
+        }
+        const auto output_count{ReadCompactSize(reader)};
+        for (uint64_t output{0}; output < output_count; ++output) {
+            reader.ignore(sizeof(CTxOut::nValue));
+            reader.ignore(ReadCompactSize(reader)); // scriptPubKey
+        }
+        if (flags & 1) {
+            const auto witness{pos()};
+            bool has_witness{false};
+            for (uint64_t input{0}; input < input_count; ++input) {
+                const auto stack_size{ReadCompactSize(reader)};
+                has_witness |= (stack_size != 0);
+                for (uint64_t item{0}; item < stack_size; ++item) reader.ignore(ReadCompactSize(reader));
+            }
+            if (!has_witness) throw std::ios_base::failure("Superfluous witness record");
+            drop_from(witness);
+            flags ^= 1;
+        }
+        if (flags != 0) throw std::ios_base::failure("Unknown transaction optional data");
+        reader.ignore(sizeof(CTransaction::nLockTime));
+    }
+    drop_from(pos());
+    return stripped;
+}
+
+BlockManager::ReadRawBlockResult BlockManager::ReadBlockWithoutWitness(const FlatFilePos& pos, const uint256& expected_hash) const
+{
+    Assume(!GetConsensus().signet_blocks);
+    auto data{ReadRawBlock(pos)};
+    if (!data) return data;
+    try {
+        CBlockHeader header;
+        SpanReader{*data} >> header;
+        const auto hash{header.GetHash()};
+        if (!CheckProofOfWork(hash, header.nBits, GetConsensus())) {
+            LogError("Errors in block header at %s while reading block", pos.ToString());
+            return util::Unexpected{ReadRawError::IO};
+        }
+        if (hash != expected_hash) {
+            LogError("GetHash() doesn't match index at %s while reading block (%s != %s)", pos.ToString(), hash.ToString(), expected_hash.ToString());
+            return util::Unexpected{ReadRawError::IO};
+        }
+        return StripBlockWitness(*data);
+    } catch (const std::exception& e) {
+        LogError("Deserialize or I/O error - %s at %s while reading block", e.what(), pos.ToString());
+        return util::Unexpected{ReadRawError::IO};
+    }
+}
+
 BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& pos, std::optional<std::pair<size_t, size_t>> block_part) const
 {
     if (pos.nPos < STORAGE_HEADER_BYTES) {
