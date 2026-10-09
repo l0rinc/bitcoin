@@ -29,6 +29,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -685,6 +686,8 @@ private:
     };
     //! Must only be mutated when m_futures is empty. Elements may be mutated when m_futures is not empty.
     std::vector<InputToFetch> m_inputs{};
+    //! Reuse buckets when identifying spends of outputs created earlier in each block
+    std::unordered_set<Txid, SaltedCoinsCacheHasher> m_earlier_txids;
 
     /**
      * Claim and fetch the next input in the queue.
