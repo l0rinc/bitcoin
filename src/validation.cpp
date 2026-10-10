@@ -2619,14 +2619,16 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             }
         }
 
-        // GetTransactionSigOpCost counts 3 types of sigops:
-        // * legacy (always)
-        // * p2sh (when P2SH enabled in flags and excludes coinbase)
-        // * witness (when witness enabled in flags and excludes coinbase)
-        nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
-        if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST) {
-            state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "too many sigops");
-            break;
+        if (fScriptChecks) {
+            // GetTransactionSigOpCost counts 3 types of sigops:
+            // * legacy (always)
+            // * p2sh (when P2SH enabled in flags and excludes coinbase)
+            // * witness (when witness enabled in flags and excludes coinbase)
+            nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
+            if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST) {
+                state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "too many sigops");
+                break;
+            }
         }
 
         if (!tx.IsCoinBase() && fScriptChecks)
@@ -4052,16 +4054,6 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
                                  strprintf("Transaction check failed (tx hash %s) %s", tx->GetHash().ToString(), tx_state.GetDebugMessage()));
         }
     }
-    // This underestimates the number of sigops, because unlike ConnectBlock it
-    // does not count witness and p2sh sigops.
-    unsigned int nSigOps = 0;
-    for (const auto& tx : block.vtx)
-    {
-        nSigOps += GetLegacySigOpCount(*tx);
-    }
-    if (nSigOps * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST)
-        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "out-of-bounds SigOpCount");
-
     if (fCheckPOW && fCheckMerkleRoot)
         block.fChecked = true;
 

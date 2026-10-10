@@ -181,8 +181,8 @@ BOOST_AUTO_TEST_CASE(sigop_limit_at_connection)
     FinalizeBlock(block);
 
     BlockValidationState state;
-    BOOST_CHECK(!CheckBlock(*block, state, Params().GetConsensus())); // TODO: Defer the sigop limit to block connection
-    BOOST_CHECK(!block->fChecked);
+    BOOST_CHECK(CheckBlock(*block, state, Params().GetConsensus()));
+    BOOST_CHECK(block->fChecked);
     LOCK(cs_main);
     state = TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true);
     BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-blk-sigops");
