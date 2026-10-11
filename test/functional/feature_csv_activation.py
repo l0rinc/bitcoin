@@ -43,11 +43,13 @@ import time
 from test_framework.blocktools import (
     create_block,
 )
+from test_framework.messages import COutPoint, CTransaction, CTxIn, CTxOut
 from test_framework.p2p import P2PDataStore
 from test_framework.script import (
     CScript,
     OP_CHECKSEQUENCEVERIFY,
     OP_DROP,
+    OP_TRUE,
 )
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -396,6 +398,38 @@ class BIP68_112_113Test(BitcoinTestFramework):
         bip68success_txs.extend(bip68heighttxs)
         self.send_blocks([self.create_test_block(bip68success_txs)])
         self.nodes[0].invalidateblock(self.nodes[0].getbestblockhash())
+
+        self.log.info("Test mixed enabled and disabled BIP68 inputs in the same block")
+        parent = self.create_self_transfer_from_utxo(bip68inputs[0])
+        parent.vout[0].scriptPubKey = CScript([OP_TRUE])
+        parent.vout.append(CTxOut(parent.vout[0].nValue // 2, CScript([OP_TRUE])))
+        parent.vout[0].nValue -= parent.vout[1].nValue
+        self.miniwallet.sign_tx(parent)
+
+        for disabled_input, lock_type in product(range(2), (0, SEQ_TYPE_FLAG)):
+            child = CTransaction()
+            child.vin = [CTxIn(COutPoint(parent.txid_int, i), nSequence=lock_type | 1) for i in range(2)]
+            child.vin[disabled_input].nSequence = SEQ_DISABLE_FLAG | lock_type | 0xffff
+            child.vout = [CTxOut(sum(output.nValue for output in parent.vout) - 1000, CScript([OP_TRUE]))]
+
+            # Version 1 ignores relative locks, including the enabled input's unmet lock.
+            child.version = 1
+            self.send_blocks([self.create_test_block([parent, child])])
+            self.nodes[0].invalidateblock(self.nodes[0].getbestblockhash())
+
+            # A disabled input must not hide the other input's unmet height or time lock.
+            for version in (2, 0xffffffff):
+                child.version = version
+                self.send_blocks([self.create_test_block([parent, child])], success=False, reject_reason='bad-txns-nonfinal')
+
+            child.version = 2
+            child.vin[1 - disabled_input].nSequence = lock_type
+            self.send_blocks([self.create_test_block([parent, child])])
+            self.nodes[0].invalidateblock(self.nodes[0].getbestblockhash())
+
+            # Disabled sequence locks still require an existing, unspent input.
+            child.vin[disabled_input].prevout.hash = 0
+            self.send_blocks([self.create_test_block([parent, child])], success=False, reject_reason='bad-txns-inputs-missingorspent')
 
         self.log.info("BIP 112 tests")
         self.log.info("Test version 1 txs")

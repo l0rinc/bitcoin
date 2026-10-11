@@ -1213,14 +1213,14 @@ BOOST_AUTO_TEST_CASE(calculatesequencelocks_tx_version_test)
 
     // A single input with a height-based relative locktime of one block. Only the
     // height branch is taken, so the block index is never dereferenced.
-    auto check_min_height{[](uint32_t version, int expected_min_height) {
+    auto check_min_height{[](uint32_t version, int expected_min_height, int flags = LOCKTIME_VERIFY_SEQUENCE) {
         CMutableTransaction mtx;
         mtx.version = version;
         mtx.vin.emplace_back(COutPoint{}, CScript{}, /*nSequenceIn=*/1);
 
         std::vector<int> prev_heights{coin_height};
         const CBlockIndex block{};
-        const auto lock_pair{CalculateSequenceLocks(CTransaction{mtx}, LOCKTIME_VERIFY_SEQUENCE, prev_heights, block)};
+        const auto lock_pair{CalculateSequenceLocks(CTransaction{mtx}, flags, prev_heights, block)};
         BOOST_CHECK_EQUAL(lock_pair.first, expected_min_height);
     }};
 
@@ -1229,6 +1229,31 @@ BOOST_AUTO_TEST_CASE(calculatesequencelocks_tx_version_test)
     check_min_height(/*version=*/1, /*expected_min_height=*/-1);
     check_min_height(/*version=*/2, /*expected_min_height=*/coin_height);
     check_min_height(/*version=*/std::numeric_limits<uint32_t>::max(), /*expected_min_height=*/coin_height);
+
+    // Other locktime flags do not enable BIP68.
+    check_min_height(/*version=*/2, /*expected_min_height=*/-1, /*flags=*/0);
+    check_min_height(/*version=*/2, /*expected_min_height=*/-1, /*flags=*/LOCKTIME_VERIFY_SEQUENCE << 1);
+    check_min_height(/*version=*/2, /*expected_min_height=*/coin_height, /*flags=*/LOCKTIME_VERIFY_SEQUENCE | (LOCKTIME_VERIFY_SEQUENCE << 1));
+}
+
+BOOST_AUTO_TEST_CASE(calculatesequencelocks_disabled_input_test)
+{
+    for (uint32_t sequence : {CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG,
+                             CTxIn::SEQUENCE_FINAL,
+                             CTxIn::MAX_SEQUENCE_NONFINAL,
+                             CTxIn::MAX_SEQUENCE_NONFINAL - 1,
+                             CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG | CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG | CTxIn::SEQUENCE_LOCKTIME_MASK}) {
+        CMutableTransaction mtx;
+        mtx.version = 2;
+        mtx.vin.emplace_back(COutPoint{}, CScript{}, sequence);
+
+        std::vector<int> prev_heights{100};
+        const CBlockIndex block{};
+        const auto lock_pair{CalculateSequenceLocks(CTransaction{mtx}, LOCKTIME_VERIFY_SEQUENCE, prev_heights, block)};
+        BOOST_CHECK_EQUAL(lock_pair.first, -1);
+        BOOST_CHECK_EQUAL(lock_pair.second, -1);
+        BOOST_CHECK_EQUAL(prev_heights.front(), 0);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(getvalueout_out_of_range_throws)

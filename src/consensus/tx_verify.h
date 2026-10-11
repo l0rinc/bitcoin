@@ -6,6 +6,8 @@
 #define BITCOIN_CONSENSUS_TX_VERIFY_H
 
 #include <consensus/amount.h>
+#include <consensus/consensus.h>
+#include <primitives/transaction.h>
 #include <script/verify_flags.h>
 
 #include <cstdint>
@@ -14,7 +16,6 @@
 
 class CBlockIndex;
 class CCoinsViewCache;
-class CTransaction;
 class TxValidationState;
 
 /** Transaction validation functions */
@@ -61,6 +62,16 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
  * specified height and time. Consensus critical.
  */
 bool IsFinalTx(const CTransaction &tx, int nBlockHeight, int64_t nBlockTime);
+
+constexpr bool IsBIP68Enabled(uint32_t version, int flags)
+{
+    return version >= 2 && (flags & LOCKTIME_VERIFY_SEQUENCE);
+}
+
+constexpr bool IsBIP68InputEnabled(uint32_t sequence)
+{
+    return !(sequence & CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG);
+}
 
 /**
  * Calculates the block height and previous block's median time past at
