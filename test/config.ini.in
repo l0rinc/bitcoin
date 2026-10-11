@@ -13,6 +13,9 @@ BUILDDIR=@abs_top_builddir@
 EXEEXT=@EXEEXT@
 RPCAUTH=@abs_top_srcdir@/share/rpcauth/rpcauth.py
 
+[net]
+BLOCK_DOWNLOAD_WINDOW=@BLOCK_DOWNLOAD_WINDOW@
+
 [components]
 # Which components are enabled.
 ENABLE_WALLET=@ENABLE_WALLET_VALUE@

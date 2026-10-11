@@ -7,6 +7,9 @@
 Test logic for skipping signature validation on blocks which we've assumed
 valid (https://github.com/bitcoin/bitcoin/pull/9484)
 
+With --sigops, the invalid block also exceeds the legacy sigop limit, testing
+that assumevalid skips sigop counting under the same conditions as scripts.
+
 We build a chain that includes an invalid signature for one of the transactions:
 
     0:        genesis block
@@ -37,6 +40,7 @@ Start a few nodes:
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
+    MAX_BLOCK_SIGOPS,
     create_block,
     create_coinbase,
 )
@@ -52,6 +56,7 @@ from test_framework.messages import (
 from test_framework.p2p import P2PInterface
 from test_framework.script import (
     CScript,
+    OP_CHECKSIG,
     OP_TRUE,
 )
 from test_framework.test_framework import BitcoinTestFramework
@@ -67,6 +72,9 @@ class BaseNode(P2PInterface):
 
 
 class AssumeValidTest(BitcoinTestFramework):
+    def add_options(self, parser):
+        parser.add_argument("--sigops", action="store_true", help="Test assumevalid with an excessive sigop count")
+
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 6
@@ -113,6 +121,8 @@ class AssumeValidTest(BitcoinTestFramework):
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(self.block1.vtx[0].txid_int, 0), scriptSig=b""))
         tx.vout.append(CTxOut(49 * 100000000, CScript([OP_TRUE])))
+        if self.options.sigops:
+            tx.vout.append(CTxOut(0, CScript([OP_CHECKSIG] * (MAX_BLOCK_SIGOPS + 1))))
 
         block102 = create_block(self.tip, height=height, ntime=self.block_time, txlist=[tx])
         self.block_time += 1
@@ -148,7 +158,7 @@ class AssumeValidTest(BitcoinTestFramework):
         ]):
             p2p0.send_and_ping(msg_block(self.blocks[0]))
         with self.nodes[0].assert_debug_log(expected_msgs=[
-            "Block validation error: block-script-verify-flag-failed",
+            "Block validation error: " + ("bad-blk-sigops" if self.options.sigops else "block-script-verify-flag-failed"),
         ]):
             for i in range(1, 103):
                 p2p0.send_without_ping(msg_block(self.blocks[i]))
@@ -183,7 +193,7 @@ class AssumeValidTest(BitcoinTestFramework):
         ]):
             p2p2.send_and_ping(msg_block(self.blocks[0]))
         with self.nodes[2].assert_debug_log(expected_msgs=[
-            "Block validation error: block-script-verify-flag-failed",
+            "Block validation error: " + ("bad-blk-sigops" if self.options.sigops else "block-script-verify-flag-failed"),
         ]):
             for i in range(1, 103):
                 p2p2.send_without_ping(msg_block(self.blocks[i]))
@@ -241,6 +251,14 @@ class AssumeValidTest(BitcoinTestFramework):
         ]):
             self.restart_node(5, extra_args=["-reindex-chainstate", f"-assumevalid={block102.hash_hex}", "-minimumchainwork=0xffff"])
             assert_equal(self.nodes[5].getblockcount(), 1)
+
+        if self.options.sigops:
+            self.log.info("Reject excessive sigops after assumevalid stops applying.")
+            coinbase = create_coinbase(height)
+            coinbase.vout.append(CTxOut(0, CScript([OP_CHECKSIG] * (MAX_BLOCK_SIGOPS + 1))))
+            block = create_block(self.tip, coinbase, ntime=self.block_time)
+            block.solve()
+            assert_equal(self.nodes[1].submitblock(block.serialize().hex()), "bad-blk-sigops")
 
 
 if __name__ == '__main__':

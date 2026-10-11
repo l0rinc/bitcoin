@@ -169,6 +169,25 @@ void MinerTestingSetup::BuildChain(const uint256& root, int height, const unsign
     }
 }
 
+// Passing context-independent checks must not bypass the sigop limit when connecting a block.
+BOOST_AUTO_TEST_CASE(sigop_limit_at_connection)
+{
+    auto block{Block(Params().GenesisBlock().GetHash())};
+    CMutableTransaction coinbase{*block->vtx[0]};
+    CScript script;
+    for (int i{0}; i <= MAX_BLOCK_SIGOPS_COST / WITNESS_SCALE_FACTOR; ++i) script << OP_CHECKSIG;
+    coinbase.vout.emplace_back(0, script);
+    block->vtx[0] = MakeTransactionRef(coinbase);
+    FinalizeBlock(block);
+
+    BlockValidationState state;
+    BOOST_CHECK(CheckBlock(*block, state, Params().GetConsensus()));
+    BOOST_CHECK(block->fChecked);
+    LOCK(cs_main);
+    state = TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true);
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-blk-sigops");
+}
+
 BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
 {
     // build a large-ish chain that's likely to have some forks

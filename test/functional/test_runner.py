@@ -111,6 +111,7 @@ BASE_SCRIPTS = [
     'p2p_node_network_limited.py --v1transport',
     'p2p_node_network_limited.py --v2transport',
     # vv Tests less than 2m vv
+    'feature_pruneassumevalid.py',
     'mining_getblocktemplate_longpoll.py',
     'p2p_segwit.py',
     'feature_maxuploadtarget.py',
@@ -139,6 +140,7 @@ BASE_SCRIPTS = [
     'wallet_groups.py',
     'p2p_blockfilters.py',
     'feature_assumevalid.py',
+    'feature_assumevalid.py --sigops',
     'wallet_taproot.py',
     'feature_bip68_sequence.py',
     'rpc_packages.py',
@@ -284,6 +286,7 @@ BASE_SCRIPTS = [
     'p2p_tx_relay_rate_limit.py',
     'p2p_eviction.py',
     'p2p_outbound_eviction.py',
+    'p2p_blockdownload.py',
     'p2p_ibd_stalling.py --v1transport',
     'p2p_ibd_stalling.py --v2transport',
     'p2p_net_deadlock.py --v1transport',

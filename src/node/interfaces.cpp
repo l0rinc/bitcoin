@@ -786,6 +786,7 @@ public:
     {
         ::uiInterface.ShowProgress(title, progress, resume_possible);
     }
+    util::Result<void> disablePruneAssumeValid() override { return chainman().DisablePruneAssumeValid(); }
     std::unique_ptr<Handler> handleNotifications(std::shared_ptr<Notifications> notifications) override
     {
         return std::make_unique<NotificationsHandlerImpl>(validation_signals(), std::move(notifications));

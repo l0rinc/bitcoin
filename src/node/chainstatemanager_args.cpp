@@ -46,6 +46,8 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManage
         }
     }
 
+    if (auto value{args.GetBoolArg("-pruneassumevalid")}) opts.prune_assumevalid = *value;
+
     if (auto value{args.GetIntArg("-maxtipage")}) opts.max_tip_age = std::chrono::seconds{*value};
 
     ReadDatabaseArgs(args, opts.coins_db);
@@ -65,6 +67,12 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManage
             return util::Error{Untranslated(strprintf("-prevoutfetchthreads must be non-negative (got %d). Use 0 to disable parallel input fetching.", *value))};
         }
         opts.prevoutfetch_threads_num = std::min(*value, MAX_PREVOUTFETCH_THREADS);
+    }
+    if (auto value{args.GetArg<int32_t>("-blockfetchthreads")}) {
+        if (*value < 0) {
+            return util::Error{Untranslated(strprintf("-blockfetchthreads must be non-negative (got %d). Use 0 to disable block read-ahead.", *value))};
+        }
+        opts.block_read_ahead_threads_num = std::min(*value, MAX_BLOCK_READ_AHEAD_THREADS);
     }
 
     if (auto max_size = args.GetIntArg("-maxsigcachesize")) {

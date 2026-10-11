@@ -29,6 +29,7 @@
 #include <kernel/types.h>
 #include <kernel/warning.h>
 #include <logging/timer.h>
+#include <node/blockfetcher.h>
 #include <node/blockstorage.h>
 #include <node/utxo_snapshot.h>
 #include <policy/ephemeral_policy.h>
@@ -1864,11 +1865,19 @@ Chainstate::Chainstate(
     BlockManager& blockman,
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
-    : m_mempool(mempool),
+    : m_block_fetcher{std::make_unique<node::BlockFetcher>([blockman = &blockman](CBlock& block, const FlatFilePos& pos, const uint256& hash) {
+          if (!blockman->ReadBlock(block, pos, hash)) return false;
+          // Only this worker owns the block until its future is consumed
+          BlockValidationState state;
+          return CheckBlock(block, state, blockman->GetConsensus());
+      }, chainman.m_options.block_read_ahead_threads_num)},
+      m_mempool(mempool),
       m_blockman(blockman),
       m_chainman(chainman),
       m_assumeutxo(from_snapshot_blockhash ? Assumeutxo::UNVALIDATED : Assumeutxo::VALIDATED),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
+
+Chainstate::~Chainstate() = default;
 
 fs::path Chainstate::StoragePath() const
 {
@@ -1933,6 +1942,7 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     assert(m_coins_views != nullptr);
     m_coinstip_cache_size_bytes = cache_size_bytes;
     m_coins_views->InitCache(m_chainman.m_options.prevoutfetch_threads_num);
+    CoinsTip().Reserve(cache_size_bytes);
 }
 
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
@@ -1995,14 +2005,13 @@ void Chainstate::InvalidBlockFound(CBlockIndex* pindex, const BlockValidationSta
     }
 }
 
-void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txundo, int nHeight)
+void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo* txundo, int nHeight)
 {
     // mark inputs spent
     if (!tx.IsCoinBase()) {
-        txundo.vprevout.reserve(tx.vin.size());
+        if (txundo) txundo->vprevout.reserve(tx.vin.size());
         for (const CTxIn &txin : tx.vin) {
-            txundo.vprevout.emplace_back();
-            bool is_spent = inputs.SpendCoin(txin.prevout, &txundo.vprevout.back());
+            bool is_spent = inputs.SpendCoin(txin.prevout, txundo ? &txundo->vprevout.emplace_back() : nullptr);
             assert(is_spent);
         }
     }
@@ -2288,11 +2297,97 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
 }
 
 
+// Return why scripts must be checked, or nullptr when assumevalid allows skipping them
+static const char* GetAssumeValidScriptCheckReason(const CBlockIndex* pindex, const ChainstateManager& chainman)
+    EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+{
+    AssertLockHeld(cs_main);
+
+    const char* script_check_reason;
+    if (chainman.AssumedValidBlock().IsNull()) {
+        script_check_reason = "assumevalid=0 (always verify)";
+    } else {
+        constexpr int64_t TWO_WEEKS_IN_SECONDS{60 * 60 * 24 * 7 * 2};
+        // We've been configured with the hash of a block which has been externally verified to have a valid history.
+        // A suitable default value is included with the software and updated from time to time.  Because validity
+        //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
+        // This setting doesn't force the selection of any particular chain but makes validating some faster by
+        //  effectively caching the result of part of the verification.
+        BlockMap::const_iterator it{chainman.m_blockman.m_block_index.find(chainman.AssumedValidBlock())};
+        if (it == chainman.m_blockman.m_block_index.end()) {
+            script_check_reason = "assumevalid hash not in headers";
+        } else if (it->second.GetAncestor(pindex->nHeight) != pindex) {
+            script_check_reason = (pindex->nHeight > it->second.nHeight) ? "block height above assumevalid height" : "block not in assumevalid chain";
+        } else if (chainman.m_best_header->GetAncestor(pindex->nHeight) != pindex) {
+            script_check_reason = "block not in best header chain";
+        } else if (chainman.m_best_header->nChainWork < chainman.MinimumChainWork()) {
+            script_check_reason = "best header chainwork below minimumchainwork";
+        } else if (GetBlockProofEquivalentTime(*chainman.m_best_header, *pindex, *chainman.m_best_header, chainman.GetConsensus()) <= TWO_WEEKS_IN_SECONDS) {
+            script_check_reason = "block too recent relative to best header";
+        } else {
+            // This block is a member of the assumed verified chain and an ancestor of the best header.
+            // Script verification is skipped when connecting blocks under the
+            //  assumevalid block. Assuming the assumevalid block is valid this
+            //  is safe because block merkle hashes are still computed and checked,
+            // Of course, if an assumed valid block is invalid due to false scriptSigs
+            //  this optimization would allow an invalid chain to be accepted.
+            // The equivalent time check discourages hash power from extorting the network via DOS attack
+            //  into accepting an invalid block through telling users they must manually set assumevalid.
+            //  Requiring a software change or burying the invalid block, regardless of the setting, makes
+            //  it hard to hide the implication of the demand. This also avoids having release candidates
+            //  that are hardly doing any signature verification at all in testing without having to
+            //  artificially set the default assumed verified block further back.
+            // The test against the minimum chain work prevents the skipping when denied access to any chain at
+            //  least as good as the expected chain.
+            script_check_reason = nullptr;
+        }
+    }
+
+    return script_check_reason;
+}
+
+bool ChainstateManager::HaveBlockData(const CBlockIndex& block) const
+{
+    AssertLockHeld(cs_main);
+    return block.HaveStoredBlockData() || m_prune_assumevalid_block.first == &block;
+}
+
+bool ChainstateManager::CanUsePruneAssumeValid(const CBlockIndex& block) const
+{
+    AssertLockHeld(cs_main);
+    // Indexes needing undo data disable the option at startup, and a UTXO snapshot has its own history download
+    return m_options.prune_assumevalid && !m_prune_assumevalid_disabled && m_blockman.IsPruneMode() && IsInitialBlockDownload() && !CurrentChainstate().m_from_snapshot_blockhash &&
+           m_best_header && block.GetAncestor(ActiveHeight()) == ActiveTip() && GetAssumeValidScriptCheckReason(&block, *this) == nullptr;
+}
+
+util::Result<void> ChainstateManager::DisablePruneAssumeValid()
+{
+    if (!m_options.prune_assumevalid) return {};
+    {
+        LOCK(cs_main);
+        if (!m_prune_assumevalid_disabled) LogInfo("-pruneassumevalid disabled: wallets require stored block data for crash recovery.");
+        m_prune_assumevalid_disabled = true;
+    }
+    // An accepted block may still be waiting for connection. Finish it before the wallet registers for notifications.
+    // Each caller must wait, including wallets loaded concurrently.
+    auto result{ActivateBestChains()};
+    WITH_LOCK(cs_main, LogPruneAssumeValidStatus(false));
+    return result;
+}
+
+void ChainstateManager::LogPruneAssumeValidStatus(bool active)
+{
+    AssertLockHeld(cs_main);
+    if (!m_options.prune_assumevalid || m_last_prune_assumevalid_logged == active) return;
+    m_last_prune_assumevalid_logged = active;
+    LogInfo("-pruneassumevalid %s", active ? "active: omitting eligible block and undo data." : "inactive: continuing with ordinary validation, storage, and pruning.");
+}
+
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
 bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-                               CCoinsViewCache& view, bool fJustCheck)
+                               CCoinsViewCache& view, bool fJustCheck, bool prune_assumevalid)
 {
     AssertLockHeld(cs_main);
     assert(pindex);
@@ -2341,45 +2436,9 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         return true;
     }
 
-    const char* script_check_reason;
-    if (m_chainman.AssumedValidBlock().IsNull()) {
-        script_check_reason = "assumevalid=0 (always verify)";
-    } else {
-        constexpr int64_t TWO_WEEKS_IN_SECONDS{60 * 60 * 24 * 7 * 2};
-        // We've been configured with the hash of a block which has been externally verified to have a valid history.
-        // A suitable default value is included with the software and updated from time to time.  Because validity
-        //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
-        // This setting doesn't force the selection of any particular chain but makes validating some faster by
-        //  effectively caching the result of part of the verification.
-        BlockMap::const_iterator it{m_blockman.m_block_index.find(m_chainman.AssumedValidBlock())};
-        if (it == m_blockman.m_block_index.end()) {
-            script_check_reason = "assumevalid hash not in headers";
-        } else if (it->second.GetAncestor(pindex->nHeight) != pindex) {
-            script_check_reason = (pindex->nHeight > it->second.nHeight) ? "block height above assumevalid height" : "block not in assumevalid chain";
-        } else if (m_chainman.m_best_header->GetAncestor(pindex->nHeight) != pindex) {
-            script_check_reason = "block not in best header chain";
-        } else if (m_chainman.m_best_header->nChainWork < m_chainman.MinimumChainWork()) {
-            script_check_reason = "best header chainwork below minimumchainwork";
-        } else if (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= TWO_WEEKS_IN_SECONDS) {
-            script_check_reason = "block too recent relative to best header";
-        } else {
-            // This block is a member of the assumed verified chain and an ancestor of the best header.
-            // Script verification is skipped when connecting blocks under the
-            //  assumevalid block. Assuming the assumevalid block is valid this
-            //  is safe because block merkle hashes are still computed and checked,
-            // Of course, if an assumed valid block is invalid due to false scriptSigs
-            //  this optimization would allow an invalid chain to be accepted.
-            // The equivalent time check discourages hash power from extorting the network via DOS attack
-            //  into accepting an invalid block through telling users they must manually set assumevalid.
-            //  Requiring a software change or burying the invalid block, regardless of the setting, makes
-            //  it hard to hide the implication of the demand. This also avoids having release candidates
-            //  that are hardly doing any signature verification at all in testing without having to
-            //  artificially set the default assumed verified block further back.
-            // The test against the minimum chain work prevents the skipping when denied access to any chain at
-            //  least as good as the expected chain.
-            script_check_reason = nullptr;
-        }
-    }
+    // AcceptBlock() already skipped the witness checks of blocks it did not store.
+    // Keep that decision if the best header changes before connection, since witnesses may be unavailable.
+    const char* script_check_reason{prune_assumevalid ? nullptr : GetAssumeValidScriptCheckReason(pindex, m_chainman)};
 
     const auto time_1{SteadyClock::now()};
     m_chainman.time_check += time_1 - time_start;
@@ -2507,10 +2566,12 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     // Precomputed transaction data pointers must not be invalidated
     // until after `control` has run the script checks (potentially
-    // in multiple threads). Preallocate the vector size so a new allocation
+    // in multiple threads). Preallocate the vector size after assumevalid
     // doesn't invalidate pointers into the vector, and keep txsdata in scope
     // for as long as `control`.
-    std::vector<PrecomputedTransactionData> txsdata(block.vtx.size());
+    std::vector<PrecomputedTransactionData> txsdata;
+    if (fScriptChecks) txsdata.resize(block.vtx.size());
+
     std::optional<CCheckQueueControl<CScriptCheck>> control;
     if (auto& queue = m_chainman.GetCheckQueue(); queue.HasThreads() && fScriptChecks) control.emplace(queue);
 
@@ -2518,7 +2579,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     CAmount nFees = 0;
     int nInputs = 0;
     int64_t nSigOpsCost = 0;
-    blockundo.vtxundo.reserve(block.vtx.size() - 1);
+    if (!prune_assumevalid) blockundo.vtxundo.reserve(block.vtx.size() - 1);
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         if (!state.IsValid()) break;
@@ -2547,30 +2608,35 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             // Check that transaction is BIP68 final
             // BIP68 lock checks (as opposed to nLockTime checks) must
             // be in ConnectBlock because they require the UTXO set
-            prevheights.resize(tx.vin.size());
-            for (size_t j = 0; j < tx.vin.size(); j++) {
-                prevheights[j] = view.AccessCoin(tx.vin[j].prevout).nHeight;
-            }
+            if (tx.version >= 2 && (nLockTimeFlags & LOCKTIME_VERIFY_SEQUENCE)) {
+                prevheights.resize(tx.vin.size());
+                for (uint32_t j = 0; j < tx.vin.size(); j++) {
+                    prevheights[j] = (tx.vin[j].nSequence & CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG) ? 0 : view.AccessCoin(tx.vin[j].prevout).nHeight;
+                }
 
-            if (!SequenceLocks(tx, nLockTimeFlags, prevheights, *pindex)) {
-                state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-nonfinal",
-                              "contains a non-BIP68-final transaction " + tx.GetHash().ToString());
+                if (!SequenceLocks(tx, nLockTimeFlags, prevheights, *pindex)) {
+                    state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-nonfinal",
+                                  "contains a non-BIP68-final transaction " + tx.GetHash().ToString());
+                    break;
+                }
+            }
+        }
+
+        if (fScriptChecks) {
+            // GetTransactionSigOpCost counts 3 types of sigops:
+            // * legacy (always)
+            // * p2sh (when P2SH enabled in flags and excludes coinbase)
+            // * witness (when witness enabled in flags and excludes coinbase)
+            nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
+            if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST) {
+                state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "too many sigops");
                 break;
             }
         }
 
-        // GetTransactionSigOpCost counts 3 types of sigops:
-        // * legacy (always)
-        // * p2sh (when P2SH enabled in flags and excludes coinbase)
-        // * witness (when witness enabled in flags and excludes coinbase)
-        nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
-        if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST) {
-            state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "too many sigops");
-            break;
-        }
-
         if (!tx.IsCoinBase() && fScriptChecks)
         {
+            assert(i < txsdata.size());
             bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
             bool tx_ok;
             TxValidationState tx_state;
@@ -2591,11 +2657,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             }
         }
 
-        CTxUndo undoDummy;
-        if (i > 0) {
-            blockundo.vtxundo.emplace_back();
-        }
-        UpdateCoins(tx, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
+        UpdateCoins(tx, view, i > 0 && !prune_assumevalid ? &blockundo.vtxundo.emplace_back() : nullptr, pindex->nHeight);
     }
     const auto time_3{SteadyClock::now()};
     m_chainman.time_connect += time_3 - time_2;
@@ -2632,7 +2694,8 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         return true;
     }
 
-    if (!m_blockman.WriteBlockUndo(blockundo, state, *pindex)) {
+    // Blocks connected without being stored have no undo data
+    if (!prune_assumevalid && !m_blockman.WriteBlockUndo(blockundo, state, *pindex)) {
         return false;
     }
 
@@ -2750,10 +2813,7 @@ bool Chainstate::FlushStateToDisk(
             }
             if (!setFilesToPrune.empty()) {
                 fFlushForPrune = true;
-                if (!m_blockman.m_have_pruned) {
-                    m_blockman.m_block_tree_db->WriteFlag("prunedblockfiles", true);
-                    m_blockman.m_have_pruned = true;
-                }
+                m_blockman.m_have_pruned = true;
             }
         }
         const auto nNow{NodeClock::now()};
@@ -2810,6 +2870,7 @@ bool Chainstate::FlushStateToDisk(
                 }
                 // Flush the chainstate (which may refer to block index entries).
                 empty_cache ? CoinsTip().Flush() : CoinsTip().Sync();
+                if (empty_cache && !m_chainman.m_interrupt) CoinsTip().Reserve(m_coinstip_cache_size_bytes);
                 m_last_flushed_block = m_blockman.LookupBlockIndex(CoinsTip().GetBestBlock());
                 full_flush_completed = true;
                 TRACEPOINT(utxocache, flush,
@@ -3013,6 +3074,7 @@ bool Chainstate::ConnectTip(
     BlockValidationState& state,
     CBlockIndex* pindexNew,
     std::shared_ptr<const CBlock> block_to_connect,
+    const CBlockIndex* read_ahead_tip,
     std::vector<ConnectedBlock>& connected_blocks,
     DisconnectedBlockTransactions& disconnectpool)
 {
@@ -3020,8 +3082,13 @@ bool Chainstate::ConnectTip(
     if (m_mempool) AssertLockHeld(m_mempool->cs);
 
     assert(pindexNew->pprev == m_chain.Tip());
-    // Read block from disk.
+    // A block accepted without being stored is connected from memory, keeping its acceptance decisions
+    const bool prune_assumevalid{m_chainman.m_prune_assumevalid_block.first == pindexNew};
+    if (prune_assumevalid) block_to_connect = std::exchange(m_chainman.m_prune_assumevalid_block, {}).second;
+    const bool from_disk{!block_to_connect};
     const auto time_1{SteadyClock::now()};
+    if (!block_to_connect) block_to_connect = m_block_fetcher->Load(pindexNew->GetBlockHash());
+    m_block_fetcher->FillQueue(read_ahead_tip, pindexNew->nHeight + 1);
     if (!block_to_connect) {
         std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
         if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
@@ -3036,16 +3103,21 @@ bool Chainstate::ConnectTip(
     SteadyClock::time_point time_3;
     // When adding aggregate statistics in the future, keep in mind that
     // num_blocks_total may be zero until the ConnectBlock() call below.
-    LogDebug(BCLog::BENCH, "  - Load block from disk: %.2fms\n",
-             Ticks<MillisecondsDouble>(time_2 - time_1));
+    LogDebug(BCLog::BENCH, "  - Load block from %s: %.2fms\n",
+             from_disk ? "disk" : "memory", Ticks<MillisecondsDouble>(time_2 - time_1));
     {
         CoinsViewOverlay& view{*m_coins_views->m_connect_block_view};
         const auto reset_guard{view.StartFetching(*block_to_connect)};
-        bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view);
+        m_chainman.LogPruneAssumeValidStatus(prune_assumevalid);
+        bool rv{ConnectBlock(*block_to_connect, state, pindexNew, view, /*fJustCheck=*/false, prune_assumevalid)};
         if (m_chainman.m_options.signals) {
             m_chainman.m_options.signals->BlockChecked(block_to_connect, state);
         }
         if (!rv) {
+            if (prune_assumevalid) {
+                return FatalError(m_chainman.GetNotifications(), state,
+                                  strprintf(_("Failed to connect a block during -pruneassumevalid: %s"), state.ToString()));
+            }
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
             LogError("%s: ConnectBlock %s failed, %s\n", __func__, pindexNew->GetBlockHash().ToString(), state.ToString());
@@ -3148,7 +3220,7 @@ CBlockIndex* Chainstate::FindMostWorkChain()
             // for the most work chain if we come across them; we can't switch
             // to a chain unless we have all the non-active-chain parent blocks.
             bool fFailedChain = pindexTest->nStatus & BLOCK_FAILED_VALID;
-            bool fMissingData = !(pindexTest->nStatus & BLOCK_HAVE_DATA);
+            bool fMissingData = !m_chainman.HaveBlockData(*pindexTest);
             if (fFailedChain || fMissingData) {
                 // Candidate chain is not usable (either invalid or missing data)
                 if (fFailedChain && (m_chainman.m_best_invalid == nullptr || pindexNew->nChainWork > m_chainman.m_best_invalid->nChainWork)) {
@@ -3159,7 +3231,7 @@ CBlockIndex* Chainstate::FindMostWorkChain()
                     // If we're missing data and not a descendant of an invalid block,
                     // then add back to m_blocks_unlinked, so that if the block arrives in the future
                     // we can try adding to setBlockIndexCandidates again.
-                    if (fMissingData && !fFailedChain) {
+                    if (fMissingData && !fFailedChain && pindexFailed->HaveStoredBlockData()) {
                         // Avoid duplicate entries in m_blocks_unlinked. If the same entry is
                         // processed twice in ReceivedBlockTransactions(), it may be re-added to
                         // setBlockIndexCandidates with a modified nSequenceId, breaking ordering
@@ -3192,17 +3264,23 @@ void Chainstate::PruneBlockIndexCandidates() {
 
 /**
  * Try to make some progress towards making index_most_work the active block.
- * pblock is either nullptr or a pointer to a CBlock corresponding to index_most_work.
+ * provided_block is either nullptr or points to the CBlock corresponding to index_most_work.
  *
  * @returns true unless a system error occurred
  */
-bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
+bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& provided_block, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
 {
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
 
     const CBlockIndex* pindexOldTip = m_chain.Tip();
     const CBlockIndex* pindexFork = m_chain.FindFork(index_most_work);
+    // Stop before a block supplied by the caller, which does not need to be read from disk
+    const CBlockIndex* read_ahead_tip{provided_block ? index_most_work.pprev : &index_most_work};
+    if (pindexFork && pindexFork != pindexOldTip) {
+        m_block_fetcher->Clear();
+        m_block_fetcher->FillQueue(read_ahead_tip, pindexFork->nHeight + 1);
+    }
 
     // Disconnect active blocks which are no longer in the best chain.
     bool fBlocksDisconnected = false;
@@ -3241,8 +3319,10 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
-            if (!ConnectTip(state, pindexConnect, pindexConnect == &index_most_work ? pblock : std::shared_ptr<const CBlock>(), connected_blocks, disconnectpool)) {
+            const auto block_to_connect{pindexConnect == &index_most_work ? provided_block : nullptr};
+            if (!ConnectTip(state, pindexConnect, block_to_connect, read_ahead_tip, connected_blocks, disconnectpool)) {
                 if (state.IsInvalid()) {
+                    m_block_fetcher->Clear();
                     // The block violates a consensus rule.
                     if (state.GetResult() != BlockValidationResult::BLOCK_MUTATED) {
                         InvalidChainFound(vpindexToConnect.front());
@@ -3296,6 +3376,7 @@ void ChainstateManager::UpdateIBDStatus()
     if (!CurrentChainstate().m_chain.IsTipRecent(MinimumChainWork(), m_options.max_tip_age)) return;
     LogInfo("Leaving InitialBlockDownload (latching to false)");
     m_cached_is_ibd.store(false, std::memory_order_relaxed);
+    LogPruneAssumeValidStatus(false);
 }
 
 bool ChainstateManager::NotifyHeaderTip()
@@ -3387,11 +3468,12 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
 
                 bool fInvalidFound = false;
                 std::shared_ptr<const CBlock> nullBlockPtr;
+                const auto& block_to_connect{pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr};
                 // BlockConnected signals must be sent for the original role;
                 // in case snapshot validation is completed during ActivateBestChainStep, the
                 // result of GetRole() changes from BACKGROUND to NORMAL.
                const ChainstateRole chainstate_role{this->GetRole()};
-                if (!ActivateBestChainStep(state, *pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connected_blocks)) {
+                if (!ActivateBestChainStep(state, *pindexMostWork, block_to_connect, fInvalidFound, connected_blocks)) {
                     // A system error occurred
                     return false;
                 }
@@ -3769,7 +3851,7 @@ void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
     }
 }
 
-/** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). */
+/** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). A null position means it is not stored. */
 void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos)
 {
     AssertLockHeld(cs_main);
@@ -3786,10 +3868,12 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             pindexNew->nHeight, pindexNew->m_chain_tx_count, prev_tx_sum(*pindexNew), CLIENT_NAME, FormatFullVersion(), CLIENT_BUGREPORT);
         pindexNew->m_chain_tx_count = 0;
     }
-    pindexNew->nFile = pos.nFile;
-    pindexNew->nDataPos = pos.nPos;
-    pindexNew->nUndoPos = 0;
-    pindexNew->nStatus |= BLOCK_HAVE_DATA;
+    if (!pos.IsNull()) {
+        pindexNew->nFile = pos.nFile;
+        pindexNew->nDataPos = pos.nPos;
+        pindexNew->nUndoPos = 0;
+        pindexNew->nStatus |= BLOCK_HAVE_DATA;
+    }
     if (DeploymentActiveAt(*pindexNew, *this, Consensus::DEPLOYMENT_SEGWIT)) {
         pindexNew->nStatus |= BLOCK_OPT_WITNESS;
     }
@@ -3827,7 +3911,7 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             }
         }
     } else {
-        if (pindexNew->pprev && pindexNew->pprev->IsValid(BLOCK_VALID_TREE)) {
+        if (!pos.IsNull() && pindexNew->pprev && pindexNew->pprev->IsValid(BLOCK_VALID_TREE)) {
             m_blockman.AddUnlinkedBlock(pindexNew);
         }
     }
@@ -3974,16 +4058,6 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
                                  strprintf("Transaction check failed (tx hash %s) %s", tx->GetHash().ToString(), tx_state.GetDebugMessage()));
         }
     }
-    // This underestimates the number of sigops, because unlike ConnectBlock it
-    // does not count witness and p2sh sigops.
-    unsigned int nSigOps = 0;
-    for (const auto& tx : block.vtx)
-    {
-        nSigOps += GetLegacySigOpCount(*tx);
-    }
-    if (nSigOps * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST)
-        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "out-of-bounds SigOpCount");
-
     if (fCheckPOW && fCheckMerkleRoot)
         block.fChecked = true;
 
@@ -4128,13 +4202,14 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     return true;
 }
 
-/** NOTE: This function is not currently invoked by ConnectBlock(), so we
+/** Disabling witness checks requires a stripped block that has already passed CheckBlock().
+ *  NOTE: This function is not currently invoked by ConnectBlock(), so we
  *  should consider upgrade issues if we change which consensus rules are
  *  enforced in this function (eg by adding a new consensus rule). See comment
  *  in ConnectBlock().
  *  Note that -reindex-chainstate skips the validation that happens here!
  */
-static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, const ChainstateManager& chainman, const CBlockIndex* pindexPrev)
+static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, const ChainstateManager& chainman, const CBlockIndex* pindexPrev, bool check_witness = true)
 {
     const int nHeight = pindexPrev == nullptr ? 0 : pindexPrev->nHeight + 1;
 
@@ -4174,7 +4249,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     // * There must be at least one output whose scriptPubKey is a single 36-byte push, the first 4 bytes of which are
     //   {0xaa, 0x21, 0xa9, 0xed}, and the following 32 bytes are SHA256^2(witness root, witness reserved value). In case there are
     //   multiple, the last one is used.
-    if (!CheckWitnessMalleation(block, DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_SEGWIT), state)) {
+    if (check_witness && !CheckWitnessMalleation(block, DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_SEGWIT), state)) {
         return false;
     }
 
@@ -4184,7 +4259,8 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     // large by filling up the coinbase witness, which doesn't change
     // the block hash, so we couldn't mark the block as permanently
     // failed).
-    if (GetBlockWeight(block) > MAX_BLOCK_WEIGHT) {
+    // For stripped blocks, CheckBlock already bounded base size times WITNESS_SCALE_FACTOR
+    if (check_witness && GetBlockWeight(block) > MAX_BLOCK_WEIGHT) {
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-weight", strprintf("%s : weight limit failed", __func__));
     }
 
@@ -4302,8 +4378,8 @@ void ChainstateManager::ReportHeadersPresync(int64_t height, int64_t timestamp)
     }
 }
 
-/** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
-bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked)
+/** Accept a block for connection. If dbp is non-nullptr, its data is already on disk */
+bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked, bool allow_stripped_retry)
 {
     const CBlock& block = *pblock;
 
@@ -4323,7 +4399,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     // save them to disk. Skip processing of unrequested blocks as an anti-DoS
     // measure, unless the blocks have more work than the active chain tip, and
     // aren't too far ahead of it, so are likely to be attached soon.
-    bool fAlreadyHave = pindex->nStatus & BLOCK_HAVE_DATA;
+    bool fAlreadyHave = HaveBlockData(*pindex);
     bool fHasMoreOrSameWork = (ActiveTip() ? pindex->nChainWork >= ActiveTip()->nChainWork : true);
     // Blocks that are too out-of-order needlessly limit the effectiveness of
     // pruning, because pruning will not delete block files that contain any
@@ -4355,8 +4431,14 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
 
     const CChainParams& params{GetParams()};
 
+    // During pruned IBD, an eligible block extending the active tip is connected without being stored.
+    // Witnesses omitted from such a block are assumed valid like its scripts.
+    const bool prune_assumevalid{!dbp && pindex->pprev == ActiveTip() && CanUsePruneAssumeValid(*pindex)};
+    const bool stripped{(prune_assumevalid || allow_stripped_retry) && !block.HasWitness()};
+    // Request eligibility can change while the response is being deserialized or waiting for this lock
+    if (allow_stripped_retry && stripped && !prune_assumevalid) return true;
     if (!CheckBlock(block, state, params.GetConsensus()) ||
-        !ContextualCheckBlock(block, state, *this, pindex->pprev)) {
+        !ContextualCheckBlock(block, state, *this, pindex->pprev, /*check_witness=*/!(prune_assumevalid && stripped))) {
         if (Assume(state.IsInvalid())) {
             ActiveChainstate().InvalidBlockFound(pindex, state);
         }
@@ -4368,6 +4450,17 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     // (but if it does not build on our best tip, let the SendMessages loop relay it)
     if (!IsInitialBlockDownload() && ActiveTip() == pindex->pprev && m_options.signals) {
         m_options.signals->NewPoWValidBlock(pindex, pblock);
+    }
+
+    if (prune_assumevalid) {
+        m_blockman.m_have_pruned = true;
+        // Keep the block in memory until it is connected, since pruning would delete it anyway
+        if (fNewBlock) *fNewBlock = true;
+        m_prune_assumevalid_block = {pindex, pblock};
+        ReceivedBlockTransactions(block, pindex, /*pos=*/{});
+        LogDebug(BCLog::VALIDATION, "Accepted block %s (%d) without storing it\n", block.GetHash().ToString(), pindex->nHeight);
+        CheckBlockIndex();
+        return true;
     }
 
     // Write block to history file
@@ -4410,17 +4503,17 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     return true;
 }
 
-bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block)
+bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, bool allow_stripped_retry)
 {
     AssertLockNotHeld(cs_main);
 
+    bool accepted{false};
     {
         CBlockIndex *pindex = nullptr;
-        if (new_block) *new_block = false;
         BlockValidationState state;
 
-        // CheckBlock() does not support multi-threaded block validation because CBlock::fChecked can cause data race.
-        // Therefore, the following critical section must include the CheckBlock() call as well.
+        // Callers may share this block, so serialize writes to its memoization flags.
+        // Prefetch workers finish their checks before handing the block to this path.
         LOCK(cs_main);
 
         // Skipping AcceptBlock() for CheckBlock() failures means that we will never mark a block as invalid if
@@ -4430,9 +4523,10 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         // not very expensive, the anti-DoS benefits of caching failure (of a definitely-invalid block) are not substantial.
         bool ret = CheckBlock(*block, state, GetConsensus());
         if (ret) {
-            // Store to disk
-            ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, new_block, min_pow_checked);
+            // Accept the block for connection
+            ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, &accepted, min_pow_checked, allow_stripped_retry);
         }
+        if (new_block) *new_block = accepted;
         if (!ret) {
             if (m_options.signals) {
                 m_options.signals->BlockChecked(block, state);
@@ -4445,14 +4539,17 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
     NotifyHeaderTip();
 
     BlockValidationState state; // Only used to report errors, not invalidity - ignore it
-    if (!ActiveChainstate().ActivateBestChain(state, block)) {
+    // A body not accepted by this call may not have passed its contextual checks.
+    // Use the accepted body from memory or disk instead of forwarding that reply to connection.
+    const auto block_to_connect{accepted ? block : nullptr};
+    if (!ActiveChainstate().ActivateBestChain(state, block_to_connect)) {
         LogError("%s: ActivateBestChain failed (%s)\n", __func__, state.ToString());
         return false;
     }
 
     Chainstate* bg_chain{WITH_LOCK(cs_main, return HistoricalChainstate())};
     BlockValidationState bg_state;
-    if (bg_chain && !bg_chain->ActivateBestChain(bg_state, block)) {
+    if (bg_chain && !bg_chain->ActivateBestChain(bg_state, block_to_connect)) {
         LogError("%s: [background] ActivateBestChain failed (%s)\n", __func__, bg_state.ToString());
         return false;
      }
@@ -4648,11 +4745,13 @@ VerifyDBResult CVerifyDB::VerifyDB(
     int nGoodTransactions = 0;
     BlockValidationState state;
     int reportDone = 0;
-    bool skipped_no_block_data{false};
+    bool skipped_missing_data{false};
     bool skipped_l3_checks{false};
     LogInfo("Verification progress: 0%%");
 
     const bool is_snapshot_cs{chainstate.m_from_snapshot_blockhash};
+    // Level 3 disconnects blocks, which also needs their undo data
+    const uint32_t required_status{nCheckLevel >= 3 ? BLOCK_HAVE_MASK : BLOCK_HAVE_DATA};
 
     for (pindex = chainstate.m_chain.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
         const int percentageDone = std::max(1, std::min(99, (int)(((double)(chainstate.m_chain.Height() - pindex->nHeight)) / (double)nCheckDepth * (nCheckLevel >= 4 ? 50 : 100))));
@@ -4665,11 +4764,12 @@ VerifyDBResult CVerifyDB::VerifyDB(
         if (pindex->nHeight <= chainstate.m_chain.Height() - nCheckDepth) {
             break;
         }
-        if ((chainstate.m_blockman.IsPruneMode() || is_snapshot_cs) && !(pindex->nStatus & BLOCK_HAVE_DATA)) {
+        if ((chainstate.m_blockman.IsPruneMode() || is_snapshot_cs) && (~pindex->nStatus & required_status)) {
             // If pruning or running under an assumeutxo snapshot, only go
-            // back as far as we have data.
-            LogInfo("Block verification stopping at height %d (no data). This could be due to pruning or use of an assumeutxo snapshot.", pindex->nHeight);
-            skipped_no_block_data = true;
+            // back as far as we have data. A block refetched after pruning
+            // has its body but not its undo data.
+            LogInfo("Block verification stopping at height %d (%s). This could be due to pruning or use of an assumeutxo snapshot.", pindex->nHeight, (pindex->nStatus & BLOCK_HAVE_DATA) ? "no undo data" : "no data");
+            skipped_missing_data = true;
             break;
         }
         CBlock block;
@@ -4760,7 +4860,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
     if (skipped_l3_checks) {
         return VerifyDBResult::SKIPPED_L3_CHECKS;
     }
-    if (skipped_no_block_data) {
+    if (skipped_missing_data) {
         return VerifyDBResult::SKIPPED_MISSING_BLOCKS;
     }
     return VerifyDBResult::SUCCESS;
@@ -5502,6 +5602,7 @@ bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
         // Otherwise, flush state to disk and deallocate the in-memory coins map.
         ret = FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH);
     }
+    if (ret && !m_chainman.m_interrupt) CoinsTip().Reserve(coinstip_size);
     return ret;
 }
 

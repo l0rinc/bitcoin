@@ -13,7 +13,6 @@
 #include <util/trace.h>
 
 #include <ranges>
-#include <unordered_set>
 
 TRACEPOINT_SEMAPHORE(utxocache, add);
 TRACEPOINT_SEMAPHORE(utxocache, spent);
@@ -49,6 +48,12 @@ CCoinsViewCache::CCoinsViewCache(CCoinsView* in_base, bool deterministic) :
 
 size_t CCoinsViewCache::DynamicMemoryUsage() const {
     return memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage;
+}
+
+void CCoinsViewCache::Reserve(uint64_t cache_size_bytes)
+{
+    // Ignoring node overhead and script allocations overestimates how many entries fit in the budget
+    cacheCoins.reserve(cache_size_bytes / (sizeof(CoinsCachePair) + sizeof(void*)));
 }
 
 std::optional<Coin> CCoinsViewCache::FetchCoinFromBase(const COutPoint& outpoint) const
@@ -379,24 +384,25 @@ CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetching(const CBlock& block 
     Assert(m_inputs.empty());
     Assert(m_input_head.load(std::memory_order_relaxed) == 0);
     Assert(m_input_tail == 0);
+    Assert(m_earlier_txids.empty());
     if (const auto workers_count{m_thread_pool->WorkersCount()}; workers_count > 0 && block.vtx.size() > 1) {
         // Loop through the block inputs and set their prevouts in the queue.
         // Filter inputs that spend outputs created earlier in the same block. These outputs will be created
         // directly in the cache from the tx that creates them, so they will not be requested from a base view.
-        std::unordered_set<Txid, SaltedCoinsCacheHasher> earlier_txids;
-        earlier_txids.reserve(block.vtx.size());
-        earlier_txids.emplace(block.vtx[0]->GetHash());
+        if (block.vtx.size() > m_earlier_txids.bucket_count()) m_earlier_txids.reserve(block.vtx.size());
+        m_earlier_txids.emplace(block.vtx[0]->GetHash());
         for (const auto& tx : block.vtx | std::views::drop(1)) {
             for (const auto& input : tx->vin) {
-                if (!earlier_txids.contains(input.prevout.hash)) m_inputs.emplace_back(input.prevout);
+                if (!m_earlier_txids.contains(input.prevout.hash)) m_inputs.emplace_back(input.prevout);
             }
-            earlier_txids.emplace(tx->GetHash());
+            m_earlier_txids.emplace(tx->GetHash());
         }
+        m_earlier_txids.clear();
         // Only submit tasks if we have something to fetch.
         if (m_inputs.size()) {
-            std::vector<std::function<void()>> tasks(workers_count, [this] {
-                while (ProcessInput()) {}
-            });
+            auto tasks{std::views::iota(uint64_t{0}, uint64_t{workers_count}) | std::views::transform([this](auto) {
+                return [this] { while (ProcessInput()) {} };
+            })};
             if (auto futures{m_thread_pool->Submit(std::move(tasks))}) {
                 m_futures = std::move(*futures);
             } else {

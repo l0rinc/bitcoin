@@ -156,6 +156,9 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
     } else {
         LogInfo("Validating signatures for all blocks.");
     }
+    if (chainman.m_options.prune_assumevalid) {
+        LogInfo("-pruneassumevalid requested: eligible bootstrap blocks will skip witness download and witness-related validation, and will not be written to block or undo files.");
+    }
     LogInfo("Setting nMinimumChainWork=%s", chainman.MinimumChainWork().GetHex());
     if (chainman.MinimumChainWork() < UintToArith256(chainman.GetConsensus().nMinimumChainWork)) {
         LogWarning("nMinimumChainWork set below default value of %s", chainman.GetConsensus().nMinimumChainWork.GetHex());
@@ -177,6 +180,9 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
 
     // Load a chain created from a UTXO snapshot, if any exist.
     Chainstate* assumeutxo_cs{chainman.LoadAssumeutxoChainstate()};
+    if (!chainman.m_blockman.IsPruneMode() || chainman.AssumedValidBlock().IsNull() || assumeutxo_cs) {
+        chainman.LogPruneAssumeValidStatus(false);
+    }
 
     if (assumeutxo_cs && options.wipe_chainstate_db) {
         // Reset chainstate target to network tip instead of snapshot block.

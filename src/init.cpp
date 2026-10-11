@@ -504,7 +504,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
 #if HAVE_SYSTEM
     argsman.AddArg("-alertnotify=<cmd>", "Execute command when an alert is raised (%s in cmd is replaced by message)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #endif
-    argsman.AddArg("-assumevalid=<hex>", strprintf("If this block is in the chain assume that it and its ancestors are valid and potentially skip their script verification (0 to verify all, default: %s, testnet3: %s, testnet4: %s, signet: %s)", defaultChainParams->GetConsensus().defaultAssumeValid.GetHex(), testnetChainParams->GetConsensus().defaultAssumeValid.GetHex(), testnet4ChainParams->GetConsensus().defaultAssumeValid.GetHex(), signetChainParams->GetConsensus().defaultAssumeValid.GetHex()), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-assumevalid=<hex>", strprintf("If this block is in the chain assume that it and its ancestors are valid and potentially skip their script verification and sigop counting (0 to verify all, default: %s, testnet3: %s, testnet4: %s, signet: %s)", defaultChainParams->GetConsensus().defaultAssumeValid.GetHex(), testnetChainParams->GetConsensus().defaultAssumeValid.GetHex(), testnet4ChainParams->GetConsensus().defaultAssumeValid.GetHex(), signetChainParams->GetConsensus().defaultAssumeValid.GetHex()), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blocksdir=<dir>", "Specify directory to hold blocks subdirectory for *.dat files (default: <datadir>)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blocksxor",
                    strprintf("Whether an XOR-key applies to blocksdir *.dat files. "
@@ -514,9 +514,11 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
                              kernel::DEFAULT_XOR_BLOCKSDIR),
                    ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-fastprune", "Use smaller block files and lower minimum prune height for testing purposes", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DEBUG_TEST);
+    argsman.AddArg("-pruneassumevalid", strprintf("Experimental optimization for pruned initial block download (IBD). If -prune is not specified, enable automatic pruning with a %u MiB target. Explicit -prune values are retained. Automatic pruning normally deletes most historical block data before IBD finishes, and assumevalid already skips script checks for part of this history. Only while those assumevalid conditions apply during pruned IBD, request blocks without witnesses, connect them to update the UTXO set, and discard them without writing block or undo data. Keep pending blocks in memory within the normal block download window. Use ordinary validation, storage, and pruning when preconditions fail, when a wallet is loaded, or when block filter indexes, the coin statistics index, or a UTXO snapshot are enabled. Skips witness validation, commitment checks, and availability checks for omitted blocks. A crash during block connection resumes from the last completed chainstate flush. An interrupted chainstate flush or a reorg needing omitted data requires a full -reindex. Disabled by default.", MIN_DISK_SPACE_FOR_BLOCK_FILES / 1_MiB), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #if HAVE_SYSTEM
     argsman.AddArg("-blocknotify=<cmd>", "Execute command when the best block changes (%s in cmd is replaced by block hash). Not run for blocks connected during initial block download or reindexing.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #endif
+    argsman.AddArg("-blockfetchthreads=<n>", strprintf("Set the number of block read-ahead threads per chainstate (0 disables, up to %d, default: %d). Retain up to %u read-ahead blocks per thread.", MAX_BLOCK_READ_AHEAD_THREADS, DEFAULT_BLOCK_READ_AHEAD_THREADS, BLOCKS_PER_READ_AHEAD_THREAD), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blockreconstructionextratxn=<n>", strprintf("Extra transactions to keep in memory for compact block reconstructions (default: %u)", DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blocksonly", strprintf("Whether to reject transactions from network peers. Disables automatic broadcast and rebroadcast of transactions, unless the source peer has the 'forcerelay' permission. RPC transactions are not affected. (default: %u)", DEFAULT_BLOCKSONLY), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-coinstatsindex", strprintf("Maintain coinstats index used by the gettxoutsetinfo RPC (default: %u)", DEFAULT_COINSTATSINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -567,6 +569,8 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
                 ), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-bantime=<n>", strprintf("Default duration (in seconds) of manually configured bans (default: %u)", DEFAULT_MISBEHAVING_BANTIME), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-bind=<addr>[:<port>][=onion]", strprintf("Bind to given address and always listen on it (default: 0.0.0.0). Use [host]:port notation for IPv6. Append =onion to tag any incoming connections to that address and port as incoming Tor connections (default: 127.0.0.1:%u=onion, testnet3: 127.0.0.1:%u=onion, testnet4: 127.0.0.1:%u=onion, signet: 127.0.0.1:%u=onion, regtest: 127.0.0.1:%u=onion)", defaultChainParams->GetDefaultPort() + 1, testnetChainParams->GetDefaultPort() + 1, testnet4ChainParams->GetDefaultPort() + 1, signetChainParams->GetDefaultPort() + 1, regtestChainParams->GetDefaultPort() + 1), ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
+    argsman.AddArg("-blockdownloadwindow=<n>", strprintf("Set the block download window (1-%d blocks, default: %d). Prepared blocks can extend the window by the block loader's read-ahead capacity. Smaller windows reduce pending block memory during -pruneassumevalid.", MAX_BLOCK_DOWNLOAD_WINDOW, DEFAULT_BLOCK_DOWNLOAD_WINDOW), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::CONNECTION);
+    argsman.AddArg("-blockdownloadmemory=<n>", strprintf("Keep nearby full blocks in memory until their parents connect during IBD (0 disables, 0-4096 MiB, default: %d). Limits serialized bytes, with a few blocks deserialized by the block loader. Other full blocks are written immediately. Blocks omitted by -pruneassumevalid use the download window instead.", DEFAULT_BLOCK_DOWNLOAD_MEMORY), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::CONNECTION);
     argsman.AddArg("-cjdnsreachable", "If set, then this host is configured for CJDNS (connecting to fc00::/8 addresses would lead us to the CJDNS network, see doc/cjdns.md) (default: 0)", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-connect=<ip>", "Connect only to the specified node; -noconnect disables automatic connections (the rules for this peer are the same as for -addnode). This option can be specified multiple times to connect to multiple nodes.", ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
     argsman.AddArg("-discover", "Discover own IP addresses (default: 1 when listening and no -externalip or -proxy)", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
@@ -795,6 +799,11 @@ static bool AppInitServers(NodeContext& node)
 // Parameter interaction based on rules
 void InitParameterInteraction(ArgsManager& args)
 {
+    if (args.GetBoolArg("-pruneassumevalid", false) &&
+        args.SoftSetArg("-prune", ToString(MIN_DISK_SPACE_FOR_BLOCK_FILES / 1_MiB))) {
+        LogInfo("parameter interaction: -pruneassumevalid=1 -> setting -prune=%u\n", MIN_DISK_SPACE_FOR_BLOCK_FILES / 1_MiB);
+    }
+
     // when specifying an explicit binding address, you want to listen on it
     // even when -connect or -proxy is specified
     if (!args.GetArgs("-bind").empty()) {
@@ -1432,6 +1441,10 @@ static ChainstateLoadResult InitAndLoadChainstate(
         .signals = node.validation_signals.get(),
     };
     Assert(ApplyArgsManOptions(args, chainman_opts)); // no error can happen, already checked in AppInitParameterInteraction
+    if (chainman_opts.prune_assumevalid && (!g_enabled_filter_types.empty() || args.GetBoolArg("-coinstatsindex", DEFAULT_COINSTATSINDEX))) {
+        LogWarning("-pruneassumevalid disabled: block filter and coin statistics indexes require stored undo data.");
+        chainman_opts.prune_assumevalid = false;
+    }
 
     BlockManager::Options blockman_opts{
         .chainparams = chainman_opts.chainparams,
