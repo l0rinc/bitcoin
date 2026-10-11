@@ -57,7 +57,7 @@ class P2PIBDStallingTest(BitcoinTestFramework):
         self.test_stalling()
         self.test_manual_peer_stalling()
 
-    def test_stalling(self, window=1024):
+    def test_stalling(self, window=2048):
         NUM_BLOCKS = window + 1
         NUM_PEERS = 5
         node = self.nodes[0]
@@ -157,7 +157,7 @@ class P2PIBDStallingTest(BitcoinTestFramework):
     def test_manual_peer_stalling(self):
         self.log.info("Test that a manual peer is paused but not disconnected for stalling block download")
         BLOCK_DOWNLOAD_COOLDOWN = 2 * 60
-        NUM_BLOCKS = 1024 + 1
+        NUM_BLOCKS = 2048 + 1
         node = self.nodes[0]
         self.restart_node(0)
         tip = int(node.getbestblockhash(), 16)
