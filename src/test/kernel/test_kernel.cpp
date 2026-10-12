@@ -1068,6 +1068,16 @@ BOOST_AUTO_TEST_CASE(btck_check_block_context_free)
     BOOST_CHECK(block.Check(consensus_params, BlockCheckFlags::ALL, state));
     BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
 
+    ChainParams regtest_params{ChainType::REGTEST};
+    auto regtest_consensus{regtest_params.GetConsensusParams()};
+    Block regtest_block{hex_string_to_byte_vec(REGTEST_BLOCK_DATA.front())};
+    BOOST_CHECK(!regtest_block.Check(consensus_params, BlockCheckFlags::ALL, state));
+    BOOST_CHECK(state.GetBlockValidationResult() == BlockValidationResult::INVALID_HEADER);
+    BOOST_CHECK(regtest_block.Check(regtest_consensus, BlockCheckFlags::ALL, state));
+    // TODO: Rechecking must use the supplied parameters instead of the earlier cached result
+    BOOST_CHECK(regtest_block.Check(consensus_params, BlockCheckFlags::ALL, state));
+    BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
+
     auto bad_merkle_block_data = raw_block;
     bad_merkle_block_data[MERKLE_ROOT_OFFSET] ^= std::byte{0x01};
     Block bad_merkle_block{bad_merkle_block_data};
