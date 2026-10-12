@@ -1386,7 +1386,10 @@ int btck_block_check(const btck_Block* block, const btck_ConsensusParams* consen
     const bool check_pow    = (flags & btck_BlockCheckFlags_POW) != 0;
     const bool check_merkle = (flags & btck_BlockCheckFlags_MERKLE) != 0;
 
-    const bool result = CheckBlock(*btck_Block::get(block), state, btck_ConsensusParams::get(consensus_params), /*fCheckPOW=*/check_pow, /*fCheckMerkleRoot=*/check_merkle);
+    const auto& original{*btck_Block::get(block)};
+    CBlock checked{static_cast<const CBlockHeader&>(original)};
+    checked.vtx = original.vtx;
+    const bool result = CheckBlock(checked, state, btck_ConsensusParams::get(consensus_params), /*fCheckPOW=*/check_pow, /*fCheckMerkleRoot=*/check_merkle);
 
     return result ? 1 : 0;
 }
