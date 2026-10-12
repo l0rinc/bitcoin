@@ -298,6 +298,7 @@ public:
     void Merge(TxGraphImpl& graph, int level, Cluster& cluster) noexcept final;
     void ApplyDependencies(TxGraphImpl& graph, int level, std::span<std::pair<GraphIndex, GraphIndex>> to_apply) noexcept final;
     std::pair<uint64_t, bool> Relinearize(TxGraphImpl& graph, int level, uint64_t max_cost) noexcept final;
+    std::vector<SetInfo<SetType>> GetChunking() const noexcept;
     void AppendChunkFeerates(std::vector<FeeFrac>& ret) const noexcept final;
     uint64_t AppendTrimData(std::vector<TrimTxData>& ret, std::vector<std::pair<GraphIndex, GraphIndex>>& deps) const noexcept final;
     void GetAncestorRefs(const TxGraphImpl& graph, std::span<std::pair<Cluster*, DepGraphIndex>>& args, std::vector<TxGraph::Ref*>& output) noexcept final;
@@ -1069,6 +1070,20 @@ void SingletonClusterImpl::RemoveChunkData(TxGraphImpl& graph) noexcept
     graph.ClearChunkData(entry);
 }
 
+std::vector<SetInfo<Cluster::SetType>> GenericClusterImpl::GetChunking() const noexcept
+{
+    auto chunking{ChunkLinearizationInfo(m_depgraph, m_linearization)};
+    // Keep the regular chunks while compaction is splitting disconnected clusters.
+    if (!m_depgraph.IsConnected()) return chunking;
+    for (const auto& chunk : chunking) {
+        if (!m_depgraph.IsConnected(chunk.transactions)) {
+            // Saturated fee sums can merge independent subpackages.
+            return {SetInfo<SetType>{m_depgraph, m_depgraph.Positions()}};
+        }
+    }
+    return chunking;
+}
+
 void GenericClusterImpl::Updated(TxGraphImpl& graph, int level, bool rename) noexcept
 {
     // Update all the Locators for this Cluster's Entry objects.
@@ -1088,7 +1103,7 @@ void GenericClusterImpl::Updated(TxGraphImpl& graph, int level, bool rename) noe
     // entries remain consistent with the chunk index (otherwise unrelated chunk index operations
     // could cause the index to become corrupted, by inserting elements in the wrong place).
     if (level == 0 && (rename || IsAcceptable())) {
-        auto chunking = ChunkLinearizationInfo(m_depgraph, m_linearization);
+        auto chunking = GetChunking();
         LinearizationIndex lin_idx{0};
         /** The sum of all chunk feerate FeeFracs with the same feerate as the current chunk,
          *  up to and including the current chunk. */
@@ -1105,7 +1120,7 @@ void GenericClusterImpl::Updated(TxGraphImpl& graph, int level, bool rename) noe
             } else {
                 // Note that this is adding fees to fees, and sizes to sizes, so the overall
                 // ratio remains the same; it's just accounting for the size of the added chunk.
-                equal_feerate_chunk_feerate += chunk.feerate;
+                equal_feerate_chunk_feerate = FeeFrac::SaturatingAdd(equal_feerate_chunk_feerate, chunk.feerate);
             }
             // Determine the m_fallback_order maximum transaction in the chunk.
             auto it = chunk.transactions.begin();
@@ -1383,9 +1398,9 @@ void SingletonClusterImpl::Compact() noexcept
 
 void GenericClusterImpl::AppendChunkFeerates(std::vector<FeeFrac>& ret) const noexcept
 {
-    auto chunk_feerates = ChunkLinearization(m_depgraph, m_linearization);
-    ret.reserve(ret.size() + chunk_feerates.size());
-    ret.insert(ret.end(), chunk_feerates.begin(), chunk_feerates.end());
+    auto chunks = GetChunking();
+    ret.reserve(ret.size() + chunks.size());
+    for (const auto& chunk : chunks) ret.push_back(chunk.feerate);
 }
 
 void SingletonClusterImpl::AppendChunkFeerates(std::vector<FeeFrac>& ret) const noexcept
@@ -1398,7 +1413,7 @@ void SingletonClusterImpl::AppendChunkFeerates(std::vector<FeeFrac>& ret) const 
 uint64_t GenericClusterImpl::AppendTrimData(std::vector<TrimTxData>& ret, std::vector<std::pair<GraphIndex, GraphIndex>>& deps) const noexcept
 {
     Assume(IsAcceptable());
-    auto linchunking = ChunkLinearizationInfo(m_depgraph, m_linearization);
+    auto linchunking = GetChunking();
     LinearizationIndex pos{0};
     uint64_t size{0};
     auto prev_index = GraphIndex(-1);
@@ -2845,7 +2860,7 @@ void GenericClusterImpl::SanityCheck(const TxGraphImpl& graph, int level) const
     }
 
     // Compute the chunking of m_linearization.
-    auto linchunking = ChunkLinearizationInfo(m_depgraph, m_linearization);
+    auto linchunking = GetChunking();
     unsigned chunk_num{0};
 
     // Verify m_linearization.
@@ -2879,7 +2894,7 @@ void GenericClusterImpl::SanityCheck(const TxGraphImpl& graph, int level) const
                     equal_feerate_prefix = linchunking[chunk_num].feerate;
                 } else {
                     assert(ByRatio{linchunking[chunk_num].feerate} == ByRatio{equal_feerate_prefix});
-                    equal_feerate_prefix += linchunking[chunk_num].feerate;
+                    equal_feerate_prefix = FeeFrac::SaturatingAdd(equal_feerate_prefix, linchunking[chunk_num].feerate);
                 }
             }
             assert(entry.m_main_chunk_feerate == linchunking[chunk_num].feerate);
