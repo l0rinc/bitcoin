@@ -322,18 +322,21 @@ FUZZ_TARGET(crypto_diff_fuzz_chacha20)
                 assert(counter == ctx.input[12]);
             },
             [&] {
-                uint32_t integralInRange = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 4096);
-                std::vector<uint8_t> output(integralInRange);
+                constexpr uint16_t MAX_BLOCKS{100}; // Leaves room for future 256- and 512-bit vector dispatches
+                const uint16_t blocks{fuzzed_data_provider.ConsumeIntegralInRange<uint16_t>(0, MAX_BLOCKS)};
+                const uint8_t tail_bytes{fuzzed_data_provider.ConsumeIntegralInRange<uint8_t>(0, ChaCha20Aligned::BLOCKLEN - 1)};
+                const uint32_t size{uint32_t{blocks} * ChaCha20Aligned::BLOCKLEN + tail_bytes};
+                std::vector<uint8_t> output(size);
                 const std::vector<uint8_t> input = ConsumeFixedLengthByteVector(fuzzed_data_provider, output.size());
                 chacha20.Crypt(MakeByteSpan(input), MakeWritableByteSpan(output));
-                std::vector<uint8_t> djb_output(integralInRange);
+                std::vector<uint8_t> djb_output(size);
                 ECRYPT_encrypt_bytes(&ctx, input.data(), djb_output.data(), input.size());
                 assert(output == djb_output);
                 // DJB's version seeks forward to a multiple of 64 bytes after every operation. Correct for that.
                 uint32_t old_counter = counter;
-                counter += (integralInRange + 63) >> 6;
+                counter += (size + ChaCha20Aligned::BLOCKLEN - 1) / ChaCha20Aligned::BLOCKLEN;
                 if (counter < old_counter) ++nonce.first;
-                if (integralInRange & 63) {
+                if (size % ChaCha20Aligned::BLOCKLEN) {
                     chacha20.Seek(nonce, counter);
                 }
                 assert(counter == ctx.input[12]);

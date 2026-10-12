@@ -5,13 +5,20 @@
 // Based on the public domain implementation 'merged' by D. J. Bernstein
 // See https://cr.yp.to/chacha.html.
 
-#include <crypto/common.h>
 #include <crypto/chacha20.h>
+
+#include <crypto/chacha20_vec.h>
+#include <crypto/common.h>
 #include <support/cleanse.h>
 
 #include <algorithm>
 #include <bit>
 #include <cassert>
+#include <limits>
+
+#ifdef ENABLE_CHACHA20_VEC
+static_assert(ChaCha20Aligned::BLOCKLEN == chacha20_vec::BLOCKLEN);
+#endif
 
 #define QUARTERROUND(a,b,c,d) \
   a += b; d = std::rotl(d ^ a, 16); \
@@ -160,10 +167,19 @@ inline void ChaCha20Aligned::Keystream(std::span<std::byte> output) noexcept
 inline void ChaCha20Aligned::Crypt(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes) noexcept
 {
     assert(in_bytes.size() == out_bytes.size());
+    size_t blocks{out_bytes.size() / BLOCKLEN};
+    assert(blocks * BLOCKLEN == out_bytes.size());
+#ifdef ENABLE_CHACHA20_VEC
+    // The vector lanes cannot carry into the next nonce word, so leave calls crossing the 32-bit block counter to the scalar code below
+    if (blocks >= chacha20_vec::MIN_BLOCKS && blocks <= std::numeric_limits<uint32_t>::max() - input[8]) {
+        chacha20_vec::chacha20_crypt_vectorized(in_bytes, out_bytes, input);
+        const size_t remaining{out_bytes.size() / BLOCKLEN};
+        input[8] += blocks - remaining;
+        blocks = remaining;
+    }
+#endif
     const std::byte* m = in_bytes.data();
     std::byte* c = out_bytes.data();
-    size_t blocks = out_bytes.size() / BLOCKLEN;
-    assert(blocks * BLOCKLEN == out_bytes.size());
 
     uint32_t x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15;
     uint32_t j4, j5, j6, j7, j8, j9, j10, j11, j12, j13, j14, j15;
