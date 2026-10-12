@@ -690,7 +690,12 @@ void BerkeleyRODatabase::Open()
                     if (orec->item_len > max_data_size) {
                         throw std::runtime_error("Overflow record has an impossible length");
                     }
+                    uint64_t pages_visited{0};
                     while (next_page != 0) {
+                        // A chain cannot contain more nonzero pages than the database file holds.
+                        if (++pages_visited > outer_meta.last_page) {
+                            throw std::runtime_error("Overflow record chain is cyclic or too long");
+                        }
                         SeekToPage(db_file, next_page, page_size);
                         PageHeader opage_header(next_page, inner_meta.other_endian);
                         db_file >> opage_header;
