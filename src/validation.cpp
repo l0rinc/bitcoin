@@ -2563,7 +2563,9 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         // * legacy (always)
         // * p2sh (when P2SH enabled in flags and excludes coinbase)
         // * witness (when witness enabled in flags and excludes coinbase)
-        nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
+        nSigOpsCost += block.fChecked && block.m_checked_legacy_sigops.size() == block.vtx.size()
+            ? GetTransactionSigOpCost(tx, view, flags, block.m_checked_legacy_sigops[i])
+            : GetTransactionSigOpCost(tx, view, flags);
         if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST) {
             state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "too many sigops");
             break;
@@ -3930,6 +3932,8 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     if (block.fChecked)
         return true;
 
+    if (fCheckPOW && fCheckMerkleRoot) block.m_checked_legacy_sigops.clear();
+
     // Check that the header is valid (particularly PoW).  This is mostly
     // redundant with the call in AcceptBlockHeader.
     if (!CheckBlockHeader(block, state, consensusParams, fCheckPOW))
@@ -3977,15 +3981,21 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     // This underestimates the number of sigops, because unlike ConnectBlock it
     // does not count witness and p2sh sigops.
     unsigned int nSigOps = 0;
+    std::vector<uint32_t> legacy_sigops;
+    if (fCheckPOW && fCheckMerkleRoot) legacy_sigops.reserve(block.vtx.size());
     for (const auto& tx : block.vtx)
     {
-        nSigOps += GetLegacySigOpCount(*tx);
+        const auto count{GetLegacySigOpCount(*tx)};
+        nSigOps += count;
+        if (fCheckPOW && fCheckMerkleRoot) legacy_sigops.push_back(count);
     }
     if (nSigOps * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST)
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "out-of-bounds SigOpCount");
 
-    if (fCheckPOW && fCheckMerkleRoot)
+    if (fCheckPOW && fCheckMerkleRoot) {
+        block.m_checked_legacy_sigops = std::move(legacy_sigops);
         block.fChecked = true;
+    }
 
     return true;
 }

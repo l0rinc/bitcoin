@@ -9,6 +9,8 @@
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <core_memusage.h>
+#include <memusage.h>
 #include <node/block_template_manager.h>
 #include <node/blockstorage.h>
 #include <node/miner.h>
@@ -17,6 +19,7 @@
 #include <primitives/transaction.h>
 #include <random.h>
 #include <script/script.h>
+#include <streams.h>
 #include <sync.h>
 #include <test/util/common.h>
 #include <test/util/script.h>
@@ -24,6 +27,7 @@
 #include <txmempool.h>
 #include <uint256.h>
 #include <util/check.h>
+#include <util/vector.h>
 #include <validation.h>
 #include <validationinterface.h>
 
@@ -196,6 +200,19 @@ BOOST_AUTO_TEST_CASE(sigop_limit_at_connection)
                 LOCK(cs_main);
                 auto state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
                 BOOST_CHECK_EQUAL(state.ToString(), sigops > max_sigops ? "bad-blk-sigops, out-of-bounds SigOpCount" : "Valid");
+                BOOST_CHECK_EQUAL(block->m_checked_legacy_sigops.empty(), sigops > max_sigops);
+                if (sigops <= max_sigops) {
+                    BOOST_REQUIRE_EQUAL(block->m_checked_legacy_sigops.size(), block->vtx.size());
+                    BOOST_CHECK_EQUAL(block->m_checked_legacy_sigops[0], sigops);
+                }
+                if (sigops <= max_sigops) {
+                    block->m_checked_legacy_sigops[0] = max_sigops + 1;
+                    auto cached_state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+                    BOOST_CHECK_EQUAL(cached_state.ToString(), "bad-blk-sigops, too many sigops");
+                }
+                block->m_checked_legacy_sigops.clear();
+                auto uncached_state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+                BOOST_CHECK_EQUAL(uncached_state.ToString(), state.ToString());
             }
         }
     }
@@ -239,9 +256,62 @@ BOOST_AUTO_TEST_CASE(contextual_sigop_limit_at_connection)
                 LOCK(cs_main);
                 auto state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
                 BOOST_CHECK_EQUAL(state.ToString(), contextual_sigops > 4 ? "bad-blk-sigops, too many sigops" : "Valid");
+                BOOST_REQUIRE_EQUAL(block->m_checked_legacy_sigops.size(), 2);
+                BOOST_CHECK_EQUAL(block->m_checked_legacy_sigops[0], legacy_sigops);
+                BOOST_CHECK_EQUAL(block->m_checked_legacy_sigops[1], 0);
+                for (uint32_t cache_size : {0, 1}) {
+                    block->m_checked_legacy_sigops.resize(cache_size);
+                    auto uncached_state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+                    BOOST_CHECK_EQUAL(uncached_state.ToString(), state.ToString());
+                }
             }
         }
     }
+}
+
+BOOST_AUTO_TEST_CASE(legacy_sigop_cache)
+{
+    auto block{FinalizeBlock(Block(Params().GenesisBlock().GetHash()))};
+    for (bool check_pow : {false, true}) {
+        for (bool check_merkle : {false, true}) {
+            CBlock checked{*block};
+            checked.fChecked = false;
+            BlockValidationState state;
+            BOOST_REQUIRE(CheckBlock(checked, state, Params().GetConsensus(), check_pow, check_merkle));
+            BOOST_CHECK_EQUAL(checked.m_checked_legacy_sigops.size(), check_pow && check_merkle ? 1 : 0);
+            if (check_pow && check_merkle) BOOST_CHECK_EQUAL(checked.m_checked_legacy_sigops[0], 0);
+            BOOST_CHECK_EQUAL(checked.fChecked, check_pow && check_merkle);
+        }
+    }
+
+    block->m_checked_legacy_sigops = {MAX_BLOCK_SIGOPS_COST / WITNESS_SCALE_FACTOR + 1};
+    {
+        LOCK(cs_main);
+        auto state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/false, /*check_merkle_root=*/false)};
+        BOOST_CHECK_EQUAL(state.ToString(), "Valid");
+        BOOST_CHECK(!block->fChecked);
+        BOOST_CHECK_EQUAL(block->m_checked_legacy_sigops[0], MAX_BLOCK_SIGOPS_COST / WITNESS_SCALE_FACTOR + 1);
+    }
+    BlockValidationState state;
+    BOOST_REQUIRE(CheckBlock(*block, state, Params().GetConsensus()));
+    BOOST_CHECK(block->m_checked_legacy_sigops == std::vector<uint32_t>{0});
+    CBlock copy{*block};
+    BOOST_CHECK(copy.m_checked_legacy_sigops == block->m_checked_legacy_sigops);
+    ClearShrink(copy.m_checked_legacy_sigops);
+    BOOST_CHECK_EQUAL(RecursiveDynamicUsage(*block) - RecursiveDynamicUsage(copy), memusage::DynamicUsage(block->m_checked_legacy_sigops));
+    copy = *block;
+    copy.SetNull();
+    BOOST_CHECK(copy.m_checked_legacy_sigops.empty());
+
+    copy = *block;
+    node::AddMerkleRootAndCoinbase(copy, copy.vtx[0], copy.nVersion, copy.nTime, copy.nNonce);
+    BOOST_CHECK(copy.m_checked_legacy_sigops.empty());
+
+    copy = *block;
+    DataStream stream;
+    stream << TX_WITH_WITNESS(*block);
+    stream >> TX_WITH_WITNESS(copy);
+    BOOST_CHECK(copy.m_checked_legacy_sigops.empty());
 }
 
 BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
