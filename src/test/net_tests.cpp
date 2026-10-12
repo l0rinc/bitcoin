@@ -1376,6 +1376,21 @@ public:
 
 } // namespace
 
+BOOST_AUTO_TEST_CASE(v2transport_session_key_ignores_deterministic_rng)
+{
+    const auto generate_handshake{[] {
+        V2Transport transport{/*nodeid=*/0, /*initiating=*/true};
+        const auto& [bytes, _more, _msg_type]{transport.GetBytesToSend(/*have_next_message=*/false)};
+        return std::vector<uint8_t>{bytes.begin(), bytes.end()};
+    }};
+
+    SeedRandomForTest(SeedRand::ZEROS);
+    const std::vector<uint8_t> first_handshake{generate_handshake()};
+    SeedRandomForTest(SeedRand::ZEROS);
+    const std::vector<uint8_t> second_handshake{generate_handshake()};
+    BOOST_CHECK(first_handshake != second_handshake);
+}
+
 BOOST_AUTO_TEST_CASE(v2transport_test)
 {
     // A mostly normal scenario, testing a transport in initiator mode.
