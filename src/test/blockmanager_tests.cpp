@@ -10,6 +10,7 @@
 #include <node/kernel_notifications.h>
 #include <script/solver.h>
 #include <primitives/block.h>
+#include <primitives/transaction.h>
 #include <util/chaintype.h>
 #include <validation.h>
 
@@ -237,6 +238,7 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
     node::BlockManager::Options blockman_opts{
         .chainparams = Params(),
+        .fast_prune = true, // 64 KiB block files, pre-allocated in 16 KiB chunks
         .blocks_dir = m_args.GetBlocksDirPath(),
         .notifications = notifications,
         .block_tree_db_params = DBParams{
@@ -256,6 +258,7 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
 
     // They are 80 bytes header + 1 byte 0x00 for vtx length
     constexpr int TEST_BLOCK_SIZE{81};
+    constexpr unsigned FAST_PRUNE_CHUNK_SIZE{0x4000};
 
     // Blockstore is empty
     LOCK(::cs_main);
@@ -300,6 +303,22 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     // Block 2 was not overwritten:
     BOOST_CHECK(!blockman.ReadBlock(read_block, pos2, {}));
     BOOST_CHECK_EQUAL(read_block.nVersion, 2);
+
+    // Fill the first block file with larger blocks until one lands in the next file
+    CMutableTransaction big_tx;
+    big_tx.vin.emplace_back().scriptSig.resize(FAST_PRUNE_CHUNK_SIZE / 2);
+    block3.vtx.push_back(MakeTransactionRef(big_tx));
+    for (int height{4}; blockman.WriteBlock(block3, height).nFile == 0; ++height) {
+    }
+
+    // Leaving the file truncates it synchronously
+    const auto* info{blockman.GetBlockFileInfo(0)};
+    BOOST_CHECK(info->nSize % FAST_PRUNE_CHUNK_SIZE != 0);
+    BOOST_CHECK_EQUAL(fs::file_size(blockman.GetBlockPosFilename({0, 0})), info->nSize);
+    BOOST_CHECK_EQUAL(fs::file_size(blockman.GetBlockPosFilename({1, 0})), FAST_PRUNE_CHUNK_SIZE);
+
+    // Finalization must not have reported an error
+    BOOST_CHECK_EQUAL(m_node.exit_status.load(), 0);
 }
 
 BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)
