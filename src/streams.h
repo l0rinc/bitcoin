@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -25,6 +26,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 /* Minimal stream for overwriting and/or appending to an existing byte vector
@@ -55,7 +57,9 @@ public:
     }
     void write(std::span<const std::byte> src)
     {
+        if (src.empty()) return;
         assert(nPos <= vchData.size());
+
         size_t nOverwrite = std::min(src.size(), vchData.size() - nPos);
         if (nOverwrite) {
             memcpy(vchData.data() + nPos, src.data(), nOverwrite);
@@ -64,6 +68,26 @@ public:
             vchData.insert(vchData.end(), UCharCast(src.data()) + nOverwrite, UCharCast(src.data() + src.size()));
         }
         nPos += src.size();
+    }
+    template <size_t Extent>
+        requires(Extent != std::dynamic_extent)
+    void write(std::span<const std::byte, Extent> src)
+    {
+        if constexpr (Extent == 0) {
+            return;
+        } else if constexpr (Extent == 1) {
+            assert(nPos <= vchData.size());
+            const auto byte{*UCharCast(&src[0])};
+            if (nPos < vchData.size()) {
+                vchData[nPos] = byte;
+            } else {
+                vchData.push_back(byte);
+            }
+            nPos += 1;
+            return;
+        } else {
+            write(std::span<const std::byte>{src});
+        }
     }
     template <typename T>
     VectorWriter& operator<<(const T& obj)
@@ -103,9 +127,7 @@ public:
 
     void read(std::span<std::byte> dst)
     {
-        if (dst.size() == 0) {
-            return;
-        }
+        if (dst.empty()) return;
 
         // Read from the beginning of the buffer
         if (dst.size() > m_data.size()) {
@@ -113,6 +135,22 @@ public:
         }
         memcpy(dst.data(), m_data.data(), dst.size());
         m_data = m_data.subspan(dst.size());
+    }
+    template <size_t Extent>
+        requires(Extent != std::dynamic_extent)
+    void read(std::span<std::byte, Extent> dst)
+    {
+        if constexpr (Extent == 0) {
+            return;
+        } else if constexpr (Extent == 1) {
+            if (m_data.empty()) {
+                throw std::ios_base::failure("SpanReader::read(): end of data");
+            }
+            dst[0] = m_data[0];
+            m_data = m_data.subspan(1);
+        } else {
+            read(std::span<std::byte>{dst});
+        }
     }
 
     void ignore(size_t n)
@@ -147,6 +185,22 @@ public:
         memcpy(m_dest.data(), src.data(), src.size());
         m_dest = m_dest.subspan(src.size());
     }
+    template <size_t Extent>
+        requires(Extent != std::dynamic_extent)
+    void write(std::span<const std::byte, Extent> src)
+    {
+        if constexpr (Extent == 0) {
+            return;
+        } else if constexpr (Extent == 1) {
+            if (m_dest.empty()) {
+                throw std::ios_base::failure("SpanWriter::write(): exceeded buffer size");
+            }
+            m_dest[0] = src[0];
+            m_dest = m_dest.subspan(1);
+        } else {
+            write(std::span<const std::byte>{src});
+        }
+    }
 
     template<typename T>
     SpanWriter& operator<<(const T& obj)
@@ -180,6 +234,7 @@ public:
     typedef vector_type::reverse_iterator reverse_iterator;
 
     explicit DataStream() = default;
+    explicit DataStream(size_type n) { reserve(n); }
     explicit DataStream(std::span<const uint8_t> sp) : DataStream{std::as_bytes(sp)} {}
     explicit DataStream(std::span<const value_type> sp) : vch(sp.data(), sp.data() + sp.size()) {}
 
@@ -210,7 +265,7 @@ public:
     //
     void read(std::span<value_type> dst)
     {
-        if (dst.size() == 0) return;
+        if (dst.empty()) return;
 
         // Read from the beginning of the buffer
         auto next_read_pos{CheckedAdd(m_read_pos, dst.size())};
@@ -224,6 +279,24 @@ public:
             return;
         }
         m_read_pos = next_read_pos.value();
+    }
+    template <size_t Extent>
+        requires(Extent != std::dynamic_extent)
+    void read(std::span<value_type, Extent> dst)
+    {
+        if constexpr (Extent == 0) {
+            return;
+        } else if constexpr (Extent == 1) {
+            if (m_read_pos == vch.size()) {
+                throw std::ios_base::failure("DataStream::read(): end of data");
+            }
+            dst[0] = vch[m_read_pos++];
+            if (m_read_pos == vch.size()) {
+                clear();
+            }
+        } else {
+            read(std::span<value_type>{dst});
+        }
     }
 
     void ignore(size_t num_ignore)
@@ -245,6 +318,19 @@ public:
     {
         // Write to the end of the buffer
         vch.insert(vch.end(), src.begin(), src.end());
+    }
+    template <typename B, size_t Extent>
+        requires(Extent != std::dynamic_extent && std::same_as<std::remove_cv_t<B>, value_type>)
+    void write(std::span<B, Extent> src)
+    {
+        if constexpr (Extent == 0) {
+            return;
+        } else if constexpr (Extent == 1) {
+            vch.push_back(src[0]);
+            return;
+        } else {
+            write(std::span<const value_type>{src});
+        }
     }
 
     template<typename T>
@@ -675,6 +761,31 @@ public:
             m_buf.resize(m_src.detail_fread(m_buf));
         }
     }
+    template <size_t Extent>
+        requires(Extent != std::dynamic_extent)
+    void read(std::span<std::byte, Extent> dst)
+    {
+        if constexpr (Extent == 0) {
+            return;
+        } else if constexpr (Extent == 1) {
+            if (m_buf.empty()) {
+                m_src.read(std::span<std::byte>{dst});
+                return;
+            }
+            if (m_buf_pos == m_buf.size()) {
+                m_buf_pos = 0;
+                m_buf.resize(m_src.detail_fread(m_buf));
+                if (m_buf.empty()) {
+                    m_src.read(std::span<std::byte>{dst});
+                    return;
+                }
+            }
+            dst[0] = m_buf[m_buf_pos++];
+            return;
+        } else {
+            read(std::span<std::byte>{dst});
+        }
+    }
 
     template <typename T>
     BufferedReader& operator>>(T&& obj)
@@ -714,6 +825,25 @@ public:
             m_buf_pos += available;
             if (m_buf_pos == m_buf.size()) flush();
             src = src.subspan(available);
+        }
+    }
+    template <size_t Extent>
+        requires(Extent != std::dynamic_extent)
+    void write(std::span<const std::byte, Extent> src)
+    {
+        if constexpr (Extent == 0) {
+            return;
+        } else if constexpr (Extent == 1) {
+            if (m_buf_pos == m_buf.size()) flush();
+            if (m_buf.empty()) {
+                write(std::span<const std::byte>{src});
+                return;
+            }
+            m_buf[m_buf_pos++] = src[0];
+            if (m_buf_pos == m_buf.size()) flush();
+            return;
+        } else {
+            write(std::span<const std::byte>{src});
         }
     }
 
