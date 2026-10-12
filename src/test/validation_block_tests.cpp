@@ -2,8 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
 #include <chain.h>
 #include <chainparams.h>
+#include <coins.h>
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
@@ -29,6 +31,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
 #include <span>
 #include <thread>
@@ -166,6 +169,78 @@ void MinerTestingSetup::BuildChain(const uint256& root, int height, const unsign
     if (gen_fork) {
         blocks.push_back(GoodBlock(root));
         BuildChain(blocks.back()->GetHash(), height - 1, invalid_rate, branch_rate, max_size, blocks);
+    }
+}
+
+// Full validation must enforce the sigop limit, including mixed opcode costs.
+BOOST_AUTO_TEST_CASE(sigop_limit_at_connection)
+{
+    constexpr uint32_t max_sigops{MAX_BLOCK_SIGOPS_COST / WITNESS_SCALE_FACTOR};
+    for (auto& [opcode, cost] : std::initializer_list<std::pair<opcodetype, uint32_t>>{
+             {OP_CHECKSIG, 1},
+             {OP_CHECKSIGVERIFY, 1},
+             {OP_CHECKMULTISIG, MAX_PUBKEYS_PER_MULTISIG},
+             {OP_CHECKMULTISIGVERIFY, MAX_PUBKEYS_PER_MULTISIG},
+         }) {
+        for (uint32_t sigops : {max_sigops - 1, max_sigops, max_sigops + 1}) {
+            BOOST_TEST_CONTEXT("opcode=" << opcode << ", sigops=" << sigops) {
+                auto block{Block(Params().GenesisBlock().GetHash())};
+                CMutableTransaction coinbase{*block->vtx[0]};
+                CScript script;
+                script.insert(script.end(), sigops / cost, opcode);
+                script.insert(script.end(), sigops % cost, OP_CHECKSIG);
+                coinbase.vout.emplace_back(0, script);
+                block->vtx[0] = MakeTransactionRef(coinbase);
+                FinalizeBlock(block);
+
+                LOCK(cs_main);
+                auto state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+                BOOST_CHECK_EQUAL(state.ToString(), sigops > max_sigops ? "bad-blk-sigops, out-of-bounds SigOpCount" : "Valid");
+            }
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(contextual_sigop_limit_at_connection)
+{
+    for (bool witness : {false, true}) {
+        const uint32_t scale{witness ? 1U : WITNESS_SCALE_FACTOR};
+        constexpr uint32_t max_legacy_sigops{MAX_BLOCK_SIGOPS_COST / WITNESS_SCALE_FACTOR};
+        const uint32_t legacy_sigops{max_legacy_sigops - scale};
+        for (uint32_t contextual_sigops : {3, 4, 5}) {
+            BOOST_TEST_CONTEXT("witness=" << witness << ", contextual_sigops=" << contextual_sigops) {
+                // Count the sigops without executing them, so the script succeeds below the limit
+                CScript script;
+                script << OP_FALSE << OP_IF;
+                script.insert(script.end(), contextual_sigops, OP_CHECKSIG);
+                script << OP_ENDIF << OP_TRUE;
+                const COutPoint prevout{Txid::FromUint256(m_rng.rand256()), 0};
+                const auto script_pubkey{witness ? GetScriptForDestination(WitnessV0ScriptHash(script)) : GetScriptForDestination(ScriptHash(script))};
+                WITH_LOCK(cs_main, m_node.chainman->ActiveChainstate().CoinsTip().AddCoin(prevout, Coin{CTxOut{1, script_pubkey}, 0, false}, /*possible_overwrite=*/false));
+
+                CMutableTransaction tx;
+                tx.vin.emplace_back(prevout);
+                if (witness) {
+                    tx.vin[0].scriptWitness.stack.push_back(ToByteVector(script));
+                } else {
+                    tx.vin[0].scriptSig << ToByteVector(script);
+                }
+                tx.vout.emplace_back(1, CScript{} << OP_TRUE);
+
+                auto block{Block(Params().GenesisBlock().GetHash())};
+                CMutableTransaction coinbase{*block->vtx[0]};
+                CScript legacy_script;
+                legacy_script.insert(legacy_script.end(), legacy_sigops, OP_CHECKSIG);
+                coinbase.vout.emplace_back(0, legacy_script);
+                block->vtx[0] = MakeTransactionRef(coinbase);
+                block->vtx.emplace_back(MakeTransactionRef(tx));
+                FinalizeBlock(block);
+
+                LOCK(cs_main);
+                auto state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+                BOOST_CHECK_EQUAL(state.ToString(), contextual_sigops > 4 ? "bad-blk-sigops, too many sigops" : "Valid");
+            }
+        }
     }
 }
 
