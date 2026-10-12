@@ -428,6 +428,16 @@ std::vector<std::string> ArgsManager::GetArgs(const std::string& strArg) const
     return result;
 }
 
+std::vector<std::pair<std::string, common::SettingsSource>> ArgsManager::GetArgsWithSource(const std::string& strArg) const
+{
+    LOCK(cs_args);
+    std::vector<std::pair<std::string, common::SettingsSource>> result;
+    for (const auto& [value, source] : common::GetSettingsListWithSource(m_settings, m_network, SettingName(strArg), !UseDefaultSection(strArg))) {
+        if (auto str{SettingToString(value)}) result.emplace_back(std::move(*str), source);
+    }
+    return result;
+}
+
 bool ArgsManager::IsArgSet(const std::string& strArg) const
 {
     return !GetSetting(strArg).isNull();
@@ -959,18 +969,18 @@ bool ArgsManager::UseDefaultSection(const std::string& arg) const
     return m_network == ChainTypeToString(ChainType::MAIN) || !m_network_only_args.contains(arg);
 }
 
-common::SettingsValue ArgsManager::GetSetting_(const std::string& arg) const
+common::SettingsValue ArgsManager::GetSetting_(const std::string& arg, common::SettingsSource* source) const
 {
     AssertLockHeld(cs_args);
     return common::GetSetting(
         m_settings, m_network, SettingName(arg), !UseDefaultSection(arg),
-        /*ignore_nonpersistent=*/false, /*get_chain_type=*/false);
+        /*ignore_nonpersistent=*/false, /*get_chain_type=*/false, source);
 }
 
-common::SettingsValue ArgsManager::GetSetting(const std::string& arg) const
+common::SettingsValue ArgsManager::GetSetting(const std::string& arg, common::SettingsSource* source) const
 {
     LOCK(cs_args);
-    return GetSetting_(arg);
+    return GetSetting_(arg, source);
 }
 
 std::vector<common::SettingsValue> ArgsManager::GetSettingsList(const std::string& arg) const
