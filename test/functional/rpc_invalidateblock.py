@@ -11,14 +11,16 @@ from test_framework.blocktools import (
 )
 from test_framework.util import (
     assert_equal,
+    assert_greater_than_or_equal,
     assert_raises_rpc_error,
 )
+from test_framework.wallet import MiniWallet
 
 
 class InvalidateTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
-        self.num_nodes = 3
+        self.num_nodes = 4
 
     def setup_network(self):
         self.setup_nodes()
@@ -138,6 +140,29 @@ class InvalidateTest(BitcoinTestFramework):
         self.log.info("Verify that invalidating an unknown block throws an error")
         assert_raises_rpc_error(-5, "Block not found", self.nodes[1].invalidateblock, "00" * 32)
         assert_equal(self.nodes[1].getbestblockhash(), blocks[-1])
+
+        self.log.info("Verify that invalidateblock restores spent outputs from disconnected blocks")
+        wallet = MiniWallet(self.nodes[3])
+
+        self.generate(wallet, 110, sync_fun=self.no_op)
+        pre_rollback_hash = self.nodes[3].getbestblockhash()
+        pre_rollback_utxo_hash = self.nodes[3].gettxoutsetinfo()["hash_serialized_3"]
+
+        mature_coinbase_utxos = [
+            utxo for utxo in wallet.get_utxos(mark_as_spent=False, confirmed_only=True)
+            if utxo["coinbase"]
+        ]
+        assert_greater_than_or_equal(len(mature_coinbase_utxos), 11)
+
+        for utxo in mature_coinbase_utxos[:11]:
+            tx = wallet.send_self_transfer(from_node=self.nodes[3], utxo_to_spend=utxo)
+            block_hash = self.generate(wallet, 1, sync_fun=self.no_op)[0]
+            assert tx["txid"] in self.nodes[3].getblock(block_hash)["tx"]
+
+        self.nodes[3].invalidateblock(self.nodes[3].getblockhash(111))
+        assert_equal(self.nodes[3].getblockcount(), 110)
+        assert_equal(self.nodes[3].getbestblockhash(), pre_rollback_hash)
+        assert_equal(self.nodes[3].gettxoutsetinfo()["hash_serialized_3"], pre_rollback_utxo_hash)
 
 
 if __name__ == '__main__':
