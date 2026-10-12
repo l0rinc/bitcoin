@@ -4,13 +4,17 @@
 
 #include <chainparams.h>
 #include <consensus/amount.h>
+#include <consensus/consensus.h>
 #include <consensus/merkle.h>
 #include <core_io.h>
 #include <hash.h>
 #include <net.h>
+#include <script/script.h>
 #include <signet.h>
+#include <streams.h>
 #include <uint256.h>
 #include <util/chaintype.h>
+#include <util/strencodings.h>
 #include <validation.h>
 
 #include <string>
@@ -64,6 +68,104 @@ BOOST_AUTO_TEST_CASE(subsidy_limit_test)
         BOOST_CHECK(MoneyRange(nSum));
     }
     BOOST_CHECK_EQUAL(nSum, CAmount{2099999997690000});
+}
+
+BOOST_AUTO_TEST_CASE(bip30_reactivated_at_bip34_indicated_height_limit)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::TESTNET);
+    const Consensus::Params& consensus{chainParams->GetConsensus()};
+    constexpr int bip34_implies_bip30_limit{1983702};
+    const uint256 block_hash{uint256::ONE};
+
+    // The BIP30 decision only reads the candidate height and BIP34 ancestor.
+    CBlockIndex bip34_block;
+    bip34_block.nHeight = consensus.BIP34Height;
+    bip34_block.phashBlock = &consensus.BIP34Hash;
+
+    CBlockIndex pre_limit_block;
+    pre_limit_block.nHeight = bip34_implies_bip30_limit - 1;
+    pre_limit_block.pprev = &bip34_block;
+    pre_limit_block.phashBlock = &block_hash;
+
+    CBlockIndex limit_block;
+    limit_block.nHeight = bip34_implies_bip30_limit;
+    limit_block.pprev = &bip34_block;
+    limit_block.phashBlock = &block_hash;
+
+    BOOST_CHECK(!ShouldEnforceBIP30ForBlock(pre_limit_block, consensus));
+    BOOST_CHECK(ShouldEnforceBIP30ForBlock(limit_block, consensus));
+}
+
+BOOST_AUTO_TEST_CASE(bip30_historical_duplicate_coinbase_exceptions)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
+    const Consensus::Params& consensus{chainParams->GetConsensus()};
+    const uint256 exception_hash_91842{"00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"};
+    const uint256 exception_hash_91880{"00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721"};
+    const uint256 wrong_hash{uint256::ONE};
+
+    CBlockIndex previous_91842;
+    previous_91842.nHeight = 91841;
+
+    CBlockIndex exception_91842;
+    exception_91842.nHeight = 91842;
+    exception_91842.pprev = &previous_91842;
+    exception_91842.phashBlock = &exception_hash_91842;
+
+    CBlockIndex wrong_hash_91842;
+    wrong_hash_91842.nHeight = 91842;
+    wrong_hash_91842.pprev = &previous_91842;
+    wrong_hash_91842.phashBlock = &wrong_hash;
+
+    CBlockIndex previous_91880;
+    previous_91880.nHeight = 91879;
+
+    CBlockIndex exception_91880;
+    exception_91880.nHeight = 91880;
+    exception_91880.pprev = &previous_91880;
+    exception_91880.phashBlock = &exception_hash_91880;
+
+    BOOST_CHECK(IsBIP30Repeat(exception_91842));
+    BOOST_CHECK(!ShouldEnforceBIP30ForBlock(exception_91842, consensus));
+    BOOST_CHECK(!IsBIP30Repeat(wrong_hash_91842));
+    BOOST_CHECK(ShouldEnforceBIP30ForBlock(wrong_hash_91842, consensus));
+    BOOST_CHECK(IsBIP30Repeat(exception_91880));
+    BOOST_CHECK(!ShouldEnforceBIP30ForBlock(exception_91880, consensus));
+}
+
+BOOST_AUTO_TEST_CASE(bip34_coinbase_height_uses_scriptnum_encoding)
+{
+    const CScript encoded_height_1{CScript{} << 1 << OP_0};
+    const CScript nominal_height_1{CScript{} << std::vector<unsigned char>{0x01} << OP_0};
+    const CScript encoded_height_16{CScript{} << 16 << OP_0};
+    const CScript nominal_height_16{CScript{} << std::vector<unsigned char>{0x10} << OP_0};
+
+    BOOST_CHECK(IsBIP34CoinbaseHeight(encoded_height_1, 1));
+    BOOST_CHECK(!IsBIP34CoinbaseHeight(nominal_height_1, 1));
+    BOOST_CHECK(IsBIP34CoinbaseHeight(encoded_height_16, 16));
+    BOOST_CHECK(!IsBIP34CoinbaseHeight(nominal_height_16, 16));
+    BOOST_CHECK(IsBIP34CoinbaseHeight(CScript{} << 17, 17));
+    BOOST_CHECK(IsBIP34CoinbaseHeight(CScript{} << 227931, 227931));
+}
+
+BOOST_AUTO_TEST_CASE(bip94_timewarp_retarget_timestamp_limit)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::TESTNET4);
+    const Consensus::Params& consensus{chainParams->GetConsensus()};
+    BOOST_REQUIRE(consensus.enforce_BIP94);
+
+    const int interval{static_cast<int>(consensus.DifficultyAdjustmentInterval())};
+    constexpr int64_t previous_block_time{1700000000};
+    const int64_t first_invalid_time{previous_block_time - MAX_TIMEWARP - 1};
+
+    BOOST_CHECK(IsBIP94TimewarpAttack(interval, first_invalid_time, previous_block_time, consensus));
+    BOOST_CHECK(!IsBIP94TimewarpAttack(interval, previous_block_time - MAX_TIMEWARP, previous_block_time, consensus));
+    BOOST_CHECK(!IsBIP94TimewarpAttack(interval + 1, first_invalid_time, previous_block_time, consensus));
+    BOOST_CHECK(!IsBIP94TimewarpAttack(0, first_invalid_time, previous_block_time, consensus));
+
+    auto legacy_consensus{consensus};
+    legacy_consensus.enforce_BIP94 = false;
+    BOOST_CHECK(!IsBIP94TimewarpAttack(interval, first_invalid_time, previous_block_time, legacy_consensus));
 }
 
 BOOST_AUTO_TEST_CASE(signet_parse_tests)
@@ -125,6 +227,42 @@ BOOST_AUTO_TEST_CASE(signet_parse_tests)
     block.vtx.at(0) = MakeTransactionRef(cb);
     BOOST_CHECK(!SignetTxs::Create(block, challenge));
     BOOST_CHECK(!CheckSignetBlockSolution(block, signet_params->GetConsensus()));
+}
+
+BOOST_AUTO_TEST_CASE(block_noncanonical_compactsize)
+{
+    const auto deserialize_block{[](const std::string& hex) {
+        DataStream stream{ParseHex(hex)};
+        CBlock block;
+        stream >> TX_WITH_WITNESS(block);
+        return block;
+    }};
+
+    const std::string header(160, '0');
+    const std::string coinbase_tx{
+        "01000000"
+        "01"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "00000000"};
+
+    BlockValidationState state;
+    BOOST_CHECK(CheckBlock(
+        deserialize_block(header + "01" + coinbase_tx),
+        state,
+        Params().GetConsensus(),
+        /*fCheckPOW=*/false,
+        /*fCheckMerkleRoot=*/false));
+    BOOST_CHECK(state.IsValid());
+
+    BOOST_CHECK_THROW(deserialize_block(header + "fd0100" + coinbase_tx), std::ios_base::failure);
 }
 
 //! Test retrieval of valid assumeutxo values.
