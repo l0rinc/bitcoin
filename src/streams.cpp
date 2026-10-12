@@ -53,6 +53,9 @@ void AutoFile::seek(int64_t offset, int origin)
 
 int64_t AutoFile::tell()
 {
+    if (IsNull()) {
+        throw std::ios_base::failure("AutoFile::tell: file handle is nullptr");
+    }
     if (!m_position.has_value()) throw std::ios_base::failure("AutoFile::tell: position unknown");
     return *m_position;
 }
