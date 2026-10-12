@@ -199,6 +199,7 @@ public:
     bool empty() const                               { return vch.size() == m_read_pos; }
     void resize(size_type n, value_type c = value_type{}) { vch.resize(n + m_read_pos, c); }
     void reserve(size_type n)                        { vch.reserve(n + m_read_pos); }
+    void shrink_to_fit()                             { vch.shrink_to_fit(); }
     const_reference operator[](size_type pos) const  { return vch[pos + m_read_pos]; }
     reference operator[](size_type pos)              { return vch[pos + m_read_pos]; }
     void clear()                                     { vch.clear(); m_read_pos = 0; }

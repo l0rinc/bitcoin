@@ -3041,6 +3041,10 @@ std::shared_ptr<CWallet> CWallet::LoadExisting(WalletContext& context, const std
 
 bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interfaces::Chain& chain, const bool rescan_required, bilingual_str& error, std::vector<bilingual_str>& warnings)
 {
+    if (auto result{chain.disablePruneAssumeValid()}; !result) {
+        error = util::ErrorString(result);
+        return false;
+    }
     LOCK(walletInstance->cs_wallet);
     // allow setting the chain if it hasn't been set already but prevent changing it
     assert(!walletInstance->m_chain || walletInstance->m_chain == &chain);

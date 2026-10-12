@@ -155,6 +155,16 @@ class GetBlockFromPeerTest(BitcoinTestFramework):
         assert_equal(pruned_node.pruneblockchain(1000), pruneheight)
         assert_raises_rpc_error(-1, "Block not available (pruned data)", pruned_node.getblock, pruned_block)
 
+        # Restore the highest pruned block so verification reaches it before any missing block bodies
+        refetched_block = self.nodes[0].getblockhash(pruneheight)
+        pruned_node.getblockfrompeer(refetched_block, pruned_node_peer_0_id)
+        self.wait_until(lambda: self.check_for_block(node=2, hash=refetched_block))
+        self.log.info("Restart with deep verification after fetching a pruned block")
+        with pruned_node.assert_debug_log(expected_msgs=[f"Block verification stopping at height {pruneheight} (no undo data)."]):
+            self.restart_node(2, extra_args=self.extra_args[2] + ["-checkblocks=0", "-checklevel=4"])
+        assert_equal(pruned_node.getbestblockhash(), self.nodes[0].getbestblockhash())
+        assert_equal(pruned_node.getblock(refetched_block)["hash"], refetched_block)
+
 
 if __name__ == '__main__':
     GetBlockFromPeerTest(__file__).main()

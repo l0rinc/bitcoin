@@ -89,7 +89,7 @@ class NodeNetworkLimitedTest(BitcoinTestFramework):
         default_value = {'status': ''}  # No status
         self.wait_until(lambda: next(filter(lambda x: x['hash'] == best_block_hash, full_node.getchaintips()), default_value)['status'] == "headers-only")
 
-        # Now, since the node aims to download a window of 1024 blocks,
+        # Now, since the node downloads within the block download window,
         # ensure it requests the blocks below the threshold only (with a
         # 2-block buffer). And also, ensure it does not request any
         # historical block.
