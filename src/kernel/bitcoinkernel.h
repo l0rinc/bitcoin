@@ -1453,6 +1453,10 @@ typedef uint32_t btck_BlockCheckFlags;
  * transaction script, timestamps, order, or other checks that may require more
  * context.
  *
+ * Checks do not change the block's cached validation state, so another check
+ * or block processing can use the same block concurrently with a distinct
+ * validation_state.
+ *
  * @param[in]     block             Non-null, btck_Block to validate.
  * @param[in]     consensus_params  Non-null, btck_ConsensusParams for validation.
  * @param[in]     flags             Bitmask of btck_BlockCheckFlags controlling the
