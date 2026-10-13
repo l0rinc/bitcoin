@@ -230,4 +230,31 @@ BOOST_AUTO_TEST_CASE(GetTxSigOpCost)
     }
 }
 
+BOOST_AUTO_TEST_CASE(witness_sigops_versions_and_lengths)
+{
+    const script_verify_flags flags{SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS};
+    const CScript witness_script{CScript{} << OP_2 << OP_CHECKMULTISIG << OP_CHECKSIG};
+    CScriptWitness witness;
+    witness.stack.emplace_back(witness_script.begin(), witness_script.end());
+    const CScript p2sh{CScript{} << OP_HASH160 << std::vector<unsigned char>(20, 1) << OP_EQUAL};
+
+    for (int version{0}; version <= 16; ++version) {
+        for (size_t size{1}; size <= 41; ++size) {
+            const CScript program{CScript{} << CScript::EncodeOP_N(version) << std::vector<unsigned char>(size, 1)};
+            const CScript nested{CScript{} << ToByteVector(program)};
+            const size_t expected{version != 0 ? 0U : size == 20 ? 1U : size == 32 ? 3U : 0U};
+            BOOST_CHECK_EQUAL(CountWitnessSigOps({}, program, witness, flags), expected);
+            BOOST_CHECK_EQUAL(CountWitnessSigOps(nested, p2sh, witness, flags), expected);
+            BOOST_CHECK_EQUAL(CountWitnessSigOps({}, program, {}, flags), version == 0 && size == 20 ? 1U : 0U);
+            BOOST_CHECK_EQUAL(CountWitnessSigOps(nested, p2sh, {}, flags), version == 0 && size == 20 ? 1U : 0U);
+            BOOST_CHECK_EQUAL(CountWitnessSigOps({}, program, witness, SCRIPT_VERIFY_P2SH), 0U);
+            BOOST_CHECK_EQUAL(CountWitnessSigOps(nested, p2sh, witness, SCRIPT_VERIFY_P2SH), 0U);
+        }
+    }
+    const CScript program{CScript{} << OP_0 << std::vector<unsigned char>(20, 1)};
+    BOOST_CHECK_EQUAL(CountWitnessSigOps(CScript{} << OP_NOP << ToByteVector(program), p2sh, witness, flags), 0U);
+    BOOST_CHECK_EQUAL(CountWitnessSigOps(CScript{} << OP_PUSHDATA1, p2sh, witness, flags), 0U);
+    BOOST_CHECK_EQUAL(CountWitnessSigOps({}, CScript{} << OP_1NEGATE << std::vector<unsigned char>(20, 1), witness, flags), 0U);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -5,6 +5,7 @@
 #include <bench/bench.h>
 #include <coins.h>
 #include <consensus/amount.h>
+#include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <key.h>
 #include <policy/policy.h>
@@ -15,6 +16,7 @@
 #include <util/check.h>
 
 #include <array>
+#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -56,3 +58,26 @@ static void CCoinsCaching(benchmark::Bench& bench)
 }
 
 BENCHMARK(CCoinsCaching);
+
+// Account for sigops with cached prevouts, without executing signatures.
+static void WitnessSigOpsCachedInputs(benchmark::Bench& bench)
+{
+    constexpr size_t NUM_INPUTS{4096};
+    CCoinsViewCache coins{&CoinsViewEmpty::Get(), /*deterministic=*/true};
+    CMutableTransaction spending;
+    for (size_t i{0}; i < NUM_INPUTS; ++i) {
+        const COutPoint outpoint{Txid::FromUint256(uint256::ONE), static_cast<uint32_t>(i)};
+        spending.vin.emplace_back(outpoint);
+        const CScript script{i % 2 == 0 ? CScript{} << OP_0 << std::vector<unsigned char>(20, 1)
+                                       : CScript{} << OP_1 << std::vector<unsigned char>(32, 1)};
+        coins.AddCoin(outpoint, Coin{CTxOut{1, script}, 1, false}, false);
+    }
+    const CTransaction tx{spending};
+    bench.batch(NUM_INPUTS).unit("input").run([&] {
+        const auto count{GetTransactionSigOpCost(tx, coins, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS)};
+        ankerl::nanobench::doNotOptimizeAway(count);
+        assert(count == NUM_INPUTS / 2);
+    });
+}
+
+BENCHMARK(WitnessSigOpsCachedInputs);
