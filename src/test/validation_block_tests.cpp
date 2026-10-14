@@ -4,6 +4,7 @@
 
 #include <chain.h>
 #include <chainparams.h>
+#include <coins.h>
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
@@ -16,6 +17,7 @@
 #include <random.h>
 #include <script/script.h>
 #include <sync.h>
+#include <test/util/coins.h>
 #include <test/util/common.h>
 #include <test/util/script.h>
 #include <test/util/setup_common.h>
@@ -29,6 +31,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
 #include <span>
 #include <thread>
@@ -166,6 +169,60 @@ void MinerTestingSetup::BuildChain(const uint256& root, int height, const unsign
     if (gen_fork) {
         blocks.push_back(GoodBlock(root));
         BuildChain(blocks.back()->GetHash(), height - 1, invalid_rate, branch_rate, max_size, blocks);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(assumevalid_bip30_lookups)
+{
+    struct CountingCoinsView final : CCoinsViewCache {
+        using CCoinsViewCache::CCoinsViewCache;
+        mutable uint64_t lookups{0};
+        bool HaveCoin(const COutPoint& outpoint) const override
+        {
+            ++lookups;
+            return CCoinsViewCache::HaveCoin(outpoint);
+        }
+    };
+
+    const auto block{GoodBlock(Params().GenesisBlock().GetHash())};
+    const auto hash{block->GetHash()};
+    const auto& coinbase{*block->vtx[0]};
+    for (bool assumevalid : {false, true}) {
+        BOOST_TEST_INFO_SCOPE("assumevalid=" << assumevalid);
+        auto options{m_node.chainman->m_options};
+        options.assumed_valid_block = assumevalid ? hash : uint256::ZERO;
+        options.signals = nullptr;
+        options.worker_threads_num = 0;
+        options.script_execution_cache_bytes = 0;
+        options.signature_cache_bytes = 0;
+        ChainstateManager manager{m_interrupt, options, {
+            .chainparams = Params(),
+            .blocks_dir = m_args.GetBlocksDirPath(),
+            .notifications = options.notifications,
+            .block_tree_db_params = {.path = m_args.GetBlocksDirPath() / "index", .cache_bytes = 0, .memory_only = true},
+        }};
+        Chainstate chainstate{nullptr, manager.m_blockman, manager};
+        LOCK(cs_main);
+        manager.m_blockman.AddToBlockIndex(Params().GenesisBlock(), manager.m_best_header);
+        CBlockIndex* index{manager.m_blockman.AddToBlockIndex(*block, manager.m_best_header)};
+        CBlockIndex best_header{*block};
+        best_header.pprev = index;
+        best_header.nHeight = index->nHeight + 1;
+        // Model burial without constructing the intervening headers
+        best_header.nChainWork = index->nChainWork + GetBlockProof(best_header) * 2200;
+        manager.m_best_header = &best_header;
+        CountingCoinsView view{&CoinsViewEmpty::Get()};
+        view.SetBestBlock(block->hashPrevBlock);
+        BlockValidationState state;
+        BOOST_REQUIRE(chainstate.ConnectBlock(*block, state, index, view, /*fJustCheck=*/true));
+        // TODO: Skip overwrite lookups for trusted history
+        BOOST_CHECK_EQUAL(view.lookups, coinbase.vout.size());
+        for (uint32_t i{0}; i < coinbase.vout.size(); ++i) {
+            const auto& output{coinbase.vout[i]};
+            if (!output.scriptPubKey.IsUnspendable()) {
+                BOOST_CHECK_EQUAL(view.AccessCoin(COutPoint{coinbase.GetHash(), i}), Coin(output, /*nHeightIn=*/1, /*fCoinBaseIn=*/true));
+            }
+        }
     }
 }
 
