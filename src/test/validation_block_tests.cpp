@@ -215,8 +215,7 @@ BOOST_AUTO_TEST_CASE(assumevalid_bip30_lookups)
         view.SetBestBlock(block->hashPrevBlock);
         BlockValidationState state;
         BOOST_REQUIRE(chainstate.ConnectBlock(*block, state, index, view, /*fJustCheck=*/true));
-        // TODO: Skip overwrite lookups for trusted history
-        BOOST_CHECK_EQUAL(view.lookups, coinbase.vout.size());
+        BOOST_CHECK_EQUAL(view.lookups, assumevalid ? 0 : coinbase.vout.size());
         for (uint32_t i{0}; i < coinbase.vout.size(); ++i) {
             const auto& output{coinbase.vout[i]};
             if (!output.scriptPubKey.IsUnspendable()) {
