@@ -1709,7 +1709,7 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
         }
         BOOST_REQUIRE_EQUAL(reused_checks.size(), 2);
         BOOST_CHECK(reused_checks[0]);
-        BOOST_CHECK(!reused_checks[1]); // TODO: Reusing execution data must not invalidate another input's signature
+        BOOST_CHECK(reused_checks[1]);
     }
 }
 

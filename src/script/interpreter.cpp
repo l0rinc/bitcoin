@@ -1486,7 +1486,7 @@ static bool HandleMissingData(MissingDataBehavior mdb)
 }
 
 template<typename T>
-bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache, MissingDataBehavior mdb)
+bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache, MissingDataBehavior mdb, SigHashCache* sighash_cache)
 {
     uint8_t ext_flag, key_version;
     switch (sigversion) {
@@ -1554,12 +1554,7 @@ bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, cons
     // Data about the output (if only one).
     if (output_type == SIGHASH_SINGLE) {
         if (in_pos >= tx_to.vout.size()) return false;
-        if (!execdata.m_output_hash) {
-            HashWriter sha_single_output{};
-            sha_single_output << tx_to.vout[in_pos];
-            execdata.m_output_hash = sha_single_output.GetSHA256();
-        }
-        ss << execdata.m_output_hash.value();
+        ss << (sighash_cache ? sighash_cache->GetTaprootSingleHash(tx_to.vout[in_pos]) : (HashWriter{} << tx_to.vout[in_pos]).GetSHA256());
     }
 
     // Additional data for BIP 342 signatures
@@ -1600,6 +1595,12 @@ void SigHashCache::Store(int32_t hash_type, const CScript& script_code, const Ha
 {
     auto& entry = m_cache_entries[CacheIndex(hash_type)];
     entry.emplace(script_code, writer);
+}
+
+uint256 SigHashCache::GetTaprootSingleHash(const CTxOut& output)
+{
+    if (!m_taproot_single_hash) m_taproot_single_hash = (HashWriter{} << output).GetSHA256();
+    return *m_taproot_single_hash;
 }
 
 template <class T>
@@ -1740,7 +1741,7 @@ bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(std::span<cons
     }
     uint256 sighash;
     if (!this->txdata) return HandleMissingData(m_mdb);
-    if (!SignatureHashSchnorr(sighash, execdata, *txTo, nIn, hashtype, sigversion, *this->txdata, m_mdb)) {
+    if (!SignatureHashSchnorr(sighash, execdata, *txTo, nIn, hashtype, sigversion, *this->txdata, m_mdb, &m_sighash_cache)) {
         return set_error(serror, SCRIPT_ERR_SCHNORR_SIG_HASHTYPE);
     }
     if (!VerifySchnorrSignature(sig, pubkey, sighash)) return set_error(serror, SCRIPT_ERR_SCHNORR_SIG);

@@ -229,9 +229,6 @@ struct ScriptExecutionData
     bool m_validation_weight_left_init = false;
     //! How much validation weight is left (decremented for every successful non-empty signature check).
     int64_t m_validation_weight_left;
-
-    //! The hash of the corresponding output
-    std::optional<uint256> m_output_hash;
 };
 
 /** Signature hash sizes */
@@ -250,14 +247,15 @@ extern const HashWriter HASHER_TAPSIGHASH; //!< Hasher with tag "TapSighash" pre
 extern const HashWriter HASHER_TAPLEAF;    //!< Hasher with tag "TapLeaf" pre-fed to it.
 extern const HashWriter HASHER_TAPBRANCH;  //!< Hasher with tag "TapBranch" pre-fed to it.
 
-/** Data structure to cache SHA256 midstates for the ECDSA sighash calculations
- *  (bare, P2SH, P2WPKH, P2WSH). */
+/** Cache SHA256 midstates for ECDSA sighashes and the SIGHASH_SINGLE output hash for Taproot.
+ *  Each cache belongs to one transaction input. */
 class SigHashCache
 {
     /** For each sighash mode (ALL, SINGLE, NONE, ALL|ANYONE, SINGLE|ANYONE, NONE|ANYONE),
      *  optionally store a scriptCode which the hash is for, plus a midstate for the SHA256
      *  computation just before adding the hash_type itself. */
     std::optional<std::pair<CScript, HashWriter>> m_cache_entries[6];
+    std::optional<uint256> m_taproot_single_hash;
 
     /** Given a hash_type, find which of the 6 cache entries is to be used. */
     int CacheIndex(int32_t hash_type) const noexcept;
@@ -267,6 +265,9 @@ public:
     [[nodiscard]] bool Load(int32_t hash_type, const CScript& script_code, HashWriter& writer) const noexcept;
     /** Store into this cache object the provided SHA256 midstate. */
     void Store(int32_t hash_type, const CScript& script_code, const HashWriter& writer) noexcept;
+
+    /** Return the SHA256 of the output matching this cache's input, hashing it on first use only. */
+    uint256 GetTaprootSingleHash(const CTxOut& output);
 };
 
 template <class T>
@@ -308,7 +309,7 @@ enum class MissingDataBehavior
 };
 
 template<typename T>
-bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache, MissingDataBehavior mdb);
+bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache, MissingDataBehavior mdb, SigHashCache* sighash_cache = nullptr);
 
 template <class T>
 class GenericTransactionSignatureChecker : public BaseSignatureChecker
