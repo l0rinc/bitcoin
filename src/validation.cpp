@@ -2364,10 +2364,10 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             script_check_reason = "block too recent relative to best header";
         } else {
             // This block is a member of the assumed verified chain and an ancestor of the best header.
-            // Script verification is skipped when connecting blocks under the
+            // Script verification and BIP30 overwrite lookups are skipped when connecting blocks under the
             //  assumevalid block. Assuming the assumevalid block is valid this
             //  is safe because block merkle hashes are still computed and checked,
-            // Of course, if an assumed valid block is invalid due to false scriptSigs
+            // Of course, if an assumed valid block is invalid due to false scriptSigs or BIP30 overwrites
             //  this optimization would allow an invalid chain to be accepted.
             // The equivalent time check discourages hash power from extorting the network via DOS attack
             //  into accepting an invalid block through telling users they must manually set assumevalid.
@@ -2463,7 +2463,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // TODO: Remove BIP30 checking from block height 1,983,702 on, once we have a
     // consensus change that ensures coinbases at those heights cannot
     // duplicate earlier coinbases.
-    if (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT) {
+    if (script_check_reason && (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT)) {
         for (const auto& tx : block.vtx) {
             for (size_t o = 0; o < tx->vout.size(); o++) {
                 if (view.HaveCoin(COutPoint(tx->GetHash(), o))) {
