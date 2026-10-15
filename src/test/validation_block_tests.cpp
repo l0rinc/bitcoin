@@ -7,6 +7,7 @@
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <kernel/types.h>
 #include <node/block_template_manager.h>
 #include <node/blockstorage.h>
 #include <node/miner.h>
@@ -67,8 +68,9 @@ struct TestSubscriber final : public CValidationInterface {
         m_expected_tip = block->GetHash();
     }
 
-    void BlockDisconnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
+    void BlockDisconnected(const ChainstateRole& role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
     {
+        BOOST_CHECK(!role.historical);
         BOOST_CHECK_EQUAL(m_expected_tip, block->GetHash());
         BOOST_CHECK_EQUAL(m_expected_tip, pindex->GetBlockHash());
 

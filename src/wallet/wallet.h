@@ -628,7 +628,7 @@ public:
     bool LoadToWallet(CWalletTx&& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void transactionAddedToMempool(const CTransactionRef& tx) override;
     void blockConnected(const kernel::ChainstateRole& role, const interfaces::BlockInfo& block) override;
-    void blockDisconnected(const interfaces::BlockInfo& block) override;
+    void blockDisconnected(const kernel::ChainstateRole& role, const interfaces::BlockInfo& block) override;
     void updatedBlockTip() override;
     void transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason) override;
     /** Set the next time this wallet should resend transactions to 12-36 hours from now, ~1 day on average. */

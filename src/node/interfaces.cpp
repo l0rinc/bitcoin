@@ -477,9 +477,9 @@ public:
     {
         m_notifications->blockConnected(role, kernel::MakeBlockInfo(index, block.get()));
     }
-    void BlockDisconnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* index) override
+    void BlockDisconnected(const ChainstateRole& role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* index) override
     {
-        m_notifications->blockDisconnected(kernel::MakeBlockInfo(index, block.get()));
+        m_notifications->blockDisconnected(role, kernel::MakeBlockInfo(index, block.get()));
     }
     void UpdatedBlockTip(const CBlockIndex* index, const CBlockIndex* fork_index, bool is_ibd) override
     {

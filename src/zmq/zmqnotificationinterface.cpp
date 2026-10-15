@@ -195,7 +195,7 @@ void CZMQNotificationInterface::BlockConnected(const ChainstateRole& role, const
     });
 }
 
-void CZMQNotificationInterface::BlockDisconnected(const std::shared_ptr<const CBlock>& pblock, const CBlockIndex* pindexDisconnected)
+void CZMQNotificationInterface::BlockDisconnected(const ChainstateRole&, const std::shared_ptr<const CBlock>& pblock, const CBlockIndex* pindexDisconnected)
 {
     for (const CTransactionRef& ptx : pblock->vtx) {
         const CTransaction& tx = *ptx;

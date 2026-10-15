@@ -128,10 +128,11 @@ protected:
      * Notifies listeners of a block being disconnected
      * Provides the block that was disconnected.
      *
-     * Called on a background thread. Only called for the active chainstate, since
-     * background chainstates should never disconnect blocks.
+     * Called on a background thread.
+     * Snapshot activation preserves the existing chainstate's tip when making it historical.
+     * If that tip is on a competing fork, historical validation must disconnect it to follow the snapshot's ancestry.
      */
-    virtual void BlockDisconnected(const std::shared_ptr<const CBlock> &block, const CBlockIndex* pindex) {}
+    virtual void BlockDisconnected(const kernel::ChainstateRole& role, const std::shared_ptr<const CBlock> &block, const CBlockIndex* pindex) {}
     /**
      * Notifies listeners of the new active block chain on-disk.
      *
@@ -227,7 +228,7 @@ public:
     void TransactionRemovedFromMempool(const CTransactionRef&, MemPoolRemovalReason, uint64_t mempool_sequence);
     void MempoolTransactionsRemovedForBlock(std::shared_ptr<const CBlock>, std::vector<RemovedMempoolTransactionInfo>, unsigned int block_height);
     void BlockConnected(const kernel::ChainstateRole&, std::shared_ptr<const CBlock>, const CBlockIndex* pindex);
-    void BlockDisconnected(std::shared_ptr<const CBlock>, const CBlockIndex* pindex);
+    void BlockDisconnected(const kernel::ChainstateRole&, std::shared_ptr<const CBlock>, const CBlockIndex* pindex);
     void ChainStateFlushed(const kernel::ChainstateRole&, const CBlockLocator&);
     void BlockChecked(const std::shared_ptr<const CBlock>&, const BlockValidationState&);
     void NewPoWValidBlock(const CBlockIndex *, const std::shared_ptr<const CBlock>&);

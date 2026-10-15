@@ -310,7 +310,7 @@ public:
         virtual void transactionAddedToMempool(const CTransactionRef& tx) {}
         virtual void transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason) {}
         virtual void blockConnected(const kernel::ChainstateRole& role, const BlockInfo& block) {}
-        virtual void blockDisconnected(const BlockInfo& block) {}
+        virtual void blockDisconnected(const kernel::ChainstateRole& role, const BlockInfo& block) {}
         virtual void updatedBlockTip() {}
         virtual void chainStateFlushed(const kernel::ChainstateRole& role, const CBlockLocator& locator) {}
     };
