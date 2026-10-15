@@ -1660,7 +1660,7 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
         BOOST_CHECK_EQUAL(HexStr(txdata.m_spent_scripts_single_hash), vec["intermediary"]["hashScriptPubkeys"].get_str());
         BOOST_CHECK_EQUAL(HexStr(txdata.m_sequences_single_hash), vec["intermediary"]["hashSequences"].get_str());
 
-        ScriptExecutionData reused_sed{.m_annex_init = true, .m_annex_present = false};
+        const ScriptExecutionData reused_sed{.m_annex_init = true, .m_annex_present = false};
         std::vector<bool> reused_checks;
         for (const auto& input : vec["inputSpending"].getValues()) {
             int txinpos = input["given"]["txinIndex"].getInt<int>();
