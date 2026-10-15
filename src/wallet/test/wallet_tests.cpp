@@ -104,8 +104,8 @@ BOOST_AUTO_TEST_CASE(block_disconnected_chainstate_role)
         m_node.validation_signals->SyncWithValidationInterfaceQueue();
 
         LOCK(m_wallet.cs_wallet);
-        BOOST_CHECK_EQUAL(wtx->isConfirmed(), false); // TODO: Historical disconnects must preserve active confirmations
-        BOOST_CHECK_EQUAL(m_wallet.GetLastBlockHeight(), index->pprev->nHeight); // TODO: Historical disconnects must not rewind the active wallet
+        BOOST_CHECK_EQUAL(wtx->isConfirmed(), role.historical);
+        BOOST_CHECK_EQUAL(m_wallet.GetLastBlockHeight(), role.historical ? index->nHeight : index->pprev->nHeight);
     }
 }
 

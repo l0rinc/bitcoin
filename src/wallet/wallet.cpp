@@ -1578,8 +1578,9 @@ void CWallet::blockConnected(const ChainstateRole& role, const interfaces::Block
     }
 }
 
-void CWallet::blockDisconnected(const ChainstateRole&, const interfaces::BlockInfo& block)
+void CWallet::blockDisconnected(const ChainstateRole& role, const interfaces::BlockInfo& block)
 {
+    if (role.historical) return;
     assert(block.data);
     LOCK(cs_wallet);
 
