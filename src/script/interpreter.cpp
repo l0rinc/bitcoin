@@ -442,7 +442,6 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
     bool fRequireMinimal = (flags & SCRIPT_VERIFY_MINIMALDATA) != 0;
     uint32_t opcode_pos = 0;
     execdata.m_codeseparator_pos = 0xFFFFFFFFUL;
-    execdata.m_codeseparator_pos_init = true;
 
     try
     {
@@ -1561,7 +1560,6 @@ bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata
         assert(execdata.m_tapleaf_hash_init);
         ss << execdata.m_tapleaf_hash;
         ss << key_version;
-        assert(execdata.m_codeseparator_pos_init);
         ss << execdata.m_codeseparator_pos;
     }
 
