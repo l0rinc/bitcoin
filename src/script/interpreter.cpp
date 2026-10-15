@@ -1246,7 +1246,7 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
 bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, script_verify_flags flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror)
 {
-    ScriptExecutionData execdata;
+    ScriptExecutionData execdata{std::nullopt};
     return EvalScript(stack, script, flags, checker, sigversion, execdata, serror);
 }
 
@@ -1536,8 +1536,7 @@ bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata
     }
 
     // Data about the input/prevout being spent
-    assert(execdata.m_annex_init);
-    const bool have_annex = execdata.m_annex_present;
+    const bool have_annex{execdata.m_annex_hash.has_value()};
     const uint8_t spend_type = (ext_flag << 1) + (have_annex ? 1 : 0); // The low bit indicates whether an annex is present.
     ss << spend_type;
     if (input_type == SIGHASH_ANYONECANPAY) {
@@ -1548,7 +1547,7 @@ bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata
         ss << in_pos;
     }
     if (have_annex) {
-        ss << execdata.m_annex_hash;
+        ss << *execdata.m_annex_hash;
     }
 
     // Data about the output (if only one).
@@ -1925,9 +1924,9 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
 {
     CScript exec_script; //!< Actually executed script (last stack item in P2WSH; implied P2PKH script in P2WPKH; leaf script in P2TR)
     std::span stack{witness.stack};
-    ScriptExecutionData execdata;
 
     if (witversion == 0) {
+        ScriptExecutionData execdata{std::nullopt};
         if (program.size() == WITNESS_V0_SCRIPTHASH_SIZE) {
             // BIP141 P2WSH: 32-byte witness v0 program (which encodes SHA256(script))
             if (stack.size() == 0) {
@@ -1955,23 +1954,22 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
         // BIP341 Taproot: 32-byte non-P2SH witness v1 program (which encodes a P2C-tweaked pubkey)
         if (!(flags & SCRIPT_VERIFY_TAPROOT)) return set_success(serror);
         if (stack.size() == 0) return set_error(serror, SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
+        std::optional<uint256> annex_hash;
         if (stack.size() >= 2 && !stack.back().empty() && stack.back()[0] == ANNEX_TAG) {
             // Drop annex (this is non-standard; see IsWitnessStandard)
             const valtype& annex = SpanPopBack(stack);
-            execdata.m_annex_hash = (HashWriter{} << annex).GetSHA256();
-            execdata.m_annex_present = true;
-        } else {
-            execdata.m_annex_present = false;
+            annex_hash = (HashWriter{} << annex).GetSHA256();
         }
-        execdata.m_annex_init = true;
         if (stack.size() == 1) {
             // Key path spending (stack size is 1 after removing optional annex)
+            const ScriptExecutionData execdata{annex_hash};
             if (!checker.CheckSchnorrSignature(stack.front(), program, SigVersion::TAPROOT, execdata, serror)) {
                 return false; // serror is set
             }
             return set_success(serror);
         } else {
             // Script path spending (stack size is >1 after removing optional annex)
+            ScriptExecutionData execdata{annex_hash};
             const valtype& control = SpanPopBack(stack);
             const valtype& script = SpanPopBack(stack);
             if (control.size() < TAPROOT_CONTROL_BASE_SIZE || control.size() > TAPROOT_CONTROL_MAX_SIZE || ((control.size() - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE) != 0) {

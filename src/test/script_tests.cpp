@@ -1660,7 +1660,7 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
         BOOST_CHECK_EQUAL(HexStr(txdata.m_spent_scripts_single_hash), vec["intermediary"]["hashScriptPubkeys"].get_str());
         BOOST_CHECK_EQUAL(HexStr(txdata.m_sequences_single_hash), vec["intermediary"]["hashSequences"].get_str());
 
-        const ScriptExecutionData reused_sed{.m_annex_init = true, .m_annex_present = false};
+        const ScriptExecutionData reused_sed{std::nullopt};
         std::vector<bool> reused_checks;
         for (const auto& input : vec["inputSpending"].getValues()) {
             int txinpos = input["given"]["txinIndex"].getInt<int>();
@@ -1697,9 +1697,7 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
             BOOST_CHECK_EQUAL(HexStr(pubkey.ComputeTapTweakHash(merkle_root.IsNull() ? nullptr : &merkle_root)), input["intermediary"]["tweak"].get_str());
 
             // We can't observe the sighash used inside the signing logic, so verify by recomputing it.
-            ScriptExecutionData sed;
-            sed.m_annex_init = true;
-            sed.m_annex_present = false;
+            const ScriptExecutionData sed{std::nullopt};
             uint256 sighash;
             BOOST_CHECK(SignatureHashSchnorr(sighash, sed, tx, txinpos, hashtype, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL));
             BOOST_CHECK_EQUAL(HexStr(sighash), input["intermediary"]["sigHash"].get_str());

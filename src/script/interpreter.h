@@ -218,17 +218,15 @@ struct ScriptExecutionData
     //! Opcode position of the last executed OP_CODESEPARATOR (or 0xFFFFFFFF if none executed).
     uint32_t m_codeseparator_pos;
 
-    //! Whether m_annex_present and (when needed) m_annex_hash are initialized.
-    bool m_annex_init = false;
-    //! Whether an annex is present.
-    bool m_annex_present;
-    //! Hash of the annex data.
-    uint256 m_annex_hash;
+    //! Hash of the annex data, absent when there is no annex
+    const std::optional<uint256> m_annex_hash;
 
     //! Whether m_validation_weight_left is initialized.
     bool m_validation_weight_left_init = false;
     //! How much validation weight is left (decremented for every successful non-empty signature check).
     int64_t m_validation_weight_left;
+
+    explicit ScriptExecutionData(std::optional<uint256> annex_hash) : m_annex_hash{std::move(annex_hash)} {}
 };
 
 /** Signature hash sizes */
