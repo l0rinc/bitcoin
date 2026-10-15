@@ -21,7 +21,10 @@
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <interfaces/chain.h>
+#include <kernel/types.h>
 #include <key_io.h>
+#include <node/blockstorage.h>
+#include <node/mining_types.h>
 #include <node/types.h>
 #include <policy/feerate.h>
 #include <policy/policy.h>
@@ -30,6 +33,7 @@
 #include <script/solver.h>
 #include <test/util/common.h>
 #include <test/util/logging.h>
+#include <test/util/mining.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
@@ -81,6 +85,28 @@ static bool BroadcastTestSimpleSpend(interfaces::Chain& chain, ChainstateManager
     // TestSimpleSpend pays a high fee; use a limit just above its feerate.
     const auto tx_feerate_limit{CFeeRate{tx_feerate.GetFeePerK() + 1}};
     return chain.broadcastTransaction(tx_ref, DEFAULT_TRANSACTION_MAXFEE, tx_feerate_limit, node::TxBroadcast::MEMPOOL_NO_BROADCAST, error);
+}
+
+BOOST_AUTO_TEST_CASE(block_disconnected_chainstate_role)
+{
+    const auto block{PrepareBlock(m_node, {})};
+    const auto* index{WITH_LOCK(cs_main, return m_node.chainman->m_blockman.AddToBlockIndex(*block, m_node.chainman->m_best_header))};
+    const auto* wtx{Assert(m_wallet.AddToWallet(block->vtx[0], TxStateConfirmed{index->GetBlockHash(), index->nHeight, /*index=*/0}))};
+
+    for (const auto role : {
+        kernel::ChainstateRole{},
+        kernel::ChainstateRole{.validated = false},
+        kernel::ChainstateRole{.historical = true}
+    }) {
+        BOOST_TEST_INFO_SCOPE(role);
+        m_node.validation_signals->BlockConnected({}, block, index);
+        m_node.validation_signals->BlockDisconnected(role, block, index);
+        m_node.validation_signals->SyncWithValidationInterfaceQueue();
+
+        LOCK(m_wallet.cs_wallet);
+        BOOST_CHECK_EQUAL(wtx->isConfirmed(), false); // TODO: Historical disconnects must preserve active confirmations
+        BOOST_CHECK_EQUAL(m_wallet.GetLastBlockHeight(), index->pprev->nHeight); // TODO: Historical disconnects must not rewind the active wallet
+    }
 }
 
 BOOST_AUTO_TEST_CASE(reject_invalid_descriptor_ranges)
