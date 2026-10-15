@@ -90,13 +90,9 @@ std::optional<uint256> MutableTransactionSignatureCreator::ComputeSchnorrSignatu
     // of data present, for now, only support signing when everything is provided.
     if (!m_txdata || !m_txdata->m_bip341_taproot_ready || !m_txdata->m_spent_outputs_ready) return std::nullopt;
 
+    if (sigversion == SigVersion::TAPSCRIPT && !leaf_hash) return std::nullopt; // BIP342 signing needs leaf hash.
     // Only support annex-less signing and scripts without OP_CODESEPARATOR
-    ScriptExecutionData execdata{std::nullopt};
-    if (sigversion == SigVersion::TAPSCRIPT) {
-        if (!leaf_hash) return std::nullopt; // BIP342 signing needs leaf hash.
-        execdata.m_tapleaf_hash_init = true;
-        execdata.m_tapleaf_hash = *leaf_hash;
-    }
+    const ScriptExecutionData execdata{std::nullopt, sigversion == SigVersion::TAPSCRIPT ? std::make_optional(*leaf_hash) : std::nullopt};
     uint256 hash;
     if (!SignatureHashSchnorr(hash, execdata, m_txto, nIn, m_options.sighash_type, sigversion, *m_txdata, MissingDataBehavior::FAIL)) return std::nullopt;
     return hash;

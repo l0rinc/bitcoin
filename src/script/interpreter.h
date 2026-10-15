@@ -208,10 +208,8 @@ enum class SigVersion
 
 struct ScriptExecutionData
 {
-    //! Whether m_tapleaf_hash is initialized.
-    bool m_tapleaf_hash_init = false;
-    //! The tapleaf hash.
-    uint256 m_tapleaf_hash;
+    //! The tapleaf hash, present only for Tapscript
+    const std::optional<uint256> m_tapleaf_hash;
 
     //! Opcode position of the last executed OP_CODESEPARATOR (or 0xFFFFFFFF if none executed).
     uint32_t m_codeseparator_pos{0xFFFFFFFF};
@@ -224,7 +222,8 @@ struct ScriptExecutionData
     //! How much validation weight is left (decremented for every successful non-empty signature check).
     int64_t m_validation_weight_left;
 
-    explicit ScriptExecutionData(std::optional<uint256> annex_hash) : m_annex_hash{std::move(annex_hash)} {}
+    explicit ScriptExecutionData(std::optional<uint256> annex_hash, std::optional<uint256> tapleaf_hash = std::nullopt)
+        : m_tapleaf_hash{std::move(tapleaf_hash)}, m_annex_hash{std::move(annex_hash)} {}
 };
 
 /** Signature hash sizes */

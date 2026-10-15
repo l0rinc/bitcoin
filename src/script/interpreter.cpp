@@ -15,9 +15,9 @@
 #include <span.h>
 #include <tinyformat.h>
 #include <uint256.h>
+#include <util/check.h>
 
 #include <algorithm>
-#include <cassert>
 #include <compare>
 #include <cstring>
 #include <limits>
@@ -426,6 +426,7 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
     // sigversion cannot be TAPROOT here, as it admits no script execution.
     assert(sigversion == SigVersion::BASE || sigversion == SigVersion::WITNESS_V0 || sigversion == SigVersion::TAPSCRIPT);
+    assert(sigversion != SigVersion::TAPSCRIPT || execdata.m_tapleaf_hash);
 
     CScript::const_iterator pc = script.begin();
     CScript::const_iterator pend = script.end();
@@ -1557,8 +1558,7 @@ bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata
 
     // Additional data for BIP 342 signatures
     if (sigversion == SigVersion::TAPSCRIPT) {
-        assert(execdata.m_tapleaf_hash_init);
-        ss << execdata.m_tapleaf_hash;
+        ss << *Assert(execdata.m_tapleaf_hash);
         ss << key_version;
         ss << execdata.m_codeseparator_pos;
     }
@@ -1967,20 +1967,19 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
             return set_success(serror);
         } else {
             // Script path spending (stack size is >1 after removing optional annex)
-            ScriptExecutionData execdata{annex_hash};
             const valtype& control = SpanPopBack(stack);
             const valtype& script = SpanPopBack(stack);
             if (control.size() < TAPROOT_CONTROL_BASE_SIZE || control.size() > TAPROOT_CONTROL_MAX_SIZE || ((control.size() - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE) != 0) {
                 return set_error(serror, SCRIPT_ERR_TAPROOT_WRONG_CONTROL_SIZE);
             }
-            execdata.m_tapleaf_hash = ComputeTapleafHash(control[0] & TAPROOT_LEAF_MASK, script);
-            if (!VerifyTaprootCommitment(control, program, execdata.m_tapleaf_hash)) {
+            const uint256 tapleaf_hash{ComputeTapleafHash(control[0] & TAPROOT_LEAF_MASK, script)};
+            if (!VerifyTaprootCommitment(control, program, tapleaf_hash)) {
                 return set_error(serror, SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
             }
-            execdata.m_tapleaf_hash_init = true;
             if ((control[0] & TAPROOT_LEAF_MASK) == TAPROOT_LEAF_TAPSCRIPT) {
                 // Tapscript (leaf version 0xc0)
                 exec_script = CScript(script.begin(), script.end());
+                ScriptExecutionData execdata{annex_hash, tapleaf_hash};
                 execdata.m_validation_weight_left = ::GetSerializeSize(witness.stack) + VALIDATION_WEIGHT_OFFSET;
                 execdata.m_validation_weight_left_init = true;
                 return ExecuteWitnessScript(stack, exec_script, flags, SigVersion::TAPSCRIPT, checker, execdata, serror);
