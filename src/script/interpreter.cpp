@@ -368,7 +368,6 @@ static bool EvalChecksigTapscript(const valtype& sig, const valtype& pubkey, Scr
     if (success) {
         // Implement the sigops/witnesssize ratio test.
         // Passing with an upgradable public key version is also counted.
-        assert(execdata.m_validation_weight_left_init);
         execdata.m_validation_weight_left -= VALIDATION_WEIGHT_PER_SIGOP_PASSED;
         if (execdata.m_validation_weight_left < 0) {
             return set_error(serror, SCRIPT_ERR_TAPSCRIPT_VALIDATION_WEIGHT);
@@ -1979,9 +1978,7 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
             if ((control[0] & TAPROOT_LEAF_MASK) == TAPROOT_LEAF_TAPSCRIPT) {
                 // Tapscript (leaf version 0xc0)
                 exec_script = CScript(script.begin(), script.end());
-                ScriptExecutionData execdata{annex_hash, tapleaf_hash};
-                execdata.m_validation_weight_left = ::GetSerializeSize(witness.stack) + VALIDATION_WEIGHT_OFFSET;
-                execdata.m_validation_weight_left_init = true;
+                ScriptExecutionData execdata{annex_hash, tapleaf_hash, static_cast<int64_t>(::GetSerializeSize(witness.stack) + VALIDATION_WEIGHT_OFFSET)};
                 return ExecuteWitnessScript(stack, exec_script, flags, SigVersion::TAPSCRIPT, checker, execdata, serror);
             }
             if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION) {
