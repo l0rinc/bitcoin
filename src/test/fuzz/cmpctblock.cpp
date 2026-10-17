@@ -243,8 +243,10 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         *block = header;
 
         CMutableTransaction coinbase_tx;
+        coinbase_tx.nLockTime = height - 1;
         coinbase_tx.vin.resize(1);
         coinbase_tx.vin[0].prevout.SetNull();
+        coinbase_tx.vin[0].nSequence = CTxIn::MAX_SEQUENCE_NONFINAL;
         coinbase_tx.vin[0].scriptSig = CScript() << height << OP_0;
         coinbase_tx.vout.resize(1);
         coinbase_tx.vout[0].scriptPubKey = CScript() << OP_TRUE;
