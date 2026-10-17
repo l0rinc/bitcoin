@@ -4,10 +4,12 @@
 
 #include <chain.h>
 #include <chainparams.h>
+#include <common/args.h>
 #include <consensus/params.h>
 #include <net_processing.h>
 #include <node/block_template_manager.h>
 #include <node/miner.h>
+#include <node/peerman_args.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <protocol.h>
@@ -15,13 +17,16 @@
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <util/check.h>
+#include <util/string.h>
 #include <validation.h>
 #include <validationinterface.h>
 
 #include <boost/test/unit_test.hpp>
 
 #include <cstdint>
+#include <limits>
 #include <memory>
+#include <string>
 
 BOOST_FIXTURE_TEST_SUITE(peerman_tests, RegTestingSetup)
 
@@ -87,6 +92,25 @@ BOOST_AUTO_TEST_CASE(connections_desirable_service_flags)
     // Lastly, verify the stale tip checks can disallow limited peers connections after not receiving blocks for a prolonged period.
     clock += std::chrono::seconds{consensus.nPowTargetSpacing * NODE_NETWORK_LIMITED_ALLOW_CONN_BLOCKS + 1};
     BOOST_CHECK(peerman->GetDesirableServiceFlags(peer_flags) == ServiceFlags(NODE_NETWORK | NODE_WITNESS));
+}
+
+BOOST_FIXTURE_TEST_CASE(block_download_window_args, BasicTestingSetup)
+{
+    ArgsManager args;
+    PeerManager::Options options;
+    node::ApplyArgsManOptions(args, options);
+    BOOST_CHECK_EQUAL(options.block_download_window, DEFAULT_BLOCK_DOWNLOAD_WINDOW);
+
+    const auto check_window{[&](int64_t value, int32_t expected) {
+        PeerManager::Options options;
+        args.ForceSetArg("-blockdownloadwindow", util::ToString(value));
+        node::ApplyArgsManOptions(args, options);
+        BOOST_CHECK_EQUAL(options.block_download_window, expected);
+    }};
+    check_window(MIN_BLOCK_DOWNLOAD_WINDOW - 1, MIN_BLOCK_DOWNLOAD_WINDOW);
+    check_window(512, 512);
+    check_window(MAX_BLOCK_DOWNLOAD_WINDOW + 1, MAX_BLOCK_DOWNLOAD_WINDOW);
+    check_window(std::numeric_limits<int64_t>::max(), MAX_BLOCK_DOWNLOAD_WINDOW);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

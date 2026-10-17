@@ -1,6 +1,7 @@
 # Reduce Memory
 
 There are a few parameters that can be dialed down to reduce the memory usage of `bitcoind`. This can be useful on embedded systems or small VPSes.
+A system with at least 4 GiB of RAM is recommended for running Bitcoin Core.
 
 ## Swapping
 
@@ -30,6 +31,14 @@ The size of some in-memory caches can be reduced. As caches trade off memory usa
 - To disable most of the mempool functionality there is the `-blocksonly` option. This will reduce the default memory usage to 5MB and make the client opt out of receiving (and thus relaying) transactions, except from peers who have the `relay` permission set (e.g. whitelisted peers), and as part of blocks.
 
   - Do not use this when using the client to broadcast transactions as any transaction sent will stick out like a sore thumb, affecting privacy. When used with the wallet it should be combined with `-walletbroadcast=0` and `-spendzeroconfchange=0`. Another mechanism for broadcasting outgoing transactions (if any) should be used.
+
+## Block downloads
+
+- `-blockdownloadwindow=<n>` - a debug option controlling how many blocks ahead of the last common block to download, defaults to `2048`. Values are clamped between `160` and `32768`.
+  - Reducing a larger window to, for example, `512` limits download lookahead during initial sync and may reduce filesystem cache pressure, but may reduce download throughput.
+  - The window counts blocks, not bytes. It does not directly limit RAM use. Peer counts and per-peer request limits also bound the number of blocks in flight.
+  - Very small windows can trigger stalling disconnections on slow links.
+  - Large windows can cause pruned nodes to exceed their disk target during initial sync because files containing blocks ahead of the tip cannot yet be pruned.
 
 ## Number of peers
 
