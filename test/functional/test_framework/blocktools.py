@@ -123,18 +123,19 @@ def create_block(hashprev=None, coinbase=None, *, ntime=None, height=None, versi
     block.hashMerkleRoot = block.calc_merkle_root()
     return block
 
-def create_empty_fork(node, fork_length=FORK_LENGTH):
+def create_empty_fork(node, fork_length=FORK_LENGTH, *, version=None):
     '''
         Creates a fork using node's chaintip as the starting point.
         Returns a list of blocks to submit in order.
     '''
-    tip = int(node.getbestblockhash(), 16)
-    height = node.getblockcount()
-    block_time = node.getblock(node.getbestblockhash())['time'] + 1
+    tip_header = node.getblockheader(node.getbestblockhash())
+    tip = int(tip_header['hash'], 16)
+    height = tip_header['height']
+    block_time = tip_header['time'] + 1
 
     blocks = []
     for _ in range(fork_length):
-        block = create_block(tip, height=height + 1, ntime=block_time)
+        block = create_block(tip, height=height + 1, ntime=block_time, version=version)
         block.solve()
         blocks.append(block)
         tip = block.hash_int
