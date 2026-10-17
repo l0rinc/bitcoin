@@ -107,8 +107,8 @@ private:
 
 /**
  * Get the minimum time a miner should use in the next block. This always
- * accounts for the BIP94 timewarp rule, so does not necessarily reflect the
- * consensus limit.
+ * accounts for the BIP94 timewarp and BIP54 Murch-Zawy rules, so does not
+ * necessarily reflect the consensus limit.
  */
 int64_t GetMinimumTime(const CBlockIndex* pindexPrev, int64_t difficulty_adjustment_interval);
 
