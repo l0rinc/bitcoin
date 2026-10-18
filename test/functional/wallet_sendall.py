@@ -216,6 +216,18 @@ class SendallTest(BitcoinTestFramework):
         self.add_utxos([17, 4])
         utxo = self.wallet.listunspent()[0]
 
+        txcount_before = self.wallet.getwalletinfo()["txcount"]
+        nonmempool_before = self.wallet.getbalances()["mine"]["nonmempool"]
+        assert_equal(nonmempool_before, 0)
+        duplicate_txid = self.wallet.sendall(recipients=[self.remainder_target], inputs=[utxo, utxo])["txid"]
+        assert_equal(self.wallet.getwalletinfo()["txcount"], txcount_before + 1)  # TODO: Rejection must not add the invalid transaction to wallet state
+        assert_equal(self.wallet.getbalances()["mine"]["nonmempool"], -utxo["amount"])  # TODO: Rejection must not record a nonmempool spend
+        assert_equal(sum(
+            candidate["txid"] == utxo["txid"] and candidate["vout"] == utxo["vout"]
+            for candidate in self.wallet.listunspent()
+        ), 0)  # TODO: Rejection must leave the real outpoint available
+        self.wallet.abandontransaction(duplicate_txid)
+
         sendall_tx_receipt = self.wallet.sendall(recipients=[self.remainder_target], inputs=[utxo])
         tx_from_wallet = self.wallet.gettransaction(txid = sendall_tx_receipt["txid"], verbose = True)
         assert_equal(len(tx_from_wallet["decoded"]["vin"]), 1)
