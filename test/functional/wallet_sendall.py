@@ -216,6 +216,23 @@ class SendallTest(BitcoinTestFramework):
         self.add_utxos([17, 4])
         utxo = self.wallet.listunspent()[0]
 
+        txcount_before = self.wallet.getwalletinfo()["txcount"]
+        nonmempool_before = self.wallet.getbalances()["mine"]["nonmempool"]
+        assert_equal(nonmempool_before, 0)
+        assert_raises_rpc_error(
+            -8,
+            f"Invalid parameter, duplicated input: {utxo['txid']}:{utxo['vout']}",
+            self.wallet.sendall,
+            recipients=[self.remainder_target],
+            inputs=[utxo, utxo],
+        )
+        assert_equal(self.wallet.getwalletinfo()["txcount"], txcount_before)
+        assert_equal(self.wallet.getbalances()["mine"]["nonmempool"], nonmempool_before)
+        assert_equal(sum(
+            candidate["txid"] == utxo["txid"] and candidate["vout"] == utxo["vout"]
+            for candidate in self.wallet.listunspent()
+        ), 1)
+
         sendall_tx_receipt = self.wallet.sendall(recipients=[self.remainder_target], inputs=[utxo])
         tx_from_wallet = self.wallet.gettransaction(txid = sendall_tx_receipt["txid"], verbose = True)
         assert_equal(len(tx_from_wallet["decoded"]["vin"]), 1)
