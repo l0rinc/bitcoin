@@ -106,6 +106,9 @@ public:
         m_checked_merkle_root = false;
     }
 
+    //! Whether any transaction carries witness data
+    bool HasWitness() const;
+
     std::string ToString() const;
 };
 

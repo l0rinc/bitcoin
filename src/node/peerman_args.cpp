@@ -14,6 +14,12 @@ namespace node {
 
 void ApplyArgsManOptions(const ArgsManager& argsman, PeerManager::Options& options)
 {
+    if (auto value{argsman.GetIntArg("-blockdownloadwindow")}) {
+        options.block_download_window = std::clamp<int64_t>(*value, 1, MAX_BLOCK_DOWNLOAD_WINDOW);
+    }
+    if (auto value{argsman.GetIntArg("-blockdownloadmemory")}) {
+        options.block_download_memory = std::clamp<int64_t>(*value, 0, 4096) * 1024 * 1024;
+    }
     if (auto value{argsman.GetBoolArg("-txreconciliation")}) options.reconcile_txs = *value;
 
     if (auto value{argsman.GetIntArg("-blockreconstructionextratxn")}) {
