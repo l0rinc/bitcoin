@@ -90,7 +90,7 @@ BOOST_AUTO_TEST_CASE(basic_tests)
     bi1.nUndoPos += 2;
     BOOST_CHECK_EQUAL(bi1.GetUndoPos().nPos, 4_GiB + 1);
     if constexpr (sizeof(void*) == 8) {
-        BOOST_CHECK_EQUAL(sizeof(CBlockIndex), 160U); // TODO: Restore the original block-index size
+        BOOST_CHECK_EQUAL(sizeof(CBlockIndex), 152U);
     }
 }
 
