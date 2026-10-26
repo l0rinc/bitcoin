@@ -28,7 +28,7 @@ static constexpr uint64_t MAX_TX_INDEX_CACHE{1_GiB};
 static constexpr uint64_t MAX_FILTER_INDEX_CACHE{1_GiB};
 //! Max memory allocated to tx spenderindex DB specific cache in bytes.
 static constexpr uint64_t MAX_TXOSPENDER_INDEX_CACHE{1_GiB};
-//! Larger default dbcache on 64-bit systems with enough RAM.
+//! Larger default dbcache on systems with enough RAM.
 static constexpr uint64_t HIGH_DEFAULT_DBCACHE{1_GiB};
 //! Minimum detected RAM required for HIGH_DEFAULT_DBCACHE.
 static constexpr uint64_t HIGH_DEFAULT_DBCACHE_MIN_TOTAL_RAM{4_GiB};
@@ -36,10 +36,8 @@ static constexpr uint64_t HIGH_DEFAULT_DBCACHE_MIN_TOTAL_RAM{4_GiB};
 namespace node {
 uint64_t GetDefaultDBCache()
 {
-    if constexpr (sizeof(void*) >= 8) {
-        if (TryGetTotalRam().value_or(0) >= HIGH_DEFAULT_DBCACHE_MIN_TOTAL_RAM) {
-            return HIGH_DEFAULT_DBCACHE;
-        }
+    if (TryGetTotalRam().value_or(0) >= HIGH_DEFAULT_DBCACHE_MIN_TOTAL_RAM) {
+        return HIGH_DEFAULT_DBCACHE;
     }
     return DEFAULT_KERNEL_CACHE;
 }
@@ -49,7 +47,7 @@ uint64_t CalculateDbCacheBytes(const ArgsManager& args)
     if (auto db_cache{args.GetIntArg("-dbcache")}) {
         if (*db_cache < 0) db_cache = 0;
         const uint64_t db_cache_bytes{SaturatingLeftShift<uint64_t>(*db_cache, 20)};
-        return std::max(MIN_DBCACHE_BYTES, std::min(db_cache_bytes, MAX_DBCACHE_BYTES));
+        return std::max(MIN_DBCACHE_BYTES, db_cache_bytes);
     }
     return GetDefaultDBCache();
 }
