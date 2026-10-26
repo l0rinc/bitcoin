@@ -108,7 +108,7 @@ Many variables respect a debug/release suffix as well, in order to use them for
 only the appropriate build config. For example:
 
     $(package)_cflags_release = -O3
-    $(package)_cflags_i686_debug = -g
+    $(package)_cflags_x86_64_debug = -g
     $(package)_config_opts_release = --disable-debug
 
 These will be used in addition to the options that do not specify
