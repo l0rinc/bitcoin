@@ -50,9 +50,9 @@ BOOST_AUTO_TEST_CASE(flatfile_open)
     {
         AutoFile file{seq.Open(FlatFilePos(0, pos1))};
         file << LIMITED_STRING(line1, 256);
-        BOOST_CHECK_EQUAL(file.tell(), static_cast<uint32_t>(pos2)); // TODO: Preserve the full file position
+        BOOST_CHECK_EQUAL(file.tell(), pos2);
         BOOST_REQUIRE_EQUAL(file.fclose(), 0);
-        BOOST_CHECK_EQUAL(fs::file_size(seq.FileName({0, 0})), static_cast<uint32_t>(pos2)); // TODO: Write at the full file position
+        BOOST_CHECK_EQUAL(fs::file_size(seq.FileName({0, 0})), pos2);
     }
 
     // Attempt to append to file opened in read-only mode.
@@ -122,7 +122,7 @@ BOOST_AUTO_TEST_CASE(flatfile_allocate)
     FlatFileSeq large_seq(data_dir, "b", 1);
     uint64_t offset{4_GiB + 1};
     BOOST_CHECK_EQUAL(large_seq.Allocate(FlatFilePos(0, offset), 1, out_of_space), 1U);
-    BOOST_CHECK_EQUAL(fs::file_size(large_seq.FileName(FlatFilePos(0, 0))), 2); // TODO: Allocate at the full file position
+    BOOST_CHECK_EQUAL(fs::file_size(large_seq.FileName(FlatFilePos(0, 0))), 4_GiB + 2);
 #endif
 }
 

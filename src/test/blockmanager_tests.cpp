@@ -33,7 +33,7 @@ BOOST_AUTO_TEST_CASE(block_file_info_undo_size)
     CBlockFileInfo info;
     info.nUndoSize = 4_GiB - 1;
     info.nUndoSize += 2;
-    BOOST_CHECK_EQUAL(info.nUndoSize, 1); // TODO: Preserve the undo size after crossing 4 GiB
+    BOOST_CHECK_EQUAL(info.nUndoSize, 4_GiB + 1);
 }
 
 BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
