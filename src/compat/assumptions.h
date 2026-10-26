@@ -32,7 +32,6 @@ static_assert(sizeof(unsigned) == 4, "32-bit unsigned assumed");
 
 // Assumption: We assume size_t to be 32-bit or 64-bit.
 // Example(s): size_t assumed to be at least 32-bit in ecdsa_signature_parse_der_lax(...).
-//             size_t assumed to be 32-bit or 64-bit in MallocUsage(...).
 static_assert(sizeof(size_t) == 4 || sizeof(size_t) == 8, "size_t assumed to be 32-bit or 64-bit");
 static_assert(sizeof(size_t) == sizeof(void*), "Sizes of size_t and void* assumed to be equal");
 

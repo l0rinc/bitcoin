@@ -21,10 +21,6 @@
 #include <unistd.h>
 #endif
 
-#ifdef HAVE_MALLOPT_ARENA_MAX
-#include <malloc.h>
-#endif
-
 #include <cstdint>
 #include <cstdlib>
 #include <optional>
@@ -55,17 +51,6 @@ void runCommand(const std::string& strCommand)
 
 void SetupEnvironment()
 {
-#ifdef HAVE_MALLOPT_ARENA_MAX
-    // glibc-specific: On 32-bit systems set the number of arenas to 1.
-    // By default, since glibc 2.10, the C library will create up to two heap
-    // arenas per core. This is known to cause excessive virtual address space
-    // usage in our usage. Work around it by setting the maximum number of
-    // arenas to 1.
-    if (sizeof(void*) == 4) {
-        mallopt(M_ARENA_MAX, 1);
-    }
-#endif
-
 #if defined(WIN32)
     assert(GetACP() == CP_UTF8);
     // Set the default input/output charset is utf-8
