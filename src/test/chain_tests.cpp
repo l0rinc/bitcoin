@@ -6,6 +6,7 @@
 
 #include <chain.h>
 #include <test/util/setup_common.h>
+#include <util/byte_units.h>
 
 #include <array>
 #include <memory>
@@ -82,6 +83,15 @@ BOOST_AUTO_TEST_CASE(basic_tests)
 
     BOOST_CHECK_EQUAL(chain_2.Genesis(), &genesis);
     BOOST_CHECK_EQUAL(chain_0.Genesis(), nullptr);
+
+    LOCK(::cs_main);
+    bi1.nStatus = BLOCK_HAVE_UNDO;
+    bi1.nUndoPos = 4_GiB - 1;
+    bi1.nUndoPos += 2;
+    BOOST_CHECK_EQUAL(bi1.GetUndoPos().nPos, 1); // TODO: Preserve the undo position after crossing 4 GiB
+    if constexpr (sizeof(void*) == 8) {
+        BOOST_CHECK_EQUAL(sizeof(CBlockIndex), 152U);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(findfork_tests)

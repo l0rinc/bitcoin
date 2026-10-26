@@ -7,6 +7,7 @@
 #include <flatfile.h>
 #include <streams.h>
 #include <test/util/setup_common.h>
+#include <util/byte_units.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -40,13 +41,18 @@ BOOST_AUTO_TEST_CASE(flatfile_open)
                       "lost if a trusted third party is still required to prevent double-spending.");
 
     uint64_t pos1{0};
+#ifndef WIN32 // Files are not sparse by default on Windows
+    pos1 = 5_GiB + 12345;
+#endif
     uint64_t pos2{pos1 + GetSerializeSize(line1)};
 
     // Write first line to file.
     {
         AutoFile file{seq.Open(FlatFilePos(0, pos1))};
         file << LIMITED_STRING(line1, 256);
+        BOOST_CHECK_EQUAL(file.tell(), static_cast<uint32_t>(pos2)); // TODO: Preserve the full file position
         BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+        BOOST_CHECK_EQUAL(fs::file_size(seq.FileName({0, 0})), static_cast<uint32_t>(pos2)); // TODO: Write at the full file position
     }
 
     // Attempt to append to file opened in read-only mode.
@@ -111,6 +117,13 @@ BOOST_AUTO_TEST_CASE(flatfile_allocate)
     BOOST_CHECK_EQUAL(seq.Allocate(FlatFilePos(0, 99), 2, out_of_space), 101U);
     BOOST_CHECK_EQUAL(fs::file_size(seq.FileName(FlatFilePos(0, 99))), 200U);
     BOOST_CHECK(!out_of_space);
+
+#ifdef __APPLE__ // Linux preallocation would allocate the sparse prefix
+    FlatFileSeq large_seq(data_dir, "b", 1);
+    uint64_t offset{4_GiB + 1};
+    BOOST_CHECK_EQUAL(large_seq.Allocate(FlatFilePos(0, offset), 1, out_of_space), 1U);
+    BOOST_CHECK_EQUAL(fs::file_size(large_seq.FileName(FlatFilePos(0, 0))), 2); // TODO: Allocate at the full file position
+#endif
 }
 
 BOOST_AUTO_TEST_CASE(flatfile_flush)

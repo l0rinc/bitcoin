@@ -10,6 +10,7 @@
 #include <node/kernel_notifications.h>
 #include <script/solver.h>
 #include <primitives/block.h>
+#include <util/byte_units.h>
 #include <util/chaintype.h>
 #include <validation.h>
 
@@ -26,6 +27,14 @@ using node::MAX_BLOCKFILE_SIZE;
 
 // use BasicTestingSetup here for the data directory configuration, setup, and cleanup
 BOOST_FIXTURE_TEST_SUITE(blockmanager_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(block_file_info_undo_size)
+{
+    CBlockFileInfo info;
+    info.nUndoSize = 4_GiB - 1;
+    info.nUndoSize += 2;
+    BOOST_CHECK_EQUAL(info.nUndoSize, 1); // TODO: Preserve the undo size after crossing 4 GiB
+}
 
 BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
 {
