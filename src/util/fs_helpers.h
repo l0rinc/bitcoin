@@ -44,7 +44,14 @@ bool FileCommit(FILE* file);
  */
 void DirectoryCommit(const fs::path& dirname);
 
-bool TruncateFile(FILE* file, unsigned int length);
+bool TruncateFile(FILE* file, uint64_t length);
+
+/**
+ * 64-bit replacements for std::fseek/std::ftell, whose `long` offsets are 32-bit on Windows.
+ * FileSeek returns 0 on success, FileTell returns -1 on failure.
+ */
+int FileSeek(FILE* file, int64_t offset, int origin);
+int64_t FileTell(FILE* file);
 
 /**
  * Try to raise the file descriptor limit to the requested number.
@@ -57,7 +64,7 @@ bool TruncateFile(FILE* file, unsigned int length);
  */
 int RaiseFileDescriptorLimit(int min_fd);
 
-void AllocateFileRange(FILE* file, unsigned int offset, unsigned int length);
+void AllocateFileRange(FILE* file, uint64_t offset, unsigned int length);
 
 /**
  * Rename src to dest.

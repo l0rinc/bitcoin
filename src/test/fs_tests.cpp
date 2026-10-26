@@ -24,7 +24,7 @@ BOOST_AUTO_TEST_CASE(truncate_file)
     uint64_t length{4_GiB + 1};
     fs::resize_file(path, length + 1);
     BOOST_CHECK(TruncateFile(file, length));
-    BOOST_CHECK_EQUAL(fs::file_size(path), 1); // TODO: Preserve the truncation length
+    BOOST_CHECK_EQUAL(fs::file_size(path), 4_GiB + 1);
     BOOST_CHECK_EQUAL(fclose(file), 0);
 }
 #endif
@@ -38,7 +38,7 @@ BOOST_AUTO_TEST_CASE(allocate_file_range)
     uint64_t offset{4_GiB + 1};
     fs::resize_file(path, offset);
     AllocateFileRange(file, offset, 1);
-    BOOST_CHECK_EQUAL(fs::file_size(path), 2); // TODO: Preserve the allocation offset
+    BOOST_CHECK_EQUAL(fs::file_size(path), 4_GiB + 2);
     BOOST_CHECK_EQUAL(fclose(file), 0);
 }
 #endif

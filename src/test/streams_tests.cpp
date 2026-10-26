@@ -833,7 +833,7 @@ BOOST_AUTO_TEST_CASE(size_preserves_position)
 
     f.seek(5_GiB, SEEK_END);
     BOOST_CHECK_EQUAL(f.size(), 10);
-    BOOST_CHECK_EQUAL(f.tell(), (sizeof(long) > 4 ? 5_GiB : 1_GiB) + 10); // TODO: Preserve the full seek offset
+    BOOST_CHECK_EQUAL(f.tell(), 5_GiB + 10);
 
     BOOST_REQUIRE_EQUAL(f.fclose(), 0);
     fs::remove(path);

@@ -453,7 +453,7 @@ public:
     /** Implementation detail, only used internally. */
     std::size_t detail_fread(std::span<std::byte> dst);
 
-    /** Wrapper around fseek(). Will throw if seeking is not possible. */
+    /** Wrapper around FileSeek(). Will throw if seeking is not possible. */
     void seek(int64_t offset, int origin);
 
     /** Find position within the file. Will throw if unknown. */
