@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 //
 #include <test/util/setup_common.h>
+#include <util/byte_units.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
 
@@ -13,6 +14,34 @@
 #include <string>
 
 BOOST_FIXTURE_TEST_SUITE(fs_tests, BasicTestingSetup)
+
+#ifndef WIN32 // Files are not sparse by default on Windows
+BOOST_AUTO_TEST_CASE(truncate_file)
+{
+    const fs::path path{m_args.GetDataDirBase() / "truncate.dat"};
+    FILE* file{fsbridge::fopen(path, "w+b")};
+    BOOST_REQUIRE(file);
+    uint64_t length{4_GiB + 1};
+    fs::resize_file(path, length + 1);
+    BOOST_CHECK(TruncateFile(file, length));
+    BOOST_CHECK_EQUAL(fs::file_size(path), 1); // TODO: Preserve the truncation length
+    BOOST_CHECK_EQUAL(fclose(file), 0);
+}
+#endif
+
+#ifdef __APPLE__ // Linux preallocation would allocate the sparse prefix
+BOOST_AUTO_TEST_CASE(allocate_file_range)
+{
+    const fs::path path{m_args.GetDataDirBase() / "allocate.dat"};
+    FILE* file{fsbridge::fopen(path, "w+b")};
+    BOOST_REQUIRE(file);
+    uint64_t offset{4_GiB + 1};
+    fs::resize_file(path, offset);
+    AllocateFileRange(file, offset, 1);
+    BOOST_CHECK_EQUAL(fs::file_size(path), 2); // TODO: Preserve the allocation offset
+    BOOST_CHECK_EQUAL(fclose(file), 0);
+}
+#endif
 
 BOOST_AUTO_TEST_CASE(fsbridge_pathtostring)
 {

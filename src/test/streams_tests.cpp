@@ -8,6 +8,7 @@
 #include <test/util/common.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
+#include <util/byte_units.h>
 #include <util/fs.h>
 #include <util/obfuscation.h>
 #include <util/strencodings.h>
@@ -829,6 +830,10 @@ BOOST_AUTO_TEST_CASE(size_preserves_position)
     (void)f.size();
     uint8_t end{};
     BOOST_CHECK_EXCEPTION(f >> end, std::ios_base::failure, HasReason{"AutoFile::read: end of file"});
+
+    f.seek(5_GiB, SEEK_END);
+    BOOST_CHECK_EQUAL(f.size(), 10);
+    BOOST_CHECK_EQUAL(f.tell(), (sizeof(long) > 4 ? 5_GiB : 1_GiB) + 10); // TODO: Preserve the full seek offset
 
     BOOST_REQUIRE_EQUAL(f.fclose(), 0);
     fs::remove(path);
