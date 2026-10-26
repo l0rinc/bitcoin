@@ -37,7 +37,6 @@ import lief
 MAX_VERSIONS = {
 'GLIBC': {
     lief.ELF.ARCH.X86_64: (2,31),
-    lief.ELF.ARCH.ARM:    (2,31),
     lief.ELF.ARCH.AARCH64:(2,31),
     lief.ELF.ARCH.PPC64:  (2,31),
     lief.ELF.ARCH.RISCV:  (2,31),
@@ -55,9 +54,6 @@ ELF_INTERPRETER_NAMES: dict[lief.ELF.ARCH, dict[lief.Header.ENDIANNESS, str]] = 
     lief.ELF.ARCH.X86_64:  {
         lief.Header.ENDIANNESS.LITTLE: "/lib64/ld-linux-x86-64.so.2",
     },
-    lief.ELF.ARCH.ARM:     {
-        lief.Header.ENDIANNESS.LITTLE: "/lib/ld-linux-armhf.so.3",
-    },
     lief.ELF.ARCH.AARCH64: {
         lief.Header.ENDIANNESS.LITTLE: "/lib/ld-linux-aarch64.so.1",
     },
@@ -72,9 +68,6 @@ ELF_INTERPRETER_NAMES: dict[lief.ELF.ARCH, dict[lief.Header.ENDIANNESS, str]] = 
 
 ELF_ABIS: dict[lief.ELF.ARCH, dict[lief.Header.ENDIANNESS, list[int]]] = {
     lief.ELF.ARCH.X86_64: {
-        lief.Header.ENDIANNESS.LITTLE: [3,17,0],
-    },
-    lief.ELF.ARCH.ARM: {
         lief.Header.ENDIANNESS.LITTLE: [3,17,0],
     },
     lief.ELF.ARCH.AARCH64: {
@@ -96,9 +89,7 @@ ELF_ALLOWED_LIBRARIES = {
 'libpthread.so.0', # threading
 'libm.so.6', # math library
 'ld-linux-x86-64.so.2', # 64-bit dynamic linker
-'ld-linux.so.2', # 32-bit dynamic linker
 'ld-linux-aarch64.so.1', # 64-bit ARM dynamic linker
-'ld-linux-armhf.so.3', # 32-bit ARM dynamic linker
 'ld64.so.1', # POWER64 ABIv1 dynamic linker
 'ld64.so.2', # POWER64 ABIv2 dynamic linker
 'ld-linux-riscv64-lp64d.so.1', # 64-bit RISC-V dynamic linker
