@@ -77,7 +77,6 @@ check_cross_paths() {
 glibc_dynamic_linker() {
     case "$1" in
         x86_64-linux-gnu)      echo /lib64/ld-linux-x86-64.so.2 ;;
-        arm-linux-gnueabihf)   echo /lib/ld-linux-armhf.so.3 ;;
         aarch64-linux-gnu)     echo /lib/ld-linux-aarch64.so.1 ;;
         riscv64-linux-gnu)     echo /lib/ld-linux-riscv64-lp64d.so.1 ;;
         powerpc64-linux-gnu)   echo /lib64/ld64.so.1 ;;

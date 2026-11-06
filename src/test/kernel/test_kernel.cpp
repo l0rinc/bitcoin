@@ -888,7 +888,6 @@ BOOST_AUTO_TEST_CASE(btck_chainman_tests)
     ChainstateManagerOptions chainman_opts{context, PathToString(test_directory.m_directory), PathToString(test_directory.m_directory / "blocks")};
     chainman_opts.SetWorkerThreads(4);
     BOOST_CHECK(!chainman_opts.SetDatabaseCacheBytes(4_MiB - 1));
-    if constexpr (sizeof(void*) == 4) BOOST_CHECK(!chainman_opts.SetDatabaseCacheBytes(2_GiB));
     BOOST_CHECK(chainman_opts.SetDatabaseCacheBytes(4_MiB));
     BOOST_CHECK(!chainman_opts.SetWipeDbs(/*wipe_block_tree=*/true, /*wipe_chainstate=*/false));
     BOOST_CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/true, /*wipe_chainstate=*/true));

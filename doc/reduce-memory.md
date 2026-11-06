@@ -44,8 +44,7 @@ The size of some in-memory caches can be reduced. As caches trade off memory usa
 ## Thread configuration
 
 For each thread a thread stack needs to be allocated. By default on Linux,
-threads take up 8MiB for the thread stack on a 64-bit system, and 4MiB in a
-32-bit system.
+threads take up 8MiB for the thread stack.
 
 - `-par=<n>` - the number of script verification threads, defaults to the number of cores in the system minus one.
 - `-rpcthreads=<n>` - the number of threads used for processing RPC requests, defaults to `16`.

@@ -9,7 +9,6 @@
 #include <prevector.h>
 #include <support/allocators/pool.h>
 
-#include <cassert>
 #include <cstdlib>
 #include <list>
 #include <map>
@@ -52,15 +51,8 @@ template<typename X> static inline size_t DynamicUsage(const X * const &v) { ret
 static inline size_t MallocUsage(size_t alloc)
 {
     // Measured on libc6 2.19 on Linux.
-    if (alloc == 0) {
-        return 0;
-    } else if (sizeof(void*) == 8) {
-        return ((alloc + 31) >> 4) << 4;
-    } else if (sizeof(void*) == 4) {
-        return ((alloc + 15) >> 3) << 3;
-    } else {
-        assert(0);
-    }
+    if (alloc == 0) return 0;
+    return ((alloc + 31) >> 4) << 4;
 }
 
 // STL data structures

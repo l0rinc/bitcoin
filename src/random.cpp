@@ -61,12 +61,8 @@ inline int64_t GetPerformanceCounter() noexcept
 {
     // Read the hardware time stamp counter when available.
     // See https://en.wikipedia.org/wiki/Time_Stamp_Counter for more information.
-#if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
+#if defined(_MSC_VER) && defined(_M_X64)
     return __rdtsc();
-#elif !defined(_MSC_VER) && defined(__i386__)
-    uint64_t r = 0;
-    __asm__ volatile ("rdtsc" : "=A"(r)); // Constrain the r variable to the eax:edx pair.
-    return r;
 #elif !defined(_MSC_VER) && (defined(__x86_64__) || defined(__amd64__))
     uint64_t r1 = 0, r2 = 0;
     __asm__ volatile ("rdtsc" : "=a"(r1), "=d"(r2)); // Constrain r1 to rax and r2 to rdx.
@@ -77,7 +73,7 @@ inline int64_t GetPerformanceCounter() noexcept
 #endif
 }
 
-#ifdef HAVE_GETCPUID
+#if defined(__x86_64__) || defined(__amd64__)
 bool g_rdrand_supported = false;
 bool g_rdseed_supported = false;
 constexpr uint32_t CPUID_F1_ECX_RDRAND = 0x40000000;
@@ -121,32 +117,16 @@ void ReportHardwareRand()
 uint64_t GetRdRand() noexcept
 {
     // RdRand may very rarely fail. Invoke it up to 10 times in a loop to reduce this risk.
-#ifdef __i386__
     uint8_t ok = 0;
-    // Initialize to 0 to silence a compiler warning that r1 or r2 may be used
+    // Initialize to 0 to silence a compiler warning that r1 may be used
     // uninitialized. Even if rdrand fails (!ok) it will set the output to 0,
     // but there is no way that the compiler could know that.
-    uint32_t r1 = 0, r2 = 0;
-    for (int i = 0; i < 10; ++i) {
-        __asm__ volatile (".byte 0x0f, 0xc7, 0xf0; setc %1" : "=a"(r1), "=q"(ok) :: "cc"); // rdrand %eax
-        if (ok) break;
-    }
-    for (int i = 0; i < 10; ++i) {
-        __asm__ volatile (".byte 0x0f, 0xc7, 0xf0; setc %1" : "=a"(r2), "=q"(ok) :: "cc"); // rdrand %eax
-        if (ok) break;
-    }
-    return (((uint64_t)r2) << 32) | r1;
-#elif defined(__x86_64__) || defined(__amd64__)
-    uint8_t ok = 0;
-    uint64_t r1 = 0; // See above why we initialize to 0.
+    uint64_t r1 = 0;
     for (int i = 0; i < 10; ++i) {
         __asm__ volatile (".byte 0x48, 0x0f, 0xc7, 0xf0; setc %1" : "=a"(r1), "=q"(ok) :: "cc"); // rdrand %rax
         if (ok) break;
     }
     return r1;
-#else
-#error "RdRand is only supported on x86 and x86_64"
-#endif
 }
 
 /** Read 64 bits of entropy using rdseed.
@@ -157,21 +137,6 @@ uint64_t GetRdSeed() noexcept
 {
     // RdSeed may fail when the HW RNG is overloaded. Loop indefinitely until enough entropy is gathered,
     // but pause after every failure.
-#ifdef __i386__
-    uint8_t ok = 0;
-    uint32_t r1, r2;
-    do {
-        __asm__ volatile (".byte 0x0f, 0xc7, 0xf8; setc %1" : "=a"(r1), "=q"(ok) :: "cc"); // rdseed %eax
-        if (ok) break;
-        __asm__ volatile ("pause");
-    } while(true);
-    do {
-        __asm__ volatile (".byte 0x0f, 0xc7, 0xf8; setc %1" : "=a"(r2), "=q"(ok) :: "cc"); // rdseed %eax
-        if (ok) break;
-        __asm__ volatile ("pause");
-    } while(true);
-    return (((uint64_t)r2) << 32) | r1;
-#elif defined(__x86_64__) || defined(__amd64__)
     uint8_t ok;
     uint64_t r1;
     do {
@@ -180,9 +145,6 @@ uint64_t GetRdSeed() noexcept
         __asm__ volatile ("pause");
     } while(true);
     return r1;
-#else
-#error "RdSeed is only supported on x86 and x86_64"
-#endif
 }
 
 #else
@@ -197,7 +159,7 @@ void ReportHardwareRand() {}
 
 /** Add 64 bits of entropy gathered from hardware to hasher. Do nothing if not supported. */
 void SeedHardwareFast(CSHA512& hasher) noexcept {
-#if defined(__x86_64__) || defined(__amd64__) || defined(__i386__)
+#if defined(__x86_64__) || defined(__amd64__)
     if (g_rdrand_supported) {
         uint64_t out = GetRdRand();
         hasher.Write((const unsigned char*)&out, sizeof(out));
@@ -208,7 +170,7 @@ void SeedHardwareFast(CSHA512& hasher) noexcept {
 
 /** Add 256 bits of entropy gathered from hardware to hasher. Do nothing if not supported. */
 void SeedHardwareSlow(CSHA512& hasher) noexcept {
-#if defined(__x86_64__) || defined(__amd64__) || defined(__i386__)
+#if defined(__x86_64__) || defined(__amd64__)
     // When we want 256 bits of entropy, prefer RdSeed over RdRand, as it's
     // guaranteed to produce independent randomness on every call.
     if (g_rdseed_supported) {
