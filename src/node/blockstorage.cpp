@@ -267,6 +267,28 @@ void BlockManager::AddUnlinkedBlock(CBlockIndex* block)
     m_blocks_unlinked.emplace(block->pprev, block);
 }
 
+void BlockManager::PruneBlock(CBlockIndex& block)
+{
+    AssertLockHeld(cs_main);
+    block.nStatus &= ~BLOCK_HAVE_MASK;
+    block.nFile = 0;
+    block.nDataPos = 0;
+    block.nUndoPos = 0;
+    m_dirty_blockindex.insert(&block);
+
+    // Prune from m_blocks_unlinked -- any block we prune would have
+    // to be downloaded again in order to consider its chain, at which
+    // point it would be considered as a candidate for
+    // m_blocks_unlinked or setBlockIndexCandidates.
+    auto range{m_blocks_unlinked.equal_range(block.pprev)};
+    for (auto it{range.first}; it != range.second; ++it) {
+        if (it->second == &block) {
+            m_blocks_unlinked.erase(it);
+            return; // AddUnlinkedBlock doesn't insert duplicates
+        }
+    }
+}
+
 void BlockManager::PruneOneBlockFile(const int fileNumber)
 {
     AssertLockHeld(cs_main);
@@ -274,25 +296,7 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
     for (auto& entry : m_block_index) {
         CBlockIndex* pindex = &entry.second;
         if (pindex->nFile == fileNumber) {
-            pindex->nStatus &= ~BLOCK_HAVE_DATA;
-            pindex->nStatus &= ~BLOCK_HAVE_UNDO;
-            pindex->nFile = 0;
-            pindex->nDataPos = 0;
-            pindex->nUndoPos = 0;
-            m_dirty_blockindex.insert(pindex);
-
-            // Prune from m_blocks_unlinked -- any block we prune would have
-            // to be downloaded again in order to consider its chain, at which
-            // point it would be considered as a candidate for
-            // m_blocks_unlinked or setBlockIndexCandidates.
-            auto range = m_blocks_unlinked.equal_range(pindex->pprev);
-            while (range.first != range.second) {
-                std::multimap<CBlockIndex*, CBlockIndex*>::iterator _it = range.first;
-                range.first++;
-                if (_it->second == pindex) {
-                    m_blocks_unlinked.erase(_it);
-                }
-            }
+            PruneBlock(*pindex);
         }
     }
 
