@@ -19,6 +19,7 @@
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <tinyformat.h>
+#include <txdb.h>
 #include <uint256.h>
 #include <util/check.h>
 #include <validation.h>
@@ -96,6 +97,31 @@ BOOST_FIXTURE_TEST_CASE(connect_tip_does_not_cache_inputs_on_failed_connect, Tes
     LOCK(cs_main);
     BOOST_CHECK_EQUAL(tip, chainstate.m_chain.Tip()->GetBlockHash()); // block rejected
     BOOST_CHECK(!chainstate.CoinsTip().HaveCoinInCache(outpoint));    // input not cached
+}
+
+BOOST_FIXTURE_TEST_CASE(connect_tip_persists_blocks_without_chainstate, TestChain100Setup)
+{
+    auto& chainman{*Assert(m_node.chainman)};
+    auto& chainstate{chainman.ActiveChainstate()};
+    auto& blockman{chainman.m_blockman};
+    uint256 persisted_tip;
+    {
+        LOCK(cs_main);
+        chainstate.ForceFlushStateToDisk();
+        persisted_tip = chainman.ActiveTip()->GetBlockHash();
+        BOOST_REQUIRE(chainstate.CoinsDB().GetBestBlock() == persisted_tip);
+    }
+
+    const auto block{CreateAndProcessBlock({}, CScript{} << OP_TRUE)};
+
+    LOCK(cs_main);
+    BOOST_CHECK(chainstate.CoinsTip().GetBestBlock() == block.GetHash());
+    BOOST_CHECK(chainstate.CoinsDB().GetBestBlock() == persisted_tip);
+    const auto* tip{chainman.ActiveTip()};
+    kernel::CBlockFileInfo file_info;
+    BOOST_REQUIRE(blockman.m_block_tree_db->ReadBlockFileInfo(tip->nFile, file_info));
+    BOOST_CHECK_LT(file_info.nSize, blockman.GetBlockFileInfo(tip->nFile)->nSize); // TODO: Persist block-file metadata on connection.
+    BOOST_CHECK_LT(file_info.nUndoSize, blockman.GetBlockFileInfo(tip->nFile)->nUndoSize); // TODO: Persist undo-file metadata on connection.
 }
 
 //! Test UpdateTip behavior for both active and background chainstates.
