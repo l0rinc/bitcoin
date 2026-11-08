@@ -120,8 +120,8 @@ BOOST_FIXTURE_TEST_CASE(connect_tip_persists_blocks_without_chainstate, TestChai
     const auto* tip{chainman.ActiveTip()};
     kernel::CBlockFileInfo file_info;
     BOOST_REQUIRE(blockman.m_block_tree_db->ReadBlockFileInfo(tip->nFile, file_info));
-    BOOST_CHECK_LT(file_info.nSize, blockman.GetBlockFileInfo(tip->nFile)->nSize); // TODO: Persist block-file metadata on connection.
-    BOOST_CHECK_LT(file_info.nUndoSize, blockman.GetBlockFileInfo(tip->nFile)->nUndoSize); // TODO: Persist undo-file metadata on connection.
+    BOOST_CHECK_EQUAL(file_info.nSize, blockman.GetBlockFileInfo(tip->nFile)->nSize);
+    BOOST_CHECK_EQUAL(file_info.nUndoSize, blockman.GetBlockFileInfo(tip->nFile)->nUndoSize);
 }
 
 //! Test UpdateTip behavior for both active and background chainstates.

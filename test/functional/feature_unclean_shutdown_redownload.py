@@ -44,11 +44,11 @@ class UncleanShutdownRedownloadTest(BitcoinTestFramework):
     def run_case(self, node, blocks, flush):
         self.sync_first_run_and_kill(node, blocks, flush)
         self.start_node(node.index)
-        assert_equal(node.getblockcount(), FIRST_RUN_BLOCKS if flush else 0)  # TODO: Recover connected blocks without a chainstate flush.
+        assert_equal(node.getblockcount(), FIRST_RUN_BLOCKS)
         peer = node.add_p2p_connection(P2PDataStore())
         peer.send_blocks_and_test(blocks, node)
         node.disconnect_p2ps()
-        assert_equal(set(peer.getdata_requests), {block.hash_int for block in blocks[FIRST_RUN_BLOCKS if flush else 0:]})  # TODO: Avoid re-downloading connected blocks.
+        assert_equal(set(peer.getdata_requests), {block.hash_int for block in blocks[FIRST_RUN_BLOCKS:]})
 
     def run_test(self):
         hashes = []
