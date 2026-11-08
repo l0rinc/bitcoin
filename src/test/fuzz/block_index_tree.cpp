@@ -161,19 +161,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 CBlockIndex* prune_block{chain[prune_height]};
                 if (prune_block != chain.Tip() && (prune_block->nStatus & BLOCK_HAVE_DATA)) {
                     blockman.m_have_pruned = true;
-                    prune_block->nStatus &= ~BLOCK_HAVE_DATA;
-                    prune_block->nStatus &= ~BLOCK_HAVE_UNDO;
-                    prune_block->nFile = 0;
-                    prune_block->nDataPos = 0;
-                    prune_block->nUndoPos = 0;
-                    auto range = blockman.m_blocks_unlinked.equal_range(prune_block->pprev);
-                    while (range.first != range.second) {
-                        std::multimap<CBlockIndex*, CBlockIndex*>::iterator _it = range.first;
-                        range.first++;
-                        if (_it->second == prune_block) {
-                            blockman.m_blocks_unlinked.erase(_it);
-                        }
-                    }
+                    blockman.PruneBlock(*prune_block);
                     pruned_blocks.push_back(prune_block);
                 }
             },
