@@ -81,7 +81,9 @@ class ReindexTest(BitcoinTestFramework):
 
     def continue_reindex_after_shutdown(self):
         node = self.nodes[0]
-        self.generate(node, 1500)
+        # Bound each mining RPC while blocks and their index are synced individually.
+        for _ in range(6):
+            self.generate(node, 250)
 
         # Restart node with reindex and stop reindex as soon as it starts reindexing
         self.log.info("Restarting node while reindexing..")
