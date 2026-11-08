@@ -2853,8 +2853,8 @@ bool Chainstate::FlushStateToDisk(
                 LOG_TIME_MILLIS_WITH_CATEGORY("write block and undo data to disk", BCLog::BENCH);
 
                 // First make sure all block and undo data is flushed to disk.
-                if (!m_blockman.FlushChainstateBlockFile(m_chain.Height())) {
-                    // FlushChainstateBlockFile() already reported the specific error through flushError()
+                if (!m_blockman.FlushBlockFiles()) {
+                    // FlushBlockFiles() already reported the specific error through flushError()
                     return state.Error("Failed to flush block or undo file");
                 }
             }

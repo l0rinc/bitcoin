@@ -222,7 +222,8 @@ private:
      * separator fields (STORAGE_HEADER_BYTES).
      */
     [[nodiscard]] FlatFilePos FindNextBlockPos(uint64_t nAddSize, unsigned int nHeight, uint64_t nTime) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
-    [[nodiscard]] bool FlushChainstateBlockFile(int tip_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Flush dirty block and undo files before persisting their index entries.
+    [[nodiscard]] bool FlushBlockFiles() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     [[nodiscard]] bool FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, uint64_t nAddSize) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     AutoFile OpenUndoFile(const FlatFilePos& pos, bool fReadOnly = false) const;
@@ -312,6 +313,9 @@ protected:
 
     /** Dirty block file entries. */
     std::set<int> m_dirty_fileinfo;
+
+    /** Block files with new data since their last successful flush. */
+    std::set<int> m_dirty_blockfiles;
 
 public:
     using Options = kernel::BlockManagerOpts;

@@ -35,6 +35,7 @@ void TestBlockManager::CleanupForFuzzing()
 {
     m_dirty_blockindex.clear();
     m_dirty_fileinfo.clear();
+    m_dirty_blockfiles.clear();
     m_blockfile_info.resize(1);
 }
 
