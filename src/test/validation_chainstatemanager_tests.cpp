@@ -9,12 +9,14 @@
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
+#include <primitives/block.h>
 #include <random.h>
 #include <rpc/blockchain.h>
 #include <sync.h>
 #include <test/util/chainstate.h>
 #include <test/util/common.h>
 #include <test/util/logging.h>
+#include <test/util/mining.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
@@ -27,6 +29,7 @@
 
 #include <tinyformat.h>
 
+#include <algorithm>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -629,6 +632,61 @@ BOOST_FIXTURE_TEST_CASE(loadblockindex_invalid_descendants, TestChain100Setup)
     BOOST_CHECK(grand_parent->nStatus & BLOCK_FAILED_VALID);
     BOOST_CHECK(parent->nStatus & BLOCK_FAILED_VALID);
     BOOST_CHECK(child->nStatus & BLOCK_FAILED_VALID);
+}
+
+BOOST_FIXTURE_TEST_CASE(link_pruned_child, RegTestingSetup)
+{
+    auto& chainman{*m_node.chainman};
+    auto& blockman{chainman.m_blockman};
+    LOCK(cs_main);
+    const auto blocks{CreateBlockChain(/*total_height=*/2, chainman.GetParams())};
+    auto* parent{blockman.AddToBlockIndex(*blocks[0], chainman.m_best_header)};
+    auto* child{blockman.AddToBlockIndex(*blocks[1], chainman.m_best_header)};
+    chainman.ReceivedBlockTransactions(*blocks[1], child, /*pos=*/{});
+    blockman.m_have_pruned = true;
+    blockman.PruneBlock(*child);
+    BOOST_CHECK(!blockman.m_blocks_unlinked.contains(parent)); // TODO: Keep pruned children while their chain transaction count is unknown
+    chainman.CheckBlockIndex();
+
+    chainman.ReceivedBlockTransactions(*blocks[0], parent, /*pos=*/{});
+    BOOST_CHECK(!child->HaveNumChainTxs()); // TODO: Receiving the parent must link its pruned descendants
+    BOOST_CHECK(!chainman.ActiveChainstate().setBlockIndexCandidates.contains(child)); // Linking a pruned child must not admit it as a candidate
+}
+
+BOOST_FIXTURE_TEST_CASE(reload_pruned_child, RegTestingSetup)
+{
+    auto& chainman{*m_node.chainman};
+    auto& blockman{chainman.m_blockman};
+    LOCK(cs_main);
+    const auto blocks{CreateBlockChain(/*total_height=*/2, chainman.GetParams())};
+    auto* parent{blockman.AddToBlockIndex(*blocks[0], chainman.m_best_header)};
+    auto* child{blockman.AddToBlockIndex(*blocks[1], chainman.m_best_header)};
+    chainman.ReceivedBlockTransactions(*blocks[1], child, /*pos=*/{});
+    blockman.PruneBlock(*child);
+
+    blockman.m_blocks_unlinked.clear(); // Check reconstruction from the block index
+    BOOST_REQUIRE(chainman.LoadBlockIndex());
+    BOOST_CHECK(!blockman.m_blocks_unlinked.contains(parent)); // TODO: Reload pruned children still awaiting ancestor transaction counts
+}
+
+BOOST_FIXTURE_TEST_CASE(redownload_pruned_candidate, RegTestingSetup)
+{
+    auto& chainman{*m_node.chainman};
+    auto& blockman{chainman.m_blockman};
+    LOCK(cs_main);
+    auto& candidates{chainman.ActiveChainstate().setBlockIndexCandidates};
+    const auto blocks{CreateBlockChain(/*total_height=*/1, chainman.GetParams())};
+    CBlock sibling{*blocks[0]};
+    ++sibling.nNonce;
+    auto* first{blockman.AddToBlockIndex(*blocks[0], chainman.m_best_header)};
+    auto* second{blockman.AddToBlockIndex(sibling, chainman.m_best_header)};
+    chainman.ReceivedBlockTransactions(*blocks[0], first, /*pos=*/{});
+    chainman.ReceivedBlockTransactions(sibling, second, /*pos=*/{});
+    blockman.PruneBlock(*first);
+    BOOST_REQUIRE(candidates.contains(first));
+
+    chainman.ReceivedBlockTransactions(*blocks[0], first, /*pos=*/{});
+    BOOST_CHECK(!std::ranges::is_sorted(candidates, candidates.value_comp())); // TODO: Redownloading must preserve candidate ordering
 }
 
 //! Verify that ReconsiderBlock clears failure flags for the target block, its ancestors, and descendants,
