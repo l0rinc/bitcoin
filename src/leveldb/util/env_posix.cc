@@ -541,6 +541,9 @@ class PosixEnv : public Env {
       void* mmap_base =
           ::mmap(/*addr=*/nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
       if (mmap_base != MAP_FAILED) {
+#if defined(MADV_RANDOM)
+        (void)::madvise(mmap_base, file_size, MADV_RANDOM);
+#endif
         *result = new PosixMmapReadableFile(filename,
                                             reinterpret_cast<char*>(mmap_base),
                                             file_size, &mmap_limiter_);
