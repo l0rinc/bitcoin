@@ -387,7 +387,7 @@ public:
 
 /** Functions for validating blocks and updating the block tree */
 
-/** Context-independent validity checks */
+/** Context-independent validity checks. Callers must synchronize access to the block's mutable validation caches. */
 bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true, bool fCheckMerkleRoot = true);
 
 /**

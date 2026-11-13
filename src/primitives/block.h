@@ -80,6 +80,8 @@ public:
     mutable bool fChecked;                            // CheckBlock()
     mutable bool m_checked_witness_commitment{false}; // CheckWitnessCommitment()
     mutable bool m_checked_merkle_root{false};        // CheckMerkleRoot()
+    //! Legacy counts from a complete CheckBlock(), invalidated with fChecked
+    mutable std::vector<uint32_t> m_checked_legacy_sigops;
 
     CBlock()
     {
@@ -94,6 +96,7 @@ public:
 
     SERIALIZE_METHODS(CBlock, obj)
     {
+        SER_READ(obj, obj.m_checked_legacy_sigops.clear());
         READWRITE(AsBase<CBlockHeader>(obj), obj.vtx);
     }
 
@@ -104,6 +107,7 @@ public:
         fChecked = false;
         m_checked_witness_commitment = false;
         m_checked_merkle_root = false;
+        m_checked_legacy_sigops.clear();
     }
 
     std::string ToString() const;

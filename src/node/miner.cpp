@@ -362,6 +362,7 @@ void AddMerkleRootAndCoinbase(CBlock& block, CTransactionRef coinbase, uint32_t 
     block.m_checked_witness_commitment = false;
     block.m_checked_merkle_root = false;
     block.fChecked = false;
+    block.m_checked_legacy_sigops.clear();
 }
 
 } // namespace node

@@ -2,11 +2,15 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
 #include <chain.h>
 #include <chainparams.h>
+#include <coins.h>
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <core_memusage.h>
+#include <memusage.h>
 #include <node/block_template_manager.h>
 #include <node/blockstorage.h>
 #include <node/miner.h>
@@ -15,6 +19,7 @@
 #include <primitives/transaction.h>
 #include <random.h>
 #include <script/script.h>
+#include <streams.h>
 #include <sync.h>
 #include <test/util/common.h>
 #include <test/util/script.h>
@@ -22,6 +27,7 @@
 #include <txmempool.h>
 #include <uint256.h>
 #include <util/check.h>
+#include <util/vector.h>
 #include <validation.h>
 #include <validationinterface.h>
 
@@ -29,6 +35,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
 #include <span>
 #include <thread>
@@ -167,6 +174,144 @@ void MinerTestingSetup::BuildChain(const uint256& root, int height, const unsign
         blocks.push_back(GoodBlock(root));
         BuildChain(blocks.back()->GetHash(), height - 1, invalid_rate, branch_rate, max_size, blocks);
     }
+}
+
+// Full validation must enforce the sigop limit, including mixed opcode costs.
+BOOST_AUTO_TEST_CASE(sigop_limit_at_connection)
+{
+    constexpr uint32_t max_sigops{MAX_BLOCK_SIGOPS_COST / WITNESS_SCALE_FACTOR};
+    for (auto& [opcode, cost] : std::initializer_list<std::pair<opcodetype, uint32_t>>{
+             {OP_CHECKSIG, 1},
+             {OP_CHECKSIGVERIFY, 1},
+             {OP_CHECKMULTISIG, MAX_PUBKEYS_PER_MULTISIG},
+             {OP_CHECKMULTISIGVERIFY, MAX_PUBKEYS_PER_MULTISIG},
+         }) {
+        for (uint32_t sigops : {max_sigops - 1, max_sigops, max_sigops + 1}) {
+            BOOST_TEST_CONTEXT("opcode=" << opcode << ", sigops=" << sigops) {
+                auto block{Block(Params().GenesisBlock().GetHash())};
+                CMutableTransaction coinbase{*block->vtx[0]};
+                CScript script;
+                script.insert(script.end(), sigops / cost, opcode);
+                script.insert(script.end(), sigops % cost, OP_CHECKSIG);
+                coinbase.vout.emplace_back(0, script);
+                block->vtx[0] = MakeTransactionRef(coinbase);
+                FinalizeBlock(block);
+
+                LOCK(cs_main);
+                auto state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+                BOOST_CHECK_EQUAL(state.ToString(), sigops > max_sigops ? "bad-blk-sigops, out-of-bounds SigOpCount" : "Valid");
+                BOOST_CHECK_EQUAL(block->m_checked_legacy_sigops.empty(), sigops > max_sigops);
+                if (sigops <= max_sigops) {
+                    BOOST_REQUIRE_EQUAL(block->m_checked_legacy_sigops.size(), block->vtx.size());
+                    BOOST_CHECK_EQUAL(block->m_checked_legacy_sigops[0], sigops);
+                }
+                if (sigops <= max_sigops) {
+                    block->m_checked_legacy_sigops[0] = max_sigops + 1;
+                    auto cached_state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+                    BOOST_CHECK_EQUAL(cached_state.ToString(), "bad-blk-sigops, too many sigops");
+                }
+                block->m_checked_legacy_sigops.clear();
+                auto uncached_state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+                BOOST_CHECK_EQUAL(uncached_state.ToString(), state.ToString());
+            }
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(contextual_sigop_limit_at_connection)
+{
+    for (bool witness : {false, true}) {
+        const uint32_t scale{witness ? 1U : WITNESS_SCALE_FACTOR};
+        constexpr uint32_t max_legacy_sigops{MAX_BLOCK_SIGOPS_COST / WITNESS_SCALE_FACTOR};
+        const uint32_t legacy_sigops{max_legacy_sigops - scale};
+        for (uint32_t contextual_sigops : {3, 4, 5}) {
+            BOOST_TEST_CONTEXT("witness=" << witness << ", contextual_sigops=" << contextual_sigops) {
+                // Count the sigops without executing them, so the script succeeds below the limit
+                CScript script;
+                script << OP_FALSE << OP_IF;
+                script.insert(script.end(), contextual_sigops, OP_CHECKSIG);
+                script << OP_ENDIF << OP_TRUE;
+                const COutPoint prevout{Txid::FromUint256(m_rng.rand256()), 0};
+                const auto script_pubkey{witness ? GetScriptForDestination(WitnessV0ScriptHash(script)) : GetScriptForDestination(ScriptHash(script))};
+                WITH_LOCK(cs_main, m_node.chainman->ActiveChainstate().CoinsTip().AddCoin(prevout, Coin{CTxOut{1, script_pubkey}, 0, false}, /*possible_overwrite=*/false));
+
+                CMutableTransaction tx;
+                tx.vin.emplace_back(prevout);
+                if (witness) {
+                    tx.vin[0].scriptWitness.stack.push_back(ToByteVector(script));
+                } else {
+                    tx.vin[0].scriptSig << ToByteVector(script);
+                }
+                tx.vout.emplace_back(1, CScript{} << OP_TRUE);
+
+                auto block{Block(Params().GenesisBlock().GetHash())};
+                CMutableTransaction coinbase{*block->vtx[0]};
+                CScript legacy_script;
+                legacy_script.insert(legacy_script.end(), legacy_sigops, OP_CHECKSIG);
+                coinbase.vout.emplace_back(0, legacy_script);
+                block->vtx[0] = MakeTransactionRef(coinbase);
+                block->vtx.emplace_back(MakeTransactionRef(tx));
+                FinalizeBlock(block);
+
+                LOCK(cs_main);
+                auto state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+                BOOST_CHECK_EQUAL(state.ToString(), contextual_sigops > 4 ? "bad-blk-sigops, too many sigops" : "Valid");
+                BOOST_REQUIRE_EQUAL(block->m_checked_legacy_sigops.size(), 2);
+                BOOST_CHECK_EQUAL(block->m_checked_legacy_sigops[0], legacy_sigops);
+                BOOST_CHECK_EQUAL(block->m_checked_legacy_sigops[1], 0);
+                for (uint32_t cache_size : {0, 1}) {
+                    block->m_checked_legacy_sigops.resize(cache_size);
+                    auto uncached_state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+                    BOOST_CHECK_EQUAL(uncached_state.ToString(), state.ToString());
+                }
+            }
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(legacy_sigop_cache)
+{
+    auto block{FinalizeBlock(Block(Params().GenesisBlock().GetHash()))};
+    for (bool check_pow : {false, true}) {
+        for (bool check_merkle : {false, true}) {
+            CBlock checked{*block};
+            checked.fChecked = false;
+            BlockValidationState state;
+            BOOST_REQUIRE(CheckBlock(checked, state, Params().GetConsensus(), check_pow, check_merkle));
+            BOOST_CHECK_EQUAL(checked.m_checked_legacy_sigops.size(), check_pow && check_merkle ? 1 : 0);
+            if (check_pow && check_merkle) BOOST_CHECK_EQUAL(checked.m_checked_legacy_sigops[0], 0);
+            BOOST_CHECK_EQUAL(checked.fChecked, check_pow && check_merkle);
+        }
+    }
+
+    block->m_checked_legacy_sigops = {MAX_BLOCK_SIGOPS_COST / WITNESS_SCALE_FACTOR + 1};
+    {
+        LOCK(cs_main);
+        auto state{TestBlockValidity(m_node.chainman->ActiveChainstate(), *block, /*check_pow=*/false, /*check_merkle_root=*/false)};
+        BOOST_CHECK_EQUAL(state.ToString(), "Valid");
+        BOOST_CHECK(!block->fChecked);
+        BOOST_CHECK_EQUAL(block->m_checked_legacy_sigops[0], MAX_BLOCK_SIGOPS_COST / WITNESS_SCALE_FACTOR + 1);
+    }
+    BlockValidationState state;
+    BOOST_REQUIRE(CheckBlock(*block, state, Params().GetConsensus()));
+    BOOST_CHECK(block->m_checked_legacy_sigops == std::vector<uint32_t>{0});
+    CBlock copy{*block};
+    BOOST_CHECK(copy.m_checked_legacy_sigops == block->m_checked_legacy_sigops);
+    ClearShrink(copy.m_checked_legacy_sigops);
+    BOOST_CHECK_EQUAL(RecursiveDynamicUsage(*block) - RecursiveDynamicUsage(copy), memusage::DynamicUsage(block->m_checked_legacy_sigops));
+    copy = *block;
+    copy.SetNull();
+    BOOST_CHECK(copy.m_checked_legacy_sigops.empty());
+
+    copy = *block;
+    node::AddMerkleRootAndCoinbase(copy, copy.vtx[0], copy.nVersion, copy.nTime, copy.nNonce);
+    BOOST_CHECK(copy.m_checked_legacy_sigops.empty());
+
+    copy = *block;
+    DataStream stream;
+    stream << TX_WITH_WITNESS(*block);
+    stream >> TX_WITH_WITNESS(copy);
+    BOOST_CHECK(copy.m_checked_legacy_sigops.empty());
 }
 
 BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
