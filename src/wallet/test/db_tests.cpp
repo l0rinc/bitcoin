@@ -4,6 +4,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <crypto/common.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <util/check.h>
@@ -15,6 +16,8 @@
 #include <wallet/walletutil.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <span>
 #include <string>
@@ -144,6 +147,98 @@ BOOST_AUTO_TEST_CASE(db_cursor_prefix_byte_test)
         batch.reset();
         database->Close();
     }
+}
+
+BOOST_AUTO_TEST_CASE(berkeley_ro_cyclic_overflow_chain_rejected)
+{
+    constexpr size_t PAGE_SIZE{4096};
+    constexpr uint32_t NUM_PAGES{5};
+    constexpr uint32_t BTREE_MAGIC{0x00053162}, BTREE_VERSION{9}, BTREE_SUBDB{0x20};
+    constexpr uint8_t BTREE_META{9}, BTREE_LEAF{5}, OVERFLOW_PAGE{7}, KEYDATA{1}, OVERFLOW_RECORD{3};
+    std::vector<std::byte> file(PAGE_SIZE * NUM_PAGES);
+
+    auto write8{[&](size_t offset, uint8_t value) { file[offset] = std::byte{value}; }};
+    auto write16{[&](size_t offset, uint16_t value) { WriteLE16(file.data() + offset, value); }};
+    auto write32{[&](size_t offset, uint32_t value) { WriteLE32(file.data() + offset, value); }};
+    auto write_meta_page{[&](uint32_t page_num, uint32_t root) {
+        size_t offset{page_num * PAGE_SIZE};
+        write32(offset + 4, 1);
+        write32(offset + 8, page_num);
+        write32(offset + 12, BTREE_MAGIC);
+        write32(offset + 16, BTREE_VERSION);
+        write32(offset + 20, PAGE_SIZE);
+        write8(offset + 25, BTREE_META);
+        write32(offset + 32, NUM_PAGES - 1);
+        write32(offset + 48, BTREE_SUBDB);
+        write32(offset + 88, root);
+    }};
+    write_meta_page(/*page_num=*/0, /*root=*/1);
+    write_meta_page(/*page_num=*/2, /*root=*/3);
+
+    // Outer root leaf with ("main", BE32(2)) records.
+    {
+        size_t offset{PAGE_SIZE};
+        write32(offset + 4, 1);
+        write32(offset + 8, 1);
+        write16(offset + 20, 2);
+        write16(offset + 22, 4082);
+        write8(offset + 24, 1);
+        write8(offset + 25, BTREE_LEAF);
+        write16(offset + 26, 4082);
+        write16(offset + 28, 4089);
+        offset += 4082;
+        write16(offset, 4);
+        write8(offset + 2, KEYDATA);
+        for (size_t i{0}; i < 4; ++i)
+            write8(offset + 3 + i, "main"[i]);
+        write16(offset + 7, 4);
+        write8(offset + 9, KEYDATA);
+        write8(offset + 13, 2);
+    }
+
+    // Inner root leaf with a key and an overflow record pointing to page 4.
+    {
+        size_t offset{3 * PAGE_SIZE};
+        write32(offset + 4, 1);
+        write32(offset + 8, 3);
+        write16(offset + 20, 2);
+        write16(offset + 22, 4080);
+        write8(offset + 24, 1);
+        write8(offset + 25, BTREE_LEAF);
+        write16(offset + 26, 4092);
+        write16(offset + 28, 4080);
+        offset += 4080;
+        write8(offset + 2, OVERFLOW_RECORD);
+        write32(offset + 4, 4);
+        write32(offset + 8, 16);
+        write16(offset + 12, 1);
+        write8(offset + 14, KEYDATA);
+        write8(offset + 15, 1);
+    }
+
+    // Empty overflow page with a self-cycle.
+    {
+        size_t offset{4 * PAGE_SIZE};
+        write32(offset + 4, 1);
+        write32(offset + 8, 4);
+        write32(offset + 16, 4);
+        write16(offset + 20, 1);
+        write8(offset + 25, OVERFLOW_PAGE);
+    }
+
+    auto bdb_path{m_path_root / "cyclic_overflow_wallet.dat"};
+    auto* handle{fsbridge::fopen(bdb_path, "wb")};
+    BOOST_REQUIRE(handle);
+    BOOST_REQUIRE_EQUAL(std::fwrite(file.data(), 1, file.size(), handle), file.size());
+    BOOST_REQUIRE_EQUAL(std::fclose(handle), 0);
+
+    DatabaseOptions options;
+    DatabaseStatus status;
+    bilingual_str error;
+    auto database{MakeBerkeleyRODatabase(bdb_path, options, status, error)};
+    BOOST_CHECK(!database);
+    BOOST_CHECK_EQUAL(status, DatabaseStatus::FAILED_LOAD);
+    BOOST_CHECK_EQUAL(error.original, "Overflow record chain is cyclic or too long");
 }
 
 BOOST_AUTO_TEST_CASE(db_availability_after_write_error)
