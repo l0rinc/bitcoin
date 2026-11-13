@@ -54,7 +54,7 @@ std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, int flags
     int nMinHeight = -1;
     int64_t nMinTime = -1;
 
-    bool fEnforceBIP68 = tx.version >= 2 && flags & LOCKTIME_VERIFY_SEQUENCE;
+    bool fEnforceBIP68 = IsBIP68Enabled(tx.version, flags);
 
     // Do not enforce sequence numbers as a relative lock time
     // unless we have been instructed to
@@ -68,7 +68,7 @@ std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, int flags
         // Sequence numbers with the most significant bit set are not
         // treated as relative lock-times, nor are they given any
         // consensus-enforced meaning at this point.
-        if (txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG) {
+        if (!IsBIP68InputEnabled(txin.nSequence)) {
             // The height of this input is not relevant for sequence locks
             prevHeights[txinIndex] = 0;
             continue;
