@@ -135,3 +135,28 @@ BENCHMARK(VerifyScriptP2WPKH);
 BENCHMARK(VerifyScriptP2TR_KeyPath);
 BENCHMARK(VerifyScriptP2TR_ScriptPath);
 BENCHMARK(VerifyNestedIfScript);
+
+// Sigop accounting also runs when assumevalid skips script execution.
+static void CountWitnessSigOpsBench(benchmark::Bench& bench, opcodetype version, size_t program_size, bool nested)
+{
+    const CScript program{CScript{} << version << std::vector<unsigned char>(program_size, 1)};
+    const CScript script_pub_key{nested ? CScript{} << OP_HASH160 << std::vector<unsigned char>(20, 1) << OP_EQUAL : program};
+    const CScript script_sig{nested ? CScript{} << ToByteVector(program) : CScript{}};
+    const CScriptWitness witness{};
+    const auto expected{version == OP_0 && program_size == 20 ? 1U : 0U};
+    bench.unit("input").run([&] {
+        const auto count{CountWitnessSigOps(script_sig, script_pub_key, witness, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS)};
+        ankerl::nanobench::doNotOptimizeAway(count);
+        assert(count == expected);
+    });
+}
+
+static void CountWitnessSigOpsP2WPKH(benchmark::Bench& bench) { CountWitnessSigOpsBench(bench, OP_0, 20, false); }
+static void CountWitnessSigOpsP2WSHEmpty(benchmark::Bench& bench) { CountWitnessSigOpsBench(bench, OP_0, 32, false); }
+static void CountWitnessSigOpsP2TR(benchmark::Bench& bench) { CountWitnessSigOpsBench(bench, OP_1, 32, false); }
+static void CountWitnessSigOpsP2SHP2WPKH(benchmark::Bench& bench) { CountWitnessSigOpsBench(bench, OP_0, 20, true); }
+
+BENCHMARK(CountWitnessSigOpsP2WPKH);
+BENCHMARK(CountWitnessSigOpsP2WSHEmpty);
+BENCHMARK(CountWitnessSigOpsP2TR);
+BENCHMARK(CountWitnessSigOpsP2SHP2WPKH);

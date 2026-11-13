@@ -546,6 +546,11 @@ public:
     bool IsPayToScriptHash() const;
     bool IsPayToWitnessScriptHash() const;
     bool IsWitnessProgram(int& version, std::vector<unsigned char>& program) const;
+    /** Return a view of the witness program without copying it.
+     * The view is valid only while this script remains alive and unmodified.
+     * Both output arguments are unchanged if this returns false.
+     */
+    bool IsWitnessProgram(int& version, std::span<const unsigned char>& program) const;
 
     bool IsPayToTaproot() const;
 

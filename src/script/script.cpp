@@ -247,7 +247,7 @@ bool CScript::IsPayToTaproot() const
 
 // A witness program is any valid CScript that consists of a 1-byte push opcode
 // followed by a data push between 2 and 40 bytes.
-bool CScript::IsWitnessProgram(int& version, std::vector<unsigned char>& program) const
+bool CScript::IsWitnessProgram(int& version, std::span<const unsigned char>& program) const
 {
     if (this->size() < 4 || this->size() > 42) {
         return false;
@@ -257,10 +257,18 @@ bool CScript::IsWitnessProgram(int& version, std::vector<unsigned char>& program
     }
     if ((size_t)((*this)[1] + 2) == this->size()) {
         version = DecodeOP_N((opcodetype)(*this)[0]);
-        program = std::vector<unsigned char>(this->begin() + 2, this->end());
+        program = {data() + 2, size() - 2};
         return true;
     }
     return false;
+}
+
+bool CScript::IsWitnessProgram(int& version, std::vector<unsigned char>& program) const
+{
+    std::span<const unsigned char> view;
+    if (!IsWitnessProgram(version, view)) return false;
+    program = std::vector(view.begin(), view.end());
+    return true;
 }
 
 bool CScript::IsPushOnly(const_iterator pc) const
