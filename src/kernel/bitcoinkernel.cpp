@@ -1246,8 +1246,8 @@ void btck_chainstate_manager_options_set_worker_threads_num(btck_ChainstateManag
 
 int btck_chainstate_manager_options_set_database_cache_bytes(btck_ChainstateManagerOptions* chainman_opts, uint64_t database_cache_bytes)
 {
-    if (database_cache_bytes < MIN_DBCACHE_BYTES || database_cache_bytes > MAX_DBCACHE_BYTES) {
-        LogError("Failed to set database cache: size is outside the supported range.");
+    if (database_cache_bytes < MIN_DBCACHE_BYTES) {
+        LogError("Failed to set database cache: size is below the minimum.");
         return -1;
     }
 

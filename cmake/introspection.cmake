@@ -46,17 +46,6 @@ check_cxx_source_compiles("
 # Check for malloc_info (for memory statistics information in getmemoryinfo).
 check_cxx_symbol_exists(malloc_info "malloc.h" HAVE_MALLOC_INFO)
 
-# Check for mallopt(M_ARENA_MAX) (to set glibc arenas).
-check_cxx_source_compiles("
-  #include <malloc.h>
-
-  int main()
-  {
-    mallopt(M_ARENA_MAX, 1);
-  }
-  " HAVE_MALLOPT_ARENA_MAX
-)
-
 # Check for posix_fallocate().
 check_cxx_source_compiles("
   #include <fcntl.h>

@@ -135,16 +135,13 @@ For example:
 
 Common `host-platform-triplet`s for cross compilation are:
 
-- `i686-linux-gnu` for Linux x86 32-bit
 - `x86_64-linux-gnu` for Linux x86 64-bit
 - `x86_64-w64-mingw32ucrt` for Windows using UCRT
 - `x86_64-apple-darwin` for Intel macOS
 - `arm64-apple-darwin` for ARM macOS
-- `arm-linux-gnueabihf` for Linux ARM 32-bit
 - `aarch64-linux-gnu` for Linux ARM 64-bit
 - `powerpc64-linux-gnu` for Linux POWER 64-bit (big endian)
 - `powerpc64le-linux-gnu` for Linux POWER 64-bit (little endian)
-- `riscv32-linux-gnu` for Linux RISC-V 32-bit
 - `riscv64-linux-gnu` for Linux RISC-V 64-bit
 - `s390x-linux-gnu` for Linux S390X
 
@@ -173,27 +170,19 @@ you may install `nix-bin` and use the Nix shell from the repository root:
 
 Please note that package availability might depend on the arch+OS you are building on.
 
-For Linux x86 32-bit cross compilation:
-
-    sudo apt-get install g++-i686-linux-gnu binutils-i686-linux-gnu
-
 For Linux x86 64-bit cross compilation:
 
     sudo apt-get install g++-x86-64-linux-gnu binutils-x86-64-linux-gnu
-
-For Linux ARM 32-bit cross compilation:
-
-    sudo apt-get install g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
 
 For Linux ARM 64-bit cross compilation:
 
     sudo apt-get install g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
 
-For Linux POWER 64-bit cross compilation (there are no packages for 32-bit):
+For Linux POWER 64-bit cross compilation:
 
     sudo apt-get install g++-powerpc64-linux-gnu binutils-powerpc64-linux-gnu g++-powerpc64le-linux-gnu binutils-powerpc64le-linux-gnu
 
-For Linux RISC-V 64-bit cross compilation (there are no packages for 32-bit):
+For Linux RISC-V 64-bit cross compilation:
 
     sudo apt-get install g++-riscv64-linux-gnu binutils-riscv64-linux-gnu
 

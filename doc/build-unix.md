@@ -2,6 +2,8 @@
 
 Some notes on how to build Bitcoin Core on Unix-like systems.
 
+Bitcoin Core requires a 64-bit operating system and toolchain.
+
 ## To Build
 
 ```bash

@@ -1203,6 +1203,10 @@ uses `mmap()` + `close()` to open table files without actually retaining
 references to the table file descriptors. If you are upgrading LevelDB, you must
 sanity check the changes to make sure that this assumption remains valid.
 
+The mmap limit is separate from `max_open_files`. Raising `max_open_files`
+beyond it causes LevelDB to retain file descriptors for additional table files,
+which can exhaust the file descriptors usable by `select()`.
+
 In addition to reviewing the upstream changes in `env_posix.cc`, you can use `lsof` to
 check this. For example, on Linux this command will show open `.ldb` file counts:
 
@@ -1215,9 +1219,6 @@ mem = 119, fd = 0
 The `mem` value shows how many files are mmap'ed, and the `fd` value shows how
 many file descriptors these files are using. You should check that `fd` is a
 small number (usually 0 on 64-bit hosts).
-
-See the notes in the `SetMaxOpenFiles()` function in `dbwrapper.cc` for more
-details.
 
 ### Consensus Compatibility
 

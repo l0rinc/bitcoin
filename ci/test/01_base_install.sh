@@ -22,10 +22,6 @@ fi
 
 MAKEJOBS="-j$( nproc )"  # Use nproc, because MAKEJOBS is the default in docker image builds.
 
-if [ -n "$DPKG_ADD_ARCH" ]; then
-  dpkg --add-architecture "$DPKG_ADD_ARCH"
-fi
-
 if [ -n "${APT_LLVM_V}" ]; then
   ${CI_RETRY_EXE} apt-get update --error-on=any
   ${CI_RETRY_EXE} apt-get install curl -y

@@ -40,12 +40,7 @@ function(test_append_socket_library target)
   set(HAVE_IFADDRS TRUE PARENT_SCOPE)
 endfunction()
 
-# Clang, when building for 32-bit,
-# and linking against libstdc++, requires linking with
-# -latomic if using the C++ atomic library.
-# Can be tested with: clang++ -std=c++20 test.cpp -m32
-#
-# Sourced from http://bugs.debian.org/797228
+# Check whether standard atomic operations require linking libatomic.
 function(test_append_atomic_library target)
   if (NOT TARGET ${target})
     message(FATAL_ERROR "${CMAKE_CURRENT_FUNCTION}() called with non-existent target \"${target}\".")

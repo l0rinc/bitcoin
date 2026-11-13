@@ -259,7 +259,6 @@ BASE_MACHO = [
 CHECKS = {
     lief.Binary.FORMATS.ELF: {
         lief.Header.ARCHITECTURES.X86_64: BASE_ELF + [('CONTROL_FLOW', check_ELF_CONTROL_FLOW)],
-        lief.Header.ARCHITECTURES.ARM: BASE_ELF,
         lief.Header.ARCHITECTURES.ARM64: BASE_ELF,
         lief.Header.ARCHITECTURES.PPC64: BASE_ELF,
         lief.Header.ARCHITECTURES.RISCV: BASE_ELF,

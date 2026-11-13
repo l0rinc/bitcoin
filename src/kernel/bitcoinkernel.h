@@ -1302,7 +1302,6 @@ BITCOINKERNEL_API void btck_chainstate_manager_options_set_worker_threads_num(
  *
  * @param[in] chainstate_manager_options Non-null, options to be set.
  * @param[in] database_cache_bytes       The total database cache size in bytes. Values below 4 MiB are rejected.
- *                                       On 32-bit systems, values above 1 GiB are also rejected.
  * @return                               0 if the set was successful, non-zero if the set failed.
  */
 BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_options_set_database_cache_bytes(
