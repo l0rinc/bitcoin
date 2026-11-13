@@ -44,6 +44,15 @@ inline constexpr bool DEFAULT_TXRECONCILIATION_ENABLE{false};
 inline constexpr uint32_t DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN{100};
 /** Default maximum per-second rate for sending transaction inventory to peers. */
 inline constexpr unsigned int DEFAULT_TX_SEND_RATE{14};
+/** Number of blocks that can be requested at any given time from a single peer. */
+inline constexpr int32_t MAX_BLOCKS_IN_TRANSIT_PER_PEER{16};
+/** Size of the "block download window": how far ahead of our current height do we fetch?
+ *  Larger windows tolerate larger download speed differences between peer, but increase the potential
+ *  degree of disordering of blocks on disk (which make reindexing and pruning harder). We'll probably
+ *  want to make this a per-peer adaptive value at some point. */
+inline constexpr int32_t DEFAULT_BLOCK_DOWNLOAD_WINDOW{2048};
+inline constexpr int32_t MIN_BLOCK_DOWNLOAD_WINDOW{MAX_BLOCKS_IN_TRANSIT_PER_PEER * (MAX_OUTBOUND_FULL_RELAY_CONNECTIONS + MAX_BLOCK_RELAY_ONLY_CONNECTIONS)};
+inline constexpr int32_t MAX_BLOCK_DOWNLOAD_WINDOW{32'768};
 inline constexpr bool DEFAULT_PEERBLOOMFILTERS = false;
 inline constexpr bool DEFAULT_PEERBLOCKFILTERS = false;
 /** Maximum number of outstanding CMPCTBLOCK requests for the same block. */
@@ -91,6 +100,8 @@ class PeerManager : public CValidationInterface, public NetEventsInterface
 {
 public:
     struct Options {
+        //! Maximum distance ahead of the last common block to request
+        int32_t block_download_window{DEFAULT_BLOCK_DOWNLOAD_WINDOW};
         //! Whether this node is running in -blocksonly mode
         bool ignore_incoming_txs{DEFAULT_BLOCKSONLY};
         //! Whether transaction reconciliation protocol is enabled
