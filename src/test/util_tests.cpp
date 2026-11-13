@@ -666,6 +666,19 @@ static void TestAddMatrix()
     BOOST_CHECK_EQUAL(MINI, SaturatingAdd(T{-1}, MINI + 1));
     BOOST_CHECK_EQUAL(MINI + 1, SaturatingAdd(T{-1}, MINI + 2));
     BOOST_CHECK_EQUAL(-1, SaturatingAdd(MINI, MAXI));
+
+    BOOST_CHECK_EQUAL(MAXI, SaturatingNegate(MINI));
+    BOOST_CHECK_EQUAL(MINI + 1, SaturatingNegate(MAXI));
+    BOOST_CHECK_EQUAL(0, SaturatingNegate(T{0}));
+    BOOST_CHECK_EQUAL(-1, SaturatingNegate(T{1}));
+    BOOST_CHECK_EQUAL(1, SaturatingNegate(T{-1}));
+
+    BOOST_CHECK_EQUAL(MINI, SaturatingSubtract(MINI, T{1}));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingSubtract(MAXI, T{-1}));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingSubtract(T{0}, MINI));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingSubtract(T{-1}, MINI));
+    BOOST_CHECK_EQUAL(MINI + 1, SaturatingSubtract(MINI, T{-1}));
+    BOOST_CHECK_EQUAL(0, SaturatingSubtract(T{1}, T{1}));
 }
 
 BOOST_AUTO_TEST_CASE(util_overflow)

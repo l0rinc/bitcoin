@@ -88,6 +88,27 @@ class PrioritiseTransactionTest(BitcoinTestFramework):
         self.generate(self.nodes[0], 1)
         assert_equal(self.nodes[0].getprioritisedtransactions(), {})
 
+    def test_saturated_fee_cluster(self):
+        self.log.info("Test that saturated modified fees can be linearized")
+        parent = self.wallet.create_self_transfer(fee_rate=0)
+        self.nodes[0].prioritisetransaction(txid=parent["txid"], fee_delta=COIN)
+        self.wallet.sendrawtransaction(from_node=self.nodes[0], tx_hex=parent["hex"])
+        child = self.wallet.create_self_transfer(utxo_to_spend=parent["new_utxo"], fee_rate=0)
+        self.nodes[0].prioritisetransaction(txid=child["txid"], fee_delta=COIN)
+        self.wallet.sendrawtransaction(from_node=self.nodes[0], tx_hex=child["hex"])
+        min_fee = -(1 << 63)
+        for txid in (parent["txid"], child["txid"]):
+            self.nodes[0].prioritisetransaction(txid=txid, fee_delta=min_fee)
+            self.nodes[0].prioritisetransaction(txid=txid, fee_delta=min_fee)
+            assert_equal(self.nodes[0].getprioritisedtransactions()[txid]["modified_fee"], min_fee)
+        assert_equal(self.nodes[0].getmempoolcluster(child["txid"])["txcount"], 2)
+
+        for txid in (parent["txid"], child["txid"]):
+            self.nodes[0].prioritisetransaction(txid=txid, fee_delta=(1 << 63) - 1)
+            self.nodes[0].prioritisetransaction(txid=txid, fee_delta=1)
+        assert_equal(self.nodes[0].getprioritisedtransactions(), {})
+        self.generate(self.nodes[0], 1)
+
     def test_replacement(self):
         self.log.info("Test tx prioritisation stays after a tx is replaced")
         conflicting_input = self.wallet.get_utxo()
@@ -228,6 +249,7 @@ class PrioritiseTransactionTest(BitcoinTestFramework):
         assert_raises_rpc_error(-3, "JSON value of type string is not of expected type number", self.nodes[0].prioritisetransaction, txid=txid, fee_delta='foo')
 
         self.test_large_fee_bump()
+        self.test_saturated_fee_cluster()
         self.test_replacement()
         self.test_diamond()
 
