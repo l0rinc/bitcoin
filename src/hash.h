@@ -174,7 +174,7 @@ public:
         std::byte data[1024];
         while (num_bytes > 0) {
             size_t now = std::min<size_t>(num_bytes, 1024);
-            read({data, now});
+            read(std::span{data, now});
             num_bytes -= now;
         }
     }
