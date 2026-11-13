@@ -91,7 +91,7 @@ using node::CBlockIndexHeightOnlyComparator;
 using node::CBlockIndexWorkComparator;
 using node::SnapshotMetadata;
 
-/** Time window to wait between writing blocks/block index and chainstate to disk.
+/** Time window between periodic chainstate writes.
  *  Randomize writing time inside the window to prevent a situation where the
  *  network over time settles into a few cohorts of synchronized writers.
 */
@@ -2835,16 +2835,13 @@ bool Chainstate::FlushStateToDisk(
         bool fCacheLarge = mode == FlushStateMode::PERIODIC && cache_state >= CoinsCacheSizeState::LARGE;
         // The cache is over the limit, we have to write now.
         bool fCacheCritical = mode == FlushStateMode::IF_NEEDED && cache_state >= CoinsCacheSizeState::CRITICAL;
-        // It's been a while since we wrote the block index and chain state to disk. Do this frequently, so we don't need to redownload or reindex after a crash.
+        // Write the chainstate periodically to limit the work repeated after a crash.
         bool fPeriodicWrite = mode == FlushStateMode::PERIODIC && nNow >= m_next_write;
         const auto empty_cache{(mode == FlushStateMode::FORCE_FLUSH) || fCacheLarge || fCacheCritical};
-        // Combine all conditions that result in a write to disk.
-        bool should_write = (mode == FlushStateMode::FORCE_SYNC) || empty_cache || fPeriodicWrite || fFlushForPrune;
-        // Write blocks, block index and best chain related state to disk.
-        if (should_write) {
-            LogDebug(BCLog::COINDB, "Writing chainstate to disk: flush mode=%s, prune=%d, large=%d, critical=%d, periodic=%d",
-                     FlushStateModeNames[size_t(mode)], fFlushForPrune, fCacheLarge, fCacheCritical, fPeriodicWrite);
-
+        // Combine the conditions that require a chainstate write.
+        bool should_write_chainstate = (mode == FlushStateMode::FORCE_SYNC) || empty_cache || fPeriodicWrite || fFlushForPrune;
+        // IF_NEEDED also persists blocks and their index without forcing a chainstate write.
+        if (should_write_chainstate || mode == FlushStateMode::IF_NEEDED) {
             // Ensure we can write block index
             if (!CheckDiskSpace(m_blockman.m_opts.blocks_dir)) {
                 return FatalError(m_chainman.GetNotifications(), state, _("Disk space is too low!"));
@@ -2853,8 +2850,8 @@ bool Chainstate::FlushStateToDisk(
                 LOG_TIME_MILLIS_WITH_CATEGORY("write block and undo data to disk", BCLog::BENCH);
 
                 // First make sure all block and undo data is flushed to disk.
-                if (!m_blockman.FlushChainstateBlockFile(m_chain.Height())) {
-                    // FlushChainstateBlockFile() already reported the specific error through flushError()
+                if (!m_blockman.FlushBlockFiles()) {
+                    // FlushBlockFiles() already reported the specific error through flushError()
                     return state.Error("Failed to flush block or undo file");
                 }
             }
@@ -2871,6 +2868,10 @@ bool Chainstate::FlushStateToDisk(
 
                 m_blockman.UnlinkPrunedFiles(setFilesToPrune);
             }
+        }
+        if (should_write_chainstate) {
+            LogDebug(BCLog::COINDB, "Writing chainstate to disk: flush mode=%s, prune=%d, large=%d, critical=%d, periodic=%d",
+                     FlushStateModeNames[size_t(mode)], fFlushForPrune, fCacheLarge, fCacheCritical, fPeriodicWrite);
 
             if (!CoinsTip().GetBestBlock().IsNull()) {
                 // Typical Coin structures on disk are around 48 bytes in size.
@@ -2894,7 +2895,7 @@ bool Chainstate::FlushStateToDisk(
             }
         }
 
-        if (should_write || m_next_write == NodeClock::time_point::max()) {
+        if (should_write_chainstate || m_next_write == NodeClock::time_point::max()) {
             constexpr auto range{DATABASE_WRITE_INTERVAL_MAX - DATABASE_WRITE_INTERVAL_MIN};
             m_next_write = FastRandomContext().rand_uniform_delay(NodeClock::now() + DATABASE_WRITE_INTERVAL_MIN, range);
         }
@@ -3046,7 +3047,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
         }
     }
 
-    // Write the chain state to disk, if necessary.
+    // Persist blocks and their index, and write the chainstate if necessary.
     if (!FlushStateToDisk(state, FlushStateMode::IF_NEEDED)) {
         return false;
     }
@@ -3139,7 +3140,7 @@ bool Chainstate::ConnectTip(
              Ticks<MillisecondsDouble>(time_4 - time_3),
              Ticks<SecondsDouble>(m_chainman.time_flush),
              Ticks<MillisecondsDouble>(m_chainman.time_flush) / m_chainman.num_blocks_total);
-    // Write the chain state to disk, if necessary.
+    // Persist blocks and their index, and write the chainstate if necessary.
     if (!FlushStateToDisk(state, FlushStateMode::IF_NEEDED)) {
         return false;
     }

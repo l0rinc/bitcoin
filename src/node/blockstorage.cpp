@@ -297,6 +297,7 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
     }
 
     m_blockfile_info.at(fileNumber) = CBlockFileInfo{};
+    m_dirty_blockfiles.erase(fileNumber);
     m_dirty_fileinfo.insert(fileNumber);
 }
 
@@ -529,6 +530,8 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
 void BlockManager::WriteBlockIndexDB()
 {
     AssertLockHeld(::cs_main);
+    if (m_dirty_fileinfo.empty() && m_dirty_blockindex.empty()) return;
+
     std::vector<std::pair<int, const CBlockFileInfo*>> vFiles;
     vFiles.reserve(m_dirty_fileinfo.size());
     for (std::set<int>::iterator it = m_dirty_fileinfo.begin(); it != m_dirty_fileinfo.end();) {
@@ -762,19 +765,14 @@ bool BlockManager::FlushBlockFile(int blockfile_num, bool fFinalize, bool finali
     AssertLockHeld(::cs_main);
     bool success = true;
 
-    if (m_blockfile_info.size() < 1) {
-        // Return if we haven't loaded any blockfiles yet. This happens during
-        // chainstate init, when we call ChainstateManager::MaybeRebalanceCaches() (which
-        // then calls FlushStateToDisk()), resulting in a call to this function before we
-        // have populated `m_blockfile_info` via LoadBlockIndexDB().
-        return true;
-    }
     assert(static_cast<int>(m_blockfile_info.size()) > blockfile_num);
 
     FlatFilePos block_pos_old(blockfile_num, m_blockfile_info[blockfile_num].nSize);
     if (!m_block_file_seq.Flush(block_pos_old, fFinalize)) {
         m_opts.notifications.flushError(_("Flushing block file to disk failed. This is likely the result of an I/O error."));
         success = false;
+    } else {
+        m_dirty_blockfiles.erase(blockfile_num);
     }
     // we do not always flush the undo file, as the chain tip may be lagging behind the incoming blocks,
     // e.g. during IBD or a sync after a node going offline
@@ -794,17 +792,17 @@ BlockfileType BlockManager::BlockfileTypeForHeight(int height)
     return (height >= *m_snapshot_height) ? BlockfileType::ASSUMED : BlockfileType::NORMAL;
 }
 
-bool BlockManager::FlushChainstateBlockFile(int tip_height)
+bool BlockManager::FlushBlockFiles()
 {
     AssertLockHeld(::cs_main);
-    auto& cursor = m_blockfile_cursors[BlockfileTypeForHeight(tip_height)];
-    // If the cursor does not exist, it means an assumeutxo snapshot is loaded,
-    // but no blocks past the snapshot height have been written yet, so there
-    // is no data associated with the chainstate, and it is safe not to flush.
-    if (cursor) {
-        return FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false);
+    for (int file_num : m_dirty_fileinfo) {
+        if (m_dirty_blockfiles.contains(file_num)) {
+            if (!FlushBlockFile(file_num, /*fFinalize=*/false, /*finalize_undo=*/false)) return false;
+        } else if (m_blockfile_info[file_num].nUndoSize > 0) {
+            // The block data is already on disk, but undo data may have been appended since.
+            if (!FlushUndoFile(file_num, /*finalize=*/false)) return false;
+        }
     }
-    // No need to log warnings in this case.
     return true;
 }
 
@@ -1176,6 +1174,7 @@ FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
         return FlatFilePos();
     }
 
+    m_dirty_blockfiles.insert(pos.nFile);
     return pos;
 }
 

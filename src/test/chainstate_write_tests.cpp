@@ -3,6 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <node/blockstorage.h>
+#include <primitives/block.h>
+#include <script/script.h>
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
@@ -123,6 +125,17 @@ BOOST_FIXTURE_TEST_CASE(chainstate_flush_failure_boundary, TestChain100Setup)
     mineBlocks(1);
     auto* new_tip{WITH_LOCK(::cs_main, return chainstate.m_chain.Tip())};
     BOOST_REQUIRE_NE(old_flushed, new_tip);
+    node::CBlockFileInfo old_file_info;
+    BOOST_REQUIRE(WITH_LOCK(::cs_main, return chainstate.m_blockman.m_block_tree_db->ReadBlockFileInfo(new_tip->nFile, old_file_info)));
+
+    // Leave received block data pending even when connections persist their own data.
+    const auto pending_block{std::make_shared<const CBlock>(CreateBlock({}, CScript{} << OP_TRUE))};
+    {
+        LOCK(::cs_main);
+        CBlockIndex* pending_index{nullptr};
+        BOOST_REQUIRE(m_node.chainman->AcceptBlock(pending_block, state, &pending_index, /*fRequested=*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true));
+        BOOST_REQUIRE_EQUAL(pending_index->nFile, new_tip->nFile);
+    }
     inject_file_open_failure(WITH_LOCK(::cs_main, return chainstate.m_blockman.GetBlockPosFilename(new_tip->GetBlockPos())));
 
     ASSERT_DEBUG_LOG("Flushing block file to disk failed");
@@ -133,7 +146,7 @@ BOOST_FIXTURE_TEST_CASE(chainstate_flush_failure_boundary, TestChain100Setup)
     BOOST_CHECK(WITH_LOCK(::cs_main, return chainstate.CoinsDB().GetBestBlock()) == old_flushed->GetBlockHash());
     node::CBlockFileInfo file_info;
     BOOST_REQUIRE(WITH_LOCK(::cs_main, return chainstate.m_blockman.m_block_tree_db->ReadBlockFileInfo(new_tip->nFile, file_info)));
-    BOOST_CHECK_EQUAL(file_info.nHeightLast, old_flushed->nHeight);
+    BOOST_CHECK_EQUAL(file_info.nHeightLast, old_file_info.nHeightLast);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -41,6 +41,11 @@ class GetBlockFromPeerTest(BitcoinTestFramework):
         except JSONRPCException:
             return False
 
+    def mine_batches(self, node, num_blocks):
+        batch_size = 100
+        for start in range(0, num_blocks, batch_size):
+            self.generate(node, min(batch_size, num_blocks - start), sync_fun=self.no_op)
+
     def run_test(self):
         self.log.info("Mine 4 blocks on Node 0")
         self.generate(self.nodes[0], 4, sync_fun=self.no_op)
@@ -125,7 +130,7 @@ class GetBlockFromPeerTest(BitcoinTestFramework):
         self.sync_blocks([self.nodes[0], pruned_node])
 
         # We need to generate more blocks to be able to prune
-        self.generate(self.nodes[0], 400, sync_fun=self.no_op)
+        self.mine_batches(self.nodes[0], 400)
         self.sync_blocks([self.nodes[0], pruned_node])
         pruneheight = pruned_node.pruneblockchain(300)
         assert_equal(pruneheight, 249)
@@ -142,14 +147,14 @@ class GetBlockFromPeerTest(BitcoinTestFramework):
         assert_equal(result, {})
 
         self.log.info("Fetched block persists after next pruning event")
-        self.generate(self.nodes[0], 250, sync_fun=self.no_op)
+        self.mine_batches(self.nodes[0], 250)
         self.sync_blocks([self.nodes[0], pruned_node])
         pruneheight += 252
         assert_equal(pruned_node.pruneblockchain(700), pruneheight)
         assert_equal(pruned_node.getblock(pruned_block)["hash"], "196ee3a1a6db2353965081c48ef8e6b031cb2115d084bec6fec937e91a2c6277")
 
         self.log.info("Fetched block can be pruned again when prune height exceeds the height of the tip at the time when the block was fetched")
-        self.generate(self.nodes[0], 250, sync_fun=self.no_op)
+        self.mine_batches(self.nodes[0], 250)
         self.sync_blocks([self.nodes[0], pruned_node])
         pruneheight += 251
         assert_equal(pruned_node.pruneblockchain(1000), pruneheight)

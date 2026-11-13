@@ -6,6 +6,7 @@
 #include <consensus/validation.h>
 #include <kernel/disconnected_transactions.h>
 #include <node/block_template_manager.h>
+#include <node/blockstorage.h>
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
@@ -522,6 +523,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_loadblockindex, TestChain100Setup)
     BOOST_CHECK_EQUAL(cs1.setBlockIndexCandidates.size(), 1);
 
     // Reset some region of the chain's nStatus, removing the HAVE_DATA flag.
+    std::vector<const CBlockIndex*> changed_indexes;
     for (int i = 0; i <= cs1.m_chain.Height(); ++i) {
         LOCK(::cs_main);
         auto index = cs1.m_chain[i];
@@ -531,6 +533,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_loadblockindex, TestChain100Setup)
             index->nStatus = BlockStatus::BLOCK_VALID_TREE;
             index->nTx = 0;
             index->m_chain_tx_count = 0;
+            changed_indexes.push_back(index);
         }
 
         ++num_indexes;
@@ -544,6 +547,9 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_loadblockindex, TestChain100Setup)
             assumed_base = index;
         }
     }
+
+    // Reload the altered records rather than the original persisted flags.
+    WITH_LOCK(::cs_main, chainman.m_blockman.m_block_tree_db->WriteBatchSync({}, assumed_tip->nFile, changed_indexes));
 
     // Note: cs2's tip is not set when ActivateExistingSnapshot is called.
     Chainstate& cs2{WITH_LOCK(::cs_main, return chainman.AddChainstate(std::make_unique<Chainstate>(nullptr, chainman.m_blockman, chainman, *assumed_base->phashBlock)))};
@@ -621,6 +627,9 @@ BOOST_FIXTURE_TEST_CASE(loadblockindex_invalid_descendants, TestChain100Setup)
     grand_parent->nStatus = (grand_parent->nStatus | BLOCK_FAILED_VALID);
     parent->nStatus = (parent->nStatus & ~BLOCK_FAILED_VALID) | BLOCK_FAILED_CHILD;
     child->nStatus = (child->nStatus & ~BLOCK_FAILED_VALID);
+
+    auto& blockman{m_node.chainman->m_blockman};
+    blockman.m_block_tree_db->WriteBatchSync({}, child->nFile, {grand_parent, parent, child});
 
     // Reload block index to recompute block status validity flags.
     m_node.chainman->LoadBlockIndex();
