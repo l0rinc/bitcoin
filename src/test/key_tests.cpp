@@ -38,6 +38,15 @@ static const std::string strAddressBad = "1HV9Lc3sNHZxwj4Zk6fB38tEmBryq2cBiF";
 
 BOOST_FIXTURE_TEST_SUITE(key_tests, BasicTestingSetup)
 
+BOOST_AUTO_TEST_CASE(key_generation_ignores_deterministic_rng)
+{
+    SeedRandomForTest(SeedRand::ZEROS);
+    const CKey first_key{GenerateRandomKey()};
+    SeedRandomForTest(SeedRand::ZEROS);
+    const CKey second_key{GenerateRandomKey()};
+    BOOST_CHECK(first_key != second_key);
+}
+
 BOOST_AUTO_TEST_CASE(key_test1)
 {
     CKey key1  = DecodeSecret(strSecret1);

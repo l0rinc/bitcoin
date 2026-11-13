@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <random.h>
-
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <util/time.h>
@@ -11,6 +10,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <array>
 #include <random>
 
 BOOST_FIXTURE_TEST_SUITE(random_tests, BasicTestingSetup)
@@ -18,6 +18,17 @@ BOOST_FIXTURE_TEST_SUITE(random_tests, BasicTestingSetup)
 BOOST_AUTO_TEST_CASE(osrandom_tests)
 {
     BOOST_CHECK(Random_SanityCheck());
+}
+
+BOOST_AUTO_TEST_CASE(strongrandom_ignores_deterministic_rng)
+{
+    std::array<unsigned char, 32> first_bytes{};
+    std::array<unsigned char, 32> second_bytes{};
+    SeedRandomForTest(SeedRand::ZEROS);
+    GetStrongRandBytes(first_bytes);
+    SeedRandomForTest(SeedRand::ZEROS);
+    GetStrongRandBytes(second_bytes);
+    BOOST_CHECK(first_bytes != second_bytes);
 }
 
 BOOST_AUTO_TEST_CASE(fastrandom_tests_deterministic)
