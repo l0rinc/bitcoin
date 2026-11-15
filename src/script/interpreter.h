@@ -208,30 +208,20 @@ enum class SigVersion
 
 struct ScriptExecutionData
 {
-    //! Whether m_tapleaf_hash is initialized.
-    bool m_tapleaf_hash_init = false;
-    //! The tapleaf hash.
-    uint256 m_tapleaf_hash;
+    //! The tapleaf hash, present only for Tapscript
+    const std::optional<uint256> m_tapleaf_hash;
 
-    //! Whether m_codeseparator_pos is initialized.
-    bool m_codeseparator_pos_init = false;
     //! Opcode position of the last executed OP_CODESEPARATOR (or 0xFFFFFFFF if none executed).
-    uint32_t m_codeseparator_pos;
+    uint32_t m_codeseparator_pos{0xFFFFFFFF};
 
-    //! Whether m_annex_present and (when needed) m_annex_hash are initialized.
-    bool m_annex_init = false;
-    //! Whether an annex is present.
-    bool m_annex_present;
-    //! Hash of the annex data.
-    uint256 m_annex_hash;
+    //! Hash of the annex data, absent when there is no annex
+    const std::optional<uint256> m_annex_hash;
 
-    //! Whether m_validation_weight_left is initialized.
-    bool m_validation_weight_left_init = false;
-    //! How much validation weight is left (decremented for every successful non-empty signature check).
+    //! Remaining Tapscript validation weight, decremented for every successful non-empty signature check.
     int64_t m_validation_weight_left;
 
-    //! The hash of the corresponding output
-    std::optional<uint256> m_output_hash;
+    explicit ScriptExecutionData(std::optional<uint256> annex_hash, std::optional<uint256> tapleaf_hash = std::nullopt, int64_t validation_weight_left = 0)
+        : m_tapleaf_hash{std::move(tapleaf_hash)}, m_annex_hash{std::move(annex_hash)}, m_validation_weight_left{validation_weight_left} {}
 };
 
 /** Signature hash sizes */
@@ -250,14 +240,15 @@ extern const HashWriter HASHER_TAPSIGHASH; //!< Hasher with tag "TapSighash" pre
 extern const HashWriter HASHER_TAPLEAF;    //!< Hasher with tag "TapLeaf" pre-fed to it.
 extern const HashWriter HASHER_TAPBRANCH;  //!< Hasher with tag "TapBranch" pre-fed to it.
 
-/** Data structure to cache SHA256 midstates for the ECDSA sighash calculations
- *  (bare, P2SH, P2WPKH, P2WSH). */
+/** Cache SHA256 midstates for ECDSA sighashes and the SIGHASH_SINGLE output hash for Taproot.
+ *  Each cache belongs to one transaction input. */
 class SigHashCache
 {
     /** For each sighash mode (ALL, SINGLE, NONE, ALL|ANYONE, SINGLE|ANYONE, NONE|ANYONE),
      *  optionally store a scriptCode which the hash is for, plus a midstate for the SHA256
      *  computation just before adding the hash_type itself. */
     std::optional<std::pair<CScript, HashWriter>> m_cache_entries[6];
+    std::optional<uint256> m_taproot_single_hash;
 
     /** Given a hash_type, find which of the 6 cache entries is to be used. */
     int CacheIndex(int32_t hash_type) const noexcept;
@@ -267,6 +258,9 @@ public:
     [[nodiscard]] bool Load(int32_t hash_type, const CScript& script_code, HashWriter& writer) const noexcept;
     /** Store into this cache object the provided SHA256 midstate. */
     void Store(int32_t hash_type, const CScript& script_code, const HashWriter& writer) noexcept;
+
+    /** Return the SHA256 of the output matching this cache's input, hashing it on first use only. */
+    uint256 GetTaprootSingleHash(const CTxOut& output);
 };
 
 template <class T>
@@ -280,7 +274,7 @@ public:
         return false;
     }
 
-    virtual bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror = nullptr) const
+    virtual bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror = nullptr) const
     {
         return false;
     }
@@ -308,7 +302,7 @@ enum class MissingDataBehavior
 };
 
 template<typename T>
-bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache, MissingDataBehavior mdb);
+bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache, MissingDataBehavior mdb, SigHashCache* sighash_cache = nullptr);
 
 template <class T>
 class GenericTransactionSignatureChecker : public BaseSignatureChecker
@@ -329,7 +323,7 @@ public:
     GenericTransactionSignatureChecker(const T* txToIn, unsigned int nInIn, const CAmount& amountIn, MissingDataBehavior mdb) : txTo(txToIn), m_mdb(mdb), nIn(nInIn), amount(amountIn), txdata(nullptr) {}
     GenericTransactionSignatureChecker(const T* txToIn, unsigned int nInIn, const CAmount& amountIn, const PrecomputedTransactionData& txdataIn, MissingDataBehavior mdb) : txTo(txToIn), m_mdb(mdb), nIn(nInIn), amount(amountIn), txdata(&txdataIn) {}
     bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const override;
-    bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror = nullptr) const override;
+    bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror = nullptr) const override;
     bool CheckLockTime(const CScriptNum& nLockTime) const override;
     bool CheckSequence(const CScriptNum& nSequence) const override;
 };
@@ -350,7 +344,7 @@ public:
         return m_checker.CheckECDSASignature(scriptSig, vchPubKey, scriptCode, sigversion);
     }
 
-    bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror = nullptr) const override
+    bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror = nullptr) const override
     {
         return m_checker.CheckSchnorrSignature(sig, pubkey, sigversion, execdata, serror);
     }
