@@ -6,7 +6,7 @@
 
 from test_framework.blocktools import create_empty_fork
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_equal, assert_raises_rpc_error
+from test_framework.util import assert_array_result, assert_equal, assert_raises_rpc_error
 
 
 class FeaturePruneStaleForkTest(BitcoinTestFramework):
@@ -17,8 +17,8 @@ class FeaturePruneStaleForkTest(BitcoinTestFramework):
     def run_test(self):
         node = self.nodes[0]
 
-        self.log.info("Create a 2-block stale fork: parent has no transactions, child has transactions")
-        [side_parent, side_child] = create_empty_fork(node, 2)
+        self.log.info("Create a 3-block stale fork: parent has no transactions, child has transactions")
+        [side_parent, side_child, side_grandchild] = create_empty_fork(node, 3)
 
         node.submitheader(side_parent.serialize().hex())
         node.submitblock(side_child.serialize().hex())
@@ -29,10 +29,16 @@ class FeaturePruneStaleForkTest(BitcoinTestFramework):
         self.generate(node, 500)
         node.pruneblockchain(node.getblockcount() - 100)
         assert_raises_rpc_error(-1, "Block not available (pruned data)", node.getblock, side_child.hash_hex)
+        # Accepting the grandchild runs CheckBlockIndex(), which requires the pruned child to still be unlinked
+        node.submitblock(side_grandchild.serialize().hex())
 
         self.log.info("Restart and mine; node must reload cleanly after the stale-fork child was pruned")
         self.restart_node(0)
         self.generate(node, 1)
+
+        self.log.info("Submit the parent to link the fork through the pruned child")
+        node.submitblock(side_parent.serialize().hex())
+        assert_array_result(node.getchaintips(), {"hash": side_grandchild.hash_hex}, {"status": "valid-headers"})
 
 
 if __name__ == '__main__':

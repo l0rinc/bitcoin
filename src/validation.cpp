@@ -3233,10 +3233,6 @@ CBlockIndex* Chainstate::FindMostWorkChain()
                     // then add back to m_blocks_unlinked, so that if the block arrives in the future
                     // we can try adding to setBlockIndexCandidates again.
                     if (fMissingData && !fFailedChain) {
-                        // Avoid duplicate entries in m_blocks_unlinked. If the same entry is
-                        // processed twice in ReceivedBlockTransactions(), it may be re-added to
-                        // setBlockIndexCandidates with a modified nSequenceId, breaking ordering
-                        // guarantees and leading to undefined behavior.
                         m_blockman.AddUnlinkedBlock(pindexFailed);
                     }
                     setBlockIndexCandidates.erase(pindexFailed);
@@ -3887,9 +3883,16 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
                    pindex->nHeight, pindex->m_chain_tx_count, prev_tx_sum(*pindex), CLIENT_NAME, FormatFullVersion(), CLIENT_BUGREPORT);
             }
             pindex->m_chain_tx_count = prev_tx_sum(*pindex);
-            pindex->nSequenceId = nBlockSequenceId++;
+            // Redownloaded blocks may still be candidates, whose ordering depends on nSequenceId
             for (const auto& c : m_chainstates) {
-                c->TryAddBlockIndexCandidate(pindex);
+                c->setBlockIndexCandidates.erase(pindex);
+            }
+            pindex->nSequenceId = nBlockSequenceId++;
+            // Pruned descendants need their block data again before they can be connected
+            if (pindex->nStatus & BLOCK_HAVE_DATA) {
+                for (const auto& c : m_chainstates) {
+                    c->TryAddBlockIndexCandidate(pindex);
+                }
             }
             std::pair<std::multimap<CBlockIndex*, CBlockIndex*>::iterator, std::multimap<CBlockIndex*, CBlockIndex*>::iterator> range = m_blockman.m_blocks_unlinked.equal_range(pindex);
             while (range.first != range.second) {
@@ -5293,7 +5296,7 @@ void ChainstateManager::CheckBlockIndex() const
     while (pindex != nullptr) {
         nNodes++;
         if (pindexFirstInvalid == nullptr && pindex->nStatus & BLOCK_FAILED_VALID) pindexFirstInvalid = pindex;
-        if (pindexFirstMissing == nullptr && !(pindex->nStatus & BLOCK_HAVE_DATA)) {
+        if (pindexFirstMissing == nullptr && (~pindex->nStatus & BLOCK_HAVE_DATA)) {
             pindexFirstMissing = pindex;
         }
         if (pindexFirstNeverProcessed == nullptr && pindex->nTx == 0) pindexFirstNeverProcessed = pindex;
@@ -5321,29 +5324,25 @@ void ChainstateManager::CheckBlockIndex() const
             // Genesis block checks.
             assert(pindex->GetBlockHash() == GetConsensus().hashGenesisBlock); // Genesis block's hash must match.
             for (const auto& c : m_chainstates) {
-                if (c->m_chain.Genesis() != nullptr) {
-                    assert(pindex == c->m_chain.Genesis()); // The chain's genesis block must be this block.
-                }
+                assert(c->m_chain.Genesis() == nullptr || pindex == c->m_chain.Genesis()); // The chain's genesis block must be this block.
             }
         }
         // nSequenceId can't be set higher than SEQ_ID_INIT_FROM_DISK{1} for blocks that aren't linked
         // (negative is used for preciousblock, SEQ_ID_BEST_CHAIN_FROM_DISK{0} for active chain when loaded from disk)
-        if (!pindex->HaveNumChainTxs()) assert(pindex->nSequenceId <= SEQ_ID_INIT_FROM_DISK);
+        assert(pindex->HaveNumChainTxs() || pindex->nSequenceId <= SEQ_ID_INIT_FROM_DISK);
         // VALID_TRANSACTIONS is equivalent to nTx > 0 for all nodes (whether or not pruning has occurred).
         // HAVE_DATA is only equivalent to nTx > 0 (or VALID_TRANSACTIONS) if no pruning has occurred.
         if (!m_blockman.m_have_pruned) {
             // If we've never pruned, then HAVE_DATA should be equivalent to nTx > 0
-            assert(!(pindex->nStatus & BLOCK_HAVE_DATA) == (pindex->nTx == 0));
+            assert(bool(~pindex->nStatus & BLOCK_HAVE_DATA) == (pindex->nTx == 0));
             assert(pindexFirstMissing == pindexFirstNeverProcessed);
         } else {
             // If we have pruned, then we can only say that HAVE_DATA implies nTx > 0
-            if (pindex->nStatus & BLOCK_HAVE_DATA) assert(pindex->nTx > 0);
+            assert((~pindex->nStatus & BLOCK_HAVE_DATA) || pindex->nTx > 0);
         }
-        if (pindex->nStatus & BLOCK_HAVE_UNDO) assert(pindex->nStatus & BLOCK_HAVE_DATA);
-        if (snap_base && snap_base->GetAncestor(pindex->nHeight) == pindex) {
-            // Assumed-valid blocks should connect to the main chain.
-            assert((pindex->nStatus & BLOCK_VALID_MASK) >= BLOCK_VALID_TREE);
-        }
+        assert((~pindex->nStatus & BLOCK_HAVE_UNDO) || (pindex->nStatus & BLOCK_HAVE_DATA));
+        // Assumed-valid blocks should connect to the main chain.
+        assert(!snap_base || snap_base->GetAncestor(pindex->nHeight) != pindex || (pindex->nStatus & BLOCK_VALID_MASK) >= BLOCK_VALID_TREE);
         // There should only be an nTx value if we have
         // actually seen a block's transactions.
         assert(((pindex->nStatus & BLOCK_VALID_MASK) >= BLOCK_VALID_TRANSACTIONS) == (pindex->nTx > 0)); // This is pruning-independent.
@@ -5355,9 +5354,9 @@ void ChainstateManager::CheckBlockIndex() const
         assert(pindex->pprev == nullptr || pindex->nChainWork >= pindex->pprev->nChainWork); // For every block except the genesis block, the chainwork must be larger than the parent's.
         assert(nHeight < 2 || (pindex->pskip && (pindex->pskip->nHeight < nHeight))); // The pskip pointer must point back for all but the first 2 blocks.
         assert(pindexFirstNotTreeValid == nullptr); // All m_blockman.m_block_index entries must at least be TREE valid
-        if ((pindex->nStatus & BLOCK_VALID_MASK) >= BLOCK_VALID_TREE) assert(pindexFirstNotTreeValid == nullptr); // TREE valid implies all parents are TREE valid
-        if ((pindex->nStatus & BLOCK_VALID_MASK) >= BLOCK_VALID_CHAIN) assert(pindexFirstNotChainValid == nullptr); // CHAIN valid implies all parents are CHAIN valid
-        if ((pindex->nStatus & BLOCK_VALID_MASK) >= BLOCK_VALID_SCRIPTS) assert(pindexFirstNotScriptsValid == nullptr); // SCRIPTS valid implies all parents are SCRIPTS valid
+        assert((pindex->nStatus & BLOCK_VALID_MASK) < BLOCK_VALID_TREE || pindexFirstNotTreeValid == nullptr); // TREE valid implies all parents are TREE valid
+        assert((pindex->nStatus & BLOCK_VALID_MASK) < BLOCK_VALID_CHAIN || pindexFirstNotChainValid == nullptr); // CHAIN valid implies all parents are CHAIN valid
+        assert((pindex->nStatus & BLOCK_VALID_MASK) < BLOCK_VALID_SCRIPTS || pindexFirstNotScriptsValid == nullptr); // SCRIPTS valid implies all parents are SCRIPTS valid
         if (pindexFirstInvalid == nullptr) {
             // Checks for not-invalid blocks.
             assert((pindex->nStatus & BLOCK_FAILED_VALID) == 0); // The failed flag cannot be set for blocks without invalid parents.
@@ -5424,9 +5423,7 @@ void ChainstateManager::CheckBlockIndex() const
                         // setBlockIndexCandidates. Otherwise, pindex only
                         // needs to be added if it is an ancestor of the target
                         // block.
-                        if (!c->TargetBlock() || c->TargetBlock()->GetAncestor(pindex->nHeight) == pindex) {
-                            assert(c->setBlockIndexCandidates.contains(pindex));
-                        }
+                        assert((c->TargetBlock() && c->TargetBlock()->GetAncestor(pindex->nHeight) != pindex) || c->setBlockIndexCandidates.contains(pindex));
                     }
                     // If some parent is missing, then it could be that this block was in
                     // setBlockIndexCandidates but had to be removed because of the missing data.
@@ -5446,12 +5443,12 @@ void ChainstateManager::CheckBlockIndex() const
                 foundInUnlinked = true;
             }
         }
-        if (pindex->pprev && (pindex->nStatus & BLOCK_HAVE_DATA) && pindexFirstNeverProcessed != nullptr && pindexFirstInvalid == nullptr) {
-            // If this block has block data available, some parent was never received, and has no invalid parents, it must be in m_blocks_unlinked.
-            assert(foundInUnlinked);
-        }
-        if (!(pindex->nStatus & BLOCK_HAVE_DATA)) assert(!foundInUnlinked); // Can't be in m_blocks_unlinked if we don't HAVE_DATA
-        if (pindexFirstMissing == nullptr) assert(!foundInUnlinked); // We aren't missing data for any parent -- cannot be in m_blocks_unlinked.
+        assert(!foundInUnlinked || pindex->nTx > 0); // Only blocks whose transactions were received belong in m_blocks_unlinked
+        // Received blocks with an unprocessed ancestor and no invalid ancestors must stay unlinked even after pruning
+        assert(pindex->nTx == 0 || pindexFirstNeverProcessed == nullptr || pindexFirstInvalid != nullptr || foundInUnlinked);
+        // Can't be in m_blocks_unlinked if we don't HAVE_DATA, unless it still lacks m_chain_tx_count.
+        assert(!foundInUnlinked || (pindex->nStatus & BLOCK_HAVE_DATA) || !pindex->HaveNumChainTxs());
+        assert(pindexFirstMissing != nullptr || !foundInUnlinked); // We aren't missing data for any parent -- cannot be in m_blocks_unlinked.
         if (pindex->pprev && (pindex->nStatus & BLOCK_HAVE_DATA) && pindexFirstNeverProcessed == nullptr && pindexFirstMissing != nullptr) {
             // We HAVE_DATA for this block, have received data for all parents at some point, but we're currently missing data for some parent.
             assert(m_blockman.m_have_pruned);
@@ -5465,11 +5462,7 @@ void ChainstateManager::CheckBlockIndex() const
             // setBlockIndexCandidates, then it must be in m_blocks_unlinked.
             for (const auto& c : m_chainstates) {
                 if (!CBlockIndexWorkComparator()(pindex, c->m_chain.Tip()) && !c->setBlockIndexCandidates.contains(pindex)) {
-                    if (pindexFirstInvalid == nullptr) {
-                        if (!c->TargetBlock() || c->TargetBlock()->GetAncestor(pindex->nHeight) == pindex) {
-                            assert(foundInUnlinked);
-                        }
-                    }
+                    assert(pindexFirstInvalid != nullptr || (c->TargetBlock() && c->TargetBlock()->GetAncestor(pindex->nHeight) != pindex) || foundInUnlinked);
                 }
             }
         }
