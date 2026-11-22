@@ -124,8 +124,9 @@ bool BlockFilterIndex::CustomInit(const std::optional<interfaces::BlockRef>& blo
 
     if (block) {
         DBVal entry;
-        if (!index_util::LookUpOne(*m_db, *block, entry)) {
-            LogError("Cannot read last block filter header; index may be corrupted");
+        BlockFilter filter;
+        if (!index_util::LookUpOne(*m_db, *block, entry) || !ReadFilterFromDisk(entry.pos, entry.hash, filter)) {
+            LogError("Cannot read %s tip %s; index may be corrupted", GetName(), block->hash.ToString());
             return false;
         }
         m_last_header = entry.header;

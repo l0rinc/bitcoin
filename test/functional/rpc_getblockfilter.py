@@ -99,15 +99,17 @@ class GetBlockFilterTest(BitcoinTestFramework):
             filter_hash = hash256(bytes.fromhex(result["filter"]))
             expected = hash256(filter_hash + bytes.fromhex(previous_header)[::-1])
             assert_equal(result["header"], expected[::-1].hex())
+            return child
 
         check_child_header(tip_header)
         node.invalidateblock(old_tip)
         assert_equal(node.getbestblockhash(), old_parent)
-        check_child_header(parent_header)
+        child_tip = check_child_header(parent_header)
 
         self.stop_node(0)
         (node.chain_path / "indexes" / "blockfilter" / "basic" / "fltr00000.dat").unlink()
-        self.start_node(0)  # TODO: reject the missing tip filter on startup
+        with node.assert_debug_log([f"Cannot read basic block filter index tip {child_tip}"]):
+            node.assert_start_raises_init_error()
 
 if __name__ == '__main__':
     GetBlockFilterTest(__file__).main()
