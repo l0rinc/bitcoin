@@ -8,12 +8,18 @@
 #include <hash.h>
 #include <tinyformat.h>
 
+#include <algorithm>
 #include <memory>
 #include <sstream>
 
 uint256 CBlockHeader::GetHash() const
 {
     return (HashWriter{} << *this).GetHash();
+}
+
+bool CBlock::HasWitness() const
+{
+    return std::ranges::any_of(vtx, [](const auto& tx) { return tx->HasWitness(); });
 }
 
 std::string CBlock::ToString() const

@@ -407,6 +407,10 @@ public:
     /** Attempt to stay below this number of bytes of block files. */
     [[nodiscard]] uint64_t GetPruneTarget() const { return m_opts.prune_target; }
     static constexpr auto PRUNE_TARGET_MANUAL{std::numeric_limits<uint64_t>::max()};
+    [[nodiscard]] static constexpr bool IsAutomaticPruneTarget(uint64_t target)
+    {
+        return target != 0 && target != PRUNE_TARGET_MANUAL;
+    }
 
     [[nodiscard]] bool LoadingBlocks() const { return m_importing || !m_blockfiles_indexed; }
 
@@ -447,7 +451,7 @@ public:
         const CBlockIndex* lower_block LIFETIMEBOUND = nullptr
     ) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
-    /** True if any block files have ever been pruned. */
+    /** Whether block data was pruned or omitted. Persisted by WriteBlockIndexDB(). */
     bool m_have_pruned = false;
 
     //! Check whether the block associated with this index entry is pruned or not.
