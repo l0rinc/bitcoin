@@ -55,6 +55,8 @@ unsigned int GetP2SHSigOpCount(const CTransaction& tx, const CCoinsViewCache& ma
  * @return Total signature operation cost of tx
  */
 int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& inputs, script_verify_flags flags);
+/** Same calculation with legacy_sigops equal to GetLegacySigOpCount(tx). */
+int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& inputs, script_verify_flags flags, uint32_t legacy_sigops);
 
 /**
  * Check if transaction is final and can be included in a block with the
