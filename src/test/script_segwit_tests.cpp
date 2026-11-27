@@ -7,6 +7,9 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
+#include <span>
+
 BOOST_FIXTURE_TEST_SUITE(script_segwit_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(IsPayToWitnessScriptHash_Valid)
@@ -78,14 +81,29 @@ bool IsExpectedWitnessProgram(const CScript& script, const int expectedVersion, 
     }
     BOOST_CHECK_EQUAL(actualVersion, expectedVersion);
     BOOST_CHECK(actualProgram == expectedProgram);
+    int view_version{-1};
+    std::span<const unsigned char> view;
+    BOOST_REQUIRE(script.IsWitnessProgram(view_version, view));
+    BOOST_CHECK_EQUAL(view_version, expectedVersion);
+    BOOST_CHECK(std::ranges::equal(view, expectedProgram));
+    BOOST_CHECK(view.data() == script.data() + 2);
     return true;
 }
 
 bool IsNoWitnessProgram(const CScript& script)
 {
-    int dummyVersion;
-    std::vector<unsigned char> dummyProgram;
-    return !script.IsWitnessProgram(dummyVersion, dummyProgram);
+    int version{-1};
+    std::vector<unsigned char> program{42, 18};
+    const bool recognized{script.IsWitnessProgram(version, program)};
+    BOOST_CHECK_EQUAL(version, -1);
+    BOOST_CHECK(program == std::vector<unsigned char>({42, 18}));
+    std::span<const unsigned char> view{program};
+    const auto* original_data{view.data()};
+    BOOST_CHECK(!script.IsWitnessProgram(version, view));
+    BOOST_CHECK_EQUAL(version, -1);
+    BOOST_CHECK(view.data() == original_data);
+    BOOST_CHECK_EQUAL(view.size(), program.size());
+    return !recognized;
 }
 
 } // anonymous namespace
@@ -116,6 +134,18 @@ BOOST_AUTO_TEST_CASE(IsWitnessProgram_Invalid_Version)
     CScript nowit;
     nowit << OP_1NEGATE << program;
     BOOST_CHECK(IsNoWitnessProgram(nowit));
+}
+
+BOOST_AUTO_TEST_CASE(IsWitnessProgram_AllVersionsAndLengths)
+{
+    for (int version{0}; version <= 16; ++version) {
+        for (size_t size{2}; size <= 40; ++size) {
+            std::vector<unsigned char> program(size);
+            for (size_t i{0}; i < size; ++i) program[i] = static_cast<unsigned char>(i + version);
+            const CScript script{CScript{} << CScript::EncodeOP_N(version) << program};
+            BOOST_CHECK(IsExpectedWitnessProgram(script, version, program));
+        }
+    }
 }
 
 BOOST_AUTO_TEST_CASE(IsWitnessProgram_Invalid_Size)
