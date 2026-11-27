@@ -1660,6 +1660,8 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
         BOOST_CHECK_EQUAL(HexStr(txdata.m_spent_scripts_single_hash), vec["intermediary"]["hashScriptPubkeys"].get_str());
         BOOST_CHECK_EQUAL(HexStr(txdata.m_sequences_single_hash), vec["intermediary"]["hashSequences"].get_str());
 
+        const ScriptExecutionData reused_sed{std::nullopt};
+        std::vector<bool> reused_checks;
         for (const auto& input : vec["inputSpending"].getValues()) {
             int txinpos = input["given"]["txinIndex"].getInt<int>();
             int hashtype = input["given"]["hashType"].getInt<int>();
@@ -1686,14 +1688,16 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
             std::vector<unsigned char> signature;
             BOOST_CHECK(creator.CreateSchnorrSig(provider, signature, pubkey, nullptr, &merkle_root, SigVersion::TAPROOT));
             BOOST_CHECK_EQUAL(HexStr(signature), input["expected"]["witness"][0].get_str());
+            if ((hashtype & SIGHASH_OUTPUT_MASK) == SIGHASH_SINGLE) {
+                auto output_key{std::span{utxos[txinpos].scriptPubKey}.subspan(2)};
+                reused_checks.push_back(creator.Checker().CheckSchnorrSignature(signature, output_key, SigVersion::TAPROOT, reused_sed));
+            }
 
             // We can't observe the tweak used inside the signing logic, so verify by recomputing it.
             BOOST_CHECK_EQUAL(HexStr(pubkey.ComputeTapTweakHash(merkle_root.IsNull() ? nullptr : &merkle_root)), input["intermediary"]["tweak"].get_str());
 
             // We can't observe the sighash used inside the signing logic, so verify by recomputing it.
-            ScriptExecutionData sed;
-            sed.m_annex_init = true;
-            sed.m_annex_present = false;
+            const ScriptExecutionData sed{std::nullopt};
             uint256 sighash;
             BOOST_CHECK(SignatureHashSchnorr(sighash, sed, tx, txinpos, hashtype, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL));
             BOOST_CHECK_EQUAL(HexStr(sighash), input["intermediary"]["sigHash"].get_str());
@@ -1701,6 +1705,9 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
             // To verify the sigmsg, hash the expected sigmsg, and compare it with the (expected) sighash.
             BOOST_CHECK_EQUAL(HexStr((HashWriter{HASHER_TAPSIGHASH} << std::span<const uint8_t>{ParseHex(input["intermediary"]["sigMsg"].get_str())}).GetSHA256()), input["intermediary"]["sigHash"].get_str());
         }
+        BOOST_REQUIRE_EQUAL(reused_checks.size(), 2);
+        BOOST_CHECK(reused_checks[0]);
+        BOOST_CHECK(reused_checks[1]);
     }
 }
 

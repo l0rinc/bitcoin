@@ -90,16 +90,9 @@ std::optional<uint256> MutableTransactionSignatureCreator::ComputeSchnorrSignatu
     // of data present, for now, only support signing when everything is provided.
     if (!m_txdata || !m_txdata->m_bip341_taproot_ready || !m_txdata->m_spent_outputs_ready) return std::nullopt;
 
-    ScriptExecutionData execdata;
-    execdata.m_annex_init = true;
-    execdata.m_annex_present = false; // Only support annex-less signing for now.
-    if (sigversion == SigVersion::TAPSCRIPT) {
-        execdata.m_codeseparator_pos_init = true;
-        execdata.m_codeseparator_pos = 0xFFFFFFFF; // Only support non-OP_CODESEPARATOR BIP342 signing for now.
-        if (!leaf_hash) return std::nullopt; // BIP342 signing needs leaf hash.
-        execdata.m_tapleaf_hash_init = true;
-        execdata.m_tapleaf_hash = *leaf_hash;
-    }
+    if (sigversion == SigVersion::TAPSCRIPT && !leaf_hash) return std::nullopt; // BIP342 signing needs leaf hash.
+    // Only support annex-less signing and scripts without OP_CODESEPARATOR
+    const ScriptExecutionData execdata{std::nullopt, sigversion == SigVersion::TAPSCRIPT ? std::make_optional(*leaf_hash) : std::nullopt};
     uint256 hash;
     if (!SignatureHashSchnorr(hash, execdata, m_txto, nIn, m_options.sighash_type, sigversion, *m_txdata, MissingDataBehavior::FAIL)) return std::nullopt;
     return hash;
@@ -949,7 +942,7 @@ class DummySignatureChecker final : public BaseSignatureChecker
 public:
     DummySignatureChecker() = default;
     bool CheckECDSASignature(const std::vector<unsigned char>& sig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const override { return sig.size() != 0; }
-    bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror) const override { return sig.size() != 0; }
+    bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror) const override { return sig.size() != 0; }
     bool CheckLockTime(const CScriptNum& nLockTime) const override { return true; }
     bool CheckSequence(const CScriptNum& nSequence) const override { return true; }
 };

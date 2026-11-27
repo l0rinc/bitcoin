@@ -15,9 +15,9 @@
 #include <span.h>
 #include <tinyformat.h>
 #include <uint256.h>
+#include <util/check.h>
 
 #include <algorithm>
-#include <cassert>
 #include <compare>
 #include <cstring>
 #include <limits>
@@ -368,7 +368,6 @@ static bool EvalChecksigTapscript(const valtype& sig, const valtype& pubkey, Scr
     if (success) {
         // Implement the sigops/witnesssize ratio test.
         // Passing with an upgradable public key version is also counted.
-        assert(execdata.m_validation_weight_left_init);
         execdata.m_validation_weight_left -= VALIDATION_WEIGHT_PER_SIGOP_PASSED;
         if (execdata.m_validation_weight_left < 0) {
             return set_error(serror, SCRIPT_ERR_TAPSCRIPT_VALIDATION_WEIGHT);
@@ -426,6 +425,7 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
     // sigversion cannot be TAPROOT here, as it admits no script execution.
     assert(sigversion == SigVersion::BASE || sigversion == SigVersion::WITNESS_V0 || sigversion == SigVersion::TAPSCRIPT);
+    assert(sigversion != SigVersion::TAPSCRIPT || execdata.m_tapleaf_hash);
 
     CScript::const_iterator pc = script.begin();
     CScript::const_iterator pend = script.end();
@@ -442,7 +442,6 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
     bool fRequireMinimal = (flags & SCRIPT_VERIFY_MINIMALDATA) != 0;
     uint32_t opcode_pos = 0;
     execdata.m_codeseparator_pos = 0xFFFFFFFFUL;
-    execdata.m_codeseparator_pos_init = true;
 
     try
     {
@@ -1246,7 +1245,7 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
 bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, script_verify_flags flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror)
 {
-    ScriptExecutionData execdata;
+    ScriptExecutionData execdata{std::nullopt};
     return EvalScript(stack, script, flags, checker, sigversion, execdata, serror);
 }
 
@@ -1486,7 +1485,7 @@ static bool HandleMissingData(MissingDataBehavior mdb)
 }
 
 template<typename T>
-bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache, MissingDataBehavior mdb)
+bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache, MissingDataBehavior mdb, SigHashCache* sighash_cache)
 {
     uint8_t ext_flag, key_version;
     switch (sigversion) {
@@ -1536,8 +1535,7 @@ bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, cons
     }
 
     // Data about the input/prevout being spent
-    assert(execdata.m_annex_init);
-    const bool have_annex = execdata.m_annex_present;
+    const bool have_annex{execdata.m_annex_hash.has_value()};
     const uint8_t spend_type = (ext_flag << 1) + (have_annex ? 1 : 0); // The low bit indicates whether an annex is present.
     ss << spend_type;
     if (input_type == SIGHASH_ANYONECANPAY) {
@@ -1548,26 +1546,19 @@ bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, cons
         ss << in_pos;
     }
     if (have_annex) {
-        ss << execdata.m_annex_hash;
+        ss << *execdata.m_annex_hash;
     }
 
     // Data about the output (if only one).
     if (output_type == SIGHASH_SINGLE) {
         if (in_pos >= tx_to.vout.size()) return false;
-        if (!execdata.m_output_hash) {
-            HashWriter sha_single_output{};
-            sha_single_output << tx_to.vout[in_pos];
-            execdata.m_output_hash = sha_single_output.GetSHA256();
-        }
-        ss << execdata.m_output_hash.value();
+        ss << (sighash_cache ? sighash_cache->GetTaprootSingleHash(tx_to.vout[in_pos]) : (HashWriter{} << tx_to.vout[in_pos]).GetSHA256());
     }
 
     // Additional data for BIP 342 signatures
     if (sigversion == SigVersion::TAPSCRIPT) {
-        assert(execdata.m_tapleaf_hash_init);
-        ss << execdata.m_tapleaf_hash;
+        ss << *Assert(execdata.m_tapleaf_hash);
         ss << key_version;
-        assert(execdata.m_codeseparator_pos_init);
         ss << execdata.m_codeseparator_pos;
     }
 
@@ -1600,6 +1591,12 @@ void SigHashCache::Store(int32_t hash_type, const CScript& script_code, const Ha
 {
     auto& entry = m_cache_entries[CacheIndex(hash_type)];
     entry.emplace(script_code, writer);
+}
+
+uint256 SigHashCache::GetTaprootSingleHash(const CTxOut& output)
+{
+    if (!m_taproot_single_hash) m_taproot_single_hash = (HashWriter{} << output).GetSHA256();
+    return *m_taproot_single_hash;
 }
 
 template <class T>
@@ -1720,7 +1717,7 @@ bool GenericTransactionSignatureChecker<T>::CheckECDSASignature(const std::vecto
 }
 
 template <class T>
-bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey_in, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror) const
+bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey_in, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror) const
 {
     assert(sigversion == SigVersion::TAPROOT || sigversion == SigVersion::TAPSCRIPT);
     // Schnorr signatures have 32-byte public keys. The caller is responsible for enforcing this.
@@ -1740,7 +1737,7 @@ bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(std::span<cons
     }
     uint256 sighash;
     if (!this->txdata) return HandleMissingData(m_mdb);
-    if (!SignatureHashSchnorr(sighash, execdata, *txTo, nIn, hashtype, sigversion, *this->txdata, m_mdb)) {
+    if (!SignatureHashSchnorr(sighash, execdata, *txTo, nIn, hashtype, sigversion, *this->txdata, m_mdb, &m_sighash_cache)) {
         return set_error(serror, SCRIPT_ERR_SCHNORR_SIG_HASHTYPE);
     }
     if (!VerifySchnorrSignature(sig, pubkey, sighash)) return set_error(serror, SCRIPT_ERR_SCHNORR_SIG);
@@ -1924,9 +1921,9 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
 {
     CScript exec_script; //!< Actually executed script (last stack item in P2WSH; implied P2PKH script in P2WPKH; leaf script in P2TR)
     std::span stack{witness.stack};
-    ScriptExecutionData execdata;
 
     if (witversion == 0) {
+        ScriptExecutionData execdata{std::nullopt};
         if (program.size() == WITNESS_V0_SCRIPTHASH_SIZE) {
             // BIP141 P2WSH: 32-byte witness v0 program (which encodes SHA256(script))
             if (stack.size() == 0) {
@@ -1954,17 +1951,15 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
         // BIP341 Taproot: 32-byte non-P2SH witness v1 program (which encodes a P2C-tweaked pubkey)
         if (!(flags & SCRIPT_VERIFY_TAPROOT)) return set_success(serror);
         if (stack.size() == 0) return set_error(serror, SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
+        std::optional<uint256> annex_hash;
         if (stack.size() >= 2 && !stack.back().empty() && stack.back()[0] == ANNEX_TAG) {
             // Drop annex (this is non-standard; see IsWitnessStandard)
             const valtype& annex = SpanPopBack(stack);
-            execdata.m_annex_hash = (HashWriter{} << annex).GetSHA256();
-            execdata.m_annex_present = true;
-        } else {
-            execdata.m_annex_present = false;
+            annex_hash = (HashWriter{} << annex).GetSHA256();
         }
-        execdata.m_annex_init = true;
         if (stack.size() == 1) {
             // Key path spending (stack size is 1 after removing optional annex)
+            const ScriptExecutionData execdata{annex_hash};
             if (!checker.CheckSchnorrSignature(stack.front(), program, SigVersion::TAPROOT, execdata, serror)) {
                 return false; // serror is set
             }
@@ -1976,16 +1971,14 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
             if (control.size() < TAPROOT_CONTROL_BASE_SIZE || control.size() > TAPROOT_CONTROL_MAX_SIZE || ((control.size() - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE) != 0) {
                 return set_error(serror, SCRIPT_ERR_TAPROOT_WRONG_CONTROL_SIZE);
             }
-            execdata.m_tapleaf_hash = ComputeTapleafHash(control[0] & TAPROOT_LEAF_MASK, script);
-            if (!VerifyTaprootCommitment(control, program, execdata.m_tapleaf_hash)) {
+            const uint256 tapleaf_hash{ComputeTapleafHash(control[0] & TAPROOT_LEAF_MASK, script)};
+            if (!VerifyTaprootCommitment(control, program, tapleaf_hash)) {
                 return set_error(serror, SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
             }
-            execdata.m_tapleaf_hash_init = true;
             if ((control[0] & TAPROOT_LEAF_MASK) == TAPROOT_LEAF_TAPSCRIPT) {
                 // Tapscript (leaf version 0xc0)
                 exec_script = CScript(script.begin(), script.end());
-                execdata.m_validation_weight_left = ::GetSerializeSize(witness.stack) + VALIDATION_WEIGHT_OFFSET;
-                execdata.m_validation_weight_left_init = true;
+                ScriptExecutionData execdata{annex_hash, tapleaf_hash, static_cast<int64_t>(::GetSerializeSize(witness.stack) + VALIDATION_WEIGHT_OFFSET)};
                 return ExecuteWitnessScript(stack, exec_script, flags, SigVersion::TAPSCRIPT, checker, execdata, serror);
             }
             if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION) {
