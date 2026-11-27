@@ -460,7 +460,7 @@ struct ConnectedBlock;
 inline constexpr std::array FlushStateModeNames{"NONE", "IF_NEEDED", "PERIODIC", "FORCE_FLUSH", "FORCE_SYNC"};
 enum class FlushStateMode: uint8_t {
     NONE,
-    IF_NEEDED,
+    IF_NEEDED, //!< Always persist blocks and their index, and flush the coins cache if critical.
     PERIODIC,
     FORCE_FLUSH,
     FORCE_SYNC,

@@ -316,6 +316,7 @@ BASE_SCRIPTS = [
     'wallet_encryption.py',
     'feature_dersig.py',
     'feature_reindex_init.py',
+    'feature_unclean_shutdown_redownload.py',
     'feature_cltv.py',
     'rpc_uptime.py',
     'feature_discover.py',

@@ -53,7 +53,17 @@ class FeatureIndexPruneTest(BitcoinTestFramework):
         self.wait_for_index_sync(timeout=150)
 
     def generate(self, node, num_blocks, sync_fun=None):
-        return super().generate(node, num_blocks, sync_fun=sync_fun or (lambda: self.linear_sync(node)))
+        hashes = []
+        batch_size = 100
+        while num_blocks > batch_size:
+            hashes.extend(super().generate(node, batch_size, sync_fun=self.no_op))
+            num_blocks -= batch_size
+        hashes.extend(super().generate(node, num_blocks, sync_fun=self.no_op))
+        if sync_fun:
+            sync_fun()
+        else:
+            self.linear_sync(node)
+        return hashes
 
     def restart_without_indices(self):
         for i in range(3):
