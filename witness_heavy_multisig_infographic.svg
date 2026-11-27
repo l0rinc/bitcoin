@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2200" viewBox="0 0 1600 2200">
+<style>text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif}</style>
+<rect x="0" y="0" width="1600" height="2200" rx="0" fill="#ffffff"/>
+<text x="70" y="92" font-size="42" font-weight="800" text-anchor="start" fill="#17222c">Standard multisig spends can make witness-heavy blocks</text>
+<text x="70" y="130" font-size="22" font-weight="400" text-anchor="start" fill="#5f6b77">The demo fills blocks with independent monetary P2WSH spends that first pass mempool policy.</text>
+<rect x="70" y="165" width="1460" height="470" rx="14" fill="#f7f9fb" stroke="#d9e0e7"/>
+<rect x="70" y="665" width="710" height="430" rx="14" fill="#f7f9fb" stroke="#d9e0e7"/>
+<rect x="820" y="665" width="710" height="430" rx="14" fill="#f7f9fb" stroke="#d9e0e7"/>
+<rect x="70" y="1125" width="710" height="360" rx="14" fill="#f7f9fb" stroke="#d9e0e7"/>
+<rect x="820" y="1125" width="710" height="360" rx="14" fill="#f7f9fb" stroke="#d9e0e7"/>
+<rect x="70" y="1515" width="1460" height="430" rx="14" fill="#f7f9fb" stroke="#d9e0e7"/>
+<rect x="70" y="1980" width="1460" height="120" rx="14" fill="#fff8f1" stroke="#f1cda9"/>
+<text x="105" y="220" font-size="28" font-weight="700" text-anchor="start" fill="#17222c">Mined block bytes: stripped/base vs witness</text>
+<text x="105" y="254" font-size="17" font-weight="400" text-anchor="start" fill="#5f6b77">All rows are accepted blocks built from standard mempool P2WSH multisig spends.</text>
+<text x="105" y="284" font-size="18" font-weight="700" text-anchor="start" fill="#17222c">small 2-of-2: 6,698 spends, 2,110,106 serialized bytes</text>
+<rect x="105" y="296" width="1070" height="45" rx="7" fill="#ecf0f4"/>
+<rect x="105" y="296" width="189" height="45" rx="7" fill="#2f6f7e"/>
+<rect x="294" y="296" width="446" height="45" rx="0" fill="#db7c26"/>
+<text x="755" y="325" font-size="19" font-weight="800" text-anchor="start" fill="#6c4ab6">3.35x</text>
+<text x="105" y="365" font-size="16" font-weight="700" text-anchor="start" fill="#2f6f7e">stripped/base: 629,839 B</text>
+<text x="355" y="365" font-size="16" font-weight="700" text-anchor="start" fill="#db7c26">witness: 1,480,267 B</text>
+<text x="610" y="365" font-size="16" font-weight="700" text-anchor="start" fill="#5f6b77">weight: 3,999,623/4,000,000</text>
+<text x="105" y="402" font-size="18" font-weight="700" text-anchor="start" fill="#17222c">small 3-of-5: 5,183 spends, 2,537,320 serialized bytes</text>
+<rect x="105" y="414" width="1070" height="45" rx="7" fill="#ecf0f4"/>
+<rect x="105" y="414" width="146" height="45" rx="7" fill="#2f6f7e"/>
+<rect x="251" y="414" width="618" height="45" rx="0" fill="#db7c26"/>
+<text x="884" y="443" font-size="19" font-weight="800" text-anchor="start" fill="#6c4ab6">5.21x</text>
+<text x="105" y="483" font-size="16" font-weight="700" text-anchor="start" fill="#2f6f7e">stripped/base: 487,429 B</text>
+<text x="355" y="483" font-size="16" font-weight="700" text-anchor="start" fill="#db7c26">witness: 2,049,891 B</text>
+<text x="610" y="483" font-size="16" font-weight="700" text-anchor="start" fill="#5f6b77">weight: 3,999,607/4,000,000</text>
+<text x="105" y="520" font-size="18" font-weight="700" text-anchor="start" fill="#17222c">custody 20-of-20: 1,588 spends, 3,550,994 serialized bytes</text>
+<rect x="105" y="532" width="1070" height="45" rx="7" fill="#ecf0f4"/>
+<rect x="105" y="532" width="45" height="45" rx="7" fill="#2f6f7e"/>
+<rect x="150" y="532" width="1025" height="45" rx="0" fill="#db7c26"/>
+<text x="1167" y="561" font-size="19" font-weight="800" text-anchor="end" fill="#6c4ab6">23.75x</text>
+<text x="105" y="601" font-size="16" font-weight="700" text-anchor="start" fill="#2f6f7e">stripped/base: 149,499 B</text>
+<text x="355" y="601" font-size="16" font-weight="700" text-anchor="start" fill="#db7c26">witness: 3,401,495 B</text>
+<text x="610" y="601" font-size="16" font-weight="700" text-anchor="start" fill="#5f6b77">weight: 3,999,491/4,000,000</text>
+<line x1="1210" y1="210" x2="1210" y2="600" stroke="#d9e0e7" stroke-width="2"/>
+<text x="1240" y="250" font-size="27" font-weight="800" text-anchor="start" fill="#17222c">Boundary proof</text>
+<text x="1240" y="296" font-size="21" font-weight="700" text-anchor="start" fill="#17222c">Each case mines N txs</text>
+<text x="1240" y="336" font-size="21" font-weight="700" text-anchor="start" fill="#17222c">N + 1 rejected</text>
+<text x="1240" y="376" font-size="21" font-weight="800" text-anchor="start" fill="#6c4ab6">reason: bad-blk-weight</text>
+<text x="1240" y="430" font-size="20" font-weight="700" text-anchor="start" fill="#5f6b77">The block is full because</text>
+<text x="1240" y="462" font-size="20" font-weight="700" text-anchor="start" fill="#5f6b77">consensus validation says</text>
+<text x="1240" y="494" font-size="20" font-weight="700" text-anchor="start" fill="#5f6b77">the next monetary spend</text>
+<text x="1240" y="526" font-size="20" font-weight="700" text-anchor="start" fill="#5f6b77">would exceed 4M weight.</text>
+<text x="105" y="725" font-size="28" font-weight="700" text-anchor="start" fill="#17222c">One example spend transaction</text>
+<rect x="105" y="770" width="630" height="112" rx="7" fill="#d8eef2" stroke="#a7cbd3"/>
+<text x="123" y="800" font-size="20" font-weight="800" text-anchor="start" fill="#2f6f7e">Stripped/base serialization</text>
+<text x="123" y="834" font-size="18" font-weight="400" fill="#17222c">version, input outpoint, sequence, one standard</text>
+<text x="123" y="858" font-size="18" font-weight="400" fill="#17222c">recipient output, locktime</text>
+<rect x="105" y="904" width="630" height="145" rx="7" fill="#f9dfc8" stroke="#edbd8e"/>
+<text x="123" y="934" font-size="20" font-weight="800" text-anchor="start" fill="#db7c26">Witness serialization</text>
+<text x="123" y="968" font-size="18" font-weight="400" fill="#17222c">empty CHECKMULTISIG dummy item, k ECDSA signatures,</text>
+<text x="123" y="992" font-size="18" font-weight="400" fill="#17222c">and the revealed witnessScript: k &lt;n compressed</text>
+<text x="123" y="1016" font-size="18" font-weight="400" fill="#17222c">pubkeys&gt; n OP_CHECKMULTISIG</text>
+<text x="105" y="1064" font-size="15" font-weight="400" fill="#5f6b77">Previous P2WSH deposit: 34-byte OP_0 HASH256(witnessScript). Spend reveals</text>
+<text x="105" y="1084" font-size="15" font-weight="400" fill="#5f6b77">signatures plus script in witness.</text>
+<text x="855" y="725" font-size="28" font-weight="700" text-anchor="start" fill="#17222c">What changes as multisig gets larger</text>
+<text x="855" y="773" font-size="16" font-weight="800" text-anchor="start" fill="#5f6b77">case</text>
+<text x="1045" y="773" font-size="16" font-weight="800" text-anchor="start" fill="#5f6b77">script</text>
+<text x="1215" y="773" font-size="16" font-weight="800" text-anchor="start" fill="#5f6b77">stack</text>
+<text x="1395" y="773" font-size="16" font-weight="800" text-anchor="start" fill="#5f6b77">result</text>
+<line x1="855" y1="795" x2="1480" y2="795" stroke="#d9e0e7" stroke-width="2"/>
+<text x="855" y="829" font-size="17" font-weight="700" text-anchor="start" fill="#17222c">small 2-of-2</text>
+<text x="1045" y="829" font-size="17" font-weight="400" text-anchor="start" fill="#17222c">71 B</text>
+<text x="1215" y="829" font-size="17" font-weight="400" text-anchor="start" fill="#17222c">2 sigs + script</text>
+<text x="1395" y="829" font-size="17" font-weight="400" text-anchor="start" fill="#17222c">2.11 MB, 3.35x</text>
+<text x="855" y="868" font-size="17" font-weight="700" text-anchor="start" fill="#17222c">small 3-of-5</text>
+<text x="1045" y="868" font-size="17" font-weight="400" text-anchor="start" fill="#17222c">173 B</text>
+<text x="1215" y="868" font-size="17" font-weight="400" text-anchor="start" fill="#17222c">3 sigs + script</text>
+<text x="1395" y="868" font-size="17" font-weight="400" text-anchor="start" fill="#17222c">2.54 MB, 5.21x</text>
+<text x="855" y="907" font-size="17" font-weight="700" text-anchor="start" fill="#17222c">custody 20-of-20</text>
+<text x="1045" y="907" font-size="17" font-weight="400" text-anchor="start" fill="#17222c">685 B</text>
+<text x="1215" y="907" font-size="17" font-weight="400" text-anchor="start" fill="#17222c">20 sigs + script</text>
+<text x="1395" y="907" font-size="17" font-weight="400" text-anchor="start" fill="#17222c">3.55 MB, 23.75x</text>
+<text x="855" y="960" font-size="18" font-weight="400" fill="#5f6b77">The small cases are the realistic baseline. The 20-of-20 case is the upper end</text>
+<text x="855" y="984" font-size="18" font-weight="400" fill="#5f6b77">of standard P2WSH multisig: still one normal CHECKMULTISIG spend per</text>
+<text x="855" y="1008" font-size="18" font-weight="400" fill="#5f6b77">transaction, but with much more authorization data in witness.</text>
+<text x="105" y="1190" font-size="28" font-weight="700" text-anchor="start" fill="#17222c">Why the block is valid</text>
+<rect x="105" y="1215" width="26" height="26" rx="13" fill="#23845f"/>
+<text x="118" y="1236" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">ok</text>
+<text x="147" y="1236" font-size="18" font-weight="400" fill="#17222c">Each spend was accepted by testmempoolaccept/sendrawtransaction</text>
+<text x="147" y="1260" font-size="18" font-weight="400" fill="#17222c">before mining.</text>
+<rect x="105" y="1281" width="26" height="26" rx="13" fill="#23845f"/>
+<text x="118" y="1302" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">ok</text>
+<text x="147" y="1302" font-size="18" font-weight="400" fill="#17222c">generateblock submit=False found the exact boundary: N spends fit,</text>
+<text x="147" y="1326" font-size="18" font-weight="400" fill="#17222c">N + 1 fails block weight.</text>
+<rect x="105" y="1347" width="26" height="26" rx="13" fill="#23845f"/>
+<text x="118" y="1368" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">ok</text>
+<text x="147" y="1368" font-size="18" font-weight="400" fill="#17222c">The final block was submitted and became the active tip.</text>
+<rect x="105" y="1389" width="26" height="26" rx="13" fill="#23845f"/>
+<text x="118" y="1410" font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">ok</text>
+<text x="147" y="1410" font-size="18" font-weight="400" fill="#17222c">The scripts are ordinary P2WSH multisig: signatures plus the</text>
+<text x="147" y="1434" font-size="18" font-weight="400" fill="#17222c">revealed witnessScript.</text>
+<text x="855" y="1190" font-size="28" font-weight="700" text-anchor="start" fill="#17222c">What this demonstrates</text>
+<text x="855" y="1235" font-size="21" font-weight="400" fill="#17222c">This does not require inscriptions or arbitrary data. It</text>
+<text x="855" y="1266" font-size="21" font-weight="400" fill="#17222c">only requires a future where many users or custodians</text>
+<text x="855" y="1297" font-size="21" font-weight="400" fill="#17222c">spend P2WSH multisig UTXOs at the same time. Small</text>
+<text x="855" y="1328" font-size="21" font-weight="400" fill="#17222c">multisig fills weight with a moderate serialized size;</text>
+<text x="855" y="1359" font-size="21" font-weight="400" fill="#17222c">larger standard multisig pushes much more of the block</text>
+<text x="855" y="1390" font-size="21" font-weight="400" fill="#17222c">into witness.</text>
+<text x="855" y="1440" font-size="22" font-weight="700" text-anchor="start" fill="#5f6b77">Exact script hex is written to:</text>
+<text x="855" y="1473" font-size="23" font-weight="800" text-anchor="start" fill="#6c4ab6">witness_heavy_multisig_script.txt</text>
+<text x="105" y="1570" font-size="28" font-weight="700" text-anchor="start" fill="#17222c">P2WSH-only full-block curve</text>
+<text x="105" y="1604" font-size="17" font-weight="400" text-anchor="start" fill="#5f6b77">Single normal k-of-k CHECKMULTISIG spend shape, SegWit v0/P2WSH only, no padding, no repeated checks.</text>
+<line x1="175" y1="1758" x2="1415" y2="1758" stroke="#d9e0e7" stroke-width="2"/>
+<line x1="175" y1="1658" x2="175" y2="1758" stroke="#d9e0e7" stroke-width="2"/>
+<line x1="175" y1="1735.2727272727273" x2="1415" y2="1735.2727272727273" stroke="#e8edf2" stroke-width="1"/>
+<text x="163" y="1740.2727272727273" font-size="13" font-weight="700" text-anchor="end" fill="#5f6b77">2.00 MB</text>
+<line x1="175" y1="1689.8181818181818" x2="1415" y2="1689.8181818181818" stroke="#e8edf2" stroke-width="1"/>
+<text x="163" y="1694.8181818181818" font-size="13" font-weight="700" text-anchor="end" fill="#5f6b77">3.00 MB</text>
+<line x1="175" y1="1664.8181818181818" x2="1415" y2="1664.8181818181818" stroke="#e8edf2" stroke-width="1"/>
+<text x="163" y="1669.8181818181818" font-size="13" font-weight="700" text-anchor="end" fill="#5f6b77">3.55 MB</text>
+<line x1="175.0" y1="1758" x2="175.0" y2="1765" stroke="#d9e0e7" stroke-width="2"/>
+<text x="175.0" y="1785" font-size="14" font-weight="700" text-anchor="middle" fill="#5f6b77">1</text>
+<line x1="436.05263157894734" y1="1758" x2="436.05263157894734" y2="1765" stroke="#d9e0e7" stroke-width="2"/>
+<text x="436.05263157894734" y="1785" font-size="14" font-weight="700" text-anchor="middle" fill="#5f6b77">5</text>
+<line x1="762.3684210526316" y1="1758" x2="762.3684210526316" y2="1765" stroke="#d9e0e7" stroke-width="2"/>
+<text x="762.3684210526316" y="1785" font-size="14" font-weight="700" text-anchor="middle" fill="#5f6b77">10</text>
+<line x1="1088.6842105263158" y1="1758" x2="1088.6842105263158" y2="1765" stroke="#d9e0e7" stroke-width="2"/>
+<text x="1088.6842105263158" y="1785" font-size="14" font-weight="700" text-anchor="middle" fill="#5f6b77">15</text>
+<line x1="1415.0" y1="1758" x2="1415.0" y2="1765" stroke="#d9e0e7" stroke-width="2"/>
+<text x="1415.0" y="1785" font-size="14" font-weight="700" text-anchor="middle" fill="#5f6b77">20</text>
+<polyline points="175.0,1749.0 240.3,1730.3 305.5,1717.4 370.8,1707.6 436.1,1700.4 501.3,1694.5 566.6,1689.9 631.8,1685.9 697.1,1682.6 762.4,1679.7 827.6,1677.3 892.9,1675.2 958.2,1673.4 1023.4,1671.7 1088.7,1670.3 1153.9,1668.9 1219.2,1667.8 1284.5,1666.7 1349.7,1665.7 1415.0,1664.8" fill="none" stroke="#6c4ab6" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="175.0" cy="1749.011318181818" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="240.26315789473682" cy="1730.2666818181817" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="305.52631578947364" cy="1717.4280454545456" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="370.7894736842105" cy="1707.6017272727272" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="436.05263157894734" cy="1700.3785" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="501.3157894736842" cy="1694.5076363636363" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="566.578947368421" cy="1689.894409090909" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="631.8421052631579" cy="1685.8716818181817" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="697.1052631578947" cy="1682.5585" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="762.3684210526316" cy="1679.688409090909" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="827.6315789473684" cy="1677.2832727272728" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="892.8947368421053" cy="1675.2177727272726" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="958.1578947368421" cy="1673.414409090909" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="1023.421052631579" cy="1671.6723181818181" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="1088.6842105263158" cy="1670.2679545454546" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="1153.9473684210525" cy="1668.9421363636363" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="1219.2105263157894" cy="1667.8215" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="1284.4736842105262" cy="1666.720681818182" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="1349.7368421052631" cy="1665.710090909091" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<circle cx="1415.0" cy="1664.8008181818182" r="4" fill="#ffffff" stroke="#6c4ab6" stroke-width="2"/>
+<text x="185.0" y="1773.011318181818" font-size="14" font-weight="800" text-anchor="start" fill="#17222c">1-of-1: 1.70 MB</text>
+<text x="250.26315789473682" y="1721.2666818181817" font-size="14" font-weight="800" text-anchor="start" fill="#17222c">2-of-2: 2.11 MB</text>
+<text x="446.05263157894734" y="1691.3785" font-size="14" font-weight="800" text-anchor="start" fill="#17222c">5-of-5: 2.77 MB</text>
+<text x="772.3684210526316" y="1670.688409090909" font-size="14" font-weight="800" text-anchor="start" fill="#17222c">10-of-10: 3.22 MB</text>
+<text x="1405.0" y="1655.8008181818182" font-size="14" font-weight="800" text-anchor="end" fill="#17222c">20-of-20: 3.55 MB</text>
+<text x="795.0" y="1814" font-size="16" font-weight="700" text-anchor="middle" fill="#5f6b77">number of pubkeys/signatures in one P2WSH CHECKMULTISIG spend</text>
+<text x="120" y="1642" font-size="16" font-weight="700" text-anchor="start" fill="#5f6b77">serialized block size at full weight</text>
+<text x="105" y="1850" font-size="18" font-weight="400" fill="#17222c">The curve tops out at 20 because P2WSH OP_CHECKMULTISIG is consensus-capped at 20 pubkeys. At that cap, standard SegWit-only</text>
+<text x="105" y="1874" font-size="18" font-weight="400" fill="#17222c">spends fill the 4M-weight block and serialize to about 3.55 MB.</text>
+<text x="105" y="2030" font-size="19" font-weight="700" fill="#17222c">Generated from the passing functional test run: mined cases used standard mempool P2WSH spends; the curve is the same P2WSH spend-size</text>
+<text x="105" y="2057" font-size="19" font-weight="700" fill="#17222c">simulation printed by the test.</text>
+</svg>
