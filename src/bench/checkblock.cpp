@@ -17,11 +17,34 @@
 #include <span>
 #include <vector>
 
+static void SizeComputerBlock(benchmark::Bench& bench) {
+    CBlock block;
+    DataStream(benchmark::data::block413567) >> TX_WITH_WITNESS(block);
+
+    bench.unit("block").run([&] {
+        SizeComputer size_computer;
+        size_computer << TX_WITH_WITNESS(block);
+        assert(size_computer.size() == benchmark::data::block413567.size());
+    });
+}
+
+static void SerializeBlock(benchmark::Bench& bench) {
+    CBlock block;
+    DataStream(benchmark::data::block413567) >> TX_WITH_WITNESS(block);
+
+    // Create output stream and verify first serialization matches input
+    bench.unit("block").run([&] {
+        DataStream output_stream(benchmark::data::block413567.size());
+        output_stream << TX_WITH_WITNESS(block);
+        assert(output_stream.size() == benchmark::data::block413567.size());
+    });
+}
+
 // These are the two major time-sinks which happen after we have fully received
 // a block off the wire, but before we can relay the block on to peers using
 // compact block relay.
 
-static void DeserializeBlockTest(benchmark::Bench& bench)
+static void DeserializeBlock(benchmark::Bench& bench)
 {
     const auto block_data{benchmark::data::block413567};
     bench.unit("block").run([&] {
@@ -31,7 +54,7 @@ static void DeserializeBlockTest(benchmark::Bench& bench)
     });
 }
 
-static void CheckBlockTest(benchmark::Bench& bench)
+static void DeserializeAndCheckBlock(benchmark::Bench& bench)
 {
     const auto& chain_params{CChainParams::Main()};
     const auto block_data{benchmark::data::block413567};
@@ -50,5 +73,7 @@ static void CheckBlockTest(benchmark::Bench& bench)
         });
 }
 
-BENCHMARK(DeserializeBlockTest);
-BENCHMARK(CheckBlockTest);
+BENCHMARK(SizeComputerBlock);
+BENCHMARK(SerializeBlock);
+BENCHMARK(DeserializeBlock);
+BENCHMARK(DeserializeAndCheckBlock);
