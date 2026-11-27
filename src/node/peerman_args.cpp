@@ -8,12 +8,17 @@
 #include <net_processing.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 
 namespace node {
 
 void ApplyArgsManOptions(const ArgsManager& argsman, PeerManager::Options& options)
 {
+    if (auto value{argsman.GetIntArg("-blockdownloadwindow")}) {
+        options.block_download_window = int32_t(std::clamp<int64_t>(*value, MIN_BLOCK_DOWNLOAD_WINDOW, MAX_BLOCK_DOWNLOAD_WINDOW));
+    }
+
     if (auto value{argsman.GetBoolArg("-txreconciliation")}) options.reconcile_txs = *value;
 
     if (auto value{argsman.GetIntArg("-blockreconstructionextratxn")}) {
