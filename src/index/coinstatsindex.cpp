@@ -150,7 +150,7 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
 
                 ++m_transaction_output_count;
                 m_total_amount += coin.out.nValue;
-                m_bogo_size += GetBogoSize(coin.out.scriptPubKey);
+                m_bogo_size += GetBogoSize(coin.out.scriptPubKey.size());
             }
 
             // The coinbase tx has no undo data since no former output is spent
@@ -167,7 +167,7 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
 
                     --m_transaction_output_count;
                     m_total_amount -= coin.out.nValue;
-                    m_bogo_size -= GetBogoSize(coin.out.scriptPubKey);
+                    m_bogo_size -= GetBogoSize(coin.out.scriptPubKey.size());
                 }
             }
         }
